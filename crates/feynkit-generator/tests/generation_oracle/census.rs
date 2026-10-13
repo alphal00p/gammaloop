@@ -18,7 +18,9 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Write as _},
-    sync::Arc,
+    fs::File,
+    io::{Read as _, Seek as _, SeekFrom, Write as _},
+    sync::{Arc, Mutex},
 };
 
 use feynkit_generator::{BuiltDiagramSet, GenerationReport, SourceIdentity};
@@ -26,10 +28,12 @@ use feynkit_graph::{
     CanonicalDiagramKey, DiagramId, FeynmanDiagram, LoopMomentumBasis,
     expressions::evaluate_overall_factor,
 };
+use serde::{Serialize, Serializer};
 use serde_json::Value;
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     domains::rational::Rational,
+    symbol,
 };
 
 /// One diagram of a run.
@@ -40,12 +44,14 @@ pub struct Entry {
     /// Full owner key pairs diagrams without relying on the recorded digest.
     full_key: Arc<CanonicalDiagramKey>,
     /// Every serialized field except the separately retained typed ID and optional name.
-    /// Sharing this value keeps policy normalization and restricted censuses inexpensive.
-    payload: Arc<Value>,
+    /// File-backed bytes keep complete payloads out of the retained census metadata.
+    payload: Payload,
     pub id: DiagramId,
     pub name: Option<String>,
     pub symmetry_factor: u128,
     pub overall_factor: String,
+    /// Original tree for binding grouping provenance without rewriting an expression.
+    factor: Atom,
     /// The overall factor with its bookkeeping heads evaluated: `1 / |Aut|` with the fermion
     /// signs and the number of diagrams that symmetrization or grouping identified with this one.
     pub weight: Rational,
@@ -56,6 +62,167 @@ pub struct Entry {
     pub basis: LoopMomentumBasis,
     /// Digest of the numerator, its prefactor, the projector and the local numerator fragments.
     pub numerator: u64,
+}
+
+/// One exact serialized payload in an anonymous file shared by census clones.
+/// Construction owns the only writer; comparisons begin after that writer is dropped.
+#[derive(Clone, Debug)]
+struct Payload {
+    store: Arc<Mutex<File>>,
+    offset: u64,
+    length: usize,
+}
+
+impl Payload {
+    fn write(value: &Value, writer: &mut File, store: &Arc<Mutex<File>>) -> Self {
+        let bytes = serde_json::to_vec(value).unwrap();
+        let offset = writer.stream_position().unwrap();
+        writer.write_all(&bytes).unwrap();
+        Self {
+            store: Arc::clone(store),
+            offset,
+            length: bytes.len(),
+        }
+    }
+
+    fn read(&self) -> Value {
+        let mut bytes = vec![0; self.length];
+        let mut file = self.store.lock().unwrap();
+        file.seek(SeekFrom::Start(self.offset)).unwrap();
+        file.read_exact(&mut bytes).unwrap();
+        drop(file);
+        serde_json::from_slice(&bytes).unwrap()
+    }
+}
+
+impl PartialEq for Payload {
+    fn eq(&self, other: &Self) -> bool {
+        self.read() == other.read()
+    }
+}
+
+impl Eq for Payload {}
+
+#[test]
+fn payload_storage_preserves_content_and_clone_lifetime() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    let value =
+        serde_json::json!({"factor": "f(3,x+y,\\\"z\\\")", "nested": [null, 1, {"n": "-2/3"}]});
+    let mut writer = tempfile::tempfile().unwrap();
+    let store = Arc::new(Mutex::new(writer.try_clone().unwrap()));
+    let first = Payload::write(&value, &mut writer, &store);
+    let second = Payload::write(&value, &mut writer, &store);
+    let different = Payload::write(
+        &serde_json::json!({"factor": "changed"}),
+        &mut writer,
+        &store,
+    );
+    drop((writer, store));
+    assert_eq!(first, second);
+    assert_ne!(first, different);
+
+    let mut writer = tempfile::tempfile().unwrap();
+    let store = Arc::new(Mutex::new(writer.try_clone().unwrap()));
+    let independent = Payload::write(&value, &mut writer, &store);
+    drop((writer, store));
+    assert_eq!(first, independent);
+    let retained = first.clone();
+    drop((first, second, different));
+    assert_eq!(retained.read(), value);
+    assert_eq!(retained, retained.clone());
+
+    // A truncated record must fail instead of becoming an empty/default payload.
+    retained
+        .store
+        .lock()
+        .unwrap()
+        .set_len(retained.length as u64 - 1)
+        .unwrap();
+    assert!(catch_unwind(AssertUnwindSafe(|| retained.read())).is_err());
+    let lifetime = Arc::downgrade(&retained.store);
+    drop(retained);
+    assert!(lifetime.upgrade().is_none());
+}
+
+#[test]
+fn streamed_exact_dump_matches_original_diagram_values() {
+    use feynkit_generator::{Grouping, Naming, NumeratorOptions, Run};
+
+    // This reference serializes the original diagrams, never the new stored payloads.
+    let original_dump = |built: &BuiltDiagramSet| {
+        let diagrams: Vec<_> = built
+            .iter()
+            .map(|diagram| {
+                let mut payload: Value =
+                    serde_json::from_slice(&serde_json::to_vec(diagram).unwrap()).unwrap();
+                payload.as_object_mut().unwrap().remove("id").unwrap();
+                payload.as_object_mut().unwrap().remove("name").unwrap();
+                serde_json::json!({
+                    "key": diagram.canonical_key().unwrap(),
+                    "payload": payload,
+                    "id": diagram.id().unwrap().to_string(),
+                    "name": diagram.name(),
+                    "aut": diagram.symmetry_factor().to_string(),
+                    "overall_factor": canonical(diagram.overall_factor()),
+                    "basis": diagram.loop_momentum_basis(),
+                })
+            })
+            .collect();
+        let groups: Vec<_> = built.groups().iter().map(|group| serde_json::json!({
+            "master": group.master,
+            "members": group.members.iter().map(|member| serde_json::json!({
+                "source_index": member.source_diagram,
+                "id": member.source_identity.as_ref().map(|identity| identity.id.to_string()),
+                "name": member.source_identity.as_ref().map(|identity| &identity.name),
+                "ratio": canonical(&member.ratio),
+                "overall_factor": canonical(&member.overall_factor),
+            })).collect::<Vec<_>>()
+        })).collect();
+        serde_json::to_vec(&serde_json::json!({"diagrams": diagrams, "groups": groups})).unwrap()
+    };
+    let case = super::cases::Case::named("qed_eeaa_scalar_L1");
+    let model = Arc::new(case.model());
+    let run = Run::default().threads(1);
+    let prepared = case.request(&model).generate(model, &run).unwrap();
+    for naming in [Naming::prefix("D"), Naming::None] {
+        let built = prepared
+            .build(
+                &NumeratorOptions::default()
+                    .with_naming(naming)
+                    .with_zero_color_filter(false),
+                &run,
+            )
+            .unwrap();
+        for grouping in [Grouping::None, case.grouping()] {
+            let grouped = built.group(&grouping, &run).unwrap();
+            let census = Census::of(&grouped);
+            for (entry, diagram) in census.diagrams.iter().zip(grouped.iter()) {
+                let mut expected: Value =
+                    serde_json::from_slice(&serde_json::to_vec(diagram).unwrap()).unwrap();
+                expected.as_object_mut().unwrap().remove("id").unwrap();
+                expected.as_object_mut().unwrap().remove("name").unwrap();
+                assert_eq!(entry.payload.read(), expected);
+            }
+            if !matches!(grouping, Grouping::None) {
+                assert!(census.groups.iter().any(|group| group.members.len() > 1));
+            }
+            let mut actual = Vec::new();
+            census.write_exact_dump(&mut actual).unwrap();
+            assert_eq!(actual, original_dump(&grouped));
+            let restricted = census.restricted(|_| true);
+            drop(census);
+            assert_eq!(restricted.diagrams[0].payload.read(), {
+                let mut expected: Value = serde_json::from_slice(
+                    &serde_json::to_vec(grouped.iter().next().unwrap()).unwrap(),
+                )
+                .unwrap();
+                expected.as_object_mut().unwrap().remove("id").unwrap();
+                expected.as_object_mut().unwrap().remove("name").unwrap();
+                expected
+            });
+        }
+    }
 }
 
 /// A numerator group: the master's position and its members.
@@ -72,6 +239,150 @@ pub struct Member {
     pub identity: Option<SourceIdentity>,
     pub ratio: String,
     pub overall_factor: String,
+}
+
+impl Group {
+    fn identity_factor(
+        &self,
+        factor: &Atom,
+        sources: &BTreeMap<usize, (DiagramId, &str, &Atom)>,
+    ) -> BTreeMap<DiagramId, (Atom, Atom)> {
+        assert!(self.members.len() > 1);
+        let members = self
+            .members
+            .iter()
+            .map(|m| (m.source_index, m))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(members.len(), self.members.len(), "duplicate source index");
+        let AtomView::Add(sum) = factor.as_view() else {
+            panic!("group factor must be the sum of its source terms");
+        };
+        assert_eq!(
+            sum.get_nargs(),
+            members.len(),
+            "missing or extra source term"
+        );
+        let mut bound = BTreeMap::new();
+        for term in sum.iter() {
+            let AtomView::Fun(term) = term else {
+                panic!("group source term has an extra coefficient or wrapper");
+            };
+            assert_eq!(
+                term.get_symbol(),
+                symbol!("feynkit_generator_factor::NumeratorDependentGrouping")
+            );
+            assert_eq!(term.get_nargs(), 3, "group source term arity");
+            let mut args = term.iter();
+            let index = usize::try_from(args.next().unwrap()).expect("natural source index");
+            let member = members.get(&index).expect("group source index exists");
+            let identity = member.identity.as_ref().expect("Named source identity");
+            let source = sources.get(&index).expect("full source index exists");
+            assert_eq!(identity.id, source.0, "source index identity");
+            assert_eq!(identity.name, source.1, "source index name");
+            let ratio = args.next().unwrap().to_owned();
+            let source_factor = args.next().unwrap().to_owned();
+            assert_eq!(canonical(&ratio), member.ratio, "group source ratio");
+            assert_eq!(
+                canonical(&source_factor),
+                member.overall_factor,
+                "group source factor"
+            );
+            assert_eq!(&source_factor, source.2);
+            assert!(
+                bound.insert(identity.id, (ratio, source_factor)).is_none(),
+                "duplicate source identity"
+            );
+        }
+        assert_eq!(
+            bound.len(),
+            members.len(),
+            "missing or duplicate source reference"
+        );
+        bound
+    }
+}
+
+#[test]
+fn class_factor_bindings_reject_invalid_provenance_or_weights() {
+    use std::panic::catch_unwind;
+    use symbolica::function;
+
+    let a = function!(symbol!("generation_oracle::source_a"), 1);
+    let b = function!(symbol!("generation_oracle::source_b"), 2);
+    let sources = BTreeMap::from([
+        (3, (DiagramId(10), "D3", &a)),
+        (7, (DiagramId(11), "D7", &b)),
+    ]);
+    let shifted = BTreeMap::from([
+        (9, (DiagramId(10), "D9", &a)),
+        (4, (DiagramId(11), "D4", &b)),
+    ]);
+    let group = |indices: [usize; 2]| Group {
+        master: 0,
+        members: [(DiagramId(10), &a), (DiagramId(11), &b)]
+            .into_iter()
+            .zip(indices)
+            .map(|((id, factor), source_index)| Member {
+                source_index,
+                identity: Some(SourceIdentity {
+                    id,
+                    name: format!("D{source_index}"),
+                }),
+                ratio: "1".into(),
+                overall_factor: canonical(factor),
+            })
+            .collect(),
+    };
+    let term = |index: i64, ratio: i64, factor: &Atom| {
+        function!(
+            symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+            index,
+            ratio,
+            factor
+        )
+    };
+    let original = term(3, 1, &a) + term(7, 1, &b);
+    let reordered = term(9, 1, &a) + term(4, 1, &b);
+    assert_ne!(canonical(&original), canonical(&reordered));
+    assert_eq!(
+        group([3, 7]).identity_factor(&original, &sources),
+        group([9, 4]).identity_factor(&reordered, &shifted)
+    );
+    for invalid in [
+        term(42, 1, &a) + term(7, 1, &b),
+        term(3, 2, &a) + term(7, 1, &b),
+        term(3, 1, &b) + term(7, 1, &b),
+        Atom::num(2) * term(3, 1, &a) + term(7, 1, &b),
+        term(3, 1, &a),
+        original.clone() + term(8, 1, &a),
+        term(3, 1, &a) + term(3, 2, &b),
+        function!(symbol!("generation_oracle::wrapped"), &original),
+    ] {
+        assert!(catch_unwind(|| group([3, 7]).identity_factor(&invalid, &sources)).is_err());
+    }
+    assert!(catch_unwind(|| group([3, 3]).identity_factor(&original, &sources)).is_err());
+    let missing = BTreeMap::from([(3, (DiagramId(10), "D3", &a))]);
+    assert!(catch_unwind(|| group([3, 7]).identity_factor(&original, &missing)).is_err());
+    let changed = BTreeMap::from([
+        (3, (DiagramId(10), "D3", &b)),
+        (7, (DiagramId(11), "D7", &b)),
+    ]);
+    assert!(catch_unwind(|| group([3, 7]).identity_factor(&original, &changed)).is_err());
+    // Equal ratios and factors must not hide swapped source identities.
+    let mut equal = group([3, 7]);
+    equal.members[1].overall_factor = canonical(&a);
+    let equal_sources = BTreeMap::from([
+        (3, (DiagramId(10), "D3", &a)),
+        (7, (DiagramId(11), "D7", &a)),
+    ]);
+    let equal_factor = term(3, 1, &a) + term(7, 1, &a);
+    assert_eq!(
+        equal.identity_factor(&equal_factor, &equal_sources).len(),
+        2
+    );
+    equal.members[0].identity.as_mut().unwrap().id = DiagramId(11);
+    equal.members[1].identity.as_mut().unwrap().id = DiagramId(10);
+    assert!(catch_unwind(|| equal.identity_factor(&equal_factor, &equal_sources)).is_err());
 }
 
 #[derive(Clone, Debug)]
@@ -193,7 +504,7 @@ fn canonical(atom: &Atom) -> String {
 }
 
 impl Entry {
-    fn of(diagram: &FeynmanDiagram) -> Entry {
+    fn of(diagram: &FeynmanDiagram, writer: &mut File, store: &Arc<Mutex<File>>) -> Entry {
         let full_key = Arc::new(diagram.canonical_key().unwrap());
         let key = serde_json::to_value(full_key.as_ref()).unwrap();
         // Preserve the u128 identity through DiagramId below, never through Value's number
@@ -205,7 +516,7 @@ impl Entry {
         let fields = serialized.as_object_mut().unwrap();
         fields.remove("id").unwrap();
         fields.remove("name").unwrap();
-        let payload = Arc::new(serialized.clone());
+        let payload = Payload::write(&serialized, writer, store);
         let fields = serialized.as_object_mut().unwrap();
         let mut numerator = Digest::new();
         for field in ["numerator", "numerator_prefactor", "projector"] {
@@ -230,6 +541,7 @@ impl Entry {
             name: diagram.name().map(str::to_owned),
             symmetry_factor: diagram.symmetry_factor(),
             overall_factor: canonical(diagram.overall_factor()),
+            factor: diagram.overall_factor().clone(),
             weight: Rational::try_from(&weight).unwrap_or_else(|_| {
                 panic!(
                     "{:?}: overall factor {weight} is not a number",
@@ -245,6 +557,15 @@ impl Entry {
 
 impl Census {
     pub fn of(result: &BuiltDiagramSet) -> Census {
+        // Heavy runs put these anonymous files on the gate's disk-backed filesystem.
+        // No extra output name survives, and the last cloned payload closes the file.
+        let mut writer = if let Ok(directory) = std::env::var("FEYNKIT_ORACLE_DUMP") {
+            std::fs::create_dir_all(&directory).unwrap();
+            tempfile::tempfile_in(directory).unwrap()
+        } else {
+            tempfile::tempfile().unwrap()
+        };
+        let store = Arc::new(Mutex::new(writer.try_clone().unwrap()));
         let groups = result
             .groups()
             .iter()
@@ -264,7 +585,10 @@ impl Census {
             .collect();
         Census {
             report: result.report().clone(),
-            diagrams: result.iter().map(Entry::of).collect(),
+            diagrams: result
+                .iter()
+                .map(|diagram| Entry::of(diagram, &mut writer, &store))
+                .collect(),
             groups,
         }
     }
@@ -394,8 +718,10 @@ impl Census {
             .zip(right.values())
             .find(|(l, r)| l.payload != r.payload)
         {
-            let left_payload = l.payload.as_object().unwrap();
-            let right_payload = r.payload.as_object().unwrap();
+            let left_value = l.payload.read();
+            let right_value = r.payload.read();
+            let left_payload = left_value.as_object().unwrap();
+            let right_payload = right_value.as_object().unwrap();
             let field = left_payload
                 .keys()
                 .chain(right_payload.keys())
@@ -520,8 +846,8 @@ impl Census {
     }
 
     /// Resolve every Named member by identity against the full ungrouped inventory,
-    /// including discarded sources. Source indices belong to each request: grouping's
-    /// canonical encounter order can differ from the ungrouped search order.
+    /// including discarded sources. Grouped output positions may differ, but each
+    /// source index refers to the original request's ungrouped inventory.
     pub fn assert_group_sources(&self, ungrouped: &Census, context: &str) {
         assert_eq!(ungrouped.groups.len(), ungrouped.diagrams.len());
         let source_indices: BTreeSet<_> = ungrouped
@@ -586,6 +912,240 @@ impl Census {
                 );
             }
         }
+    }
+
+    /// Compare classes after joining by the full key. Search order and display names may
+    /// change, but the retained frame, original rules, factors and group members may not.
+    pub fn assert_class_equivalent(
+        &self,
+        other: &Census,
+        sources: (&Census, &Census),
+        context: &str,
+    ) {
+        self.assert_group_sources(sources.0, context);
+        other.assert_group_sources(sources.1, context);
+        // Only a grouping head's first argument is request-local provenance. Bind it
+        // to the complete source identity; retain the ratio and nested factor trees.
+        let factors = |census: &Census, sources: &Census| {
+            let source_indices = sources
+                .groups
+                .iter()
+                .map(|group| {
+                    assert_eq!(group.members.len(), 1, "{context}: ungrouped source");
+                    let member = &group.members[0];
+                    let identity = member.identity.as_ref().expect("Named source identity");
+                    let entry = &sources.diagrams[group.master];
+                    assert_eq!(identity.id, entry.id, "{context}: source identity");
+                    assert_eq!(
+                        Some(&identity.name),
+                        entry.name.as_ref(),
+                        "{context}: source name"
+                    );
+                    (
+                        member.source_index,
+                        (entry.id, identity.name.as_str(), &entry.factor),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(
+                source_indices.len(),
+                sources.groups.len(),
+                "{context}: unique source indices"
+            );
+            for entry in &census.diagrams {
+                let serialized = canonical(&entry.factor);
+                assert_eq!(
+                    entry.overall_factor, serialized,
+                    "{context}: factor serialization"
+                );
+                assert_eq!(
+                    entry.payload.read()["overall_factor"].as_str(),
+                    Some(serialized.as_str()),
+                    "{context}: payload factor serialization"
+                );
+            }
+            census
+                .groups
+                .iter()
+                .filter(|group| group.members.len() > 1)
+                .map(|group| {
+                    let entry = &census.diagrams[group.master];
+                    (
+                        entry.id,
+                        group.identity_factor(&entry.factor, &source_indices),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>()
+        };
+        let left_factors = factors(self, sources.0);
+        let right_factors = factors(other, sources.1);
+        assert_eq!(
+            left_factors, right_factors,
+            "{context}: source-bound group factors"
+        );
+        let left = self.by_key();
+        let right = other.by_key();
+        assert!(left.keys().eq(right.keys()), "{context}: diagram keys");
+        for (key, entry) in &left {
+            let other = right[key];
+            let value = entry.payload.read();
+            let other_value = other.payload.read();
+            let payload = value.as_object().unwrap();
+            let other_payload = other_value.as_object().unwrap();
+            assert!(
+                payload.keys().eq(other_payload.keys()),
+                "{context}: payload fields"
+            );
+            for (field, value) in payload {
+                if field != "overall_factor" || !left_factors.contains_key(&entry.id) {
+                    assert_eq!(
+                        value, &other_payload[field],
+                        "{context}: full {field} payload"
+                    );
+                }
+            }
+            assert_eq!(
+                (
+                    entry.id,
+                    entry.symmetry_factor,
+                    entry.frame,
+                    entry.numerator,
+                    &entry.basis
+                ),
+                (
+                    other.id,
+                    other.symmetry_factor,
+                    other.frame,
+                    other.numerator,
+                    &other.basis
+                ),
+                "{context}: identity, symmetry, frame, numerator or basis"
+            );
+        }
+        let groups = |census: &Census| {
+            census
+                .groups
+                .iter()
+                .map(|group| {
+                    let members = group
+                        .members
+                        .iter()
+                        .map(|member| {
+                            (
+                                member.identity.as_ref().expect("Named identity").id,
+                                (member.ratio.clone(), member.overall_factor.clone()),
+                            )
+                        })
+                        .collect::<BTreeMap<_, _>>();
+                    assert_eq!(
+                        members.len(),
+                        group.members.len(),
+                        "{context}: duplicate member"
+                    );
+                    (census.diagrams[group.master].id, members)
+                })
+                .collect::<BTreeMap<_, _>>()
+        };
+        let left_groups = groups(self);
+        let right_groups = groups(other);
+        assert_eq!(
+            left_groups.len(),
+            self.groups.len(),
+            "{context}: duplicate master"
+        );
+        assert_eq!(
+            right_groups.len(),
+            other.groups.len(),
+            "{context}: duplicate master"
+        );
+        assert_eq!(
+            left_groups, right_groups,
+            "{context}: member identity, ratio or factor"
+        );
+    }
+
+    /// Retain exact physical fields for independent replay, in addition to the compact census.
+    pub fn write_exact_dump(&self, writer: impl std::io::Write) -> serde_json::Result<()> {
+        // Keep the old Value serializer's sorted field order and literal values,
+        // while materializing only one stored diagram payload at a time.
+        #[derive(Serialize)]
+        struct Diagram<'a> {
+            aut: String,
+            basis: Value,
+            id: String,
+            key: Value,
+            name: &'a Option<String>,
+            overall_factor: &'a str,
+            payload: Value,
+        }
+        struct Diagrams<'a>(&'a [Entry]);
+        impl Serialize for Diagrams<'_> {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.collect_seq(self.0.iter().map(|entry| Diagram {
+                    aut: entry.symmetry_factor.to_string(),
+                    basis: serde_json::to_value(&entry.basis).unwrap(),
+                    id: entry.id.to_string(),
+                    key: serde_json::to_value(entry.full_key.as_ref()).unwrap(),
+                    name: &entry.name,
+                    overall_factor: &entry.overall_factor,
+                    payload: entry.payload.read(),
+                }))
+            }
+        }
+        #[derive(Serialize)]
+        struct Source<'a> {
+            id: Option<String>,
+            name: Option<&'a str>,
+            overall_factor: &'a str,
+            ratio: &'a str,
+            source_index: usize,
+        }
+        struct Members<'a>(&'a [Member]);
+        impl Serialize for Members<'_> {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.collect_seq(self.0.iter().map(|member| {
+                    Source {
+                        id: member
+                            .identity
+                            .as_ref()
+                            .map(|identity| identity.id.to_string()),
+                        name: member
+                            .identity
+                            .as_ref()
+                            .map(|identity| identity.name.as_str()),
+                        overall_factor: &member.overall_factor,
+                        ratio: &member.ratio,
+                        source_index: member.source_index,
+                    }
+                }))
+            }
+        }
+        #[derive(Serialize)]
+        struct GroupDump<'a> {
+            master: usize,
+            members: Members<'a>,
+        }
+        struct Groups<'a>(&'a [Group]);
+        impl Serialize for Groups<'_> {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.collect_seq(self.0.iter().map(|group| GroupDump {
+                    master: group.master,
+                    members: Members(&group.members),
+                }))
+            }
+        }
+        #[derive(Serialize)]
+        struct Dump<'a> {
+            diagrams: Diagrams<'a>,
+            groups: Groups<'a>,
+        }
+        serde_json::to_writer(
+            writer,
+            &Dump {
+                diagrams: Diagrams(&self.diagrams),
+                groups: Groups(&self.groups),
+            },
+        )
     }
 
     /// One line per diagram and per group, for comparing the runs of two builds with `diff`.

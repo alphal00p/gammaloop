@@ -123,6 +123,11 @@ macro_rules! typed_views {
             pub fn is_connected(&self, side: VertexSet) -> bool { self.0.is_connected(side) }
             pub fn loops_in(&self, side: VertexSet) -> usize { self.0.loops_in(side) }
             pub fn edges(&self) -> impl Iterator<Item = EdgeView<'a, F>> + 'a { self.0.edges() }
+            /// Assigned class or particle of an edge. Class members retain the original field order.
+            pub fn field(&self, edge: usize) -> Option<Dressed<'a, F>> { self.0.field(edge) }
+            /// Known direction at the first endpoint, including unresolved directed classes.
+            /// None means undirected or not yet assigned; field() distinguishes those cases.
+            pub fn flow(&self, edge: usize) -> Option<Flow> { self.0.flow(edge) }
             pub fn rules(&self, vertex: usize) -> Option<&'a [u32]> { self.0.rules(vertex) }
             /// Rules compatible with the assigned stubs at this vertex, in declaration order.
             pub fn domains(&self, vertex: usize) -> Vec<u32> { self.0.domains(vertex) }
@@ -157,6 +162,14 @@ typed_views! {
     DiagramView,
 }
 
+/// A field at the current dressing stage, borrowing the original immutable field table.
+/// A class is not a representative particle: predicates must hold for its refinements.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dressed<'a, F> {
+    Class(&'a [F]),
+    Particle(&'a F),
+}
+
 /// An inclusive range of the possible sum of one declared theory weight.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OrderBound<'a> {
@@ -172,6 +185,9 @@ pub struct EdgeView<'a, F> {
     /// Its field and direction at `vertices[0]` once assigned: an outgoing stub makes the edge
     /// point from `vertices[0]` to `vertices[1]` (directed self-loops have an outgoing stub).
     pub stub: Option<Stub<&'a F>>,
+    /// Direction is known even while a class has no concrete particle stub. None means
+    /// undirected or still unassigned, as distinguished by the view's field accessor.
+    pub flow: Option<Flow>,
 }
 
 /// A bridge of a [`View`] together with the side of it that is final: that side has no open
@@ -271,10 +287,14 @@ impl<'a, F, L> View<'a, F, L> {
     }
 
     fn model(&self) -> &'a Model {
-        &self
+        let model = &self
             .compiled
-            .expect("a decoration view borrows its compiled plan")
-            .model
+            .expect("a search view borrows its compiled plan")
+            .model;
+        match self.state {
+            State::Decoration(d) if d.particles => model.particles(),
+            _ => model,
+        }
     }
 
     fn topology(&self) -> &'a Topology {
@@ -406,7 +426,8 @@ impl<'a, F, L> View<'a, F, L> {
     }
 
     /// Every edge between vertices. From [`Stage::Fields`] on, edges are listed in the order
-    /// stage 2 assigns their fields: the edges with a field come first.
+    /// stage 2 assigns their classes. Particle refinement assigns a whole directed line at once,
+    /// so resolved particle fields need not form a prefix.
     pub fn edges(&self) -> impl Iterator<Item = EdgeView<'a, F>> + 'a {
         match self.state {
             State::Topology(t) => Either::Left((0..t.n).flat_map(move |u| {
@@ -419,10 +440,29 @@ impl<'a, F, L> View<'a, F, L> {
                     (0..m).map(move |_| EdgeView {
                         vertices: [u, v],
                         stub: None,
+                        flow: None,
                     })
                 })
             })),
             State::Decoration(d) => Either::Right(self.compiled.expect("decoration view").edges(d)),
+        }
+    }
+
+    fn field(&self, edge: usize) -> Option<Dressed<'a, F>> {
+        match self.state {
+            State::Topology(_) => None,
+            State::Decoration(d) => self.compiled.expect("decoration view").dressed(d, edge),
+        }
+    }
+
+    fn flow(&self, edge: usize) -> Option<Flow> {
+        match self.state {
+            State::Topology(_) => None,
+            State::Decoration(d) => self
+                .compiled
+                .expect("decoration view")
+                .decoration_edge(d, edge)
+                .and_then(|e| e.stub.flow),
         }
     }
 
@@ -450,7 +490,7 @@ impl<'a, F, L> View<'a, F, L> {
                     .model
                     .leg_state(t.vertices[vertex].degree, t.vertices[vertex].legs),
             };
-            return state.map(|s| compiled.model.domain(s)).unwrap_or_default();
+            return state.map(|s| self.model().domain(s)).unwrap_or_default();
         }
         // Stored skeletons keep rule declarations but no automaton. Match the attached stubs
         // directly, preserving duplicate rules and their original insertion indices.
@@ -547,8 +587,8 @@ impl<'a, F, L> View<'a, F, L> {
         bridges
     }
 
-    /// The state as a graph: the edges placed so far, with their field once assigned (undirected
-    /// before), and the legs; nodes carry their rule once it is the only one that fits. Open
+    /// The state as a graph: assigned orientations and resolved particle fields, and the legs.
+    /// A class has no concrete particle payload yet. Nodes carry their rule once unique. Open
     /// stubs are left out.
     pub fn graph(&self) -> HedgeGraph<Option<F>, Option<usize>, Option<L>>
     where
@@ -638,7 +678,7 @@ impl<'a, F, L> View<'a, F, L> {
         }
         for e in edges {
             let [u, v] = e.vertices.map(NodeIndex);
-            match e.stub.as_ref().and_then(|s| s.flow) {
+            match e.flow {
                 None => builder.add_edge(u, v, edge(e.stub), Orientation::Undirected),
                 Some(Flow::Source) => builder.add_edge(u, v, edge(e.stub), Orientation::Default),
                 Some(Flow::Sink) => builder.add_edge(v, u, edge(e.stub), Orientation::Default),
@@ -649,17 +689,65 @@ impl<'a, F, L> View<'a, F, L> {
 }
 
 impl<F, L> Compiled<F, L> {
-    /// The edges of a decoration, with the stubs of the labelled ones.
+    /// The edges retain orientation before an actual class member is selected.
     fn edges<'a>(&'a self, d: Decoration<'a>) -> impl Iterator<Item = EdgeView<'a, F>> + 'a {
-        d.edges.iter().enumerate().map(move |(i, e)| EdgeView {
-            vertices: [e.u as usize, e.v as usize],
-            stub: d.labels.get(i).map(|&l| self.stub(e, l)),
+        d.edges.iter().enumerate().map(move |(i, e)| {
+            let flow = self.decoration_edge(d, i).and_then(|edge| edge.stub.flow);
+            let stub = match self.dressed(d, i) {
+                Some(Dressed::Particle(field)) => Some(Stub { field, flow }),
+                _ => None,
+            };
+            EdgeView {
+                vertices: [e.u as usize, e.v as usize],
+                stub,
+                flow,
+            }
         })
+    }
+
+    fn decoration_edge(&self, d: Decoration<'_>, index: usize) -> Option<DiagramEdge> {
+        let edge = d.edges.get(index)?;
+        let label = d
+            .labels
+            .get(index)
+            .copied()
+            .filter(|&label| label != u8::MAX);
+        if d.particles {
+            if let Some(label) = label {
+                return Some(Self::edge_with(self.model.particles(), edge, label));
+            }
+            Some(Self::edge_with(
+                &self.model,
+                edge,
+                *d.coarse_labels?.get(index)?,
+            ))
+        } else {
+            Some(Self::edge_with(&self.model, edge, label?))
+        }
+    }
+
+    fn dressed<'a>(&'a self, d: Decoration<'_>, index: usize) -> Option<Dressed<'a, F>> {
+        let edge = self.decoration_edge(d, index)?;
+        let fine = d.particles && d.labels.get(index).is_some_and(|&label| label != u8::MAX);
+        if fine || self.model.refinement.is_none() {
+            Some(Dressed::Particle(
+                &self.tables.fields[edge.stub.field as usize],
+            ))
+        } else {
+            let members = &self.tables.class_members[edge.stub.field as usize];
+            Some(match members.as_ref() {
+                [field] => Dressed::Particle(field),
+                fields => Dressed::Class(fields),
+            })
+        }
     }
 
     /// The decorated edge, with its field rank and direction at the first vertex.
     pub(super) fn edge(&self, e: &Edge, l: u8) -> DiagramEdge {
-        let model = &self.model;
+        Self::edge_with(self.model.particles(), e, l)
+    }
+
+    fn edge_with(model: &Model, e: &Edge, l: u8) -> DiagramEdge {
         let (field, flow) = if e.u == e.v {
             let label = model.theory.loop_labels[l as usize];
             (label.field, label.directed.then_some(Flow::Source))
@@ -675,14 +763,6 @@ impl<F, L> Compiled<F, L> {
         DiagramEdge {
             vertices: [e.u, e.v],
             stub: Stub { field, flow },
-        }
-    }
-
-    fn stub(&self, e: &Edge, label: u8) -> Stub<&F> {
-        let edge = self.edge(e, label);
-        Stub {
-            field: &self.tables.fields[edge.stub.field as usize],
-            flow: edge.stub.flow,
         }
     }
 }

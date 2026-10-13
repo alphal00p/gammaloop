@@ -22,7 +22,7 @@ pub use generation::{
 };
 pub use grouping::GroupingError;
 pub use options::{
-    Bridges, CancellationToken, CutAmplitude, Cuts, GenerationControl, GenerationProgress,
+    Bridges, CancellationToken, Classes, CutAmplitude, Cuts, GenerationControl, GenerationProgress,
     GraphGroupingOptions, Grouping, Loops, Naming, NumeratorOptions, Orders, Range, Request,
     Restrict, Run, Selection, Stage, Symmetrize, TopologyRules, Veto,
 };

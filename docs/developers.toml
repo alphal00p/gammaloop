@@ -22,7 +22,7 @@ status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-10-13"
-review_ref = "e81fa93f8177a195c43015f95510d5d3adac5d01"
+review_ref = "eda52a7fd0cb7c79e900986dbe349f7f37c15946"
 products = ["gammaloop", "feynkit"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
 review_triggers = ["crates/feynkit*/**", "crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
@@ -43,7 +43,12 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-13: Only a pre-Request load regression was added. It proves the
 # existing version 10 guard rejects old state before model or symbolic payload decoding,
 # without changing the persisted layout or load implementation.
-digest = "944bb45fddc56c9133e2791b2515c4458d0e9434"
+# Reviewed 2026-10-13: Version 11 now persists the explicit field-class search policy in
+# Request. The note preserves versions 8, 9 and 10 history and the exact-version
+# regeneration contract; the added regression proves rejection before invalid payload
+# decoding. The merged owner also retains the accepted SIDE pre-Request rejection guard,
+# with its expected current version updated to 11.
+digest = "5d7c762e5f5af25a1aca0e69aa365ac71a9694de"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -219,6 +224,24 @@ anchor = "pub fn generate(&self, model: Arc<Model>, run: &Run)"
 # Request/DiagramSet/BuiltDiagramSet prose describes discovery, build, select/group and
 # the squared-order relation.
 digest = "f8d4c758a2aa60209fa9f42c74a3d7b961d110ac"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/src/options.rs"
+symbol = "feynkit_generator::Request"
+anchor = "pub struct Request {"
+# Reviewed 2026-10-13: Request stores Classes with Auto as default and persists it
+# alongside existing physical options; the architecture documents the policy and version
+# 11 boundary.
+digest = "944767b0d94fc7cf2d80b60e57e1f0dc901f9e2c"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/src/generation/enumeration.rs"
+symbol = "feynkit_generator::generation::enumeration::Signatures::class_distinctions"
+anchor = "    fn class_distinctions("
+# Reviewed 2026-10-13: The physics adapter supplies request-observed field/rule equality
+# distinctions and keeps surviving Theory positions separate from sparse model rule IDs;
+# the note documents that ownership.
+digest = "5bbdc8374cc7518eb15d423d997162cba868495c"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -700,7 +723,7 @@ status = "Implemented · reviewed 2026-08-18"
 lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-10-13"
-review_ref = "e81fa93f8177a195c43015f95510d5d3adac5d01"
+review_ref = "eda52a7fd0cb7c79e900986dbe349f7f37c15946"
 products = ["linnet"]
 topics = ["half-edge", "subgraph", "dot", "serialization", "algorithms"]
 review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs", "crates/linnet/src/half_edge/**", "crates/linnet/src/parser/**", "crates/linnet/src/permutation.rs", "crates/linnet/src/tree/**", "crates/linnet/src/union_find/**", "crates/linnet/src/drawing.rs", "crates/linnet/src/num_traits.rs", "crates/linnet/Cargo.toml"]
@@ -803,6 +826,35 @@ anchor = "pub struct DotGraph<N: Topology = NodeForest> {"
 # order, later graph attributes and lossless quoting/indentation. Existing native pipeline
 # text retained; no runtime validation inferred.
 digest = "bb3e6eb54812c4446cb3ead858533bea76ef96b3"
+
+[[section.note.scope]]
+path = "crates/linnet/src/half_edge/generate/query.rs"
+symbol = "linnet::half_edge::generate::Classes"
+anchor = "pub enum Classes {"
+# Reviewed 2026-10-13: The note documents Auto and None, the conservative directed-line
+# scope and caller distinctions; the policy owner is explicitly covered.
+digest = "2f18a18ad9f2918553e7bc66efd933d1cd99e511"
+
+[[section.note.scope]]
+path = "crates/linnet/src/half_edge/generate/model.rs"
+symbol = "linnet::half_edge::generate::model::Theory::field_classes"
+anchor = "    fn field_classes("
+# Reviewed 2026-10-13: The note documents exact coloured rule-incidence orbits, structural
+# exclusions, budget distinctions and preserved external particle pins; the class compiler
+# owner is explicitly covered.
+# Reviewed 2026-10-13: Using the existing canonize() borrows the same ordered node and edge
+# payloads; the uniform NoData half-edge payload retains one colour. Class orbits and the note
+# remain unchanged.
+digest = "d6d46373db8825791507acda8016362c27f4215b"
+
+[[section.note.scope]]
+path = "crates/linnet/src/half_edge/generate/decorate.rs"
+symbol = "linnet::half_edge::generate::decorate::Decorator::start_refinement"
+anchor = "    fn start_refinement("
+# Reviewed 2026-10-13: The note documents whole-line fine assignment, the coarse
+# stabilizer quotient, preserved original rule indices and hereditary hook boundaries; the
+# refinement owner is explicitly covered.
+digest = "691adcfd55d67105b92e10a5da50c0ea7f4a8d38"
 
 [[section.note]]
 id = "vakint-architecture"

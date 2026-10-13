@@ -10,7 +10,7 @@ use pyo3::exceptions::{PyIndexError, PyReferenceError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 
-use super::{Objects, PyEdgeSignature, PyGraph};
+use super::{cleared, Objects, PyEdgeSignature, PyFlow, PyGraph};
 
 /// How far a typed generation view has been built.
 #[cfg_attr(
@@ -42,6 +42,88 @@ impl From<generate::Stage> for PyGenerationStage {
 
 fn expired() -> PyErr {
     PyReferenceError::new_err("a callback generation view is only valid during its callback")
+}
+
+enum DressedValue {
+    Class(Py<PyTuple>),
+    Particle(Py<PyAny>),
+}
+
+/// An owned field value with an explicit class/particle tag, so tuple-valued keys remain distinct.
+/// Values may be retained after a callback; asking an expired view for a value is an error.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(name = "Dressed")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
+pub(super) struct PyDressed {
+    value: Option<DressedValue>,
+}
+
+impl PyDressed {
+    fn from_native(
+        py: Python<'_>,
+        objects: &Objects,
+        value: generate::Dressed<'_, u32>,
+    ) -> PyResult<Self> {
+        let value = match value {
+            generate::Dressed::Class(members) => DressedValue::Class(
+                PyTuple::new(
+                    py,
+                    members
+                        .iter()
+                        .map(|&rank| objects.field(py, rank))
+                        .collect::<PyResult<Vec<_>>>()?,
+                )?
+                .unbind(),
+            ),
+            generate::Dressed::Particle(&rank) => DressedValue::Particle(objects.field(py, rank)?),
+        };
+        Ok(Self { value: Some(value) })
+    }
+}
+
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[pymethods]
+impl PyDressed {
+    /// Either "class" or "particle"; the tag is independent of the Python key's type.
+    #[getter]
+    fn kind(&self) -> PyResult<&'static str> {
+        Ok(match self.value.as_ref().ok_or_else(cleared)? {
+            DressedValue::Class(_) => "class",
+            DressedValue::Particle(_) => "particle",
+        })
+    }
+    /// Original keys in a class; None for a concrete particle.
+    #[getter]
+    #[gen_stub(override_return_type(type_repr = "tuple[_Key, ...] | None"))]
+    fn members(&self, py: Python<'_>) -> PyResult<Option<Py<PyTuple>>> {
+        Ok(match self.value.as_ref().ok_or_else(cleared)? {
+            DressedValue::Class(members) => Some(members.clone_ref(py)),
+            DressedValue::Particle(_) => None,
+        })
+    }
+    /// The original particle key; None for a class. Use kind when None itself is a key.
+    #[getter]
+    #[gen_stub(override_return_type(type_repr = "_Key | None"))]
+    fn particle(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        Ok(match self.value.as_ref().ok_or_else(cleared)? {
+            DressedValue::Class(_) => None,
+            DressedValue::Particle(particle) => Some(particle.clone_ref(py)),
+        })
+    }
+    #[gen_stub(skip)]
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        match &self.value {
+            Some(DressedValue::Class(members)) => visit.call(members),
+            Some(DressedValue::Particle(particle)) => visit.call(particle),
+            None => Ok(()),
+        }
+    }
+    #[gen_stub(skip)]
+    fn __clear__(&mut self) {
+        self.value = None;
+    }
 }
 
 // Native typed views deliberately expose the same read-only methods. Generate their Python
@@ -228,6 +310,20 @@ macro_rules! typed_view {
                 })
             }
 
+            /// A class or concrete original particle for this edge; None while unassigned.
+            fn field(&self, py: Python<'_>, edge: usize) -> PyResult<Option<PyDressed>> {
+                self.with(|view| {
+                    let objects = self.objects()?;
+                    view.field(edge).map(|value| PyDressed::from_native(py, objects, value)).transpose()
+                })
+            }
+
+            /// Known direction at the edge's first vertex, including during class refinement.
+            /// None denotes an undirected or unassigned edge; field() distinguishes them.
+            fn flow(&self, edge: usize) -> PyResult<Option<PyFlow>> {
+                self.with(|view| Ok(view.flow(edge).map(Into::into)))
+            }
+
             /// Exact matching rules once all vertex stubs have fields; otherwise None.
             fn rules(&self, vertex: usize) -> PyResult<Option<Vec<u32>>> {
                 self.at(vertex, |view, v| Ok(view.rules(v).map(<[u32]>::to_vec)))
@@ -362,6 +458,7 @@ impl PySkeletonView {
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyGenerationStage>()?;
+    module.add_class::<PyDressed>()?;
     module.add_class::<PySkeletonView>()?;
     module.add_class::<PyDressingView>()?;
     module.add_class::<PyDiagramView>()?;

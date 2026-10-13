@@ -5,3 +5,4 @@ zero-flow edges = true -> Skeletons; hereditary=true; Restriction
 vertex bound = None -> Skeletons; hereditary=true; Restriction
 weight g = -2..=2 -> Dressing; hereditary=true; Propagator
 weight g = -2..=2 -> Rules; hereditary=false; FinalCheck
+flavour classes = Auto; 0 nontrivial directed single-line classes -> Dressing; hereditary=false; Propagator

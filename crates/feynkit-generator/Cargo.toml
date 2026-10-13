@@ -31,6 +31,7 @@ linnet = { workspace = true, features = ["rayon"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+tempfile = "3.8"
 
 [features]
 default = ["native"]

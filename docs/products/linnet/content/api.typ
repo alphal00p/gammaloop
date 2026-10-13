@@ -98,6 +98,23 @@ construct diagrams. `plan.diagrams()` yields compact owned `Diagram` objects: `g
 A materialized graph has rule indices on nodes, fields on edges, and leg labels on dangling
 half-edges. Its mutation does not change the compact output.
 
+`Classes.auto()` is the default for both `Query(..., classes=...)` and
+`theory.query(..., classes=...)`. It first assigns compatible directed-line flavour classes,
+then refines them to the original fields and vertex rules. `Classes.none()` assigns particles
+directly for comparison; the completed canonical diagrams, rule identities and automorphism
+orders are the same. Undirected fields and rules that do not admit safe flavour refinement
+remain distinct.
+
+`view.field(edge_index)` returns None for an unassigned edge, or an owned `Dressed` value.
+Its `kind` is `"class"` with `members` containing a tuple of original keys, or `"particle"`
+with `particle` holding the original key; the other property is None. The explicit tag keeps
+a tuple-valued particle key distinct from a class, and distinguishes a concrete None key
+from an unassigned field. `view.flow(edge_index)` returns `Flow.Source` or `Flow.Sink` at the
+first endpoint as soon as direction is known, including unresolved classes; None means
+undirected or unassigned. The existing `edges()` tuples remain `(u, v, concrete_stub_or_none)`:
+a known directed class still has no concrete stub. Retained `Dressed` values own their keys
+and survive the callback; calling `field()` or `flow()` on an expired view raises `ReferenceError`.
+
 The three typed hooks have separate purposes: `prune_skeletons` receives `SkeletonView`,
 `prune_dressings` receives `DressingView`, and final `select` receives `DiagramView`.
 Pruning predicates must reject every refinement of a rejected state; selection can use any

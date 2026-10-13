@@ -215,7 +215,7 @@ This bound excludes global projectors/prefactors and does not replace subdiverge
 
 Python's model-bound `Process` describes external states independently of calculation kind.
 Its `amplitude(loops=...)` and `cross_section(loops=...)` constructors produce a `Request` with
-native `Orders`, `Restrict`, `TopologyRules`, `Cuts` and `Symmetrize` values. Loops are explicit
+native `Orders`, `Restrict`, `TopologyRules`, `Classes`, `Cuts` and `Symmetrize` values. Loops are explicit
 for every request, including vacuum requests. Both languages use the same minimal defaults;
 there are no Python-only topology presets or keyword-to-filter translators.
 
@@ -227,6 +227,14 @@ constructs physical numerators; the resulting `BuiltDiagramSet` owns subsequent 
 alignment valid. Amplitude squared-order constraints resolve one common partner relation,
 which survives selection, grouping and conversion into `Amplitude`; symbolic squaring uses
 only permitted class pairs. Cross sections test squared powers on the summed forward graph.
+
+The separate field-search policy `Classes::Auto` first assigns safe directed-line flavour
+classes, then refines them to exact particles; `Classes::None` retains direct particle search.
+FeynKit supplies equality distinctions for spin and colour, active mass vetoes, cut and
+unresolved content, rule colour/Lorentz structures and coupling occupancy, plus active cut
+orders and left/right exchange. These distinctions only split Linnet's structural classes.
+The adapter indexes rules by their surviving Theory position, preserving sparse original
+model rule IDs. Class labels are request-local equality values, not model identities.
 
 Diagram names are optional; structural IDs and aggregate numerators are computed on demand.
 The ID hashes Linnet's structural canonical form, including model particle/rule names,
@@ -730,7 +738,9 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 10` currently).
+- State format is versioned with `state_manifest.toml` (`version = 11` currently).
+- Version 11 adds the explicit field-class search policy to the persisted `Request`.
+  Older saved states must be regenerated before loading.
 - Version 10 persists the generation `Request` separately from numerator, selection and grouping settings, with `u128` symmetry orders. Older positional state layouts must be regenerated.
 - Version 9 weights each identical-beam cross-section graph by its beam-exchange orbit. The layout is unchanged, but older symmetrized identical-beam states carry halved weights that nothing in them reveals, so every older state must be regenerated.
 - Version 8 binds canonical FeynKit model records to runtime graph identities.

@@ -237,6 +237,18 @@ impl Structure {
     }
 }
 
+/// Whether safe directed-line flavours are assigned in classes before particle refinement.
+/// Undirected fields and fields in non-diagonal or multi-line rules remain distinct.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+pub enum Classes {
+    #[default]
+    Auto,
+    /// The original particle search, also used as the exact refinement oracle.
+    None,
+}
+
 /// What to enumerate. Compiling a [`super::Plan`] validates this request once against a theory.
 ///
 /// Pruning hooks must reject every refinement of a rejected state. Final selection may use any
@@ -249,6 +261,9 @@ pub struct Query<F, L> {
     pub(super) weights: Vec<(String, [i64; 2])>,
     pub(super) counts: Vec<(Countable<F>, [i64; 2])>,
     pub(super) hooks: Hooks<F, L>,
+    pub(super) classes: Classes,
+    pub(super) field_colours: Vec<(F, u32)>,
+    pub(super) rule_colours: Vec<(usize, u32)>,
 }
 
 impl<F: Clone, L: Clone> Query<F, L> {
@@ -267,7 +282,29 @@ impl<F: Clone, L: Clone> Query<F, L> {
             weights: Vec::new(),
             counts: Vec::new(),
             hooks: Hooks::default(),
+            classes: Classes::Auto,
+            field_colours: Vec::new(),
+            rule_colours: Vec::new(),
         }
+    }
+
+    pub fn classes(mut self, classes: Classes) -> Self {
+        self.classes = classes;
+        self
+    }
+
+    /// Additional equality colours read by the physics request's active criteria.
+    /// These only split structural orbits; zero is the colour of an unspecified entry.
+    /// Fields and rules have separate colour spaces. Unknown or repeated keys are errors.
+    #[doc(hidden)]
+    pub fn class_distinctions(
+        mut self,
+        fields: impl IntoIterator<Item = (F, u32)>,
+        rules: impl IntoIterator<Item = (usize, u32)>,
+    ) -> Self {
+        self.field_colours.extend(fields);
+        self.rule_colours.extend(rules);
+        self
     }
 
     pub fn loops(mut self, range: impl RangeBounds<usize>) -> Self {

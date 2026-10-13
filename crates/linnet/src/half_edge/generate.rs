@@ -125,12 +125,13 @@ pub use output::{Counts, Dressings, LoopCounts, Skeleton, SkeletonSnapshot, Skel
 use output::{DiagramOutput, Emit, SkeletonData};
 use query::Hooks;
 pub use query::{
-    Bridges, Legs, PlanCriterion, PlanReport, PlanRole, PlanStage, Query, Run, Structure, Theory,
-    TheoryBuilder,
+    Bridges, Classes, Legs, PlanCriterion, PlanReport, PlanRole, PlanStage, Query, Run, Structure,
+    Theory, TheoryBuilder,
 };
 use topology::{Context, Limits, Search, Topology, MAX_VERTICES};
 pub use view::{
-    Bridge, DiagramView, DressingView, EdgeView, OrderBound, SkeletonView, Stage, VertexSet,
+    Bridge, DiagramView, Dressed, DressingView, EdgeView, OrderBound, SkeletonView, Stage,
+    VertexSet,
 };
 use view::{Prune, Pruner, State, View};
 
@@ -256,6 +257,7 @@ impl<F, L> Diagram<F, L> {
     /// Internal edges in decorator order; every stub is assigned, at the first endpoint.
     pub fn edges(&self) -> impl ExactSizeIterator<Item = EdgeView<'_, F>> {
         self.edges.iter().map(|edge| EdgeView {
+            flow: edge.stub.flow,
             vertices: edge.vertices.map(usize::from),
             stub: Some(Stub {
                 field: &self.tables.fields[edge.stub.field as usize],
@@ -418,6 +420,14 @@ pub enum GenerationError {
     TooManyCounts,
     #[error("unknown weight column {0:?}")]
     UnknownWeight(String),
+    #[error("class distinction refers to an unknown field")]
+    UnknownClassField,
+    #[error("class distinction repeats a field")]
+    DuplicateClassField,
+    #[error("class distinction refers to unknown rule {0}")]
+    UnknownClassRule(usize),
+    #[error("class distinction repeats rule {0}")]
+    DuplicateClassRule(usize),
     #[error("generation request is infeasible: {0}")]
     Infeasible(PlanReport),
     #[error("weight name {0:?} is declared more than once")]
@@ -620,6 +630,7 @@ struct Compiled<F, L> {
 struct OutputTables<F, L> {
     /// Distinct fields and labels, sorted: their ids are ranks.
     fields: Arc<[F]>,
+    class_members: Box<[Box<[F]>]>,
     labels: Box<[L]>,
     packing: model::Legs,
     signatures: Arc<[Vec<u8>]>,
@@ -681,13 +692,77 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
             });
         }
         let request = Self::request(theory, query, report)?;
-        let model = Model::new(Arc::clone(&theory.dense), &classes, &request)?;
+        let mut field_colours = vec![0; fields.len()];
+        let mut seen_fields = vec![false; fields.len()];
+        for (key, colour) in &query.field_colours {
+            let field = fields
+                .binary_search(key)
+                .map_err(|_| GenerationError::UnknownClassField)?;
+            if std::mem::replace(&mut seen_fields[field], true) {
+                return Err(GenerationError::DuplicateClassField);
+            }
+            field_colours[field] = *colour;
+        }
+        let mut rule_colours = vec![0; theory.n_rules];
+        let mut seen_rules = vec![false; theory.n_rules];
+        for &(rule, colour) in &query.rule_colours {
+            if rule >= theory.n_rules {
+                return Err(GenerationError::UnknownClassRule(rule));
+            }
+            if std::mem::replace(&mut seen_rules[rule], true) {
+                return Err(GenerationError::DuplicateClassRule(rule));
+            }
+            rule_colours[rule] = colour;
+        }
+        let model = match query.classes {
+            Classes::None => Model::new(Arc::clone(&theory.dense), &classes, &request)?,
+            Classes::Auto => Model::with_classes(
+                Arc::clone(&theory.dense),
+                &classes,
+                &request,
+                &field_colours,
+                &rule_colours,
+            )?,
+        };
+        let nontrivial = model.refinement.as_ref().map_or(0, |refinement| {
+            refinement
+                .members
+                .iter()
+                .filter(|members| members.len() > 1)
+                .count()
+        });
+        report.criterion(
+            "flavour classes",
+            format!(
+                "{:?}; {nontrivial} nontrivial directed single-line classes",
+                query.classes
+            ),
+            PlanStage::Dressing,
+            false,
+            PlanRole::Propagator,
+        );
+        let class_members = model.refinement.as_ref().map_or_else(
+            || Box::new([]) as Box<[Box<[F]>]>,
+            |refinement| {
+                refinement
+                    .members
+                    .iter()
+                    .map(|members| {
+                        members
+                            .iter()
+                            .map(|&field| fields[field as usize].clone())
+                            .collect()
+                    })
+                    .collect()
+            },
+        );
         let packing = model.legs.clone();
         Ok(Self {
             model: Arc::new(model),
             ranked: OnceLock::new(),
             tables: Arc::new(OutputTables {
                 fields: Arc::clone(fields),
+                class_members,
                 labels: labels.into_boxed_slice(),
                 packing,
                 signatures: Arc::clone(&theory.dense.signatures),

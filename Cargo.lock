@@ -1905,6 +1905,7 @@ dependencies = [
  "spenso",
  "spenso-hep-lib",
  "symbolica",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 

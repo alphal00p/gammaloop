@@ -4,3 +4,4 @@ self loops = false -> Skeletons; hereditary=true; Restriction
 zero-flow edges = false -> Skeletons; hereditary=true; Restriction
 vertex bound = None -> Skeletons; hereditary=true; Restriction
 vertices in [0] = 1..=1 -> Dressing; hereditary=true; Propagator
+flavour classes = Auto; 0 nontrivial directed single-line classes -> Dressing; hereditary=false; Propagator

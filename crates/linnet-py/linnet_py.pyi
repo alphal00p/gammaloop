@@ -13,6 +13,7 @@ __all__ = [
     "Angle",
     "Auto",
     "Bridges",
+    "Classes",
     "Color",
     "Countable",
     "Counts",
@@ -30,6 +31,7 @@ __all__ = [
     "DotVertexData",
     "DrawOptions",
     "DrawingSelectors",
+    "Dressed",
     "Edge",
     "EdgeSignature",
     "Flow",
@@ -315,6 +317,23 @@ class Bridges:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
+class Classes:
+    r"""
+    Safe directed-line flavour refinement policy; Auto retains exact particle/rule outputs.
+    """
+    @staticmethod
+    def auto() -> Classes:
+        r"""
+        Assign safe flavour classes, then refine to original particles and rules.
+        """
+    @staticmethod
+    def none() -> Classes:
+        r"""
+        Assign particles directly, for exact comparison with class refinement.
+        """
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class Color:
     r"""
     A safe Typst color value.
@@ -546,6 +565,28 @@ class DrawingSelectors:
     """
     def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, node: _NodeDrawingSelector = ..., edge: _EdgeDrawingSelector = ..., source: _HalfEdgeDrawingSelector = ..., sink: _HalfEdgeDrawingSelector = ...) -> DrawingSelectors: ...
+
+@typing.final
+class Dressed:
+    r"""
+    An owned field value with an explicit class/particle tag, so tuple-valued keys remain distinct.
+    Values may be retained after a callback; asking an expired view for a value is an error.
+    """
+    @property
+    def kind(self) -> builtins.str:
+        r"""
+        Either "class" or "particle"; the tag is independent of the Python key's type.
+        """
+    @property
+    def members(self) -> tuple[_Key, ...] | None:
+        r"""
+        Original keys in a class; None for a concrete particle.
+        """
+    @property
+    def particle(self) -> _Key | None:
+        r"""
+        The original particle key; None for a class. Use kind when None itself is a key.
+        """
 
 @typing.final
 class Edge:
@@ -1148,6 +1189,15 @@ class DiagramView:
         r"""
         Internal edges `(u, v, stub)`; stub is None before its field is assigned.
         """
+    def field(self, edge: builtins.int) -> typing.Optional[Dressed]:
+        r"""
+        A class or concrete original particle for this edge; None while unassigned.
+        """
+    def flow(self, edge: builtins.int) -> typing.Optional[Flow]:
+        r"""
+        Known direction at the edge's first vertex, including during class refinement.
+        None denotes an undirected or unassigned edge; field() distinguishes them.
+        """
     def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
         r"""
         Exact matching rules once all vertex stubs have fields; otherwise None.
@@ -1220,6 +1270,15 @@ class DressingView:
     def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, typing.Optional[EdgeSignature]]]:
         r"""
         Internal edges `(u, v, stub)`; stub is None before its field is assigned.
+        """
+    def field(self, edge: builtins.int) -> typing.Optional[Dressed]:
+        r"""
+        A class or concrete original particle for this edge; None while unassigned.
+        """
+    def flow(self, edge: builtins.int) -> typing.Optional[Flow]:
+        r"""
+        Known direction at the edge's first vertex, including during class refinement.
+        None denotes an undirected or unassigned edge; field() distinguishes them.
         """
     def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
         r"""
@@ -1546,6 +1605,15 @@ class SkeletonView:
         r"""
         Internal edges `(u, v, stub)`; stub is None before its field is assigned.
         """
+    def field(self, edge: builtins.int) -> typing.Optional[Dressed]:
+        r"""
+        A class or concrete original particle for this edge; None while unassigned.
+        """
+    def flow(self, edge: builtins.int) -> typing.Optional[Flow]:
+        r"""
+        Known direction at the edge's first vertex, including during class refinement.
+        None denotes an undirected or unassigned edge; field() distinguishes them.
+        """
     def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
         r"""
         Exact matching rules once all vertex stubs have fields; otherwise None.
@@ -1584,7 +1652,7 @@ class Query:
     r"""
     A request snapshot. Later edits to the supplied Legs do not change it.
     """
-    def __new__(cls, legs: Legs, *, loops: int | range | None = None, structure: typing.Optional[Structure] = None, weights: dict[str, tuple[int | None, int | None]] | None = None, counts: typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None = None, prune_skeletons: typing.Callable[[SkeletonView], bool] | None = None, prune_dressings: typing.Callable[[DressingView], bool] | None = None, select: typing.Callable[[DiagramView], bool] | None = None) -> Query: ...
+    def __new__(cls, legs: Legs, *, loops: int | range | None = None, structure: typing.Optional[Structure] = None, classes: typing.Optional[Classes] = None, weights: dict[str, tuple[int | None, int | None]] | None = None, counts: typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None = None, prune_skeletons: typing.Callable[[SkeletonView], bool] | None = None, prune_dressings: typing.Callable[[DressingView], bool] | None = None, select: typing.Callable[[DiagramView], bool] | None = None) -> Query: ...
 
 @typing.final
 class Ratio:
@@ -1814,7 +1882,7 @@ class Theory:
     @property
     def weight_names(self) -> builtins.list[builtins.str]: ...
     def __new__(cls, vertices: typing.Sequence[typing.Sequence[EdgeSignature]], *, weights: dict[str, typing.Sequence[int]] | None = None) -> Theory: ...
-    def query(self, legs: Legs, *, loops: int | range | None = None, structure: typing.Optional[Structure] = None, weights: dict[str, tuple[int | None, int | None]] | None = None, counts: typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None = None, prune_skeletons: typing.Callable[[SkeletonView], bool] | None = None, prune_dressings: typing.Callable[[DressingView], bool] | None = None, select: typing.Callable[[DiagramView], bool] | None = None) -> Plan: ...
+    def query(self, legs: Legs, *, loops: int | range | None = None, structure: typing.Optional[Structure] = None, classes: typing.Optional[Classes] = None, weights: dict[str, tuple[int | None, int | None]] | None = None, counts: typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None = None, prune_skeletons: typing.Callable[[SkeletonView], bool] | None = None, prune_dressings: typing.Callable[[DressingView], bool] | None = None, select: typing.Callable[[DiagramView], bool] | None = None) -> Plan: ...
 
 @typing.final
 class TraversalTree:

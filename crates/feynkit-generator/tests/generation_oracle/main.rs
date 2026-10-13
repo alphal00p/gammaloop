@@ -26,12 +26,13 @@
 
 mod cases;
 mod census;
+mod classes;
 
 use std::{collections::BTreeSet, process::Command};
 
 use cases::{CASES, Case, REFERENCE};
 use census::{Census, Scope, Summary};
-use feynkit_generator::{Grouping, Naming, NumeratorOptions, Run, Selection};
+use feynkit_generator::{Classes, Grouping, Naming, NumeratorOptions, Run, Selection};
 use feynkit_graph::FeynmanDiagram;
 use feynkit_model::Model;
 use symbolica::domains::rational::Rational;
@@ -43,12 +44,12 @@ fn threads() -> Vec<usize> {
 }
 
 fn census(case: &Case, threads: usize) -> Census {
-    census_with_naming(case, threads, Naming::prefix("D"))
+    census_with_naming(case, threads, Naming::prefix("D"), Classes::Auto)
 }
 
-fn census_with_naming(case: &Case, threads: usize, naming: Naming) -> Census {
+fn census_with_naming(case: &Case, threads: usize, naming: Naming, classes: Classes) -> Census {
     let model = case.model();
-    let request = case.request(&model);
+    let request = case.request(&model).with_classes(classes);
     let run = Run::default().threads(threads);
     let result = request
         .generate(model.into(), &run)
@@ -97,18 +98,20 @@ fn check(name: &str, tier: &str, row: Row) {
     let case = Case::named(name);
     let mut threads = threads().into_iter();
     let first = threads.next().expect("a thread count");
-    let reference = census(case, first);
-    let minimal = census_with_naming(case, first, Naming::None);
+    // Historical rows and dumps include particle-only search work and local names.
+    // Keep that route explicit; classes::check validates Auto against None.
+    let reference = census_with_naming(case, first, Naming::prefix("D"), Classes::None);
+    let minimal = census_with_naming(case, first, Naming::None, Classes::None);
     reference.assert_minimal(&minimal, name);
     for count in threads {
-        let other = census(case, count);
+        let other = census_with_naming(case, count, Naming::prefix("D"), Classes::None);
         reference.assert_same(
             &other,
             Scope::Exact,
             &format!("{name}: Named {first} vs {count} threads"),
         );
         drop(other);
-        let other = census_with_naming(case, count, Naming::None);
+        let other = census_with_naming(case, count, Naming::None, Classes::None);
         minimal.assert_same(
             &other,
             Scope::Exact,
@@ -120,7 +123,7 @@ fn check(name: &str, tier: &str, row: Row) {
     // Bind Named identities to full physical sources; the policy comparison above
     // requires Minimal to preserve the same request-local indices, ratios and factors.
     let model = case.model();
-    let request = case.request(&model);
+    let request = case.request(&model).with_classes(Classes::None);
     let run = Run::default().threads(first);
     let numerators = NumeratorOptions::default().with_naming(Naming::prefix("D"));
     // The source name/index assertion is specific to these selector-free fixtures.
@@ -238,9 +241,32 @@ macro_rules! oracle_test {
     };
 }
 
+// Keep the class comparison matrix tied to the authoritative success table and heavy tier.
+macro_rules! class_test {
+    (fast $name:ident) => {
+        #[test]
+        #[allow(non_snake_case)]
+        fn $name() {
+            super::classes::check(super::Case::named(stringify!($name)));
+        }
+    };
+    (heavy $name:ident) => {
+        #[test]
+        #[ignore = "heavy oracle tier: run with `just generation-oracle-heavy`"]
+        #[allow(non_snake_case)]
+        fn $name() {
+            super::classes::check(super::Case::named(stringify!($name)));
+        }
+    };
+    (failing $name:ident) => {};
+}
+
 macro_rules! oracle {
     ($($tier:ident $name:ident: $row:expr;)*) => {
         $(oracle_test!($tier $name $row);)*
+        mod class_equivalence {
+            $(class_test!($tier $name);)*
+        }
         /// The cases of the oracle table.
         const ORACLE: &[&str] = &[$(stringify!($name)),*];
     };

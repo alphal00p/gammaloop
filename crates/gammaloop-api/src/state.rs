@@ -1600,7 +1600,8 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 9 weights identical-beam cross-section graphs by their beam-exchange orbit;
 // older symmetrized identical-beam states carry halved weights that nothing in them reveals.
 // Version 10 persists Request and separate numerator/selection/grouping settings, with u128 symmetry orders.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 10;
+// Version 11 adds the explicit field-class search policy to the persisted Request.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 11;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -4784,6 +4785,27 @@ commands = ["quit -n"]
             let message = err.to_string();
             assert!(message.contains("cannot be migrated"));
             assert!(message.contains("regenerate the saved state"));
+            // All paths exist, but the old version must fail before either payload decodes.
+            fs::write(temp.path().join("model.json"), b"invalid model payload").unwrap();
+            fs::write(
+                temp.path().join("symbolica_state.bin"),
+                b"invalid symbolic payload",
+            )
+            .unwrap();
+            fs::create_dir(temp.path().join("processes")).unwrap();
+            let error = State::load(temp.path().to_owned(), None, None)
+                .err()
+                .expect("old state rejected before payload decoding");
+            assert_eq!(error.to_string(), message);
+            assert_eq!(
+                fs::read(temp.path().join("model.json")).unwrap(),
+                b"invalid model payload"
+            );
+            assert_eq!(
+                fs::read(temp.path().join("symbolica_state.bin")).unwrap(),
+                b"invalid symbolic payload"
+            );
+            assert!(!temp.path().join("logs").exists());
         }
     }
 
@@ -4792,7 +4814,7 @@ commands = ["quit -n"]
         let temp = tempdir().unwrap();
         fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 9\n").unwrap();
         // Every required path exists, but neither the model nor symbolic payload can decode.
-        // The v10 guard must win before loading either or initializing state/logging.
+        // The manifest-version guard must win before loading either or initializing state/logging.
         fs::write(temp.path().join("model.json"), b"invalid model payload").unwrap();
         fs::write(
             temp.path().join("symbolica_state.bin"),
@@ -4805,7 +4827,7 @@ commands = ["quit -n"]
             .expect("pre-Request state must be rejected");
         let message = error.to_string();
         assert!(
-            message.contains("State version 9 predates the supported version 10"),
+            message.contains("State version 9 predates the supported version 11"),
             "{message}"
         );
         assert!(message.contains("cannot be migrated"), "{message}");

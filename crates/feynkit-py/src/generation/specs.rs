@@ -8,7 +8,7 @@ use feynkit_generator::{
     Range, Restrict, Selection, Symmetrize, TopologyRules, Veto,
 };
 use feynkit_graph::EdgeId;
-use linnet_py::PyBridges;
+use linnet_py::{PyBridges, PyClasses};
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyModule};
 use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 
@@ -1785,6 +1785,7 @@ impl PyAmplitudeOptions {
 }
 
 pub(super) fn register(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<PyClasses>()?;
     module.add_class::<PyBridges>()?;
     module.add_class::<PyRange>()?;
     module.add_class::<PyLoops>()?;

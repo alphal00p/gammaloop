@@ -1,6 +1,6 @@
 mod algorithms;
 mod generate;
-pub use generate::{CancelCheck, GenerationCallbacks, PyBridges, PyPlanReport};
+pub use generate::{CancelCheck, GenerationCallbacks, PyBridges, PyClasses, PyPlanReport};
 mod keys;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};

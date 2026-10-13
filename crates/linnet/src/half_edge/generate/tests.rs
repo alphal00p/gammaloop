@@ -1494,12 +1494,33 @@ fn check_view(view: &View<'_>, n_legs: usize) {
         Stage::Topology => assert!(edges.iter().all(|e| e.stub.is_none())),
         Stage::Fields => {
             assert!(view.is_topology_complete());
-            // fields are assigned in edge order; a vertex fits rules once its stubs are known
-            let assigned = edges.iter().take_while(|e| e.stub.is_some()).count();
-            assert!(assigned > 0 && edges[assigned..].iter().all(|e| e.stub.is_none()));
+            // Classes form an edge prefix. Refinement resolves whole directed lines, so
+            // particle stubs need not form a prefix; unresolved classes still have a flow.
+            let assigned = edges
+                .iter()
+                .take_while(|e| e.stub.is_some() || e.flow.is_some())
+                .count();
+            assert!(assigned > 0);
+            assert!(edges[assigned..]
+                .iter()
+                .all(|e| e.stub.is_none() && e.flow.is_none()));
+            for edge in &edges {
+                if let Some(stub) = &edge.stub {
+                    assert_eq!(stub.flow, edge.flow);
+                }
+            }
             for v in 0..n {
-                let known = edges[assigned..].iter().all(|e| !e.vertices.contains(&v));
-                assert_eq!(view.rules(v).is_some(), known);
+                let particles_known = edges
+                    .iter()
+                    .filter(|e| e.vertices.contains(&v))
+                    .all(|e| e.stub.is_some());
+                let fields_known = edges[assigned..].iter().all(|e| !e.vertices.contains(&v));
+                if particles_known {
+                    assert!(view.rules(v).is_some());
+                } else if !fields_known {
+                    assert!(view.rules(v).is_none());
+                }
+                // A class-known vertex may expose coarse rules before its fine rules fit.
             }
         }
         Stage::Complete => {
@@ -1764,8 +1785,9 @@ fn budgeted_run((theory, query): &Fixture, controls: &Run<'_>) -> Vec<Diagram<u8
     }
 }
 
-/// Budgets prune to the graphs of the unbudgeted run that meet them, in its order, sequentially
-/// and in parallel. Returns the states the filter sees with and without the budgets.
+/// Budgets retain exactly the unbudgeted graphs that meet them, with the same automorphisms.
+/// Sequential and parallel runs of the same request also retain their order. Returns the
+/// states the filter sees with and without the budgets.
 fn assert_budgets_prune_like_post_filter(
     generator: impl Fn() -> Fixture,
     budgets: &[Budget],
@@ -1786,19 +1808,32 @@ fn assert_filtered_budgets_prune_like_post_filter(
         .into_iter()
         .filter(|d| budgets.iter().all(|b| b.admits(d)))
         .collect();
-    assert_eq!(
-        canonical_forms(&pruned),
-        canonical_forms(&post),
-        "{budgets:?}"
-    );
+    let exact = |diagrams: &[Diagram<u8, u8>]| {
+        let mut entries = BTreeMap::new();
+        for diagram in diagrams {
+            assert!(
+                entries
+                    .insert(
+                        diagram.canonical_form().clone(),
+                        diagram.symmetry_factor().unwrap(),
+                    )
+                    .is_none(),
+                "duplicate canonical representative: {budgets:?}"
+            );
+        }
+        entries
+    };
+    let expected = exact(&post);
+    assert_eq!(exact(&pruned), expected, "{budgets:?}");
     let parallel = budgeted_run(
         &with_pruning(budgeted(), filter),
         &Run::default().parallel(true),
     );
+    assert_eq!(exact(&parallel), expected, "{budgets:?}");
     assert_eq!(
         canonical_forms(&parallel),
-        canonical_forms(&post),
-        "{budgets:?}"
+        canonical_forms(&pruned),
+        "same request's sequential/parallel order: {budgets:?}"
     );
     (pruned_states, states)
 }

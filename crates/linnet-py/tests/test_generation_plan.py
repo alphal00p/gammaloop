@@ -26,6 +26,17 @@ class _Field:
         return "GenerationField('phi')"
 
 
+def _two_flavour_qed(keys=None):
+    # Class members straddle the fixed photon in key order; each key is itself a tuple.
+    if keys is None:
+        keys = (("a", ("lepton", 1)), ("b", ("photon",)), ("c", ("lepton", 2)))
+    first, photon_key, second = keys
+    photon = g.EdgeSignature(photon_key)
+    charged = [g.EdgeSignature(key, direction=False) for key in (first, second)]
+    theory = g.Theory([[line, line.flip(), photon] for line in charged])
+    return theory, g.Legs([(1, photon), (2, photon)]), (first, second)
+
+
 class GenerationPlanTests(unittest.TestCase):
     def test_named_signed_weights_keep_duplicate_rules_distinct(self):
         phi = g.EdgeSignature(field("phi"))
@@ -386,6 +397,10 @@ class GenerationPlanTests(unittest.TestCase):
                             _ = view.stage
                         with self.assertRaises(ReferenceError):
                             view.graph()
+                        with self.assertRaises(ReferenceError):
+                            view.field(0)
+                        with self.assertRaises(ReferenceError):
+                            view.flow(0)
 
     def test_expired_callback_views_release_their_python_keys(self):
         saved = []
@@ -544,6 +559,206 @@ class GenerationPlanTests(unittest.TestCase):
                 self.assertTrue(stream.aborted)
                 self.assertEqual(reports[-1], 1)
                 self.assertEqual(run.cancelled, cancel)
+
+    def test_flavour_class_modes_preserve_canonical_maps_and_original_rules(self):
+        theory, legs, _ = _two_flavour_qed()
+        reference = None
+        for classes in (g.Classes.none(), g.Classes.auto(), None):
+            for direct in (False, True):
+                with self.subTest(classes=classes, direct=direct):
+                    options = {} if classes is None else {"classes": classes}
+                    plan = (
+                        theory.query(legs, loops=1, **options)
+                        if direct
+                        else g.Plan(theory, g.Query(legs, loops=1, **options))
+                    )
+                    diagrams = list(plan.diagrams())
+                    actual = {
+                        diagram.canonical_form(): (
+                            diagram.symmetry_factor(),
+                            tuple(sorted(diagram.rules())),
+                        )
+                        for diagram in diagrams
+                    }
+                    self.assertEqual(len(actual), len(diagrams))
+                    self.assertEqual(len(actual), 2)
+                    self.assertEqual(set(actual.values()), {(1, (0, 0)), (1, (1, 1))})
+                    counts = plan.count()
+                    self.assertTrue(counts.complete)
+                    self.assertEqual(counts.diagrams, 2)
+                    self.assertEqual(counts.sum_inv_aut, Fraction(2))
+                    dressed = {
+                        diagram.canonical_form(): diagram.symmetry_factor()
+                        for skeleton in plan.skeletons()
+                        for diagram in skeleton.diagrams()
+                    }
+                    self.assertEqual(
+                        dressed, {key: value[0] for key, value in actual.items()}
+                    )
+                    if reference is None:
+                        reference = actual
+                    else:
+                        self.assertEqual(actual, reference)
+
+    def test_class_fields_keep_original_tuple_keys_and_directed_flow(self):
+        def execute():
+            theory, legs, keys = _two_flavour_qed()
+            saved_views, owned = [], []
+            seen = set()
+
+            def inspect(view):
+                saved_views.append(view)
+                for index, (_, _, stub) in enumerate(view.edges()):
+                    value = view.field(index)
+                    flow = view.flow(index)
+                    if value is None:
+                        self.assertIsNone(stub)
+                        self.assertIsNone(flow)
+                        continue
+                    self.assertIs(type(value), g.Dressed)
+                    seen.add(value.kind)
+                    owned.append(value)
+                    if value.kind == "class":
+                        self.assertIsNone(stub)
+                        self.assertIsNone(value.particle)
+                        self.assertIs(type(value.members), tuple)
+                        self.assertEqual(len(value.members), 2)
+                        self.assertIs(value.members[0], keys[0])
+                        self.assertIs(value.members[1], keys[1])
+                        self.assertIn(flow, (g.Flow.Source, g.Flow.Sink))
+                    else:
+                        self.assertEqual(value.kind, "particle")
+                        self.assertIsNone(value.members)
+                        self.assertTrue(any(value.particle is key for key in keys))
+                        self.assertIs(stub.data, value.particle)
+                        self.assertEqual(
+                            flow, g.Flow.Source if stub.direction else g.Flow.Sink
+                        )
+                    if type(view) is g.DiagramView:
+                        self.assertEqual(value.kind, "particle")
+                return True
+
+            # Omitting classes must take the Auto route and expose a real class state.
+            plan = theory.query(legs, loops=1, prune_dressings=inspect, select=inspect)
+            self.assertEqual(plan.count(g.Run(parallel=True)).diagrams, 2)
+            self.assertEqual(seen, {"class", "particle"})
+            return saved_views, owned, keys
+
+        views, owned, keys = execute()
+        gc.collect()
+        for view in views:
+            with self.assertRaises(ReferenceError):
+                view.field(0)
+            with self.assertRaises(ReferenceError):
+                view.flow(0)
+        for value in owned:
+            if value.kind == "class":
+                self.assertIs(value.members[0], keys[0])
+                self.assertIs(value.members[1], keys[1])
+                self.assertIsNone(value.particle)
+            else:
+                # A concrete tuple-valued key is not a tuple of class members.
+                self.assertIs(type(value.particle), tuple)
+                self.assertTrue(any(value.particle is key for key in keys))
+                self.assertIsNone(value.members)
+
+    def test_owned_dressed_values_participate_in_key_cycles(self):
+        def cycle(kind):
+            owner = _Owner()
+            payload = _Field(owner)
+            theory, legs, _ = _two_flavour_qed(
+                (("a", payload), ("b", "photon"), ("c", payload))
+            )
+
+            def capture(view):
+                for index in range(len(view.edges())):
+                    value = view.field(index)
+                    if value is not None and value.kind == kind:
+                        owner.output = value
+                return True
+
+            self.assertEqual(
+                theory.query(legs, loops=1, prune_dressings=capture).count().diagrams, 2
+            )
+            self.assertIs(type(owner.output), g.Dressed)
+            # owner -> Dressed -> original tuple key -> custom payload -> owner.
+            return weakref.ref(owner)
+
+        for kind in ("class", "particle"):
+            with self.subTest(kind=kind):
+                probe = cycle(kind)
+                gc.collect()
+                self.assertIsNone(probe())
+
+    def test_class_callback_failure_and_cancel_expire_views_without_poisoning_plan(
+        self,
+    ):
+        theory, legs, keys = _two_flavour_qed()
+        for outcome in ("type_error", "exception", "cancel"):
+            with self.subTest(outcome=outcome):
+                run = g.Run(parallel=True)
+                saved = []
+                stopped = False
+                mode = outcome
+                sentinel = RuntimeError("class callback sentinel")
+
+                def inspect(view):
+                    nonlocal stopped
+                    self.assertFalse(
+                        stopped, "a callback ran after failure or cancellation"
+                    )
+                    for index in range(len(view.edges())):
+                        value = view.field(index)
+                        if value is None or value.kind != "class" or mode == "keep":
+                            continue
+                        saved.append((view, value))
+                        stopped = True
+                        if mode == "exception":
+                            raise sentinel
+                        if mode == "type_error":
+                            return 1
+                        run.cancel()
+                        return True
+                    return True
+
+                plan = theory.query(legs, loops=1, prune_dressings=inspect)
+                stream = plan.diagrams(run)
+                if outcome == "cancel":
+                    self.assertEqual(list(stream), [])
+                    self.assertTrue(run.cancelled)
+                else:
+                    error = TypeError if outcome == "type_error" else RuntimeError
+                    with self.assertRaises(error) as caught:
+                        list(stream)
+                    if outcome == "exception":
+                        self.assertIs(caught.exception, sentinel)
+                self.assertTrue(stream.aborted)
+                self.assertEqual(len(saved), 1)
+                view, value = saved[0]
+                self.assertEqual(value.kind, "class")
+                self.assertIs(value.members[0], keys[0])
+                self.assertIs(value.members[1], keys[1])
+                with self.assertRaises(ReferenceError):
+                    view.field(0)
+                with self.assertRaises(ReferenceError):
+                    view.flow(0)
+                mode, stopped = "keep", False
+                self.assertEqual(plan.count(g.Run()).diagrams, 2)
+
+    def test_rejecting_a_class_but_accepting_its_particles_is_not_hereditary(self):
+        theory, legs, _ = _two_flavour_qed()
+
+        def only_particles(view):
+            return all(
+                view.field(index) is None or view.field(index).kind != "class"
+                for index in range(len(view.edges()))
+            )
+
+        plan = theory.query(legs, loops=1, prune_dressings=only_particles)
+        for parallel in (False, True):
+            with self.subTest(parallel=parallel):
+                with self.assertRaisesRegex(RuntimeError, "hereditary"):
+                    plan.count(g.Run(parallel=parallel, check_heredity=True))
 
     def test_published_generation_example_runs(self):
         source_path = (

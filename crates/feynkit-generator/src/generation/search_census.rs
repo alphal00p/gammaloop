@@ -1,5 +1,6 @@
-//! Search census of the reference generation workloads: how many states each search stage keeps,
-//! and how many of them lead nowhere.
+//! Historical particle-only search census of the reference generation workloads: how many
+//! states each stage keeps, and how many of them lead nowhere. Requests explicitly use
+//! `Classes::None`; Auto class/refinement work is measured separately from these fixed rows.
 //!
 //! [`crate::Request::generate`] searches in parallel. The census instead follows the same plan
 //! sequentially so each callback lies on one depth-first path. Vertices keep their numbers
@@ -198,7 +199,7 @@ impl SearchCensus {
     /// against the raw-assignment owner used by [`crate::Request::generate`].
     fn of(case: &Case) -> Result<Self, GenerationError> {
         let model = case.model();
-        let request = case.request(&model);
+        let request = case.request(&model).with_classes(crate::Classes::None);
         let generator = Generator::new(model);
         let tracker = Arc::new(Mutex::new(Tracker::default()));
         let skeleton_recorder = Arc::clone(&tracker);

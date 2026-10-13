@@ -351,6 +351,44 @@ impl PyBridges {
     }
 }
 
+/// Safe directed-line flavour refinement policy; Auto retains exact particle/rule outputs.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(name = "Classes", frozen, from_py_object)]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
+#[derive(Clone)]
+#[doc(hidden)]
+pub struct PyClasses(generate::Classes);
+
+impl From<generate::Classes> for PyClasses {
+    fn from(value: generate::Classes) -> Self {
+        Self(value)
+    }
+}
+impl From<PyClasses> for generate::Classes {
+    fn from(value: PyClasses) -> Self {
+        value.0
+    }
+}
+
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyClasses {
+    /// Assign safe flavour classes, then refine to original particles and rules.
+    #[staticmethod]
+    fn auto() -> Self {
+        Self(generate::Classes::Auto)
+    }
+    /// Assign particles directly, for exact comparison with class refinement.
+    #[staticmethod]
+    fn none() -> Self {
+        Self(generate::Classes::None)
+    }
+    fn __repr__(&self) -> String {
+        format!("Classes({:?})", self.0)
+    }
+}
+
 /// Restrictions decided by topology alone. Defaults are the native Structure defaults.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Structure", frozen, from_py_object)]
@@ -505,6 +543,7 @@ pub(crate) struct PyQuery {
     slots: Vec<Slot>,
     loops: LoopOrders,
     structure: generate::Structure,
+    classes: generate::Classes,
     weights: WeightLimits,
     counts: CountLimits,
     hooks: Option<Py<callbacks::Hooks>>,
@@ -514,13 +553,14 @@ pub(crate) struct PyQuery {
 #[pymethods]
 impl PyQuery {
     #[new]
-    #[pyo3(signature=(legs, *, loops=None, structure=None, weights=None, counts=None, prune_skeletons=None, prune_dressings=None, select=None))]
+    #[pyo3(signature=(legs, *, loops=None, structure=None, classes=None, weights=None, counts=None, prune_skeletons=None, prune_dressings=None, select=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         py: Python<'_>,
         legs: &PyLegs,
         #[gen_stub(override_type(type_repr = "int | range | None"))] loops: Option<LoopOrders>,
         structure: Option<&PyStructure>,
+        classes: Option<&PyClasses>,
         #[gen_stub(override_type(type_repr = "dict[str, tuple[int | None, int | None]] | None"))]
         weights: Option<&Bound<'_, PyDict>>,
         #[gen_stub(override_type(type_repr="typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None", imports=("typing")))]
@@ -536,6 +576,7 @@ impl PyQuery {
             slots: legs.slots.iter().map(|s| s.clone_ref(py)).collect(),
             loops: loops.unwrap_or(LoopOrders(Limit::Unbounded, Limit::Unbounded)),
             structure: structure.map_or_else(generate::Structure::default, |s| s.0.clone()),
+            classes: classes.map_or_else(generate::Classes::default, |mode| mode.0),
             weights: weights
                 .map(|d| {
                     d.iter()
@@ -645,7 +686,7 @@ impl PyTheory {
     fn weight_names(&self) -> Vec<String> {
         self.inner.weight_names().map(str::to_owned).collect()
     }
-    #[pyo3(signature=(legs, *, loops=None, structure=None, weights=None, counts=None, prune_skeletons=None, prune_dressings=None, select=None))]
+    #[pyo3(signature=(legs, *, loops=None, structure=None, classes=None, weights=None, counts=None, prune_skeletons=None, prune_dressings=None, select=None))]
     #[allow(clippy::too_many_arguments)]
     fn query(
         &self,
@@ -653,6 +694,7 @@ impl PyTheory {
         legs: &PyLegs,
         #[gen_stub(override_type(type_repr = "int | range | None"))] loops: Option<LoopOrders>,
         structure: Option<&PyStructure>,
+        classes: Option<&PyClasses>,
         #[gen_stub(override_type(type_repr = "dict[str, tuple[int | None, int | None]] | None"))]
         weights: Option<&Bound<'_, PyDict>>,
         #[gen_stub(override_type(type_repr="typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None", imports=("typing")))]
@@ -672,6 +714,7 @@ impl PyTheory {
                 legs,
                 loops,
                 structure,
+                classes,
                 weights,
                 counts,
                 prune_skeletons,
@@ -864,7 +907,8 @@ impl PyPlan {
         }
         let mut native = generate::Query::new(&legs)
             .loops((query.loops.0, query.loops.1))
-            .structure(query.structure.clone());
+            .structure(query.structure.clone())
+            .classes(query.classes);
         for (name, (low, high)) in &query.weights {
             native = native.weight(
                 name,
@@ -1382,6 +1426,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyEdgeSignature>()?;
     module.add_class::<PyLegs>()?;
     module.add_class::<PyBridges>()?;
+    module.add_class::<PyClasses>()?;
     module.add_class::<PyStructure>()?;
     module.add_class::<PyCountable>()?;
     module.add_class::<PyQuery>()?;

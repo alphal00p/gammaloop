@@ -121,7 +121,8 @@ fn saved_child_dirs(root: &Path, expected_binary: &str, kind: &str) -> Result<Ve
     Ok(saved_dirs)
 }
 
-const PROCESS_DEFINITION_MAGIC: &[u8] = b"GLPROC\x02\0";
+// Version 3 persists the explicit Auto/None field-class policy.
+const PROCESS_DEFINITION_MAGIC: &[u8] = b"GLPROC\x03\0";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct ProcessDefinition {
@@ -1285,14 +1286,21 @@ mod tests {
             error.contains("symmetrize_final does not apply to cross sections"),
             "{error}"
         );
-        // Legacy positional definitions have no new-layout envelope and must never be decoded.
-        fs::write(temp.join("def.bin"), [0_u8; 128]).unwrap();
-        let error = format!("{:?}", ProcessDefinition::load(&temp, context).unwrap_err());
-        assert!(
-            error.contains("unsupported generation definition"),
-            "{error}"
-        );
-        assert!(error.contains("regenerate it"), "{error}");
+        // Neither legacy positional definitions nor P7's v2 payload without a class policy
+        // may reach bincode/model decoding. Keep the invalid payload intact on rejection.
+        for bytes in [
+            vec![0_u8; 128],
+            [b"GLPROC\x02\0".as_slice(), &[0xff; 128]].concat(),
+        ] {
+            fs::write(temp.join("def.bin"), &bytes).unwrap();
+            let error = format!("{:?}", ProcessDefinition::load(&temp, context).unwrap_err());
+            assert!(
+                error.contains("unsupported generation definition"),
+                "{error}"
+            );
+            assert!(error.contains("regenerate it"), "{error}");
+            assert_eq!(fs::read(temp.join("def.bin")).unwrap(), bytes);
+        }
         fs::remove_dir_all(temp).unwrap();
     }
 

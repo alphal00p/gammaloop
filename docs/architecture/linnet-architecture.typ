@@ -139,6 +139,18 @@ rules. Pruning must reject every refinement of a rejected state; final selection
 Accepted diagrams retain compact data and materialize graphs and canonical forms on demand.
 Parallel execution preserves the serial search order.
 
+`Query.classes(Classes::Auto)` enables a conservative class search for directed fields that
+occur only in single diagonal lines. Undirected fields and participants in mixed or multi-line
+rules remain distinct. Exact automorphism orbits of the coloured rule-incidence graph define
+the eligible classes; active budgets and caller distinctions can only split them. External
+label classes retain their original particle pins.
+
+A complete coarse assignment is refined by whole directed lines, with its stabilizer used
+for the second symmetry quotient. Fine automaton checks retain original rule indices,
+including equal-signature rules, and exact weights and automorphism orders are computed for
+the resulting particle assignment. Hereditary dressing hooks also inspect refinement states.
+`Classes::None` bypasses the quotient and serves as the direct-particle comparison route.
+
 DOT interchange follows a separate adapter path:
 
 ```text

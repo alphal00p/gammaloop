@@ -545,6 +545,7 @@ pub(crate) struct Theory {
 #[derive(Debug)]
 pub(crate) struct Model {
     pub(crate) theory: Arc<Theory>,
+    pub(crate) refinement: Option<ClassRefinement>,
     /// The external legs by label class, as complete topologies carry them.
     pub(crate) legs: Legs,
     /// The external legs as the topology search places them: three or more label classes of
@@ -697,6 +698,7 @@ impl Model {
             && theory.charges.balances(legs);
         Ok(Model {
             theory,
+            refinement: None,
             budgets,
             weight_bounds,
             balanced,
@@ -803,6 +805,195 @@ impl Model {
         self.theory.labels.len() <= 1
             && self.theory.loop_labels.len() <= 1
             && self.theory.unique_rules
+    }
+}
+
+/// Fine particle tables retained by a coarse directed-line search. Original rule indices are
+/// unchanged in both automata, including equal-signature split and counterterm rules.
+#[derive(Debug)]
+pub(crate) struct ClassRefinement {
+    pub(crate) fine: Box<Model>,
+    pub(crate) members: Vec<Vec<u8>>,
+    pub(crate) field_class: Vec<u8>,
+}
+
+impl Theory {
+    /// Exact field orbits of the coloured rule incidence graph, after structural exclusions.
+    /// Only directed, single diagonal lines are optimized. Undirected scalar families are
+    /// deliberately left singleton too: this is not a general boson or Majorana quotient.
+    /// With every other field fixed, one diagonal line per rule makes a field orbit an
+    /// interchangeable family of rule fibres, not a correlated multi-line permutation.
+    fn field_classes(
+        &self,
+        request: &Request,
+        field_colours: &[u32],
+        rule_colours: &[u32],
+    ) -> Vec<Vec<u8>> {
+        use crate::half_edge::{builder::HedgeGraphBuilder, involution::Orientation, HedgeGraph};
+        let n_fields = self.present.len() / 3;
+        let mut eligible: Vec<_> = (0..n_fields)
+            .map(|f| !self.present[3 * f] && self.present[3 * f + 1] && self.present[3 * f + 2])
+            .collect();
+        for signature in self.signatures.iter() {
+            let directed: Vec<_> = signature
+                .iter()
+                .copied()
+                .filter(|s| s % 3 != UNDIRECTED)
+                .collect();
+            if directed.is_empty() {
+                continue;
+            }
+            let diagonal = directed.len() == 2
+                && directed[0] / 3 == directed[1] / 3
+                && directed[0] % 3 != directed[1] % 3;
+            if !diagonal {
+                // Inspect the original rule, never a rule with previously excluded fields
+                // removed: every participant in a mixed or multi-line rule stays excluded.
+                for stub in directed {
+                    eligible[stub as usize / 3] = false;
+                }
+            }
+        }
+        if eligible.iter().filter(|&&yes| yes).count() < 2 {
+            return (0..n_fields).map(|field| vec![field as u8]).collect();
+        }
+        let mut builder = HedgeGraphBuilder::new();
+        let fields: Vec<_> = (0..n_fields)
+            .map(|f| {
+                let mut colour = vec![
+                    if eligible[f] { 0 } else { f as i64 + 1 },
+                    field_colours[f] as i64,
+                ];
+                colour.extend(
+                    request
+                        .edges
+                        .iter()
+                        .map(|(_, set, _)| ((set >> f) & 1) as i64),
+                );
+                colour.extend(request.lines.iter().map(|(set, _)| ((set >> f) & 1) as i64));
+                builder.add_node((0u8, colour))
+            })
+            .collect();
+        for (r, signature) in self.signatures.iter().enumerate() {
+            let mut colour = vec![rule_colours[r] as i64];
+            colour.extend(request.weights.iter().map(|(weights, _)| weights[r] as i64));
+            let rule = builder.add_node((1u8, colour));
+            for (port, &stub) in signature.iter().enumerate() {
+                builder.add_edge(
+                    fields[stub as usize / 3],
+                    rule,
+                    (port as u8, stub % 3),
+                    Orientation::Undirected,
+                );
+            }
+        }
+        let graph: HedgeGraph<(u8, u8), (u8, Vec<i64>)> = builder.build();
+        let orbits = graph.canonize().node_orbits();
+        let mut classes = std::collections::BTreeMap::<_, Vec<u8>>::new();
+        for (f, &node) in fields.iter().enumerate() {
+            classes.entry(orbits[node]).or_default().push(f as u8);
+        }
+        let mut classes: Vec<_> = classes.into_values().collect();
+        classes.sort_unstable_by_key(|fields| fields[0]);
+        classes
+    }
+}
+
+impl Model {
+    pub(crate) fn with_classes(
+        theory: Arc<Theory>,
+        legs: &[(u8, u8)],
+        request: &Request,
+        field_colours: &[u32],
+        rule_colours: &[u32],
+    ) -> Result<Self, GenerationError> {
+        let members = theory.field_classes(request, field_colours, rule_colours);
+        if members.iter().all(|class| class.len() == 1) {
+            return Self::new(theory, legs, request);
+        }
+        let mut field_class = vec![0; field_colours.len()];
+        for (class, fields) in members.iter().enumerate() {
+            for &field in fields {
+                field_class[field as usize] = class as u8;
+            }
+        }
+        let coarse_stub = |stub: u8| 3 * field_class[stub as usize / 3] + stub % 3;
+        let signatures = theory
+            .signatures
+            .iter()
+            .map(|signature| signature.iter().copied().map(coarse_stub).collect())
+            .collect::<Vec<Vec<u8>>>();
+        let coarse = Arc::new(Theory::new(members.len(), &signatures)?);
+        let fine = Box::new(Self::new(theory, legs, request)?);
+        let mut coarse_request = request.clone();
+        let coarse_set = |set: u128| {
+            members
+                .iter()
+                .enumerate()
+                .fold(0u128, |bits, (class, fields)| {
+                    let counted = set >> fields[0] & 1;
+                    assert!(
+                        fields.iter().all(|&field| set >> field & 1 == counted),
+                        "count colours split classes"
+                    );
+                    bits | counted << class
+                })
+        };
+        for (_, set, _) in &mut coarse_request.edges {
+            *set = coarse_set(*set);
+        }
+        for (set, _) in &mut coarse_request.lines {
+            *set = coarse_set(*set);
+        }
+        // Keep the original external label-class partition, even when several classes now
+        // carry the same coarse stub. Their original particle pins remain in fine.legs.
+        let coarse_legs: Vec<_> = legs.iter().map(|&(s, n)| (coarse_stub(s), n)).collect();
+        let mut model = Self::new(coarse, &coarse_legs, &coarse_request)?;
+        model.balanced &= fine.balanced;
+        model.refinement = Some(ClassRefinement {
+            fine,
+            members,
+            field_class,
+        });
+        Ok(model)
+    }
+
+    pub(crate) fn particles(&self) -> &Self {
+        self.refinement.as_ref().map_or(self, |r| &r.fine)
+    }
+
+    /// Actual external label classes, unlike anonymous topology slots, always retain their
+    /// original particle flavour. Fine refinement starts from these fully labelled legs.
+    pub(crate) fn labelled_state(&self, degree: u8, packed: u64) -> Option<VertexState> {
+        let mut state = self.theory.vertices.root(degree)?;
+        for c in 0..self.legs.n_classes() {
+            for _ in 0..self.legs.count(packed, c) {
+                state = self.theory.vertices.step(state, self.legs.stub[c])?;
+            }
+        }
+        Some(state)
+    }
+
+    pub(crate) fn try_label(
+        &self,
+        [a, b]: [VertexState; 2],
+        label: usize,
+        is_loop: bool,
+    ) -> Option<[VertexState; 2]> {
+        if is_loop {
+            let [s, t] = self.theory.loop_labels[label].stubs;
+            let state = self
+                .theory
+                .vertices
+                .step(self.theory.vertices.step(a, s)?, t)?;
+            Some([state, state])
+        } else {
+            let l = self.theory.labels[label];
+            Some([
+                self.theory.vertices.step(a, l.at_u)?,
+                self.theory.vertices.step(b, l.at_v)?,
+            ])
+        }
     }
 }
 
@@ -972,6 +1163,43 @@ mod tests {
         request: &Request,
     ) -> Result<Model, GenerationError> {
         Model::new(Arc::new(Theory::new(n_fields, signatures)?), legs, request)
+    }
+
+    #[test]
+    fn original_rules_and_counted_fields_split_directed_classes() {
+        // Fields a=0 and c=2 have a single diagonal line; b=1 is undirected.
+        let signatures = vec![vec![1, 2, 3], vec![7, 8, 3]];
+        let theory = Theory::new(3, &signatures).unwrap();
+        assert_eq!(
+            theory.field_classes(&Request::default(), &[0; 3], &[0; 2]),
+            vec![vec![0, 2], vec![1]]
+        );
+        // A counted subset is an active colour even when its numerical bound is loose.
+        for request in [
+            Request {
+                lines: vec![(1 << 0, [0, 1])],
+                ..Request::default()
+            },
+            Request {
+                edges: vec![(false, 1 << 0, [0, i64::MAX])],
+                ..Request::default()
+            },
+        ] {
+            assert_eq!(
+                theory.field_classes(&request, &[0; 3], &[0; 2]),
+                vec![vec![0], vec![1], vec![2]]
+            );
+        }
+        // Inspect the original non-diagonal or multi-line rule before quotienting.
+        for mixed in [vec![1, 8, 3], vec![1, 2, 7, 8]] {
+            let mut signatures = signatures.clone();
+            signatures.push(mixed);
+            let theory = Theory::new(3, &signatures).unwrap();
+            assert_eq!(
+                theory.field_classes(&Request::default(), &[0; 3], &[0; 3]),
+                vec![vec![0], vec![1], vec![2]]
+            );
+        }
     }
 
     #[test]

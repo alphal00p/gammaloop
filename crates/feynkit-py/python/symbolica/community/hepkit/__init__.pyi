@@ -14,7 +14,7 @@ import symbolica.community.hepkit.sector_decomposition
 import symbolica.community.tensor
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.community.graph import Bridges as Bridges, DiagramRender, Graph, PlanReport, RenderSettings
+from symbolica.community.graph import Bridges as Bridges, Classes as Classes, DiagramRender, Graph, PlanReport, RenderSettings
 from symbolica.community.tensor import DisplaySettings, Slot, TensorExpression, TensorName
 from symbolica.core import Expression
 
@@ -9726,7 +9726,7 @@ class Process:
         alternatives : sequence[sequence[Particle | ParticleSelector | str | int]]
             Allowed outgoing particle lists.
         """
-    def amplitude(self, *, loops: Loops, orders: typing.Optional[Orders] = None, restrict: typing.Optional[Restrict] = None, topology: typing.Optional[TopologyRules] = None, symmetrize: typing.Optional[Symmetrize] = None, prune_skeletons: typing.Optional[typing.Any] = None, prune_dressings: typing.Optional[typing.Any] = None, select: typing.Optional[typing.Any] = None) -> Request:
+    def amplitude(self, *, loops: Loops, orders: typing.Optional[Orders] = None, restrict: typing.Optional[Restrict] = None, topology: typing.Optional[TopologyRules] = None, classes: typing.Optional[Classes] = None, symmetrize: typing.Optional[Symmetrize] = None, prune_skeletons: typing.Optional[typing.Any] = None, prune_dressings: typing.Optional[typing.Any] = None, select: typing.Optional[typing.Any] = None) -> Request:
         r"""
         Create an amplitude (including vacuum) discovery request with explicit total loops.
 
@@ -9747,6 +9747,8 @@ class Process:
             Model-validated particle and vertex restrictions.
         topology : TopologyRules or None, optional
             Explicit topology criteria; None keeps minimal unrestricted defaults.
+        classes : graph.Classes or None, optional
+            Safe flavour-class refinement policy; None uses Classes.auto().
         symmetrize : Symmetrize or None, optional
             External-label permutation symmetries, disabled by default.
         prune_skeletons : callable or None, optional
@@ -9756,7 +9758,7 @@ class Process:
         select : callable or None, optional
             Arbitrary bool predicate receiving a complete graph.DiagramView.
         """
-    def cross_section(self, *, loops: Loops, orders: typing.Optional[Orders] = None, restrict: typing.Optional[Restrict] = None, topology: typing.Optional[TopologyRules] = None, cuts: typing.Optional[Cuts] = None, symmetrize: typing.Optional[Symmetrize] = None, prune_skeletons: typing.Optional[typing.Any] = None, prune_dressings: typing.Optional[typing.Any] = None, select: typing.Optional[typing.Any] = None) -> Request:
+    def cross_section(self, *, loops: Loops, orders: typing.Optional[Orders] = None, restrict: typing.Optional[Restrict] = None, topology: typing.Optional[TopologyRules] = None, classes: typing.Optional[Classes] = None, cuts: typing.Optional[Cuts] = None, symmetrize: typing.Optional[Symmetrize] = None, prune_skeletons: typing.Optional[typing.Any] = None, prune_dressings: typing.Optional[typing.Any] = None, select: typing.Optional[typing.Any] = None) -> Request:
         r"""
         Create a cross-section discovery request with explicit forward loops.
 
@@ -9778,6 +9780,8 @@ class Process:
             Model-validated particle and vertex restrictions.
         topology : TopologyRules or None, optional
             Explicit topology criteria; None keeps minimal unrestricted defaults.
+        classes : graph.Classes or None, optional
+            Safe flavour-class refinement policy; None uses Classes.auto().
         cuts : Cuts or None, optional
             Physical cut content and ranges; blobs and spectators default unrestricted.
         symmetrize : Symmetrize or None, optional
@@ -10194,6 +10198,17 @@ class Request:
         Using the setup in the ``Request`` class example:
 
         >>> assert request.topology.self_loops
+        """
+    @property
+    def classes(self) -> Classes:
+        r"""
+        Shared graph.Classes policy for class-first or direct particle dressing.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> policy = request.classes
         """
     @property
     def cuts(self) -> Cuts:

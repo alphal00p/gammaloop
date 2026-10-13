@@ -57,6 +57,10 @@ pub(crate) struct Decoration<'d> {
     /// Per labelled edge: a [`super::model::Label`] index, or a [`super::model::LoopLabel`] index
     /// for self-loops.
     pub(crate) labels: &'d [u8],
+    /// Fine particle labels may be assigned by whole line rather than by edge prefix. MAX is
+    /// unresolved; the complete coarse labels still expose its class and orientation.
+    pub(crate) particles: bool,
+    pub(crate) coarse_labels: Option<&'d [u8]>,
     /// Per vertex: the automaton state of its legs and labelled edges.
     pub(crate) states: &'d [VertexState],
     /// Per vertex: the signature index; empty until the rules are chosen.
@@ -110,6 +114,19 @@ pub(crate) struct Decorator {
     rules: Vec<u32>,
     rule_image: Vec<u32>,
     phase: Phase,
+    refining: bool,
+    coarse_labels: Vec<u8>,
+    coarse_states: Vec<VertexState>,
+    coarse_stabilizer: Vec<usize>,
+    refine_lines: Vec<RefinementLine>,
+    refine_next: Vec<usize>,
+    refine_trails: Vec<Vec<(usize, [VertexState; 2])>>,
+    refine_depth: usize,
+    refine_descending: bool,
+    /// Incremental pin propagation is needed only for external nontrivial-class legs.
+    pinned_lines: Option<PinnedLines>,
+    pin_checkpoints: Vec<usize>,
+    refine_image: Vec<(u8, u8)>,
     /// Number of edges labelled so far, and whether the labelling extends (or backtracks next).
     assigned: usize,
     descending: bool,
@@ -138,8 +155,81 @@ enum Phase {
     Single,
     /// Searching labellings.
     Labels,
+    /// Particle choices on the directed lines of a minimal coarse assignment.
+    Refinements,
     /// Enumerating the rule tuples of a minimal labelling; `true` before the first.
     Rules(bool),
+}
+
+/// A nontrivial class occupies one diagonal directed line. The original external legs may
+/// fix its particle; otherwise every class member is tried once, before the rule fibres.
+#[derive(Debug)]
+struct RefinementLine {
+    class: usize,
+    edges: Vec<usize>,
+    pin: Option<u8>,
+}
+
+/// Rollback connectivity for externally pinned lines. No instance is created for purely
+/// internal flavour sums; those components are built once per complete coarse assignment.
+#[derive(Debug)]
+struct PinnedLines {
+    parent: Vec<usize>,
+    size: Vec<usize>,
+    pin: Vec<Option<u8>>,
+    trail: Vec<(usize, usize, usize, Option<u8>)>,
+}
+
+impl PinnedLines {
+    fn new(pin: Vec<Option<u8>>) -> Self {
+        Self {
+            parent: (0..pin.len()).collect(),
+            size: vec![1; pin.len()],
+            pin,
+            trail: Vec::new(),
+        }
+    }
+
+    fn root(&self, mut vertex: usize) -> usize {
+        while self.parent[vertex] != vertex {
+            vertex = self.parent[vertex];
+        }
+        vertex
+    }
+
+    fn join(&mut self, u: usize, v: usize) -> bool {
+        let (mut u, mut v) = (self.root(u), self.root(v));
+        if u == v {
+            return true;
+        }
+        if self.pin[u].zip(self.pin[v]).is_some_and(|(a, b)| a != b) {
+            return false;
+        }
+        if self.size[u] < self.size[v] {
+            std::mem::swap(&mut u, &mut v);
+        }
+        for vertex in [u, v] {
+            self.trail.push((
+                vertex,
+                self.parent[vertex],
+                self.size[vertex],
+                self.pin[vertex],
+            ));
+        }
+        self.parent[v] = u;
+        self.size[u] += self.size[v];
+        self.pin[u] = self.pin[u].or(self.pin[v]);
+        true
+    }
+
+    fn undo(&mut self, checkpoint: usize) {
+        while self.trail.len() > checkpoint {
+            let (vertex, parent, size, pin) = self.trail.pop().unwrap();
+            self.parent[vertex] = parent;
+            self.size[vertex] = size;
+            self.pin[vertex] = pin;
+        }
+    }
 }
 
 impl Decorator {
@@ -154,6 +244,8 @@ impl Decorator {
         node_group_order: Option<u128>,
     ) {
         self.phase = Phase::Done;
+        self.refining = false;
+        self.pinned_lines = None;
         self.placement = None;
         self.parked = false;
         self.vetoed = None;
@@ -170,7 +262,7 @@ impl Decorator {
             });
         self.kernel = self.leg_kernel;
         let n = topology.n;
-        let single = model.single_diagram();
+        let single = model.refinement.is_none() && model.single_diagram();
         if single {
             self.list_edges(topology);
         } else {
@@ -186,6 +278,9 @@ impl Decorator {
         self.labels.clear();
         self.labels.resize(self.edges.len(), 0);
         self.trail.resize(self.edges.len(), [0; 2]);
+        if !self.start_pins(model, topology) {
+            return;
+        }
         if !self.start_budgets(model, topology) {
             return;
         }
@@ -270,10 +365,16 @@ impl Decorator {
                     self.phase = Phase::Done;
                     return Step::Ready;
                 }
-                Phase::Rules(first) => match self.poll_rules(model, first, work) {
+                Phase::Rules(first) => match self.poll_rules(model.particles(), first, work) {
                     Step::Ready => return Step::Ready,
                     Step::Yield => return Step::Yield,
-                    Step::Done => self.phase = Phase::Labels,
+                    Step::Done => {
+                        self.phase = if self.refining {
+                            Phase::Refinements
+                        } else {
+                            Phase::Labels
+                        }
+                    }
                     Step::Pending => unreachable!("rule tuples are judged after dressing"),
                 },
                 Phase::Labels => match self.poll_labelling(model, t, filter, defer, work) {
@@ -282,10 +383,31 @@ impl Decorator {
                     Step::Yield => return Step::Yield,
                     Step::Ready => {
                         if self.labelling_minimal(model) {
+                            if model.refinement.is_some() {
+                                if self.start_refinement(model, t) {
+                                    self.phase = Phase::Refinements;
+                                }
+                            } else {
+                                self.choices.clear();
+                                self.choices.resize(t.n, 0);
+                                self.phase = Phase::Rules(true);
+                            }
+                        }
+                    }
+                },
+                Phase::Refinements => match self.poll_refinement(model, t, filter, defer, work) {
+                    Step::Pending => return Step::Pending,
+                    Step::Yield => return Step::Yield,
+                    Step::Ready => {
+                        if self.refinement_minimal(model) {
                             self.choices.clear();
                             self.choices.resize(t.n, 0);
                             self.phase = Phase::Rules(true);
                         }
+                    }
+                    Step::Done => {
+                        self.restore_coarse();
+                        self.phase = Phase::Labels;
                     }
                 },
             }
@@ -305,7 +427,14 @@ impl Decorator {
     /// The field prefix from the last [`Step::Pending`], before its line counts are committed.
     pub(crate) fn pending<'d>(&'d self, t: &'d Topology) -> Decoration<'d> {
         assert!(self.parked, "a dressing verdict must be pending");
-        self.labelled(t, self.placement.expect("parked edge").edge + 1)
+        self.labelled(
+            t,
+            if self.refining {
+                self.edges.len()
+            } else {
+                self.placement.expect("parked edge").edge + 1
+            },
+        )
     }
 
     /// Resolve one parked edge. Rejection resumes at its next label; accepted prefixes commit
@@ -313,11 +442,21 @@ impl Decorator {
     pub(crate) fn resume(&mut self, model: &Model, keep: bool, check_heredity: bool) {
         assert!(self.parked, "a dressing verdict must be pending");
         self.parked = false;
+        if self.refining {
+            if self.verdict(self.edges.len() + self.refine_depth, keep, check_heredity) {
+                self.refine_depth += 1;
+                self.refine_descending = true;
+            } else {
+                self.undo_refinement_line(self.refine_depth);
+            }
+            return;
+        }
         let placement = self.placement.expect("parked edge");
         if self.verdict(placement.edge, keep, check_heredity) {
             self.commit(model, placement.edge);
         } else {
             self.set_ends(self.edges[placement.edge], placement.before);
+            self.undo_pins(placement.edge);
         }
     }
 
@@ -334,6 +473,8 @@ impl Decorator {
             topology: t,
             edges: &self.edges,
             labels: &self.labels[..n],
+            particles: self.refining,
+            coarse_labels: self.refining.then_some(&self.coarse_labels),
             states: &self.states,
             rules: &[],
             automorphism_count: None,
@@ -663,10 +804,14 @@ impl Decorator {
                         self.assigned = e;
                         self.set_ends(self.edges[e], self.trail[e]);
                         self.follow_lines(model, e, true);
+                        self.undo_pins(e);
                         (e, self.labels[e] as usize + 1)
                     };
                     let before = self.ends(self.edges[e]);
                     self.trail[e] = before;
+                    if let Some(pins) = &self.pinned_lines {
+                        self.pin_checkpoints[e] = pins.trail.len();
+                    }
                     Placement {
                         edge: e,
                         next_label: first,
@@ -688,7 +833,10 @@ impl Decorator {
             });
             self.add(model, edge, label, placement.before);
             self.labels[e] = label as u8;
-            if self.forward_check(model, e) && self.within_budgets(model, e) {
+            if self.forward_check(model, e)
+                && self.within_budgets(model, e)
+                && self.join_pins(model, e)
+            {
                 if defer {
                     self.parked = true;
                     return Step::Pending;
@@ -699,7 +847,329 @@ impl Decorator {
                 }
             }
             self.set_ends(edge, placement.before);
+            self.undo_pins(e);
         }
+    }
+
+    fn class_field(model: &Model, edge: Edge, label: u8) -> usize {
+        if edge.u == edge.v {
+            model.theory.loop_labels[label as usize].field as usize
+        } else {
+            model.theory.labels[label as usize].field as usize
+        }
+    }
+
+    fn start_pins(&mut self, model: &Model, topology: &Topology) -> bool {
+        let Some(refinement) = &model.refinement else {
+            return true;
+        };
+        let fine = &refinement.fine;
+        let mut pins = vec![None; topology.n];
+        for (vertex, pin) in pins.iter_mut().enumerate() {
+            for class in 0..fine.legs.n_classes() {
+                if fine.legs.count(topology.vertices[vertex].labelled, class) == 0 {
+                    continue;
+                }
+                let field = fine.legs.stub[class] / 3;
+                if refinement.members[refinement.field_class[field as usize] as usize].len() == 1 {
+                    continue;
+                }
+                if pin.is_some_and(|previous| previous != field) {
+                    return false;
+                }
+                *pin = Some(field);
+            }
+        }
+        if pins.iter().any(Option::is_some) {
+            self.pinned_lines = Some(PinnedLines::new(pins));
+            self.pin_checkpoints.clear();
+            self.pin_checkpoints.resize(self.edges.len(), 0);
+        }
+        true
+    }
+
+    fn join_pins(&mut self, model: &Model, edge: usize) -> bool {
+        let Some(pins) = &mut self.pinned_lines else {
+            return true;
+        };
+        let e = self.edges[edge];
+        let class = Self::class_field(model, e, self.labels[edge]);
+        if model.refinement.as_ref().unwrap().members[class].len() == 1 {
+            return true;
+        }
+        pins.join(e.u as usize, e.v as usize)
+    }
+
+    fn undo_pins(&mut self, edge: usize) {
+        if let Some(pins) = &mut self.pinned_lines {
+            pins.undo(self.pin_checkpoints[edge]);
+        }
+    }
+
+    /// Map a label between the coarse and particle alphabet without changing its orientation.
+    fn corresponding_label(
+        from: &Model,
+        to: &Model,
+        edge: Edge,
+        label: u8,
+        field: u8,
+    ) -> Option<u8> {
+        if edge.u == edge.v {
+            let directed = from.theory.loop_labels[label as usize].directed;
+            to.theory
+                .loop_labels
+                .iter()
+                .position(|l| l.field == field && l.directed == directed)
+        } else {
+            let direction = from.theory.labels[label as usize].direction;
+            to.theory
+                .labels
+                .iter()
+                .position(|l| l.field == field && l.direction == direction)
+        }
+        .map(|index| index as u8)
+    }
+
+    fn start_refinement(&mut self, model: &Model, topology: &Topology) -> bool {
+        let refinement = model.refinement.as_ref().unwrap();
+        let fine = &refinement.fine;
+        self.coarse_labels.clone_from(&self.labels);
+        self.coarse_states.clone_from(&self.states);
+        self.coarse_stabilizer.clone_from(&self.stabilizer);
+        self.refining = true;
+        self.labels.fill(u8::MAX);
+        self.states.clear();
+        for vertex in &topology.vertices[..topology.n] {
+            let Some(state) = fine.labelled_state(vertex.degree, vertex.labelled) else {
+                self.restore_coarse();
+                return false;
+            };
+            self.states.push(state);
+        }
+        // Unpinned line connectivity is deliberately constructed only here, once per complete
+        // coarse assignment. Incremental rollback connectivity exists solely for external pins.
+        let mut internal = None;
+        if self.pinned_lines.is_none() {
+            let mut lines = PinnedLines::new(vec![None; topology.n]);
+            for (index, &edge) in self.edges.iter().enumerate() {
+                let class = Self::class_field(model, edge, self.coarse_labels[index]);
+                if refinement.members[class].len() > 1 {
+                    assert!(lines.join(edge.u as usize, edge.v as usize));
+                }
+            }
+            internal = Some(lines);
+        }
+        let lines = self.pinned_lines.as_ref().or(internal.as_ref()).unwrap();
+        self.refine_lines.clear();
+        for (index, &edge) in self.edges.iter().enumerate() {
+            let class = Self::class_field(model, edge, self.coarse_labels[index]);
+            if refinement.members[class].len() == 1 {
+                continue;
+            }
+            let root = lines.root(edge.u as usize);
+            if let Some(line) = self
+                .refine_lines
+                .iter_mut()
+                .find(|line| lines.root(self.edges[line.edges[0]].u as usize) == root)
+            {
+                assert_eq!(
+                    line.class, class,
+                    "a safe directed line has one field class"
+                );
+                line.edges.push(index);
+            } else {
+                self.refine_lines.push(RefinementLine {
+                    class,
+                    edges: vec![index],
+                    pin: lines.pin[root],
+                });
+            }
+        }
+        // Singleton edges are already fully known in the coarse view. Their fine automaton
+        // transitions are fixed, not new branching decisions or extra hook calls.
+        for index in 0..self.edges.len() {
+            let edge = self.edges[index];
+            let class = Self::class_field(model, edge, self.coarse_labels[index]);
+            if refinement.members[class].len() != 1 {
+                continue;
+            }
+            let label = Self::corresponding_label(
+                model,
+                fine,
+                edge,
+                self.coarse_labels[index],
+                refinement.members[class][0],
+            )
+            .unwrap();
+            let Some(after) = fine.try_label(self.ends(edge), label as usize, edge.u == edge.v)
+            else {
+                self.restore_coarse();
+                return false;
+            };
+            self.set_ends(edge, after);
+            self.labels[index] = label;
+        }
+        self.refine_next.clear();
+        self.refine_next.resize(self.refine_lines.len(), 0);
+        self.refine_trails.clear();
+        self.refine_trails
+            .resize_with(self.refine_lines.len(), Vec::new);
+        self.refine_depth = 0;
+        self.refine_descending = true;
+        true
+    }
+
+    fn restore_coarse(&mut self) {
+        self.labels.clone_from(&self.coarse_labels);
+        self.states.clone_from(&self.coarse_states);
+        self.refining = false;
+    }
+
+    fn undo_refinement_line(&mut self, depth: usize) {
+        while let Some((index, before)) = self.refine_trails[depth].pop() {
+            self.set_ends(self.edges[index], before);
+            self.labels[index] = u8::MAX;
+        }
+    }
+
+    fn refine_line(&mut self, model: &Model, depth: usize, field: u8) -> bool {
+        let fine = model.particles();
+        for position in 0..self.refine_lines[depth].edges.len() {
+            let index = self.refine_lines[depth].edges[position];
+            let edge = self.edges[index];
+            let label =
+                Self::corresponding_label(model, fine, edge, self.coarse_labels[index], field)
+                    .unwrap();
+            let before = self.ends(edge);
+            let Some(after) = fine.try_label(before, label as usize, edge.u == edge.v) else {
+                return false;
+            };
+            self.refine_trails[depth].push((index, before));
+            self.set_ends(edge, after);
+            self.labels[index] = label;
+        }
+        // Count membership is constant throughout each class. Only rule-weight intervals can
+        // narrow during particle refinement; exact rule weights are still checked by Rules.
+        let width = model.budgets.len();
+        if width != 0 {
+            let start = self.edges.len() * width;
+            let mut row = self.tallies[start..start + width].to_vec();
+            for (weight, interval) in row[..fine.budgets.n_weights].iter_mut().enumerate() {
+                *interval = self.states.iter().fold([0; 2], |[a, b], &state| {
+                    let [low, high] = fine.weight(state, weight);
+                    [a + low as i64, b + high as i64]
+                });
+            }
+            if !fine.budgets.admit(&row) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn poll_refinement(
+        &mut self,
+        model: &Model,
+        topology: &Topology,
+        filter: Option<&dyn Prune>,
+        defer: bool,
+        work: &mut Work,
+    ) -> Step {
+        loop {
+            if self.refine_descending && self.refine_depth == self.refine_lines.len() {
+                self.refine_descending = false;
+                return Step::Ready;
+            }
+            if !work.spend() {
+                return Step::Yield;
+            }
+            if !self.refine_descending {
+                let Some(depth) = self.refine_depth.checked_sub(1) else {
+                    return Step::Done;
+                };
+                self.refine_depth = depth;
+                self.undo_refinement_line(depth);
+                self.refine_descending = true;
+            }
+            let depth = self.refine_depth;
+            let line = &self.refine_lines[depth];
+            let members = &model.refinement.as_ref().unwrap().members[line.class];
+            let field = match line.pin {
+                Some(pin) => (self.refine_next[depth] == 0).then_some(pin),
+                None => members.get(self.refine_next[depth]).copied(),
+            };
+            let Some(field) = field else {
+                self.refine_next[depth] = 0;
+                self.refine_descending = false;
+                continue;
+            };
+            self.refine_next[depth] += 1;
+            if self.refine_line(model, depth, field) {
+                if defer {
+                    self.parked = true;
+                    return Step::Pending;
+                }
+                let keep = filter.is_none_or(|filter| {
+                    filter.keeps(State::Decoration(self.labelled(topology, self.edges.len())))
+                });
+                if self.verdict(
+                    self.edges.len() + depth,
+                    keep,
+                    filter.is_some_and(|filter| filter.checks_heredity()),
+                ) {
+                    self.refine_depth += 1;
+                    continue;
+                }
+            }
+            self.undo_refinement_line(depth);
+        }
+    }
+
+    /// The second quotient uses only the stabilizer of this coarse assignment. Bundle order
+    /// remains coarse-first even when a class's original particle ranks are interleaved.
+    fn refinement_minimal(&mut self, model: &Model) -> bool {
+        let fine = model.particles();
+        let field_class = &model.refinement.as_ref().unwrap().field_class;
+        self.stabilizer.clear();
+        for position in 0..self.coarse_stabilizer.len() {
+            let k = self.coarse_stabilizer[position] - 1;
+            let mut comparison = Ordering::Equal;
+            for bundle in 0..self.bundles.len() {
+                let preimage = self.preimage[k * self.bundles.len() + bundle] as usize;
+                let (start, end) = self.bundles[preimage];
+                let edge = self.edges[start];
+                self.refine_image.clear();
+                for &label in &self.labels[start..end] {
+                    let label = if self.flips[k * self.bundles.len() + bundle] && edge.u != edge.v {
+                        fine.theory.labels[label as usize].flip
+                    } else {
+                        label
+                    };
+                    let field = Self::class_field(fine, edge, label);
+                    let coarse =
+                        Self::corresponding_label(fine, model, edge, label, field_class[field])
+                            .unwrap();
+                    self.refine_image.push((coarse, label));
+                }
+                self.refine_image.sort_unstable();
+                let (start, end) = self.bundles[bundle];
+                comparison = self
+                    .refine_image
+                    .iter()
+                    .map(|&(_, label)| label)
+                    .cmp(self.labels[start..end].iter().copied());
+                if comparison != Ordering::Equal {
+                    break;
+                }
+            }
+            match comparison {
+                Ordering::Less => return false,
+                Ordering::Equal => self.stabilizer.push(k + 1),
+                Ordering::Greater => {}
+            }
+        }
+        self.kernel = self.kernel_order(fine);
+        true
     }
 
     /// The states of the ends of `edge`.
@@ -1087,6 +1557,616 @@ mod tests {
                 assert_eq!(actual, expected);
                 assert_eq!(*deferred.seen.lock().unwrap(), *direct.seen.lock().unwrap());
                 assert!(!deferred.seen.lock().unwrap().is_empty());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod refinement_tests {
+    use std::{collections::BTreeMap, sync::Mutex};
+
+    use super::*;
+    use crate::half_edge::{
+        generate::{
+            batch::{Event, HookMask, Output},
+            Classes, Countable, Dressed, GenerationError, Legs, Plan, Query, Run, Structure, Stub,
+            Theory,
+        },
+        involution::Flow,
+    };
+
+    fn theory() -> Theory<char> {
+        let mut builder = Theory::builder().weights(["order"]);
+        // The two members straddle the fixed boson in field-rank order. Equal signatures are
+        // distinct rule fibres, and selecting a weight does not merge their original IDs.
+        for field in ['a', 'c'] {
+            for weight in [0, 1] {
+                builder = builder.vertex(
+                    [
+                        Stub::incoming(field),
+                        Stub::outgoing(field),
+                        Stub::undirected('b'),
+                    ],
+                    [weight],
+                );
+            }
+        }
+        builder
+            .vertex(vec![Stub::undirected('b'); 3], [0])
+            .build()
+            .unwrap()
+    }
+
+    fn query(legs: &Legs<char, u8>, loops: usize) -> Query<char, u8> {
+        Query::new(legs).loops(loops..=loops).structure(Structure {
+            self_loops: true,
+            zero_flow_edges: true,
+            ..Structure::default()
+        })
+    }
+
+    fn exact(
+        theory: &Theory<char>,
+        request: &Query<char, u8>,
+        mode: Classes,
+    ) -> BTreeMap<crate::half_edge::canon::CanonicalForm<usize, char, Option<u8>>, u128> {
+        let plan = Plan::new(theory, &request.clone().classes(mode)).unwrap();
+        let mut reference = None;
+        let executions: &[(bool, usize)] =
+            if cfg!(all(feature = "rayon", not(target_arch = "wasm32"))) {
+                &[(false, 1), (true, 1), (true, 8), (true, 32)]
+            } else {
+                &[(false, 1)]
+            };
+        for &(parallel, threads) in executions {
+            let generate = || {
+                let run = Run::default().parallel(parallel);
+                let entry = |diagram: crate::half_edge::generate::Diagram<char, u8>| {
+                    (
+                        diagram.canonical_form().clone(),
+                        diagram.symmetry_factor().unwrap(),
+                    )
+                };
+                let ordered = plan.diagrams(&run).unwrap().map(entry).collect::<Vec<_>>();
+                let diagrams = ordered.iter().cloned().collect::<BTreeMap<_, _>>();
+                assert_eq!(diagrams.len(), ordered.len(), "duplicate coloured key");
+                let counts = plan.count(&run).unwrap();
+                assert_eq!(counts.diagrams, num_bigint::BigUint::from(diagrams.len()));
+                let weight: num_rational::BigRational = diagrams
+                    .values()
+                    .map(|&aut| num_rational::BigRational::new(1.into(), aut.into()))
+                    .sum();
+                assert_eq!(counts.sum_inv_aut, weight);
+                assert!(counts.complete);
+                let snapshots = plan
+                    .skeletons(&run)
+                    .unwrap()
+                    .map(|skeleton| skeleton.snapshot())
+                    .collect::<Vec<_>>();
+                let retained = snapshots
+                    .iter()
+                    .flat_map(|skeleton| plan.dressings(skeleton, &run).unwrap().map(entry))
+                    .collect::<Vec<_>>();
+                let retained_map = retained.iter().cloned().collect::<BTreeMap<_, _>>();
+                assert_eq!(retained_map.len(), retained.len(), "duplicate retained key");
+                assert_eq!(retained_map, diagrams, "retained skeleton dressing");
+                ordered
+            };
+            #[cfg(all(feature = "rayon", not(target_arch = "wasm32")))]
+            let actual = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap()
+                .install(generate);
+            #[cfg(not(all(feature = "rayon", not(target_arch = "wasm32"))))]
+            let actual = generate();
+            if let Some(expected) = &reference {
+                assert_eq!(
+                    &actual, expected,
+                    "{mode:?}: order with parallel={parallel} at {threads} threads"
+                );
+            } else {
+                reference = Some(actual);
+            }
+        }
+        reference.unwrap().into_iter().collect()
+    }
+
+    #[test]
+    fn class_refinement_preserves_fine_keys_rules_weights_and_external_pins() {
+        let theory = theory();
+        let photon = Legs::new()
+            .leg(1, Stub::undirected('b'))
+            .leg(2, Stub::undirected('b'));
+        let four_photons = (1..=4).fold(Legs::new(), |legs, label| {
+            legs.leg(label, Stub::undirected('b'))
+        });
+        let pinned = Legs::new()
+            .leg(1, Stub::incoming('a'))
+            .leg(2, Stub::outgoing('a'))
+            .leg(3, Stub::incoming('c'))
+            .leg(4, Stub::outgoing('c'));
+        for request in [
+            query(&photon, 1),
+            query(&photon, 2).weight("order", 1..=2),
+            query(&four_photons, 1),
+            query(&pinned, 1),
+            query(&Legs::new(), 2),
+        ] {
+            let plan = Plan::new(&theory, &request).unwrap();
+            assert_eq!(
+                plan.compiled
+                    .tables
+                    .class_members
+                    .iter()
+                    .map(|m| m.to_vec())
+                    .collect::<Vec<_>>(),
+                vec![vec!['a', 'c'], vec!['b']]
+            );
+            let particle = exact(&theory, &request, Classes::None);
+            assert!(!particle.is_empty());
+            assert_eq!(exact(&theory, &request, Classes::Auto), particle);
+        }
+    }
+
+    #[test]
+    fn original_rule_exclusions_and_active_colours_split_before_quotienting() {
+        let base = theory();
+        let legs = Legs::new()
+            .leg(1, Stub::undirected('b'))
+            .leg(2, Stub::undirected('b'));
+        let plain = query(&legs, 1);
+        for request in [
+            plain.clone().class_distinctions([('a', 1)], []),
+            plain.clone().class_distinctions([], [(0, 1)]),
+            plain.clone().count(Countable::Propagators(vec!['a']), ..=1),
+        ] {
+            let plan = Plan::new(&base, &request).unwrap();
+            assert!(plan.compiled.model.refinement.is_none());
+            assert_eq!(
+                exact(&base, &request, Classes::Auto),
+                exact(&base, &request, Classes::None)
+            );
+        }
+        for mixed in [
+            vec![
+                Stub::incoming('a'),
+                Stub::outgoing('c'),
+                Stub::undirected('b'),
+            ],
+            vec![
+                Stub::incoming('a'),
+                Stub::outgoing('a'),
+                Stub::incoming('c'),
+                Stub::outgoing('c'),
+            ],
+        ] {
+            let mut builder = Theory::builder();
+            for field in ['a', 'c'] {
+                builder = builder.vertex(
+                    [
+                        Stub::incoming(field),
+                        Stub::outgoing(field),
+                        Stub::undirected('b'),
+                    ],
+                    [],
+                );
+            }
+            let unsafe_theory = builder.vertex(mixed, []).build().unwrap();
+            let plan = Plan::new(&unsafe_theory, &plain).unwrap();
+            assert!(plan.compiled.model.refinement.is_none());
+            // The particle-only fallback needs no allocated class-output cache.
+            assert!(plan.compiled.tables.class_members.is_empty());
+            let particle = exact(&unsafe_theory, &plain, Classes::None);
+            assert!(!particle.is_empty());
+            assert_eq!(exact(&unsafe_theory, &plain, Classes::Auto), particle);
+        }
+        let undirected = Theory::builder()
+            .vertex(vec![Stub::undirected('a'); 3], [])
+            .vertex(vec![Stub::undirected('c'); 3], [])
+            .build()
+            .unwrap();
+        assert!(Plan::new(&undirected, &query(&Legs::new(), 2))
+            .unwrap()
+            .compiled
+            .model
+            .refinement
+            .is_none());
+    }
+
+    #[test]
+    fn class_refinement_preserves_thirteen_identical_and_distinct_legs() {
+        for identical in [true, false] {
+            let mut builder = Theory::builder();
+            for field in ['a', 'c'] {
+                let mut signature = vec![Stub::incoming(field), Stub::outgoing(field)];
+                signature.extend(vec![Stub::undirected('b'); 13]);
+                builder = builder.vertex(signature, []);
+            }
+            let theory = builder.build().unwrap();
+            let mut legs = Legs::new()
+                .leg(20, Stub::incoming('a'))
+                .leg(21, Stub::outgoing('a'));
+            for i in 0..13 {
+                legs = legs.leg(if identical { 0 } else { i }, Stub::undirected('b'));
+            }
+            let request = query(&legs, 0).structure(Structure {
+                max_vertices: Some(1),
+                ..Structure::default()
+            });
+            assert!(Plan::new(&theory, &request)
+                .unwrap()
+                .compiled
+                .model
+                .refinement
+                .is_some());
+            let particle = exact(&theory, &request, Classes::None);
+            assert_eq!(particle.len(), 1);
+            assert_eq!(
+                particle.values().copied().next(),
+                Some(if identical { (1..=13).product() } else { 1 })
+            );
+            assert_eq!(exact(&theory, &request, Classes::Auto), particle);
+        }
+        // The same leg kernel also applies when there is no nontrivial flavour class.
+        let scalar = Theory::builder()
+            .vertex(vec![Stub::undirected('b'); 13], [])
+            .build()
+            .unwrap();
+        for identical in [true, false] {
+            let legs = (0..13).fold(Legs::new(), |legs, i| {
+                legs.leg(if identical { 0 } else { i }, Stub::undirected('b'))
+            });
+            let request = query(&legs, 0).structure(Structure {
+                max_vertices: Some(1),
+                ..Structure::default()
+            });
+            let particle = exact(&scalar, &request, Classes::None);
+            assert_eq!(
+                particle.values().copied().collect::<Vec<_>>(),
+                [if identical { (1..=13).product() } else { 1 }]
+            );
+            assert_eq!(exact(&scalar, &request, Classes::Auto), particle);
+        }
+        // The unrelated-field singleton path must retain the cached 13! node-group order.
+        let theory = Theory::builder()
+            .vertex([Stub::undirected('b')], [])
+            .vertex(vec![Stub::undirected('b'); 13], [])
+            .build()
+            .unwrap();
+        let request = query(&Legs::new(), 0).structure(Structure {
+            max_vertices: Some(14),
+            zero_flow_edges: true,
+            ..Structure::default()
+        });
+        let particle = exact(&theory, &request, Classes::None);
+        let mut orders = particle.values().copied().collect::<Vec<_>>();
+        orders.sort();
+        assert_eq!(orders, [2, (1..=13).product()]);
+        assert_eq!(exact(&theory, &request, Classes::Auto), particle);
+    }
+
+    #[test]
+    fn anonymous_flavour_pins_and_active_weight_bounds_preserve_complete_maps() {
+        let theory = theory();
+        let legs = Legs::new()
+            .leg(0, Stub::incoming('a'))
+            .leg(0, Stub::outgoing('a'))
+            .leg(0, Stub::incoming('c'))
+            .leg(0, Stub::outgoing('c'));
+        let request = query(&legs, 1);
+        for bounded in [request.clone(), request.clone().weight("order", 1..=2)] {
+            let particle = exact(&theory, &bounded, Classes::None);
+            assert!(!particle.is_empty());
+            assert_eq!(exact(&theory, &bounded, Classes::Auto), particle);
+        }
+        // A fine rule's order cannot be hidden by the coarse fibre or a loose partial bound.
+        let impossible = request.weight("order", 100..=100);
+        for mode in [Classes::None, Classes::Auto] {
+            match Plan::new(&theory, &impossible.clone().classes(mode)) {
+                Err(GenerationError::Infeasible(report)) => {
+                    assert_eq!(
+                        report.infeasible.as_deref(),
+                        Some("no loop partition satisfies the request")
+                    );
+                    assert_eq!(
+                        report.empty_partitions,
+                        vec![(1, "no degree/weight partition satisfies the request".into())]
+                    );
+                }
+                _ => panic!("{mode:?}: impossible order must be rejected during planning"),
+            }
+        }
+    }
+
+    #[test]
+    fn class_views_keep_flow_ranked_members_and_owned_refinement_snapshots() {
+        let theory = theory();
+        let legs = Legs::new()
+            .leg(1, Stub::undirected('b'))
+            .leg(2, Stub::undirected('b'));
+        let request = query(&legs, 1).deferred_hooks(HookMask {
+            dressings: true,
+            ..HookMask::default()
+        });
+        let plan = Plan::new(&theory, &request).unwrap();
+        let run = Run::default();
+        let mut driver = plan.batched(&run, Output::Diagrams).unwrap();
+        let mut retained = None;
+        let mut expected = BTreeMap::new();
+        let mut saw_particle = false;
+        loop {
+            match driver.poll().unwrap() {
+                Event::Batch(requests) => {
+                    let replies = requests
+                        .iter()
+                        .map(|request| request.reply(true))
+                        .collect::<Vec<_>>();
+                    for request in requests {
+                        let ranked = request.into_ranked();
+                        let retain = {
+                            let view = ranked.dressing().unwrap();
+                            let mut retain = None;
+                            for (index, edge) in view.edges().enumerate() {
+                                match view.field(index) {
+                                    Some(Dressed::Class(fields)) => {
+                                        assert_eq!(fields, &[0, 2]);
+                                        assert!(matches!(
+                                            view.flow(index),
+                                            Some(Flow::Source | Flow::Sink)
+                                        ));
+                                        assert_eq!(edge.flow, view.flow(index));
+                                        assert!(edge.stub.is_none());
+                                        if retained.is_none() {
+                                            retain = Some(index);
+                                        }
+                                    }
+                                    Some(Dressed::Particle(_))
+                                        if view.edges().all(|edge| edge.stub.is_some()) =>
+                                    {
+                                        saw_particle = true
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            retain
+                        };
+                        if let Some(index) = retain {
+                            retained = Some((ranked, index));
+                        }
+                    }
+                    driver.resolve(&replies).unwrap();
+                }
+                Event::Diagram(diagram) => {
+                    assert!(expected
+                        .insert(
+                            diagram.canonical_form().clone(),
+                            diagram.symmetry_factor().unwrap()
+                        )
+                        .is_none());
+                }
+                Event::Done => break,
+                Event::Yield => {}
+                _ => panic!("unexpected output"),
+            }
+        }
+        assert!(saw_particle);
+        let (retained, index) = retained.expect("a coarse callback snapshot");
+        assert!(matches!(
+            retained.dressing().unwrap().field(index),
+            Some(Dressed::Class(&[0, 2]))
+        ));
+        assert_eq!(expected, exact(&theory, &query(&legs, 1), Classes::None));
+    }
+
+    #[test]
+    fn class_veto_survives_refinement_for_the_existing_heredity_diagnostic() {
+        let theory = theory();
+        let legs = Legs::new()
+            .leg(1, Stub::undirected('b'))
+            .leg(2, Stub::undirected('b'));
+        let request = query(&legs, 1).prune_dressings(|view| {
+            !(0..view.edges().count())
+                .any(|edge| matches!(view.field(edge), Some(Dressed::Class(_))))
+        });
+        let plan = Plan::new(&theory, &request).unwrap();
+        for parallel in [false, true] {
+            let run = Run::default().parallel(parallel).check_heredity(true);
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| plan.count(&run)))
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn refinement_tiny_work_and_deferred_verdicts_preserve_every_assignment_and_hook() {
+        use crate::half_edge::generate::topology::{Context, Search};
+        use std::sync::atomic::AtomicBool;
+        struct Trace(Mutex<Vec<(Vec<u8>, bool)>>);
+        impl Prune for Trace {
+            fn keeps(&self, state: State<'_>) -> bool {
+                let State::Decoration(d) = state else {
+                    unreachable!()
+                };
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push((d.labels.to_vec(), d.particles));
+                true
+            }
+            fn checks_heredity(&self) -> bool {
+                false
+            }
+        }
+        let theory = theory();
+        let legs = Legs::new()
+            .leg(1, Stub::undirected('b'))
+            .leg(2, Stub::undirected('b'));
+        let plan = Plan::new(&theory, &query(&legs, 1)).unwrap();
+        let model = &plan.compiled.model;
+        let limits = &plan.orders[0].1;
+        let stop = AtomicBool::new(false);
+        let cx = Context {
+            model,
+            limits,
+            stop: &stop,
+            abort_check: None,
+            filter: None,
+        };
+        let mut search = Search::new(model, Topology::empty(model, limits), Default::default());
+        while search.next(&cx) {
+            let t = search.topology();
+            let mut reference = None;
+            for (defer, quantum) in [(false, None), (false, Some(1)), (true, Some(1))] {
+                let trace = Trace(Mutex::new(Vec::new()));
+                let mut decorator = Decorator::default();
+                decorator.start(model, t, search.generators(), search.node_group_order());
+                let mut outputs = Vec::new();
+                loop {
+                    match decorator.poll(
+                        model,
+                        t,
+                        Some(&trace),
+                        defer,
+                        &mut quantum.map_or_else(Work::unlimited, Work::bounded),
+                    ) {
+                        Step::Ready => {
+                            let d = decorator.decoration(t);
+                            outputs.push((
+                                d.labels.to_vec(),
+                                d.rules.to_vec(),
+                                d.automorphism_count,
+                            ));
+                            // No nontrivial same-label parallel kernel can exchange two distinct
+                            // refinement components under the single diagonal line contract.
+                            for &(start, end) in &decorator.bundles {
+                                for pair in (start..end).collect::<Vec<_>>().windows(2) {
+                                    let a = pair[0];
+                                    let b = pair[1];
+                                    if decorator.coarse_labels.get(a)
+                                        == decorator.coarse_labels.get(b)
+                                    {
+                                        assert_eq!(d.labels[a], d.labels[b]);
+                                    }
+                                }
+                            }
+                        }
+                        Step::Pending => {
+                            let keep = trace.keeps(State::Decoration(decorator.pending(t)));
+                            decorator.resume(model, keep, false);
+                        }
+                        Step::Yield => {}
+                        Step::Done => break,
+                    }
+                }
+                let result = (outputs, trace.0.into_inner().unwrap());
+                if let Some(expected) = &reference {
+                    assert_eq!(&result, expected);
+                } else {
+                    reference = Some(result);
+                }
+            }
+        }
+    }
+    #[test]
+    fn low_degree_rule_fibres_preserve_every_coloured_assignment() {
+        let mut builder = Theory::builder().weights(["order"]);
+        for field in ['a', 'c'] {
+            builder = builder.vertex(
+                [
+                    Stub::incoming(field),
+                    Stub::outgoing(field),
+                    Stub::undirected('b'),
+                ],
+                [1],
+            );
+            for weight in [0, 1] {
+                builder = builder.vertex([Stub::incoming(field), Stub::outgoing(field)], [weight]);
+            }
+        }
+        let theory = builder.build().unwrap();
+        let legs = Legs::new()
+            .leg(1, Stub::undirected('b'))
+            .leg(2, Stub::undirected('b'));
+        let request = query(&legs, 1)
+            .structure(Structure {
+                self_loops: true,
+                zero_flow_edges: true,
+                max_vertices: Some(4),
+                ..Structure::default()
+            })
+            .weight("order", 2..=3);
+        let expected = exact(&theory, &request, Classes::None);
+        assert!(!expected.is_empty());
+        assert_eq!(exact(&theory, &request, Classes::Auto), expected);
+    }
+
+    #[test]
+    fn cancellation_at_class_and_particle_hooks_stops_before_any_output() {
+        use std::sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc,
+        };
+        for particle in [false, true] {
+            let mut builder = Theory::builder();
+            for field in ['a', 'c'] {
+                builder = builder.vertex(
+                    [
+                        Stub::incoming(field),
+                        Stub::outgoing(field),
+                        Stub::undirected('b'),
+                    ],
+                    [],
+                );
+            }
+            let theory = builder.build().unwrap();
+            let legs = Legs::new()
+                .leg(1, Stub::undirected('b'))
+                .leg(2, Stub::undirected('b'));
+            for mode in 0..3 {
+                let stop = Arc::new(AtomicBool::new(false));
+                let triggered = Arc::new(AtomicUsize::new(0));
+                let callback_stop = Arc::clone(&stop);
+                let callback_triggered = Arc::clone(&triggered);
+                let request = query(&legs, 1).prune_dressings(move |view| {
+                    assert!(
+                        !callback_stop.load(Ordering::Relaxed),
+                        "no callback after cancellation"
+                    );
+                    let boundary = (0..view.edges().count()).any(|edge| match view.field(edge) {
+                        Some(Dressed::Class(_)) => !particle,
+                        Some(Dressed::Particle(&('a' | 'c'))) => particle,
+                        _ => false,
+                    });
+                    if boundary {
+                        callback_triggered.fetch_add(1, Ordering::Relaxed);
+                        callback_stop.store(true, Ordering::Relaxed);
+                    }
+                    true
+                });
+                let plan = Plan::new(&theory, &request).unwrap();
+                let run = Run::default().abort(&stop);
+                match mode {
+                    0 => {
+                        let counts = plan.count(&run).unwrap();
+                        assert_eq!(counts.diagrams, num_bigint::BigUint::from(0u8));
+                        assert!(!counts.complete);
+                    }
+                    1 => assert!(plan.diagrams(&run).unwrap().next().is_none()),
+                    _ => {
+                        let skeleton_run = Run::default();
+                        let skeleton = plan
+                            .skeletons(&skeleton_run)
+                            .unwrap()
+                            .next()
+                            .unwrap()
+                            .snapshot();
+                        assert!(plan.dressings(&skeleton, &run).unwrap().next().is_none());
+                    }
+                }
+                assert_eq!(triggered.load(Ordering::Relaxed), 1);
             }
         }
     }

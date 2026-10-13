@@ -12,7 +12,7 @@ mod scene;
 mod snapshot;
 pub use graph::PyGraph;
 #[doc(hidden)]
-pub use graph::{CancelCheck, GenerationCallbacks, PyBridges, PyPlanReport};
+pub use graph::{CancelCheck, GenerationCallbacks, PyBridges, PyClasses, PyPlanReport};
 pub use topology::PySubgraph;
 pub use typst::PyRenderSettings;
 pub use typst::{PyAuto as Auto, PyRenderSettings as RenderSettings};

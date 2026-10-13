@@ -13,7 +13,12 @@
 //! they are decided: bridges and special topologies on untyped topologies, and the special
 //! topologies again with the masses of complete graphs.
 
-use std::{cmp::Ordering, collections::BTreeMap, ops::Bound};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet, HashMap},
+    hash::Hash,
+    ops::Bound,
+};
 
 use feynkit_graph::ExternalState;
 use feynkit_model::{Model, Particle, ParticleId, VertexRuleId};
@@ -36,8 +41,8 @@ use super::{
     graph::{Endpoint, ExternalNode, GeneratedEdge, GeneratedGraph},
     special_topologies::{PlainGraph, SpecialTopologyVetoes},
 };
-use crate::Request;
 use crate::options::ResolvedRestrictions;
+use crate::{Classes, Request};
 
 /// The label of an external leg during generation. Legs with equal labels and stubs are
 /// interchangeable: symmetrized legs of one state share a label, all others are exact.
@@ -118,6 +123,132 @@ impl VertexSignatures {
         Ok(signatures)
     }
 
+    /// Only properties observed by the active physics request refine the core's structural
+    /// field orbits. The integer colours are local equality labels, not model identities.
+    fn class_distinctions(
+        &self,
+        model: &Model,
+        options: &Request,
+    ) -> Result<(Vec<(ParticleId, u32)>, Vec<(usize, u32)>), GenerationError> {
+        let cross_section = options.kind == crate::GenerationType::CrossSection;
+        let cut_states = if cross_section {
+            options.process.covariant_cut_states(model, options.kind)?
+        } else {
+            Vec::new()
+        };
+        let unresolved = if cross_section {
+            super::unresolved_cut_content(model, options)?
+        } else {
+            None
+        };
+        let distinguish_mass = [
+            options.topology.self_energies,
+            options.topology.tadpoles,
+            options.topology.snails,
+        ]
+        .iter()
+        .any(|veto| veto.massive != veto.massless);
+        let mut field_keys = HashMap::new();
+        let fields = self
+            .stubs
+            .iter()
+            .flatten()
+            .map(|stub| stub.field)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|field| {
+                let particle = model.particle_by_id(field)?;
+                let anti = model.particle_by_id(particle.antiparticle)?;
+                // A directed field represents both charges. Preserve charge and multiplicity
+                // separately for every allowed final state, including covariant alternatives.
+                let cut_content = cut_states
+                    .iter()
+                    .map(|state| {
+                        [particle.pdg_code, anti.pdg_code]
+                            .map(|pdg| state.iter().filter(|&&value| value == pdg).count())
+                    })
+                    .collect::<Vec<_>>();
+                let unresolved_content = unresolved.as_ref().map(|content| {
+                    [field, particle.antiparticle].map(|id| content.particles.contains(&id))
+                });
+                let key = (
+                    (particle.spin, particle.color, anti.spin, anti.color),
+                    distinguish_mass.then(|| {
+                        [field, particle.antiparticle].map(|id| model.particle_is_massless(id))
+                    }),
+                    cut_content,
+                    unresolved_content,
+                );
+                Ok((field, Self::equality_colour(&mut field_keys, key)?))
+            })
+            .collect::<Result<Vec<_>, GenerationError>>()?;
+
+        let mut rule_keys = HashMap::new();
+        let rules = self
+            .rules
+            .iter()
+            .enumerate()
+            .map(|(local_rule, &rule)| {
+                let rule = model.vertex_rule_by_id(rule)?;
+                let lorentz = rule
+                    .lorentz_structures
+                    .iter()
+                    .map(|&id| {
+                        let structure = model.lorentz_structure_by_id(id)?;
+                        Ok((structure.spins.clone(), structure.structure.clone()))
+                    })
+                    .collect::<Result<Vec<_>, GenerationError>>()?;
+                let occupancy = rule
+                    .couplings
+                    .iter()
+                    .map(|row| row.iter().map(Option::is_some).collect::<Vec<_>>())
+                    .collect::<Vec<_>>();
+                let orders = if cross_section {
+                    rule.coupling_orders(model)
+                } else {
+                    BTreeMap::new()
+                };
+                let cut_orders = options
+                    .cuts
+                    .amplitude
+                    .orders
+                    .plain
+                    .keys()
+                    .map(|name| orders.get(name).copied().unwrap_or(0))
+                    .collect::<Vec<_>>();
+                // Reversing an edge and conjugating its particle preserves both local
+                // signatures. Only the optional global amplitude-side exchange conjugates
+                // a rule; then CP repair compares its complete coupling-order map.
+                let cp_orders =
+                    (cross_section && options.cuts.symmetrize_left_right).then_some(orders);
+                let key = (
+                    rule.color_structures.clone(),
+                    lorentz,
+                    occupancy,
+                    cut_orders,
+                    cp_orders,
+                );
+                // Keys use the surviving Theory position; model rule IDs can have holes.
+                Ok((local_rule, Self::equality_colour(&mut rule_keys, key)?))
+            })
+            .collect::<Result<Vec<_>, GenerationError>>()?;
+        Ok((fields, rules))
+    }
+
+    /// Intern structured equality without printing symbolic expressions or assigning stable IDs.
+    fn equality_colour<K: Eq + Hash>(
+        colours: &mut HashMap<K, u32>,
+        key: K,
+    ) -> Result<u32, GenerationError> {
+        if let Some(&colour) = colours.get(&key) {
+            return Ok(colour);
+        }
+        let colour = u32::try_from(colours.len())
+            .map_err(|_| GenerationError::ArithmeticOverflow("a field-class distinction"))?;
+        colours.insert(key, colour);
+        Ok(colour)
+    }
+
     /// The generator of a request: the legs of `externals`, these signatures, the loop orders and
     /// structural limits of `options`, and its coupling orders and fermion-loop range as budgets;
     /// Typed hooks prune it after the budgets.
@@ -165,8 +296,13 @@ impl VertexSignatures {
         let mut query = Query::new(&legs)
             .loops(options.loops.range())
             .structure(structure)
+            .classes(options.classes)
             .prune_skeletons(skeletons)
             .prune_dressings(dressings);
+        if options.classes == Classes::Auto {
+            let (fields, rules) = self.class_distinctions(model, options)?;
+            query = query.class_distinctions(fields, rules);
+        }
         // Repeated constraints on one declared order must all hold.
         let bound = |order: usize| {
             i32::try_from(order)
@@ -638,6 +774,77 @@ fn permutations(n: usize) -> impl Iterator<Item = Vec<usize>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn active_mass_and_cut_membership_split_physics_equality_colours() {
+        use crate::{Loops, Process, TopologyRules, Veto};
+        let model = Model::qed();
+        let up = model.particle_id("u").unwrap();
+        let top = model.particle_id("t").unwrap();
+        assert!(model.particle_is_massless(up));
+        assert!(!model.particle_is_massless(top));
+        let request = Process::new(["a"], ["a"]).amplitude(Loops::total(2..=2));
+        let colours = |request: &Request| {
+            let signatures = VertexSignatures::new(&model, request).unwrap();
+            signatures
+                .class_distinctions(&model, request)
+                .unwrap()
+                .0
+                .into_iter()
+                .collect::<BTreeMap<_, _>>()
+        };
+        for veto in [
+            Veto::default(),
+            Veto::all(),
+            Veto::massive(),
+            Veto::massless(),
+        ] {
+            for kind in 0..3 {
+                let topology = match kind {
+                    0 => TopologyRules::new().with_self_energies(veto),
+                    1 => TopologyRules::new().with_tadpoles(veto),
+                    _ => TopologyRules::new().with_snails(veto),
+                };
+                let colours = colours(&request.clone().with_topology(topology));
+                assert_eq!(
+                    colours[&up] == colours[&top],
+                    veto.massive == veto.massless,
+                    "only an active mass-selective veto may distinguish these field colours"
+                );
+            }
+        }
+        let cross_section =
+            Process::new(["a", "a"], ["u", "u~"]).cross_section(Loops::forward(1..=1));
+        let colours = colours(&cross_section);
+        assert_ne!(
+            colours[&up], colours[&top],
+            "requested cut membership is active"
+        );
+    }
+
+    #[test]
+    fn sparse_original_rules_keep_dense_local_equality_colours() {
+        use crate::{Loops, Process, Restrict, VertexSelector};
+        let model = Model::qed();
+        let surviving = (1..model.vertex_rules().len())
+            .step_by(2)
+            .map(|index| model.vertex_rule_id_at(index).unwrap())
+            .collect::<Vec<_>>();
+        assert!(surviving.len() > 1);
+        let selectors = surviving
+            .iter()
+            .map(|&id| VertexSelector::by_id(&model, id).unwrap());
+        let request = Process::new(["a"], ["a"])
+            .amplitude(Loops::total(1..=1))
+            .with_restrict(Restrict::new().only_vertices(selectors));
+        let signatures = VertexSignatures::new(&model, &request).unwrap();
+        assert_eq!(signatures.rules, surviving);
+        let (_, colours) = signatures.class_distinctions(&model, &request).unwrap();
+        assert_eq!(
+            colours.iter().map(|&(index, _)| index).collect::<Vec<_>>(),
+            (0..surviving.len()).collect::<Vec<_>>()
+        );
+    }
 
     #[test]
     fn compact_inputs_preserve_materialized_edges_slots_and_external_order() {

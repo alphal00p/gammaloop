@@ -1119,6 +1119,134 @@ assert not cancelled.select(forced).report.completed
 }
 
 #[test]
+fn python_flavour_classes_preserve_physics_assignments_and_ranked_fields() {
+    Python::initialize();
+    Python::attach(|py| {
+        let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
+        crate::initialize_feynkit(&module).unwrap();
+        let graph = PyModule::new(py, "symbolica.community.graph").unwrap();
+        linnet_py::register(&graph).unwrap();
+        let locals = PyDict::new(py);
+        locals.set_item("fk", &module).unwrap();
+        locals.set_item("graph", &graph).unwrap();
+        let code = CString::new(r#"
+from fractions import Fraction
+
+assert fk.Classes is graph.Classes
+assert fk.Bridges is graph.Bridges
+model = fk.Model.standard_model()
+process = model.process([22], [22])
+restriction = fk.Restrict().only_particles([11, 13, 22])
+rule_ids = {rule.name: index for index, rule in enumerate(model.vertex_rules)}
+criteria = dict(loops=fk.Loops.total(1), restrict=restriction,
+                topology=fk.TopologyRules(self_loops=False))
+
+def leg_key(leg):
+    return None if leg is None else (leg.state, leg.index)
+
+def endpoint(half_edge):
+    if half_edge is None:
+        return (-1, "", -1)
+    label = leg_key(half_edge.data)
+    return (half_edge.node.index, *(label if label is not None else ("", -1)))
+
+def exact(diagrams):
+    result = {}
+    for diagram in diagrams:
+        canonical, _, aut, _ = diagram.graph.canonize(
+            node_key=lambda rule: rule_ids[rule.name],
+            edge_key=lambda particle: particle.pdg_code,
+            half_edge_key=leg_key,
+        )
+        edges = []
+        for edge in canonical.edges():
+            ends = (endpoint(edge.source), endpoint(edge.sink))
+            directed = edge.orientation != graph.Orientation.Undirected
+            if not directed:
+                ends = tuple(sorted(ends))
+            elif edge.orientation == graph.Orientation.Reversed:
+                ends = ends[::-1]
+            edges.append((edge.data.pdg_code, directed, ends))
+        key = (tuple(rule_ids[node.data.name] for node in canonical.nodes()), tuple(sorted(edges)))
+        assert key not in result
+        assert aut == diagram.aut
+        result[key] = (diagram.aut, tuple(sorted(rule_ids[rule.name] for rule in diagram.rules)))
+    return result
+
+reference = None
+for mode in (fk.Classes.none(), graph.Classes.auto(), None):
+    options = {} if mode is None else {"classes": mode}
+    request = process.amplitude(**criteria, **options)
+    assert type(request.classes) is graph.Classes
+    assert repr(request.classes) == repr(graph.Classes.auto() if mode is None else mode)
+    counts = request.count()
+    diagrams = request.generate()
+    assert counts.complete and diagrams.report.completed
+    assert counts.diagrams == len(diagrams) == 2
+    assert counts.sum_inv_aut == Fraction(2)
+    actual = exact(diagrams)
+    assert len(actual) == 2
+    if reference is None:
+        reference = actual
+    else:
+        assert actual == reference
+    sewn = model.process([11, -11], [22, 22]).cross_section(
+        loops=fk.Loops.forward(1), **options
+    )
+    assert type(sewn.classes) is graph.Classes
+    assert repr(sewn.classes) == repr(request.classes)
+
+retained, classes, particles = [], [], []
+def inspect(view):
+    for index, (_, _, stub) in enumerate(view.edges()):
+        value = view.field(index)
+        flow = view.flow(index)
+        if value is None:
+            assert stub is None and flow is None
+            continue
+        assert type(value) is graph.Dressed
+        retained.append(view)
+        if value.kind == "class":
+            assert type(value.members) is tuple and len(value.members) == 2
+            assert {member.pdg_code for member in value.members} == {11, 13}
+            assert all(type(member) is fk.Particle for member in value.members)
+            assert value.particle is None and stub is None
+            assert flow in (graph.Flow.Source, graph.Flow.Sink)
+            classes.append(value)
+        else:
+            assert value.kind == "particle" and value.members is None
+            assert type(value.particle) is fk.Particle
+            assert value.particle.pdg_code in {11, 13}
+            assert stub.data is value.particle
+            assert flow == (graph.Flow.Source if stub.direction else graph.Flow.Sink)
+            particles.append(value)
+        if type(view) is graph.DiagramView:
+            assert value.kind == "particle"
+    return True
+
+# Model particle IDs have gaps here; the callback's rank table must restore actual records.
+observed = process.amplitude(**criteria, prune_dressings=inspect, select=inspect).generate(
+    run=fk.Run(threads=2)
+)
+assert observed.report.completed and exact(observed) == reference
+assert classes and particles
+for value in classes:
+    assert {member.pdg_code for member in value.members} == {11, 13}
+    assert all(any(particle.particle is member for particle in particles) for member in value.members)
+for view in retained:
+    for access in (view.field, view.flow):
+        try:
+            access(0)
+        except ReferenceError:
+            pass
+        else:
+            raise AssertionError("field/flow escaped the callback scope")
+"#).unwrap();
+        py.run(&code, Some(&locals), Some(&locals)).unwrap();
+    });
+}
+
+#[test]
 fn request_decorators_preserve_dispatch_gc_and_heredity_contracts() {
     Python::initialize();
     Python::attach(|py| {

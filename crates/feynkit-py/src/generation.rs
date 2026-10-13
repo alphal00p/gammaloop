@@ -25,7 +25,7 @@ use feynkit_generator::{
 use feynkit_graph::DiagramId;
 use feynkit_model::Model;
 use linnet::half_edge::generate::batch::{Hook, HookMask};
-use linnet_py::{PyDiagramRender, PyRenderSettings};
+use linnet_py::{PyClasses, PyDiagramRender, PyRenderSettings};
 use pyo3::{
     FromPyObject, IntoPyObjectExt, PyTraverseError, PyVisit,
     exceptions::{PyTypeError, PyValueError},
@@ -708,6 +708,8 @@ impl PyProcess {
     ///     Model-validated particle and vertex restrictions.
     /// topology : TopologyRules or None, optional
     ///     Explicit topology criteria; None keeps minimal unrestricted defaults.
+    /// classes : graph.Classes or None, optional
+    ///     Safe flavour-class refinement policy; None uses Classes.auto().
     /// symmetrize : Symmetrize or None, optional
     ///     External-label permutation symmetries, disabled by default.
     /// prune_skeletons : callable or None, optional
@@ -716,7 +718,7 @@ impl PyProcess {
     ///     Hereditary bool predicate receiving a scoped graph.DressingView.
     /// select : callable or None, optional
     ///     Arbitrary bool predicate receiving a complete graph.DiagramView.
-    #[pyo3(signature=(*, loops, orders=None, restrict=None, topology=None, symmetrize=None, prune_skeletons=None, prune_dressings=None, select=None))]
+    #[pyo3(signature=(*, loops, orders=None, restrict=None, topology=None, classes=None, symmetrize=None, prune_skeletons=None, prune_dressings=None, select=None))]
     #[allow(clippy::too_many_arguments)]
     fn amplitude(
         &self,
@@ -724,6 +726,7 @@ impl PyProcess {
         orders: Option<&PyOrders>,
         restrict: Option<&PyRestrict>,
         topology: Option<&PyTopologyRules>,
+        classes: Option<&PyClasses>,
         symmetrize: Option<&PySymmetrize>,
         prune_skeletons: Option<Py<PyAny>>,
         prune_dressings: Option<Py<PyAny>>,
@@ -735,6 +738,7 @@ impl PyProcess {
             orders,
             restrict,
             topology,
+            classes,
             None,
             symmetrize,
             prune_skeletons,
@@ -762,6 +766,8 @@ impl PyProcess {
     ///     Model-validated particle and vertex restrictions.
     /// topology : TopologyRules or None, optional
     ///     Explicit topology criteria; None keeps minimal unrestricted defaults.
+    /// classes : graph.Classes or None, optional
+    ///     Safe flavour-class refinement policy; None uses Classes.auto().
     /// cuts : Cuts or None, optional
     ///     Physical cut content and ranges; blobs and spectators default unrestricted.
     /// symmetrize : Symmetrize or None, optional
@@ -772,7 +778,7 @@ impl PyProcess {
     ///     Hereditary bool predicate receiving a scoped graph.DressingView.
     /// select : callable or None, optional
     ///     Arbitrary bool predicate receiving a complete graph.DiagramView.
-    #[pyo3(signature=(*, loops, orders=None, restrict=None, topology=None, cuts=None, symmetrize=None, prune_skeletons=None, prune_dressings=None, select=None))]
+    #[pyo3(signature=(*, loops, orders=None, restrict=None, topology=None, classes=None, cuts=None, symmetrize=None, prune_skeletons=None, prune_dressings=None, select=None))]
     #[allow(clippy::too_many_arguments)]
     fn cross_section(
         &self,
@@ -780,6 +786,7 @@ impl PyProcess {
         orders: Option<&PyOrders>,
         restrict: Option<&PyRestrict>,
         topology: Option<&PyTopologyRules>,
+        classes: Option<&PyClasses>,
         cuts: Option<&PyCuts>,
         symmetrize: Option<&PySymmetrize>,
         prune_skeletons: Option<Py<PyAny>>,
@@ -792,6 +799,7 @@ impl PyProcess {
             orders,
             restrict,
             topology,
+            classes,
             cuts,
             symmetrize,
             prune_skeletons,
@@ -832,6 +840,7 @@ impl PyRequest {
         orders: Option<&PyOrders>,
         restrict: Option<&PyRestrict>,
         topology: Option<&PyTopologyRules>,
+        classes: Option<&PyClasses>,
         cuts: Option<&PyCuts>,
         symmetrize: Option<&PySymmetrize>,
         prune_skeletons: Option<Py<PyAny>>,
@@ -846,6 +855,9 @@ impl PyRequest {
         }
         if let Some(v) = topology {
             inner = inner.with_topology(v.inner.clone());
+        }
+        if let Some(v) = classes {
+            inner = inner.with_classes(v.clone().into());
         }
         if let Some(v) = cuts {
             inner = inner.with_cuts(v.inner.clone());
@@ -1124,6 +1136,17 @@ impl PyRequest {
         PyTopologyRules {
             inner: self.inner.topology().clone(),
         }
+    }
+    /// Shared graph.Classes policy for class-first or direct particle dressing.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Request`` class example:
+    ///
+    /// >>> policy = request.classes
+    #[getter]
+    fn classes(&self) -> PyClasses {
+        self.inner.classes().into()
     }
     /// Physical cut criteria.
     ///

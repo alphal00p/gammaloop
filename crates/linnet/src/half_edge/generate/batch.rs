@@ -83,6 +83,21 @@ impl<F, L> Request<F, L> {
                 model: Arc::clone(&self.snapshot.compiled.model),
                 tables: Arc::new(OutputTables {
                     fields: (0..tables.fields.len() as u32).collect(),
+                    class_members: self
+                        .snapshot
+                        .compiled
+                        .model
+                        .refinement
+                        .as_ref()
+                        .map_or_else(
+                            || Box::new([]) as Box<[Box<[u32]>]>,
+                            |r| {
+                                r.members
+                                    .iter()
+                                    .map(|members| members.iter().map(|&f| f as u32).collect())
+                                    .collect()
+                            },
+                        ),
                     labels: (0..tables.labels.len() as u32).collect(),
                     packing: tables.packing.clone(),
                     signatures: Arc::clone(&tables.signatures),
@@ -144,6 +159,8 @@ struct Snapshot<F, L> {
 struct Assignment {
     edges: Box<[Edge]>,
     labels: Box<[u8]>,
+    particles: bool,
+    coarse_labels: Option<Box<[u8]>>,
     states: Box<[VertexState]>,
     rules: Box<[u32]>,
     automorphisms: Option<u128>,
@@ -159,6 +176,8 @@ impl<F, L> Snapshot<F, L> {
                 Some(Assignment {
                     edges: d.edges.into(),
                     labels: d.labels.into(),
+                    particles: d.particles,
+                    coarse_labels: d.coarse_labels.map(Into::into),
                     states: d.states.into(),
                     rules: d.rules.into(),
                     automorphisms: d.automorphism_count,
@@ -182,6 +201,8 @@ impl<F, L> Snapshot<F, L> {
                 topology: &self.topology,
                 edges: &d.edges,
                 labels: &d.labels,
+                particles: d.particles,
+                coarse_labels: d.coarse_labels.as_deref(),
                 states: &d.states,
                 rules: &d.rules,
                 automorphism_count: d.automorphisms,

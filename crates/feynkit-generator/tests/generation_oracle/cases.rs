@@ -824,3 +824,15 @@ pub const CASES: &[Case] = &[
     cross_section("xs_qcd_gguu_sym_L1", Model::qcd, GG, UU, 1, beam_exchange),
     cross_section("xs_qcd_gguu_1pi_L1", Model::qcd, GG, UU, 1, loop_one_pi),
 ];
+
+/// The historical unrestricted SM workload; do not substitute the QED-capped oracle case.
+pub fn unrestricted_sm_uudd() -> Case {
+    amplitude(
+        "sm_uudd_L1",
+        Model::standard_model,
+        &["u", "u~"],
+        &["d", "d~"],
+        1,
+        plain,
+    )
+}

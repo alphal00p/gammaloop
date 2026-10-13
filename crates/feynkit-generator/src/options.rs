@@ -4,8 +4,8 @@ use crate::{
 };
 use feynkit_graph::{DiagramId, EdgeId};
 use feynkit_model::{Model, ParticleId, VertexRuleId};
-pub use linnet::half_edge::generate::Bridges;
 use linnet::half_edge::generate::batch;
+pub use linnet::half_edge::generate::{Bridges, Classes};
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -619,6 +619,8 @@ pub struct Request {
     pub(crate) topology: TopologyRules,
     pub(crate) cuts: Cuts,
     pub(crate) symmetrization: Symmetrize,
+    #[serde(default)]
+    pub(crate) classes: Classes,
     #[serde(skip)]
     pub(crate) prune_skeletons: Option<SkeletonCallback>,
     #[serde(skip)]
@@ -639,6 +641,7 @@ impl Request {
             topology: TopologyRules::default(),
             cuts: Cuts::new(),
             symmetrization: Symmetrize::default(),
+            classes: Classes::Auto,
             prune_skeletons: None,
             prune_dressings: None,
             select: None,
@@ -674,6 +677,14 @@ impl Request {
     }
     pub fn symmetrization(&self) -> Symmetrize {
         self.symmetrization
+    }
+    /// Whether the native search groups structurally equivalent particle flavours.
+    pub fn classes(&self) -> Classes {
+        self.classes
+    }
+    pub fn with_classes(mut self, classes: Classes) -> Self {
+        self.classes = classes;
+        self
     }
     pub fn with_orders(mut self, v: Orders) -> Self {
         self.orders = self.orders.merge(v);
@@ -803,6 +814,7 @@ impl fmt::Debug for Request {
             .field("topology", &self.topology)
             .field("cuts", &self.cuts)
             .field("symmetrization", &self.symmetrization)
+            .field("classes", &self.classes)
             .field("prune_skeletons", &self.prune_skeletons.is_some())
             .field("prune_dressings", &self.prune_dressings.is_some())
             .field("select", &self.select.is_some())
@@ -819,6 +831,7 @@ impl PartialEq for Request {
             && self.topology == other.topology
             && self.cuts == other.cuts
             && self.symmetrization == other.symmetrization
+            && self.classes == other.classes
     }
 }
 impl Eq for Request {}
@@ -838,6 +851,7 @@ impl bincode::Encode for Request {
                 &self.topology,
                 &self.cuts,
                 &self.symmetrization,
+                &self.classes,
             ),
             e,
         )
@@ -847,7 +861,7 @@ impl<C> bincode::Decode<C> for Request {
     fn decode<D: bincode::de::Decoder<Context = C>>(
         d: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
-        let (process, kind, loops, restrictions, orders, topology, cuts, symmetrization) =
+        let (process, kind, loops, restrictions, orders, topology, cuts, symmetrization, classes) =
             bincode::Decode::decode(d)?;
         Ok(Self {
             process,
@@ -858,6 +872,7 @@ impl<C> bincode::Decode<C> for Request {
             topology,
             cuts,
             symmetrization,
+            classes,
             prune_skeletons: None,
             prune_dressings: None,
             select: None,
@@ -1319,18 +1334,26 @@ mod tests {
             .amplitude(Loops::total(0..=2))
             .with_restrict(Restrict::new().only_vertices(["V_3_SCALAR_000"]))
             .with_topology(TopologyRules::default().with_bridges(Bridges::OnePIInLoops))
+            .with_classes(Classes::None)
             .prune_skeletons(|_| true)
             .select(|_| false);
         let decoded: Request =
             serde_json::from_str(&serde_json::to_string(&request).unwrap()).unwrap();
         assert_eq!(decoded, request);
         assert!(decoded.prune_skeletons.is_none() && decoded.select.is_none());
+        assert_eq!(decoded.classes(), Classes::None);
+        assert_ne!(decoded, request.clone().with_classes(Classes::Auto));
+        let mut legacy_json = serde_json::to_value(&request).unwrap();
+        legacy_json.as_object_mut().unwrap().remove("classes");
+        let legacy: Request = serde_json::from_value(legacy_json).unwrap();
+        assert_eq!(legacy.classes(), Classes::Auto);
         let encoded = bincode::encode_to_vec(&request, bincode::config::standard()).unwrap();
         let (decoded, n): (Request, usize) =
             bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
         assert_eq!(n, encoded.len());
         assert_eq!(decoded, request);
         assert!(decoded.prune_skeletons.is_none());
+        assert_eq!(decoded.classes(), Classes::None);
         let atom = Atom::parse("(x+y)^3", "P7_wire", ParseSettings::default()).unwrap();
         let options = NumeratorOptions::default()
             .with_prefactor(atom.clone())

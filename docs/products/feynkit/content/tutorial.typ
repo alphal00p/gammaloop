@@ -194,6 +194,19 @@ compact = request.generate(run=run)
 assert compact.report.completed
 ```
 
+Both `process.amplitude(..., classes=fk.Classes.auto())` and
+`process.cross_section(..., classes=fk.Classes.auto())` default to safe flavour-class
+refinement. Import `graph` from `symbolica.community` for the shared view types:
+`fk.Classes is graph.Classes`, and `request.classes` uses this same type.
+`graph.Classes.none()` assigns particles directly while retaining the same completed
+particle/rule assignments and automorphism weights. In dressing callbacks,
+`view.field(edge_index)` returns an owned `graph.Dressed` tagged `"class"` or `"particle"`;
+`members` contains the original model `Particle` records for a class, while `particle` holds
+a concrete record. `view.flow(edge_index)` can already be `graph.Flow.Source` or `Sink` when
+`edges()[edge_index][2]` is still None. A pruning predicate must remain valid for every class
+member and every later refinement. A retained `Dressed` outlives the callback, but its
+expired view cannot be queried again.
+
 Use `prune_skeletons` for hereditary pruning of untyped topologies and
 `prune_dressings` for hereditary pruning of field assignments. Returning `False`
 rejects that state and every refinement, without cancelling the run. `select`
