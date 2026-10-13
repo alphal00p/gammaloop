@@ -23,6 +23,9 @@ use symbolica::{
 };
 use thiserror::Error;
 
+mod cache;
+pub use cache::CanonicalRoutingCache;
+
 /// A spanning-forest routing in the underlying graph's edge coordinates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MomentumBasis {

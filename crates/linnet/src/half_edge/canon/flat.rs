@@ -6,6 +6,8 @@
 //! of an undirected edge never matters and `Orientation::Reversed` resolves to the physical
 //! direction.
 
+use super::{CanonicalInputError, KeyedEdge};
+
 use crate::half_edge::{
     involution::{Flow, InvolutiveMapping, Orientation},
     nodestore::Topology,
@@ -121,12 +123,7 @@ impl Flat {
         for (h, m) in mapping.iter() {
             let (opposite, edge, role) = match m {
                 InvolutiveMapping::Identity { data, underlying } => {
-                    let role = match (data.orientation, underlying) {
-                        (Orientation::Undirected, _) => Role::Leg,
-                        (Orientation::Default, Flow::Source)
-                        | (Orientation::Reversed, Flow::Sink) => Role::LegOut,
-                        _ => Role::LegIn,
-                    };
+                    let role = Role::of_leg(data.orientation, *underlying);
                     (h, data.data, role)
                 }
                 InvolutiveMapping::Source { data, sink_idx } => {
@@ -152,6 +149,95 @@ impl Flat {
         self.colour(keys.edges.len(), keys.hedges.len());
         self.index_nodes(self.ncol.len());
         keys
+    }
+
+    /// Load caller keys and compact edges directly into the same buffers as `load`.
+    pub(super) fn load_edges<KV: Ord, KE: Ord, KH: Ord>(
+        &mut self,
+        node_keys: impl IntoIterator<Item = KV, IntoIter: ExactSizeIterator>,
+        edges: impl IntoIterator<Item = KeyedEdge<KE, KH>>,
+    ) -> Result<KeyTables<KV, KE, KH>, CanonicalInputError> {
+        let node_keys = node_keys.into_iter();
+        let nodes = node_keys.len();
+        if nodes > u32::MAX as usize {
+            return Err(CanonicalInputError::IndexOverflow);
+        }
+        let nodes = rank(node_keys.enumerate(), &mut self.ncol);
+        self.inv.clear();
+        self.node_of.clear();
+        self.edge_of.clear();
+        self.hcol.clear();
+        let edges = edges.into_iter();
+        let capacity = edges.size_hint().0;
+        if capacity > u32::MAX as usize {
+            return Err(CanonicalInputError::IndexOverflow);
+        }
+        let mut edge_keys = Vec::with_capacity(capacity);
+        let mut hedge_keys = Vec::with_capacity(capacity.saturating_mul(2).min(u32::MAX as usize));
+        for edge in edges {
+            let e = edge_keys.len();
+            let h = self.inv.len();
+            let n_hedges = if matches!(&edge, KeyedEdge::Paired { .. }) {
+                2
+            } else {
+                1
+            };
+            if e >= u32::MAX as usize || h > u32::MAX as usize - n_hedges {
+                return Err(CanonicalInputError::IndexOverflow);
+            }
+            let node = |node: crate::half_edge::NodeIndex| {
+                if node.0 < self.ncol.len() {
+                    Ok(node.0 as u32)
+                } else {
+                    Err(CanonicalInputError::UnknownNode {
+                        node,
+                        nodes: self.ncol.len(),
+                    })
+                }
+            };
+            match edge {
+                KeyedEdge::Paired {
+                    source,
+                    sink,
+                    key,
+                    orientation,
+                } => {
+                    let (source_node, sink_node) = (node(source.0)?, node(sink.0)?);
+                    self.inv.extend([h as u32 + 1, h as u32]);
+                    self.node_of.extend([source_node, sink_node]);
+                    self.edge_of.extend([e as u32; 2]);
+                    self.hcol.extend([
+                        Role::of_edge(orientation, true) as u32,
+                        Role::of_edge(orientation, false) as u32,
+                    ]);
+                    edge_keys.push(key);
+                    hedge_keys.extend([source.1, sink.1]);
+                }
+                KeyedEdge::Dangling {
+                    node: at,
+                    hedge_key,
+                    key,
+                    orientation,
+                    flow,
+                } => {
+                    let at = node(at)?;
+                    self.inv.push(h as u32);
+                    self.node_of.push(at);
+                    self.edge_of.push(e as u32);
+                    self.hcol.push(Role::of_leg(orientation, flow) as u32);
+                    edge_keys.push(key);
+                    hedge_keys.push(hedge_key);
+                }
+            }
+        }
+        let keys = KeyTables {
+            nodes,
+            edges: rank(edge_keys.into_iter().enumerate(), &mut self.edge_key),
+            hedges: rank(hedge_keys.into_iter().enumerate(), &mut self.hedge_key),
+        };
+        self.colour(keys.edges.len(), keys.hedges.len());
+        self.index_nodes(self.ncol.len());
+        Ok(keys)
     }
 
     /// Load a graph given directly by node colours and undirected `[a, b, colour]` edges, for
@@ -403,6 +489,16 @@ impl Flat {
 }
 
 impl Role {
+    fn of_leg(orientation: Orientation, flow: Flow) -> Role {
+        match (orientation, flow) {
+            (Orientation::Undirected, _) => Role::Leg,
+            (Orientation::Default, Flow::Source) | (Orientation::Reversed, Flow::Sink) => {
+                Role::LegOut
+            }
+            _ => Role::LegIn,
+        }
+    }
+
     /// Role of the source (`true`) or sink hedge of a paired edge.
     fn of_edge(orientation: Orientation, source: bool) -> Role {
         match (orientation, source) {

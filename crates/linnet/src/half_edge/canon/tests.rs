@@ -1,6 +1,6 @@
 use rand::{rngs::SmallRng, seq::SliceRandom, Rng, SeedableRng};
 
-use super::{ignore, Canonization};
+use super::{ignore, CanonicalForm, CanonicalInputError, Canonization, KeyedEdge};
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
     involution::{Flow, Hedge, Orientation},
@@ -1194,4 +1194,122 @@ fn many_distinct_keys_use_the_dense_colour_table() {
         .unwrap();
     assert_eq!(relabelled.canonical_form(), *c.canonical_form());
     assert_ne!(swapped.canonical_form(), *c.canonical_form());
+}
+
+#[test]
+fn compact_input_preserves_canonical_form_and_exact_node_frame() {
+    let compact = |spec: &Spec| {
+        let edges = spec.elements.iter().map(|&element| match element {
+            Element::Edge {
+                a,
+                ka,
+                b,
+                kb,
+                data,
+                orientation,
+            } => KeyedEdge::Paired {
+                source: (NodeIndex(a), ka),
+                sink: (NodeIndex(b), kb),
+                key: data,
+                orientation,
+            },
+            Element::Leg {
+                node,
+                key,
+                data,
+                orientation,
+                flow,
+            } => KeyedEdge::Dangling {
+                node: NodeIndex(node),
+                hedge_key: key,
+                key: data,
+                orientation,
+                flow,
+            },
+        });
+        CanonicalForm::label_edges(spec.nodes.iter().copied(), edges).unwrap()
+    };
+    let mut rng = SmallRng::seed_from_u64(0x0c01_1ac7);
+    let fixtures = [
+        Spec::new(0),
+        Spec::new(4),
+        Spec::new(3)
+            .undirected(0, 7, 0, 7)
+            .undirected(0, 7, 0, 7)
+            .undirected(0, 2, 1, 3)
+            .undirected(0, 2, 1, 3)
+            .leg(2, 9)
+            .leg(2, 9),
+        Spec::new(3)
+            .edge(0, 1, 1, 2, 4, Orientation::Default)
+            .edge(1, 2, 0, 1, 4, Orientation::Reversed)
+            .edge(1, 8, 1, 3, 9, Orientation::Default)
+            .leg(0, 5),
+    ];
+    for spec in fixtures
+        .into_iter()
+        .chain((0..128).map(|_| Spec::random(&mut rng, 8, 12, 6)))
+    {
+        let (expected_form, _) = compact(&spec);
+        // Each relabelled input must retain the *same map as the existing backend*, even when
+        // several equivalent labels tie; equal isomorphism certificates alone are insufficient.
+        let mut relabel_rng = SmallRng::seed_from_u64(481);
+        for case in
+            std::iter::once(spec.clone()).chain((0..5).map(|_| spec.relabel(&mut relabel_rng)))
+        {
+            let graph = case.build();
+            let full = graph.canonize();
+            let (form, nodes) = compact(&case);
+            assert_eq!(form, expected_form);
+            let full_owned = graph.canonize_by(|v| *v, |e| *e, |h| *h);
+            assert_eq!(&form, full_owned.canonical_form());
+            for node in 0..case.nodes.len() {
+                assert_eq!(nodes[NodeIndex(node)], full.canonical_node(NodeIndex(node)));
+            }
+        }
+    }
+}
+
+#[test]
+fn compact_input_rejects_unknown_nodes_and_workspace_recovers() {
+    let bad = CanonicalForm::label_edges(
+        ["node"],
+        [KeyedEdge::Dangling {
+            node: NodeIndex(1),
+            hedge_key: Some("leg"),
+            key: "edge",
+            orientation: Orientation::Reversed,
+            flow: Flow::Source,
+        }],
+    );
+    assert_eq!(
+        bad.unwrap_err(),
+        CanonicalInputError::UnknownNode {
+            node: NodeIndex(1),
+            nodes: 1
+        }
+    );
+    let mut graph = HedgeGraphBuilder::new();
+    let node = graph.add_node("node");
+    graph.add_external_edge(
+        node.add_data(Some("leg")),
+        "edge",
+        Orientation::Reversed,
+        Flow::Source,
+    );
+    let graph: HedgeGraph<_, _, _> = graph.build();
+    let (form, nodes) = CanonicalForm::label_edges(
+        ["node"],
+        [KeyedEdge::Dangling {
+            node: NodeIndex(0),
+            hedge_key: Some("leg"),
+            key: "edge",
+            orientation: Orientation::Reversed,
+            flow: Flow::Source,
+        }],
+    )
+    .unwrap();
+    let full = graph.canonize_by(|v| *v, |e| *e, |h| *h);
+    assert_eq!(&form, full.canonical_form());
+    assert_eq!(nodes[NodeIndex(0)], full.canonical_node(NodeIndex(0)));
 }

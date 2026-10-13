@@ -9,9 +9,8 @@ use crate::tree::{
 };
 
 use super::{
-    builder::HedgeNodeBuilder,
     involution::Hedge,
-    remap::{index_u32, HedgeRemap, NodeRemap, Renumbering, SplitRenumbering},
+    remap::{HedgeRemap, NodeRemap, Renumbering, SplitRenumbering},
     subgraph::{BaseSubgraph, Inclusion, SuBitGraph, SubSetLike},
     HedgeGraphError, NodeIndex, NodeVec,
 };
@@ -303,49 +302,6 @@ impl<T: Topology, V> NodeStore<T, V> {
     /// The node partition.
     pub fn topology(&self) -> &T {
         &self.topology
-    }
-
-    /// Builds a store from node descriptions that partition `n_hedges` half-edges.
-    ///
-    /// # Panics
-    ///
-    /// If the descriptions do not partition the half-edges.
-    pub(crate) fn build(
-        nodes: impl IntoIterator<Item = HedgeNodeBuilder<V>>,
-        n_hedges: usize,
-    ) -> Self {
-        Self::build_with_mapping(nodes, n_hedges, std::convert::identity)
-    }
-
-    /// Like [`Self::build`], converting each node's payload.
-    pub(crate) fn build_with_mapping<ND>(
-        nodes: impl IntoIterator<Item = HedgeNodeBuilder<ND>>,
-        n_hedges: usize,
-        mut map_data: impl FnMut(ND) -> V,
-    ) -> Self {
-        const UNSET: u32 = u32::MAX;
-        let mut label = vec![UNSET; n_hedges];
-        let nodes = nodes.into_iter();
-        let mut data = NodeVec::with_capacity(nodes.size_hint().0);
-        for (node, builder) in nodes.enumerate() {
-            let node = index_u32(node);
-            for hedge in &builder.hedges {
-                assert!(
-                    label[hedge.0] == UNSET || label[hedge.0] == node,
-                    "hedge incidence must form a partition"
-                );
-                label[hedge.0] = node;
-            }
-            data.push(map_data(builder.data));
-        }
-        assert!(
-            !label.contains(&UNSET),
-            "hedge incidence must cover all half-edges"
-        );
-        // Collecting the mapped labels back into `u32`s reuses this allocation.
-        let labels = label.into_iter().map(|node| NodeIndex(node as usize));
-        let topology = T::from_labels(labels, data.0.len());
-        NodeStore { topology, data }
     }
 
     /// Builds nodes from source and sink neighbor sets with default payloads.

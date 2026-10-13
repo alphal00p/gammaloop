@@ -13,6 +13,18 @@ use linnet::{
 use std::cell::LazyCell;
 use symbolica::atom::{AtomView, FunctionBuilder, Symbol};
 
+// Finalization always replaces this before returning a diagram. Sharing the
+// empty placeholder avoids an otherwise unused allocation for every diagram.
+static UNROUTED_BASIS: LazyLock<Arc<LoopMomentumBasis>> = LazyLock::new(|| {
+    Arc::new(LoopMomentumBasis {
+        tree_edges: vec![],
+        loop_edges: vec![],
+        external_edges: vec![],
+        dependent_externals: vec![],
+        edge_signatures: BTreeMap::new(),
+    })
+});
+
 /// Where finalization put each provisional edge of a generated diagram, indexed
 /// by provisional edge id. Vertices keep their ids.
 struct FinalFrame {
@@ -301,13 +313,7 @@ impl FeynmanDiagramBuilder {
             numerator,
             numerator_prefactor: self.numerator_prefactor,
             projector: self.projector,
-            loop_momentum_basis: LoopMomentumBasis {
-                tree_edges: vec![],
-                loop_edges: vec![],
-                external_edges: vec![],
-                dependent_externals: vec![],
-                edge_signatures: BTreeMap::new(),
-            },
+            loop_momentum_basis: Arc::clone(&UNROUTED_BASIS),
             cuts: self.cuts,
             topology_threshold_candidates: self.topology_threshold_candidates,
             validation: OnceLock::new(),
@@ -360,7 +366,7 @@ impl FeynmanDiagramBuilder {
                 diagram.with_loop_momentum_edges(&requested)?
             } else {
                 basis.validate(&diagram)?;
-                diagram.loop_momentum_basis = basis;
+                diagram.loop_momentum_basis = Arc::new(basis);
                 diagram
             }
         } else if self.canonical_loop_momentum_basis {
@@ -369,7 +375,10 @@ impl FeynmanDiagramBuilder {
                     .canonical_order
                     .as_deref()
                     .expect("canonical generated routing collected its order");
-                diagram.with_canonical_loop_momentum_basis_finalized(ordered)?
+                match self.canonical_routing_cache {
+                    Some(cache) => cache.route(diagram, ordered)?,
+                    None => diagram.with_canonical_loop_momentum_basis_finalized(ordered)?,
+                }
             } else {
                 diagram.with_canonical_loop_momentum_basis()?
             }
@@ -379,7 +388,7 @@ impl FeynmanDiagramBuilder {
                 .into_iter()
                 .next()
                 .ok_or(DiagramError::MissingLoopMomentumBasis)?;
-            diagram.loop_momentum_basis = basis;
+            diagram.loop_momentum_basis = Arc::new(basis);
             diagram
         };
         // Each branch above either constructs a routing from a spanning forest

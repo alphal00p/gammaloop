@@ -5,6 +5,7 @@
 mod cases;
 mod enumeration;
 mod graph;
+mod interaction_stars;
 #[cfg(test)]
 mod projector_equivalence;
 #[cfg(test)]
@@ -26,12 +27,13 @@ use feynkit_graph::{
     DiagramId, DiagramThresholdCandidate, DiagramVertex, DotDiagram, EdgeId, ExternalLeg,
     ExternalState, FeynmanDiagram, FeynmanDiagramBuilder, VertexId, VertexSlot,
 };
-use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
+#[cfg(test)]
+use feynkit_model::VertexRule;
+use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRuleId};
 use idenso::{color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bispinor};
 use linnet::half_edge::{
-    HedgeGraph, NodeIndex,
-    builder::HedgeGraphBuilder,
-    canon::ignore,
+    NodeIndex,
+    canon::{CanonicalForm, KeyedEdge},
     generate::GraphGenerator,
     involution::{Flow, Orientation},
     subgraph::{InternalSubGraph, SuBitGraph, SubSetLike},
@@ -64,6 +66,7 @@ use enumeration::{
 };
 pub use graph::ExternalNode;
 use graph::{Endpoint, GeneratedEdge, GeneratedGraph, PlainNodes, PlainVertex};
+use interaction_stars::{InteractionStar, InteractionStars};
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
@@ -1766,13 +1769,15 @@ struct PreparedSearch {
 #[derive(Clone)]
 pub(crate) struct Generator {
     model: Arc<Model>,
-    numerators: Arc<NumeratorCache>,
+    cache: Arc<GenerationCache>,
 }
 
-/// Localized factors depend on the immutable model and their index assignment,
-/// not on the rest of the diagram. Keep them for this generator's lifetime.
-#[derive(Default)]
-struct NumeratorCache {
+/// Reuse model-local interaction stars, canonical routing and exact symbolic factors
+/// for this generator's lifetime. Per-diagram identities are bound at each use.
+struct GenerationCache {
+    stars: InteractionStars,
+    routing: Arc<feynkit_graph::routing::CanonicalRoutingCache>,
+    factors: RwLock<HashMap<(u64, u64, FermionSigns), Atom>>,
     interaction_rules: RwLock<HashMap<InteractionRuleKey, Arc<CompiledInteraction>>>,
     propagators: RwLock<HashMap<PropagatorNumeratorKey, Atom>>,
     /// Automatic projectors by the finalized position of every external state. Finalization
@@ -1890,10 +1895,16 @@ impl FeynmanDiagramRulesExt for DotDiagram {
 
 impl Generator {
     pub fn new(model: impl Into<Arc<Model>>) -> Self {
-        Self {
-            model: model.into(),
-            numerators: Arc::default(),
-        }
+        let model = model.into();
+        let cache = Arc::new(GenerationCache {
+            stars: InteractionStars::new(&model),
+            routing: Arc::default(),
+            factors: RwLock::default(),
+            interaction_rules: RwLock::default(),
+            propagators: RwLock::default(),
+            projectors: RwLock::default(),
+        });
+        Self { model, cache }
     }
 
     fn search(
@@ -2278,7 +2289,7 @@ impl Generator {
                 return Ok(None);
             }
         }
-        topology.graph = ResolvedProcess::repair_cp_interaction_rules(topology.graph, &self.model)?;
+        topology.graph = self.repair_cp_interaction_rules(topology.graph)?;
         if !self.passes_vertex_selection(&topology.graph, options) {
             return Ok(None);
         }
@@ -2687,40 +2698,11 @@ impl Generator {
         multiplicity: u64,
         options: &GenerationOptions,
     ) -> Result<FeynmanDiagram, GenerationError> {
-        // The automorphism count of the rule-coloured graph is a denominator
-        // in the overall multiplier.
-        let mut factors = vec![
-            symbol!("feynkit_generator_factor::AutG")
-                .call(topology.symmetry)
-                .pow(-1),
-        ];
-        if multiplicity > 1 {
-            factors.push(
-                symbol!("feynkit_generator_factor::NumeratorIndependentSymmetryGrouping")
-                    .call(multiplicity),
-            );
-        }
-        if fermion_signs.internal_loop_negative {
-            factors.push(symbol!("feynkit_generator_factor::InternalFermionLoopSign").call(-1));
-        }
-        if fermion_signs.include_external_ordering {
-            let sign = if fermion_signs.external_ordering_negative {
-                -1
-            } else {
-                1
-            };
-            factors
-                .push(symbol!("feynkit_generator_factor::ExternalFermionOrderingSign").call(sign));
-        }
-        if fermion_signs.include_antifermion_spin_sum {
-            let sign = if fermion_signs.antifermion_spin_sum_negative {
-                -1
-            } else {
-                1
-            };
-            factors.push(symbol!("feynkit_generator_factor::AntiFermionSpinSumSign").call(sign));
-        }
-        let overall_factor = Atom::mul_many(factors);
+        let overall_factor = memoised(
+            &self.cache.factors,
+            (topology.symmetry, multiplicity, fermion_signs),
+            |&(symmetry, multiplicity, signs)| Ok(signs.factor(symmetry, multiplicity)),
+        )?;
         let graph = &topology.graph;
         let incoming_count = graph
             .externals()
@@ -2728,6 +2710,7 @@ impl Generator {
             .count();
         let mut builder = FeynmanDiagramBuilder::new(Arc::clone(&self.model), name)
             .canonical_loop_momentum_basis()
+            .canonical_routing_cache(Arc::clone(&self.cache.routing))
             .symmetry_factor(topology.symmetry)
             .overall_factor(overall_factor)
             .numerator_prefactor(options.numerator_prefactor.clone())
@@ -2736,12 +2719,21 @@ impl Generator {
         // Every external state with the connection of the leg that carries it.
         let mut external_states = Vec::new();
         let mut endpoint_slots = vec![[VertexSlot(0); 2]; graph.n_edges()];
+        let mut star = InteractionStar::default();
         for (vertex, rule_id) in graph.vertices().enumerate() {
             let rule = self.model.vertex_rule_by_id(rule_id)?;
-            let legs = self.interaction_half_edges(graph, vertex, rule)?;
-            for (slot, leg) in legs.iter().enumerate() {
-                endpoint_slots[leg.edge][usize::from(leg.flow.is_sink())] = VertexSlot(slot);
-            }
+            self.cache
+                .stars
+                .read(graph, vertex, &self.model, &mut star)?;
+            self.cache.stars.rule(rule_id).bind(
+                &star,
+                vertex,
+                rule,
+                &self.model,
+                |slot, leg| {
+                    endpoint_slots[leg.edge][usize::from(leg.flow.is_sink())] = VertexSlot(slot);
+                },
+            )?;
             builder.add_vertex(DiagramVertex::interaction(format!("v{vertex}"), rule_id));
         }
         for (edge_index, edge) in graph.edges().enumerate() {
@@ -2807,7 +2799,7 @@ impl Generator {
                         ExternalStatePosition::finalized(external, connection, &diagram)
                     })
                     .collect();
-                let projector = memoised(&self.numerators.projectors, positions, |positions| {
+                let projector = memoised(&self.cache.projectors, positions, |positions| {
                     self.external_state_projector(positions)
                 })?;
                 diagram.with_projector(projector)
@@ -2834,6 +2826,7 @@ impl Generator {
                 continue;
             }
             let rule = self.model.vertex_rule_by_id(rule_id)?;
+            let ports = self.cache.stars.rule(rule_id);
             let mut legs = vec![None; rule.particles.len()];
             // Finalization carries incidence and UFO slots into the native half-edge frame.
             // Visit both ends of a self-loop, skipping dummy slots after the interaction legs.
@@ -2848,13 +2841,13 @@ impl Generator {
                     Flow::Source => data.source_slot(),
                     Flow::Sink => data.target_slot(),
                 };
-                let particle = self.model.particle_by_id(rule.particles[slot.0])?;
+                let (spin, color) = ports.spin_color(slot.0);
                 legs[slot.0] = Some(NumeratorHalfEdge {
                     edge: edge.0,
                     hedge: hedge.0,
                     flow,
-                    spin: particle.spin,
-                    color: particle.color,
+                    spin,
+                    color,
                 });
             }
             let legs = legs
@@ -2979,38 +2972,54 @@ impl Generator {
         ))
     }
 
+    #[cfg(test)]
     fn interaction_half_edges(
         &self,
         graph: &GeneratedGraph,
         vertex: usize,
         rule: &VertexRule,
     ) -> Result<Vec<NumeratorHalfEdge>, GenerationError> {
-        // Reconstruct the UFO particle order discarded by topology
-        // canonicalization. Direction distinguishes particle and antiparticle
-        // slots, while a self-loop contributes both of its half-edges.
-        let mut available = available_interaction_half_edges(graph, vertex, &self.model)?;
+        let rule_id = self.model.vertex_rule_id(&rule.name)?;
+        let mut star = InteractionStar::default();
+        self.cache
+            .stars
+            .read(graph, vertex, &self.model, &mut star)?;
+        let mut legs = Vec::with_capacity(rule.particles.len());
+        self.cache
+            .stars
+            .rule(rule_id)
+            .bind(&star, vertex, rule, &self.model, |_, leg| legs.push(leg))?;
+        Ok(legs)
+    }
 
-        let mut ordered = Vec::with_capacity(rule.particles.len());
-        for (leg, particle_id) in rule.particles.iter().enumerate() {
-            let particle = self.model.particle_by_id(*particle_id)?;
-            let expected = incoming_stub(&self.model, particle);
-            let Some(position) = available
-                .iter()
-                .position(|(_, signature)| *signature == expected)
-            else {
-                return Err(GenerationError::MissingInteractionLeg {
-                    vertex,
-                    interaction: rule.name.clone(),
-                    leg: leg + 1,
-                    particle: particle.name.clone(),
-                });
-            };
-            let mut selected = available.remove(position).0;
-            selected.spin = particle.spin;
-            selected.color = particle.color;
-            ordered.push(selected);
+    fn repair_cp_interaction_rules(
+        &self,
+        graph: GeneratedGraph,
+    ) -> Result<GeneratedGraph, GenerationError> {
+        let mut replacements = BTreeMap::new();
+        let mut star = InteractionStar::default();
+        for (vertex, rule_id) in graph.vertices().enumerate() {
+            self.model.vertex_rule_by_id(rule_id)?;
+            self.cache
+                .stars
+                .read(&graph, vertex, &self.model, &mut star)?;
+            let repaired = self
+                .cache
+                .stars
+                .repair_rule(rule_id, vertex, &star, &self.model)?;
+            if repaired != rule_id {
+                replacements.insert(vertex, repaired);
+            }
         }
-        Ok(ordered)
+        if replacements.is_empty() {
+            return Ok(graph);
+        }
+        let rules = graph
+            .vertices()
+            .enumerate()
+            .map(|(vertex, rule)| replacements.get(&vertex).copied().unwrap_or(rule))
+            .collect::<Vec<_>>();
+        Ok(graph.with_vertex_rules(rules))
     }
 
     fn propagator_numerator(&self, particle: &Particle) -> Result<(Atom, bool), GenerationError> {
@@ -3031,7 +3040,7 @@ impl Generator {
             rule: rule_id,
             colors: instantiation.legs.iter().map(|leg| leg.color).collect(),
         };
-        let rule = memoised(&self.numerators.interaction_rules, key, |_| {
+        let rule = memoised(&self.cache.interaction_rules, key, |_| {
             CompiledInteraction::new(&self.model, rule_id, instantiation).map(Arc::new)
         })?;
         rule.instantiate(instantiation)
@@ -3048,7 +3057,7 @@ impl Generator {
             edge,
             hedges,
         };
-        memoised(&self.numerators.propagators, key, |_| {
+        memoised(&self.cache.propagators, key, |_| {
             let particle = self.model.particle_by_id(particle_id)?;
             let (propagator, reversed) = self.propagator_numerator(particle)?;
             let flows = if reversed {
@@ -3071,51 +3080,6 @@ impl Generator {
             })
         })
     }
-}
-
-/// The incident half-edges of `vertex` with the stub each one presents to the vertex: the
-/// particle entering the vertex through it, as in the all-incoming UFO convention.
-fn available_interaction_half_edges(
-    graph: &GeneratedGraph,
-    vertex: usize,
-    model: &Model,
-) -> Result<Vec<(NumeratorHalfEdge, ParticleStub)>, GenerationError> {
-    graph
-        .incident(vertex)
-        .into_iter()
-        .map(|(edge_id, flow)| {
-            let edge = graph.edge(edge_id);
-            let particle = model.particle_by_id(edge.particle)?;
-            let entering = if flow == Flow::Sink || !edge.directed {
-                particle
-            } else {
-                model.antiparticle(particle)?
-            };
-            Ok((
-                NumeratorHalfEdge {
-                    edge: edge_id,
-                    flow,
-                    hedge: 2 * edge_id + usize::from(flow == Flow::Sink),
-                    spin: 0,
-                    color: 1,
-                },
-                incoming_stub(model, entering),
-            ))
-        })
-        .collect()
-}
-
-fn vertex_rule_signature(
-    model: &Model,
-    rule: &VertexRule,
-) -> Result<Vec<ParticleStub>, GenerationError> {
-    let mut signature = rule
-        .particles
-        .iter()
-        .map(|particle| Ok(incoming_stub(model, model.particle_by_id(*particle)?)))
-        .collect::<Result<Vec<_>, GenerationError>>()?;
-    signature.sort();
-    Ok(signature)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -3406,6 +3370,47 @@ struct FermionSigns {
     external_ordering_negative: bool,
     include_antifermion_spin_sum: bool,
     antifermion_spin_sum_negative: bool,
+}
+
+impl FermionSigns {
+    /// The diagram multiplier depends only on its exact weight and physical
+    /// signs, so decorated graphs with the same values share its construction.
+    fn factor(self, symmetry: u64, multiplicity: u64) -> Atom {
+        // The automorphism count of the rule-coloured graph is a denominator
+        // in the overall multiplier.
+        let mut factors = vec![
+            symbol!("feynkit_generator_factor::AutG")
+                .call(symmetry)
+                .pow(-1),
+        ];
+        if multiplicity > 1 {
+            factors.push(
+                symbol!("feynkit_generator_factor::NumeratorIndependentSymmetryGrouping")
+                    .call(multiplicity),
+            );
+        }
+        if self.internal_loop_negative {
+            factors.push(symbol!("feynkit_generator_factor::InternalFermionLoopSign").call(-1));
+        }
+        if self.include_external_ordering {
+            let sign = if self.external_ordering_negative {
+                -1
+            } else {
+                1
+            };
+            factors
+                .push(symbol!("feynkit_generator_factor::ExternalFermionOrderingSign").call(sign));
+        }
+        if self.include_antifermion_spin_sum {
+            let sign = if self.antifermion_spin_sum_negative {
+                -1
+            } else {
+                1
+            };
+            factors.push(symbol!("feynkit_generator_factor::AntiFermionSpinSumSign").call(sign));
+        }
+        Atom::mul_many(factors)
+    }
 }
 
 struct NormalizedFermionFlow {
@@ -3868,53 +3873,63 @@ impl ResolvedProcess {
         // Internal direction is omitted from the reduced skeleton but restored below.
         // The two global left/right choices share incidence and edge colors. Prepare that
         // skeleton once and vary only its external half-edge keys when canonizing it.
-        let mut skeleton = HedgeGraphBuilder::new();
-        let nodes: Vec<NodeIndex> = (0..graph.n_vertices())
-            .map(|_| skeleton.add_node(()))
-            .collect();
-        for edge in graph.edges() {
-            let color = self
-                .numerator_colors
-                .edge(&edge, model, exact_internal_particles)?;
-            match (edge.source, edge.sink) {
-                (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => {
-                    skeleton.add_edge(nodes[source], nodes[sink], color, Orientation::Undirected)
-                }
-                (Endpoint::External(external), Endpoint::Vertex(vertex))
-                | (Endpoint::Vertex(vertex), Endpoint::External(external)) => {
-                    let normal = external_color(external)?;
-                    let swapped = if include_left_right_remapping {
-                        external_color(partner(external))?
-                    } else {
-                        normal
-                    };
-                    skeleton.add_external_edge(
-                        nodes[vertex].add_data(Some([normal, swapped])),
-                        color,
-                        Orientation::Default,
-                        Flow::Sink,
-                    )
-                }
-                (Endpoint::External(_), Endpoint::External(_)) => {
-                    unreachable!("generated edges touch an interaction vertex")
-                }
-            }
-        }
-        let skeleton: HedgeGraph<usize, (), Option<[i64; 2]>> = skeleton.build();
+        let edges = graph
+            .edges()
+            .map(|edge| {
+                let color = self
+                    .numerator_colors
+                    .edge(&edge, model, exact_internal_particles)?;
+                let labels = match (edge.source, edge.sink) {
+                    (Endpoint::External(external), _) | (_, Endpoint::External(external)) => {
+                        let normal = external_color(external)?;
+                        let swapped = if include_left_right_remapping {
+                            external_color(partner(external))?
+                        } else {
+                            normal
+                        };
+                        Some([normal, swapped])
+                    }
+                    _ => None,
+                };
+                Ok((edge, color, labels))
+            })
+            .collect::<Result<Vec<_>, GenerationError>>()?;
         let mut candidates = Vec::new();
         for swapped in [false, true] {
             if swapped && !include_left_right_remapping {
                 continue;
             }
-            let canonical = skeleton.canonize_by(
-                ignore,
-                |color| *color,
-                |colors| colors.map(|colors| colors[usize::from(swapped)]),
-            );
-            let positions: Vec<usize> = (0..graph.n_vertices())
-                .map(|vertex| canonical.canonical_node(NodeIndex(vertex)).0)
-                .collect();
-            candidates.push((canonical.into_canonical_form(), swapped, positions));
+            let compact = edges
+                .iter()
+                .map(|&(edge, key, labels)| match (edge.source, edge.sink) {
+                    (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => KeyedEdge::Paired {
+                        source: (NodeIndex(source), None),
+                        sink: (NodeIndex(sink), None),
+                        key,
+                        orientation: Orientation::Undirected,
+                    },
+                    (Endpoint::External(_), Endpoint::Vertex(vertex))
+                    | (Endpoint::Vertex(vertex), Endpoint::External(_)) => KeyedEdge::Dangling {
+                        node: NodeIndex(vertex),
+                        hedge_key: labels.map(|labels| labels[usize::from(swapped)]),
+                        key,
+                        orientation: Orientation::Default,
+                        flow: Flow::Sink,
+                    },
+                    (Endpoint::External(_), Endpoint::External(_)) => {
+                        unreachable!("generated edges touch an interaction vertex")
+                    }
+                });
+            let (form, nodes) = CanonicalForm::label_edges(
+                std::iter::repeat_n(linnet::half_edge::NoData {}, graph.n_vertices()),
+                compact,
+            )
+            .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+            let positions = nodes
+                .into_iter()
+                .map(|(_, node)| node.0)
+                .collect::<Vec<_>>();
+            candidates.push((form, swapped, positions));
         }
         let (_, left_right_swapped, positions) = candidates
             .into_iter()
@@ -3931,10 +3946,10 @@ impl ResolvedProcess {
             }
             Endpoint::External(external) => Endpoint::External(external),
         };
-        let mut edges = graph
-            .edges()
+        let mut edges = edges
+            .into_iter()
             .enumerate()
-            .map(|(edge_id, edge)| {
+            .map(|(edge_id, (edge, _, _))| {
                 // All external edges point into the interaction graph and internal
                 // edges point from the lower to the higher canonical vertex.
                 let flipped = edge.sink.external().is_some()
@@ -3984,64 +3999,6 @@ impl ResolvedProcess {
                 }
             },
         ))
-    }
-
-    fn repair_cp_interaction_rules(
-        graph: GeneratedGraph,
-        model: &Model,
-    ) -> Result<GeneratedGraph, GenerationError> {
-        let mut replacements = BTreeMap::new();
-        for (vertex, rule_id) in graph.vertices().enumerate() {
-            let rule = model.vertex_rule_by_id(rule_id)?;
-            let expected = vertex_rule_signature(model, rule)?;
-            let mut actual = available_interaction_half_edges(&graph, vertex, model)?
-                .into_iter()
-                .map(|(_, signature)| signature)
-                .collect::<Vec<_>>();
-            actual.sort();
-            if actual == expected {
-                continue;
-            }
-
-            let mut cp_expected = expected
-                .iter()
-                .cloned()
-                .map(ParticleStub::flipped)
-                .collect::<Vec<_>>();
-            cp_expected.sort();
-            let coupling_orders = rule.coupling_orders(model);
-            let mut candidates = Vec::new();
-            if actual == cp_expected {
-                for (candidate_index, candidate) in model.vertex_rules().iter().enumerate() {
-                    if candidate.coupling_orders(model) == coupling_orders
-                        && vertex_rule_signature(model, candidate)? == actual
-                    {
-                        candidates.push((
-                            model.vertex_rule_id_at(candidate_index)?,
-                            candidate.name.clone(),
-                        ));
-                    }
-                }
-            }
-            if candidates.len() != 1 {
-                return Err(GenerationError::InvalidCpInteractionRule {
-                    vertex,
-                    interaction: rule.name.clone(),
-                    candidates: candidates.into_iter().map(|(_, name)| name).collect(),
-                });
-            }
-            replacements.insert(vertex, candidates[0].0);
-        }
-
-        if replacements.is_empty() {
-            return Ok(graph);
-        }
-        let rules = graph
-            .vertices()
-            .enumerate()
-            .map(|(vertex, rule)| replacements.get(&vertex).copied().unwrap_or(rule))
-            .collect::<Vec<_>>();
-        Ok(graph.with_vertex_rules(rules))
     }
 
     // Normalize every fermion chain before exposing the diagram. A chain keeps
@@ -6560,7 +6517,9 @@ mod tests {
                 .unwrap();
         }
 
-        let repaired = ResolvedProcess::repair_cp_interaction_rules(graph.build(), &model).unwrap();
+        let repaired = Generator::new(model.clone())
+            .repair_cp_interaction_rules(graph.build())
+            .unwrap();
         assert_eq!(repaired.vertices().next().unwrap(), vertex(&model, "V_117"));
         let rule = model.vertex_rule("V_117").unwrap();
         assert_eq!(
@@ -6587,7 +6546,9 @@ mod tests {
                 .add_edge(interaction, external, true, edge(&model, pdg))
                 .unwrap();
         }
-        let repaired = ResolvedProcess::repair_cp_interaction_rules(graph.build(), &model).unwrap();
+        let repaired = Generator::new(model.clone())
+            .repair_cp_interaction_rules(graph.build())
+            .unwrap();
         assert_eq!(repaired.vertices().next().unwrap(), vertex(&model, "V_117"));
 
         let resolved_options = |filter| {
@@ -7063,7 +7024,7 @@ mod tests {
             );
         }
         assert_eq!(
-            generator.numerators.interaction_rules.read().unwrap().len(),
+            generator.cache.interaction_rules.read().unwrap().len(),
             1,
             "graph positions and momentum flow do not create another compiled rule"
         );
@@ -7124,7 +7085,7 @@ mod tests {
             "the standard-model rules have no graph-dependent lowering operations"
         );
         assert_eq!(
-            generator.numerators.interaction_rules.read().unwrap().len(),
+            generator.cache.interaction_rules.read().unwrap().len(),
             model.vertex_rules().len()
         );
     }

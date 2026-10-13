@@ -604,7 +604,7 @@ pub struct FeynmanDiagram {
     numerator: DiagramNumerator,
     numerator_prefactor: Atom,
     projector: Atom,
-    loop_momentum_basis: LoopMomentumBasis,
+    loop_momentum_basis: Arc<LoopMomentumBasis>,
     cuts: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
     // Structural, routing, or numerator edits must invalidate this certificate.
@@ -1411,9 +1411,9 @@ impl FeynmanDiagram {
     }
 
     /// Store a routing materialized from one of this diagram's spanning forests.
-    fn with_routing(mut self, basis: LoopMomentumBasis) -> Self {
+    fn with_routing(mut self, basis: impl Into<Arc<LoopMomentumBasis>>) -> Self {
         self.validation.take();
-        self.loop_momentum_basis = basis;
+        self.loop_momentum_basis = basis.into();
         let _ = self.routing_validation.set(());
         self
     }
@@ -1814,7 +1814,7 @@ impl FeynmanDiagram {
             dot_value(&snapshot.numerator_prefactor),
             dot_value(&snapshot.projector),
             dot_value(&loop_momentum_edges),
-            dot_value(&serde_json::to_string(&self.loop_momentum_basis)?),
+            dot_value(&serde_json::to_string(self.loop_momentum_basis())?),
             dot_value(&serde_json::to_string(&snapshot.half_edge_order)?),
             dot_value(&serde_json::to_string(&self.cuts)?),
             dot_value(&serde_json::to_string(&self.topology_threshold_candidates)?),
@@ -2391,7 +2391,7 @@ impl FeynmanDiagram {
             numerator: self.numerator().to_canonical_string(),
             numerator_prefactor: self.numerator_prefactor.to_canonical_string(),
             projector: self.projector.to_canonical_string(),
-            loop_momentum_basis: self.loop_momentum_basis.clone(),
+            loop_momentum_basis: self.loop_momentum_basis().clone(),
             cuts: self.cuts.clone(),
             topology_threshold_candidates: self.topology_threshold_candidates.clone(),
         })
@@ -2509,6 +2509,7 @@ pub struct FeynmanDiagramBuilder {
     projector: Atom,
     loop_momentum_basis: Option<LoopMomentumBasis>,
     canonical_loop_momentum_basis: bool,
+    canonical_routing_cache: Option<Arc<routing::CanonicalRoutingCache>>,
     cuts: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
 }
@@ -2531,6 +2532,7 @@ impl FeynmanDiagramBuilder {
             projector: Atom::one(),
             loop_momentum_basis: None,
             canonical_loop_momentum_basis: false,
+            canonical_routing_cache: None,
             cuts: Vec::new(),
             topology_threshold_candidates: Vec::new(),
         }
@@ -2569,6 +2571,13 @@ impl FeynmanDiagramBuilder {
     /// Choose canonical topology order when no explicit basis is supplied.
     pub fn canonical_loop_momentum_basis(mut self) -> Self {
         self.canonical_loop_momentum_basis = true;
+        self
+    }
+
+    /// Reuse canonical amplitude routing across decorations in this request.
+    /// This preserves the edge and half-edge frame chosen during finalization.
+    pub fn canonical_routing_cache(mut self, cache: Arc<routing::CanonicalRoutingCache>) -> Self {
+        self.canonical_routing_cache = Some(cache);
         self
     }
 

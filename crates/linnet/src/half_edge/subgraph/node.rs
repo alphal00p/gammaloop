@@ -1,6 +1,5 @@
 use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
 
-use crate::half_edge::builder::HedgeNodeBuilder;
 use crate::half_edge::involution::HedgePair;
 use crate::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubGraphOps};
 use crate::half_edge::{Hedge, HedgeGraph, Topology};
@@ -267,20 +266,6 @@ impl HedgeNode {
                 .filter
                 .union(&other.internal_graph.filter),
             loopcount: None,
-        }
-    }
-
-    pub fn from_builder<V>(builder: &HedgeNodeBuilder<V>, len: usize) -> Self {
-        let internal_graph = InternalSubGraph::empty(len);
-        let mut externalhedges = SuBitGraph::empty(len);
-
-        for hedge in &builder.hedges {
-            externalhedges.add(*hedge);
-        }
-
-        HedgeNode {
-            internal_graph,
-            hairs: externalhedges,
         }
     }
 

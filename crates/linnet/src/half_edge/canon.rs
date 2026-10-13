@@ -51,7 +51,7 @@ pub(crate) use search::mix;
 use search::Search;
 
 use super::{
-    involution::{EdgeIndex, EdgeVec, Hedge, HedgeVec},
+    involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgeVec, Orientation},
     nodestore::Topology,
     HedgeGraph, NoData, NodeIndex, NodeVec,
 };
@@ -92,6 +92,36 @@ pub struct CanonicalForm<KV, KE, KH> {
     hedge_keys: Vec<KH>,
 }
 
+/// One edge in a compact canonicalization input, with caller keys rather than ranks.
+///
+/// Elements follow insertion order. A paired edge contributes its source hedge then its sink;
+/// a dangling edge contributes one hedge, exactly as [`super::builder::HedgeGraphBuilder`].
+#[derive(Clone, Debug)]
+pub enum KeyedEdge<KE, KH> {
+    Paired {
+        source: (NodeIndex, KH),
+        sink: (NodeIndex, KH),
+        key: KE,
+        orientation: Orientation,
+    },
+    Dangling {
+        node: NodeIndex,
+        hedge_key: KH,
+        key: KE,
+        orientation: Orientation,
+        flow: Flow,
+    },
+}
+
+/// Invalid compact input. Pairing and dense edge/hedge identifiers are supplied by the loader.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum CanonicalInputError {
+    #[error("canonicalization node {node:?} is outside {nodes} nodes")]
+    UnknownNode { node: NodeIndex, nodes: usize },
+    #[error("canonicalization input exceeds the u32 index space")]
+    IndexOverflow,
+}
+
 impl<KV, KE, KH> CanonicalForm<KV, KE, KH> {
     /// The canonical form and automorphism count of a graph given by its node colours (ranks of
     /// the node keys) and hedges; equal to those of [`HedgeGraph::canonize_by`] on the same graph
@@ -111,6 +141,31 @@ impl<KV, KE, KH> CanonicalForm<KV, KE, KH> {
                 keys.hedges.len(),
             );
             ws.certify(keys)
+        })
+    }
+
+    /// Canonical form and input-node -> canonical-node map of a compact keyed graph.
+    ///
+    /// This uses the same search, key ordering and hedge insertion order as
+    /// [`HedgeGraph::canonize_by`], without constructing a graph, hedge/edge maps or the lifted
+    /// half-edge automorphism group. Node keys are in input node order, including isolated nodes.
+    pub fn label_edges(
+        node_keys: impl IntoIterator<Item = KV, IntoIter: ExactSizeIterator>,
+        edges: impl IntoIterator<Item = KeyedEdge<KE, KH>>,
+    ) -> Result<(Self, NodeVec<NodeIndex>), CanonicalInputError>
+    where
+        KV: Ord,
+        KE: Ord,
+        KH: Ord,
+    {
+        Workspace::with(|ws| {
+            let keys = ws.flat.load_edges(node_keys, edges)?;
+            let form = ws.canonical_form(keys);
+            let mut nodes = vec![NodeIndex(0); ws.flat.n_nodes()];
+            for (canonical, &input) in ws.search.best_lab().iter().enumerate() {
+                nodes[input as usize] = NodeIndex(canonical);
+            }
+            Ok((form, nodes.into_iter().collect()))
         })
     }
 

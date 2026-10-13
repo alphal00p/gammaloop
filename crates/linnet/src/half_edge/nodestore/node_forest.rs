@@ -1370,7 +1370,6 @@ mod tests {
     use super::*;
     use crate::{
         half_edge::{
-            builder::HedgeNodeBuilder,
             nodestore::NodeStore,
             subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
         },
@@ -1383,15 +1382,24 @@ mod tests {
     /// A store whose node `i` has payload `i` and the half-edges `parts[i]`.
     pub(super) fn store(parts: &[&[usize]]) -> Store {
         let n_hedges = parts.iter().flat_map(|part| part.iter()).count();
-        NodeStore::build(
-            parts
-                .iter()
-                .enumerate()
-                .map(|(data, hedges)| HedgeNodeBuilder {
-                    data,
-                    hedges: hedges.iter().copied().map(Hedge).collect(),
-                }),
-            n_hedges,
+        let mut labels = vec![None; n_hedges];
+        for (node, part) in parts.iter().enumerate() {
+            for &hedge in *part {
+                let previous = labels[hedge].replace(NodeIndex(node));
+                assert!(
+                    previous.is_none_or(|previous| previous == NodeIndex(node)),
+                    "hedge incidence must form a partition"
+                );
+            }
+        }
+        NodeStore::new(
+            NodeForest::from_labels(
+                labels
+                    .into_iter()
+                    .map(|node| node.expect("hedge incidence must cover all half-edges")),
+                parts.len(),
+            ),
+            (0..parts.len()).collect(),
         )
     }
 
@@ -2242,15 +2250,9 @@ mod tests {
         for _ in 0..300 {
             let n_nodes = 1 + random(8);
             let mut owner: Vec<usize> = (0..random(16)).map(|_| random(n_nodes)).collect();
-            let mut store: Store = NodeStore::build(
-                (0..n_nodes).map(|node| HedgeNodeBuilder {
-                    data: node,
-                    hedges: (0..owner.len())
-                        .filter(|&h| owner[h] == node)
-                        .map(Hedge)
-                        .collect(),
-                }),
-                owner.len(),
+            let mut store: Store = NodeStore::new(
+                NodeForest::from_labels(owner.iter().copied().map(NodeIndex), n_nodes),
+                (0..n_nodes).collect(),
             );
             let mut parent: Vec<usize> = (0..n_nodes).collect();
             let mut size: Vec<usize> = (0..n_nodes)

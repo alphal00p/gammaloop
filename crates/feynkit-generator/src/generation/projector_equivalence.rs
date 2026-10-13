@@ -105,7 +105,7 @@ fn check(name: &str) -> usize {
             assert_eq!(json(&automatic), json(&provisional), "{context}");
         }
     }
-    generator.numerators.projectors.read().unwrap().len()
+    generator.cache.projectors.read().unwrap().len()
 }
 
 #[test]

@@ -4,7 +4,7 @@ use super::{
         EdgeData, Flow, Hedge, HedgePair, HedgeVec, Involution, InvolutionError, Orientation,
     },
     nodestore::{NodeStore, Topology},
-    subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike},
+    subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
     swap::Swap,
     HedgeGraph, NoData, NodeIndex,
 };
@@ -67,34 +67,6 @@ impl<H> HedgeData<H> {
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-/// A temporary structure used during the construction of a [`HedgeGraph`].
-///
-/// It holds the data for a node and a list of half-edges that are incident to it
-/// before the full graph topology (e.g., a specific [`Topology`]) is finalized.
-pub struct HedgeNodeBuilder<V> {
-    /// The data associated with the node being built.
-    pub(crate) data: V,
-    /// A list of [`Hedge`] identifiers that are incident to this node.
-    pub(crate) hedges: Vec<Hedge>,
-}
-
-impl<V> HedgeNodeBuilder<V> {
-    pub fn to_base<S: BaseSubgraph>(&self, len: usize) -> S {
-        let mut subgraph = S::empty(len);
-
-        for hedge in &self.hedges {
-            subgraph.add(*hedge);
-        }
-
-        subgraph
-    }
-}
-
-#[derive(Clone, Debug)]
-#[cfg_attr(
-    feature = "rkyv",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
 /// A builder for programmatically constructing [`HedgeGraph`] instances.
 ///
 /// This builder allows for the incremental addition of nodes and edges (both
@@ -125,8 +97,10 @@ impl<V> HedgeNodeBuilder<V> {
 /// ```
 pub struct HedgeGraphBuilder<E, V, H = NoData> {
     hedge_data: HedgeVec<H>,
-    /// A list of nodes currently being built, stored as [`HedgeNodeBuilder`] instances.
-    nodes: Vec<HedgeNodeBuilder<V>>,
+    nodes: Vec<V>,
+    /// Record the partition directly in half-edge order, without a temporary
+    /// incidence vector for each node and a second pass to flatten it.
+    node_labels: Vec<NodeIndex>,
     /// The [`Involution`] structure managing the half-edges being added to the graph.
     pub(crate) involution: Involution<E>,
 }
@@ -136,6 +110,7 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
         HedgeGraphBuilder {
             hedge_data: HedgeVec::new(),
             nodes: Vec::new(),
+            node_labels: Vec::new(),
             involution: Involution::new(),
         }
     }
@@ -145,6 +120,7 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
         HedgeGraphBuilder {
             hedge_data: HedgeVec::with_capacity(hedges),
             nodes: Vec::with_capacity(nodes),
+            node_labels: Vec::with_capacity(hedges),
             involution: Involution {
                 inv: HedgeVec::with_capacity(hedges),
             },
@@ -162,11 +138,15 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
     /// Panics if a requested node is out of range or appears more than once.
     pub fn retain_nodes_in_order(mut self, order: &[NodeIndex]) -> (Self, HedgeVec<Option<Hedge>>) {
         let mut used = vec![false; self.nodes.len()];
+        let mut incident = vec![Vec::new(); self.nodes.len()];
+        for (hedge, node) in self.node_labels.iter().enumerate() {
+            incident[node.0].push(Hedge(hedge));
+        }
         let mut hedges = Vec::new();
         for &node in order {
             assert!(!used[node.0], "retained nodes must be unique");
             used[node.0] = true;
-            hedges.extend_from_slice(&self.nodes[node.0].hedges);
+            hedges.extend_from_slice(&incident[node.0]);
         }
         let len = self.involution.len().0;
         let mut mapping: HedgeVec<_> = std::iter::repeat_n(None, len).collect();
@@ -178,6 +158,7 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
             if from != position {
                 self.involution.swap(Hedge(position), Hedge(from));
                 self.hedge_data.swap(Hedge(position), Hedge(from));
+                self.node_labels.swap(position, from);
                 positions.swap(at[position], at[from]);
                 at.swap(position, from);
             }
@@ -188,16 +169,18 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
         }
         self.involution.delete(&discarded);
         self.hedge_data.truncate(hedges.len());
+        self.node_labels.truncate(hedges.len());
+        let mut node_map = vec![NodeIndex(0); self.nodes.len()];
+        for (new, old) in order.iter().enumerate() {
+            node_map[old.0] = NodeIndex(new);
+        }
+        for node in &mut self.node_labels {
+            *node = node_map[node.0];
+        }
         let mut nodes = self.nodes.into_iter().map(Some).collect::<Vec<_>>();
         self.nodes = order
             .iter()
-            .map(|node| {
-                let mut node = nodes[node.0].take().expect("unique retained node");
-                for hedge in &mut node.hedges {
-                    *hedge = mapping[*hedge].expect("retained node hedge");
-                }
-                node
-            })
+            .map(|node| nodes[node.0].take().expect("unique retained node"))
             .collect();
         (self, mapping)
     }
@@ -210,10 +193,11 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
         self,
         map: impl FnMut(V) -> V2,
     ) -> HedgeGraph<E, V2, H, N> {
-        let len: Hedge = self.involution.len();
-
         HedgeGraph {
-            node_store: NodeStore::build_with_mapping(self.nodes, len.0, map),
+            node_store: NodeStore::new(
+                N::from_labels(self.node_labels.into_iter(), self.nodes.len()),
+                self.nodes.into_iter().map(map).collect(),
+            ),
             edge_store: SmartEdgeVec::new(self.involution),
             hedge_data: self.hedge_data,
         }
@@ -237,10 +221,7 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
 
     pub fn add_node(&mut self, data: V) -> NodeIndex {
         let index = self.nodes.len();
-        self.nodes.push(HedgeNodeBuilder {
-            data,
-            hedges: Vec::new(),
-        });
+        self.nodes.push(data);
         NodeIndex(index)
     }
 
@@ -253,12 +234,12 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
     ) {
         let source = source.into();
         let sink = sink.into();
-        let (sourceh, sinkh) = self.involution.add_pair(data, directed);
+        assert!(source.node.0 < self.nodes.len() && sink.node.0 < self.nodes.len());
+        self.involution.add_pair(data, directed);
         self.hedge_data.push(source.data);
         self.hedge_data.push(sink.data);
 
-        self.nodes[source.node.0].hedges.push(sourceh);
-        self.nodes[sink.node.0].hedges.push(sinkh);
+        self.node_labels.extend([source.node, sink.node]);
     }
 
     pub fn add_external_edge(
@@ -269,8 +250,9 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
         underlying: Flow,
     ) {
         let source = source.into();
-        let id = self.involution.add_identity(data, orientation, underlying);
-        self.nodes[source.node.0].hedges.push(id);
+        assert!(source.node.0 < self.nodes.len());
+        self.involution.add_identity(data, orientation, underlying);
+        self.node_labels.push(source.node);
         self.hedge_data.push(source.data);
     }
 }
@@ -283,12 +265,82 @@ impl<E, V, H> Default for HedgeGraphBuilder<E, V, H> {
 
 impl<E, V, H, N: Topology> From<HedgeGraphBuilder<E, V, H>> for HedgeGraph<E, V, H, N> {
     fn from(builder: HedgeGraphBuilder<E, V, H>) -> Self {
-        let len: Hedge = builder.involution.len();
+        builder.build_with_map(std::convert::identity)
+    }
+}
 
-        HedgeGraph {
-            node_store: NodeStore::build(builder.nodes, len.0),
-            edge_store: SmartEdgeVec::new(builder.involution),
-            hedge_data: builder.hedge_data,
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::half_edge::nodestore::{reference::RefTopology, NodeForest};
+
+    fn retained<N: Topology>() {
+        let mut builder = HedgeGraphBuilder::<usize, usize>::new();
+        let nodes = (0..4).map(|i| builder.add_node(i)).collect::<Vec<_>>();
+        builder.add_edge(nodes[0], nodes[1], 10, Orientation::Default);
+        builder.add_edge(nodes[1], nodes[1], 11, Orientation::Reversed);
+        builder.add_external_edge(nodes[2], 12, Orientation::Undirected, Flow::Sink);
+        let (builder, first) = builder.retain_nodes_in_order(&[nodes[1], nodes[0], nodes[3]]);
+        assert_eq!(
+            first
+                .into_iter()
+                .map(|(_, value)| value)
+                .collect::<Vec<_>>(),
+            vec![
+                Some(Hedge(3)),
+                Some(Hedge(0)),
+                Some(Hedge(1)),
+                Some(Hedge(2)),
+                None
+            ]
+        );
+        let (builder, second) = builder.retain_nodes_in_order(&[NodeIndex(0), NodeIndex(2)]);
+        assert_eq!(
+            second
+                .into_iter()
+                .map(|(_, value)| value)
+                .collect::<Vec<_>>(),
+            vec![Some(Hedge(0)), Some(Hedge(1)), Some(Hedge(2)), None]
+        );
+        let graph: HedgeGraph<usize, usize, NoData, N> = builder.build_with_map(|i| i + 100);
+        assert_eq!(graph.node_bound(), 2);
+        assert_eq!(
+            graph
+                .iter_nodes()
+                .map(|(_, crown, data)| (crown.collect::<Vec<_>>(), *data))
+                .collect::<Vec<_>>(),
+            vec![(vec![Hedge(0), Hedge(1), Hedge(2)], 101), (vec![], 103)]
+        );
+        let edges = graph
+            .iter_edges()
+            .map(|(pair, _, data)| (pair, *data.data, data.orientation))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            edges,
+            vec![
+                (
+                    HedgePair::Unpaired {
+                        hedge: Hedge(0),
+                        flow: Flow::Sink
+                    },
+                    10,
+                    Orientation::Default
+                ),
+                (
+                    HedgePair::Paired {
+                        source: Hedge(1),
+                        sink: Hedge(2)
+                    },
+                    11,
+                    Orientation::Reversed
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn flat_incidence_retains_exact_frames_in_each_topology() {
+        retained::<NodeForest>();
+        retained::<RefTopology>();
     }
 }
