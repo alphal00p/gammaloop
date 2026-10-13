@@ -15,11 +15,14 @@ use idenso::{
 #[cfg(test)]
 use linnet::half_edge::subgraph::SubGraphLike;
 use linnet::half_edge::{
-    involution::EdgeIndex,
+    involution::{EdgeIndex, Flow},
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
 };
 use serde::{Deserialize, Serialize};
-use spenso::structure::IndexedStructure;
+use spenso::structure::{
+    IndexedStructure,
+    slot::{DummyAind, IsAbstractSlot},
+};
 use symbolica::{
     atom::{AtomCore, AtomView},
     prelude::*,
@@ -30,12 +33,13 @@ use crate::{
     debug_tags,
     graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis},
     momentum::sample::LoopIndex,
-    numerator::{symbolica_ext::NumeratorAtomExt, ufo::UFO},
+    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt, ufo::UFO},
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ForestNodeLike, Rooted, UVCtx, integrated::IntegratedCts},
         marker::{UvMarker, UvOperation},
+        uv_graph::UVE,
     },
 };
 use three_dimensional_reps::MomentumSignature;
@@ -65,6 +69,8 @@ pub(crate) enum Local4dBranch {
     S,
     #[serde(rename = "US")]
     US,
+    O,
+    UO,
     Combined,
 }
 
@@ -80,6 +86,10 @@ pub(crate) struct Local4dBranchProvenance {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FourDSector {
     pub(crate) atom: SymbolicTensor<IndexedStructure>,
+    /// Signed input to the analytic scheme correction. OS keeps its physical
+    /// on-shell branch local and integrates only the single-scale UV remainder.
+    /// Enclosing operators still act on the complete `atom`.
+    scheme_integrand: Option<SymbolicTensor<IndexedStructure>>,
     /// A nonzero S branch occurred in this contribution's ancestry. Retained
     /// soft coordinates require canonical routing and restrict supported parent
     /// schemes, even after later cancellations. Parent operators act once on `atom`;
@@ -160,12 +170,140 @@ pub(crate) struct CanonicalUvTerm {
     /// Aligned with `source_witness`; sign means raw momentum = sign * class
     /// momentum. None denotes a residual or component-loop-independent factor.
     pub(crate) source_classes: Vec<Option<(UvDenominatorClassId, i32)>>,
+    /// A projection-local crown coordinate. It is restored before this child
+    /// is composed with any surrounding graph expression.
+    pub(crate) on_shell_point: Option<OnShellProjectionPoint>,
 }
 
 type CanonicalUvAlgebraKey = (
     BTreeMap<UvDenominatorClassId, usize>,
     Vec<(EdgeIndex, Atom, Atom, Atom)>,
+    Option<OnShellProjectionPoint>,
 );
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct OnShellProjectionPoint {
+    pub(crate) component: usize,
+    edge: EdgeIndex,
+    mass: Atom,
+}
+
+impl OnShellProjectionPoint {
+    fn lift(&self, atom: &Atom) -> Atom {
+        atom.replace_map(|view, _, output| {
+            if let AtomView::Fun(point) = view
+                && point.get_symbol() == GS.os_mom
+                && point.get_nargs() >= 2
+                && usize::try_from(point.get(0)).ok() == Some(usize::from(self.edge))
+                && point.get(1) == self.mass.as_view()
+            {
+                let mut momentum = FunctionBuilder::new(GS.emr_mom).add_arg(point.get(0));
+                for index in point.iter().skip(2) {
+                    momentum = momentum.add_arg(index);
+                }
+                **output = momentum.finish();
+            }
+        })
+    }
+
+    fn restore(&self, atom: &Atom) -> Atom {
+        atom.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_nargs() == 0
+                || usize::try_from(momentum.get(0)).ok() != Some(usize::from(self.edge))
+            {
+                return;
+            }
+            if momentum.get_symbol() == GS.emr_vec {
+                **output = Atom::Zero;
+            } else if momentum.get_symbol() == GS.emr_mom {
+                let mut point = FunctionBuilder::new(GS.os_mom)
+                    .add_arg(usize::from(self.edge))
+                    .add_arg(&self.mass);
+                for index in momentum.iter().skip(1) {
+                    point = point.add_arg(index);
+                }
+                **output = point.finish();
+            }
+        })
+    }
+
+    pub(crate) fn bind(&self, atom: &Atom) -> Atom {
+        GS.resolve_os_momenta(&self.restore(atom))
+    }
+}
+
+impl FourDTerm {
+    /// Introduce one formal source-crown coordinate only in the projection
+    /// copy. The exact inverse proves that neither a physical external vector
+    /// nor a denominator prescription was accidentally replaced.
+    fn project_on_shell_point(
+        &mut self,
+        components: &[(SuBitGraph, SuBitGraph, LoopMomentumBasis)],
+    ) -> Result<Option<OnShellProjectionPoint>> {
+        let mut points = BTreeSet::new();
+        for denominator in &self.denominators {
+            let _ = denominator.momentum.replace_map(|view, _, _| {
+                if let AtomView::Fun(point) = view
+                    && point.get_symbol() == GS.os_mom
+                    && point.get_nargs() == 2
+                    && let Ok(edge) = usize::try_from(point.get(0))
+                {
+                    points.insert((EdgeIndex(edge), point.get(1).to_owned()));
+                }
+            });
+        }
+        let Some((edge, mass)) = points.pop_first() else {
+            self.numerator = self
+                .numerator
+                .with_checked_expression(GS.resolve_os_momenta(self.numerator.expression()))?;
+            for denominator in &mut self.denominators {
+                denominator.full_expr = GS.resolve_os_momenta(&denominator.full_expr);
+            }
+            return Ok(None);
+        };
+        if !points.is_empty() {
+            return Err(eyre!(
+                "one projected OS term currently requires one component-local on-shell point"
+            ));
+        }
+        let component = components
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, _, lmb))| lmb.ext_edges.contains(&edge))
+            .map(|(component, _)| component)
+            .collect::<Vec<_>>();
+        let [component] = component.as_slice() else {
+            return Err(eyre!(
+                "OS point must own one unambiguous component crown coordinate"
+            ));
+        };
+        let point = OnShellProjectionPoint {
+            component: *component,
+            edge,
+            mass,
+        };
+        let lifted = point.lift(self.numerator.expression());
+        if point.restore(&lifted) != *self.numerator.expression() {
+            return Err(eyre!("OS numerator point-binding certificate failed"));
+        }
+        self.numerator = self.numerator.with_checked_expression(lifted)?;
+        for denominator in &mut self.denominators {
+            let momentum = point.lift(&denominator.momentum);
+            let polynomial = point.lift(&denominator.full_expr);
+            if point.restore(&momentum) != denominator.momentum
+                || point.restore(&polynomial) != denominator.full_expr
+            {
+                return Err(eyre!("OS denominator point-binding certificate failed"));
+            }
+            denominator.momentum = momentum;
+            denominator.full_expr = polynomial;
+        }
+        Ok(Some(point))
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct UvDenominatorClassKey {
@@ -293,9 +431,22 @@ impl CanonicalUvDenominatorClass {
 }
 
 impl FourDSector {
+    pub(crate) fn integration_atom(&self) -> &SymbolicTensor<IndexedStructure> {
+        self.scheme_integrand.as_ref().unwrap_or(&self.atom)
+    }
+
+    pub(crate) fn with_scheme_integrand(mut self, atom: SymbolicTensor<IndexedStructure>) -> Self {
+        self.scheme_integrand = Some(atom);
+        self
+    }
+
     pub(crate) fn accounted_bytes(&self) -> usize {
         std::mem::size_of::<Self>()
             + self.atom.expression().as_view().get_byte_size()
+            + self
+                .scheme_integrand
+                .as_ref()
+                .map_or(0, |atom| atom.expression().as_view().get_byte_size())
             + self.inherited_loop_edges.capacity() * std::mem::size_of::<EdgeIndex>()
             + self.provenance_components.capacity()
                 * std::mem::size_of::<Local4dComponentProvenance>()
@@ -358,6 +509,7 @@ impl FourDSector {
         inherited_loop_edges.dedup();
         Self {
             has_soft_ancestry: false,
+            scheme_integrand: None,
             atom,
             active_components,
             frozen_lmbs,
@@ -384,7 +536,11 @@ impl FourDSector {
     /// Normalize only a projection-owned copy, with class membership resolved
     /// separately in each rational term and independent component frame.
     pub(crate) fn canonical_projection(&self, graph: &Graph) -> Result<CanonicalUvSector> {
-        let terms = self.physical_terms()?;
+        let mut terms = self.physical_terms()?;
+        let on_shell_points = terms
+            .iter_mut()
+            .map(|term| term.project_on_shell_point(&self.active_components))
+            .collect::<Result<Vec<_>>>()?;
         let mut classes = BTreeMap::<UvDenominatorClassKey, BTreeSet<EdgeIndex>>::new();
         let mut term_keys = Vec::with_capacity(terms.len());
         for term in &terms {
@@ -466,7 +622,8 @@ impl FourDSector {
             active_components: self.active_components.clone(),
             frozen_lmbs: self.frozen_lmbs.clone(),
         };
-        for (term, keys) in terms.into_iter().zip(term_keys) {
+        for ((term, keys), on_shell_point) in terms.into_iter().zip(term_keys).zip(on_shell_points)
+        {
             let source_classes = keys
                 .into_iter()
                 .map(|key| key.map(|(key, sign)| (ids[&key], sign)))
@@ -481,6 +638,7 @@ impl FourDSector {
                 powers,
                 source_witness: term.denominators,
                 source_classes,
+                on_shell_point,
             };
             let neutral = canonical.neutral_numerator(&term.numerator, graph)?;
             term.numerator = canonical.normalize_numerator(&term.numerator, &term, graph)?;
@@ -532,6 +690,10 @@ impl CanonicalUvSector {
                 .map(|term| {
                     term.numerator.expression().as_view().get_byte_size()
                         + term.source_numerator.expression().as_view().get_byte_size()
+                        + term
+                            .on_shell_point
+                            .as_ref()
+                            .map_or(0, |point| point.mass.as_view().get_byte_size())
                         + term.powers.len() * 64
                         + term.source_witness.capacity() * std::mem::size_of::<FourDDenominator>()
                         + term
@@ -908,7 +1070,7 @@ impl CanonicalUvTerm {
             })
             .collect::<Vec<_>>();
         residual.sort();
-        (self.powers.clone(), residual)
+        (self.powers.clone(), residual, self.on_shell_point.clone())
     }
 }
 
@@ -1014,7 +1176,7 @@ impl Full4dCts {
         };
         // Integrated projections already own their admitted tensor interfaces.
         let mut projected = match scheme {
-            ApproximationType::MUV | ApproximationType::IR => {
+            ApproximationType::MUV | ApproximationType::IR | ApproximationType::OS => {
                 let integrated = integrated.finite_counterterm()?;
                 Ok(Self(FourDSectors::with_atom(
                     local.0.active.clone(),
@@ -1058,9 +1220,6 @@ impl Full4dCts {
                     },
                 )))
             }
-            ApproximationType::OS => unimplemented!(
-                "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-            ),
             scheme => Err(eyre!("No recursive counterterm projection for {scheme}")),
         }?;
         projected.0.has_soft_ancestry |= local.0.has_soft_ancestry;
@@ -1556,6 +1715,115 @@ impl Rooted for Local4dCts {
 }
 
 impl Graph {
+    /// Evaluate the complete component at its two rest-frame subtraction
+    /// points, inserting the projector on the outgoing spinor port. The
+    /// surrounding graph is absent from this component-local substitution.
+    fn on_shell_branches(
+        &self,
+        model: &crate::model::Model,
+        atom: &SymbolicTensor<IndexedStructure>,
+        component: &SuBitGraph,
+        lmb: &LoopMomentumBasis,
+    ) -> Result<[SymbolicTensor<IndexedStructure>; 2]> {
+        let crown = self.dummy_less_full_crown(component);
+        let boundary = crown.included_iter().collect::<Vec<_>>();
+        if boundary.len() != 2
+            || boundary.iter().any(|hedge| {
+                self[self[hedge]]
+                    .particle
+                    .particle()
+                    .is_none_or(|particle| {
+                        let particle = model
+                            .particle_by_id(particle)
+                            .expect("graph particle belongs to its model");
+                        !particle.is_spinor() || particle.color.abs() != 3
+                    })
+            })
+        {
+            return Err(eyre!("OS requires a quark two-point component"));
+        }
+        let outgoing = boundary
+            .iter()
+            .copied()
+            .find(|hedge| self.flow(*hedge) == Flow::Source)
+            .ok_or_else(|| eyre!("OS requires an outgoing fermion spinor port"))?;
+        let incoming = boundary
+            .iter()
+            .copied()
+            .find(|hedge| self.flow(*hedge) == Flow::Sink)
+            .ok_or_else(|| eyre!("OS requires an incoming fermion spinor port"))?;
+        let owner = self[&incoming];
+        let mass = self[owner].mass_atom(model);
+        if mass != self[self[&outgoing]].mass_atom(model) {
+            return Err(eyre!(
+                "OS component boundary fermions must have the same physical mass"
+            ));
+        }
+        let port = self.underlying[outgoing]
+            .edge_spin_slots()
+            .next()
+            .ok_or_else(|| eyre!("OS component has no outgoing spinor slot"))?
+            .to_atom();
+        // The completed zero keeps its original logical spinor interface.
+        if atom.is_zero() {
+            return Ok([atom.clone(), atom.clone()]);
+        }
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let port = cooking.try_cook(port.as_view())?;
+        if atom
+            .expression()
+            .replace(port.to_pattern())
+            .match_iter()
+            .next()
+            .is_none()
+        {
+            return Err(eyre!(
+                "OS component numerator must retain its open outgoing spinor port"
+            ));
+        }
+        let dummy = cooking.try_cook(idenso::bis!(4, Atom::from(Aind::new_dummy())).as_view())?;
+        let gamma0 = SymbolicTensor::infer_indexed(idenso::gamma0!(&dummy, &port))?;
+        let routed = atom
+            .expression()
+            .replace_multiple(self.uv_wrapped_replacement(component, lmb, &[W_.x___]));
+        let external = boundary.iter().map(|hedge| self[hedge]).collect::<Vec<_>>();
+        let [positive, negative] = [1, -1].map(|sigma| -> Result<_> {
+            let point = function!(GS.os_mom, usize::from(owner), Atom::num(sigma) * &mass);
+            let evaluated = routed.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                    && momentum.get_nargs() >= 1
+                    && usize::try_from(momentum.get(0))
+                        .is_ok_and(|edge| external.contains(&EdgeIndex(edge)))
+                {
+                    let indices = momentum
+                        .iter()
+                        .skip(1)
+                        .map(|index| index.to_owned())
+                        .collect::<Vec<_>>();
+                    **output = GS.indexed_momentum(&point, &indices);
+                }
+            });
+            let evaluated = atom.with_checked_expression(evaluated)?;
+            let projected = evaluated
+                .expression()
+                .replace(port.to_pattern())
+                .with(dummy.to_pattern());
+            let (projected, _) = evaluated.with_transformed_expression(projected)?;
+            // Contract the identity part directly. Each copy of the completed
+            // numerator remains factored; the gamma0 insertion retains its
+            // ordered spinor contraction through the fresh internal port.
+            let gamma_term = gamma0.clone().multiply(projected)?;
+            let gamma_term =
+                gamma_term.with_checked_expression(Atom::num(sigma) * gamma_term.expression())?;
+            let branch = evaluated.try_add(&gamma_term)?;
+            Ok(branch.with_checked_expression(branch.expression() / Atom::num(2))?)
+        });
+        Ok([positive?, negative?])
+    }
+
     pub(crate) fn uv_rescaled(
         &self,
         expansion_subgraph: &SuBitGraph,
@@ -2550,10 +2818,14 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
     let started = Instant::now();
     let mut taylor_time = Duration::ZERO;
     let scheme = current.renormalization_scheme();
-    if scheme == ApproximationType::OS {
-        unimplemented!(
-            "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-        );
+    if scheme == ApproximationType::OS
+        && (current.dod() != 1
+            || ctx.graph.n_loops(current.subgraph()) != 1
+            || !given.subgraph().is_empty())
+    {
+        return Err(eyre!(
+            "OS currently requires an isolated degree-one one-loop quark self-energy"
+        ));
     }
     if scheme == ApproximationType::MUV && current.dod() > 0 && integrand.0.has_soft_ancestry {
         return Err(eyre!(
@@ -2567,7 +2839,10 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
         ));
     }
     match scheme {
-        ApproximationType::MUV | ApproximationType::PolePart | ApproximationType::IR => {
+        ApproximationType::MUV
+        | ApproximationType::PolePart
+        | ApproximationType::IR
+        | ApproximationType::OS => {
             if ctx.settings.generate_integrated {
                 // Inspect the original UV-subgraph factors before multiplication,
                 // zero-sector pruning, or Dirac simplification can hide gamma5
@@ -2617,7 +2892,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                 }
                 let co_graph = grow_factor(ctx, current, given)?;
                 let grown = finalize(sector.atom.clone().multiply(co_graph)?)?;
-                let soft_route = scheme == ApproximationType::IR || sector.has_soft_ancestry;
+                let soft_route = matches!(scheme, ApproximationType::IR | ApproximationType::OS)
+                    || sector.has_soft_ancestry;
                 let mut retained_loop_edges = sector
                     .active_components
                     .iter()
@@ -2673,6 +2949,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     ));
                 }
                 let taylor_started = Instant::now();
+                let mut scheme_integrand = None;
                 let (result, coordinate_lmb, provenance_branches) = if soft_route {
                     let input = Full4dCts(FourDSectors::new(vec![sector.clone()], Vec::new())?);
                     let lmb = compatible_lmb(ctx, current, given, &input)?;
@@ -2681,6 +2958,42 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     // typed sector. U and H are linear across these sectors.
                     let (raw, provenance_branches) = if scheme == ApproximationType::IR {
                         hat_t_raw_with_provenance(&grown, ctx, current, given, &lmb)?
+                    } else if scheme == ApproximationType::OS {
+                        let ordinary = t_raw(&grown, ctx, current, given, &lmb)?;
+                        let [positive, negative] = ctx.graph.on_shell_branches(
+                            ctx.model,
+                            &grown,
+                            current.subgraph(),
+                            &lmb,
+                        )?;
+                        let on_shell = positive.try_add(&negative)?;
+                        // U acts on the completed projected expression, including
+                        // the physical mass defining the subtraction point.
+                        let overlap = t_raw(
+                            &on_shell.with_checked_expression(
+                                GS.resolve_os_momenta(on_shell.expression()),
+                            )?,
+                            ctx,
+                            current,
+                            given,
+                            &lmb,
+                        )?;
+                        let vacuum = ordinary.try_sub(&overlap)?;
+                        let combined = vacuum.try_add(&on_shell)?;
+                        let provenance = [
+                            (Local4dBranch::U, &ordinary),
+                            (Local4dBranch::O, &on_shell),
+                            (Local4dBranch::UO, &overlap),
+                            (Local4dBranch::Combined, &combined),
+                        ]
+                        .into_iter()
+                        .map(|(branch, atom)| Local4dBranchProvenance {
+                            branch,
+                            byte_size: atom.expression().as_view().get_byte_size(),
+                        })
+                        .collect();
+                        scheme_integrand = Some(finalize(vacuum)?);
+                        (combined, provenance)
                     } else {
                         let raw = t_raw(&grown, ctx, current, given, &lmb)?;
                         let byte_size = raw.expression().as_view().get_byte_size();
@@ -2804,6 +3117,17 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     active_components,
                     sector.frozen_lmbs.clone(),
                 );
+                if let Some(vacuum) = scheme_integrand {
+                    let signed_vacuum = -vacuum;
+                    let marked = marker.apply(
+                        UvOperation::Approx,
+                        marker_current.subgraph(),
+                        marker_given.subgraph(),
+                        signed_vacuum.expression(),
+                    );
+                    projected = projected
+                        .with_scheme_integrand(signed_vacuum.with_checked_expression(marked)?);
+                }
                 // Normalize the selected result once. Descendants act on this
                 // completed signed sector; ordinary controls are built in tests.
                 projected.has_soft_ancestry = sector.has_soft_ancestry
@@ -2851,8 +3175,6 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
             );
             Ok(local)
         }
-        // OS remains deferred; see the current-boundaries section in
-        // docs/architecture/uv-renormalization.typ.
         atype => Err(eyre!("Not yet implemented {:?}", atype)),
     }
 }
@@ -6123,10 +6445,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-    )]
-    fn os_dispatch_is_unconditionally_deferred() {
+    fn os_dispatch_rejects_scalar_components() {
         test_initialise().unwrap();
         let graph = scalar_two_point_graph();
         let given = root_node(&graph);
@@ -6136,7 +6455,13 @@ mod tests {
             ..Default::default()
         };
         let ctx = UVCtx::new(&graph, &graph.model, &settings);
-        let _ = uv_limit(&Full4dCts::root(), &ctx, &current, &given, &current, &given);
+        let error =
+            uv_limit(&Full4dCts::root(), &ctx, &current, &given, &current, &given).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("OS requires a quark two-point component")
+        );
     }
 
     fn paper_series_through(rescaled: Atom, degree: i64) -> Atom {
@@ -10869,3 +11194,7 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "on_shell_tests.rs"]
+pub(crate) mod on_shell_tests;

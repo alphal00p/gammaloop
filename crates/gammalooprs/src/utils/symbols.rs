@@ -237,6 +237,9 @@ pub struct GammaloopSymbols {
     pub delta_vec: Symbol,
     /// Canonical spatial component `Q(edge, index___)`.
     pub emr_mom: Symbol,
+    /// Component-local on-shell point: boundary owner, signed physical mass,
+    /// and optionally a vector index. The mass remains visible to outer jets.
+    pub(crate) os_mom: Symbol,
     /// UV-local provenance stored in the tag slot of `Q(...)` while applying a
     /// Taylor operator. Its arguments are the immutable source edge, its
     /// `UvMomentumProvenanceRole`, and the literal momentum payload. Hard roles
@@ -794,6 +797,10 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     emr_mom: feynkit_graph::symbols::momentum(),
     // The original index-free momentum is provenance metadata, not a tensor child.
     uv_momentum_provenance: symbol!("gammalooprs::uv::momentum_provenance"; Scalar),
+    os_mom: symbol!(
+        "gammalooprs::uv::on_shell_point",
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
+    ),
     uv_class: symbol!("gammalooprs::uv::class"),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
@@ -1133,12 +1140,35 @@ impl GammaloopSymbols {
             let AtomView::Fun(vector) = view else {
                 return;
             };
-            if vector.get_symbol() == self.emr_mom && vector.get_nargs() == 1 {
-                let mut component = FunctionBuilder::new(self.emr_mom).add_arg(vector.get(0));
+            let arity = if vector.get_symbol() == self.emr_mom {
+                1
+            } else if vector.get_symbol() == self.os_mom {
+                2
+            } else {
+                return;
+            };
+            if vector.get_nargs() == arity {
+                let mut component = FunctionBuilder::new(vector.get_symbol());
+                for argument in vector.iter() {
+                    component = component.add_arg(argument);
+                }
                 for index in indices {
                     component = component.add_arg(index);
                 }
                 **output = component.finish();
+            }
+        })
+    }
+
+    /// Lower indexed on-shell points, retaining bare vector metadata for
+    /// exact denominator reconstruction.
+    pub(crate) fn resolve_os_momenta(&self, atom: &Atom) -> Atom {
+        atom.replace_map(|view, _, output| {
+            if let AtomView::Fun(point) = view
+                && point.get_symbol() == self.os_mom
+                && point.get_nargs() == 3
+            {
+                **output = point.get(1) * self.energy_delta(point.get(2)).as_view();
             }
         })
     }

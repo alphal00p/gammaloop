@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     env, fs,
-    panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
     process::Command,
     time::{Duration, Instant},
@@ -3107,36 +3106,37 @@ fn genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs() -> Res
 }
 
 #[test]
-fn local_os_integrated_generation_is_rejected_by_run_generate() -> Result<()> {
+fn local_os_integrated_generation_succeeds_through_projected_four_d() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = get_test_cli(
         Some(LOCAL_OS_CARD.into()),
-        get_tests_workspace_path().join("local_os_integrated_generation_rejected"),
-        Some("local_os_integrated_generation_rejected".to_string()),
+        get_tests_workspace_path().join("local_os_integrated_projected_four_d"),
+        Some("local_os_integrated_projected_four_d".to_string()),
         true,
     )?;
-    cli.cli_settings.global.generation.uv.generate_integrated = true;
-
-    let error = cli
-        .run_command("run generate")
-        .expect_err("the production generate command must reject integrated local OS CTs");
-    let message = format!("{error:#}");
+    cli.run_command("run generate")?;
+    assert_generated_local_integrand(&cli, LOCAL_OS_NAME, LOCAL_OS_NAME, 3)?;
+    assert_selected_local_identifier(
+        &cli,
+        LOCAL_OS_NAME,
+        LOCAL_OS_NAME,
+        ApproximationType::OS,
+        [-6, 6],
+        [6, 21],
+        1,
+    )?;
+    let value = evaluate_momentum_sample(
+        &mut cli,
+        LOCAL_OS_NAME,
+        LOCAL_OS_NAME,
+        &[19.0, -29.0, 37.0],
+        None,
+        f64::EPSILON,
+    )?;
     assert!(
-        message.contains("local on-shell/OS counterterms are local-only in phase 1")
-            && message.contains("generate_integrated=false"),
-        "the generation error lacks the phase-1 OS policy and corrective setting: {message}"
-    );
-
-    let process_id = cli
-        .state
-        .resolve_process_ref(Some(&ProcessRef::Unqualified(LOCAL_OS_NAME.to_string())))?;
-    let resolved = cli
-        .state
-        .process_list
-        .get_integrand(process_id, LOCAL_OS_NAME)?;
-    assert!(
-        resolved.integrand.is_none(),
-        "a rejected production generation must not publish a partial integrand"
+        value.value.re.is_finite() && value.value.im.is_finite(),
+        "the OS local contribution and vacuum scheme correction must evaluate finitely: {:?}",
+        value.value,
     );
 
     clean_test(&cli.cli_settings.state.folder);
@@ -4938,58 +4938,52 @@ const LOCAL_OS_CARD: &str = "local_os_top_self_energy.toml";
 const LOCAL_OS_NAME: &str = "local_os_top_self_energy";
 
 #[test]
-fn massive_top_self_energy_local_os_dispatch_is_deferred() {
+fn massive_top_self_energy_local_os_dispatch_uses_projected_four_d() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    let state_path = get_tests_workspace_path().join(format!(
-        "{LOCAL_OS_NAME}_explicit_false_project_local_4d_false"
-    ));
-    clean_test(&state_path);
-    let panic = catch_unwind(AssertUnwindSafe(|| {
-        let _ = local_ct_cli(LOCAL_OS_CARD, LOCAL_OS_NAME, false, false, false);
-    }))
-    .expect_err("the local OS fixture must reach the intentional deferred-dispatch panic");
-    clean_test(&state_path);
-    let message = panic
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| panic.downcast_ref::<&str>().copied())
-        .unwrap_or("non-string panic payload");
-    assert!(
-        message.contains(
-            "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-        ),
-        "unexpected local OS panic: {message}",
-    );
+    let mut cli = get_test_cli(
+        Some(LOCAL_OS_CARD.into()),
+        get_tests_workspace_path().join("local_os_unintegrated_projected_four_d"),
+        Some("local_os_unintegrated_projected_four_d".to_string()),
+        true,
+    )?;
+    cli.cli_settings.global.generation.uv.generate_integrated = false;
+    cli.run_command("run generate")?;
+    assert_generated_local_integrand(&cli, LOCAL_OS_NAME, LOCAL_OS_NAME, 3)?;
+    assert_selected_local_identifier(
+        &cli,
+        LOCAL_OS_NAME,
+        LOCAL_OS_NAME,
+        ApproximationType::OS,
+        [-6, 6],
+        [6, 21],
+        1,
+    )?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
 
 #[test]
-fn paper_appendix_b1_os_child_reaches_deferred_dispatch() {
+fn paper_appendix_b1_os_child_requires_validated_nested_policy() {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const NAME: &str = "paper_appendix_b1_nested_gluon_self_energy_os";
     let state_path =
         get_tests_workspace_path().join(format!("{NAME}_explicit_false_project_local_4d_false"));
     clean_test(&state_path);
-    let panic = catch_unwind(AssertUnwindSafe(|| {
-        let _ = local_ct_cli(
-            "paper_appendix_b1_nested_gluon_self_energy_os.toml",
-            NAME,
-            false,
-            false,
-            false,
-        );
-    }))
-    .expect_err("the Appendix-B.1 OS fixture must reach the intentional deferred-dispatch panic");
+    let error = local_ct_cli(
+        "paper_appendix_b1_nested_gluon_self_energy_os.toml",
+        NAME,
+        false,
+        false,
+        false,
+    )
+    .err()
+    .expect("the nested OS fixture must fail before unvalidated forest composition");
     clean_test(&state_path);
-    let message = panic
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| panic.downcast_ref::<&str>().copied())
-        .unwrap_or("non-string panic payload");
+    let message = format!("{error:#}");
     assert!(
-        message.contains(
-            "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-        ),
-        "unexpected Appendix-B.1 OS panic: {message}",
+        message.contains("on-shell/OS component")
+            && message.contains("nested or disconnected scheme policy"),
+        "unexpected Appendix-B.1 OS error: {message}",
     );
 }
 

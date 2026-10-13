@@ -1,7 +1,7 @@
 = UV renormalization architecture
 <uv-renormalization-architecture>
 #quote(block: true)[
-#strong[Reviewed:] 2026-10-01 against jj change `xuoqsyop`
+#strong[Reviewed:] 2026-10-13; includes the isolated on-shell self-energy mechanism.
 
 #strong[Lifecycle:] Current implementation architecture. Unsupported
 prescription paths are recorded explicitly under
@@ -209,6 +209,13 @@ node does not copy that policy; it stores computed values:
 
 This separation lets the same integrated result be consumed differently
 without storing scheme-specific copies.
+
+An OS component supplies a distinct analytic input: its signed vacuum remainder
+$-[U_1 Sigma-U_1 O Sigma]$. The complete signed local counterterm also retains
+$-O Sigma$, which supplies the physical mass correction. The finite analytic
+addback must not integrate and cancel that physical on-shell contribution.
+The operator, loop-measure derivation, and independent references are maintained
+in #link("on-shell-counterterms.typ")[On-shell massive-fermion counterterms].
 
 Four-dimensional recursive state stores completed signed counterterm sectors
 with their active component frames and frozen integrated frames. A containing
@@ -476,10 +483,16 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   soft branch. It also rejects IR and PolePart components in one nested or
   disconnected UV wood until their combined integrated policy is implemented.
   Components that cannot occur together in a wood do not trigger this rejection.
-- Local `OS` dispatch remains deferred, and requesting integrated OS is rejected
-  before forest computation. `Unsubtracted` is expected to be filtered out
-  before these operations. These checks are skipped when UV subtraction itself
-  is disabled.
+- An isolated degree-one quark self-energy supports local `OS` in four
+  dimensions, its vacuum-only integrated scheme correction, and exact CFF
+  projection. Numerical generation requires
+  `local_uv_cts_from_expanded_4d_integrands = true` and
+  `explicit_orientation_sum_only = true`. Direct three-dimensional, nested,
+  and disconnected OS assignments remain guarded until their component-local
+  composition is validated. The massless specialization agrees with H1.
+  `Unsubtracted` is
+  expected to be filtered out before these operations. These checks are skipped
+  when UV subtraction itself is disabled.
 - Parametric integrand generation currently supports final 3D output
   only. `FourD` is used by integrated renormalization internally but is
   rejected by the parametric orchestrator.
