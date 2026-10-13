@@ -13,8 +13,9 @@ use crate::{
     },
 };
 use idenso::{
+    color::ColorSimplifySettings,
     shorthands::UndoShorthands,
-    tensor::{SymbolicNetExt, SymbolicNetParse},
+    tensor::{AlgebraSettings, SymbolicNetExt, SymbolicNetParse},
 };
 use linnet::half_edge::involution::Hedge;
 use spenso::{
@@ -70,7 +71,7 @@ pub(crate) fn fixture(massless: bool) -> Result<(Graph, OwnedForestNode, OwnedFo
     Ok((graph, current, root))
 }
 
-fn scalar_component(atom: &Atom) -> Result<Atom> {
+pub(super) fn scalar_component(atom: &Atom) -> Result<Atom> {
     // Production intentionally keeps scalar inner products opaque. The
     // independent finite-component oracle must materialize them explicitly,
     // reserving fresh indices on this whole factorized diagnostic copy.
@@ -157,7 +158,7 @@ fn rational_coefficients(
     Ok(coefficients)
 }
 
-fn assert_rational_zero(
+pub(super) fn assert_rational_zero(
     label: &str,
     graph: &Graph,
     current: &OwnedForestNode,
@@ -168,7 +169,19 @@ fn assert_rational_zero(
         .into_iter()
         .enumerate()
     {
-        let certificate = numerators.canonicalize(&numerator.undo_dots::<Aind>()?)?;
+        // Close Dirac chains symbolically before finite component execution.
+        // The shared spin-algebra owner protects scalar products and leaves
+        // graph numerator products factorized, avoiding large matrix-entry
+        // circuits for a closed quark trace. It performs no Taylor operation.
+        let source = NumeratorInterface::admit(numerator.clone(), None)?.try_into_indexed()?;
+        let reduced = crate::uv::approx::integrated::simplify(&source)?.simplify_algebra(
+            &AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                ..Default::default()
+            },
+        )?;
+        let reduced = NumeratorInterface::export(&reduced).0;
+        let certificate = numerators.canonicalize(&reduced.undo_dots::<Aind>()?)?;
         let is_zero = certificate.is_zero;
         if !is_zero {
             debug_tags!(#uv, #local, #four_d, #trace;
@@ -176,8 +189,9 @@ fn assert_rational_zero(
                 label = label,
                 denominator_class = class,
                 file.denominators = ?denominators,
-                file.numerator = %numerator,
-                file.contracted_tensor = %certificate.key,
+                file.numerator = %numerator.to_plain_string(),
+                file.contracted_tensor = %certificate.key.to_plain_string(),
+                file.rational_expression = %atom.to_plain_string(),
                 "Nonzero factorized OS oracle tensor coefficient"
             );
         }
@@ -290,6 +304,62 @@ fn on_shell_zero_operand_needs_no_inferred_spinor_port() -> Result<()> {
                 )
                 .is_err()
         );
+    }
+    Ok(())
+}
+
+#[test]
+fn exact_os_coefficients_use_fundamental_color_dimension_identities() -> Result<()> {
+    test_initialise()?;
+    let spectator = parse_lit!((color_a + color_b) * (color_c - color_d) ^ 11);
+    for dimension in [3, 5] {
+        let casimir = idenso::color_cas!(2, idenso::cof!(dimension as usize));
+        let index = idenso::color_idx!(2, idenso::cof!(dimension as usize));
+        let dimension_ratio = Atom::num(dimension * dimension - 1) / Atom::num(dimension);
+        let settings = AlgebraSettings {
+            color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+            ..Default::default()
+        };
+        let difference = casimir.pow(2) - &dimension_ratio * &casimir * index;
+        assert!(
+            SymbolicTensor::infer(&spectator * difference)?
+                .simplify_algebra(&settings)?
+                .expression()
+                .is_zero(),
+        );
+        assert_eq!(
+            SymbolicTensor::infer(&spectator * casimir)?
+                .simplify_algebra(&settings)?
+                .expression(),
+            &(&spectator * dimension_ratio / Atom::num(2)),
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn symbolic_spin_reduction_preserves_os_phase_order_and_scalar_factors() -> Result<()> {
+    test_initialise()?;
+    let (graph, current, root) = fixture(false)?;
+    let (_, _, numerator) = one_loop_reference(&graph, &current, &root)?;
+    let spectator = parse_lit!((spin_a + spin_b) * (spin_c + spin_d) ^ 11);
+    let mut tensors = NumeratorJetCache::default();
+    for original in [numerator.clone(), gamma_zero_at_port(&graph, &numerator, 1)] {
+        let source = NumeratorInterface::admit(original.clone(), None)?.try_into_indexed()?;
+        let reduced = crate::uv::approx::integrated::simplify(&source)?;
+        let reduced_source = NumeratorInterface::export(&reduced).0;
+        // This comparison deliberately uses the original finite component
+        // engine directly, without the symbolic reduction under test.
+        assert!(
+            tensors
+                .canonicalize(&(&original - &reduced_source).undo_dots::<Aind>()?)?
+                .is_zero,
+            "symbolic spin reduction must preserve the exact QCD phase and ordered gamma0 insertion",
+        );
+        let factored_source =
+            NumeratorInterface::admit(&spectator * &original, None)?.try_into_indexed()?;
+        let factored = crate::uv::approx::integrated::simplify(&factored_source)?;
+        assert_eq!(factored.expression(), &(&spectator * reduced.expression()));
     }
     Ok(())
 }
@@ -713,6 +783,70 @@ fn production_os_dirac_cff_matches_independent_energy_residues() -> Result<()> {
         assert!(
             is_zero,
             "physical Dirac CFF differs from the independent residues at spatial momentum {spatial:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn on_shell_taylor_preserves_fixed_point_denominator_contractions() -> Result<()> {
+    test_initialise()?;
+    let (graph, current, root) = fixture(false)?;
+    let settings = UVgenerationSettings {
+        generate_integrated: false,
+        ..Default::default()
+    };
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
+    let source = graph
+        .numerator(current.subgraph(), &graph.empty_subgraph())?
+        .state
+        .expr;
+    let vector_slot = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+    let edge = current.lmb().loop_edges[LoopIndex(0)];
+    let momentum = function!(GS.emr_mom, usize::from(edge), &vector_slot);
+    let time = GS.energy_delta(&vector_slot);
+    let compact_time_component = function!(GS.delta_vec, GS.cind(0), &momentum);
+    let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
+    let prescription = Atom::var(symbol!("os_taylor_prescription"; Scalar));
+    let opaque_power = function!(symbol!("os_taylor_spectator"; Scalar), 7).pow(3);
+    let opaque_inverse = (Atom::var(symbol!("os_taylor_x"; Scalar)) + Atom::one()).pow(-2);
+    let opaque = &opaque_power * &opaque_inverse;
+    for sign in [-1, 1] {
+        let polynomial = |time_component: Atom| {
+            dot(&momentum, &momentum)
+                + Atom::num(2 * sign) * &mass * time_component
+                + mass.pow(2)
+                + &prescription
+        };
+        let operand = |time_component| {
+            // One denominator keeps the prescription inside the retained UV
+            // order, so the check below is sensitive to dropping it.
+            source.with_checked_expression(
+                source.expression() * &opaque
+                    / GS.den(
+                        usize::from(edge),
+                        function!(GS.emr_mom, usize::from(edge)),
+                        mass.pow(2),
+                        polynomial(time_component),
+                    ),
+            )
+        };
+        let compact = operand(compact_time_component.clone())?;
+        let explicit = operand(dot(&momentum, &time))?;
+        let actual = t_raw(&compact, &ctx, &current, &root, current.lmb())?;
+        let expected = t_raw(&explicit, &ctx, &current, &root, current.lmb())?;
+        assert_eq!(actual.expression(), expected.expression());
+        assert_eq!(
+            actual.structure().logical_slots(),
+            source.structure().logical_slots()
+        );
+        assert!(!actual.is_zero());
+        assert!(actual.expression().contains(&opaque_power));
+        assert!(actual.expression().contains(&opaque_inverse));
+        assert!(
+            actual
+                .expression()
+                .contains_symbol(prescription.get_symbol().unwrap())
         );
     }
     Ok(())

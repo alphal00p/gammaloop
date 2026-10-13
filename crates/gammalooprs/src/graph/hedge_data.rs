@@ -1,4 +1,3 @@
-#[cfg(test)]
 use itertools::Itertools;
 use linnet::{
     half_edge::involution::{Flow, Hedge},
@@ -162,7 +161,6 @@ pub struct HedgeData {
 }
 
 impl HedgeData {
-    #[cfg(test)]
     pub(crate) fn edge_color_slots(&self) -> impl Iterator<Item = LibrarySlot<Aind>> + '_ {
         self.num_indices
             .color_indices
@@ -170,7 +168,6 @@ impl HedgeData {
             .external_structure_iter()
     }
 
-    #[cfg(test)]
     pub(crate) fn color_kronekers(&self, other: &Self) -> Atom {
         self.edge_color_slots()
             .zip_eq(other.edge_color_slots())
