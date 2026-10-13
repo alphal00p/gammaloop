@@ -285,7 +285,8 @@ impl GammaloopSymbols {
         {
             return arg.into_owned();
         }
-        arg.replace(self.sign_theta(W_.a_))
+        let mut collected = arg
+            .replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
             // A generalized residue-map delta is represented as
             // IF(current_id-key, 0, 1). Move the selected branch body inside
@@ -301,15 +302,83 @@ impl GammaloopSymbols {
             .replace(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero]))
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
             .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
-            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
-            // Tensor contractions are complete here. Combine scalar contributions
-            // selected by the same key while keeping their complete bodies lazy.
-            .replace(
-                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_)])
-                    + Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.c_)]),
-            )
-            .repeat()
-            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_) + W_.c_]))
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]));
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #orientation, #summary;
+            stage = "orientation_scalar_branches_group_start",
+            input_bytes = collected.as_view().get_byte_size(),
+            "Grouping scalar contributions with identical orientation conditions"
+        );
+        crate::debug_tags!(#generation, #compile, #orientation, #dump;
+            stage = "orientation_scalar_branches_group_input",
+            file.atom = %collected.to_canonical_string(),
+            "Factorized input to orientation branch grouping"
+        );
+        let mut passes = 0;
+        let mut merged_branches = 0;
+        loop {
+            let mut merged = 0;
+            collected = collected.replace_map_bottom_up(|view, _, out| {
+                let AtomView::Add(sum) = view else {
+                    return;
+                };
+                let mut groups: HashMap<AtomView<'_>, Vec<AtomView<'_>>> = HashMap::new();
+                let mut other = Vec::new();
+                for term in sum.iter() {
+                    if let AtomView::Fun(branch) = term
+                        && branch.get_symbol() == Symbol::IF
+                        && branch.get_nargs() == 3
+                    {
+                        let mut args = branch.iter();
+                        let condition = args.next().unwrap();
+                        if args.next().unwrap().is_zero() {
+                            groups
+                                .entry(condition)
+                                .or_default()
+                                .push(args.next().unwrap());
+                            continue;
+                        }
+                    }
+                    other.push(term);
+                }
+                let removed = groups
+                    .values()
+                    .map(|bodies| bodies.len() - 1)
+                    .sum::<usize>();
+                if removed == 0 {
+                    return;
+                }
+                merged += removed;
+                // Tensor contractions are complete here. Group only immediate
+                // scalar summands; products, powers, and branch bodies retain
+                // their factorization and their lazy conditional boundary.
+                **out = Atom::add_many(other.into_iter().map(|term| term.to_owned()).chain(
+                    groups.into_iter().map(|(condition, bodies)| {
+                        Symbol::IF.call_args([
+                            condition.to_owned(),
+                            Atom::Zero,
+                            Atom::add_many(bodies),
+                        ])
+                    }),
+                ));
+            });
+            passes += 1;
+            merged_branches += merged;
+            // Joining bodies may expose another additive branch boundary.
+            // Every changed pass removes at least one IF, so this terminates.
+            if merged == 0 {
+                break;
+            }
+        }
+        crate::debug_tags!(#generation, #profile, #compile, #orientation, #summary;
+            stage = "orientation_scalar_branches_group_done",
+            output_bytes = collected.as_view().get_byte_size(),
+            passes,
+            merged_branches,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Grouped scalar contributions without pairwise expression rescans"
+        );
+        collected
     }
 
     pub fn den<'a>(
@@ -1945,6 +2014,116 @@ mod tests {
         let expected =
             Symbol::IF.call_args([condition, Atom::Zero, Atom::add_many(bodies)]) + unrelated;
         let collected = GS.collect_orientation_if(expression);
+        assert_eq!(collected, expected);
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    #[test]
+    fn orientation_collection_preserves_nested_branch_truth_tables() {
+        let (key, inner, a, b, x) = symbol!(
+            "selector_nested_key",
+            "selector_nested_inner",
+            "selector_nested_a",
+            "selector_nested_b",
+            "selector_nested_x"
+        );
+        let branch =
+            |condition: Atom, body: Atom| Symbol::IF.call_args([condition, Atom::Zero, body]);
+        let bodies = [
+            (Atom::var(a) + b).pow(5) / (Atom::var(x) + 1).pow(2),
+            (Atom::var(a) - b).pow(3) / (Atom::var(x) + 2),
+            Atom::var(x).pow(-1),
+        ];
+        let expression = Atom::add_many((0..3).flat_map(|outer_id| {
+            let branch = &branch;
+            bodies.iter().enumerate().map(move |(inner_id, body)| {
+                branch(
+                    Atom::var(key) - outer_id,
+                    branch(Atom::var(inner) - (inner_id % 2), body.clone())
+                        + branch(Atom::var(inner) - (inner_id % 2), Atom::num(outer_id + 1)),
+                )
+            })
+        }));
+        // Independent bounded reference: the previous exact pairwise rule.
+        // Its top-down traversal may leave 2*IF(c,0,b) outside another IF
+        // after normalization, so it does not define a unique grouped AST.
+        let reference = expression
+            .replace(
+                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_)])
+                    + Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.c_)]),
+            )
+            .repeat()
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_) + W_.c_]));
+        let collected = GS.collect_orientation_if(expression.clone());
+        let expected_grouping = Atom::add_many((0..3).map(|outer_id| {
+            branch(
+                Atom::var(key) - outer_id,
+                branch(
+                    Atom::var(inner),
+                    &bodies[0] + &bodies[2] + Atom::num(2 * (outer_id + 1)),
+                ) + branch(Atom::var(inner) - 1, &bodies[1] + Atom::num(outer_id + 1)),
+            )
+        }));
+        assert_eq!(collected, expected_grouping);
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+        // These values exhaust the conditions' truth categories. The physical
+        // bodies remain symbolic and factorized in every exact comparison.
+        for outer_id in 0..4 {
+            for inner_id in 0..4 {
+                let select = |atom: &Atom| {
+                    atom.replace(key)
+                        .with(Atom::num(outer_id))
+                        .replace(inner)
+                        .with(Atom::num(inner_id))
+                };
+                let expected = if outer_id < 3 {
+                    Atom::add_many(
+                        bodies
+                            .iter()
+                            .enumerate()
+                            .filter(|(index, _)| index % 2 == inner_id as usize)
+                            .map(|(_, body)| body + Atom::num(outer_id + 1)),
+                    )
+                } else {
+                    Atom::Zero
+                };
+                assert_eq!(select(&expression), expected);
+                assert_eq!(select(&reference), expected);
+                assert_eq!(select(&collected), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn orientation_collection_groups_many_keys_without_expanding_bodies() {
+        let (key, a, b, x) = symbol!(
+            "selector_many_key",
+            "selector_many_a",
+            "selector_many_b",
+            "selector_many_x"
+        );
+        let mut original = Vec::new();
+        let mut expected = Vec::new();
+        for id in 0..126 {
+            let bodies = (0..16)
+                .map(|row| {
+                    (Atom::var(a) + row).pow(7) * (Atom::var(b) + id).pow(5)
+                        / (Atom::var(x) + row + 1).pow(2)
+                })
+                .collect::<Vec<_>>();
+            original.extend(
+                bodies.iter().map(|body| {
+                    Symbol::IF.call_args([Atom::var(key) - id, Atom::Zero, body.clone()])
+                }),
+            );
+            expected.push(Symbol::IF.call_args([
+                Atom::var(key) - id,
+                Atom::Zero,
+                Atom::add_many(bodies),
+            ]));
+        }
+        let expected = Atom::add_many(expected);
+        let collected = GS.collect_orientation_if(Atom::add_many(original));
         assert_eq!(collected, expected);
         assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
     }
