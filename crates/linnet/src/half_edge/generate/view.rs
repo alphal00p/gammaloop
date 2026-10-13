@@ -9,7 +9,7 @@ use super::{
     decorate::{Decoration, Edge},
     model::Direction,
     topology::Topology,
-    Compiled, DiagramEdge, Filter, Stub,
+    Compiled, Filter, Stub,
 };
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
@@ -429,8 +429,8 @@ impl<F, L> Compiled<F, L> {
         })
     }
 
-    /// The decorated edge, with its field rank and direction at the first vertex.
-    pub(super) fn edge(&self, e: &Edge, l: u8) -> DiagramEdge {
+    /// The field rank and direction of a decorated edge at its first vertex.
+    pub(super) fn edge_stub(&self, e: &Edge, l: u8) -> Stub<u8> {
         let model = &self.model;
         let (field, flow) = if e.u == e.v {
             let label = model.loop_labels[l as usize];
@@ -444,17 +444,14 @@ impl<F, L> Compiled<F, L> {
             };
             (label.field, flow)
         };
-        DiagramEdge {
-            vertices: [e.u, e.v],
-            stub: Stub { field, flow },
-        }
+        Stub { field, flow }
     }
 
     fn stub(&self, e: &Edge, label: u8) -> Stub<&F> {
-        let edge = self.edge(e, label);
+        let stub = self.edge_stub(e, label);
         Stub {
-            field: &self.tables.fields[edge.stub.field as usize],
-            flow: edge.stub.flow,
+            field: &self.tables.fields[stub.field as usize],
+            flow: stub.flow,
         }
     }
 }

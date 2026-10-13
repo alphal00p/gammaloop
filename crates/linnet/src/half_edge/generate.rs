@@ -169,13 +169,17 @@ impl<F> Stub<F> {
     }
 }
 
+mod diagram_topology;
+pub use diagram_topology::DiagramTopology;
+
 /// A generated graph, with compact owned data and independently lazy graph/form caches.
 #[derive(Clone)]
 pub struct Diagram<F, L> {
     rules: Box<[u32]>,
-    edges: Box<[DiagramEdge]>,
-    /// `(vertex, leg class)` in native half-edge insertion order.
-    legs: Box<[(u8, u32)]>,
+    topology: Arc<DiagramTopology>,
+    stubs: Box<[Stub<u8>]>,
+    /// Leg classes in native half-edge insertion order, shared with the shape.
+    leg_classes: Arc<[u32]>,
     tables: Arc<OutputTables<F, L>>,
     graph: OnceLock<HedgeGraph<F, usize, Option<L>>>,
     canonical_form: OnceLock<CanonicalForm<usize, F, Option<L>>>,
@@ -185,19 +189,12 @@ pub struct Diagram<F, L> {
     pub automorphism_count: Option<u128>,
 }
 
-/// Payload ranks for an internal edge; no search buffers or automaton are retained.
-#[derive(Clone)]
-struct DiagramEdge {
-    vertices: [u8; 2],
-    stub: Stub<u8>,
-}
-
 impl<F, L> std::fmt::Debug for Diagram<F, L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Diagram")
             .field("rules", &self.rules)
-            .field("edges", &self.edges.len())
-            .field("legs", &self.legs.len())
+            .field("edges", &self.stubs.len())
+            .field("legs", &self.leg_classes.len())
             .field("loops", &self.loops)
             .field("automorphism_count", &self.automorphism_count)
             .field("graph_cached", &self.graph.get().is_some())
@@ -210,6 +207,11 @@ impl<F, L> std::fmt::Debug for Diagram<F, L> {
 }
 
 impl<F, L> Diagram<F, L> {
+    /// The same immutable incidence owner for sibling particle/rule decorations.
+    pub fn topology(&self) -> &Arc<DiagramTopology> {
+        &self.topology
+    }
+
     /// Signature indices in native vertex order, without materializing the graph.
     pub fn rules(&self) -> &[u32] {
         &self.rules
@@ -217,21 +219,27 @@ impl<F, L> Diagram<F, L> {
 
     /// Internal edges in decorator order; every stub is assigned, at the first endpoint.
     pub fn edges(&self) -> impl ExactSizeIterator<Item = EdgeView<'_, F>> {
-        self.edges.iter().map(|edge| EdgeView {
-            vertices: edge.vertices.map(usize::from),
-            stub: Some(Stub {
-                field: &self.tables.fields[edge.stub.field as usize],
-                flow: edge.stub.flow,
-            }),
+        self.stubs.iter().enumerate().map(|(edge, stub)| {
+            let vertices = self
+                .topology
+                .endpoints(self.leg_classes.len() + edge)
+                .map(|vertex| vertex.expect("paired endpoint"));
+            EdgeView {
+                vertices,
+                stub: Some(Stub {
+                    field: &self.tables.fields[stub.field as usize],
+                    flow: stub.flow,
+                }),
+            }
         })
     }
 
     /// External slots in insertion order: vertex, leg class, then repetition within the class.
     pub fn legs(&self) -> impl ExactSizeIterator<Item = (usize, &L, Stub<&F>)> {
-        self.legs.iter().map(|&(vertex, class)| {
+        self.leg_classes.iter().enumerate().map(|(slot, &class)| {
             let leg = self.tables.legs[class as usize];
             (
-                vertex as usize,
+                self.topology.endpoints(slot)[1].expect("external attachment"),
                 &self.tables.labels[leg.label as usize],
                 Stub {
                     field: &self.tables.fields[leg.field as usize],
@@ -248,7 +256,7 @@ impl<F: Clone, L: Clone> Diagram<F, L> {
         self.graph.get_or_init(|| {
             GraphView::build(
                 self.rules.len(),
-                self.legs.len(),
+                self.leg_classes.len(),
                 self.legs(),
                 self.edges(),
                 |v| self.rules[v] as usize,
@@ -276,15 +284,15 @@ impl<F: Clone + Ord, L: Clone + Ord> Diagram<F, L> {
         );
         raw.fields
             .extend(self.tables.legs.iter().map(|leg| leg.field));
-        raw.fields
-            .extend(self.edges.iter().map(|edge| edge.stub.field));
+        raw.fields.extend(self.stubs.iter().map(|stub| stub.field));
         raw.fields.sort_unstable();
         raw.fields.dedup();
         let field_rank = |field| raw.fields.binary_search(&field).expect("present field") as u32;
         // `None` (paired hedges) sorts before every label.
-        let paired = !self.edges.is_empty();
+        let paired = !self.stubs.is_empty();
         let mut n_edges = 0;
-        for &(vertex, class) in &self.legs {
+        for (slot, &class) in self.leg_classes.iter().enumerate() {
+            let vertex = self.topology.endpoints(slot)[1].expect("external attachment");
             let leg = self.tables.legs[class as usize];
             let role = match leg.flow {
                 None => Role::Leg,
@@ -302,17 +310,21 @@ impl<F: Clone + Ord, L: Clone + Ord> Diagram<F, L> {
             });
             n_edges += 1;
         }
-        for edge in &self.edges {
-            let roles = match edge.stub.flow {
+        for (slot, stub) in self.stubs.iter().enumerate() {
+            let vertices = self
+                .topology
+                .endpoints(self.leg_classes.len() + slot)
+                .map(|vertex| vertex.expect("paired endpoint"));
+            let roles = match stub.flow {
                 None => (Role::Undirected, Role::Undirected),
                 Some(Flow::Source) => (Role::Tail, Role::Head),
                 Some(Flow::Sink) => (Role::Head, Role::Tail),
             };
             let hedge = raw.hedges.len() as u32;
-            let edge_key = field_rank(edge.stub.field);
+            let edge_key = field_rank(stub.field);
             for (node, opposite, role) in [
-                (edge.vertices[0], hedge + 1, roles.0),
-                (edge.vertices[1], hedge, roles.1),
+                (vertices[0], hedge + 1, roles.0),
+                (vertices[1], hedge, roles.1),
             ] {
                 raw.hedges.push(RawHedge {
                     node: node as u32,
@@ -356,7 +368,9 @@ pub struct Progress {
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum GenerationError {
-    #[error("bound the loop order or the number of vertices (vertices of degree two or less always need a vertex bound)")]
+    #[error(
+        "bound the loop order or the number of vertices (vertices of degree two or less always need a vertex bound)"
+    )]
     Unbounded,
     #[error("signatures need between 1 and 15 stubs, found {0}")]
     UnsupportedDegree(usize),
@@ -794,12 +808,13 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
         Ok(request)
     }
 
-    /// Freeze accepted output without retaining the topology, decorator or scratch pool.
+    /// Freeze accepted output without retaining mutable search, decorator or scratch buffers.
     fn diagram(
         &self,
         d: Decoration<'_>,
         loops: usize,
         filter: Option<&Filter<F, L>>,
+        shared: &mut Option<OutputTopology>,
     ) -> Option<Diagram<F, L>> {
         let mut view = GraphView::new(self, loops, State::Decoration(d));
         if let Some(filter) = filter {
@@ -812,15 +827,8 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                  assignment it completes"
             );
         }
-        let diagram = Diagram {
-            rules: d.rules.into(),
-            edges: d
-                .edges
-                .iter()
-                .zip(d.labels)
-                .map(|(edge, &label)| self.edge(edge, label))
-                .collect(),
-            legs: (0..d.topology.n)
+        let shared = shared.get_or_insert_with(|| {
+            let legs = (0..d.topology.n)
                 .flat_map(|vertex| {
                     self.tables
                         .legs
@@ -828,7 +836,7 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                         .enumerate()
                         .flat_map(move |(class, _)| {
                             std::iter::repeat_n(
-                                (vertex as u8, class as u32),
+                                (vertex, class as u32),
                                 self.model
                                     .legs
                                     .count(d.topology.vertices[vertex].labelled, class)
@@ -836,7 +844,31 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                             )
                         })
                 })
+                .collect::<Vec<_>>();
+            let mut topology = DiagramTopology::new(
+                d.topology.n,
+                legs.iter().map(|&(vertex, _)| [None, Some(vertex)]).chain(
+                    d.edges
+                        .iter()
+                        .map(|edge| [Some(edge.u as usize), Some(edge.v as usize)]),
+                ),
+            );
+            topology.single_diagram = self.model.single_diagram();
+            OutputTopology {
+                topology: Arc::new(topology),
+                leg_classes: legs.into_iter().map(|(_, class)| class).collect(),
+            }
+        });
+        let diagram = Diagram {
+            rules: d.rules.into(),
+            topology: Arc::clone(&shared.topology),
+            stubs: d
+                .edges
+                .iter()
+                .zip(d.labels)
+                .map(|(edge, &label)| self.edge_stub(edge, label))
                 .collect(),
+            leg_classes: Arc::clone(&shared.leg_classes),
             tables: Arc::clone(&self.tables),
             graph: view
                 .take_complete_graph()
@@ -856,6 +888,12 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
         }
         Some(diagram)
     }
+}
+
+#[derive(Clone)]
+struct OutputTopology {
+    topology: Arc<DiagramTopology>,
+    leg_classes: Arc<[u32]>,
 }
 
 /// Search and decoration buffers.
@@ -951,6 +989,7 @@ struct Run {
     search: Search,
     decorator: Decorator,
     decorating: bool,
+    output_topology: Option<OutputTopology>,
 }
 
 impl Run {
@@ -959,6 +998,7 @@ impl Run {
             search: Search::new(model, task, scratch.search),
             decorator: scratch.decorator,
             decorating: false,
+            output_topology: None,
         }
     }
 
@@ -985,7 +1025,10 @@ impl Run {
                     self.decorating = false;
                     break;
                 };
-                if let Some(diagram) = cx.compiled.diagram(d, cx.loops, filter) {
+                if let Some(diagram) =
+                    cx.compiled
+                        .diagram(d, cx.loops, filter, &mut self.output_topology)
+                {
                     return Some(diagram);
                 }
             }
@@ -996,6 +1039,7 @@ impl Run {
             if cx.stop.load(Ordering::Relaxed) {
                 return None;
             }
+            self.output_topology = None;
             self.decorator.start(
                 model,
                 self.search.topology(),

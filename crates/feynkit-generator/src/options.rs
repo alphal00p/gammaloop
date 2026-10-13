@@ -303,11 +303,12 @@ impl fmt::Display for GenerationFilter {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GenerationProgress {
-    /// Stable pipeline stage; counts restart at each stage.
+    /// Stable pipeline stage with an independent counter. Enumeration, interaction
+    /// filtering and construction can interleave while diagrams stream.
     pub stage: &'static str,
     /// Work items processed in this stage, not the number retained.
     pub completed: usize,
-    /// Unknown while enumerating topologies or merging diagram groups;
+    /// Unknown while work streams from enumeration or while merging diagram groups;
     /// numerator preparation, sampling, and comparison count input diagrams.
     pub total: Option<usize>,
     /// Cumulative zero numerators removed so far in this generation run.

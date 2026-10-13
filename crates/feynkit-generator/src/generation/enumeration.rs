@@ -430,7 +430,7 @@ impl ProcessExternals {
                 directed: stub.flow.is_some(),
             })
         }));
-        GeneratedGraph::new(
+        GeneratedGraph::with_topology(
             diagram
                 .rules()
                 .iter()
@@ -438,6 +438,7 @@ impl ProcessExternals {
             edges
                 .into_iter()
                 .map(|edge| edge.expect("every compact edge is placed")),
+            Arc::clone(diagram.topology()),
         )
     }
 

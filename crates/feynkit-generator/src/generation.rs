@@ -12,6 +12,7 @@ mod projector_equivalence;
 mod search_census;
 mod signed_routing;
 mod special_topologies;
+mod topology_reuse;
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -70,6 +71,7 @@ use graph::{Endpoint, GeneratedEdge, GeneratedGraph, PlainNodes, PlainVertex};
 use interaction_stars::{InteractionStar, InteractionStars};
 use signed_routing::DiagramWeight;
 pub use signed_routing::{RoutedEdge, RoutedGenerationResult, RoutedVertex, SignedRoutedDiagram};
+use topology_reuse::{CanonicalNodes, TopologyReuse};
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
@@ -240,7 +242,8 @@ pub struct GenerationReport {
     /// coupling-order or fermion-loop range, are not enumerated and add none.
     pub topology_count: usize,
     /// Enumerated diagrams: topologies with fields and vertex rules, before the cut and
-    /// charge-conjugation filters that need their canonical frame.
+    /// charge-conjugation filters that need their canonical frame. On cancellation, this
+    /// counts the emitted prefix: construction can stop the search before it finishes.
     pub interaction_assignment_count: usize,
     /// Number of diagrams retained after selection and any requested numerator filtering.
     pub retained_count: usize,
@@ -2112,6 +2115,44 @@ impl Generator {
         Ok(RoutedGenerationResult { diagrams, report })
     }
 
+    /// Process encounter order without retaining the entire search result. Batches
+    /// leave the requested Rayon pool available to both Linnet's ordered search window and
+    /// diagram construction; indexed draining preserves the order within each batch.
+    fn collect_ordered<I, T>(
+        items: I,
+        transform: impl Fn(I::Item) -> Result<Option<T>, GenerationError> + Sync,
+    ) -> Result<Vec<T>, GenerationError>
+    where
+        I: Iterator,
+        I::Item: Send,
+        T: Send,
+    {
+        #[cfg(target_arch = "wasm32")]
+        return items.map(transform).filter_map(Result::transpose).collect();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let threads = rayon::current_num_threads();
+            if threads == 1 {
+                return items.map(transform).filter_map(Result::transpose).collect();
+            }
+            let batch_size = threads.saturating_mul(8);
+            let mut items = items;
+            let mut batch = Vec::with_capacity(batch_size);
+            let mut collected = Vec::new();
+            loop {
+                batch.extend(items.by_ref().take(batch_size));
+                if batch.is_empty() {
+                    return Ok(collected);
+                }
+                let mapped = batch
+                    .par_drain(..)
+                    .map(&transform)
+                    .collect::<Result<Vec<_>, _>>()?;
+                collected.extend(mapped.into_iter().flatten());
+            }
+        }
+    }
+
     fn prepare_diagrams(
         &self,
         process: &Process,
@@ -2146,11 +2187,6 @@ impl Generator {
             });
         #[cfg(not(target_arch = "wasm32"))]
         let generator = generator.parallel(true);
-        let enumerate = || {
-            generator
-                .iter()
-                .map(|diagrams| diagrams.collect::<Vec<_>>())
-        };
         #[cfg(not(target_arch = "wasm32"))]
         let pool = {
             let mut pool = ThreadPoolBuilder::new();
@@ -2161,43 +2197,49 @@ impl Generator {
             }
             pool.build()?
         };
-        let mut generated = if externals.vetoed(&self.model, options) {
-            Vec::new()
-        } else {
-            #[cfg(target_arch = "wasm32")]
-            let generated = enumerate()?;
-            #[cfg(not(target_arch = "wasm32"))]
-            let generated = pool.install(enumerate)?;
-            generated
-        };
-        let mut completed = !options.cancellation_requested();
-        // Numerator grouping keeps the first representative, so preserve its canonical
-        // encounter order. Ungrouped output retains Linnet's deterministic search order
-        // without demanding canonical forms merely for naming.
-        if !matches!(options.numerator_grouping, NumeratorGrouping::None) {
-            generated.sort_by(|a, b| a.canonical_form().cmp(b.canonical_form()));
-        }
-        let topology_count = topologies.load(Ordering::Relaxed);
-        let interaction_assignment_count = generated.len();
-
-        let prepared_count = Mutex::new(0);
-        options.report_progress("interaction_filters", 0, Some(interaction_assignment_count));
-        let prepare = || {
-            #[cfg(target_arch = "wasm32")]
-            let diagrams = generated.iter();
-            #[cfg(not(target_arch = "wasm32"))]
-            let diagrams = generated.par_iter();
-            diagrams
-                .map(|diagram| {
+        let process_diagrams = || {
+            let mut generated = generator.iter()?;
+            // Numerator grouping keeps the first representative, so preserve its canonical
+            // encounter order. Ungrouped output retains Linnet's deterministic search order
+            // without demanding canonical forms merely for naming.
+            let mut sorted = if matches!(options.numerator_grouping, NumeratorGrouping::None) {
+                None
+            } else {
+                let mut diagrams = generated.by_ref().collect::<Vec<_>>();
+                diagrams.sort_by(|a, b| a.canonical_form().cmp(b.canonical_form()));
+                Some(diagrams.into_iter())
+            };
+            let assignment_total = sorted.as_ref().map(ExactSizeIterator::len);
+            options.report_progress("interaction_filters", 0, assignment_total);
+            let mut interaction_assignment_count = assignment_total.unwrap_or(0);
+            let diagrams = std::iter::from_fn(|| {
+                // Linnet can already hold the next diagram in its ordered search window.
+                // Stop before asking for it when construction cancels the consumer.
+                if options.cancellation_requested() {
+                    return None;
+                }
+                match &mut sorted {
+                    Some(sorted) => sorted.next(),
+                    None => generated.next(),
+                }
+            })
+            .inspect(|_| {
+                if assignment_total.is_none() {
+                    interaction_assignment_count += 1;
+                }
+            });
+            let prepared_count = Mutex::new(0);
+            let prepare =
+                |diagram: linnet::half_edge::generate::Diagram<ParticleId, ExternalLabel>| {
                     if options.cancellation_requested() {
                         return Ok(None);
                     }
                     // Diagrams related by permuting sewn pairs are kept once, weighted by
                     // their number.
-                    let input = match externals.sewn_pair_orbit(diagram) {
+                    let input = match externals.sewn_pair_orbit(&diagram) {
                         None => None,
                         Some(multiplicity) => {
-                            let graph = externals.graph(diagram, &signatures);
+                            let graph = externals.graph(&diagram, &signatures);
                             let symmetry = diagram
                                 .automorphism_count
                                 .and_then(|count| u64::try_from(count).ok())
@@ -2207,56 +2249,54 @@ impl Generator {
                     };
                     let mut count = prepared_count.lock().unwrap();
                     *count += 1;
-                    options.report_progress(
-                        "interaction_filters",
-                        *count,
-                        Some(interaction_assignment_count),
-                    );
+                    options.report_progress("interaction_filters", *count, assignment_total);
                     Ok(input)
-                })
-                .collect::<Result<Vec<_>, GenerationError>>()
+                };
+            let constructed = Mutex::new(0);
+            let construct = |input: DiagramInput, total| {
+                if options.cancellation_requested() {
+                    return Ok(None);
+                }
+                let weight = DiagramWeight::new(input.signs, input.multiplicity);
+                let pair = self.diagram_pair(None, generation_type, input, options, target)?;
+                let mut count = constructed.lock().unwrap();
+                *count += 1;
+                options.report_progress(target.stage(), *count, total);
+                Ok(Some(ConstructedDiagram { pair, weight }))
+            };
+            let diagrams = if resolved.identifies_mirror_images() {
+                // Mirror orbits change the multiplicity, so their prepared inputs must
+                // meet before any diagram receives its physical factor.
+                let inputs = Self::collect_ordered(diagrams, prepare)?;
+                let inputs = DiagramInput::merge_identical(inputs);
+                let total = Some(inputs.len());
+                options.report_progress(target.stage(), 0, total);
+                Self::collect_ordered(inputs.into_iter(), |input| construct(input, total))?
+            } else {
+                options.report_progress(target.stage(), 0, None);
+                Self::collect_ordered(diagrams, |diagram| {
+                    let Some(input) = prepare(diagram)? else {
+                        return Ok(None);
+                    };
+                    construct(input, None)
+                })?
+            };
+            Ok::<_, GenerationError>((diagrams, interaction_assignment_count))
         };
-        #[cfg(target_arch = "wasm32")]
-        let diagram_inputs = prepare()?;
-        #[cfg(not(target_arch = "wasm32"))]
-        let diagram_inputs = pool.install(prepare)?;
-        let mut diagram_inputs = diagram_inputs.into_iter().flatten().collect::<Vec<_>>();
-        if resolved.identifies_mirror_images() {
-            diagram_inputs = DiagramInput::merge_identical(diagram_inputs);
-        }
-        if options.cancellation_requested() {
-            completed = false;
-        }
-        let total = diagram_inputs.len();
-        options.report_progress(target.stage(), 0, Some(total));
-        let constructed = Mutex::new(0);
-        let construct = || {
-            #[cfg(target_arch = "wasm32")]
-            let inputs = diagram_inputs.into_iter();
-            #[cfg(not(target_arch = "wasm32"))]
-            let inputs = diagram_inputs.into_par_iter();
-            inputs
-                .map(|input| {
-                    if options.cancellation_requested() {
-                        return Ok::<_, GenerationError>(None);
-                    }
-                    let weight = DiagramWeight::new(input.signs, input.multiplicity);
-                    let pair = self.diagram_pair(None, generation_type, input, options, target)?;
-                    let mut count = constructed.lock().unwrap();
-                    *count += 1;
-                    options.report_progress(target.stage(), *count, Some(total));
-                    Ok(Some(ConstructedDiagram { pair, weight }))
-                })
-                .collect::<Result<Vec<_>, _>>()
-        };
-        #[cfg(target_arch = "wasm32")]
-        let diagram_pairs = construct()?;
-        #[cfg(not(target_arch = "wasm32"))]
-        let diagram_pairs = pool.install(construct)?;
-        let mut diagram_pairs = diagram_pairs.into_iter().flatten().collect::<Vec<_>>();
-        if options.cancellation_requested() {
-            completed = false;
-        }
+        let (mut diagram_pairs, interaction_assignment_count) =
+            if externals.vetoed(&self.model, options) {
+                options.report_progress("interaction_filters", 0, Some(0));
+                options.report_progress(target.stage(), 0, Some(0));
+                (Vec::new(), 0)
+            } else {
+                #[cfg(target_arch = "wasm32")]
+                let diagrams = process_diagrams()?;
+                #[cfg(not(target_arch = "wasm32"))]
+                let diagrams = pool.install(process_diagrams)?;
+                diagrams
+            };
+        let topology_count = topologies.load(Ordering::Relaxed);
+        let completed = !options.cancellation_requested();
         options.report_progress("selection", 0, None);
         if !options.forced_cuts.is_empty() {
             let mut matched = vec![false; options.forced_cuts.len()];
@@ -3245,6 +3285,8 @@ impl DiagramInput {
     /// Left/right symmetrization canonicalizes a sewn graph and its mirror image to the same
     /// representative. Kept apart, they would be two diagrams with one [`DiagramId`].
     fn merge_identical(inputs: Vec<Self>) -> Vec<Self> {
+        // Equality and hashing use immutable graph data, ignoring the lazy incidence cache.
+        #[allow(clippy::mutable_key_type)]
         let mut firsts = HashMap::with_capacity(inputs.len());
         let first = inputs
             .iter()
@@ -3774,6 +3816,7 @@ impl NumeratorColors {
 
 struct ResolvedProcess {
     numerator_colors: NumeratorColors,
+    topology_reuse: TopologyReuse,
     generation_type: GenerationType,
     incoming: Vec<Particle>,
     outgoing: Vec<Vec<Particle>>,
@@ -3795,6 +3838,7 @@ impl ResolvedProcess {
         };
         Ok(Self {
             numerator_colors: NumeratorColors::new(model)?,
+            topology_reuse: TopologyReuse::default(),
             generation_type,
             incoming: process
                 .incoming()
@@ -4035,42 +4079,63 @@ impl ResolvedProcess {
             if swapped && !include_left_right_remapping {
                 continue;
             }
-            let compact = edges
-                .iter()
-                .map(|&(edge, key, labels)| match (edge.source, edge.sink) {
-                    (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => KeyedEdge::Paired {
-                        source: (NodeIndex(source), None),
-                        sink: (NodeIndex(sink), None),
-                        key,
-                        orientation: Orientation::Undirected,
-                    },
-                    (Endpoint::External(_), Endpoint::Vertex(vertex))
-                    | (Endpoint::Vertex(vertex), Endpoint::External(_)) => KeyedEdge::Dangling {
-                        node: NodeIndex(vertex),
-                        hedge_key: labels.map(|labels| labels[usize::from(swapped)]),
-                        key,
-                        orientation: Orientation::Default,
-                        flow: Flow::Sink,
-                    },
-                    (Endpoint::External(_), Endpoint::External(_)) => {
-                        unreachable!("generated edges touch an interaction vertex")
-                    }
-                });
-            let (form, nodes) = CanonicalForm::label_edges(
-                std::iter::repeat_n(linnet::half_edge::NoData {}, graph.n_vertices()),
-                compact,
-            )
-            .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
-            let positions = nodes
-                .into_iter()
-                .map(|(_, node)| node.0)
-                .collect::<Vec<_>>();
-            candidates.push((form, swapped, positions));
+            let flags = [
+                exact_internal_particles,
+                include_left_right_remapping,
+                use_left_right_external_colors,
+                swapped,
+            ];
+            let nodes = match self.topology_reuse.get(graph, &edges, flags) {
+                Some(nodes) => nodes,
+                None => {
+                    let compact =
+                        edges
+                            .iter()
+                            .map(|&(edge, key, labels)| match (edge.source, edge.sink) {
+                                (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => {
+                                    KeyedEdge::Paired {
+                                        source: (NodeIndex(source), None),
+                                        sink: (NodeIndex(sink), None),
+                                        key,
+                                        orientation: Orientation::Undirected,
+                                    }
+                                }
+                                (Endpoint::External(_), Endpoint::Vertex(vertex))
+                                | (Endpoint::Vertex(vertex), Endpoint::External(_)) => {
+                                    KeyedEdge::Dangling {
+                                        node: NodeIndex(vertex),
+                                        hedge_key: labels
+                                            .map(|labels| labels[usize::from(swapped)]),
+                                        key,
+                                        orientation: Orientation::Default,
+                                        flow: Flow::Sink,
+                                    }
+                                }
+                                (Endpoint::External(_), Endpoint::External(_)) => {
+                                    unreachable!("generated edges touch an interaction vertex")
+                                }
+                            });
+                    let (form, nodes) = CanonicalForm::label_edges(
+                        std::iter::repeat_n(linnet::half_edge::NoData {}, graph.n_vertices()),
+                        compact,
+                    )
+                    .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+                    let positions = nodes
+                        .into_iter()
+                        .map(|(_, node)| node.0)
+                        .collect::<Vec<_>>();
+                    let nodes = Arc::new(CanonicalNodes { form, positions });
+                    self.topology_reuse.insert(graph, &edges, flags, &nodes);
+                    nodes
+                }
+            };
+            candidates.push((nodes, swapped));
         }
-        let (_, left_right_swapped, positions) = candidates
+        let (nodes, left_right_swapped) = candidates
             .into_iter()
-            .min_by(|left, right| (&left.0, left.1).cmp(&(&right.0, right.1)))
+            .min_by(|left, right| (&left.0.form, left.1).cmp(&(&right.0.form, right.1)))
             .ok_or_else(|| GenerationError::GraphConstruction("no canonical graph".to_owned()))?;
+        let positions = &nodes.positions;
 
         // The selected global exchange is an involution. Applying it to the legs keeps each
         // physical external label attached to its original process state while adopting the
@@ -4123,7 +4188,7 @@ impl ResolvedProcess {
         // edge/LMB order even when their legacy canonical representatives differ.
         edges.sort_by_key(|(edge, pdg_code, _, _)| (edge.source, edge.sink, *pdg_code));
         Ok(graph.reframed(
-            &positions,
+            positions,
             edges
                 .into_iter()
                 .map(|(edge, _, edge_id, flipped)| (edge_id, flipped, edge.particle)),
@@ -6063,6 +6128,109 @@ mod tests {
                 assert_eq!(serial.ratio, parallel.ratio);
                 assert_eq!(serial.overall_factor, parallel.overall_factor);
             }
+        }
+    }
+
+    #[test]
+    fn completed_streaming_report_matches_native_enumeration() {
+        let generator = Generator::new(scalar_model());
+        let process = Process::new(["phi"], ["phi"]);
+        let options = GenerationOptions::default()
+            .with_loop_count(4, 4)
+            .unwrap()
+            .max_vertices(8)
+            .allow_self_loops(false)
+            .threads(1)
+            .output(GenerationOutput::Minimal);
+        let topologies = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&topologies);
+        let search = generator
+            .search(&process, &options, GenerationType::Amplitude, |_, _| {})
+            .unwrap();
+        let native = search.generator.progress(move |progress| {
+            observed.store(progress.topologies, Ordering::Relaxed);
+            true
+        });
+        let assignments = native.iter().unwrap().count();
+        let mut outputs = Vec::new();
+        for threads in [1, 4] {
+            let progress = Arc::new(Mutex::new(Vec::new()));
+            let captured = Arc::clone(&progress);
+            let full = generator
+                .generate(
+                    &process,
+                    &options.clone().threads(threads).progress(move |update| {
+                        if update.stage == "numerators" {
+                            captured
+                                .lock()
+                                .unwrap()
+                                .push((update.completed, update.total));
+                        }
+                        crate::GenerationControl::Continue
+                    }),
+                    GenerationType::Amplitude,
+                )
+                .unwrap();
+            assert!(full.report.completed);
+            // Four workers must consume several bounded batches, rather than validating
+            // only the first batch and never resuming the native search window.
+            assert!(full.diagrams.len() > 32);
+            assert_eq!(full.report.interaction_assignment_count, assignments);
+            assert_eq!(
+                full.report.topology_count,
+                topologies.load(Ordering::Relaxed)
+            );
+            assert_eq!(
+                *progress.lock().unwrap(),
+                (0..=full.diagrams.len())
+                    .map(|count| (count, None))
+                    .collect::<Vec<_>>()
+            );
+            full.validate_groups().unwrap();
+            outputs.push(full);
+        }
+        assert_eq!(outputs[0].report, outputs[1].report);
+        for (serial, parallel) in outputs[0].diagrams.iter().zip(&outputs[1].diagrams) {
+            assert_eq!(serial.to_json().unwrap(), parallel.to_json().unwrap());
+        }
+    }
+
+    #[test]
+    fn serial_numerator_cancellation_stops_the_streamed_search_prefix() {
+        let generator = Generator::new(scalar_model());
+        let process = Process::new(["phi"], ["phi"]);
+        let options = GenerationOptions::default()
+            .with_loop_count(3, 3)
+            .unwrap()
+            .threads(1)
+            .output(GenerationOutput::Minimal);
+        let complete = generator
+            .generate(&process, &options, GenerationType::Amplitude)
+            .unwrap();
+        assert!(complete.diagrams.len() > 2);
+        let prefix = generator
+            .generate(
+                &process,
+                &options.progress(|update| {
+                    if update.stage == "numerators" && update.completed == 2 {
+                        crate::GenerationControl::Cancel
+                    } else {
+                        crate::GenerationControl::Continue
+                    }
+                }),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert!(!prefix.report.completed);
+        assert_eq!(prefix.report.interaction_assignment_count, 2);
+        assert_eq!(prefix.report.retained_count, 2);
+        assert!(
+            prefix.report.interaction_assignment_count
+                < complete.report.interaction_assignment_count
+        );
+        prefix.validate_groups().unwrap();
+        for (actual, expected) in prefix.diagrams.iter().zip(&complete.diagrams) {
+            assert_eq!(actual.to_json().unwrap(), expected.to_json().unwrap());
         }
     }
 

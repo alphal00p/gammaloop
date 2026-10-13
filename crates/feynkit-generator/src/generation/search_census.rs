@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use linnet::half_edge::generate::Stage;
 
 use super::{Generator, cases::Case, enumeration::GenerationView};
-use crate::{GenerationControl, GenerationError};
+use crate::GenerationError;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct SearchCensus {
@@ -194,7 +194,8 @@ impl Tracker {
 impl SearchCensus {
     /// The census of `case` with one thread, from the generator that [`Generator::generate`]
     /// builds for it, searched sequentially; the diagram and topology counts are checked
-    /// against [`Generator::generate`] cancelled after enumeration.
+    /// against its bounded parallel enumeration with one worker. Full generation streams
+    /// construction, so cancellation there no longer provides a complete search census.
     fn of(case: &Case) -> Result<Self, GenerationError> {
         let model = case.model();
         let options = case.options(&model, 1);
@@ -216,21 +217,26 @@ impl SearchCensus {
             .finish();
         assert_eq!(census.diagrams, diagrams);
 
-        let enumeration = case
-            .options(model, 1)
-            .progress(|progress| match progress.stage {
-                "topologies" => GenerationControl::Continue,
-                _ => GenerationControl::Cancel,
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+
+            let prepared = generator.search(&case.process(), &options, case.kind, |_, _| {})?;
+            let topologies = Arc::new(AtomicUsize::new(0));
+            let observed = Arc::clone(&topologies);
+            let parallel = prepared.generator.parallel(true).progress(move |progress| {
+                observed.store(progress.topologies, Ordering::Relaxed);
+                true
             });
-        let report = generator
-            .generate(&case.process(), &enumeration, case.kind)?
-            .report;
-        assert_eq!(
-            (census.topologies, census.diagrams),
-            (report.topology_count, report.interaction_assignment_count),
-            "{}: the sequential search differs from generation",
-            case.name
-        );
+            let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+            let diagrams = pool.install(|| parallel.iter().map(Iterator::count))?;
+            assert_eq!(
+                (census.topologies, census.diagrams),
+                (topologies.load(Ordering::Relaxed), diagrams),
+                "{}: the sequential search differs from bounded parallel enumeration",
+                case.name
+            );
+        }
         Ok(census)
     }
 }

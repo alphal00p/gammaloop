@@ -2274,6 +2274,8 @@ impl PyGenerationProgress {
     /// Pipeline stage: topologies (diagram enumeration),
     /// interaction_filters, numerators, selection, filter_zero_color, grouping_preparation,
     /// grouping_samples, grouping_comparison, grouping, complete or cancelled.
+    /// Enumeration, interaction filtering and construction can interleave; each
+    /// stage keeps its own processed-item counter.
     ///
     /// Examples
     /// --------

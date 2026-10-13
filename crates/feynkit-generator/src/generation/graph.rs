@@ -11,6 +11,7 @@ use linnet::{
     half_edge::{
         HedgeGraph, NodeIndex,
         builder::HedgeGraphBuilder,
+        generate::DiagramTopology,
         involution::{Flow, Orientation},
     },
     permutation::Permutation,
@@ -65,15 +66,8 @@ impl GeneratedEdge {
 /// both incident ends, and each external leg retains its attached interaction vertex.
 #[derive(Debug, Clone)]
 pub(crate) struct GeneratedGraph {
-    topology: Arc<GeneratedTopology>,
+    topology: Arc<DiagramTopology>,
     frame: Arc<GeneratedFrame>,
-}
-
-#[derive(Debug)]
-struct GeneratedTopology {
-    edges: Box<[GeneratedEdge]>,
-    offsets: Box<[usize]>,
-    incident: Box<[(usize, Flow)]>,
 }
 
 #[derive(Debug, Clone)]
@@ -90,12 +84,16 @@ struct FramedEdge {
     /// Relative to the immutable base edge, including for undirected edges and self-loops.
     reversed: bool,
     particle: ParticleId,
+    directed: bool,
     external: Option<ExternalNode>,
 }
 
 /// Equal vertex rules and edges in identifier order.
 impl PartialEq for GeneratedGraph {
     fn eq(&self, other: &Self) -> bool {
+        if Arc::ptr_eq(&self.topology, &other.topology) && Arc::ptr_eq(&self.frame, &other.frame) {
+            return true;
+        }
         self.vertices().eq(other.vertices()) && self.edges().eq(other.edges())
     }
 }
@@ -115,59 +113,71 @@ impl GeneratedGraph {
     ///
     /// # Panics
     /// Panics if an edge has no vertex endpoint or references an unknown vertex.
+    #[cfg(test)]
     pub(crate) fn new(
         vertices: impl IntoIterator<Item = VertexRuleId>,
         edges: impl IntoIterator<Item = GeneratedEdge>,
     ) -> Self {
-        let rules = vertices.into_iter().collect::<Vec<_>>();
-        let edges = edges.into_iter().collect::<Box<[_]>>();
-        let mut offsets = vec![0; rules.len() + 1];
-        for edge in &edges {
-            assert!(
-                matches!(edge.source, Endpoint::Vertex(_))
-                    || matches!(edge.sink, Endpoint::Vertex(_)),
-                "an edge needs an interaction vertex"
-            );
-            for endpoint in [edge.source, edge.sink] {
-                if let Endpoint::Vertex(vertex) = endpoint {
-                    offsets[vertex + 1] += 1;
-                }
-            }
-        }
-        for vertex in 0..rules.len() {
-            offsets[vertex + 1] += offsets[vertex];
-        }
-        let mut incident = vec![(0, Flow::Source); offsets[rules.len()]];
-        let mut next = offsets[..rules.len()].to_vec();
-        for (id, edge) in edges.iter().enumerate() {
-            for (endpoint, flow) in [(edge.source, Flow::Source), (edge.sink, Flow::Sink)] {
-                if let Endpoint::Vertex(vertex) = endpoint {
-                    incident[next[vertex]] = (id, flow);
-                    next[vertex] += 1;
-                }
-            }
-        }
-        let frame = GeneratedFrame {
-            vertices: Permutation::id(rules.len()),
-            edges: Permutation::id(edges.len()),
-            rules,
-            edge_data: edges
-                .iter()
-                .map(|edge| FramedEdge {
-                    reversed: false,
-                    particle: edge.particle,
-                    external: edge.source.external().or_else(|| edge.sink.external()),
-                })
-                .collect(),
+        let vertices = vertices.into_iter().collect::<Vec<_>>();
+        let edges = edges.into_iter().collect::<Vec<_>>();
+        let endpoint = |endpoint| match endpoint {
+            Endpoint::Vertex(vertex) => Some(vertex),
+            Endpoint::External(_) => None,
         };
+        let topology = Arc::new(DiagramTopology::new(
+            vertices.len(),
+            edges
+                .iter()
+                .map(|edge| [endpoint(edge.source), endpoint(edge.sink)]),
+        ));
+        Self::with_topology(vertices, edges, topology)
+    }
+
+    /// Bind fields and rules onto a native shape; incidence survives every decoration.
+    pub(crate) fn with_topology(
+        vertices: impl IntoIterator<Item = VertexRuleId>,
+        edges: impl IntoIterator<Item = GeneratedEdge>,
+        topology: Arc<DiagramTopology>,
+    ) -> Self {
+        let rules = vertices.into_iter().collect::<Vec<_>>();
+        let edge_data = edges
+            .into_iter()
+            .enumerate()
+            .map(|(id, edge)| {
+                let endpoint = |endpoint| match endpoint {
+                    Endpoint::Vertex(vertex) => Some(vertex),
+                    Endpoint::External(_) => None,
+                };
+                let actual = [endpoint(edge.source), endpoint(edge.sink)];
+                let base = topology.endpoints(id);
+                let reversed = actual != base;
+                assert!(
+                    actual == base || actual == [base[1], base[0]],
+                    "decoration changed incidence"
+                );
+                FramedEdge {
+                    reversed,
+                    particle: edge.particle,
+                    directed: edge.directed,
+                    external: edge.source.external().or_else(|| edge.sink.external()),
+                }
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rules.len(), topology.vertex_count());
+        assert_eq!(edge_data.len(), topology.edge_count());
         Self {
-            topology: Arc::new(GeneratedTopology {
-                edges,
-                offsets: offsets.into_boxed_slice(),
-                incident: incident.into_boxed_slice(),
+            frame: Arc::new(GeneratedFrame {
+                vertices: Permutation::id(rules.len()),
+                edges: Permutation::id(edge_data.len()),
+                rules,
+                edge_data,
             }),
-            frame: Arc::new(frame),
+            topology,
         }
+    }
+
+    pub(super) fn topology(&self) -> &Arc<DiagramTopology> {
+        &self.topology
     }
 
     /// Adopt a new frame without rebuilding incidence. `vertices` maps current vertices to
@@ -219,6 +229,7 @@ impl GeneratedGraph {
             edge_data.push(FramedEdge {
                 reversed: old.reversed ^ reversed,
                 particle,
+                directed: old.directed,
                 external: old.external.map(&external),
             });
         }
@@ -253,7 +264,7 @@ impl GeneratedGraph {
     }
 
     pub(crate) fn n_edges(&self) -> usize {
-        self.topology.edges.len()
+        self.topology.edge_count()
     }
 
     /// The vertex rules in current vertex order.
@@ -266,14 +277,14 @@ impl GeneratedGraph {
     }
 
     pub(crate) fn edge(&self, edge: usize) -> GeneratedEdge {
-        let base = self.topology.edges[self.frame.edges.inv()[edge]];
+        let base = self.topology.endpoints(self.frame.edges.inv()[edge]);
         let data = self.frame.edge_data[edge];
         let endpoint = |endpoint| match endpoint {
-            Endpoint::Vertex(vertex) => Endpoint::Vertex(self.frame.vertices.map()[vertex]),
-            Endpoint::External(_) => Endpoint::External(data.external.expect("external leg")),
+            Some(vertex) => Endpoint::Vertex(self.frame.vertices.map()[vertex]),
+            None => Endpoint::External(data.external.expect("external leg")),
         };
-        let mut source = endpoint(base.source);
-        let mut sink = endpoint(base.sink);
+        let mut source = endpoint(base[0]);
+        let mut sink = endpoint(base[1]);
         if data.reversed {
             std::mem::swap(&mut source, &mut sink);
         }
@@ -281,7 +292,7 @@ impl GeneratedGraph {
             source,
             sink,
             particle: data.particle,
-            directed: base.directed,
+            directed: data.directed,
         }
     }
 
@@ -289,8 +300,9 @@ impl GeneratedGraph {
     /// edge IDs, source before sink. Reversing a self-loop must not reverse its UFO slot order.
     pub(crate) fn incident(&self, vertex: usize) -> Vec<(usize, Flow)> {
         let base = self.frame.vertices.inv()[vertex];
-        let mut incident = self.topology.incident
-            [self.topology.offsets[base]..self.topology.offsets[base + 1]]
+        let mut incident = self
+            .topology
+            .incident(base)
             .iter()
             .map(|&(edge, flow)| {
                 let edge = self.frame.edges.map()[edge];
@@ -660,5 +672,70 @@ mod tests {
         assert!(Arc::ptr_eq(&graph.topology, &swapped.topology));
         let empty = GeneratedGraph::new([], []);
         assert_eq!(empty.reframed(&[], [], |leg| leg), empty);
+    }
+
+    #[test]
+    fn sibling_payloads_share_incidence_without_sharing_direction_or_particles() {
+        let shape = Arc::new(DiagramTopology::new(
+            2,
+            [[None, Some(0)], [Some(0), Some(1)], [Some(1), Some(1)]],
+        ));
+        let external = ExternalNode {
+            index: 0,
+            state: ExternalState::Incoming,
+            particle: ParticleId::from_index(0),
+        };
+        let first = GeneratedGraph::with_topology(
+            [VertexRuleId::from_index(0); 2],
+            [
+                GeneratedEdge {
+                    source: Endpoint::External(external),
+                    sink: Endpoint::Vertex(0),
+                    particle: external.particle,
+                    directed: false,
+                },
+                GeneratedEdge {
+                    source: Endpoint::Vertex(0),
+                    sink: Endpoint::Vertex(1),
+                    particle: external.particle,
+                    directed: false,
+                },
+                GeneratedEdge {
+                    source: Endpoint::Vertex(1),
+                    sink: Endpoint::Vertex(1),
+                    particle: external.particle,
+                    directed: false,
+                },
+            ],
+            Arc::clone(&shape),
+        );
+        let mut changed = first.edges().collect::<Vec<_>>();
+        changed[1] = GeneratedEdge {
+            source: Endpoint::Vertex(1),
+            sink: Endpoint::Vertex(0),
+            particle: ParticleId::from_index(1),
+            directed: true,
+        };
+        changed[2].particle = ParticleId::from_index(1);
+        changed[2].directed = true;
+        let second = GeneratedGraph::with_topology(
+            [VertexRuleId::from_index(1); 2],
+            changed.clone(),
+            Arc::clone(&shape),
+        );
+        assert!(Arc::ptr_eq(first.topology(), second.topology()));
+        assert_eq!(second.edges().collect::<Vec<_>>(), changed);
+        assert_eq!(
+            first.incident(1),
+            [(1, Flow::Sink), (2, Flow::Source), (2, Flow::Sink)]
+        );
+        assert_eq!(
+            second.incident(1),
+            [(1, Flow::Source), (2, Flow::Source), (2, Flow::Sink)]
+        );
+        assert_eq!(
+            shape.incident(1).as_ptr(),
+            second.topology().incident(1).as_ptr()
+        );
     }
 }
