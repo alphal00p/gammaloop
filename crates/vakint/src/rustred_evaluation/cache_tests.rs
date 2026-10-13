@@ -9,6 +9,7 @@ use rustred_app::CachePreparationStatus;
 use std::{
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+    time::Instant,
 };
 use symbolica::atom::AtomCore;
 
@@ -32,11 +33,21 @@ fn assert_same(left: symbolica::atom::Atom, right: symbolica::atom::Atom) {
     assert!((left - right).expand().together().is_zero());
 }
 fn fresh_reader(path: &Path) {
+    let started = Instant::now();
     let engine = Vakint::new().unwrap();
+    println!(
+        "CACHE_1L_TIMING engine_new_seconds={:.9} scope=functional_shared_host_not_paired_benchmark",
+        started.elapsed().as_secs_f64()
+    );
     let reference = Vakint::new().unwrap();
     let settings = settings();
     assert!(!engine.cache_statistics(1).unwrap().attached);
+    let started = Instant::now();
     engine.load_cache(1, path, &Default::default()).unwrap();
+    println!(
+        "CACHE_1L_TIMING load_seconds={:.9}",
+        started.elapsed().as_secs_f64()
+    );
     assert_eq!(
         engine
             .cache_statistics(1)
@@ -46,9 +57,14 @@ fn fresh_reader(path: &Path) {
             .chunks_read,
         0
     );
+    let started = Instant::now();
     let cached = engine
         .evaluate_integral(&settings, input(4).as_view())
         .unwrap();
+    println!(
+        "CACHE_1L_TIMING first_disk_public_I4_seconds={:.9}",
+        started.elapsed().as_secs_f64()
+    );
     assert_same(
         cached.clone(),
         reference
@@ -59,16 +75,25 @@ fn fresh_reader(path: &Path) {
     assert_eq!(first.native.backing_hits, 1);
     assert_eq!(first.native.completed_reductions, 0);
     assert_eq!(first.native.work.rule_applications(), 0);
-    assert_same(
-        cached,
-        engine
-            .evaluate_integral(&settings, input(4).as_view())
-            .unwrap(),
+    println!("CACHE_1L_FIRST_HIT {first:?} scope=loaded_engine_only_not_reference_or_whole_child");
+    let started = Instant::now();
+    let warm = engine
+        .evaluate_integral(&settings, input(4).as_view())
+        .unwrap();
+    println!(
+        "CACHE_1L_TIMING ram_warm_public_I4_seconds={:.9}",
+        started.elapsed().as_secs_f64()
     );
+    assert_same(cached, warm);
     assert_eq!(engine.cache_statistics(1).unwrap().native.ram_hits, 1);
+    let started = Instant::now();
     let held_out = engine
         .evaluate_integral(&settings, input(5).as_view())
         .unwrap();
+    println!(
+        "CACHE_1L_TIMING held_out_public_I5_seconds={:.9}",
+        started.elapsed().as_secs_f64()
+    );
     assert_same(
         held_out,
         reference
@@ -78,6 +103,11 @@ fn fresh_reader(path: &Path) {
     let missed = engine.cache_statistics(1).unwrap();
     assert_eq!(missed.native.completed_reductions, 1);
     assert!(missed.native.work.rule_applications() > 0);
+    assert!(
+        missed.native.descendant_ram_hits > 0,
+        "held-out I5 must reuse the prepared I4 root as a native descendant"
+    );
+    println!("CACHE_1L_AFTER_HELD_OUT {missed:?}");
     engine.clear_cache(1).unwrap();
     assert_eq!(
         engine.cache_statistics(1).unwrap().native.cached_integrals,
@@ -136,9 +166,15 @@ fn one_loop_preparation_and_fresh_process_hits_preserve_public_evaluation() {
         ),
         ..Default::default()
     };
+    let started = Instant::now();
     let report = engine
         .prepare_cache(1, &output, &options, &AtomicBool::new(false), |_| Ok(()))
         .unwrap();
+    println!(
+        "CACHE_1L_TIMING prepare_total_seconds={:.9} engine_new_excluded=true",
+        started.elapsed().as_secs_f64()
+    );
+    println!("CACHE_1L_PREPARATION {}", report.to_document());
     assert_eq!(
         report.status,
         CachePreparationStatus::Complete,
@@ -161,4 +197,5 @@ fn one_loop_preparation_and_fresh_process_hits_preserve_public_evaluation() {
         String::from_utf8_lossy(&result.stderr)
     );
     assert!(String::from_utf8_lossy(&result.stdout).contains("1 passed"));
+    print!("{}", String::from_utf8_lossy(&result.stdout));
 }

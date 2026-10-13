@@ -10,9 +10,9 @@ use rustred::{
     },
 };
 use rustred_app::{
-    CachePreparationBackend, CachePreparationOptions, CachePreparationReport,
-    CachePreparationWorkload, ClosedApplicationCache, ClosedCachePreparationBackend,
-    EntryPowerBudget, FiniteEntryDomain, SavedApplicationCachePackLimits,
+    CachePreparationBackend, CachePreparationOptions, CachePreparationPrimerBudget,
+    CachePreparationReport, CachePreparationWorkload, ClosedApplicationCache,
+    ClosedCachePreparationBackend, EntryPowerBudget, SavedApplicationCachePackLimits,
     SavedApplicationCachePackStatistics, prepare_application_cache,
 };
 
@@ -32,10 +32,14 @@ pub struct RustRedCacheRoot {
 
 #[derive(Clone, Debug, Default)]
 pub enum RustRedCacheWorkload {
-    /// Small finite operational primer: A <= arity+2 and R <= 1 over physical
-    /// supports. It is neither a physics envelope nor a coverage declaration.
+    /// Native finite operational primer: two extra positive powers above the
+    /// surviving unit-power lines and rank at most one. Not physics coverage.
     #[default]
     Primer,
+    RelativePrimer {
+        max_extra_dots: u32,
+        max_numerator_rank: u32,
+    },
     Explicit(Vec<RustRedCacheRoot>),
     Finite(EntryPowerBudget),
 }
@@ -102,50 +106,26 @@ impl RustRedCacheWorkload {
             )
             .map_err(operation);
         }
-        let mut domains = Vec::new();
-        for (namespace, binding) in bindings.iter().enumerate() {
-            let arity = binding.physical_arity;
-            let count = u32::try_from(arity)
-                .ok()
-                .and_then(|arity| 1usize.checked_shl(arity))
-                .ok_or_else(|| {
-                    operation(rustred_app::AppError::new(
-                        rustred_app::AppErrorKind::Limit,
-                        "cache primer support count does not fit this platform",
-                    ))
-                })?;
-            if count > max_roots {
-                return Err(operation(rustred_app::AppError::new(
-                    rustred_app::AppErrorKind::Limit,
-                    "cache primer supports exceed workload allowance",
-                )));
-            }
-            let budget = match self {
-                Self::Finite(budget) => *budget,
-                Self::Primer => EntryPowerBudget {
-                    max_positive_power: u32::try_from(arity + 2).map_err(|_| {
-                        operation(rustred_app::AppError::new(
-                            rustred_app::AppErrorKind::Limit,
-                            "cache primer power allowance overflow",
-                        ))
-                    })?,
-                    max_numerator_rank: 1,
-                    min_power_difference: None,
-                    max_power_difference: None,
-                },
-                Self::Explicit(_) => unreachable!(),
-            };
-            for bits in 0..count {
-                let support = (0..arity)
-                    .map(|axis| bits & (1usize << axis) != 0)
-                    .collect();
-                domains.push((
-                    namespace,
-                    FiniteEntryDomain::new(support, budget).map_err(operation)?,
-                ));
-            }
-        }
-        CachePreparationWorkload::finite_entry_domains(bindings, &domains, max_roots)
+        let budget = match self {
+            Self::Primer => CachePreparationPrimerBudget::default(),
+            Self::RelativePrimer {
+                max_extra_dots,
+                max_numerator_rank,
+            } => CachePreparationPrimerBudget::Relative {
+                max_extra_dots: *max_extra_dots,
+                max_numerator_rank: *max_numerator_rank,
+            },
+            Self::Finite(budget) => CachePreparationPrimerBudget::Absolute(*budget),
+            Self::Explicit(_) => unreachable!(),
+        };
+        // The shipped closed K1/K3/K6 parents have only physical denominator
+        // slots. RustRed owns every pinch/composition/count calculation.
+        let parents = bindings
+            .iter()
+            .enumerate()
+            .map(|(namespace, binding)| (namespace, vec![true; binding.physical_arity]))
+            .collect::<Vec<_>>();
+        CachePreparationWorkload::parent_pinches(bindings, &parents, budget, max_roots)
             .map_err(operation)
     }
 }

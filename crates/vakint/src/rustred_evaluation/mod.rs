@@ -7,6 +7,8 @@
 mod artifact;
 pub mod cache;
 #[cfg(test)]
+mod cache_lower_tests;
+#[cfg(test)]
 mod cache_tests;
 mod factor_projection;
 mod factor_provider;
