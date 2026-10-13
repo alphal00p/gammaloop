@@ -333,8 +333,11 @@ registers only that mode's distribution functions. Finite-temperature energy der
 are built incrementally. Zero-temperature registration contains only order zero; positive-order
 factors are removed or localized before ordinary evaluator construction, as described below.
 The builder persists the mode so runtime warmup can validate the current
-temperature, chemical potentials, bosonic mass domain, and the real masses of
-zero-temperature fermion steps after loading or updating a model.
+temperature, chemical potentials, bosonic mass domain, and finite real fermion masses
+where finite-temperature distributions or zero-temperature occupation steps are used,
+including after loading or updating a model. The stable finite-temperature occupation
+formula uses absolute values of real arguments and does not analytically continue
+complex shell energies.
 Vacuum builders register no thermal distribution functions.
 
 `integrands::process::fermi_surface::FermiSurfaceProduct` localizes zero-temperature

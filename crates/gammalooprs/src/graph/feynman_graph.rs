@@ -238,11 +238,10 @@ impl Graph {
                     self.name
                 ));
             }
-            // A zero-temperature fermion step, including any Fermi surface it
-            // localizes, needs a real shell energy.
-            let fermion_step =
-                mode == MediumMode::ZeroTemperatureEquilibrium && chemical_potential.is_some();
-            if edge.data.is_fermion() && !fermion_step {
+            // Finite-temperature occupations and zero-temperature fermion steps,
+            // including any Fermi surface they localize, need a real shell energy.
+            let needs_real_mass = mode.is_finite_temperature() || chemical_potential.is_some();
+            if edge.data.is_fermion() && !needs_real_mass {
                 continue;
             }
             let mass = match edge.data.mass_value::<f64>(model, parameters) {
@@ -259,7 +258,7 @@ impl Graph {
             if edge.data.is_fermion() {
                 if !mass.im.is_zero() || !mass.re.0.is_finite() {
                     return Err(eyre::eyre!(
-                        "Thermal graph '{}' requires a finite real fermion mass at zero temperature on edge {edge_id}; got {mass}",
+                        "Thermal graph '{}' requires a finite real fermion mass for thermal occupations on edge {edge_id}; got {mass}",
                         self.name
                     ));
                 }
@@ -1368,12 +1367,12 @@ mod tests {
     }
 
     #[test]
-    fn zero_temperature_fermion_steps_require_real_masses() -> eyre::Result<()> {
+    fn thermal_fermion_distributions_require_real_masses() -> eyre::Result<()> {
         test_initialise()?;
         let mut model = load_generic_model("sm");
         let mass_parameter = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
         let mut graph: Graph = format!(
-            r#"digraph cold_fermion {{
+            r#"digraph thermal_fermion {{
                 node [num=1]; edge [num=1];
                 A -> A [particle="d" mass="{mass_parameter}"];
             }}"#
@@ -1393,21 +1392,28 @@ mod tests {
             std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
             for (mass, valid) in [
                 (Complex::new_re(F(-2.0)), true),
+                (Complex::new_re(F(0.0)), true),
+                (Complex::new_re(F(2.0)), true),
                 (Complex::new(F(2.0), F(0.5)), false),
+                (Complex::new_re(F(f64::NAN)), false),
+                (Complex::new_re(F(f64::INFINITY)), false),
             ] {
                 model.get_parameter_mut("MT")?.value = Some(mass);
                 for mode in [
+                    MediumMode::Vacuum,
                     MediumMode::ThermodynamicEquilibrium,
                     MediumMode::ZeroTemperatureEquilibrium,
                 ] {
                     graph.set_medium_mode(mode)?;
                     graph.param_builder.update_model_values(&model)?;
                     let result = graph.validate_medium_parameters(&model, 1.0);
-                    // Absent and literal-zero potentials have no occupation step.
-                    // Finite-temperature fermions keep their existing domain.
+                    // Vacuum has no thermal occupations; absent and literal-zero
+                    // potentials have no zero-temperature occupation step.
                     assert_eq!(
                         result.is_ok(),
-                        valid || !has_mu || mode.is_finite_temperature(),
+                        valid
+                            || mode == MediumMode::Vacuum
+                            || (mode == MediumMode::ZeroTemperatureEquilibrium && !has_mu),
                         "{mode:?}, MT={mass}, chemical_potential={chemical_potential:?}"
                     );
                     if let Err(error) = result {

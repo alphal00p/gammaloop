@@ -94,8 +94,9 @@ and Goldstone interactions. Then set the values, for example with `set model muB
 Finite-temperature evaluation requires a finite, positive inverse temperature. Chemical
 potentials must be finite and real. Bosons require a finite, nonnegative real mass and
 `|mu| < m`, with the massless `m = mu = 0` case also supported. Massive saturation
-(`|mu| = m > 0`) and boson condensation are unsupported. Fermions may have `|mu| >= m`; at zero
-temperature, a fermion with a chemical potential needs a finite real mass. These
+(`|mu| = m > 0`) and boson condensation are unsupported. Fermions may have `|mu| >= m`.
+Finite-temperature fermions require a finite real mass; at zero temperature the same check
+applies when a fermion has a chemical potential and therefore an occupation step. These
 checks use the current model values and any DOT mass overrides when the integrand is warmed up,
 including after model updates or state reloads.
 
