@@ -636,6 +636,14 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
     // vanish. Their raised lines previously failed generation (a boson) and
     // the first sample (a degenerate massless onset).
     let (model, _, mut global, settings) = cold_dense_setup()?;
+    let mut literal_zero_model = model.clone();
+    for particle in &mut literal_zero_model.particles {
+        if matches!(particle.name.as_str(), "e-" | "e+") {
+            std::sync::Arc::make_mut(&mut particle.0).chemical_potential =
+                Some(crate::model::ParameterName(crate::model::UFOSymbol::zero()));
+        }
+    }
+    let literal_zero_model = Model::from_serializable_model(literal_zero_model.to_serializable());
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(1)
         .stack_size(256 * 1024 * 1024)
@@ -648,7 +656,13 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
         orientation: None,
         channel_id: None,
     };
-    for (particle, fermi_sectors) in [("G+", false), ("e-", true)] {
+    // Named zero-valued parameters retain sectors for later runtime updates.
+    // Literal ZERO has no occupation step or surface.
+    for (model, particle, fermi_sectors) in [
+        (&model, "G+", false),
+        (&model, "e-", true),
+        (&literal_zero_model, "e-", false),
+    ] {
         let graphs = Graph::from_string(
             format!(
                 r#"digraph zero_mu_cycle {{
@@ -656,22 +670,22 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
                     A -> B [id=0 lmb_id=0]; B -> A [id=1];
                 }}"#
             ),
-            &model,
+            model,
         )?;
         let mut values = Vec::new();
         for vacuum_subtraction in [false, true] {
             global.generation.medium.vacuum_subtraction = vacuum_subtraction;
             let mut amplitude = Amplitude::from_graph_list("zero_mu_cycle", graphs.clone())?;
-            amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+            amplitude.preprocess(model, &global.generation, &(&settings).into(), &pool)?;
             amplitude.build_integrand(
-                &model,
+                model,
                 "zero_mu_cycle",
                 &global,
                 (&settings).into(),
                 &pool,
             )?;
             let runtime = amplitude.integrand.as_mut().unwrap();
-            runtime.warm_up(&model)?;
+            runtime.warm_up(model)?;
             let ProcessIntegrand::Amplitude(generated) = &*runtime else {
                 unreachable!()
             };
@@ -682,7 +696,7 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
             );
             values.push(
                 runtime
-                    .evaluate_momentum_configuration(&model, &input, false)?
+                    .evaluate_momentum_configuration(model, &input, false)?
                     .integrand_result,
             );
         }

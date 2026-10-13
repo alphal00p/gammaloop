@@ -215,10 +215,7 @@ impl Graph {
             if edge.data.is_dummy {
                 continue;
             }
-            let chemical_potential = edge
-                .data
-                .chemical_potential_atom()
-                .filter(|atom| !atom.is_zero());
+            let chemical_potential = edge.data.chemical_potential_atom();
             let mu = match &chemical_potential {
                 Some(atom) => parameters
                     .pairs
@@ -1382,26 +1379,40 @@ mod tests {
             }}"#
         )
         .into_graph(&model)?;
-        for (mass, valid) in [
-            (Complex::new_re(F(-2.0)), true),
-            (Complex::new(F(2.0), F(0.5)), false),
+        let named_mu = graph[EdgeIndex(0)].particle().unwrap().chemical_potential;
+        for (chemical_potential, has_mu) in [
+            (None, false),
+            (Some(crate::model::ParameterName(UFOSymbol::zero())), false),
+            (named_mu, true),
         ] {
-            model.get_parameter_mut("MT")?.value = Some(mass);
-            for mode in [
-                MediumMode::ThermodynamicEquilibrium,
-                MediumMode::ZeroTemperatureEquilibrium,
+            let crate::graph::edge::PossibleParticle::MassOverriddenParticle { particle, .. } =
+                &mut graph.underlying[EdgeIndex(0)].particle
+            else {
+                unreachable!("the fixture has a DOT mass override")
+            };
+            std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
+            for (mass, valid) in [
+                (Complex::new_re(F(-2.0)), true),
+                (Complex::new(F(2.0), F(0.5)), false),
             ] {
-                graph.set_medium_mode(mode)?;
-                graph.param_builder.update_model_values(&model)?;
-                let result = graph.validate_medium_parameters(&model, 1.0);
-                // Finite-temperature fermions keep their existing domain.
-                assert_eq!(
-                    result.is_ok(),
-                    valid || mode.is_finite_temperature(),
-                    "{mode:?}, MT={mass}"
-                );
-                if let Err(error) = result {
-                    assert!(error.to_string().contains("real fermion mass"), "{error}");
+                model.get_parameter_mut("MT")?.value = Some(mass);
+                for mode in [
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    graph.set_medium_mode(mode)?;
+                    graph.param_builder.update_model_values(&model)?;
+                    let result = graph.validate_medium_parameters(&model, 1.0);
+                    // Absent and literal-zero potentials have no occupation step.
+                    // Finite-temperature fermions keep their existing domain.
+                    assert_eq!(
+                        result.is_ok(),
+                        valid || !has_mu || mode.is_finite_temperature(),
+                        "{mode:?}, MT={mass}, chemical_potential={chemical_potential:?}"
+                    );
+                    if let Err(error) = result {
+                        assert!(error.to_string().contains("real fermion mass"), "{error}");
+                    }
                 }
             }
         }
@@ -1574,7 +1585,7 @@ mod tests {
     }
 
     #[test]
-    fn zero_temperature_distinguishes_absent_and_zero_chemical_potential() {
+    fn zero_temperature_treats_literal_zero_chemical_potential_as_absent() {
         test_initialise().unwrap();
         let mut graph: Graph = dot!(digraph thermal {
             node [num=1]; edge [num=1 particle="d"];
@@ -1583,13 +1594,14 @@ mod tests {
         .unwrap();
         let edge = EdgeIndex(0);
         let mut particle = graph[edge].particle().unwrap();
-        for chemical_potential in [
-            None,
-            Some(crate::model::ParameterName(UFOSymbol::zero())),
-            particle.chemical_potential,
+        for (chemical_potential, has_mu) in [
+            (None, false),
+            (Some(crate::model::ParameterName(UFOSymbol::zero())), false),
+            (particle.chemical_potential, true),
         ] {
             std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
             graph.underlying[edge].particle = particle.clone().into();
+            assert_eq!(graph[edge].chemical_potential_atom().is_some(), has_mu);
             for thermal_sign in [-1, 0, 1] {
                 for order in 0..=3 {
                     let vacuum = graph
@@ -1616,11 +1628,13 @@ mod tests {
                         GS.sign(edge),
                         MediumMode::ZeroTemperatureEquilibrium,
                     );
-                    if chemical_potential.is_none() {
+                    if !has_mu {
                         assert_eq!(zero_temperature.unwrap(), vacuum);
                     } else {
                         assert_eq!(zero_temperature.is_ok(), order == 0);
-                        if order > 0 {
+                        if order == 0 {
+                            assert!(zero_temperature.unwrap().contains_symbol(GS.heaviside));
+                        } else {
                             let error = zero_temperature.unwrap_err().to_string();
                             assert!(error.contains(&format!("edge {edge}")));
                             assert!(error.contains(&format!("derivative order {order}")));
@@ -1769,7 +1783,7 @@ mod tests {
                 .find(|&edge| graph[edge].is_fermion() == fermion)
                 .unwrap();
             let chemical_potential = graph[edge].chemical_potential_atom();
-            let has_mu = chemical_potential.as_ref().is_some_and(|mu| !mu.is_zero());
+            let has_mu = chemical_potential.is_some();
             assert_eq!(has_mu, fermion);
             for order in 0..=4 {
                 let mut expression = graph

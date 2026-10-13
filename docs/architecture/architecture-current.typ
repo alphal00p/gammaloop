@@ -386,8 +386,9 @@ all evaluator methods then evaluate the sector's complete one-entry catalogue.
 This avoids selecting and evaluating inactive catalogue entries for every sector.
 Distinct signed chemical-potential supports stay separate, and the
 ordinary bulk retains its existing evaluator path. Only fermions with a chemical
-potential have Fermi surfaces. A missing chemical potential is zero, and warm-up
-restricts bosons to `|mu| < m` or `m = mu = 0`; their zero-temperature occupation
+potential have Fermi surfaces. The shared edge accessor treats a missing chemical potential
+and literal `ZERO` identically; named parameters remain symbolic even at runtime value zero.
+Warm-up restricts bosons to `|mu| < m` or `m = mu = 0`; their zero-temperature occupation
 is then constant on `E > 0`, so extraction removes their positive orders and
 ignores their steps. Expanded keys with a repeated distribution are rejected.
 Residual fermion steps must be independent of the localized loop directions;
