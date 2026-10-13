@@ -1152,6 +1152,14 @@ impl RatatuiDashboardState {
         let y_span = self.chart_y_sigma_span as f64;
         let y_min = current_value.0 - y_span * sigma;
         let y_max = current_value.0 + y_span * sigma;
+        if !(y_max - y_min).is_finite() || y_min >= y_max {
+            frame.render_widget(
+                Paragraph::new("Cannot plot a finite, non-zero range at this scale.")
+                    .block(titled_block("Convergence")),
+                area,
+            );
+            return;
+        }
 
         let mut datasets = vec![
             Dataset::default()
@@ -2654,10 +2662,11 @@ fn value_axis_labels(min: f64, max: f64) -> Vec<Span<'static>> {
 }
 
 fn evenly_spaced_values(min: f64, max: f64, count: usize) -> Vec<f64> {
-    if count <= 1 || !min.is_finite() || !max.is_finite() || (max - min).abs() < f64::EPSILON {
+    if count <= 1 || !min.is_finite() || !max.is_finite() {
         return vec![min];
     }
 
+    // Small dimensionful ranges still need multiple labels: Ratatui divides by count - 1.
     let step = (max - min) / (count.saturating_sub(1) as f64);
     (0..count).map(|index| min + step * index as f64).collect()
 }
@@ -2956,6 +2965,49 @@ mod tests {
             dashboard.selected_discrete_key(),
             Some((ContributionKind::Bin(1), ComponentKind::Real))
         );
+    }
+
+    #[test]
+    fn convergence_chart_renders_small_dimensionful_ranges() {
+        let mut update = status_update();
+        update.main_results.row_groups[0].rows[0].slot_cells[0]
+            .signed
+            .value
+            .as_mut()
+            .expect("signed value")
+            .raw = (F(1.0e-30), F(1.0e-32));
+        let mut dashboard = RatatuiDashboardState::new();
+        dashboard.update(update);
+
+        let rendered = render(&dashboard);
+        assert!(rendered.contains("central value"), "{rendered}");
+        assert!(!rendered.contains("Cannot plot"), "{rendered}");
+    }
+
+    #[test]
+    fn convergence_chart_explains_unrepresentable_ranges() {
+        for (central, error) in [
+            (1.0, f64::MIN_POSITIVE),
+            (f64::MAX, 1.0),
+            (0.0, f64::MAX / 4.0),
+            (0.0, f64::MAX),
+        ] {
+            let mut update = status_update();
+            update.main_results.row_groups[0].rows[0].slot_cells[0]
+                .signed
+                .value
+                .as_mut()
+                .expect("signed value")
+                .raw = (F(central), F(error));
+            let mut dashboard = RatatuiDashboardState::new();
+            dashboard.update(update);
+
+            let rendered = render(&dashboard);
+            assert!(
+                rendered.contains("Cannot plot a finite, non-zero range at this scale."),
+                "central={central}, error={error}:\n{rendered}"
+            );
+        }
     }
 
     #[test]

@@ -22,7 +22,7 @@ use crate::{
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
             prepare_buffered_event,
-            sampling::context::{SamplingLUHostPlan, SamplingMapContext},
+            sampling::context::{PreparedLUHost, SamplingLUHostPlan, SamplingMapContext},
             sampling::maps::{
                 ImplicitSurfaceRadialMap, SamplingEvaluationError, SamplingMapAffine,
                 SamplingMapComposition, SamplingMapEmbedding,
@@ -1424,6 +1424,7 @@ impl CrossSectionGraphTerm {
                     sampling_bridge_fixed256: Default::default(),
                     sampling_bridge_arb: Default::default(),
                     sampling_source: Default::default(),
+                    sampling_externals_f64: Default::default(),
                     sampling_catalogue: Default::default(),
                     sampling_programs: Default::default(),
                     lmb_basis_ids: TiVec::new(),
@@ -1670,6 +1671,270 @@ impl CrossSectionGraphTerm {
         }
 
         Ok(new_event)
+    }
+
+    /// Authenticate retained sampling hosts against their selected canonical row
+    /// and certify their materialization on the complete physical cut rays.
+    #[allow(clippy::type_complexity)] // Each cut retains its complete ray and root diagnostics.
+    fn adopt_prepared_lu_hosts<'h, T: FloatLike>(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        masses: &EdgeVec<F<T>>,
+        hosts: impl IntoIterator<Item = &'h PreparedLUHost<T>>,
+        context: &GraphTermEvaluationContext<'_, '_, T>,
+    ) -> Result<BTreeMap<CutGroupId, (EsurfaceRay<T>, NewtonIterationResult<T>)>> {
+        let mut adopted = BTreeMap::new();
+        for host in hosts {
+            let plan = &host.plan;
+            if host.source.graph_id != context.graph_id
+                || plan.graph_name != self.graph.name
+                || Some(host.source.generating_channel) != context.sampling_channel
+                || Some(host.source.target_channel) != context.sampling_channel
+            {
+                return Err(eyre!(
+                    "LU host source {:?} / plan {:?} does not belong to graph {} '{}' selected channel {:?}",
+                    host.source,
+                    plan,
+                    context.graph_id,
+                    self.graph.name,
+                    context.sampling_channel
+                ));
+            }
+            let group = self
+                .cut_group_data
+                .cut_groups
+                .get(plan.cut_group_id)
+                .ok_or_else(|| eyre!("LU host claims unknown cut group {:?}", plan))?;
+            if !self.counterterm.cut_group_is_active(plan.cut_group_id)
+                || group.cuts.first() != Some(&plan.representative_cut_id)
+            {
+                return Err(eyre!(
+                    "LU host claims incompatible active representative {:?}",
+                    plan
+                ));
+            }
+            let Some(SamplingCatalogueEntry::Named(channel)) = self
+                .multi_channeling_setup
+                .sampling_catalogue
+                .as_ref()
+                .and_then(|catalogue| {
+                    catalogue
+                        .entries
+                        .get(host.source.generating_channel.index())
+                })
+            else {
+                return Err(eyre!(
+                    "LU host {:?} has no selected named channel definition",
+                    plan
+                ));
+            };
+            if channel.definition.parent_lmb != plan.parent_lmb {
+                return Err(eyre!(
+                    "LU host parent {:?} does not match selected channel definition '{}' parent {:?}",
+                    plan.parent_lmb,
+                    channel.name,
+                    channel.definition.parent_lmb
+                ));
+            }
+            let surface = &self.cut_esurface[plan.representative_cut_id];
+            let native_lmb = self
+                .multi_channeling_setup
+                .sampling_parent_lmb(&plan.parent_lmb)?;
+            let required = plan
+                .parent_lmb
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| {
+                    surface.energies.iter().any(|edge| {
+                        native_lmb.edge_signatures[*edge]
+                            .internal
+                            .to_momtrop_format()[*index]
+                            != 0
+                    })
+                })
+                .map(|(_, edge)| *edge)
+                .collect_vec();
+            if plan.required_prior_lmb != required || host.prior.len() != 3 * required.len() {
+                return Err(eyre!(
+                    "LU host has incompatible canonical prerequisites {:?}; actual {:?}",
+                    plan,
+                    required
+                ));
+            }
+            // The context retains the compiled child path as provenance.
+            // Here authenticate the physical consumer against the existing
+            // resolved catalogue, without inventing a second wrapper traversal.
+            let declared_host = channel.blocks.iter().any(|block| {
+                !block.target.is_phase_space()
+                    && required
+                        .iter()
+                        .all(|edge| block.preceding_lmb.contains(edge))
+                    && block.target.host_cut().is_some_and(|edges| {
+                        group.cuts.iter().any(|id| {
+                            (channel.definition.on_cut.is_empty()
+                                || channel.definition.on_cut.contains(&id.0))
+                                && self.cut_esurface[*id]
+                                    .energies
+                                    .iter()
+                                    .map(|edge| edge.0)
+                                    .sorted()
+                                    .eq(edges.iter().copied())
+                        })
+                    })
+            });
+            if !declared_host {
+                return Err(eyre!(
+                    "LU host {:?} is not a declared consumer of selected channel definition '{}'",
+                    plan,
+                    channel.name
+                ));
+            }
+            if host.prior.iter().any(|value| !value.is_finite()) {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "LU host adoption",
+                    detail: format!("nonfinite retained prerequisites for {plan:?}"),
+                }
+                .into());
+            }
+            let canonical = context
+                .canonical_sample
+                .ok_or_else(|| eyre!("LU host adoption requires its retained canonical row"))?;
+            if canonical.graph_id != context.graph_id
+                || canonical.channel_id != context.sampling_channel
+                || canonical
+                    .prepared_lu_hosts
+                    .iter()
+                    .filter(|original| original.plan == host.plan && original.source == host.source)
+                    .count()
+                    != 1
+            {
+                return Err(eyre!(
+                    "LU host {:?} has no unique matching authority in its canonical graph/channel row",
+                    host.source
+                ));
+            }
+            // Payload remains in the original source frame through all
+            // sample rotations. Rotate its affine coefficients exactly once.
+            let ray = host.ray.rotate(context.rotation);
+            let zero = momentum_sample.zero();
+            let center = LoopMomenta::from_iter(
+                (0..momentum_sample.loop_moms().0.len())
+                    .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+            );
+            let completed = surface.routed_ray(
+                momentum_sample.loop_moms(),
+                &center,
+                momentum_sample.external_moms(),
+                masses,
+                &self.graph.loop_momentum_basis,
+            );
+            // Physical attempts materialize the canonical draw; a native
+            // sampling bridge is not needed merely to recover its budget.
+            let budget = F::<T>::from_f64(context.sampling_accuracy_budget);
+            // This worst-case exponent covers every host-null pulled-back
+            // block. It does not certify complete threshold/joint density.
+            let dimension_bound = 3 * (plan.parent_lmb.len() - required.len());
+            ray.verify_lu_candidate(&completed, &host.solution, dimension_bound, &budget)
+                .wrap_err_with(|| {
+                    format!(
+                        "graph '{}' host {:?}, source {:?}, rotation {}",
+                        self.graph.name, plan, host.source, context.rotation.method
+                    )
+                })?;
+            for block in &channel.blocks {
+                let energy_sets = block.target.energy_edge_sets();
+                let [left, right] = energy_sets.as_slice() else {
+                    continue;
+                };
+                let Some(host_edges) = block.target.host_cut() else {
+                    continue;
+                };
+                let Some(cut_id) = group.cuts.iter().find(|id| {
+                    (channel.definition.on_cut.is_empty()
+                        || channel.definition.on_cut.contains(&id.0))
+                        && self.cut_esurface[**id]
+                            .energies
+                            .iter()
+                            .map(|edge| edge.0)
+                            .sorted()
+                            .eq(host_edges.iter().copied())
+                }) else {
+                    continue;
+                };
+                let targets = [
+                    self.sampling_target_surface(*cut_id, block.target.cut_side(), left)?,
+                    self.sampling_target_surface(*cut_id, block.target.cut_side(), right)?,
+                ];
+                let original_host = canonical
+                    .prepared_lu_hosts
+                    .iter()
+                    .find(|original| original.plan == host.plan && original.source == host.source)
+                    .expect("unique canonical host authenticated above");
+                // Use the same rounded scalar rescaling as physical LU.
+                // Enclosing mathematical tau*K would miss that rounding.
+                // The canonical source is never remapped in a native attempt.
+                let canonical_point = canonical.sample.rotate(context.rotation, 0, 0);
+                let canonical_loops = canonical_point
+                    .loop_moms()
+                    .rescale(&original_host.solution.solution, Subspace::None);
+                let native_loops = momentum_sample
+                    .loop_moms()
+                    .rescale(&host.solution.solution, Subspace::None);
+                let cached_masses = self
+                    .real_mass_vec
+                    .as_ref()
+                    .ok_or_else(|| eyre!("joint host alignment requires warmup mass data"))?;
+                let canonical_masses = self.graph.new_edgevec(|_, edge, _| {
+                    cached_masses[edge]
+                        .map(F::<ArbPrec>::from_ff64)
+                        .unwrap_or_else(|| F::<ArbPrec>::default().zero())
+                });
+                let original = |target: &Esurface| {
+                    target.evaluate_routed_enclosed(
+                        &canonical_point.one(),
+                        &canonical_loops,
+                        canonical_point.external_moms(),
+                        &canonical_masses,
+                        &self.graph.loop_momentum_basis,
+                    )
+                };
+                let materialized = |target: &Esurface| {
+                    target.evaluate_routed_enclosed(
+                        &momentum_sample.one(),
+                        &native_loops,
+                        momentum_sample.external_moms(),
+                        masses,
+                        &self.graph.loop_momentum_basis,
+                    )
+                };
+                // Original h/z are preserved at finite host residual. The
+                // second half-budget is a generic on-cut requirement, not
+                // a replacement of either equation by a cut identity or a
+                // bound on arbitrary CT multipliers/raised derivative jets.
+                EsurfaceRay::<T>::verify_normal_alignment(
+                    [original(targets[0])?, original(targets[1])?],
+                    [materialized(targets[0])?, materialized(targets[1])?],
+                    materialized(surface)?,
+                    context.sampling_accuracy_budget,
+                )
+                .wrap_err_with(|| {
+                    format!(
+                        "graph '{}' channel '{}' target {:?}, host {:?}, rotation {}",
+                        self.graph.name, channel.name, block.target, plan, context.rotation.method,
+                    )
+                })?;
+            }
+            if adopted
+                .insert(plan.cut_group_id, (ray, host.solution.clone()))
+                .is_some()
+            {
+                return Err(eyre!(
+                    "multiple authoritative LU hosts for cut group {:?}",
+                    plan
+                ));
+            }
+        }
+        Ok(adopted)
     }
 }
 
@@ -2557,39 +2822,107 @@ impl GraphTerm for CrossSectionGraphTerm {
         Ok(())
     }
 
+    fn needs_physical_overlaps(&self) -> bool {
+        self.cut_group_data
+            .cut_groups
+            .iter_enumerated()
+            .any(|(cut_group_id, _)| self.counterterm.needs_overlap_geometry(cut_group_id))
+    }
+
     fn prepare_physical_overlaps(
         &mut self,
         sample: &MomentumSample<ArbPrec>,
         mut context: GraphTermEvaluationContext<'_, '_, ArbPrec>,
     ) -> Result<Option<TiVec<CutGroupId, Option<LUSharedOverlaps<ArbPrec>>>>> {
+        if !self.needs_physical_overlaps() {
+            return Ok(None);
+        }
         let masses = self.graph.get_real_mass_vector(context.model);
         let e_cm = F::from_f64(context.settings.kinematics.e_cm);
+        // Most sampling roots were prepared below Arb1000. Reject insufficient
+        // full-ray residuals before repeating the directed host certificates.
+        // Any reused candidate still passes the complete provenance checks.
+        let zero = sample.zero();
+        let center = LoopMomenta::from_iter(
+            (0..sample.loop_moms().0.len())
+                .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
+        );
+        let candidates = context.prepared_lu_hosts.iter().filter(|host| {
+            let Some(group) = self.cut_group_data.cut_groups.get(host.plan.cut_group_id) else {
+                // Keep malformed identities for the authentication error below.
+                return true;
+            };
+            if !self
+                .counterterm
+                .needs_overlap_geometry(host.plan.cut_group_id)
+            {
+                return false;
+            }
+            let surface = &self.cut_esurface[group.cuts[0]];
+            let completed = surface.routed_ray(
+                sample.loop_moms(),
+                &center,
+                sample.external_moms(),
+                &masses,
+                &self.graph.loop_momentum_basis,
+            );
+            let residual = completed.evaluate(&host.solution.solution).0;
+            let accuracy =
+                sample.one().epsilon() * sample.one().from_usize(4 * surface.energies.len() + 1);
+            residual.0.is_finite() && residual.abs() <= &e_cm * accuracy
+        });
+        let mut adopted_hosts =
+            self.adopt_prepared_lu_hosts(sample, &masses, candidates, &context)?;
         let mut representatives = Vec::new();
         for (cut_group_id, group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            if !self.counterterm.cut_group_is_active(cut_group_id) {
+            if !self.counterterm.needs_overlap_geometry(cut_group_id) {
                 continue;
             }
             let cut_id = group.cuts[0];
-            // The center prescription uses the complete physical equation in
-            // the generation parent for every channel, including bare raw input.
-            // Native evaluation keeps its existing host adoption and root owner.
+            // Overlap membership and centers retain the original Arb1000
+            // accuracy. A sampling-density certificate alone does not justify
+            // geometry decisions for a root promoted from a lower precision.
+            let surface = &self.cut_esurface[cut_id];
+            let reusable = adopted_hosts
+                .remove(&cut_group_id)
+                .and_then(|(_, solution)| {
+                    let completed = surface.routed_ray(
+                        sample.loop_moms(),
+                        &center,
+                        sample.external_moms(),
+                        &masses,
+                        &self.graph.loop_momentum_basis,
+                    );
+                    completed.certified_lu_root(&solution, &e_cm)
+                });
+            crate::debug_tags!(#integration, #cut, #solver;
+                graph = %self.graph.name,
+                cut_group_id = cut_group_id.0,
+                reused_prepared_root = reusable.is_some(),
+                "canonical overlap root authority"
+            );
             let identity = RadialRootIdentity::new(format!(
                 "canonical physical overlap graph '{}' cut group {}",
                 self.graph.name, cut_group_id.0,
             ));
-            let (_, solution) = self.cut_esurface[cut_id]
-                .solve_lu_cut(
-                    sample.loop_moms(),
-                    sample.external_moms(),
-                    &masses,
-                    &self.graph.loop_momentum_basis,
-                    &e_cm,
-                    &mut context.evaluation_metadata.radial_root_diagnostics,
-                    &identity,
-                )
-                .map_err(|error| SamplingEvaluationError::UncertifiedRoot {
-                    detail: format!("{identity}: {error:?}"),
-                })?;
+            let solution = if let Some(solution) = reusable {
+                solution
+            } else {
+                surface
+                    .solve_lu_cut(
+                        sample.loop_moms(),
+                        sample.external_moms(),
+                        &masses,
+                        &self.graph.loop_momentum_basis,
+                        &e_cm,
+                        &mut context.evaluation_metadata.radial_root_diagnostics,
+                        &identity,
+                    )
+                    .map_err(|error| SamplingEvaluationError::UncertifiedRoot {
+                        detail: format!("{identity}: {error:?}"),
+                    })?
+                    .1
+            };
             if let Some(runtime) = context.event_processing_runtime.as_deref_mut()
                 && runtime.has_selectors()
             {
@@ -2659,268 +2992,12 @@ impl GraphTerm for CrossSectionGraphTerm {
         // overhead even though adoption happens at the physical boundary. Charge
         // the entire interval on success and error; ordinary LU solves stay here.
         let adoption_start = Instant::now();
-        let adopted_hosts = (|| {
-            let mut adopted = BTreeMap::new();
-            for host in context.prepared_lu_hosts {
-                let plan = &host.plan;
-                if host.source.graph_id != context.graph_id
-                    || plan.graph_name != self.graph.name
-                    || Some(host.source.generating_channel) != context.sampling_channel
-                    || Some(host.source.target_channel) != context.sampling_channel
-                {
-                    return Err(eyre!(
-                        "LU host source {:?} / plan {:?} does not belong to graph {} '{}' selected channel {:?}",
-                        host.source,
-                        plan,
-                        context.graph_id,
-                        self.graph.name,
-                        context.sampling_channel
-                    ));
-                }
-                let group = self
-                    .cut_group_data
-                    .cut_groups
-                    .get(plan.cut_group_id)
-                    .ok_or_else(|| eyre!("LU host claims unknown cut group {:?}", plan))?;
-                if !self.counterterm.cut_group_is_active(plan.cut_group_id)
-                    || group.cuts.first() != Some(&plan.representative_cut_id)
-                {
-                    return Err(eyre!(
-                        "LU host claims incompatible active representative {:?}",
-                        plan
-                    ));
-                }
-                let Some(SamplingCatalogueEntry::Named(channel)) = self
-                    .multi_channeling_setup
-                    .sampling_catalogue
-                    .as_ref()
-                    .and_then(|catalogue| {
-                        catalogue
-                            .entries
-                            .get(host.source.generating_channel.index())
-                    })
-                else {
-                    return Err(eyre!(
-                        "LU host {:?} has no selected named channel definition",
-                        plan
-                    ));
-                };
-                if channel.definition.parent_lmb != plan.parent_lmb {
-                    return Err(eyre!(
-                        "LU host parent {:?} does not match selected channel definition '{}' parent {:?}",
-                        plan.parent_lmb,
-                        channel.name,
-                        channel.definition.parent_lmb
-                    ));
-                }
-                let surface = &self.cut_esurface[plan.representative_cut_id];
-                let native_lmb = self
-                    .multi_channeling_setup
-                    .sampling_parent_lmb(&plan.parent_lmb)?;
-                let required = plan
-                    .parent_lmb
-                    .iter()
-                    .enumerate()
-                    .filter(|(index, _)| {
-                        surface.energies.iter().any(|edge| {
-                            native_lmb.edge_signatures[*edge]
-                                .internal
-                                .to_momtrop_format()[*index]
-                                != 0
-                        })
-                    })
-                    .map(|(_, edge)| *edge)
-                    .collect_vec();
-                if plan.required_prior_lmb != required || host.prior.len() != 3 * required.len() {
-                    return Err(eyre!(
-                        "LU host has incompatible canonical prerequisites {:?}; actual {:?}",
-                        plan,
-                        required
-                    ));
-                }
-                // The context retains the compiled child path as provenance.
-                // Here authenticate the physical consumer against the existing
-                // resolved catalogue, without inventing a second wrapper traversal.
-                let declared_host = channel.blocks.iter().any(|block| {
-                    !block.target.is_phase_space()
-                        && required
-                            .iter()
-                            .all(|edge| block.preceding_lmb.contains(edge))
-                        && block.target.host_cut().is_some_and(|edges| {
-                            group.cuts.iter().any(|id| {
-                                (channel.definition.on_cut.is_empty()
-                                    || channel.definition.on_cut.contains(&id.0))
-                                    && self.cut_esurface[*id]
-                                        .energies
-                                        .iter()
-                                        .map(|edge| edge.0)
-                                        .sorted()
-                                        .eq(edges.iter().copied())
-                            })
-                        })
-                });
-                if !declared_host {
-                    return Err(eyre!(
-                        "LU host {:?} is not a declared consumer of selected channel definition '{}'",
-                        plan,
-                        channel.name
-                    ));
-                }
-                if host.prior.iter().any(|value| !value.is_finite()) {
-                    return Err(SamplingEvaluationError::Unrepresentable {
-                        operation: "LU host adoption",
-                        detail: format!("nonfinite retained prerequisites for {plan:?}"),
-                    }
-                    .into());
-                }
-                let canonical = context
-                    .canonical_sample
-                    .ok_or_else(|| eyre!("LU host adoption requires its retained canonical row"))?;
-                if canonical.graph_id != context.graph_id
-                    || canonical.channel_id != context.sampling_channel
-                    || canonical
-                        .prepared_lu_hosts
-                        .iter()
-                        .filter(|original| {
-                            original.plan == host.plan && original.source == host.source
-                        })
-                        .count()
-                        != 1
-                {
-                    return Err(eyre!(
-                        "LU host {:?} has no unique matching authority in its canonical graph/channel row",
-                        host.source
-                    ));
-                }
-                // Payload remains in the original source frame through all
-                // sample rotations. Rotate its affine coefficients exactly once.
-                let ray = host.ray.rotate(context.rotation);
-                let zero = momentum_sample.zero();
-                let center = LoopMomenta::from_iter(
-                    (0..momentum_sample.loop_moms().0.len())
-                        .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
-                );
-                let completed = surface.routed_ray(
-                    momentum_sample.loop_moms(),
-                    &center,
-                    momentum_sample.external_moms(),
-                    &masses,
-                    &self.graph.loop_momentum_basis,
-                );
-                // Physical attempts materialize the canonical draw; a native
-                // sampling bridge is not needed merely to recover its budget.
-                let budget = F::<T>::from_f64(context.sampling_accuracy_budget);
-                // This worst-case exponent covers every host-null pulled-back
-                // block. It does not certify complete threshold/joint density.
-                let dimension_bound = 3 * (plan.parent_lmb.len() - required.len());
-                ray.verify_lu_candidate(&completed, &host.solution, dimension_bound, &budget)
-                    .wrap_err_with(|| {
-                        format!(
-                            "graph '{}' host {:?}, source {:?}, rotation {}",
-                            self.graph.name, plan, host.source, context.rotation.method
-                        )
-                    })?;
-                for block in &channel.blocks {
-                    let energy_sets = block.target.energy_edge_sets();
-                    let [left, right] = energy_sets.as_slice() else {
-                        continue;
-                    };
-                    let Some(host_edges) = block.target.host_cut() else {
-                        continue;
-                    };
-                    let Some(cut_id) = group.cuts.iter().find(|id| {
-                        (channel.definition.on_cut.is_empty()
-                            || channel.definition.on_cut.contains(&id.0))
-                            && self.cut_esurface[**id]
-                                .energies
-                                .iter()
-                                .map(|edge| edge.0)
-                                .sorted()
-                                .eq(host_edges.iter().copied())
-                    }) else {
-                        continue;
-                    };
-                    let targets = [
-                        self.sampling_target_surface(*cut_id, block.target.cut_side(), left)?,
-                        self.sampling_target_surface(*cut_id, block.target.cut_side(), right)?,
-                    ];
-                    let original_host = canonical
-                        .prepared_lu_hosts
-                        .iter()
-                        .find(|original| {
-                            original.plan == host.plan && original.source == host.source
-                        })
-                        .expect("unique canonical host authenticated above");
-                    // Use the same rounded scalar rescaling as physical LU.
-                    // Enclosing mathematical tau*K would miss that rounding.
-                    // The canonical source is never remapped in a native attempt.
-                    let canonical_point = canonical.sample.rotate(context.rotation, 0, 0);
-                    let canonical_loops = canonical_point
-                        .loop_moms()
-                        .rescale(&original_host.solution.solution, Subspace::None);
-                    let native_loops = momentum_sample
-                        .loop_moms()
-                        .rescale(&host.solution.solution, Subspace::None);
-                    let cached_masses = self
-                        .real_mass_vec
-                        .as_ref()
-                        .ok_or_else(|| eyre!("joint host alignment requires warmup mass data"))?;
-                    let canonical_masses = self.graph.new_edgevec(|_, edge, _| {
-                        cached_masses[edge]
-                            .map(F::<ArbPrec>::from_ff64)
-                            .unwrap_or_else(|| F::<ArbPrec>::default().zero())
-                    });
-                    let original = |target: &Esurface| {
-                        target.evaluate_routed_enclosed(
-                            &canonical_point.one(),
-                            &canonical_loops,
-                            canonical_point.external_moms(),
-                            &canonical_masses,
-                            &self.graph.loop_momentum_basis,
-                        )
-                    };
-                    let materialized = |target: &Esurface| {
-                        target.evaluate_routed_enclosed(
-                            &momentum_sample.one(),
-                            &native_loops,
-                            momentum_sample.external_moms(),
-                            &masses,
-                            &self.graph.loop_momentum_basis,
-                        )
-                    };
-                    // Original h/z are preserved at finite host residual. The
-                    // second half-budget is a generic on-cut requirement, not
-                    // a replacement of either equation by a cut identity or a
-                    // bound on arbitrary CT multipliers/raised derivative jets.
-                    EsurfaceRay::<T>::verify_normal_alignment(
-                        [original(targets[0])?, original(targets[1])?],
-                        [materialized(targets[0])?, materialized(targets[1])?],
-                        materialized(surface)?,
-                        context.sampling_accuracy_budget,
-                    )
-                    .wrap_err_with(|| {
-                        format!(
-                            "graph '{}' channel '{}' target {:?}, host {:?}, rotation {}",
-                            self.graph.name,
-                            channel.name,
-                            block.target,
-                            plan,
-                            context.rotation.method,
-                        )
-                    })?;
-                }
-                if adopted
-                    .insert(plan.cut_group_id, (ray, host.solution.clone()))
-                    .is_some()
-                {
-                    return Err(eyre!(
-                        "multiple authoritative LU hosts for cut group {:?}",
-                        plan
-                    ));
-                }
-            }
-            Ok::<_, eyre::Report>(adopted)
-        })();
+        let adopted_hosts = self.adopt_prepared_lu_hosts(
+            momentum_sample,
+            &masses,
+            context.prepared_lu_hosts,
+            &context,
+        );
         if !context.prepared_lu_hosts.is_empty() {
             context.evaluation_metadata.parameterization_time += adoption_start.elapsed();
         }
@@ -3223,11 +3300,17 @@ impl GraphTerm for CrossSectionGraphTerm {
             });
         }
 
-        let shared_overlaps = if context.settings.subtraction.disable_threshold_subtraction {
+        let shared_overlaps = if context.settings.subtraction.disable_threshold_subtraction
+            || !self.needs_physical_overlaps()
+        {
             ti_vec![None; self.cut_group_data.cut_groups.len()]
         } else {
             let deferred_points = deferred_cut_evaluations
                 .iter()
+                .filter(|deferred| {
+                    self.counterterm
+                        .needs_overlap_geometry(deferred.cut_group_id)
+                })
                 .map(|deferred| {
                     (
                         deferred.cut_group_id,
