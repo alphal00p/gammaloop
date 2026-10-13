@@ -283,3 +283,40 @@ preprocessing and verified witness selection. It asserts that no owner program
 was prepared and no IBP rule was applied. The bounded-cache test separately
 requires actual eviction and compares exact repeated values, guards and family
 identities while checking the retained byte allowance.
+
+The 813-witness diagnostic can explicitly select
+`VAKINT_SAVED_APPLICATION_TRANSPORT_PROFILE=materialize-512m`. This test-only
+profile is shared with the two-case transport diagnostic. It allows 512 million
+native and aggregate transport operations; 128 million exponent and endpoint
+power entries; eight million operational nodes, projected endpoints and native
+polynomial terms; and two billion bytes each for retained endpoint keys and
+coefficient clones. Native exact-coefficient, scalar-lowering, matching and
+reduction policies remain unchanged. The complete selected options are printed
+before loading. The profile cannot be combined with the older single
+`VAKINT_SAVED_APPLICATION_NATIVE_POLYNOMIAL_OPERATIONS` override.
+
+The default-policy census retained 811 passes and two resource failures; raising
+only the native-operation allowance did not address the independent aggregate
+operation and exponent-entry caps. The complete profile admitted both remaining
+witnesses through the unchanged production matcher without owner preparation
+or IBP application, peaking at 3.72 GB in that two-case run. This is an explicit
+operational choice, not a larger mathematical entry union or a production
+default.
+
+On 13 October 2026, the unchanged full census then passed all 813 witnesses
+under this same complete profile, with one preparation worker. The successful
+IDs exactly matched the inventory, all reconstruction identities passed, and
+owner preparation, rule-cache entries and IBP applications remained zero.
+The admission loop took 971.550 seconds; the whole test including loading took
+1046.92 seconds, with sampled peak RSS 3.847 GB on shared-host CPUs 8–15.
+The frozen actual-Git diagnostic used RustRed `1fca5bd0` and executable SHA256
+`eaa4dbf2f0e85caa26c4c6f863266cf3c9d425714c5dd25e3edeb65e83e45cdb`.
+These are finite admission witnesses, not 813 completed reductions or an
+exhaustive proof over the entry union. The earlier default-policy failures are
+not erased or reclassified as successful default-limit runs.
+
+A separate ordering hypothesis was tested and rejected: the problematic
+candidate already had just one coalesced rank-ten key and no rank-zero key to
+check first. The manual diagnostic retains that negative result; it is not an
+acceptance test. No production predicate ordering or fast-rejection API was
+introduced to obtain the successful full-census result.

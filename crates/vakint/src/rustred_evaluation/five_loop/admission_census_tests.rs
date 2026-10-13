@@ -247,13 +247,34 @@ fn external_package_all_813_witnesses_pass_native_frontend_admission_without_red
                     .parse::<usize>()
                     .expect("native polynomial operation allowance must be an unsigned integer")
             });
-    if let Some(operations) = native_operations_override {
+    let transport_profile = std::env::var("VAKINT_SAVED_APPLICATION_TRANSPORT_PROFILE").ok();
+    assert!(
+        transport_profile.is_none() || native_operations_override.is_none(),
+        "select either a complete transport profile or the single native-operation override"
+    );
+    if let Some(profile) = &transport_profile {
+        assert_eq!(
+            profile,
+            test_profiles::MATERIALIZATION_PROFILE,
+            "unknown test-only transport profile"
+        );
+        test_profiles::apply_materialization_profile(&mut settings);
+    } else if let Some(operations) = native_operations_override {
         settings
             .rustred_application_options
             .trace_limits
             .expansion
             .max_native_polynomial_operations = operations;
     }
+    println!(
+        "{}",
+        json!({"event":"admission_census_policy", "cases":rows.len(),
+        "transport_profile":transport_profile,
+        "application_options":format!("{:?}",settings.rustred_application_options),
+        "scalar_limits":format!("{:?}",settings.rustred_scalar_numerator_limits),
+        "matching_limits":format!("{:?}",settings.rustred_momentum_match_limits),
+        "production_defaults_changed":false,"ibp_application":false})
+    );
     let load_started = Instant::now();
     let vakint = Vakint::new()
         .unwrap()
@@ -275,7 +296,8 @@ fn external_package_all_813_witnesses_pass_native_frontend_admission_without_red
         json!({"event":"admission_census_prepared", "seconds":load_started.elapsed().as_secs_f64(),
         "cases":rows.len(), "ibp_application":false, "exhaustive_point_enumeration":false,
         "native_polynomial_operations":settings.rustred_application_options.trace_limits.expansion.max_native_polynomial_operations,
-        "native_polynomial_operations_override":native_operations_override.is_some()})
+        "native_polynomial_operations_override":native_operations_override.is_some(),
+        "transport_profile":transport_profile})
     );
     let started = Instant::now();
     let mut failures = Vec::new();

@@ -45,6 +45,14 @@ static PARENTS: LazyLock<Vec<ParentDescriptor>> = LazyLock::new(descriptors);
 #[path = "five_loop/admission_census_tests.rs"]
 mod admission_census_tests;
 
+#[cfg(test)]
+#[path = "five_loop/entry_probe_diagnostics.rs"]
+mod entry_probe_diagnostics;
+
+#[cfg(test)]
+#[path = "five_loop/test_profiles.rs"]
+mod test_profiles;
+
 #[cfg(all(test, feature = "feynkit-ingress"))]
 #[path = "../../tests/fixtures/qcd_ladder/slow.rs"]
 mod slow;
