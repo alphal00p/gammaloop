@@ -2684,6 +2684,7 @@ mod tests {
         dot,
         graph::{GraphThreeDSource, parse::IntoGraph},
         initialisation::test_initialise,
+        model::InputParamCard,
         numerator::{aind::Aind, energy_degree::EnergyPowerAnalyzer},
         uv::approx::projected_4d::Local4dProjectionContext,
         uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode, uv_graph::UVE},
@@ -2925,14 +2926,22 @@ mod tests {
     }
 
     fn paper_appendix_b1_massless_graph() -> Graph {
+        let mut model = crate::utils::load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../../assets/models/json/sm/restrict_default.json").to_owned(),
+            "json",
+        )
+        .unwrap();
+        model.simplify(&mut parameters).unwrap();
         include_str!(
             "../../../../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"
         )
         // Keep the checked-in GammaLoop route p=GL e2, k=GL e3 used to
         // realize the loop coordinates of B.1 and B.15, changing only the
-        // fermion species for B.10-B.16.
+        // fermion species for B.10-B.16. Apply the massless restriction before
+        // constructing both propagator numerators and poles.
         .replace("particle=t", "particle=d")
-        .into_graph(&crate::utils::load_generic_model("sm"))
+        .into_graph(&model)
         .unwrap()
     }
 
@@ -5346,9 +5355,16 @@ mod tests {
     #[test]
     fn integrated_massless_gauge_soft_jet_vanishes_but_completed_hat_does_not() -> Result<()> {
         test_initialise()?;
+        // Match the run card's sm-default import: the full model retains MD.
+        let mut model = crate::utils::load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../../assets/models/json/sm/restrict_default.json").to_owned(),
+            "json",
+        )?;
+        model.simplify(&mut parameters)?;
         let graph: Graph =
             include_str!("../../../../../tests/resources/graphs/local_ir_gluon_self_energy.dot")
-                .into_graph(&crate::utils::load_generic_model("sm"))?;
+                .into_graph(&model)?;
         assert!(graph[EdgeIndex(2)].mass_atom().is_zero());
         let mut current = two_point_node(&graph, ApproximationType::IR);
         current.dod = 2;

@@ -36,6 +36,7 @@ use crate::feyngen::diagram_generator::EdgeColor;
 use crate::feyngen::diagram_generator::feynman_graph_automorphism_group_size;
 use crate::graph::FeynmanGraph;
 use crate::initialisation::test_initialise;
+use crate::model::InputParamCard;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
 use crate::settings::GlobalSettings;
@@ -1704,6 +1705,13 @@ fn nlo_fs_dis() {
     // The historical sm_dis fixture differs in the retained DIS sector only
     // by tagging the electron-photon vertex with the LT coupling order.
     let mut model = load_generic_model("sm");
+    let mut restriction = InputParamCard::from_str(
+        include_str!("../../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+            .to_owned(),
+        "json",
+    )
+    .unwrap();
+    model.simplify(&mut restriction).unwrap();
     model.name = "sm_dis".into();
     model.orders.push(Arc::new(crate::model::Order {
         name: "LT".into(),

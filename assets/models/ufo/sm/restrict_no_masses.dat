@@ -14,6 +14,8 @@ Block SMINPUTS
 ## INFORMATION FOR MASS
 ###################################
 Block MASS 
+    1 0.000000e+00 # MD
+    2 0.000000e+00 # MU
     3 0.000000e+00 # MS 
     4 0.000000e+00 # MC 
     5 0.000000e+00 # MB 
@@ -56,6 +58,9 @@ Block Wolfenstein
 ## INFORMATION FOR YUKAWA
 ###################################
 Block YUKAWA 
+    1 0.000000e+00 # ymd
+    2 0.000000e+00 # ymu
+    3 0.000000e+00 # yms
     4 0.000000e+00 # ymc 
     5 0.000000e+00 # ymb 
     6 1.730000e+02 # ymt

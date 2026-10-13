@@ -213,21 +213,23 @@ vt = Particle(pdg_code=16,
 
 vt__tilde__ = vt.anti()
 
-u = Particle(pdg_code=2,
-             name='u',
-             antiname='u~',
-             spin=2,
-             color=3,
-             mass=Param.ZERO,
-             width=Param.ZERO,
-             texname=r'{u}',
-             antitexname=r'{\overline{u}}',
-             charge=Fraction(2, 3),
-             GhostNumber=0,
-             LeptonNumber=0,
-             Y=Fraction(1, 3),
-             YRight=Fraction(4, 3),
-             chemical_potential=Param.muu)
+u = Particle(
+    pdg_code=2,
+    name='u',
+    antiname='u~',
+    spin=2,
+    color=3,
+    mass=Param.MU,
+    width=Param.ZERO,
+    texname=r'{u}',
+    antitexname=r'{\overline{u}}',
+    charge=Fraction(2, 3),
+    GhostNumber=0,
+    LeptonNumber=0,
+    Y=Fraction(1, 3),
+    YRight=Fraction(4, 3),
+    chemical_potential=Param.muu,
+)
 
 u__tilde__ = u.anti()
 
@@ -267,21 +269,23 @@ t = Particle(pdg_code=6,
 
 t__tilde__ = t.anti()
 
-d = Particle(pdg_code=1,
-             name='d',
-             antiname='d~',
-             spin=2,
-             color=3,
-             mass=Param.ZERO,
-             width=Param.ZERO,
-             texname=r'{d}',
-             antitexname=r'{\overline{d}}',
-             charge=Fraction(-1, 3),
-             GhostNumber=0,
-             LeptonNumber=0,
-             Y=Fraction(1, 3),
-             YRight=Fraction(-2, 3),
-             chemical_potential=Param.mud)
+d = Particle(
+    pdg_code=1,
+    name='d',
+    antiname='d~',
+    spin=2,
+    color=3,
+    mass=Param.MD,
+    width=Param.ZERO,
+    texname=r'{d}',
+    antitexname=r'{\overline{d}}',
+    charge=Fraction(-1, 3),
+    GhostNumber=0,
+    LeptonNumber=0,
+    Y=Fraction(1, 3),
+    YRight=Fraction(-2, 3),
+    chemical_potential=Param.mud,
+)
 
 d__tilde__ = d.anti()
 

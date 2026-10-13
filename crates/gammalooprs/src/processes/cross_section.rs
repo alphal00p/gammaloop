@@ -4620,6 +4620,7 @@ mod tests {
         dot,
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
+        model::InputParamCard,
         processes::cross_section::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
         settings::global::{GenerationSettings, OrientationPattern},
         utils::{GS, load_generic_model},
@@ -5177,6 +5178,15 @@ mod tests {
     #[test]
     fn cross_section_lmb_cut_edge_exclusion_prefers_massive_then_fermion_then_id() {
         test_initialise().unwrap();
+        let mut model = load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+                .to_owned(),
+            "json",
+        )
+        .unwrap();
+        model.simplify(&mut parameters).unwrap();
+        // Keep the light fermion massless to distinguish mass priority from spin priority.
         let graph = dot!(
             digraph cut_edge_priority {
                 edge [num=1]
@@ -5186,7 +5196,8 @@ mod tests {
                 A -> B [id=2 particle="t" mass=1]
                 A -> B [id=3 particle="a"]
                 A -> B [id=4 mass=0]
-            }
+            },
+            &model
         )
         .unwrap();
 

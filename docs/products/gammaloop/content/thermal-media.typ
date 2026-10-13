@@ -87,8 +87,8 @@ With the default `--simplify-model=true`, a restriction card turns every paramet
 zero into a constant. `sm-default` therefore fixes all five chemical potentials at zero. Import
 `sm-thermal` instead, which sets `muB = 3` and keeps it adjustable, or `sm-full` when other
 chemical potentials must vary. `sm-thermal_s_mass` matches `sm-thermal` but also keeps the
-strange-quark mass `MS` adjustable; the strange quark has no Yukawa coupling. Then set the values,
-for example with `set model muB=0.5`.
+strange-quark mass `MS` and Yukawa input `yms` adjustable, retaining the corresponding Higgs
+and Goldstone interactions. Then set the values, for example with `set model muB=0.5`.
 
 Finite-temperature evaluation requires a finite, positive inverse temperature. Chemical
 potentials must be finite and real. Bosons require a finite, nonnegative real mass and

@@ -39,6 +39,18 @@ first_category.add_options(name='diagonal ckm',  # name
                                   ('WOLFENSTEIN', [4], 0.0)]
                            )
 
+first_category.add_options(
+    name='u mass = 0', default=True, rules=[('MASS', [2], 0.0), ('YUKAWA', [2], 0.0)]
+)
+
+first_category.add_options(
+    name='d mass = 0', default=True, rules=[('MASS', [1], 0.0), ('YUKAWA', [1], 0.0)]
+)
+
+first_category.add_options(
+    name='s mass = 0', default=True, rules=[('MASS', [3], 0.0), ('YUKAWA', [3], 0.0)]
+)
+
 first_category.add_options(name='c mass = 0',  # name
                            default=True,        # default
                            rules=[('MASS', [4], 0.0),
