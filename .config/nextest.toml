@@ -71,6 +71,18 @@ not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) 
     test(=uv::approx::local_4d::on_shell_forest_tests::three_loop_open_spinor_hard_coefficient_has_exact_finite_certificate) or
     test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_generic_hard_limits) or
     test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_correlated_hard_limits) or
+    test(=local_os_nested_generation_agrees_across_three_routes) or
+    test(=slow::local_os_nested_generation_matches_all_routes) or
+    test(=slow::local_os_soft_gluon_generation_matches_all_routes) or
+    test(=slow::local_os_disjoint_generation_matches_all_routes) or
+    test(=slow::local_os_three_loop_generation_matches_all_routes) or
+    test(=slow::local_os_primitive_complete_uv_scaling_matrix) or
+    test(=slow::local_os_quark_in_gluon_complete_uv_scaling_matrix) or
+    test(=slow::local_os_quark_in_quark_complete_uv_scaling_matrix) or
+    test(=slow::local_os_soft_gluon_complete_uv_scaling_matrix) or
+    test(=slow::local_os_disjoint_complete_uv_scaling_matrix) or
+    test(=slow::local_os_three_loop_complete_uv_scaling_matrix) or
+    test(=gamma_star_ttx::gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross_section_and_auxiliary_scales) or
     test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=se1l_uv) or
     test(=integrations::scalar_mercedes) or
@@ -180,6 +192,12 @@ threads-required = 10
 [[profile.default.overrides]]
 filter = "package(clinnet) and binary(=public_typst_behavior)"
 test-group = "memory-intensive"
+
+# Inclusive OS scale scans are a full-main workload; reserve a worker.
+[[profile.default.overrides]]
+filter = "test(=gamma_star_ttx::gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross_section_and_auxiliary_scales)"
+test-group = "integration"
+threads-required = "num-test-threads"
 
 [[profile.default.overrides]]
 # Box4E uses two correlated representation slots and four threshold channels.
@@ -339,7 +357,19 @@ test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forests_ma
 test(=uv::approx::local_4d::on_shell_forest_tests::three_loop_open_spinor_hard_coefficient_has_exact_finite_certificate) or
 test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_generic_hard_limits) or
 test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_correlated_hard_limits) or
-test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
+test(=local_os_nested_generation_agrees_across_three_routes) or
+test(=slow::local_os_nested_generation_matches_all_routes) or
+test(=slow::local_os_soft_gluon_generation_matches_all_routes) or
+test(=slow::local_os_disjoint_generation_matches_all_routes) or
+test(=slow::local_os_three_loop_generation_matches_all_routes) or
+test(=slow::local_os_primitive_complete_uv_scaling_matrix) or
+test(=slow::local_os_quark_in_gluon_complete_uv_scaling_matrix) or
+test(=slow::local_os_quark_in_quark_complete_uv_scaling_matrix) or
+test(=slow::local_os_soft_gluon_complete_uv_scaling_matrix) or
+test(=slow::local_os_disjoint_complete_uv_scaling_matrix) or
+test(=slow::local_os_three_loop_complete_uv_scaling_matrix) or
+test(=gamma_star_ttx::gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross_section_and_auxiliary_scales) or
+    test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=se1l_uv) or
     test(=integrations::scalar_mercedes) or
     test(=test_vacuum_amplitude_generation_full_sm_three_loop_raw) or

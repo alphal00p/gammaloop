@@ -29,6 +29,7 @@ linnet = { workspace = true }
 momtrop = { workspace = true }
 ndarray = { workspace = true }
 rand = { workspace = true, features = ["small_rng"] }
+rayon = { workspace = true }
 serde_json = { workspace = true }
 parking_lot = { version = "0.12", default-features = false }
 spenso = { workspace = true, features = ["native", "shadowing"] }
