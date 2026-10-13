@@ -127,15 +127,26 @@ fn vertex_matrix(
     ] {
         expression = expression.replace(identity).with(Atom::one());
     }
-    let ckm = model.get_parameter("CKM1x3");
-    expression = expression
-        .replace(Atom::from(ckm.name).to_pattern())
-        .with(ckm.expression.as_ref().unwrap().to_pattern());
+    // The older quark vertices use one layer of I1x--I4x flavor coefficients;
+    // retain the Yukawa and CKM inputs for the independent component probes.
+    for parameter in model.parameters.values().filter(|parameter| {
+        ["I1x", "I2x", "I3x", "I4x"]
+            .iter()
+            .any(|prefix| parameter.name.namespaceless_string().starts_with(*prefix))
+    }) {
+        expression = expression
+            .replace(Atom::from(parameter.name).to_pattern())
+            .with(parameter.expression.as_ref().unwrap().to_pattern());
+    }
     for (name, value) in parameter_values {
         expression = expression
             .replace(Atom::from(UFOSymbol::from(*name)).to_pattern())
             .with(value.clone());
     }
+    let ckm = model.get_parameter("CKM1x3");
+    expression = expression
+        .replace(Atom::from(ckm.name).to_pattern())
+        .with(ckm.expression.as_ref().unwrap().to_pattern());
     for (name, value) in [
         ("ytau", tau_yukawa),
         ("ee", Atom::one()),
@@ -268,6 +279,205 @@ fn generated_complex_charged_current_preserves_the_ckm_norm() {
         spin_sum(&left, &bar(&raw_right)),
         Atom::num((-63, 2)) + Atom::num(42) * Atom::i()
     );
+}
+
+#[test]
+fn generated_sm_quark_higgs_and_neutral_goldstone_vertices_follow_the_action() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let inverse_sqrt_two = Atom::num(2).pow(Atom::num((-1, 2)));
+    for (quark, yukawa, goldstone_sign) in [
+        ("u", "yu", 1),
+        ("c", "yc", 1),
+        ("t", "yt", 1),
+        ("d", "yd", -1),
+        ("s", "ys", -1),
+        ("b", "yb", -1),
+    ] {
+        for scalar in ["H", "G0"] {
+            let graphs = Graph::from_string(
+                format!(
+                    r#"
+                    digraph decay {{
+                        ext [style=invis];
+                        amplitude [name="amplitude"];
+                        ext -> amplitude [particle="{scalar}"];
+                        amplitude -> ext [particle="{quark}"];
+                        amplitude -> ext [particle="{quark}~"];
+                    }}
+                    "#
+                ),
+                &model,
+            )
+            .unwrap();
+            let matrix = vertex_matrix(
+                &graphs[0],
+                "amplitude",
+                &model,
+                0,
+                Atom::one(),
+                &[(yukawa, Atom::num((3, 5)))],
+            );
+            // H: -i y/sqrt(2) I. G0: +y/sqrt(2) gamma5 for up-type
+            // quarks and the opposite sign for down-type quarks. These are
+            // explicit Weyl components of the Higgs-doublet Yukawa action.
+            for (row, entries) in matrix.iter().enumerate() {
+                for (column, entry) in entries.iter().enumerate() {
+                    let expected = if row != column {
+                        Atom::Zero
+                    } else if scalar == "H" {
+                        -Atom::i() * Atom::num((3, 5)) * &inverse_sqrt_two
+                    } else {
+                        Atom::num((3 * goldstone_sign * if row < 2 { -1 } else { 1 }, 5))
+                            * &inverse_sqrt_two
+                    };
+                    assert_eq!(entry, &expected, "{scalar} {quark}[{row},{column}]");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn generated_sm_quark_charged_yukawas_satisfy_hermiticity_and_ward_identities() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let inverse_sqrt_two = Atom::num(2).pow(Atom::num((-1, 2)));
+    // Set g=1, MW=3, v=6, m_up=3 and m_down=15/2. Both unequal,
+    // nonzero Yukawas enter each vertex, so neither chirality can be omitted.
+    let up_yukawa = inverse_sqrt_two.clone();
+    let down_yukawa = Atom::num((5, 2)) * &inverse_sqrt_two;
+    for (up_index, (up, up_parameter)) in [("u", "yu"), ("c", "yc"), ("t", "yt")]
+        .into_iter()
+        .enumerate()
+    {
+        for (down_index, (down, down_parameter)) in [("d", "yd"), ("s", "ys"), ("b", "yb")]
+            .into_iter()
+            .enumerate()
+        {
+            let graphs = Graph::from_string(
+                format!(
+                    r#"
+                    digraph scalar_plus {{
+                        ext [style=invis];
+                        amplitude [name="amplitude"];
+                        ext -> amplitude [particle="G+"];
+                        amplitude -> ext [particle="{up}"];
+                        amplitude -> ext [particle="{down}~"];
+                    }}
+                    digraph vector_plus {{
+                        ext [style=invis];
+                        amplitude [name="amplitude"];
+                        ext -> amplitude [particle="W+"];
+                        amplitude -> ext [particle="{up}"];
+                        amplitude -> ext [particle="{down}~"];
+                    }}
+                    digraph scalar_minus {{
+                        ext [style=invis];
+                        amplitude [name="amplitude"];
+                        ext -> amplitude [particle="G-"];
+                        amplitude -> ext [particle="{down}"];
+                        amplitude -> ext [particle="{up}~"];
+                    }}
+                    digraph vector_minus {{
+                        ext [style=invis];
+                        amplitude [name="amplitude"];
+                        ext -> amplitude [particle="W-"];
+                        amplitude -> ext [particle="{down}"];
+                        amplitude -> ext [particle="{up}~"];
+                    }}
+                    "#
+                ),
+                &model,
+            )
+            .unwrap();
+            let ckm_name = format!("CKM{}x{}", up_index + 1, down_index + 1);
+            let ckm = Atom::num(((3 + up_index) as i64, 5))
+                + Atom::i() * Atom::num(((4 + down_index) as i64, 7));
+            let parameters = [
+                (up_parameter, up_yukawa.clone()),
+                (down_parameter, down_yukawa.clone()),
+                (ckm_name.as_str(), ckm.clone()),
+            ];
+            let matrices: [Matrix; 4] = std::array::from_fn(|index| {
+                vertex_matrix(
+                    &graphs[index],
+                    "amplitude",
+                    &model,
+                    0,
+                    Atom::one(),
+                    &parameters,
+                )
+            });
+            let [plus_scalar, plus_vector, minus_scalar, minus_vector] = matrices;
+            // In the shipped CKM convention W+ carries CKM_ij*. Thus
+            // G+ = CKM* (yd PR-yu PL), G- = CKM (yu PR-yd PL).
+            for (scalar, vector, flavor, left, right) in [
+                (
+                    &plus_scalar,
+                    &plus_vector,
+                    ckm.conj(),
+                    -&up_yukawa,
+                    down_yukawa.clone(),
+                ),
+                (
+                    &minus_scalar,
+                    &minus_vector,
+                    ckm,
+                    -&down_yukawa,
+                    up_yukawa.clone(),
+                ),
+            ] {
+                for row in 0..4 {
+                    for column in 0..4 {
+                        let expected_scalar = if row != column {
+                            Atom::Zero
+                        } else {
+                            &flavor * if row < 2 { &left } else { &right }
+                        };
+                        let expected_vector = if matches!((row, column), (2, 0) | (3, 1)) {
+                            Atom::i() * &flavor * &inverse_sqrt_two
+                        } else {
+                            Atom::Zero
+                        };
+                        assert_eq!(scalar[row][column], expected_scalar, "G {up} {down}");
+                        assert_eq!(vector[row][column], expected_vector, "W {up} {down}");
+                    }
+                }
+            }
+            assert_eq!(negative(&minus_scalar), bar(&plus_scalar), "{up} {down}");
+            assert_eq!(negative(&minus_vector), bar(&plus_vector), "{up} {down}");
+
+            // Independent on-shell Weyl spinors with p_up=(5,0,0,4),
+            // p_down=(17/2,0,0,-4), and k=(27/2,0,0,0). Check both
+            // helicities; their different PL/PR weights expose either missing
+            // Yukawa. Overall spinor normalizations cancel from the identity.
+            for (bra, ket) in [
+                (
+                    [Atom::num(3), Atom::Zero, Atom::one(), Atom::Zero],
+                    [Atom::num((-5, 3)), Atom::Zero, Atom::one(), Atom::Zero],
+                ),
+                (
+                    [Atom::Zero, Atom::one(), Atom::Zero, Atom::num(3)],
+                    [Atom::Zero, Atom::num((-3, 5)), Atom::Zero, Atom::one()],
+                ),
+            ] {
+                let mut residual = Atom::Zero;
+                let mut scalar_amplitude = Atom::Zero;
+                for row in 0..4 {
+                    for column in 0..4 {
+                        scalar_amplitude += &bra[row] * &plus_scalar[row][column] * &ket[column];
+                        residual += &bra[row]
+                            * (Atom::num((27, 2)) * &plus_vector[row][column]
+                                + Atom::i() * Atom::num(3) * &plus_scalar[row][column])
+                            * &ket[column];
+                    }
+                }
+                assert_eq!(residual, Atom::Zero, "{up} {down}");
+                assert_ne!(scalar_amplitude, Atom::Zero, "{up} {down}");
+            }
+        }
+    }
 }
 
 #[test]

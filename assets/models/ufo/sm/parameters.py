@@ -72,6 +72,36 @@ etaWS = Parameter(name='etaWS',
                   lhablock='Wolfenstein',
                   lhacode=[4])
 
+ymu = Parameter(
+    name='ymu',
+    nature='external',
+    type='real',
+    value=0.0022,
+    texname='\\text{ymu}',
+    lhablock='YUKAWA',
+    lhacode=[2],
+)
+
+ymd = Parameter(
+    name='ymd',
+    nature='external',
+    type='real',
+    value=0.0047,
+    texname='\\text{ymd}',
+    lhablock='YUKAWA',
+    lhacode=[1],
+)
+
+yms = Parameter(
+    name='yms',
+    nature='external',
+    type='real',
+    value=0.095,
+    texname='\\text{yms}',
+    lhablock='YUKAWA',
+    lhacode=[3],
+)
+
 ymc = Parameter(name='ymc',
                 nature='external',
                 type='real',
@@ -127,6 +157,26 @@ MZ = Parameter(name='MZ',
                texname='\\text{MZ}',
                lhablock='MASS',
                lhacode=[23])
+
+MU = Parameter(
+    name='MU',
+    nature='external',
+    type='real',
+    value=0.0022,
+    texname='\\text{MU}',
+    lhablock='MASS',
+    lhacode=[2],
+)
+
+MD = Parameter(
+    name='MD',
+    nature='external',
+    type='real',
+    value=0.0047,
+    texname='\\text{MD}',
+    lhablock='MASS',
+    lhacode=[1],
+)
 
 MS = Parameter(name='MS',
                nature='external',
@@ -391,6 +441,30 @@ lam = Parameter(name='lam',
                 type='real',
                 value='MH**2/(2.*vev**2)',
                 texname='\\text{lam}')
+
+yu = Parameter(
+    name='yu',
+    nature='internal',
+    type='real',
+    value='(ymu*cmath.sqrt(2))/vev',
+    texname='\\text{yu}',
+)
+
+yd = Parameter(
+    name='yd',
+    nature='internal',
+    type='real',
+    value='(ymd*cmath.sqrt(2))/vev',
+    texname='\\text{yd}',
+)
+
+ys = Parameter(
+    name='ys',
+    nature='internal',
+    type='real',
+    value='(yms*cmath.sqrt(2))/vev',
+    texname='\\text{ys}',
+)
 
 yb = Parameter(name='yb',
                nature='internal',

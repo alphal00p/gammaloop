@@ -21,6 +21,17 @@ Importing the full model or using `--simplify-model=false` retains adjustable ex
 parameters. Runtime changes to their numerical values preserve the symbolic mass assignment
 used for generation, including when the new value is zero.
 
+The full bundled Standard Model includes masses and Higgs/Goldstone Yukawa interactions for
+all quark flavors. Its light-quark benchmark inputs are `MU = ymu = 0.0022`,
+`MD = ymd = 0.0047`, and `MS = yms = 0.095`, in GeV. As for the heavier flavors, the
+propagator masses and Yukawa input masses are independently adjustable; the dimensionless
+couplings satisfy `yq = sqrt(2) * ymq / vev`. These are model defaults, not running-mass evolution.
+The ordinary restriction cards fix all six light-quark inputs to zero. The exception,
+`thermal_s_mass`, retains nonzero `MS` and `yms` so both remain adjustable.
+
+Default jet clustering selects colored particles with zero resolved mass. When using finite
+quark masses in the full model, set `clustered_pdgs` explicitly to include those quarks in jets.
+
 == Choose a generation mode
 
 The interactive command tree separates cross sections, amplitudes, and operations on processes

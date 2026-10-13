@@ -452,6 +452,7 @@ mod test {
         dot,
         graph::{Graph, edge::ParseEdge, parse::IntoGraph},
         initialisation::{initialise, test_initialise},
+        model::InputParamCard,
         numerator::aind::Aind,
         processes::{Amplitude, AmplitudeGraph, DotExportSettings},
         settings::{
@@ -665,7 +666,14 @@ mod test {
     #[test]
     fn user_numerator_tree_fixtures_match_ufo_tree_algebra() {
         test_initialise().unwrap();
-        let model = crate::utils::load_generic_model("sm");
+        let mut model = crate::utils::load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+                .to_owned(),
+            "json",
+        )
+        .unwrap();
+        model.simplify(&mut parameters).unwrap();
         let mut expected = None;
         for source in [
             include_str!("../../../../tests/resources/graphs/qqx_aaa_tree_unprocessed.dot"),
@@ -708,8 +716,16 @@ mod test {
     #[test]
     fn tree() {
         initialise().unwrap();
-        // The explicit UFO reference includes i*pslash for each internal
-        // fermion propagator, matching the embedded SM Feynman rules.
+        let mut model = crate::utils::load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+                .to_owned(),
+            "json",
+        )
+        .unwrap();
+        model.simplify(&mut parameters).unwrap();
+        // The massless UFO reference includes i*pslash for each internal
+        // fermion propagator, matching the restricted SM Feynman rules.
         let mut graphs: Vec<Graph> = dot!(
             digraph qqx_aaa_tree_1 {
                         num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
@@ -775,9 +791,8 @@ mod test {
 
             edge [num="1"];
             node [num="1"];
-            }
-
-
+            },
+            &model
         )
         .unwrap();
 
@@ -806,8 +821,6 @@ mod test {
         }
 
         let mut a = Amplitude::from_graph_list("test", graphs.clone()).unwrap();
-
-        let model = crate::utils::load_generic_model("sm");
 
         let generation_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(1)

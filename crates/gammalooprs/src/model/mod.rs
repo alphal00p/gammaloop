@@ -2949,20 +2949,21 @@ mod tests {
     #[test]
     fn restricted_zero_masses_match_literal_zero_model() -> eyre::Result<()> {
         let mut full = load_generic_model("sm");
-        for (name, value) in [("MS", 0.095), ("MC", 1.27)] {
+        for (name, value) in [("MU", 0.0022), ("MD", 0.0047), ("MS", 0.095), ("MC", 1.27)] {
             full.get_parameter_mut(name)?.value = Some(Complex::new(F(value), F(0.0)));
         }
         let mut literal_zero = full.to_serializable();
         for particle in &mut literal_zero.particles {
-            if matches!(particle.mass.as_str(), "MS" | "MC") {
+            if matches!(particle.mass.as_str(), "MU" | "MD" | "MS" | "MC") {
                 particle.mass = "ZERO".into();
             }
         }
-        // An existing literal-ZERO fermion supplies the independent propagator oracle.
+        // Neutrinos remain literal-ZERO fermions even when every quark mass is free.
+        // Their propagators supply an independent oracle for both fermion flows.
         for propagator in &mut literal_zero.propagators {
             let source = match propagator.particle.as_str() {
-                "s" | "c" => full.get_propagator_for_particle("u"),
-                "s~" | "c~" => full.get_propagator_for_particle("u~"),
+                "u" | "d" | "s" | "c" => full.get_propagator_for_particle("ve"),
+                "u~" | "d~" | "s~" | "c~" => full.get_propagator_for_particle("ve~"),
                 _ => continue,
             };
             let source = super::SerializablePropagator::from_propagator(&source);
@@ -2971,7 +2972,7 @@ mod tests {
         }
         let mut literal_zero = Model::from_serializable_model(literal_zero);
         let mut card = full.default_param_card();
-        for name in ["MS", "MC"] {
+        for name in ["MU", "MD", "MS", "MC"] {
             card.insert(UFOSymbol::from(name), Complex::new(F(0.0), F(0.0)));
         }
         literal_zero.simplify(&mut card.clone())?;
@@ -2979,7 +2980,7 @@ mod tests {
         let expected = serde_json::to_value(literal_zero.to_serializable())?;
         assert_eq!(serde_json::to_value(full.to_serializable())?, expected);
 
-        for name in ["s", "s~", "c", "c~"] {
+        for name in ["u", "u~", "d", "d~", "s", "s~", "c", "c~"] {
             let particle = full.get_particle(name);
             assert!(particle.is_massless(), "{name}");
             assert!(
@@ -2987,7 +2988,7 @@ mod tests {
                 "{name}"
             );
         }
-        for name in ["MS", "MC"] {
+        for name in ["MU", "MD", "MS", "MC"] {
             assert_eq!(full.get_parameter(name).nature, ParameterNature::Internal);
             assert!(!card.contains_key(&UFOSymbol::from(name)));
         }
@@ -3042,7 +3043,7 @@ mod tests {
             mass.expression = Some(expression.into());
             mass.value = None;
             let imported = Model::from_str(serde_json::to_string(&serialized)?, "json")?;
-            for (name, control) in [("s", "u"), ("s~", "u~")] {
+            for (name, control) in [("s", "ve"), ("s~", "ve~")] {
                 assert!(imported.get_particle(name).is_massless(), "{expression}");
                 let propagator = imported.get_propagator_for_particle(name);
                 let expected = full.get_propagator_for_particle(control);
