@@ -14,7 +14,8 @@ nextest-version = "0.9.137"
 # Strict fast lane. Seven cases exceeded 240s in the matched CI-optim runs;
 # the other 36 slow cases have not been timed. The remaining 139 scalar cases
 # are included despite their `slow` module names. See docs/architecture/ci.typ.
-# The fixed-statistics self-energy acceptance also runs in the main-only lane.
+# The fixed-statistics self-energy acceptance and inclusive OS auxiliary-scale
+# scan also run in the main-only lane.
 default-filter = '''
 not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) and not (
     test(=cff::esurface::tests::failing::test_from_cut_left_box) or
@@ -71,6 +72,18 @@ not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) 
     test(=uv::approx::local_4d::on_shell_forest_tests::three_loop_open_spinor_hard_coefficient_has_exact_finite_certificate) or
     test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_generic_hard_limits) or
     test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_correlated_hard_limits) or
+    test(=local_os_nested_generation_agrees_across_three_routes) or
+    test(=slow::local_os_nested_generation_matches_all_routes) or
+    test(=slow::local_os_soft_gluon_generation_matches_all_routes) or
+    test(=slow::local_os_disjoint_generation_matches_all_routes) or
+    test(=slow::local_os_three_loop_generation_matches_all_routes) or
+    test(=slow::local_os_primitive_complete_uv_scaling_matrix) or
+    test(=slow::local_os_quark_in_gluon_complete_uv_scaling_matrix) or
+    test(=slow::local_os_quark_in_quark_complete_uv_scaling_matrix) or
+    test(=slow::local_os_soft_gluon_complete_uv_scaling_matrix) or
+    test(=slow::local_os_disjoint_complete_uv_scaling_matrix) or
+    test(=slow::local_os_three_loop_complete_uv_scaling_matrix) or
+    test(=gamma_star_ttx::gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross_section_and_auxiliary_scales) or
     test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=se1l_uv) or
     test(=integrations::scalar_mercedes) or
@@ -162,6 +175,12 @@ threads-required = 10
 filter = "package(clinnet) and binary(=public_typst_behavior)"
 test-group = "memory-intensive"
 
+# Inclusive OS scale scans are a full-main workload; reserve a worker.
+[[profile.default.overrides]]
+filter = "test(=gamma_star_ttx::gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross_section_and_auxiliary_scales)"
+test-group = "integration"
+threads-required = "num-test-threads"
+
 [[profile.default.overrides]]
 filter = "test(heavy) or test(memory) or test(large)"
 test-group = "memory-intensive"
@@ -187,7 +206,12 @@ threads-required = "num-test-threads"
 # These UV fixtures share generated-state directories across test processes.
 
 [[profile.default.overrides]]
-filter = "package(gammaloop-integration-tests) and binary(uv) and test(/^(dgse_local_ir_profiles_are_non_vacuous|dgse_local_ir_generation_orientation_filter_profiles_one_orientation|massless_quark_self_energy_local_ir_profile_is_non_vacuous|massless_gluon_self_energy_local_ir_profile_is_non_vacuous|soft_cff_state_survives_a_fresh_process_reload|massive_top_self_energy_local_os_dispatch_is_deferred|paper_appendix_b1_os_child_direct_dispatch_keeps_mixed_prescriptions|paper_appendix_b1_os_child_projects_with_live_parent_momentum|local_ir_disconnected_completed_components_form_nonzero_union|consecutive_soft_components_have_exact_forest_and_cli_profile|local_ir_integrated_generation_succeeds_across_local_uv_routes|genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs|local_os_integrated_generation_is_rejected_by_run_generate|local_ir_and_pole_part_wood_is_rejected_by_run_generate|local_ir_child_under_positive_degree_muv_parent_is_rejected_by_run_generate)$/)"
+filter = "package(gammaloop-integration-tests) and binary(uv) and (test(/^local_os_performance_/) or test(/^slow::local_os_/))"
+test-group = "soft-ct-serial"
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+filter = "package(gammaloop-integration-tests) and binary(uv) and test(/^(dgse_local_ir_profiles_are_non_vacuous|dgse_local_ir_generation_orientation_filter_profiles_one_orientation|massless_quark_self_energy_local_ir_profile_is_non_vacuous|massless_gluon_self_energy_local_ir_profile_is_non_vacuous|soft_cff_state_survives_a_fresh_process_reload|massive_top_self_energy_local_os_dispatch_uses_projected_four_d|paper_appendix_b1_os_child_direct_dispatch_keeps_mixed_prescriptions|paper_appendix_b1_os_child_projects_with_live_parent_momentum|local_ir_disconnected_completed_components_form_nonzero_union|consecutive_soft_components_have_exact_forest_and_cli_profile|local_ir_integrated_generation_succeeds_across_local_uv_routes|genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs|local_os_primitive_orientations_have_local_uv_controls|local_os_integrated_generation_agrees_across_three_routes|local_os_nested_generation_agrees_across_three_routes|local_ir_and_pole_part_wood_is_rejected_by_run_generate|local_ir_child_under_positive_degree_muv_parent_is_rejected_by_run_generate)$/)"
 test-group = "soft-ct-serial"
 
 [[profile.default.overrides]]
@@ -307,7 +331,19 @@ test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forests_ma
 test(=uv::approx::local_4d::on_shell_forest_tests::three_loop_open_spinor_hard_coefficient_has_exact_finite_certificate) or
 test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_generic_hard_limits) or
 test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_correlated_hard_limits) or
-test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
+test(=local_os_nested_generation_agrees_across_three_routes) or
+test(=slow::local_os_nested_generation_matches_all_routes) or
+test(=slow::local_os_soft_gluon_generation_matches_all_routes) or
+test(=slow::local_os_disjoint_generation_matches_all_routes) or
+test(=slow::local_os_three_loop_generation_matches_all_routes) or
+test(=slow::local_os_primitive_complete_uv_scaling_matrix) or
+test(=slow::local_os_quark_in_gluon_complete_uv_scaling_matrix) or
+test(=slow::local_os_quark_in_quark_complete_uv_scaling_matrix) or
+test(=slow::local_os_soft_gluon_complete_uv_scaling_matrix) or
+test(=slow::local_os_disjoint_complete_uv_scaling_matrix) or
+test(=slow::local_os_three_loop_complete_uv_scaling_matrix) or
+test(=gamma_star_ttx::gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross_section_and_auxiliary_scales) or
+    test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=se1l_uv) or
     test(=integrations::scalar_mercedes) or
     test(=test_vacuum_amplitude_generation_full_sm_three_loop_raw) or

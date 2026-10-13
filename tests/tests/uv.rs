@@ -3105,40 +3105,477 @@ fn genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs() -> Res
     Ok(())
 }
 
-#[test]
-fn local_os_integrated_generation_succeeds_through_projected_four_d() -> Result<()> {
-    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+#[derive(Clone, Copy)]
+enum OsRouteFixture {
+    PrimitiveTopSelfEnergy,
+    AppendixB1NestedOsChild,
+    NestedOsTopSelfEnergy,
+    SoftGluonInOsTop,
+    DisjointOsTopSelfEnergies,
+    ThreeLoopOsTopSelfEnergy,
+}
+
+impl OsRouteFixture {
+    fn inputs(
+        self,
+    ) -> (
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static [&'static [f64]],
+    ) {
+        match self {
+            OsRouteFixture::PrimitiveTopSelfEnergy => (
+                LOCAL_OS_CARD,
+                LOCAL_OS_NAME,
+                LOCAL_OS_NAME,
+                &[&[19.0, -29.0, 37.0], &[-41.0, 13.0, 23.0]],
+            ),
+            OsRouteFixture::AppendixB1NestedOsChild => (
+                "paper_appendix_b1_nested_gluon_self_energy_os.toml",
+                "paper_appendix_b1_nested_gluon_self_energy",
+                "deferred_os",
+                &[
+                    &[19.0, -29.0, 37.0, 11.0, 43.0, -23.0],
+                    &[41.0, 17.0, -31.0, -13.0, 59.0, 7.0],
+                ],
+            ),
+            OsRouteFixture::NestedOsTopSelfEnergy => (
+                "local_nested_os_top_self_energy.toml",
+                "local_nested_os_top_self_energy",
+                "local_nested_os_top_self_energy",
+                &[
+                    &[19.0, -29.0, 37.0, 11.0, 43.0, -23.0],
+                    &[-41.0, 13.0, 23.0, 29.0, -17.0, 31.0],
+                ],
+            ),
+            OsRouteFixture::SoftGluonInOsTop => (
+                "local_soft_gluon_in_top_self_energy.toml",
+                "local_soft_gluon_in_top_self_energy",
+                "local_soft_gluon_in_top_self_energy",
+                &[
+                    &[19.0, -29.0, 37.0, 11.0, 43.0, -23.0],
+                    &[-41.0, 13.0, 23.0, 29.0, -17.0, 31.0],
+                ],
+            ),
+            OsRouteFixture::DisjointOsTopSelfEnergies => (
+                "local_disjoint_os_top_self_energies.toml",
+                "local_disjoint_os_top_self_energies",
+                "local_disjoint_os_top_self_energies",
+                &[
+                    &[19.0, -29.0, 37.0, 11.0, 43.0, -23.0],
+                    &[-41.0, 13.0, 23.0, 29.0, -17.0, 31.0],
+                ],
+            ),
+            OsRouteFixture::ThreeLoopOsTopSelfEnergy => (
+                "local_os_three_loop_top_self_energy.toml",
+                "local_os_three_loop_top_self_energy",
+                "local_os_three_loop_top_self_energy",
+                &[
+                    &[19.0, -29.0, 37.0, 11.0, 43.0, -23.0, 7.0, -17.0, 53.0],
+                    &[-41.0, 13.0, 23.0, 29.0, -17.0, 31.0, -13.0, 59.0, 7.0],
+                ],
+            ),
+        }
+    }
+}
+
+fn run_os_route(
+    fixture: OsRouteFixture,
+    (route, explicit, projected): (&str, bool, bool),
+    artifact_name: &str,
+) -> Result<(Vec<InspectEvaluation>, CLIState)> {
+    const EVALUATION_REPEATS: usize = 5;
+    const EVALUATION_SECONDS: usize = 2;
+    const EVALUATION_BATCHES: usize = 20;
+    let (card, process_name, integrand_name, samples) = fixture.inputs();
+    let artifacts = gammaloop_integration_tests::new_test_artifact_dir(artifact_name)?;
     let mut cli = get_test_cli(
-        Some(LOCAL_OS_CARD.into()),
-        get_tests_workspace_path().join("local_os_integrated_projected_four_d"),
-        Some("local_os_integrated_projected_four_d".to_string()),
+        Some(card.into()),
+        artifacts.join("state"),
+        Some("generation".to_string()),
         true,
     )?;
+    cli.cli_settings
+        .global
+        .generation
+        .explicit_orientation_sum_only = explicit;
+    cli.cli_settings.global.generation.orientation_pattern = Default::default();
+    cli.cli_settings
+        .global
+        .generation
+        .uv
+        .local_uv_cts_from_expanded_4d_integrands = projected;
+    if matches!(fixture, OsRouteFixture::PrimitiveTopSelfEnergy) {
+        // A moving on-shell quark distinguishes the live external momentum
+        // from the component's fixed rest-frame subtraction point.
+        cli.run_command(r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[180.08053753806934,0.0,0.0,50.0],"dependent"],"helicities":[1,1]}}'"#)?;
+    }
+    let generate_integrated = cli.cli_settings.global.generation.uv.generate_integrated;
+    assert_eq!(
+        generate_integrated,
+        matches!(fixture, OsRouteFixture::PrimitiveTopSelfEnergy),
+        "the primitive fixture includes integrated OS terms; the nested fixture is local-only"
+    );
+    let generation_started_unix_milliseconds = u64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_millis(),
+    )?;
+    let started = Instant::now();
     cli.run_command("run generate")?;
-    assert_generated_local_integrand(&cli, LOCAL_OS_NAME, LOCAL_OS_NAME, 3)?;
+    let generation_seconds = started.elapsed().as_secs_f64();
+    let generation_finished_unix_milliseconds = u64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_millis(),
+    )?;
+    assert_generated_local_integrand(&cli, process_name, integrand_name, samples[0].len())?;
     assert_selected_local_identifier(
         &cli,
-        LOCAL_OS_NAME,
-        LOCAL_OS_NAME,
+        process_name,
+        integrand_name,
         ApproximationType::OS,
         [-6, 6],
         [6, 21],
         1,
     )?;
-    let value = evaluate_momentum_sample(
-        &mut cli,
-        LOCAL_OS_NAME,
-        LOCAL_OS_NAME,
-        &[19.0, -29.0, 37.0],
-        None,
-        f64::EPSILON,
+    if matches!(fixture, OsRouteFixture::AppendixB1NestedOsChild) {
+        assert_selected_local_identifier(
+            &cli,
+            process_name,
+            integrand_name,
+            ApproximationType::IR,
+            [-21, 21],
+            [6, 21],
+            1,
+        )?;
+    }
+    let mut values = Vec::new();
+    for sample in samples {
+        let value = evaluate_momentum_sample(
+            &mut cli,
+            process_name,
+            integrand_name,
+            sample,
+            None,
+            f64::EPSILON,
+        )?;
+        assert!(value.value.re.is_finite() && value.value.im.is_finite());
+        let minimum_magnitude = match fixture {
+            OsRouteFixture::PrimitiveTopSelfEnergy => 1.0e-16,
+            _ => 0.0,
+        };
+        assert!(
+            value.value.re.hypot(value.value.im) > minimum_magnitude,
+            "{process_name}, {route}: the route comparison must be nonzero"
+        );
+        values.push(value);
+    }
+    let process = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(process_name.to_string())))?;
+    let mut report = cli.generation_performance_report(process, integrand_name)?;
+    report["fixture_card"] = card.into();
+    report["fixture_process"] = process_name.into();
+    report["counterterm_scope"] = if generate_integrated {
+        "local_and_integrated"
+    } else {
+        "local_only"
+    }
+    .into();
+    report["generate_integrated"] = generate_integrated.into();
+    report["momentum_samples"] = json!(samples);
+    report["route"] = route.into();
+    report["route_index"] = 0.into();
+    report["generation_wall_seconds"] = generation_seconds.into();
+    report["generation_started_unix_milliseconds"] = generation_started_unix_milliseconds.into();
+    report["generation_finished_unix_milliseconds"] = generation_finished_unix_milliseconds.into();
+    report["memory_scope"] = "generation_sampled_process_rss".into();
+    report["evaluation_protocol"] = json!({
+        "repeats_per_point": EVALUATION_REPEATS,
+        "target_seconds_per_repeat": EVALUATION_SECONDS,
+        "batches_per_repeat": EVALUATION_BATCHES,
+        "minimal_integrand": true,
+    });
+    let source_log = cli
+        .cli_settings
+        .state
+        .folder
+        .join("logs/gammalog-generation.jsonl");
+    let profile_log = artifacts.join("generation_profile.jsonl");
+    report["profile_log"] = json!(source_log.is_file().then_some(&profile_log));
+    std::fs::write(
+        artifacts.join("generation.json"),
+        serde_json::to_vec_pretty(&report)?,
     )?;
-    assert!(
-        value.value.re.is_finite() && value.value.im.is_finite(),
-        "the OS local contribution and vacuum scheme correction must evaluate finitely: {:?}",
-        value.value,
-    );
+    let mut measurements = Vec::new();
+    for repeat in 0..EVALUATION_REPEATS {
+        for (point_index, sample) in samples.iter().enumerate() {
+            let benchmark_point = sample
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let output = artifacts.join(if repeat == 0 && point_index == 0 {
+                "evaluation.json".to_string()
+            } else {
+                format!("evaluation_point_{point_index}_repeat_{repeat}.json")
+            });
+            cli.run_command(&format!(
+                "bench -p {process_name} -i {integrand_name} -m -x {benchmark_point} --duration {EVALUATION_SECONDS}s --n-batches {EVALUATION_BATCHES} --minimal-integrand --json-output {}",
+                output.display(),
+            ))?;
+            let measurement: Value = serde_json::from_slice(&std::fs::read(&output)?)?;
+            measurements.push(json!({
+                "point_index": point_index,
+                "repeat": repeat,
+                "artifact": output,
+                "total_samples": measurement["total_samples"],
+                "summary": measurement["summary"],
+            }));
+        }
+    }
+    std::fs::write(
+        artifacts.join("evaluation_measurements.json"),
+        serde_json::to_vec_pretty(&json!({
+            "schema_version": 1,
+            "route": route,
+            "points": samples,
+            "protocol": report["evaluation_protocol"],
+            "measurements": measurements,
+        }))?,
+    )?;
+    if source_log.is_file() {
+        std::fs::copy(source_log, profile_log)?;
+    }
+    Ok((values, cli))
+}
 
+impl OsRouteFixture {
+    fn check_uv_scaling(self, explicit: bool, projected: bool) -> Result<()> {
+        let (card, process, integrand, _) = self.inputs();
+        let artifacts = gammaloop_integration_tests::new_test_artifact_dir(&format!(
+            "os_uv_scaling_{process}"
+        ))?;
+        let mut profiles = Vec::new();
+        let mut retained_states = Vec::new();
+        for bare in [false, true] {
+            let state = artifacts.join(if bare { "bare" } else { "subtracted" });
+            let mut cli = get_test_cli(Some(card.into()), state, None, true)?;
+            let generation = &mut cli.cli_settings.global.generation;
+            generation.explicit_orientation_sum_only = explicit;
+            generation.orientation_pattern = Default::default();
+            generation.uv.local_uv_cts_from_expanded_4d_integrands = projected;
+            generation.uv.generate_integrated = false;
+            if bare {
+                let prescription = &mut generation.uv.renormalization_prescription;
+                prescription.log_divergent = ApproximationType::Unsubtracted;
+                prescription.massive_power_divergent = ApproximationType::Unsubtracted;
+                prescription.massless_power_divergent = ApproximationType::Unsubtracted;
+                prescription.overrides.clear();
+            }
+            if matches!(self, Self::PrimitiveTopSelfEnergy) {
+                cli.run_command(r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[180.08053753806934,0.0,0.0,50.0],"dependent"],"helicities":[1,1]}}'"#)?;
+            }
+            cli.run_command("run generate")?;
+            let profile = cli_uv_profile_pass_fail(&mut cli, process, integrand)?;
+            std::fs::copy(
+                cli.cli_settings
+                    .state
+                    .folder
+                    .join("local_ct_uv_profile/uv_profile.json"),
+                artifacts.join(if bare { "bare.json" } else { "subtracted.json" }),
+            )?;
+            profiles.push(profile);
+            retained_states.push(cli.cli_settings.state.folder.clone());
+        }
+        let [subtracted, bare] = profiles.as_slice() else {
+            unreachable!("the matched scan has exactly two controls")
+        };
+        assert_eq!(
+            subtracted.profile_identity, bare.profile_identity,
+            "OS and bare controls must have identical scales, LMBs, and hard subsets"
+        );
+        assert!(
+            subtracted.total > 0 && subtracted.resolved > 0 && subtracted.failed == 0,
+            "{process}: complete OS forest must pass every resolved UV limit: {subtracted:?}"
+        );
+        assert!(
+            bare.total > 0 && bare.resolved > 0 && bare.dod_failures > 0,
+            "{process}: the unsubtracted control must expose a resolved UV divergence: {bare:?}"
+        );
+        if !explicit {
+            assert!(
+                subtracted.orientation_total > 0
+                    && subtracted.orientation_resolved > 0
+                    && subtracted.orientation_failed == 0,
+                "{process}: selectable orientations must satisfy their local UV bounds: {subtracted:?}"
+            );
+            assert!(
+                bare.orientation_dod_failures > 0,
+                "{process}: the bare orientation control must diverge: {bare:?}"
+            );
+        }
+        for state in retained_states {
+            clean_test(state);
+        }
+        Ok(())
+    }
+
+    fn check_routes(self, artifact_name: &str) -> Result<()> {
+        let mut reference: Option<Vec<InspectEvaluation>> = None;
+        let profile_artifacts = gammaloop_integration_tests::new_test_artifact_dir(artifact_name)?;
+        let profile_log = profile_artifacts.join("generation_profile.jsonl");
+        let mut retained_states = Vec::new();
+        for route_config in [
+            ("projected_four_d", true, true),
+            ("explicit_direct", true, false),
+            ("orientation_direct", false, false),
+        ] {
+            let route = route_config.0;
+            let (values, cli) =
+                run_os_route(self, route_config, &format!("{artifact_name}/{route}"))?;
+            if let Some(reference) = &reference {
+                for (point, (actual, expected)) in values.iter().zip(reference).enumerate() {
+                    let difference = (actual.value.re - expected.value.re)
+                        .hypot(actual.value.im - expected.value.im);
+                    let scale = actual
+                        .value
+                        .re
+                        .hypot(actual.value.im)
+                        .max(expected.value.re.hypot(expected.value.im));
+                    let accuracy = actual
+                        .relative_accuracy
+                        .max(expected.relative_accuracy)
+                        .max(f64::EPSILON);
+                    assert!(
+                        difference <= INSPECT_DEPENDENCE_ACCURACY_FACTOR * accuracy * scale,
+                        "{route} sample {point}: {:?} differs from projected 4D {:?}",
+                        actual.value,
+                        expected.value
+                    );
+                }
+            } else {
+                reference = Some(values);
+            }
+            // The first CLI owns the process-wide synchronous file logger. Keep
+            // its state until every route has finished writing to that same file.
+            retained_states.push(cli.cli_settings.state.folder.clone());
+        }
+        let source_log = retained_states[0].join("logs/gammalog-generation.jsonl");
+        if source_log.is_file() {
+            std::fs::copy(source_log, &profile_log)?;
+        }
+        for (route_index, state) in retained_states.into_iter().enumerate() {
+            let artifacts = state
+                .parent()
+                .expect("the state belongs to its route artifact");
+            let report_path = artifacts.join("generation.json");
+            let mut report: Value = serde_json::from_slice(&std::fs::read(&report_path)?)?;
+            report["route_index"] = route_index.into();
+            report["memory_scope"] =
+                "generation_sampled_process_rss_with_prior_route_allocations".into();
+            report["profile_log"] = json!(profile_log.is_file().then_some(&profile_log));
+            std::fs::write(report_path, serde_json::to_vec_pretty(&report)?)?;
+            let intermediate_log = artifacts.join("generation_profile.jsonl");
+            if intermediate_log.is_file() {
+                std::fs::remove_file(intermediate_log)?;
+            }
+            clean_test(state);
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn local_os_primitive_orientations_have_local_uv_controls() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    // The one-loop fixture has selectable production orientations. This
+    // small control supplements the complete sums compared in every route.
+    OsRouteFixture::PrimitiveTopSelfEnergy.check_uv_scaling(false, false)
+}
+
+#[test]
+fn local_os_integrated_generation_agrees_across_three_routes() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    OsRouteFixture::PrimitiveTopSelfEnergy.check_routes("os_route_matrix")
+}
+
+#[test]
+fn local_os_nested_generation_agrees_across_three_routes() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    OsRouteFixture::AppendixB1NestedOsChild.check_routes("os_nested_route_matrix")
+}
+
+#[test]
+fn local_os_performance_projected_four_d() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let (_, cli) = run_os_route(
+        OsRouteFixture::PrimitiveTopSelfEnergy,
+        ("projected_four_d", true, true),
+        "os_performance_projected_four_d",
+    )?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn local_os_performance_explicit_direct() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let (_, cli) = run_os_route(
+        OsRouteFixture::PrimitiveTopSelfEnergy,
+        ("explicit_direct", true, false),
+        "os_performance_explicit_direct",
+    )?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn local_os_performance_orientation_direct() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let (_, cli) = run_os_route(
+        OsRouteFixture::PrimitiveTopSelfEnergy,
+        ("orientation_direct", false, false),
+        "os_performance_orientation_direct",
+    )?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn local_os_performance_nested_projected_four_d() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let (_, cli) = run_os_route(
+        OsRouteFixture::AppendixB1NestedOsChild,
+        ("projected_four_d", true, true),
+        "os_performance_nested_projected_four_d",
+    )?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn local_os_performance_nested_explicit_direct() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let (_, cli) = run_os_route(
+        OsRouteFixture::AppendixB1NestedOsChild,
+        ("explicit_direct", true, false),
+        "os_performance_nested_explicit_direct",
+    )?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn local_os_performance_nested_orientation_direct() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let (_, cli) = run_os_route(
+        OsRouteFixture::AppendixB1NestedOsChild,
+        ("orientation_direct", false, false),
+        "os_performance_nested_orientation_direct",
+    )?;
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
@@ -5477,6 +5914,75 @@ fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
 mod slow {
     use super::*;
     use gammalooprs::model::ModelGammaLoopExt;
+
+    #[test]
+    fn local_os_nested_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::NestedOsTopSelfEnergy.check_routes("os_quark_nested_route_matrix")
+    }
+
+    #[test]
+    fn local_os_soft_gluon_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::SoftGluonInOsTop.check_routes("os_soft_gluon_route_matrix")
+    }
+
+    #[test]
+    fn local_os_disjoint_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::DisjointOsTopSelfEnergies.check_routes("os_disjoint_route_matrix")
+    }
+
+    #[test]
+    fn local_os_three_loop_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::ThreeLoopOsTopSelfEnergy.check_routes("os_three_loop_route_matrix")
+    }
+
+    #[test]
+    fn local_os_primitive_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::PrimitiveTopSelfEnergy.check_uv_scaling(true, false)
+    }
+
+    #[test]
+    fn local_os_quark_in_gluon_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::AppendixB1NestedOsChild.check_uv_scaling(true, true)
+    }
+
+    #[test]
+    fn local_os_quark_in_quark_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::NestedOsTopSelfEnergy.check_uv_scaling(true, true)
+    }
+
+    #[test]
+    fn local_os_soft_gluon_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::SoftGluonInOsTop.check_uv_scaling(true, false)
+    }
+
+    #[test]
+    fn local_os_disjoint_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::DisjointOsTopSelfEnergies.check_uv_scaling(true, true)
+    }
+
+    #[test]
+    fn local_os_three_loop_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        // For this bounded scan, projected construction savings dominate the
+        // direct evaluator's smaller per-sample cost. The separate route
+        // matrix retains pointwise checks of both direct representations.
+        // The profiler inherits this pool and clones evaluator state across
+        // parallel subsets. One worker bounds RAM without reducing coverage.
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .stack_size(32 * 1024 * 1024)
+            .build()?
+            .install(|| OsRouteFixture::ThreeLoopOsTopSelfEnergy.check_uv_scaling(true, true))
+    }
 
     fn run_double_triangle_soft_ir_case(
         card: &str,
