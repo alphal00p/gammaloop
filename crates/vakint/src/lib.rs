@@ -27,6 +27,10 @@ pub use rustred::solver::{
     CandidateRoutedCachePolicy as RustRedCachePolicy,
     CandidateRoutedCacheStatistics as RustRedCacheWorkStatistics,
 };
+pub use rustred_evaluation::cache::{
+    RustRedCacheLoadOptions, RustRedCachePreparationOptions, RustRedCacheRoot,
+    RustRedCacheStatistics, RustRedCacheWorkload,
+};
 pub use rustred_evaluation::five_loop::RustRedSymbolicEvaluation;
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions};
 
@@ -2342,6 +2346,7 @@ pub struct Vakint {
     pub topologies: Topologies,
     rustred_application:
         Arc<std::sync::Mutex<Option<rustred_evaluation::five_loop::LoadedApplication>>>,
+    rustred_lower_caches: Arc<std::sync::Mutex<rustred_evaluation::cache::LoadedLowerCaches>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -4284,6 +4289,7 @@ impl Vakint {
         Ok(Vakint {
             topologies,
             rustred_application: Arc::default(),
+            rustred_lower_caches: Arc::default(),
         })
     }
 

@@ -235,11 +235,12 @@ impl MatchedScalarFamily {
 
     pub(super) fn evaluate(
         self,
+        vakint: &crate::Vakint,
         settings: &VakintSettings,
         numerator: symbolica::atom::AtomView,
         options: &RustRedEvaluationOptions,
     ) -> Result<Atom, RustRedEvaluationError> {
-        super::materialize::evaluate(self, settings, numerator, options)
+        super::materialize::evaluate(vakint, self, settings, numerator, options)
     }
 }
 

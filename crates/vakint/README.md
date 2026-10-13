@@ -32,6 +32,10 @@ under `examples/` for DOT input, cache settings, exact family-qualified outputs,
 and retained nonzero conditions. Numerical five-loop master substitution is
 unsupported.
 
+Explicit lower-loop exact-cache preparation and read-only attachment are under
+development; the one-loop fresh-process gate passes. See the
+[cache interface, limits and remaining scope](cache_preparation.typ).
+
 For supported one-, two- and three-loop equal-mass vacuum families, the opt-in
 `EvaluationOrder::rustred_only()` scalar backend instead applies closing IBP
 artifacts shipped with Vakint and reuses Vakint's pure-Rust master

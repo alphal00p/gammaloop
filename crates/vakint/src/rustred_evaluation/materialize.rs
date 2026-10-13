@@ -14,6 +14,7 @@ use super::matching::MatchedScalarFamily;
 use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 
 pub(super) fn evaluate(
+    vakint: &crate::Vakint,
     matched: MatchedScalarFamily,
     settings: &VakintSettings,
     numerator: AtomView,
@@ -55,18 +56,33 @@ pub(super) fn evaluate(
         .map_err(|error| RustRedEvaluationError::ScalarNumerator {
             detail: error.to_string(),
         })?;
-    let mut reducer =
-        Reducer::new(artifact).map_err(|error| RustRedEvaluationError::Reduction {
-            detail: error.to_string(),
-        })?;
+    // The ordinary reducer is still request-local. An explicitly attached
+    // native cache supplies the same typed homogeneity result without creating
+    // a second, unused seeded reducer alongside its configured RAM allowance.
+    let mut reducer = None;
     let mut raw_masters = Atom::Zero;
     let mut precision_warnings = crate::master_precision::MasterPrecisionWarnings::new(settings);
     for lowered in lowering.terms() {
-        let decomposition = reducer
-            .reduce_with_common_mass_homogeneity(lowered.integral())
-            .map_err(|error| RustRedEvaluationError::Reduction {
-                detail: error.to_string(),
-            })?;
+        let decomposition =
+            match vakint.cached_closed_homogeneous(matched.family, lowered.integral())? {
+                Some(decomposition) => decomposition,
+                None => {
+                    if reducer.is_none() {
+                        reducer = Some(Reducer::new(artifact).map_err(|error| {
+                            RustRedEvaluationError::Reduction {
+                                detail: error.to_string(),
+                            }
+                        })?);
+                    }
+                    reducer
+                        .as_mut()
+                        .expect("initialized above")
+                        .reduce_with_common_mass_homogeneity(lowered.integral())
+                        .map_err(|error| RustRedEvaluationError::Reduction {
+                            detail: error.to_string(),
+                        })?
+                }
+            };
         for (master, coefficient) in decomposition.terms() {
             let combined = artifact
                 .coefficient_context()

@@ -320,3 +320,29 @@ candidate already had just one coalesced rank-ten key and no rank-zero key to
 check first. The manual diagnostic retains that negative result; it is not an
 acceptance test. No production predicate ordering or fast-rejection API was
 introduced to obtain the successful full-census result.
+
+== Application validation and remaining performance gap
+
+The post-weighted-lowering, actual-Git `1fca5bd0` application suite passed all
+three primary inputs, expanded and simultaneous-basis-change comparisons,
+all six positive-line cancellation controls, all three massive-bridge controls,
+the homogeneous degree-ten control, and every guard-domain comparison.
+The frozen executable SHA256 was
+`dd5307d2c1f9a72ede886450f310a7a261e88a4e677f0c4b95683c7f4a39afdb`.
+It completed in 3203.631 seconds (53 minutes 24 seconds), with sampled peak RSS
+2.884 GB. The current frozen library also passed the 52-terminal factor-product
+gate in 202.90 seconds, plus six numerator, four matcher and one five-loop
+basis-invariance tests.
+
+This successful application run was materially slower than the earlier
+`bf5b2882` run (1365.807 seconds); the runs were not a controlled benchmark
+pair. Four frontend admitted-witness searches account for almost all of the
+observed increase: their combined time rose from 896.439 to 2718.036 seconds.
+Each search retained exactly 73 graph maps, 2304 orientation candidates and
+144 verified witnesses in both runs. The evidence therefore points to higher
+per-candidate frontend cost, not an expanded witness search space. Each
+candidate repeats scalar sealing, parent transport, weighted lowering and
+entry admission; existing timers do not separate those inner costs. A live
+profile was requested but the process had already finished, so no finer
+attribution is claimed and no run was restarted. This is an open performance
+issue, separate from correctness and from saved-rule cache effectiveness.

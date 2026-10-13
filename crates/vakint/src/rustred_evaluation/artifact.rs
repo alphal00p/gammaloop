@@ -1,6 +1,7 @@
 use std::sync::LazyLock;
 
 use rustred::foundry::artifact::{ArtifactPersistenceError, ArtifactSchemaVersion, ClosedArtifact};
+use sha2::{Digest, Sha256};
 
 use super::RustRedEvaluationError;
 use super::terminal::{TerminalCatalog, TerminalManifest, TerminalSource};
@@ -27,7 +28,26 @@ fn decode_current_artifact(bytes: &[u8]) -> Result<ClosedArtifact, ArtifactPersi
 // intentionally have no Vakint migration, compatibility reader, or fallback.
 struct FamilyAssets {
     artifact: ClosedArtifact,
+    source_digest: [u8; 32],
     terminals: TerminalCatalog,
+}
+
+/// The digest and artifact originate from the same authenticated immutable
+/// byte buffer. Cache identity never rereads a path or reencodes Symbolica state.
+#[derive(Clone, Copy)]
+pub(super) struct ArtifactSnapshot<'a> {
+    artifact: &'a ClosedArtifact,
+    source_digest: [u8; 32],
+}
+
+impl<'a> ArtifactSnapshot<'a> {
+    pub(super) fn artifact(self) -> &'a ClosedArtifact {
+        self.artifact
+    }
+
+    pub(super) fn source_digest(self) -> [u8; 32] {
+        self.source_digest
+    }
 }
 
 fn load_assets(
@@ -38,6 +58,7 @@ fn load_assets(
     let terminals = TerminalCatalog::compile(&artifact, terminal_manifest)?;
     Ok(FamilyAssets {
         artifact,
+        source_digest: Sha256::digest(bytes).into(),
         terminals,
     })
 }
@@ -118,7 +139,7 @@ impl ArtifactFamily {
         }
     }
 
-    pub(super) fn artifact(self) -> Result<&'static ClosedArtifact, RustRedEvaluationError> {
+    fn assets(self) -> Result<&'static FamilyAssets, RustRedEvaluationError> {
         let loaded = match self {
             Self::UnitMassVacuumK1 => &*K1_ASSETS,
             Self::UnitMassVacuumK3 => &*K3_ASSETS,
@@ -126,26 +147,26 @@ impl ArtifactFamily {
         };
         loaded
             .as_ref()
-            .map(|assets| &assets.artifact)
             .map_err(|detail| RustRedEvaluationError::ArtifactLoad {
                 family: self.name(),
                 detail: detail.clone(),
             })
     }
 
+    pub(super) fn artifact(self) -> Result<&'static ClosedArtifact, RustRedEvaluationError> {
+        Ok(&self.assets()?.artifact)
+    }
+
+    pub(super) fn snapshot(self) -> Result<ArtifactSnapshot<'static>, RustRedEvaluationError> {
+        let assets = self.assets()?;
+        Ok(ArtifactSnapshot {
+            artifact: &assets.artifact,
+            source_digest: assets.source_digest,
+        })
+    }
+
     pub(super) fn terminals(self) -> Result<&'static TerminalCatalog, RustRedEvaluationError> {
-        let loaded = match self {
-            Self::UnitMassVacuumK1 => &*K1_ASSETS,
-            Self::UnitMassVacuumK3 => &*K3_ASSETS,
-            Self::UnitMassVacuumK6 => &*K6_ASSETS,
-        };
-        loaded
-            .as_ref()
-            .map(|assets| &assets.terminals)
-            .map_err(|detail| RustRedEvaluationError::ArtifactLoad {
-                family: self.name(),
-                detail: detail.clone(),
-            })
+        Ok(&self.assets()?.terminals)
     }
 
     pub(super) fn validate_root_powers(self, powers: &[i64]) -> Result<(), RustRedEvaluationError> {
@@ -191,8 +212,27 @@ mod tests {
     };
 
     use super::{
-        ArtifactFamily, K1_BYTES, K3_BYTES, decode_current_artifact, shipped_family_for_loop_count,
+        ArtifactFamily, K1_BYTES, K3_BYTES, K6_BYTES, decode_current_artifact,
+        shipped_family_for_loop_count,
     };
+    use sha2::{Digest, Sha256};
+
+    #[test]
+    fn cache_snapshot_digest_belongs_to_the_loaded_immutable_bytes() {
+        for (family, bytes) in [
+            (ArtifactFamily::UnitMassVacuumK1, K1_BYTES),
+            (ArtifactFamily::UnitMassVacuumK3, K3_BYTES),
+            (ArtifactFamily::UnitMassVacuumK6, K6_BYTES),
+        ] {
+            let snapshot = family.snapshot().unwrap();
+            let expected: [u8; 32] = Sha256::digest(bytes).into();
+            assert_eq!(snapshot.source_digest(), expected);
+            assert!(std::ptr::eq(
+                snapshot.artifact(),
+                family.artifact().unwrap()
+            ));
+        }
+    }
 
     #[test]
     fn registry_exposes_only_sealed_assets_until_four_loop_artifact_exists() {

@@ -5,6 +5,9 @@
 //! successful evaluation is not an unrestricted family-closure claim.
 
 mod artifact;
+pub mod cache;
+#[cfg(test)]
+mod cache_tests;
 mod factor_projection;
 mod factor_provider;
 pub(crate) mod five_loop;
@@ -53,6 +56,12 @@ impl fmt::Display for RustRedEvaluationOptions {
 #[derive(Debug, Error, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RustRedEvaluationError {
+    #[error("RustRed cache backend is unavailable for {loop_count} loops")]
+    CacheBackendUnavailable { loop_count: usize },
+    #[error("RustRed lower-loop cache lock is poisoned")]
+    CacheLockPoisoned,
+    #[error("RustRed cache operation failed: {source}")]
+    CacheOperation { source: rustred_app::AppError },
     #[deprecated(
         since = "0.1.2",
         note = "retained for source compatibility with the pre-artifact RustRed seam"
@@ -140,7 +149,7 @@ impl Vakint {
             return four_loop::evaluate(settings, numerator, integral_specs, options);
         }
         MatchedScalarFamily::try_new(integral_specs)?
-            .evaluate(settings, numerator, options)
+            .evaluate(self, settings, numerator, options)
             .map_err(Into::into)
     }
 }
