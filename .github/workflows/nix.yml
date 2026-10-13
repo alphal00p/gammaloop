@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: nix-${{ github.workflow }}-${{ github.run_id }}
@@ -46,10 +47,27 @@ jobs:
             echo "::error::Main test coverage requires the Symbolica license secret"
             exit 1
           fi
-      - uses: NixOS/nix-installer-action@main
-      - uses: Mic92/hestia@v3
+      - uses: ./.github/actions/nix-ci-cache
         with:
-          version: v3.0.0
+          netrc: ${{ secrets.NIXCI_NETRC }}
+      - name: Check producer disk budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /nix/store "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          # The publication closure can approach 8 GiB; reserve another 4 GiB
+          # before starting compiler work. Nix collects unrooted paths below
+          # its 4 GiB watermark and runs only one derivation at a time.
+          for path in /nix/store "$RUNNER_TEMP" "$GITHUB_WORKSPACE"; do
+            available=$(df --output=avail -B1 "$path" | tail -n 1)
+            if [ "$available" -lt $((12 * 1024 * 1024 * 1024)) ]; then
+              echo "::error::Shared Nix artifacts require at least 12 GiB free on $path before building"
+              exit 1
+            fi
+          done
+      - uses: Mic92/hestia@v3.1.0
+        with:
+          version: v3.1.0
           drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
           no-closure: true
           upstream-cache-filter: true
@@ -59,11 +77,15 @@ jobs:
           set -euo pipefail
           # Avoid publishing every large intermediate Crane merge tree.
           test -z "$(nix --option post-build-hook "" config show post-build-hook)"
+          # Keep all roots alive through publication and matrix evaluation,
+          # including while the daemon collects unneeded build intermediates.
+          producer_roots="$RUNNER_TEMP/nix-shared-artifacts"
+          mkdir -p "$producer_roots"
           producer_output_lines=$(
             nix --option post-build-hook "" build \
               --impure \
               --keep-going \
-              --no-link \
+              --out-link "$producer_roots/result" \
               --print-build-logs \
               --print-out-paths \
               .#packages.x86_64-linux.alphal00p-docs-cargo-artifacts \
@@ -74,6 +96,7 @@ jobs:
           )
           mapfile -t producer_outputs <<< "$producer_output_lines"
           test "${#producer_outputs[@]}" -eq 5
+          df -h /nix/store "$RUNNER_TEMP"
           publish_path_lines=$(
             nix-store --query --requisites "${producer_outputs[@]}" | LC_ALL=C sort -u
           )
@@ -146,6 +169,13 @@ jobs:
         env:
           MANIFEST_VERSION: ${{ steps.matrix.outputs.manifest-version }}
         run: test "$MANIFEST_VERSION" -gt 0
+      - name: Record final disk use and release job resources
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/nixci.netrc"
+          df -h /nix/store "$RUNNER_TEMP" || true
+          rm -rf "$RUNNER_TEMP/nix-shared-artifacts"
 
   build:
     name: ${{ matrix.name }} (${{ matrix.system }})
@@ -158,10 +188,12 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - uses: NixOS/nix-installer-action@main
-      - uses: Mic92/hestia@v3
+      - uses: ./.github/actions/nix-ci-cache
         with:
-          version: v3.0.0
+          netrc: ${{ secrets.NIXCI_NETRC }}
+      - uses: Mic92/hestia@v3.1.0
+        with:
+          version: v3.1.0
           drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
           no-closure: true
           upstream-cache-filter: true
@@ -173,6 +205,7 @@ jobs:
           SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
         run: |
           set -euo pipefail
+          df -h /nix/store "$RUNNER_TEMP"
           result_dir=target/ci-results
           mkdir -p "$result_dir"
           rm -f "$result_dir/metrics.csv"
@@ -195,7 +228,7 @@ jobs:
           nix "${nix_options[@]}" build \
             --impure \
             --keep-going \
-            --no-link \
+            --out-link "$RUNNER_TEMP/nix-check-result" \
             --print-build-logs \
             --print-out-paths \
             ".#$CHECK_ATTR" \
@@ -237,6 +270,18 @@ jobs:
           path: target/ci-results/metrics.csv
           if-no-files-found: ignore
           retention-days: 7
+      - name: Record final disk use and release job resources
+        if: always()
+        shell: bash
+        run: |
+          trap 'rm -f "$RUNNER_TEMP/nixci.netrc"' EXIT
+          # A worker's post-build hook can still have queued uploads. Drain
+          # them while the completed checks remain protected from collection.
+          if [ -n "${HESTIA_BIN:-}" ]; then
+            "$HESTIA_BIN" drain --socket "$HESTIA_SOCKET" --timeout "$HESTIA_DRAIN_TIMEOUT"
+          fi
+          df -h /nix/store "$RUNNER_TEMP" || true
+          rm -f "$RUNNER_TEMP"/nix-check-result*
 
   flake-checks:
     name: Flake checks

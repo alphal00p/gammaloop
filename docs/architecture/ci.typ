@@ -27,6 +27,19 @@ forcing rebuilds.
   [`.github/scripts/ci-report.mjs`], [Collect and compare existing CI runs],
 )
 
+Main's native Actions jobs install Just 1.58.0 rather than the Ubuntu package,
+which cannot parse the shared recipe attributes. Fast-test jobs also install
+Typst 0.15.1 and prebuilt Jujutsu 0.45.1 for drawing and provenance tests.
+These tools are verified before the test suite starts on Linux and macOS.
+
+Nix Actions producers and matrix workers authenticate to the NixCI cache before
+realizing their exact inputs. They build one derivation at a time with two build
+cores and retain output roots through Hestia publication. Nix's automatic store
+collection keeps a 4–8 GiB free-space watermark; the producer checks for at least
+12 GiB free before compiling and reports free space after realization. The
+8 GiB producer-publication limit still applies to the final closure, independently
+of temporary compiler/store usage.
+
 Automatic NixCI work covers tests, Clippy, doctests, formatting, graph validation,
 the full five-product documentation check, necessary producers and final success.
 The documentation check validates generated references and examples, renders
@@ -273,7 +286,7 @@ label. Returning to development means removing the label and committing
 For rollout, create the `final-review` label first. After the readiness workflow
 is merged and its successful check is registered, add `NixCI readiness`, bound
 to GitHub Actions, to the existing `PRs must pass` ruleset. Preserve the required
-`deploy packages.x86_64-linux.nix-ci-passed` status from NixCI and all unrelated
+`NixCI` suite status from NixCI and all unrelated
 rules. The readiness check supplements successful tests; it does not replace them.
 
 Prefer an available completion notification over keeping an agent polling CI.

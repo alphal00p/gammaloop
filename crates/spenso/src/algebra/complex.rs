@@ -430,7 +430,13 @@ impl<T: Debug> std::fmt::Debug for Complex<T> {
 
 impl<T: LowerExp> std::fmt::LowerExp for Complex<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("({:e}+{:e}i)", self.re, self.im))
+        match f.precision() {
+            Some(precision) => f.write_fmt(format_args!(
+                "({:.*e}+{:.*e}i)",
+                precision, self.re, precision, self.im
+            )),
+            None => f.write_fmt(format_args!("({:e}+{:e}i)", self.re, self.im)),
+        }
     }
 }
 
@@ -523,5 +529,31 @@ impl<T: Display> Display for RealOrComplex<T> {
             RealOrComplex::Complex(c) => c.fmt(f),
             RealOrComplex::Real(r) => r.fmt(f),
         }
+    }
+}
+
+#[cfg(test)]
+mod formatting_tests {
+    use super::Complex;
+
+    #[test]
+    fn lower_exp_preserves_default_component_formatting() {
+        let value = Complex::new(1.23456e-4_f64, -6.78912e-5);
+        assert_eq!(format!("{value:e}"), "(1.23456e-4+-6.78912e-5i)");
+    }
+
+    #[test]
+    fn lower_exp_forwards_precision_to_both_components() {
+        let value = Complex::new(1.23456e-4_f64, -6.78912e-5);
+        assert_eq!(format!("{value:.3e}"), "(1.235e-4+-6.789e-5i)");
+        assert_eq!(format!("{value:.8e}"), "(1.23456000e-4+-6.78912000e-5i)");
+    }
+
+    #[test]
+    fn lower_exp_formats_zero_at_requested_precision() {
+        let value = Complex::new(0.0_f64, 0.0);
+        assert_eq!(format!("{value:e}"), "(0e0+0e0i)");
+        assert_eq!(format!("{value:.0e}"), "(0e0+0e0i)");
+        assert_eq!(format!("{value:.8e}"), "(0.00000000e0+0.00000000e0i)");
     }
 }

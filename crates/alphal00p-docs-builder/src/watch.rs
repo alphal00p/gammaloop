@@ -150,7 +150,7 @@ impl SourceWatcher {
     ) -> Result<()> {
         let dependencies = dependencies
             .into_iter()
-            .map(|path| lexical_absolute(&self.root, &path))
+            .map(|path| canonicalize_existing_prefix(&self.root, &path))
             .filter(|path| {
                 !ignored_workspace_path(&self.root, path)
                     && !self
@@ -244,6 +244,9 @@ impl SourceWatcher {
             event
                 .paths
                 .into_iter()
+                // Notifications and Typst may spell a symlinked root differently.
+                // Resolve existing parents as well when the changed file was deleted.
+                .map(|path| canonicalize_existing_prefix(&self.root, &path))
                 .filter(|path| self.relevant(path))
                 .map(|path| path.strip_prefix(&self.root).unwrap_or(&path).to_path_buf()),
         );
@@ -932,7 +935,7 @@ mod tests {
     use notify::event::RenameMode;
 
     fn workspace() -> TempDir {
-        let directory = tempfile::tempdir().unwrap();
+        let directory = tempfile::tempdir_in(env::temp_dir().canonicalize().unwrap()).unwrap();
         fs::create_dir(directory.path().join("docs")).unwrap();
         fs::create_dir(directory.path().join("crates")).unwrap();
         fs::create_dir(directory.path().join(".cargo")).unwrap();
@@ -1264,6 +1267,7 @@ mod tests {
         let external = tempfile::tempdir().unwrap();
         let inputs = external.path().join("inputs");
         fs::create_dir(&inputs).unwrap();
+        let inputs = inputs.canonicalize().unwrap();
         let nested = inputs.join("theme");
         let dependency = nested.join("colors.typ");
         let mut watcher = SourceWatcher::new(root.path(), Vec::new()).unwrap();
@@ -1294,6 +1298,8 @@ mod tests {
         let second = external.path().join("second");
         fs::create_dir(&first).unwrap();
         fs::create_dir(&second).unwrap();
+        let first = first.canonicalize().unwrap();
+        let second = second.canonicalize().unwrap();
         let mut watcher = SourceWatcher::new(root.path(), Vec::new()).unwrap();
 
         watcher
@@ -1312,6 +1318,7 @@ mod tests {
         let external = tempfile::tempdir().unwrap();
         let nested = external.path().join("theme");
         fs::create_dir(&nested).unwrap();
+        let nested = nested.canonicalize().unwrap();
         let dependency = nested.join("colors.typ");
         let mut watcher = SourceWatcher::new(root.path(), Vec::new()).unwrap();
         watcher
@@ -1322,7 +1329,7 @@ mod tests {
         watcher.refresh_typst_dependency_watches().unwrap();
         assert_eq!(
             watcher.dependency_watch_roots,
-            BTreeSet::from([external.path().to_path_buf()])
+            BTreeSet::from([external.path().canonicalize().unwrap()])
         );
         assert_eq!(watcher.typst_dependencies, BTreeSet::from([dependency]));
     }
@@ -1333,6 +1340,7 @@ mod tests {
         let external = tempfile::tempdir().unwrap();
         let dependency = external.path().join("theme.typ");
         fs::write(&dependency, "#let color = blue").unwrap();
+        let dependency = dependency.canonicalize().unwrap();
         let temporary = external.path().join(".theme.typ.tmp");
         let mut watcher = SourceWatcher::new(root.path(), Vec::new()).unwrap();
         watcher
@@ -1380,6 +1388,7 @@ mod tests {
         fs::create_dir(root.join("crates")).unwrap();
         fs::create_dir(root.join("target")).unwrap();
         fs::create_dir(root.join("target/session")).unwrap();
+        let root = root.canonicalize().unwrap();
         let alias = container.path().join("workspace-link");
         symlink(&root, &alias).unwrap();
 
@@ -1397,9 +1406,37 @@ mod tests {
             vec![root.join("target/session"), root.join("generated/site")]
         );
 
-        let wrapper = root.join("target/session/main.typ");
-        watcher.replace_typst_dependencies([wrapper]).unwrap();
-        assert!(watcher.typst_dependencies.is_empty());
+        let wrapper = alias.join("target/session/main.typ");
+        let generated = alias.join("generated/site/index.html");
+        let dependency = alias.join("docs/theme.typ");
+        watcher
+            .replace_typst_dependencies([wrapper.clone(), generated.clone(), dependency.clone()])
+            .unwrap();
+        assert_eq!(
+            watcher.typst_dependencies,
+            BTreeSet::from([root.join("docs/theme.typ")])
+        );
+        assert!(watcher.dependency_watch_roots.is_empty());
+
+        let mut changed = Vec::new();
+        watcher.collect(
+            Event::new(EventKind::Create(notify::event::CreateKind::File))
+                .add_path(dependency)
+                .add_path(wrapper)
+                .add_path(generated),
+            &mut changed,
+        );
+        assert_eq!(changed, vec![PathBuf::from("docs/theme.typ")]);
+
+        let deleted = alias.join("docs/deleted.typ");
+        fs::write(&deleted, "#let value = 1").unwrap();
+        fs::remove_file(&deleted).unwrap();
+        changed.clear();
+        watcher.collect(
+            Event::new(EventKind::Remove(notify::event::RemoveKind::File)).add_path(deleted),
+            &mut changed,
+        );
+        assert_eq!(changed, vec![PathBuf::from("docs/deleted.typ")]);
     }
 
     #[test]

@@ -10407,6 +10407,10 @@ mod tests {
             schema: LEGACY_PROSE_SCHEMA_VERSION,
             source: Vec::new(),
         };
+        assert!(builder.check_prose_sources().is_ok());
+        // On a case-insensitive filesystem, writing readme.md over README.md
+        // preserves the original directory entry's allowed spelling.
+        fs::remove_file(temporary.path().join("README.md")).unwrap();
 
         for source in [
             "new-note.MD",
@@ -10428,6 +10432,7 @@ mod tests {
             fs::remove_file(path).unwrap();
         }
 
+        fs::write(temporary.path().join("README.md"), "Compatibility readme").unwrap();
         fs::write(temporary.path().join("README.typ"), "= Duplicate readme").unwrap();
         assert!(builder.check_prose_sources().is_err());
     }

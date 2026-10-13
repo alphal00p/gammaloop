@@ -147,7 +147,12 @@ fn test_epem_dd_dt() -> Result<()> {
     .run(&mut cli)?;
 
     // Sum both virtual and both real-gluon cuts at the original cube point.
-    assert_snapshot!(format!("{a:.8e}"),@"(-1.7675722573627832e-4+-6.290575596256553e-5i)");
+    assert_complex_approx_eq(
+        a,
+        Complex::new(-1.7675722573627832e-4, -6.290575596256553e-5),
+        "electron-pair double-triangle virtual and real-cut sum",
+    );
+    assert_snapshot!(format!("{a:.8e}"),@"(-1.76757226e-4+-6.29057560e-5i)");
 
     let integrate_command = Integrate {
         workspace_path: Some(
@@ -204,7 +209,7 @@ mod failing {
         }
         .run(&mut state)?;
 
-        assert_snapshot!(format!("{:.8e}",a*jac.unwrap()),@"(-6.923469780323106e-4+6.181987787694587e-4i)");
+        assert_snapshot!(format!("{:.8e}",a*jac.unwrap()),@"(-6.92346978e-4+6.18198779e-4i)");
 
         Ok(())
     }

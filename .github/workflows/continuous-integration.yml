@@ -93,7 +93,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just@1.58.0
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -178,7 +178,6 @@ jobs:
             libssl-dev \
             libgmp-dev \
             libmpfr-dev \
-            just \
             libmpc-dev \
             python3 \
             python3-dev
@@ -187,13 +186,21 @@ jobs:
         if: startsWith(matrix.os, 'macos-')
         run: |
           brew update
-          brew install pkg-config openssl@3 gmp mpfr libmpc just form
+          brew install pkg-config openssl@3 gmp mpfr libmpc form
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: taiki-e/install-action@v2
+      - name: Install test command tools
+        uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest
+          tool: just@1.58.0,cargo-nextest,cargo-binstall
+
+      - name: Install Jujutsu for provenance tests
+        run: cargo binstall --no-confirm --strategies crate-meta-data jj-cli@0.45.1
+
+      - uses: typst-community/setup-typst@v4
+        with:
+          typst-version: 0.15.1
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -215,6 +222,10 @@ jobs:
 
       - name: Verify external tools
         run: |
+          just --version
+          just --unstable --list > /dev/null
+          jj --version
+          typst --version
           command -v form
           form
           command -v python3
@@ -283,12 +294,15 @@ jobs:
             libmpfr-dev \
             libmpc-dev \
             python3 \
-            just \
             python3-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.58.0
 
       - uses: Swatinem/rust-cache@v2
         if: matrix.check != 'fmt'
