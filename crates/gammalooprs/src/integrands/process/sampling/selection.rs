@@ -2368,6 +2368,18 @@ impl SamplingChannelCatalogue {
         })
     }
 
+    /// Complete ordinary LMB catalogues can retain one binary64 proposal for
+    /// every physical precision lane. Named and surface maps keep their existing
+    /// source policy; source accuracy and fixed input ranges are checked by the
+    /// integrand's epoch policy.
+    pub(crate) fn supports_binary64_source(&self) -> bool {
+        !self.entries.is_empty()
+            && self
+                .entries
+                .iter()
+                .all(|entry| matches!(entry, SamplingCatalogueEntry::Lmb { .. }))
+    }
+
     /// The first fixed-Quad source class excludes hosted/composed geometry and
     /// user proxies. A single incompatible entry requires Fixed256 or Arb for
     /// the entire epoch, according to the requested accuracy budget.
@@ -3678,6 +3690,50 @@ mod tests {
                 Some(SamplingPartitionMode::MapDensity)
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn binary64_source_requires_complete_ordinary_lmb_catalogue() -> Result<()> {
+        let ordinary = SamplingCatalogueEntry::Lmb {
+            basis_id: 0,
+            edges: vec![1, 2],
+            source: SamplingChannelSelector::Preset(SamplingChannelPreset::Lmb),
+        };
+        let mut catalogue = SamplingChannelCatalogue {
+            graph_name: "any topology".into(),
+            selectors: vec![],
+            entries: vec![
+                ordinary.clone(),
+                SamplingCatalogueEntry::Lmb {
+                    basis_id: 1,
+                    edges: vec![2, 3],
+                    source: SamplingChannelSelector::Lmb(vec![2, 3]),
+                },
+            ],
+        };
+        assert!(catalogue.supports_binary64_source());
+        for expression in ["lmb(1,2)", "phase_space(cut(3,4))", "surface(3,4)"] {
+            catalogue.entries[1] = SamplingCatalogueEntry::Named(ResolvedNamedSamplingChannel {
+                name: "ordinary sounding label".into(),
+                definition: definition(expression),
+                map: SamplingMapDefinition::parse(expression)?,
+                singularity_proxy: None,
+                blocks: vec![],
+            });
+            assert!(!catalogue.supports_binary64_source(), "{expression}");
+        }
+        catalogue.entries[1] = SamplingCatalogueEntry::Surface {
+            edges: vec![3, 4],
+            parent_lmb: vec![1, 2],
+        };
+        assert!(!catalogue.supports_binary64_source());
+        catalogue.entries.reverse();
+        assert!(!catalogue.supports_binary64_source());
+        catalogue.entries = vec![ordinary];
+        assert!(catalogue.supports_binary64_source());
+        catalogue.entries.clear();
+        assert!(!catalogue.supports_binary64_source());
         Ok(())
     }
 

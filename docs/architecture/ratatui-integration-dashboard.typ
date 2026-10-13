@@ -88,6 +88,10 @@ not mutate the scientific result.
 
 == Verification contract
 
+Convergence labels retain small dimensionful ranges. Collapsed, nonfinite, or
+overflowing chart bounds display an explanatory message instead of constructing
+an invalid chart; this presentation guard does not alter integration estimates.
+
 The maintained checks cover command parsing, keyboard action mapping, overview/slot metrics,
 global versus focused statistics, chart phase and history behavior, ETA display, discrete-bin
 detail, max-weight formatting, and narrow terminal layouts. Changes to status fields must update

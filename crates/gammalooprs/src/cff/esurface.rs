@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::dual::HyperDual;
-use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
+use symbolica::domains::float::{FloatLike as SymFloatLike, Real, SingleFloat};
 use symbolica::id::Replacement;
 use symbolica::{function, parse};
 use tracing::debug;
@@ -101,6 +101,42 @@ impl EsurfaceRay<ArbPrec> {
                 .collect::<Result<_>>()?,
             shift: F::from_arb(&self.shift.0)?,
         })
+    }
+
+    /// Certify a retained root at canonical geometry accuracy, independently of
+    /// its sampling-density budget. The fresh LU residual limit is necessary
+    /// but not sufficient: directed signs and slopes also bound relative root
+    /// displacement at the same precision. Uncertain candidates need a solve.
+    pub(crate) fn certified_lu_root(
+        &self,
+        candidate: &NewtonIterationResult<ArbPrec>,
+        e_cm: &F<ArbPrec>,
+    ) -> Option<NewtonIterationResult<ArbPrec>> {
+        let root = &candidate.solution;
+        if !root.0.is_finite()
+            || root <= &root.zero()
+            || !e_cm.0.is_finite()
+            || e_cm <= &e_cm.zero()
+        {
+            return None;
+        }
+        let accuracy = root.epsilon() * root.from_usize(4 * self.energies.len() + 1);
+        let (residual, derivative) = self.evaluate(root);
+        if !residual.0.is_finite() || residual.abs() > e_cm * &accuracy {
+            return None;
+        }
+        let solution = NewtonIterationResult {
+            solution: root.clone(),
+            derivative_at_solution: derivative,
+            error_of_function: residual,
+            num_iterations_used: candidate.num_iterations_used,
+        };
+        // verify_lu_candidate allocates 1/[4*(dimension+1)] of its budget to
+        // root displacement. With dimension zero this yields epsilon*(4n+1),
+        // and checks positive root isolation rather than trusting a rounded zero.
+        self.verify_lu_candidate(self, &solution, 0, &(root.from_usize(4) * accuracy))
+            .ok()?;
+        Some(solution)
     }
 }
 
@@ -2708,7 +2744,9 @@ mod tests {
     };
     use typed_index_collections::ti_vec;
 
-    use super::{EsurfaceExistence, add_external_shifts};
+    use super::{EsurfaceExistence, EsurfaceRay, add_external_shifts};
+    use crate::utils::SamplingFloat;
+    use crate::utils::newton_solver::NewtonIterationResult;
 
     #[test]
     fn canonical_ray_embedding_preserves_ordered_occurrences_and_native_coefficients() {
@@ -3288,6 +3326,92 @@ mod tests {
             .downcast_ref::<SamplingEvaluationError>(),
             Some(SamplingEvaluationError::Unrepresentable { .. })
         ));
+    }
+
+    #[test]
+    fn canonical_lu_root_reuses_certified_arb_geometry() {
+        let one = F::<ArbPrec>::default().one();
+        let vector = |x| ThreeMomentum::new(x, one.zero(), one.zero());
+        let ray = EsurfaceRay {
+            energies: vec![(
+                EdgeIndex(1),
+                vector(one.from_usize(3)),
+                vector(one.zero()),
+                one.from_usize(3),
+            )],
+            shift: -one.from_usize(6),
+        };
+        let candidate = ray
+            .solve_lu_cut(
+                &one.from_usize(6),
+                &mut RadialRootDiagnostics::default(),
+                &RadialRootIdentity::new("canonical root reuse fixture".into()),
+            )
+            .unwrap();
+        let certified = ray
+            .certified_lu_root(&candidate, &one.from_usize(6))
+            .expect("a fresh Arb root must meet the canonical geometry certificate");
+        assert_eq!(certified.solution, candidate.solution);
+        assert_eq!(certified.num_iterations_used, candidate.num_iterations_used);
+        assert!(
+            certified.error_of_function.abs()
+                <= one.from_usize(6) * one.epsilon() * one.from_usize(5)
+        );
+        let mut displaced = candidate;
+        displaced.solution += &one / one.from_usize(10).powi(100);
+        displaced.error_of_function = one.zero();
+        assert!(
+            ray.certified_lu_root(&displaced, &one.from_usize(6))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn canonical_lu_root_rejects_sampling_accuracy_after_exact_promotion() {
+        let one = F::<ArbPrec>::default().one();
+        let vector = |x| ThreeMomentum::new(x, one.zero(), one.zero());
+        let ray = EsurfaceRay {
+            energies: vec![(
+                EdgeIndex(1),
+                vector(one.from_usize(3)),
+                vector(one.zero()),
+                one.from_usize(3),
+            )],
+            shift: -one.from_usize(6),
+        };
+        let source = ray.materialize::<SamplingFloat>().unwrap();
+        let source_one = F::<SamplingFloat>::default().one();
+        let lower = source
+            .solve_lu_cut(
+                &source_one.from_usize(6),
+                &mut RadialRootDiagnostics::default(),
+                &RadialRootIdentity::new("lower precision source fixture".into()),
+            )
+            .unwrap();
+        let mut candidate = NewtonIterationResult {
+            solution: lower.solution.to_arb_exact().unwrap(),
+            derivative_at_solution: lower.derivative_at_solution.to_arb_exact().unwrap(),
+            error_of_function: lower.error_of_function.to_arb_exact().unwrap(),
+            num_iterations_used: lower.num_iterations_used,
+        };
+        ray.verify_lu_candidate(&ray, &candidate, 3, &(&one / one.from_usize(10).powi(12)))
+            .expect("the lower precision root is adequate for sampling density");
+        // A zero residual from the source arithmetic cannot certify decisions
+        // made on the original complete Arb1000 physical ray.
+        candidate.error_of_function = one.zero();
+        assert!(
+            ray.certified_lu_root(&candidate, &one.from_usize(6))
+                .is_none()
+        );
+        let fresh = ray
+            .solve_lu_cut(
+                &one.from_usize(6),
+                &mut RadialRootDiagnostics::default(),
+                &RadialRootIdentity::new("fallback canonical root fixture".into()),
+            )
+            .unwrap();
+        assert!(ray.certified_lu_root(&fresh, &one.from_usize(6)).is_some());
+        assert_ne!(fresh.solution, candidate.solution);
     }
 
     #[test]
