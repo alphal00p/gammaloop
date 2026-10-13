@@ -19,7 +19,7 @@ use crate::{
         ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
         LoopMomentumBasis,
     },
-    numerator::energy_degree::EnergyPowerAssignmentPlan,
+    numerator::energy_degree::{EnergyPowerAnalyzer, EnergyPowerAssignmentPlan, EnergyReference},
     settings::global::{GenerationSettings, UniformNumeratorSamplingScale},
     uv::approx::{
         local_4d::{CanonicalUvDenominatorClass, CanonicalUvSector, FourDSector},
@@ -480,6 +480,7 @@ pub(crate) struct ExactCffPreparationKey {
     pub(super) uv_edges: Vec<EdgeIndex>,
     pub(super) boundary_hedges: Vec<Hedge>,
     pub(super) coordinates: Option<(LoopMomentumBasis, ExactUvSubLmbFrame)>,
+    pub(super) fixed_external_momenta: BTreeMap<EdgeIndex, Atom>,
     pub(super) classes: Vec<CanonicalUvDenominatorClass>,
     pub(super) numerator: Atom,
     pub(super) options: Generate3DExpressionOptions,
@@ -496,6 +497,11 @@ impl ExactCffPreparationKey {
                 .sum::<usize>()
             + self.uv_edges.capacity() * size_of::<EdgeIndex>()
             + self.boundary_hedges.capacity() * size_of::<Hedge>()
+            + self
+                .fixed_external_momenta
+                .values()
+                .map(|momentum| 64 + momentum.as_view().get_byte_size())
+                .sum::<usize>()
             + self
                 .coordinates
                 .as_ref()
@@ -728,6 +734,16 @@ impl Graph {
                 options.representation == RepresentationMode::Cff,
             )
             .map_err(|error| {
+                crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #trace;
+                    stage = "exact_numerator_assignment_failure",
+                    graph = %self.name,
+                    error = %error,
+                    physical_bounds = ?physical_energy_degree_bounds,
+                    file.excluded_edges = ?excluded_numerator_edges,
+                    file.candidates = ?candidates,
+                    file.numerator = %analysis_numerator.to_plain_string(),
+                    "Exact numerator assignment failed before CFF generation"
+                );
                 eyre::eyre!(
                     "could not plan exact 4D CFF numerator energies for graph `{}`: {error}",
                     self.name,
@@ -2334,6 +2350,7 @@ mod tests {
                     &Atom::one(),
                     generation_cache,
                     &[],
+                    &BTreeMap::new(),
                 )?;
                 let mut value = Atom::Zero;
                 for term in cff.terms.values() {
