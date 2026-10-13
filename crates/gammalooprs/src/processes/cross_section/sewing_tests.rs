@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use linnet::half_edge::involution::HedgePair;
+use linnet::half_edge::involution::{Flow, HedgePair};
 
 use spenso::{
     iterators::IteratableTensor,
@@ -25,9 +25,11 @@ use symbolica::{
 };
 
 use crate::{
-    graph::Graph,
+    graph::{Graph, LMBext},
     initialisation::test_initialise,
-    model::{Model, ModelGammaLoopExt, UFOSymbol, VertexRuleIdGammaLoopExt},
+    model::{
+        Model, ModelGammaLoopExt, ParticleIdGammaLoopExt, UFOSymbol, VertexRuleIdGammaLoopExt,
+    },
     numerator::{ParsingNet, aind::Aind},
     utils::{FUN_LIB, GS, load_generic_model},
 };
@@ -287,7 +289,7 @@ fn generated_complex_charged_current_preserves_the_ckm_norm() {
 }
 
 #[test]
-fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
+fn generated_sm_charged_ward_identity_follows_the_action() {
     test_initialise().unwrap();
     // The approved canonical model carries the action-consistent Lorentz rules;
     // loading it rebuilds the vertex rules and their shared Lorentz references.
@@ -305,12 +307,6 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
                 ext -> amplitude [particle="W+"];
                 amplitude -> ext [particle="vt"];
                 amplitude -> ext [particle="ta+"];
-            }
-            digraph charged_ghost {
-                ext [style=invis];
-                ext -> amplitude [particle="ghWp"];
-                ext -> amplitude [particle="ghWp~"];
-                ext -> amplitude [particle="a"];
             }
             "#,
         &model,
@@ -364,47 +360,101 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
     }
     assert_eq!(ward_residual, Atom::Zero);
     assert_eq!(goldstone_amplitude, yukawa);
+}
 
-    let graph = &graphs[2];
-    let (node, _, vertex) = graph
-        .underlying
-        .iter_nodes()
-        .find(|(_, _, vertex)| {
-            vertex
-                .vertex_rule
-                .as_ref()
-                .is_some_and(|rule| rule.resolve(&model).name == "V_26")
-        })
-        .unwrap();
-    let mut expression = model.expand_couplings(&vertex.num.value);
-    let mut antighost_edge = None;
-    for hedge in graph.underlying.iter_crown(node) {
-        match graph.underlying[hedge].ufo_order.value {
-            1 => antighost_edge = Some(graph.underlying[&hedge]),
-            2 => {
-                for slot in graph.underlying[hedge]
-                    .num_indices
-                    .spin_indices
-                    .vertex_indices
-                    .external_structure_iter()
-                {
-                    expression = expression
-                        .replace(rule_index(&slot).to_pattern())
-                        .with(GS.cind(0));
-                }
+#[test]
+fn generated_sm_ghost_momenta_follow_the_ordered_incoming_state() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let momenta = [[5, 1, 2, 3], [3, -2, 1, 4], [-8, 1, -3, -7]];
+    for component in 0..4 {
+        assert_eq!(momenta.iter().map(|p| p[component]).sum::<i64>(), 0);
+    }
+    // In the ordered incoming (ghost, antighost, vector) state, the Grassmann
+    // contraction of barc c supplies a minus. With D=partial-ieA, V_26 is
+    // -ie(p2+p3)=+ie p1. The independent V_13 coupling has the opposite sign.
+    for (vertex_name, particles, coefficient) in [
+        ("V_26", ["ghWp", "ghWp~", "a"], 1),
+        ("V_13", ["ghA", "ghWp~", "W+"], -1),
+    ] {
+        let dot = format!(
+            r#"digraph ghost {{
+                ext [style=invis];
+                ext -> amplitude [particle="{}"];
+                ext -> amplitude [particle="{}"];
+                ext -> amplitude [particle="{}"];
+            }}"#,
+            particles[0], particles[1], particles[2]
+        );
+        let graphs = Graph::from_dot(&dot, &model).unwrap();
+        let graph = &graphs[0];
+        assert_eq!(graph.overall_factor, Atom::one());
+        let (node, _, vertex) = graph
+            .underlying
+            .iter_nodes()
+            .find(|(_, _, vertex)| {
+                vertex
+                    .vertex_rule
+                    .as_ref()
+                    .is_some_and(|rule| rule.resolve(&model).name == vertex_name)
+            })
+            .unwrap();
+        let mut slots = BTreeMap::new();
+        let mut vector_indices = Vec::new();
+        for hedge in graph.underlying.iter_crown(node) {
+            assert_eq!(graph.underlying.flow(hedge), Flow::Sink);
+            let order = usize::from(graph.underlying[hedge].ufo_order.value);
+            let edge = graph.underlying[&hedge];
+            let particle = graph.underlying[edge].particle.particle().resolve(&model);
+            assert_eq!(particle.name, particles[order]);
+            assert_eq!(particle.ghost_number, [1, -1, 0][order]);
+            assert!(slots.insert(order, edge).is_none());
+            if order == 2 {
+                vector_indices.extend(
+                    graph.underlying[hedge]
+                        .num_indices
+                        .spin_indices
+                        .vertex_indices
+                        .external_structure_iter()
+                        .map(|slot| rule_index(&slot)),
+                );
             }
-            _ => {}
+        }
+        assert_eq!(slots.keys().copied().collect::<Vec<_>>(), [0, 1, 2]);
+        assert_eq!(vector_indices.len(), 1);
+        let expression = model
+            .expand_couplings(&vertex.num.value)
+            .replace(Atom::from(UFOSymbol::from("ee")).to_pattern())
+            .with(Atom::one());
+        for component in 0..4 {
+            let index = GS.cind(component);
+            let mut raw = expression
+                .replace(vector_indices[0].to_pattern())
+                .with(index.clone());
+            let mut routed = raw.replace_multiple(&graph.integrand_replacement(
+                &graph.full_filter(),
+                &graph.loop_momentum_basis,
+                &[index.clone()],
+            ));
+            for (&order, &edge) in &slots {
+                let value = Atom::num(momenta[order][component]);
+                raw = raw.replace(GS.emr_mom(edge, &index)).with(value.clone());
+                let external = graph.loop_momentum_basis.ext_from(edge).unwrap();
+                routed = routed
+                    .replace(symbolica::function!(GS.external_mom, external.0, &index))
+                    .with(value);
+            }
+            let expected = Atom::num(coefficient * momenta[0][component]) * Atom::i();
+            assert_eq!(raw, expected, "{vertex_name} raw component {component}");
+            assert_eq!(
+                routed, expected,
+                "{vertex_name} routed component {component}"
+            );
+            if vertex_name == "V_26" {
+                assert_ne!(raw, Atom::num(-momenta[1][component]) * Atom::i());
+            }
         }
     }
-    // The antighost flows into this vertex. With e=1 and pbar^0=3,
-    // -barc partial D c, D=partial-ieA, requires -3i. Slot assignment
-    // and incoming-momentum conversion above are the actual Graph pipeline.
-    let ghost_value = expression
-        .replace(Atom::from(UFOSymbol::from("ee")).to_pattern())
-        .with(Atom::one())
-        .replace(GS.emr_mom(antighost_edge.unwrap(), GS.cind(0)).to_pattern())
-        .with(Atom::num(3));
-    assert_eq!(ghost_value, Atom::num(-3) * Atom::i());
 }
 
 #[test]

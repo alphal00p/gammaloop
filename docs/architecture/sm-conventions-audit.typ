@@ -1,12 +1,12 @@
 = Standard Model conventions audit
 <standard-model-conventions-audit>
-This records the local SM conventions used by GammaLoop after the phase-convention corrections. The canonical UFO and JSON agree on the corrected ghost derivative and Goldstone Yukawa rules, using an explicit scalar/pseudoscalar and vector/axial basis. The three-gluon, electroweak triple-vector and derivative scalar rules were retained after independent action and component checks. Fermion and antifermion propagator signs were retained. The electroweak sector uses the Feynman-gauge virtual propagators and complete covariant cut-state convention described below.
+This records the local SM conventions used by GammaLoop after the phase-convention corrections. The canonical UFO and JSON agree on the ghost momentum tensor and Goldstone Yukawa rules, using an explicit scalar/pseudoscalar and vector/axial basis. The three-gluon, electroweak triple-vector and derivative scalar rules were retained after independent action and component checks. Fermion and antifermion propagator signs were retained. The electroweak sector uses the Feynman-gauge virtual propagators and complete covariant cut-state convention described below.
 
 The full amplitude and LU marking/contour contract is in #link("phase-conventions.typ");. The supported setting is a Hermitian theory with real propagator masses. The local audit does not establish a complex-mass prescription or complete electroweak LU correctness.
 
 == Momentum, spin and color conventions
 <momentum-spin-and-color-conventions>
-We use metric `(+,-,-,-)`, fields Fourier transformed with `exp(-ip.x)`, and a vertex equal to `i` times the interaction action. Numbered UFO `P(mu,leg)` is the incoming momentum of that vertex leg. GammaLoop assigns the underlying source-to-sink momentum `q` with `+q` at a sink and `-q` at a source. This conversion is owned by #link("../../crates/gammalooprs/src/numerator/ufo.rs")[UFO reindexing];, after vertex legs, tensor slots and momenta have received the same permutation in #link("../../crates/gammalooprs/src/graph/parse/mod.rs")[graph parsing];.
+We use metric `(+,-,-,-)`, fields Fourier transformed with `exp(-ip.x)`, and a vertex equal to `i` times the interaction action. Numbered UFO `P(mu,leg)` is the incoming momentum of that vertex leg. FeynKit assigns the underlying source-to-sink momentum `q` with `+q` at a sink and `-q` at a source. The shared #link("../../crates/feynkit-generator/src/generation.rs")[FeynKit rule lowering] performs this conversion using finalized interaction slots; #link("../../crates/gammalooprs/src/graph/parse/mod.rs")[GammaLoop graph import] transfers the same endpoint slots and vertex expressions.
 
 These choices agree with #link("https://arxiv.org/pdf/2304.09883")[UFO 2.0, Table 2];. The action checks used #link("https://arxiv.org/pdf/1209.6213")[Romão--Silva, sections 2, 4 and 5];, whose sign parameters expose the convention choices; #link("https://arxiv.org/pdf/0709.1075")[Denner, Appendix A];, which fixes incoming momenta and propagator factors; and #link("https://www.tep.physik.uni-freiburg.de/lectures/archive/QCD-WS-14/qcd")[Schwinn, equations 4.81--4.87];, which derives the QCD and Faddeev--Popov interactions. ALOHA compatibility was not the criterion for accepting a sign.
 
@@ -26,7 +26,7 @@ The QCD spin and fundamental-color index orders must be distinguished. With the 
 
 == Complete derivative inventory
 <complete-derivative-inventory>
-Write `S=P_2-P_3` for `VSS1`, `U=p_antighost` for the corrected `UUV1`, and
+Write `S=P_2-P_3` for `VSS1`, `U=P_2+P_3=-P_1` for `UUV1` with momentum conservation, and
 
 ```text
 K123 = g12 (p1-p2)_3 + g13 (p3-p1)_2 + g23 (p2-p3)_1
@@ -69,7 +69,7 @@ for `VVV1`. All momenta and field lists below are incoming; color and Lorentz le
 
 The final export certificate reads the current UFO `lorentz.py`, `vertices.py` and `couplings.py` directly through their Python syntax trees and compares them with the current JSON. All 23 field orders, color factors, Lorentz and coupling slots, symbolic coupling expressions and three derivative tensors agree. Historical pre-correction inventory files are not the source for this comparison.
 
-The correction changes `UUV1` from `−P(3,2)` to `+P(3,2)` in both #link("../../assets/models/ufo/sm/lorentz.py")[the UFO] and #link("../../assets/models/json/sm/sm.json")[the JSON];. No derivative coupling expression or cached coupling value changes. For example, the charged ghost kinetic term and scalar electromagnetic current fix `D=partial-ieA`; `−barc partial D c` then gives V\_26 equal to `−ie pbar`. The previous `UUV1` reversed that result. The same action comparison fixes all twelve electroweak ghost currents and the QCD ghost current.
+Both #link("../../assets/models/ufo/sm/lorentz.py")[the UFO] and #link("../../assets/models/json/sm/sm.json")[the JSON] use `UUV1=P(3,2)+P(3,3)`. In the ordered incoming `(ghWp,ghWp~,a)` state, `ghWp` has ghost number +1 and `ghWp~` has ghost number −1. Electric charge does not determine that distinction. With `D=partial-ieA`, the interaction is `+ie barc partial(A c)`. The ordered incoming Grassmann contraction of `barc c` supplies a minus, giving `−ie(p2+p3)=+ie p1` for V\_26. Integrating the derivative onto the action field `barc` does not identify its momentum with incoming antighost slot 2: that field contracts with incoming ghost slot 1. V\_13 has the opposite coupling and therefore `−ie p1`. The model and generic momentum lowering are retained; the earlier antighost-only test and audit were incorrect.
 
 The three-gluon sign is consequently valid #strong[with the conventions above];. An independent cubic Yang--Mills differentiation checked all 64 Lorentz components for each ordered color basis of V\_36, V\_43 and V\_54. A separate exact `q qbar -> gg` Ward calculation used the SU(2) subgroup of SU(3), `f123=+1`, fixed rational on-shell momenta, one transverse spectator polarization, four independent external-spin choices and all entries of each resulting color matrix. It vanishes for the actual transposed quark color and current three-gluon sign; changing either independently gives four nonzero entries. This is a discriminating relative-sign certificate, not a claim to have sampled every SU(3) color assignment or every kinematic point. Changing both conventions together is an equivalent representation. No three-gluon correction is needed.
 
@@ -116,9 +116,9 @@ The model regression `sm_lorentz_structures_use_the_scalar_and_vector_axial_basi
 
 == Generated local certificates and RHS sewing
 <generated-local-certificates-and-rhs-sewing>
-#link("../../crates/gammalooprs/src/processes/cross_section/sewing_tests.rs")[sewing\_tests.rs] uses actual `Graph::from_string` vertex assignment and tensor contraction, with independent explicit matrices/spinors as the oracle.
+#link("../../crates/gammalooprs/src/processes/cross_section/sewing_tests.rs")[sewing\_tests.rs] uses `Graph::from_dot` through FeynKit rule assignment and tensor contraction, with independent explicit matrices/spinors as the oracle.
 
-`generated_sm_charged_ward_and_ghost_momentum_follow_the_action` fixes `MW=5`, `m_tau=2`, `g=1`, `y_tau=sqrt(2)/5` and real on-shell momenta
+`generated_sm_charged_ward_identity_follows_the_action` fixes `MW=5`, `m_tau=2`, `g=1`, `y_tau=sqrt(2)/5` and real on-shell momenta
 
 ```text
 k_W=(5,0,0,0),
@@ -128,7 +128,7 @@ p_tau=(29/10,0,0,-21/10).
 
 With normalized spinors, the fixed left-handed neutrino gives `k.A_W=-i sqrt(42)` and corrected `A_G=sqrt(42)/5`, so `k.A_W+i MW A_G=0`. The Rust regression divides the spinors by their common normalization factors, using `ubar=(0,0,0,1)` and `v=(0,-2/5,0,1)`, and writes the Yukawa as `(2/5)/sqrt(2)`. This homogeneous identity then reduces exactly without a radical-simplification assumption. It first checks every generated scalar and temporal-vector matrix entry against explicit Weyl matrices. The previous scalar chirality gave `A_G=0`, violating the identity. This tests chirality rather than only a spin-summed norm. No internal vector propagator is involved.
 
-The same test checks the all-incoming charged ghost vertex with `e=1` and `pbar^0=3`, obtaining `−3i`. Actual graph exports before the correction instead gave `+3i`, with `overall_factor=1` and the antighost momentum attached to the expected edge. There is no hidden per-vertex graph-ordering minus that could compensate the old `UUV1`.
+The separate `generated_sm_ghost_momenta_follow_the_ordered_incoming_state` checks V\_26 and V\_13 with `e=1` and all incoming components `p1=(5,1,2,3)`, `p2=(3,-2,1,4)`, `p3=(-8,1,-3,-7)`. These momenta conserve exactly and distinguish the ghost momentum from the antighost momentum in every component. The expected V\_26 vector is `(5i,i,2i,3i)`; V\_13 has the opposite sign. The test reads the actual interaction-slot, edge and vector-index mapping, checks ghost numbers and incoming orientations, and compares both raw edge momenta and the routed basis against those independent values, with overall factor 1. The former test substituted only one antighost component and left the vector momentum symbolic. This local ghost-component check is not a ghost-sensitive Ward or Slavnov–Taylor identity; the charged Ward identity above is a separate certificate.
 
 `generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner` compares the inverse-process vertex with the explicit matrix adjoint and independently sewn spin sums. `generated_complex_charged_current_preserves_the_ckm_norm` retains a genuinely complex CKM coefficient and tests the sewn norm. These establish why inverse UFO vertices on the RHS must not be subjected to a second whole-tensor conjugation. The LU marking and contour factors remain separately required by #link("phase-conventions.typ")[the phase contract];.
 
