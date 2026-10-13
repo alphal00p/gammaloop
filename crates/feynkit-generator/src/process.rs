@@ -281,6 +281,17 @@ impl Process {
         crate::generation::Generator::new(model).generate(self, options, GenerationType::Amplitude)
     }
 
+    /// Generate owned, signed and momentum-routed amplitude diagrams without
+    /// projectors or local Lorentz/color numerators. Symbolic filtering and
+    /// grouping options are rejected rather than silently omitted.
+    pub fn generate_routed_diagrams(
+        &self,
+        model: impl Into<Arc<Model>>,
+        options: &crate::GenerationOptions,
+    ) -> Result<crate::RoutedGenerationResult, crate::GenerationError> {
+        crate::generation::Generator::new(model).generate_routed(self, options)
+    }
+
     /// Generate a coherent symbolic amplitude from complete, unsewn diagrams.
     pub fn generate_amplitude(
         &self,

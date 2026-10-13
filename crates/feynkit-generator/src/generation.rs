@@ -10,6 +10,7 @@ mod interaction_stars;
 mod projector_equivalence;
 #[cfg(test)]
 mod search_census;
+mod signed_routing;
 mod special_topologies;
 
 use std::{
@@ -67,6 +68,8 @@ use enumeration::{
 pub use graph::ExternalNode;
 use graph::{Endpoint, GeneratedEdge, GeneratedGraph, PlainNodes, PlainVertex};
 use interaction_stars::{InteractionStar, InteractionStars};
+use signed_routing::DiagramWeight;
+pub use signed_routing::{RoutedEdge, RoutedGenerationResult, RoutedVertex, SignedRoutedDiagram};
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
@@ -128,6 +131,8 @@ pub enum GenerationError {
     InvalidThreadCount(usize),
     #[error("numerator grouping requires at least one numerical sample")]
     InvalidNumericalSampleCount,
+    #[error("signed routed generation cannot apply {option}")]
+    RoutedSymbolicOption { option: &'static str },
     #[error("arithmetic overflow while computing {0}")]
     ArithmeticOverflow(&'static str),
     #[error("forced cut edge set {edges:?} does not match any generated physical cut")]
@@ -237,7 +242,7 @@ pub struct GenerationReport {
     /// Enumerated diagrams: topologies with fields and vertex rules, before the cut and
     /// charge-conjugation filters that need their canonical frame.
     pub interaction_assignment_count: usize,
-    /// Number of diagrams retained after exact zero-numerator removal.
+    /// Number of diagrams retained after selection and any requested numerator filtering.
     pub retained_count: usize,
     pub zero_numerator_count: usize,
     pub completed: bool,
@@ -1766,6 +1771,35 @@ struct PreparedSearch {
     generator: GraphGenerator<ParticleId, ExternalLabel>,
 }
 
+/// Both outputs share enumeration, physical signs, final geometry and selection.
+#[derive(Clone, Copy)]
+enum GenerationTarget {
+    Full,
+    Routed,
+}
+
+impl GenerationTarget {
+    fn stage(self) -> &'static str {
+        match self {
+            Self::Full => "numerators",
+            Self::Routed => "routing",
+        }
+    }
+}
+
+struct ConstructedDiagram {
+    pair: DiagramPair,
+    weight: DiagramWeight,
+}
+
+struct PreparedGeneration {
+    diagrams: Vec<ConstructedDiagram>,
+    options: GenerationOptions,
+    report: GenerationReport,
+    #[cfg(not(target_arch = "wasm32"))]
+    pool: rayon::ThreadPool,
+}
+
 #[derive(Clone)]
 pub(crate) struct Generator {
     model: Arc<Model>,
@@ -1955,6 +1989,136 @@ impl Generator {
         options: &GenerationOptions,
         generation_type: GenerationType,
     ) -> Result<GenerationResult, GenerationError> {
+        let PreparedGeneration {
+            diagrams,
+            options,
+            report,
+            #[cfg(not(target_arch = "wasm32"))]
+            pool,
+        } = self.prepare_diagrams(process, options, generation_type, GenerationTarget::Full)?;
+        let options = &options;
+        let mut completed = report.completed;
+        let selected = diagrams.into_iter().map(|diagram| diagram.pair).collect();
+        let grouping = if options.cancellation_requested() {
+            completed = false;
+            &NumeratorGrouping::None
+        } else {
+            &options.numerator_grouping
+        };
+        let group = || {
+            grouping::group_diagrams(
+                selected,
+                &self.model,
+                grouping,
+                options.symmetrizes_left_right(),
+                options,
+            )
+        };
+        #[cfg(target_arch = "wasm32")]
+        let grouped = group()?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let grouped = pool.install(group)?;
+        if options.cancellation_requested() {
+            completed = false;
+        }
+
+        let zero_numerator_count = grouped.zero_numerator_count;
+        let groups = grouped.groups;
+        let diagrams = grouped.diagrams;
+        let total = groups.len();
+        options.report_progress_with_zero_count("grouping", 0, Some(total), zero_numerator_count);
+        for output_index in 0..total {
+            options.report_progress_with_zero_count(
+                "grouping",
+                output_index + 1,
+                Some(total),
+                zero_numerator_count,
+            );
+        }
+
+        let result = GenerationResult {
+            report: GenerationReport {
+                topology_count: report.topology_count,
+                interaction_assignment_count: report.interaction_assignment_count,
+                retained_count: diagrams.len(),
+                zero_numerator_count,
+                completed,
+            },
+            diagrams,
+            groups,
+        };
+        result.validate_groups()?;
+        options.report_progress_with_zero_count(
+            if completed { "complete" } else { "cancelled" },
+            result.diagrams.len(),
+            Some(result.diagrams.len()),
+            zero_numerator_count,
+        );
+        Ok(result)
+    }
+
+    pub fn generate_routed(
+        &self,
+        process: &Process,
+        options: &GenerationOptions,
+    ) -> Result<RoutedGenerationResult, GenerationError> {
+        for (enabled, option) in [
+            (
+                !matches!(options.numerator_grouping, NumeratorGrouping::None),
+                "numerator grouping",
+            ),
+            (options.filter_zero_color, "zero-color filtering"),
+            (options.projector.is_some(), "an external projector"),
+            (
+                !options.numerator_prefactor.is_one(),
+                "a numerator prefactor",
+            ),
+        ] {
+            if enabled {
+                return Err(GenerationError::RoutedSymbolicOption { option });
+            }
+        }
+        let PreparedGeneration {
+            diagrams,
+            options,
+            mut report,
+            ..
+        } = self.prepare_diagrams(
+            process,
+            options,
+            GenerationType::Amplitude,
+            GenerationTarget::Routed,
+        )?;
+        let diagrams = diagrams
+            .into_iter()
+            .map(|diagram| {
+                Ok(SignedRoutedDiagram::new(
+                    diagram.pair.into_representative()?,
+                    diagram.weight,
+                ))
+            })
+            .collect::<Result<Vec<_>, GenerationError>>()?;
+        report.retained_count = diagrams.len();
+        report.completed &= !options.cancellation_requested();
+        options.report_progress(
+            if report.completed {
+                "complete"
+            } else {
+                "cancelled"
+            },
+            diagrams.len(),
+            Some(diagrams.len()),
+        );
+        Ok(RoutedGenerationResult { diagrams, report })
+    }
+
+    fn prepare_diagrams(
+        &self,
+        process: &Process,
+        options: &GenerationOptions,
+        generation_type: GenerationType,
+        target: GenerationTarget,
+    ) -> Result<PreparedGeneration, GenerationError> {
         let PreparedSearch {
             options,
             resolved,
@@ -2064,7 +2228,7 @@ impl Generator {
             completed = false;
         }
         let total = diagram_inputs.len();
-        options.report_progress("numerators", 0, Some(total));
+        options.report_progress(target.stage(), 0, Some(total));
         let constructed = Mutex::new(0);
         let construct = || {
             #[cfg(target_arch = "wasm32")]
@@ -2076,11 +2240,12 @@ impl Generator {
                     if options.cancellation_requested() {
                         return Ok::<_, GenerationError>(None);
                     }
-                    let pair = self.diagram_pair(None, generation_type, input, options)?;
+                    let weight = DiagramWeight::new(input.signs, input.multiplicity);
+                    let pair = self.diagram_pair(None, generation_type, input, options, target)?;
                     let mut count = constructed.lock().unwrap();
                     *count += 1;
-                    options.report_progress("numerators", *count, Some(total));
-                    Ok(Some(pair))
+                    options.report_progress(target.stage(), *count, Some(total));
+                    Ok(Some(ConstructedDiagram { pair, weight }))
                 })
                 .collect::<Result<Vec<_>, _>>()
         };
@@ -2096,7 +2261,8 @@ impl Generator {
         if !options.forced_cuts.is_empty() {
             let mut matched = vec![false; options.forced_cuts.len()];
             let mut retained = Vec::new();
-            for pair in diagram_pairs {
+            for mut diagram in diagram_pairs {
+                let pair = &diagram.pair;
                 let cuts = pair
                     .comparison()
                     .cuts()
@@ -2122,8 +2288,8 @@ impl Generator {
                     .cloned()
                     .collect::<Vec<_>>();
                 if !cuts.is_empty() {
-                    let pair = pair.with_cuts(cuts)?;
-                    retained.push(pair);
+                    diagram.pair = diagram.pair.with_cuts(cuts)?;
+                    retained.push(diagram);
                 }
             }
             diagram_pairs = retained;
@@ -2146,7 +2312,8 @@ impl Generator {
             )),
         };
         let mut selected = Vec::with_capacity(diagram_pairs.len());
-        for (index, mut pair) in diagram_pairs.into_iter().enumerate() {
+        for (index, mut diagram) in diagram_pairs.into_iter().enumerate() {
+            let pair = &diagram.pair;
             let name = naming.map(|(prefix, width)| format!("{prefix}{index:0width$}"));
             let selected_by_id = match &options.selected_diagram_ids {
                 Some(selected) if !selected.is_empty() => {
@@ -2179,8 +2346,9 @@ impl Generator {
                 continue;
             }
             if let Some(name) = &name {
-                pair = pair.with_name(name);
+                diagram.pair = diagram.pair.with_name(name);
             }
+            let pair = &diagram.pair;
             let by_id = if options.loop_momentum_bases.is_empty() {
                 None
             } else if let Some(edges) = options
@@ -2196,66 +2364,22 @@ impl Generator {
                     .and_then(|name| options.named_loop_momentum_bases.get(name))
             });
             if let Some(edges) = requested_basis {
-                pair = pair.with_loop_momentum_edges(edges)?;
+                diagram.pair = diagram.pair.with_loop_momentum_edges(edges)?;
             }
-            selected.push(pair);
+            selected.push(diagram);
         }
-        let grouping = if options.cancellation_requested() {
-            completed = false;
-            &NumeratorGrouping::None
-        } else {
-            &options.numerator_grouping
-        };
-        let group = || {
-            grouping::group_diagrams(
-                selected,
-                &self.model,
-                grouping,
-                options.symmetrizes_left_right(),
-                options,
-            )
-        };
-        #[cfg(target_arch = "wasm32")]
-        let grouped = group()?;
-        #[cfg(not(target_arch = "wasm32"))]
-        let grouped = pool.install(group)?;
-        if options.cancellation_requested() {
-            completed = false;
-        }
-
-        let zero_numerator_count = grouped.zero_numerator_count;
-        let groups = grouped.groups;
-        let diagrams = grouped.diagrams;
-        let total = groups.len();
-        options.report_progress_with_zero_count("grouping", 0, Some(total), zero_numerator_count);
-        for output_index in 0..total {
-            options.report_progress_with_zero_count(
-                "grouping",
-                output_index + 1,
-                Some(total),
-                zero_numerator_count,
-            );
-        }
-
-        let result = GenerationResult {
+        Ok(PreparedGeneration {
+            diagrams: selected,
             report: GenerationReport {
                 topology_count,
                 interaction_assignment_count,
-                retained_count: diagrams.len(),
-                zero_numerator_count,
-                completed,
+                completed: completed && !options.cancellation_requested(),
+                ..GenerationReport::default()
             },
-            diagrams,
-            groups,
-        };
-        result.validate_groups()?;
-        options.report_progress_with_zero_count(
-            if completed { "complete" } else { "cancelled" },
-            result.diagrams.len(),
-            Some(result.diagrams.len()),
-            zero_numerator_count,
-        );
-        Ok(result)
+            options: options.clone(),
+            #[cfg(not(target_arch = "wasm32"))]
+            pool,
+        })
     }
 
     /// Canonicalize a generated diagram, apply the cut and interaction filters that need its
@@ -2340,6 +2464,7 @@ impl Generator {
         generation_type: GenerationType,
         input: DiagramInput,
         options: &GenerationOptions,
+        target: GenerationTarget,
     ) -> Result<DiagramPair, GenerationError> {
         let DiagramInput {
             comparison,
@@ -2356,25 +2481,26 @@ impl Generator {
             .filter(|(_, edge)| !edge.is_external())
             .map(|(edge, _)| reversed_edges.contains(&EdgeId(edge)))
             .collect::<Vec<_>>();
-        let comparison = self.to_diagram(
-            name.clone(),
-            generation_type,
-            comparison,
-            signs,
-            multiplicity,
-            options,
-        )?;
+        let construct = |name, topology| match target {
+            GenerationTarget::Full => self.to_diagram(
+                name,
+                generation_type,
+                topology,
+                signs,
+                multiplicity,
+                options,
+            ),
+            GenerationTarget::Routed => {
+                let builder = FeynmanDiagramBuilder::new(Arc::clone(&self.model), name);
+                self.assemble_diagram(generation_type, topology, builder)
+                    .map(|(diagram, _)| diagram)
+            }
+        };
+        let comparison = construct(name.clone(), comparison)?;
         if identical {
             return Ok(DiagramPair::Shared(comparison));
         }
-        let representative = self.to_diagram(
-            name,
-            generation_type,
-            representative,
-            signs,
-            multiplicity,
-            options,
-        )?;
+        let representative = construct(name, representative)?;
         // Finalization orders external carriers before the internal edges, which keep the
         // canonical order. Transport the comparison-to-representative reversals into that
         // finalized edge frame; process flow fixes all external carriers.
@@ -2703,17 +2829,46 @@ impl Generator {
             (topology.symmetry, multiplicity, fermion_signs),
             |&(symmetry, multiplicity, signs)| Ok(signs.factor(symmetry, multiplicity)),
         )?;
+        let mut builder = FeynmanDiagramBuilder::new(Arc::clone(&self.model), name)
+            .overall_factor(overall_factor)
+            .numerator_prefactor(options.numerator_prefactor.clone());
+        // A requested projector uses provisional indices and must enter finalization.
+        if let Some(projector) = &options.projector {
+            builder = builder.projector(projector.clone());
+        }
+        let (mut diagram, external_states) =
+            self.assemble_diagram(generation_type, topology, builder)?;
+        if options.projector.is_none() {
+            let positions = external_states
+                .into_iter()
+                .map(|(external, connection)| {
+                    ExternalStatePosition::finalized(external, connection, &diagram)
+                })
+                .collect();
+            let projector = memoised(&self.cache.projectors, positions, |positions| {
+                self.external_state_projector(positions)
+            })?;
+            diagram = diagram.with_projector(projector);
+        }
+        self.construct_numerators(diagram, |_| true)
+    }
+
+    /// Materialize and route the same physical geometry before any Feynman rules.
+    fn assemble_diagram(
+        &self,
+        generation_type: GenerationType,
+        topology: ColoredTopology,
+        builder: FeynmanDiagramBuilder,
+    ) -> Result<(FeynmanDiagram, Vec<(ExternalNode, usize)>), GenerationError> {
         let graph = &topology.graph;
         let incoming_count = graph
             .externals()
             .filter(|(_, external, _)| external.state == ExternalState::Incoming)
             .count();
-        let mut builder = FeynmanDiagramBuilder::new(Arc::clone(&self.model), name)
+        let mut builder = builder
             .canonical_loop_momentum_basis()
             .canonical_routing_cache(Arc::clone(&self.cache.routing))
             .symmetry_factor(topology.symmetry)
-            .overall_factor(overall_factor)
-            .numerator_prefactor(options.numerator_prefactor.clone())
             .cuts(topology.cut_partitions.clone())
             .topology_threshold_candidates(topology.topology_threshold_candidates.clone());
         // Every external state with the connection of the leg that carries it.
@@ -2786,26 +2941,7 @@ impl Generator {
                 }
             }
         }
-        let diagram = match &options.projector {
-            // A requested projector refers to the provisional frame and is finalized with the
-            // diagram.
-            Some(projector) => builder.projector(projector.clone()).build()?,
-            // The automatic one is built directly in the final frame.
-            None => {
-                let diagram = builder.build()?;
-                let positions = external_states
-                    .into_iter()
-                    .map(|(external, connection)| {
-                        ExternalStatePosition::finalized(external, connection, &diagram)
-                    })
-                    .collect();
-                let projector = memoised(&self.cache.projectors, positions, |positions| {
-                    self.external_state_projector(positions)
-                })?;
-                diagram.with_projector(projector)
-            }
-        };
-        self.construct_numerators(diagram, |_| true)
+        Ok((builder.build()?, external_states))
     }
 
     /// Instantiate the Feynman rules of the fragments `replaced` selects.
@@ -9368,5 +9504,265 @@ mod tests {
             .to_plain_string();
         assert!(vertex_numerator.contains("gammalooprs::hedge"));
         assert!(vertex_numerator.contains("gammalooprs::hedge"));
+    }
+
+    #[test]
+    fn routed_weights_match_all_symbolic_sign_components() {
+        for mask in 0..32 {
+            let signs = FermionSigns {
+                internal_loop_negative: mask & 1 != 0,
+                include_external_ordering: mask & 2 != 0,
+                external_ordering_negative: mask & 4 != 0,
+                include_antifermion_spin_sum: mask & 8 != 0,
+                antifermion_spin_sum_negative: mask & 16 != 0,
+            };
+            let weight = DiagramWeight::new(signs, 19);
+            let expected =
+                feynkit_graph::expressions::evaluate_overall_factor(signs.factor(7, 19).as_view());
+            // Weight evaluation does not need a graph. Read the independent exact components.
+            assert_eq!(
+                Atom::num(weight.sign) * Atom::num(weight.multiplicity) / Atom::num(7),
+                expected,
+                "mask {mask}"
+            );
+        }
+    }
+
+    #[test]
+    fn routed_generation_matches_full_geometry_routing_and_grassmann_weights() {
+        let options = GenerationOptions::default()
+            .threads(1)
+            .with_loop_count(0, 1)
+            .unwrap()
+            .max_vertices(3)
+            .allow_self_loops(true);
+        let cases = [
+            (
+                scalar_model(),
+                Process::new(["phi"], ["phi"]),
+                options.clone(),
+            ),
+            (
+                fermion_model(),
+                Process::new([1_i64, 1], [1_i64, 1]),
+                options.clone(),
+            ),
+            (
+                fermion_model(),
+                Process::new([22_i64], [22_i64]),
+                options.clone(),
+            ),
+            (
+                standard_model(),
+                Process::new([-4_i64, 1, 251], std::iter::empty::<i64>()),
+                options
+                    .clone()
+                    .with_loop_count(0, 0)
+                    .unwrap()
+                    .max_vertices(1),
+            ),
+            (
+                standard_model(),
+                Process::new(["g"], ["g"]),
+                options.with_loop_count(1, 1).unwrap().with_graph_filter(
+                    GenerationFilter::VertexAllow(vec![VertexSelector::from("V_35")]),
+                ),
+            ),
+        ];
+        let mut negative = 0;
+        for (model, process, options) in cases {
+            let model = Arc::new(model);
+            let full = process
+                .generate_diagrams(Arc::clone(&model), &options)
+                .unwrap();
+            let routed = process.generate_routed_diagrams(model, &options).unwrap();
+            assert!(!routed.diagrams.is_empty());
+            assert_eq!(full.report, routed.report);
+            for (full, routed) in full.diagrams.iter().zip(&routed.diagrams) {
+                assert_eq!(full.id().unwrap(), routed.id().unwrap());
+                assert_eq!(full.name(), routed.name());
+                assert_eq!(full.loop_momentum_basis(), routed.loop_momentum_basis());
+                assert_eq!(full.symmetry_factor(), routed.automorphism_order());
+                assert_eq!(
+                    numeric_factor(full),
+                    Atom::num(routed.sign()) * Atom::num(routed.multiplicity())
+                        / Atom::num(routed.automorphism_order())
+                );
+                assert_eq!(
+                    full.vertices()
+                        .map(|(id, data)| (id, data.name.as_str(), data.interaction))
+                        .collect::<Vec<_>>(),
+                    routed
+                        .vertices()
+                        .map(|(id, data)| (id, data.name, data.interaction))
+                        .collect::<Vec<_>>()
+                );
+                assert_eq!(
+                    full.edges()
+                        .map(|(id, ends, data)| (
+                            id,
+                            ends,
+                            data.particle,
+                            data.directed,
+                            data.external.as_ref(),
+                            data.source_slot(),
+                            data.target_slot()
+                        ))
+                        .collect::<Vec<_>>(),
+                    routed
+                        .edges()
+                        .map(|(id, ends, data)| (
+                            id,
+                            ends,
+                            data.particle,
+                            data.directed,
+                            data.external,
+                            data.source_slot,
+                            data.target_slot
+                        ))
+                        .collect::<Vec<_>>()
+                );
+                routed.validate().unwrap();
+                negative += usize::from(routed.sign() < 0);
+            }
+        }
+        assert!(
+            negative > 0,
+            "closed loops and exchanged external Grassmann lines carry actual minus signs"
+        );
+    }
+
+    #[test]
+    fn routed_generation_does_not_instantiate_local_rule_expressions() {
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] = serde_json::json!("P(1,99)");
+        let model = Arc::new(Model::from_json(&definition.to_string()).unwrap());
+        let process = Process::new(["phi"], ["phi", "phi"]);
+        let options = GenerationOptions::default()
+            .threads(1)
+            .with_loop_count(0, 0)
+            .unwrap();
+        let routed = process
+            .generate_routed_diagrams(Arc::clone(&model), &options)
+            .unwrap();
+        assert_eq!(routed.diagrams.len(), 1);
+        assert!(matches!(
+            process.generate_diagrams(model, &options),
+            Err(GenerationError::InvalidNumeratorLeg { .. })
+        ));
+    }
+
+    #[test]
+    fn routed_generation_rejects_symbolic_options() {
+        let generator = Generator::new(scalar_model());
+        let process = Process::new(["phi"], ["phi", "phi"]);
+        for options in [
+            GenerationOptions::default().projector(Atom::one()),
+            GenerationOptions::default().numerator_prefactor(Atom::num(2)),
+            GenerationOptions::default().filter_zero_color(true),
+            GenerationOptions::default().numerator_grouping(NumeratorGrouping::Identical(
+                crate::GraphGroupingOptions::default(),
+            )),
+        ] {
+            assert!(matches!(
+                generator.generate_routed(&process, &options),
+                Err(GenerationError::RoutedSymbolicOption { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn full_geometry_assembly_transports_provisional_projector_indices() {
+        let generator = Generator::new(scalar_model());
+        let mut graph = Graph::new();
+        let interaction = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V1")));
+        let external = graph.add_node(ColoredNode::External(ExternalNode {
+            index: 0,
+            state: ExternalState::Outgoing,
+            particle: particle(&generator.model, 25),
+        }));
+        graph
+            .add_edge(
+                interaction,
+                interaction,
+                false,
+                particle(&generator.model, 25),
+            )
+            .unwrap();
+        graph
+            .add_edge(interaction, external, false, particle(&generator.model, 25))
+            .unwrap();
+        let diagram = generator
+            .to_diagram(
+                None,
+                GenerationType::Amplitude,
+                ColoredTopology {
+                    graph: graph.build(),
+                    symmetry: 1,
+                    cut_partitions: vec![],
+                    topology_threshold_candidates: vec![],
+                },
+                FermionSigns::default(),
+                1,
+                &GenerationOptions::default()
+                    .projector(feynkit_graph::symbols::edge_index().call(0)),
+            )
+            .unwrap();
+        let (internal, _, _) = diagram
+            .edges()
+            .find(|(_, _, data)| data.external.is_none())
+            .unwrap();
+        assert_eq!(
+            internal,
+            EdgeId(1),
+            "finalization places the external carrier first"
+        );
+        assert_eq!(
+            diagram.projector(),
+            &feynkit_graph::symbols::edge_index().call(internal.0)
+        );
+    }
+
+    #[test]
+    fn routed_selection_and_requested_basis_match_full_generation() {
+        let model = Arc::new(scalar_model());
+        let process = Process::new(["phi"], ["phi"]);
+        let options = GenerationOptions::default()
+            .threads(1)
+            .with_loop_count(1, 1)
+            .unwrap()
+            .max_vertices(2);
+        let all = process
+            .generate_diagrams(Arc::clone(&model), &options)
+            .unwrap();
+        let chosen = &all.diagrams[0];
+        let options = options
+            .select_diagrams([chosen.name().unwrap()])
+            .with_named_loop_momentum_basis(
+                chosen.name().unwrap(),
+                chosen.loop_momentum_basis().loop_edges.clone(),
+            );
+        let full = process
+            .generate_diagrams(Arc::clone(&model), &options)
+            .unwrap();
+        let routed = process
+            .generate_routed_diagrams(Arc::clone(&model), &options)
+            .unwrap();
+        assert_eq!(routed.diagrams.len(), 1);
+        assert_eq!(
+            routed.diagrams[0].id().unwrap(),
+            full.diagrams[0].id().unwrap()
+        );
+        assert_eq!(
+            routed.diagrams[0].loop_momentum_basis(),
+            full.diagrams[0].loop_momentum_basis()
+        );
+        let cancellation = crate::CancellationToken::new();
+        cancellation.cancel();
+        let cancelled = process
+            .generate_routed_diagrams(model, &options.cancellation_token(cancellation))
+            .unwrap();
+        assert!(!cancelled.report.completed);
+        assert!(cancelled.diagrams.is_empty());
     }
 }

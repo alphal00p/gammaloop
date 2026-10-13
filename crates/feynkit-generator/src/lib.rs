@@ -15,7 +15,8 @@ use feynkit_graph::momentum_symbol;
 
 pub use generation::{
     DiagramGroup, ExternalLabel, ExternalNode, FeynmanDiagramRulesExt, GenerationError,
-    GenerationReport, GenerationResult, GenerationView, GroupMember, SourceIdentity,
+    GenerationReport, GenerationResult, GenerationView, GroupMember, RoutedEdge,
+    RoutedGenerationResult, RoutedVertex, SignedRoutedDiagram, SourceIdentity,
     UnresolvedCutContent, unresolved_cut_content,
 };
 pub use grouping::GroupingError;
