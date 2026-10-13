@@ -2317,10 +2317,7 @@ mod tests {
             // Concrete orientation calls must not depend on a global sign slot.
             let mut params = vec![GS.ose(edge), GS.inverse_temperature.to_atom()];
             let mut input = vec![1.0, 2.0];
-            if let Some(mu) = graph[edge]
-                .chemical_potential_atom()
-                .filter(|mu| !mu.is_zero())
-            {
+            if let Some(mu) = graph[edge].chemical_potential_atom() {
                 params.push(mu);
                 input.push(if graph[edge].is_fermion() { 1.5 } else { 0.4 });
             }

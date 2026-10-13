@@ -367,6 +367,35 @@ mod tests {
     }
 
     #[test]
+    fn fermi_sectors_treat_literal_zero_chemical_potential_as_absent() -> Result<()> {
+        let mut graph = routing::test_graph()?;
+        let edge = EdgeIndex(1);
+        let mut particle = graph[edge].particle().unwrap();
+        for chemical_potential in [
+            None,
+            Some(crate::model::ParameterName(crate::model::UFOSymbol::zero())),
+        ] {
+            std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
+            graph.underlying[edge].particle = particle.clone().into();
+            for derivative_order in [1, 3] {
+                let expression =
+                    ThermalDistributionCall::atom(1, derivative_order, 0, 1, 1) + Atom::num(7);
+                let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+                assert_eq!(bulk, Atom::num(7));
+                assert!(sectors.is_empty());
+                let factor = ThermalDistributionFactor {
+                    edge_id: edge,
+                    sign: 1,
+                    derivative_order: derivative_order as usize,
+                };
+                let error = FermiSurfaceProduct::new(&graph, &[factor]).err().unwrap();
+                assert!(error.to_string().contains("has no chemical potential"));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn fermi_sector_extraction_rejects_undefined_products_and_uncertified_steps() -> Result<()> {
         let graph = routing::test_graph()?;
         let delta = ThermalDistributionCall::atom(1, 1, 0, 1, 1);

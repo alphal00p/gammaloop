@@ -119,6 +119,8 @@ impl PossibleParticle {
         }
     }
 
+    /// Literal ZERO is absent; named parameters remain present even when their
+    /// current value is zero, since runtime parameter updates can change it.
     pub(crate) fn chemical_potential_atom(&self) -> Option<Atom> {
         self.particle()
             .and_then(|particle| particle.chemical_potential)
@@ -127,6 +129,7 @@ impl PossibleParticle {
                     .replace(UFOSymbol::zero().0)
                     .with(Atom::Zero)
             })
+            .filter(|mu| !mu.is_zero())
     }
     // pub fn just_mass(mass:Atom,)
 

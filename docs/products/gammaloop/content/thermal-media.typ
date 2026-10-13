@@ -75,7 +75,8 @@ muB = [0.5, 0.0]
 == Chemical potentials
 
 Chemical potentials are model parameters. Each particle may name one (`chemical_potential` in
-JSON and UFO models); a particle without one has zero chemical potential. UFO import keeps these
+JSON and UFO models); a missing assignment or the literal `ZERO` means zero chemical potential.
+A runtime value of zero does not turn a named parameter into a literal `ZERO`. UFO import keeps these
 assignments and therefore requires `ufo-model-loader>=1.0.0`. In the bundled `sm` model,
 antiparticles use the negated `minus_<name>` parameter, and every particle's value is derived
 from the external parameters `muB`, `muQ`, `muLe`, `muLmu`, and `muLtau` (LHA block
