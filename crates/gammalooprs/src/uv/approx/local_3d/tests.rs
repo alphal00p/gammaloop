@@ -263,7 +263,7 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
         )?;
         assert_eq!(
             ordinary_cff.production_prefactor_factor(),
-            ordinary.core_global_prefactor_sign.factor(),
+            ordinary.source_frame.factor(),
             "the typed bridge must be a no-op for scalar and linear-key ordinary production CFFs",
         );
     }

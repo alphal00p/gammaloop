@@ -128,12 +128,9 @@ pub enum CffEnergyFactorOwnership {
 pub struct CffEnergyFactorComponent {
     pub internal_edge_ids: Vec<usize>,
     pub ownership: CffEnergyFactorOwnership,
-    /// The scalar denominator source's uniform CFF convention in this
-    /// independently generated rational component.
-    pub denominator_only_global_prefactor_sign: CffGlobalPrefactorSign,
-    /// The shared causal core's uniform contour convention in this
-    /// independently generated rational component.
-    pub core_global_prefactor_sign: CffGlobalPrefactorSign,
+    /// The uniform contour convention of this independently generated rational
+    /// component, shared by scalar and generalized sources.
+    pub source_frame: CffGlobalPrefactorSign,
 }
 
 impl CffEnergyFactorComponent {
@@ -148,8 +145,7 @@ impl CffEnergyFactorComponent {
         Self {
             internal_edge_ids,
             ownership: self.ownership,
-            denominator_only_global_prefactor_sign: self.denominator_only_global_prefactor_sign,
-            core_global_prefactor_sign: self.core_global_prefactor_sign,
+            source_frame: self.source_frame,
         }
     }
 }
@@ -204,21 +200,19 @@ impl CffGlobalPrefactorSign {
 pub struct GeneratedThreeDExpression<E = (), H = ()> {
     pub expression: ThreeDExpression<OrientationID, E, H>,
     pub energy_factor_ownership: CffEnergyFactorOwnership,
-    /// Rational-component metadata retained with persisted expressions.  The
+    /// Rational-component metadata retained with persisted expressions. The
     /// aggregate ownership above is insufficient for products mixing ordinary
-    /// and generalized components, whose source-convention signs must be
-    /// converted independently.
+    /// and generalized components, whose energy factors retain separate owners
+    /// and whose contour signs compose componentwise.
     pub energy_factor_components: Vec<CffEnergyFactorComponent>,
     /// Transient source-edge bounds supplied to this generation call. These always
     /// remain in the generator input's namespace; higher-level consumers that also
     /// need physical-parent bounds must retain them as separate metadata.
     pub source_energy_degree_bounds: Vec<(usize, usize)>,
-    /// The scalar denominator source's uniform CFF convention, independent of
-    /// numerator bounds and generalized interpolation. This is one ingredient
-    /// of a consumer's componentwise convention bridge; it is not, by itself,
-    /// the GammaLoop production bridge.
-    pub denominator_only_global_prefactor_sign: CffGlobalPrefactorSign,
-    pub core_global_prefactor_sign: CffGlobalPrefactorSign,
+    /// Product of the rational components' uniform contour signs, independent
+    /// of numerator bounds and generalized interpolation. Consumers combine
+    /// this with their own denominator and energy-factor conventions.
+    pub source_frame: CffGlobalPrefactorSign,
 }
 
 // Component boundaries and prefactor conventions are persisted because they
@@ -234,8 +228,7 @@ where
         bincode::Encode::encode(&self.expression, encoder)?;
         bincode::Encode::encode(&self.energy_factor_ownership, encoder)?;
         bincode::Encode::encode(&self.energy_factor_components, encoder)?;
-        bincode::Encode::encode(&self.denominator_only_global_prefactor_sign, encoder)?;
-        bincode::Encode::encode(&self.core_global_prefactor_sign, encoder)
+        bincode::Encode::encode(&self.source_frame, encoder)
     }
 }
 
@@ -254,8 +247,7 @@ where
             energy_factor_ownership: bincode::Decode::decode(decoder)?,
             energy_factor_components: bincode::Decode::decode(decoder)?,
             source_energy_degree_bounds: Vec::new(),
-            denominator_only_global_prefactor_sign: bincode::Decode::decode(decoder)?,
-            core_global_prefactor_sign: bincode::Decode::decode(decoder)?,
+            source_frame: bincode::Decode::decode(decoder)?,
         })
     }
 }
@@ -294,30 +286,24 @@ mod generated_expression_persistence_tests {
         orientation.variants[0].uniform_scale_power = 2;
         let mut expression = ThreeDExpression::new_empty();
         expression.orientations.push(orientation);
-        let generated: GeneratedThreeDExpression =
-            GeneratedThreeDExpression {
-                expression,
-                energy_factor_ownership: CffEnergyFactorOwnership::VariantLocal,
-                energy_factor_components: vec![
-                    CffEnergyFactorComponent {
-                        internal_edge_ids: vec![3, 4],
-                        ownership: CffEnergyFactorOwnership::VariantLocal,
-                        denominator_only_global_prefactor_sign:
-                            CffGlobalPrefactorSign::from_exponent(1),
-                        core_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(0),
-                    },
-                    CffEnergyFactorComponent {
-                        internal_edge_ids: vec![8],
-                        ownership: CffEnergyFactorOwnership::GlobalSourceProduct,
-                        denominator_only_global_prefactor_sign:
-                            CffGlobalPrefactorSign::from_exponent(0),
-                        core_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(1),
-                    },
-                ],
-                source_energy_degree_bounds: vec![(3, 2)],
-                denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(1),
-                core_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(0),
-            };
+        let generated: GeneratedThreeDExpression = GeneratedThreeDExpression {
+            expression,
+            energy_factor_ownership: CffEnergyFactorOwnership::VariantLocal,
+            energy_factor_components: vec![
+                CffEnergyFactorComponent {
+                    internal_edge_ids: vec![3, 4],
+                    ownership: CffEnergyFactorOwnership::VariantLocal,
+                    source_frame: CffGlobalPrefactorSign::from_exponent(1),
+                },
+                CffEnergyFactorComponent {
+                    internal_edge_ids: vec![8],
+                    ownership: CffEnergyFactorOwnership::GlobalSourceProduct,
+                    source_frame: CffGlobalPrefactorSign::from_exponent(0),
+                },
+            ],
+            source_energy_degree_bounds: vec![(3, 2)],
+            source_frame: CffGlobalPrefactorSign::from_exponent(1),
+        };
 
         let bytes = bincode::encode_to_vec(&generated, bincode::config::standard()).unwrap();
 
@@ -333,14 +319,7 @@ mod generated_expression_persistence_tests {
             decoded.energy_factor_ownership,
             generated.energy_factor_ownership
         );
-        assert_eq!(
-            decoded.denominator_only_global_prefactor_sign,
-            generated.denominator_only_global_prefactor_sign
-        );
-        assert_eq!(
-            decoded.core_global_prefactor_sign,
-            generated.core_global_prefactor_sign
-        );
+        assert_eq!(decoded.source_frame, generated.source_frame);
         assert_eq!(
             decoded.energy_factor_components,
             generated.energy_factor_components
@@ -615,9 +594,7 @@ fn generate_3d_expression_from_parsed_generated(
     // energies in the distributions or their derivatives.
     let uses_generalized_expression = cff_bounds_need_generalized_expression(&bounds);
     let denominator_edge_ids = parsed.denominator_internal_edge_ids();
-    let denominator_only_global_prefactor_sign =
-        CffGlobalPrefactorSign::denominator_contour_frame(parsed);
-    let core_global_prefactor_sign = denominator_only_global_prefactor_sign;
+    let source_frame = CffGlobalPrefactorSign::denominator_contour_frame(parsed);
     let (expression, energy_factor_ownership) = if uses_generalized_expression {
         (
             // Keep the connected graph and its numerator in one Laurent
@@ -641,14 +618,14 @@ fn generate_3d_expression_from_parsed_generated(
         if basis.len() != parsed.loop_names.len() {
             return Err(GenerationError::SingularBasis);
         }
-        // Ordinary consumers restore the advertised core frame. An
+        // Ordinary consumers restore the advertised source frame. An
         // embedded terminal must normalize to that same frame even
         // when incidence joins several independent one-loop residues.
         let mut scalar = LowerSectorCffBuilder::new(parsed, options.medium_mode);
         scalar.context = options.cff_generation_context;
         scalar.source_prefactor = Some(Rational::from(
             CffGlobalPrefactorSign::from_exponent(denominator_edge_ids.len())
-                .product(core_global_prefactor_sign)
+                .product(source_frame)
                 .factor(),
         ));
         (
@@ -662,8 +639,7 @@ fn generate_3d_expression_from_parsed_generated(
         .then_some(CffEnergyFactorComponent {
             internal_edge_ids: denominator_edge_ids,
             ownership: energy_factor_ownership,
-            denominator_only_global_prefactor_sign,
-            core_global_prefactor_sign,
+            source_frame,
         })
         .into_iter()
         .collect();
@@ -672,8 +648,7 @@ fn generate_3d_expression_from_parsed_generated(
         energy_factor_ownership,
         energy_factor_components,
         source_energy_degree_bounds: Vec::new(),
-        denominator_only_global_prefactor_sign,
-        core_global_prefactor_sign,
+        source_frame,
     })
 }
 
@@ -770,8 +745,7 @@ fn build_expression_preserving_internal_edges(
         energy_factor_ownership: generated.energy_factor_ownership,
         energy_factor_components,
         source_energy_degree_bounds: Vec::new(),
-        denominator_only_global_prefactor_sign: generated.denominator_only_global_prefactor_sign,
-        core_global_prefactor_sign: generated.core_global_prefactor_sign,
+        source_frame: generated.source_frame,
     })
 }
 
@@ -828,8 +802,7 @@ fn expression_with_only_preserved_edges(
         energy_factor_ownership: CffEnergyFactorOwnership::GlobalSourceProduct,
         energy_factor_components: Vec::new(),
         source_energy_degree_bounds: Vec::new(),
-        denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::default(),
-        core_global_prefactor_sign: CffGlobalPrefactorSign::default(),
+        source_frame: CffGlobalPrefactorSign::default(),
     })
 }
 
@@ -1078,15 +1051,10 @@ fn generate_rational_component_product(
         .iter()
         .map(|(generated, embedding)| (&generated.expression, embedding))
         .collect::<Vec<_>>();
-    let core_global_prefactor_sign = component_expressions
+    let source_frame = component_expressions
         .iter()
         .fold(CffGlobalPrefactorSign::default(), |sign, (generated, _)| {
-            sign.product(generated.core_global_prefactor_sign)
-        });
-    let denominator_only_global_prefactor_sign = component_expressions
-        .iter()
-        .fold(CffGlobalPrefactorSign::default(), |sign, (generated, _)| {
-            sign.product(generated.denominator_only_global_prefactor_sign)
+            sign.product(generated.source_frame)
         });
     let mut energy_factor_components = Vec::new();
     for (generated, embedding) in &component_expressions {
@@ -1108,8 +1076,7 @@ fn generate_rational_component_product(
         energy_factor_ownership,
         energy_factor_components,
         source_energy_degree_bounds: Vec::new(),
-        denominator_only_global_prefactor_sign,
-        core_global_prefactor_sign,
+        source_frame,
     }))
 }
 
@@ -5272,7 +5239,7 @@ mod causal_generation_tests {
         // beta=(-1)^N*chi=-1 for this one-line source. Chi alone is +1
         // and misses that conversion.
         let source_factor = CffGlobalPrefactorSign::from_exponent(1)
-            .product(generated.denominator_only_global_prefactor_sign)
+            .product(generated.source_frame)
             .factor() as f64;
         let actual = source_factor * powered_identity_test_value(&parsed, &generated, "1", &input);
         let expected = -1.0 / (2.0 * energy);
@@ -5346,7 +5313,7 @@ mod causal_generation_tests {
                 .to_atom(crate::expression::AllOrientations);
             let source_frame =
                 CffGlobalPrefactorSign::from_exponent(parsed.denominator_internal_edge_ids().len())
-                    .product(generated.core_global_prefactor_sign);
+                    .product(generated.source_frame);
             assert!(
                 (Atom::num(source_frame.factor()) * scalar_sum
                     + Atom::num(1) / (Atom::num(2) * &energy))
@@ -5395,7 +5362,7 @@ mod causal_generation_tests {
     }
 
     #[test]
-    fn repeated_sources_share_the_core_frame_for_all_numerator_bounds() {
+    fn repeated_sources_share_the_source_frame_for_all_numerator_bounds() {
         let parsed = ParsedGraph {
             internal_edges: (0..2)
                 .map(|edge_id| ParsedGraphInternalEdge {
@@ -5432,10 +5399,9 @@ mod causal_generation_tests {
         let generalized = generate(vec![(0, 2)]);
 
         for generated in [constant, generalized] {
-            assert_eq!(generated.core_global_prefactor_sign.factor(), 1);
             assert_eq!(
-                generated.denominator_only_global_prefactor_sign,
-                generated.core_global_prefactor_sign,
+                generated.source_frame.factor(),
+                1,
                 "the one-loop source frame is independent of numerator ownership",
             );
         }
@@ -5696,23 +5662,15 @@ mod causal_generation_tests {
         };
         // The raw evaluator includes positive 1/(2E) factors. Reproduce the
         // documented GammaLoop source conversion independently of the values:
-        // (-1)^N times the scalar/ordinary frame of each rational component.
+        // (-1)^N times the source frame of each rational component.
         let source_conversion = |generated: &GeneratedThreeDExpression| {
             generated
                 .energy_factor_components
                 .iter()
                 .fold(1.0, |factor, component| {
-                    let frame = match component.ownership {
-                        CffEnergyFactorOwnership::GlobalSourceProduct => {
-                            component.core_global_prefactor_sign
-                        }
-                        CffEnergyFactorOwnership::VariantLocal => {
-                            component.denominator_only_global_prefactor_sign
-                        }
-                    };
                     factor
                         * CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                            .product(frame)
+                            .product(component.source_frame)
                             .factor() as f64
                 })
         };
@@ -5725,14 +5683,7 @@ mod causal_generation_tests {
         // the (-1)^N converting positive 1/(2E) factors to the physical
         // scalar-denominator source frame; the lowered graphs change N.
         for generated in [&scalar, &lower_3, &lower_8] {
-            assert_eq!(
-                quadratic.denominator_only_global_prefactor_sign,
-                generated.denominator_only_global_prefactor_sign
-            );
-            assert_eq!(
-                quadratic.core_global_prefactor_sign,
-                generated.core_global_prefactor_sign
-            );
+            assert_eq!(quadratic.source_frame, generated.source_frame);
         }
         for seed in [11, 29, 47] {
             let mut input = crate::eval::EvaluationInput::deterministic(
@@ -5902,19 +5853,11 @@ mod causal_generation_tests {
                     .energy_factor_components
                     .iter()
                     .fold(1.0, |factor, component| {
-                        let frame = match component.ownership {
-                            CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                component.core_global_prefactor_sign
-                            }
-                            CffEnergyFactorOwnership::VariantLocal => {
-                                component.denominator_only_global_prefactor_sign
-                            }
-                        };
                         factor
                             * CffGlobalPrefactorSign::from_exponent(
                                 component.internal_edge_ids.len(),
                             )
-                            .product(frame)
+                            .product(component.source_frame)
                             .factor() as f64
                     });
             assert_eq!(source_factor, 1.0);
@@ -5992,10 +5935,7 @@ mod causal_generation_tests {
                 },
             )
             .unwrap();
-            assert_eq!(
-                generated.denominator_only_global_prefactor_sign.factor(),
-                -1
-            );
+            assert_eq!(generated.source_frame.factor(), -1);
             // Five source denominators and the connected two-loop frame
             // convert this generated raw expression with sign +1.
             for (tadpole_spatial, bubble_spatial) in [(0.0, 0.0), (1.5, 0.0), (0.0, 1.5)] {
@@ -6096,17 +6036,9 @@ mod causal_generation_tests {
                 .energy_factor_components
                 .iter()
                 .fold(1.0, |factor, component| {
-                    let frame = match component.ownership {
-                        CffEnergyFactorOwnership::GlobalSourceProduct => {
-                            component.core_global_prefactor_sign
-                        }
-                        CffEnergyFactorOwnership::VariantLocal => {
-                            component.denominator_only_global_prefactor_sign
-                        }
-                    };
                     factor
                         * CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                            .product(frame)
+                            .product(component.source_frame)
                             .factor() as f64
                 });
         for external_energy in [2.4, 0.7] {
@@ -6165,7 +6097,7 @@ mod causal_generation_tests {
                     .iter()
                     .map(|component| {
                         CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                            .product(component.core_global_prefactor_sign)
+                            .product(component.source_frame)
                             .factor() as f64
                     })
                     .product();
@@ -6245,11 +6177,11 @@ mod causal_generation_tests {
             let child_numerator = physical_q0(child_signs[0]);
             let parent_frame =
                 CffGlobalPrefactorSign::from_exponent(parent.denominator_internal_edge_ids().len())
-                    .product(parent_generated.denominator_only_global_prefactor_sign)
+                    .product(parent_generated.source_frame)
                     .factor() as f64;
             let child_frame =
                 CffGlobalPrefactorSign::from_exponent(child.denominator_internal_edge_ids().len())
-                    .product(child_generated.denominator_only_global_prefactor_sign)
+                    .product(child_generated.source_frame)
                     .factor() as f64;
             let parent_value = parent_frame
                 * powered_identity_test_value(
@@ -6316,11 +6248,11 @@ mod causal_generation_tests {
         let retained = "(edges[0][0]+0.37)**2";
         let parent_frame =
             CffGlobalPrefactorSign::from_exponent(parent.denominator_internal_edge_ids().len())
-                .product(parent_generated.denominator_only_global_prefactor_sign)
+                .product(parent_generated.source_frame)
                 .factor() as f64;
         let child_frame =
             CffGlobalPrefactorSign::from_exponent(child.denominator_internal_edge_ids().len())
-                .product(child_generated.denominator_only_global_prefactor_sign)
+                .product(child_generated.source_frame)
                 .factor() as f64;
         let parent_value = parent_frame
             * powered_identity_test_value(
@@ -6382,7 +6314,7 @@ mod causal_generation_tests {
             // coarse directions. The public contour value below must be
             // independent of how those rows are assembled.
             let source_sign = CffGlobalPrefactorSign::from_exponent(2)
-                .product(generated.denominator_only_global_prefactor_sign)
+                .product(generated.source_frame)
                 .factor() as f64;
             // Independently, clockwise Below residues of 1/D^2 and q0^2/D^2
             // are +1/(4E^3) and -1/(4E), with D=q0^2-E^2+i0. E=2 makes
@@ -6427,7 +6359,7 @@ mod causal_generation_tests {
         .unwrap();
         let simple_frame =
             CffGlobalPrefactorSign::from_exponent(simple.denominator_internal_edge_ids().len())
-                .product(simple_generated.denominator_only_global_prefactor_sign)
+                .product(simple_generated.source_frame)
                 .factor() as f64;
         let expected = simple_frame
             * powered_identity_test_value(&simple, &simple_generated, "1", &input(1))
@@ -6467,7 +6399,7 @@ mod causal_generation_tests {
                 let source_frame = CffGlobalPrefactorSign::from_exponent(
                     parsed.denominator_internal_edge_ids().len(),
                 )
-                .product(generated.denominator_only_global_prefactor_sign)
+                .product(generated.source_frame)
                 .factor() as f64;
                 let actual = source_frame
                     * powered_identity_test_value(&parsed, &generated, &numerator, &input(2));
@@ -6616,11 +6548,11 @@ mod causal_generation_tests {
         let child_value = powered_identity_test_value(&child, &child_generated, "1", &child_input);
         let parent_value = parent_value
             * CffGlobalPrefactorSign::from_exponent(parent.denominator_internal_edge_ids().len())
-                .product(parent_generated.denominator_only_global_prefactor_sign)
+                .product(parent_generated.source_frame)
                 .factor() as f64;
         let child_value = child_value
             * CffGlobalPrefactorSign::from_exponent(child.denominator_internal_edge_ids().len())
-                .product(child_generated.core_global_prefactor_sign)
+                .product(child_generated.source_frame)
                 .factor() as f64;
         let scale = parent_value
             .abs()
@@ -6765,19 +6697,11 @@ mod causal_generation_tests {
                     .energy_factor_components
                     .iter()
                     .fold(1.0, |factor, component| {
-                        let frame = match component.ownership {
-                            CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                component.core_global_prefactor_sign
-                            }
-                            CffEnergyFactorOwnership::VariantLocal => {
-                                component.denominator_only_global_prefactor_sign
-                            }
-                        };
                         factor
                             * CffGlobalPrefactorSign::from_exponent(
                                 component.internal_edge_ids.len(),
                             )
-                            .product(frame)
+                            .product(component.source_frame)
                             .factor() as f64
                     });
             let actual =
@@ -6853,7 +6777,7 @@ mod causal_generation_tests {
             .sum();
         let expected = -q_residue / (2.0 * input.masses[1]);
         let frame = CffGlobalPrefactorSign::from_exponent(5)
-            .product(generated.denominator_only_global_prefactor_sign)
+            .product(generated.source_frame)
             .factor() as f64;
         let actual = frame
             * crate::eval::evaluate_expression(
@@ -6977,19 +6901,11 @@ mod causal_generation_tests {
                             let source_factor = generated.energy_factor_components.iter().fold(
                                 1.0,
                                 |factor, component| {
-                                    let frame = match component.ownership {
-                                        CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                            component.core_global_prefactor_sign
-                                        }
-                                        CffEnergyFactorOwnership::VariantLocal => {
-                                            component.denominator_only_global_prefactor_sign
-                                        }
-                                    };
                                     factor
                                         * CffGlobalPrefactorSign::from_exponent(
                                             component.internal_edge_ids.len(),
                                         )
-                                        .product(frame)
+                                        .product(component.source_frame)
                                         .factor() as f64
                                 },
                             );
@@ -7065,7 +6981,7 @@ mod causal_generation_tests {
                 + input.masses[0].powi(2))
             .sqrt();
             let frame = CffGlobalPrefactorSign::from_exponent(2)
-                .product(generated.denominator_only_global_prefactor_sign)
+                .product(generated.source_frame)
                 .factor() as f64;
             let actual = frame
                 * crate::eval::evaluate_expression(
@@ -7289,7 +7205,7 @@ mod causal_generation_tests {
                 let source_frame = CffGlobalPrefactorSign::from_exponent(
                     graph.denominator_internal_edge_ids().len(),
                 )
-                .product(generated.denominator_only_global_prefactor_sign)
+                .product(generated.source_frame)
                 .factor() as f64;
                 source_frame
                     * crate::eval::evaluate_expression(
@@ -7491,19 +7407,11 @@ mod causal_generation_tests {
                             .energy_factor_components
                             .iter()
                             .fold(1.0, |factor, component| {
-                                let frame = match component.ownership {
-                                    CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                        component.core_global_prefactor_sign
-                                    }
-                                    CffEnergyFactorOwnership::VariantLocal => {
-                                        component.denominator_only_global_prefactor_sign
-                                    }
-                                };
                                 factor
                                     * CffGlobalPrefactorSign::from_exponent(
                                         component.internal_edge_ids.len(),
                                     )
-                                    .product(frame)
+                                    .product(component.source_frame)
                                     .factor() as f64
                             });
                     source_factor * powered_identity_test_value(&parsed, generated, "1", &input)
@@ -7685,19 +7593,11 @@ mod causal_generation_tests {
                         .energy_factor_components
                         .iter()
                         .fold(1.0, |factor, component| {
-                            let frame = match component.ownership {
-                                CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                    component.core_global_prefactor_sign
-                                }
-                                CffEnergyFactorOwnership::VariantLocal => {
-                                    component.denominator_only_global_prefactor_sign
-                                }
-                            };
                             factor
                                 * CffGlobalPrefactorSign::from_exponent(
                                     component.internal_edge_ids.len(),
                                 )
-                                .product(frame)
+                                .product(component.source_frame)
                                 .factor() as f64
                         });
                 source_factor * powered_identity_test_value(&parsed, generated, "1", &input)
@@ -7777,19 +7677,11 @@ mod causal_generation_tests {
                             .energy_factor_components
                             .iter()
                             .fold(1.0, |factor, component| {
-                                let frame = match component.ownership {
-                                    CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                        component.core_global_prefactor_sign
-                                    }
-                                    CffEnergyFactorOwnership::VariantLocal => {
-                                        component.denominator_only_global_prefactor_sign
-                                    }
-                                };
                                 factor
                                     * CffGlobalPrefactorSign::from_exponent(
                                         component.internal_edge_ids.len(),
                                     )
-                                    .product(frame)
+                                    .product(component.source_frame)
                                     .factor() as f64
                             });
                     source_factor
@@ -7882,19 +7774,11 @@ mod causal_generation_tests {
                             .energy_factor_components
                             .iter()
                             .fold(1.0, |factor, component| {
-                                let frame = match component.ownership {
-                                    CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                        component.core_global_prefactor_sign
-                                    }
-                                    CffEnergyFactorOwnership::VariantLocal => {
-                                        component.denominator_only_global_prefactor_sign
-                                    }
-                                };
                                 factor
                                     * CffGlobalPrefactorSign::from_exponent(
                                         component.internal_edge_ids.len(),
                                     )
-                                    .product(frame)
+                                    .product(component.source_frame)
                                     .factor() as f64
                             });
                     source_factor
@@ -8348,10 +8232,7 @@ mod causal_generation_tests {
         };
         let exact = generate(vec![(1, 1), (3, 2), (4, 1)]);
         let conservative = generate(vec![(1, 2), (3, 2), (4, 1)]);
-        assert_eq!(
-            exact.core_global_prefactor_sign,
-            conservative.core_global_prefactor_sign
-        );
+        assert_eq!(exact.source_frame, conservative.source_frame);
         // A conservative quadratic capacity may add internal interpolation
         // contacts. Those variants still sample the same runtime
         // factorized numerator; their presence is not numerator expansion.
@@ -8369,7 +8250,7 @@ mod causal_generation_tests {
                 crate::eval::evaluate_expression(&parsed, &generated.expression, numerator, &input)
                     .unwrap()
                     .value
-                    * generated.core_global_prefactor_sign.factor() as f64
+                    * generated.source_frame.factor() as f64
             };
             let exact_value = evaluate(&exact);
             let conservative_value = evaluate(&conservative);
@@ -8521,7 +8402,7 @@ mod causal_generation_tests {
                             * CffGlobalPrefactorSign::from_exponent(
                                 component.internal_edge_ids.len(),
                             )
-                            .product(component.core_global_prefactor_sign)
+                            .product(component.source_frame)
                             .factor() as f64
                     });
             let public_signed =
@@ -8679,14 +8560,7 @@ mod graph_source_tests {
                         generated.energy_factor_components,
                         original.energy_factor_components
                     );
-                    assert_eq!(
-                        generated.core_global_prefactor_sign,
-                        original.core_global_prefactor_sign
-                    );
-                    assert_eq!(
-                        generated.denominator_only_global_prefactor_sign,
-                        original.denominator_only_global_prefactor_sign
-                    );
+                    assert_eq!(generated.source_frame, original.source_frame);
                     assert_eq!(
                         generated.source_energy_degree_bounds,
                         options.energy_degree_bounds.clone().unwrap()
@@ -8786,9 +8660,7 @@ mod graph_source_tests {
             vec![CffEnergyFactorComponent {
                 internal_edge_ids: vec![10, 11, 12, 13],
                 ownership: generated.energy_factor_ownership,
-                denominator_only_global_prefactor_sign: generated
-                    .denominator_only_global_prefactor_sign,
-                core_global_prefactor_sign: generated.core_global_prefactor_sign,
+                source_frame: generated.source_frame,
             }]
         );
         let expression = generated.expression;
@@ -8883,7 +8755,7 @@ mod initial_state_cut_tests {
                 let source_sign = CffGlobalPrefactorSign::from_exponent(
                     parsed.denominator_internal_edge_ids().len(),
                 )
-                .product(generated.core_global_prefactor_sign)
+                .product(generated.source_frame)
                 .factor() as f64;
                 for (actual, expected) in [
                     (source_sign * scalar, -1.0 / (2.0 * energy)),
@@ -8933,9 +8805,7 @@ mod cff_tests {
             vec![CffEnergyFactorComponent {
                 internal_edge_ids: vec![0, 1, 2],
                 ownership: generated.energy_factor_ownership,
-                denominator_only_global_prefactor_sign: generated
-                    .denominator_only_global_prefactor_sign,
-                core_global_prefactor_sign: generated.core_global_prefactor_sign,
+                source_frame: generated.source_frame,
             }]
         );
         let expression = generated.expression;
@@ -9012,9 +8882,7 @@ mod cff_tests {
                 vec![CffEnergyFactorComponent {
                     internal_edge_ids: vec![1, 2, 3],
                     ownership: generated.energy_factor_ownership,
-                    denominator_only_global_prefactor_sign: generated
-                        .denominator_only_global_prefactor_sign,
-                    core_global_prefactor_sign: generated.core_global_prefactor_sign,
+                    source_frame: generated.source_frame,
                 }]
             );
             assert_eq!(
@@ -9484,16 +9352,8 @@ mod cff_tests {
             .energy_factor_components
             .iter()
             .map(|component| {
-                let sign = match component.ownership {
-                    CffEnergyFactorOwnership::GlobalSourceProduct => {
-                        component.core_global_prefactor_sign
-                    }
-                    CffEnergyFactorOwnership::VariantLocal => {
-                        component.denominator_only_global_prefactor_sign
-                    }
-                };
                 CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                    .product(sign)
+                    .product(component.source_frame)
                     .factor() as f64
             })
             .product();
@@ -9574,16 +9434,8 @@ mod cff_tests {
             .energy_factor_components
             .iter()
             .map(|component| {
-                let sign = match component.ownership {
-                    CffEnergyFactorOwnership::GlobalSourceProduct => {
-                        component.core_global_prefactor_sign
-                    }
-                    CffEnergyFactorOwnership::VariantLocal => {
-                        component.denominator_only_global_prefactor_sign
-                    }
-                };
                 CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                    .product(sign)
+                    .product(component.source_frame)
                     .factor() as f64
             })
             .product();
@@ -9677,16 +9529,8 @@ mod cff_tests {
             .energy_factor_components
             .iter()
             .map(|component| {
-                let sign = match component.ownership {
-                    CffEnergyFactorOwnership::GlobalSourceProduct => {
-                        component.core_global_prefactor_sign
-                    }
-                    CffEnergyFactorOwnership::VariantLocal => {
-                        component.denominator_only_global_prefactor_sign
-                    }
-                };
                 CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                    .product(sign)
+                    .product(component.source_frame)
                     .factor() as f64
             })
             .product();
@@ -9824,15 +9668,7 @@ mod cff_tests {
                 )
                 .unwrap();
                 let value = |generated: &GeneratedThreeDExpression| {
-                    let frame = match generated.energy_factor_ownership {
-                        CffEnergyFactorOwnership::GlobalSourceProduct => {
-                            generated.core_global_prefactor_sign
-                        }
-                        CffEnergyFactorOwnership::VariantLocal => {
-                            generated.denominator_only_global_prefactor_sign
-                        }
-                    };
-                    frame.factor() as f64
+                    generated.source_frame.factor() as f64
                         * crate::eval::evaluate_expression(
                             &parsed,
                             &generated.expression,
@@ -9946,16 +9782,8 @@ mod cff_tests {
                 .energy_factor_components
                 .iter()
                 .map(|component| {
-                    let sign = match component.ownership {
-                        CffEnergyFactorOwnership::GlobalSourceProduct => {
-                            component.core_global_prefactor_sign
-                        }
-                        CffEnergyFactorOwnership::VariantLocal => {
-                            component.denominator_only_global_prefactor_sign
-                        }
-                    };
                     CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                        .product(sign)
+                        .product(component.source_frame)
                         .factor() as f64
                 })
                 .product();
@@ -10056,16 +9884,8 @@ mod cff_tests {
                     .energy_factor_components
                     .iter()
                     .map(|component| {
-                        let sign = match component.ownership {
-                            CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                component.core_global_prefactor_sign
-                            }
-                            CffEnergyFactorOwnership::VariantLocal => {
-                                component.denominator_only_global_prefactor_sign
-                            }
-                        };
                         CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                            .product(sign)
+                            .product(component.source_frame)
                             .factor() as f64
                     })
                     .product();
@@ -10131,16 +9951,8 @@ mod cff_tests {
                     .energy_factor_components
                     .iter()
                     .map(|component| {
-                        let sign = match component.ownership {
-                            CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                component.core_global_prefactor_sign
-                            }
-                            CffEnergyFactorOwnership::VariantLocal => {
-                                component.denominator_only_global_prefactor_sign
-                            }
-                        };
                         CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                            .product(sign)
+                            .product(component.source_frame)
                             .factor() as f64
                     })
                     .product();
@@ -10223,19 +10035,11 @@ mod cff_tests {
                         let frame = generated.energy_factor_components.iter().fold(
                             1.0,
                             |factor, component| {
-                                let sign = match component.ownership {
-                                    CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                        component.core_global_prefactor_sign
-                                    }
-                                    CffEnergyFactorOwnership::VariantLocal => {
-                                        component.denominator_only_global_prefactor_sign
-                                    }
-                                };
                                 factor
                                     * CffGlobalPrefactorSign::from_exponent(
                                         component.internal_edge_ids.len(),
                                     )
-                                    .product(sign)
+                                    .product(component.source_frame)
                                     .factor() as f64
                             },
                         );
@@ -10310,19 +10114,11 @@ mod cff_tests {
                                 let frame = generated.energy_factor_components.iter().fold(
                                     1.0,
                                     |factor, component| {
-                                        let sign = match component.ownership {
-                                            CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                                component.core_global_prefactor_sign
-                                            }
-                                            CffEnergyFactorOwnership::VariantLocal => {
-                                                component.denominator_only_global_prefactor_sign
-                                            }
-                                        };
                                         factor
                                             * CffGlobalPrefactorSign::from_exponent(
                                                 component.internal_edge_ids.len(),
                                             )
-                                            .product(sign)
+                                            .product(component.source_frame)
                                             .factor()
                                                 as f64
                                     },
@@ -10400,16 +10196,8 @@ mod cff_tests {
                 .energy_factor_components
                 .iter()
                 .map(|component| {
-                    let sign = match component.ownership {
-                        CffEnergyFactorOwnership::GlobalSourceProduct => {
-                            component.core_global_prefactor_sign
-                        }
-                        CffEnergyFactorOwnership::VariantLocal => {
-                            component.denominator_only_global_prefactor_sign
-                        }
-                    };
                     CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                        .product(sign)
+                        .product(component.source_frame)
                         .factor() as f64
                 })
                 .product();

@@ -1125,10 +1125,17 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 13` currently).
-- Version 13 stores the selected medium in graph parameter builders and the
-  zero-temperature Fermi-surface evaluators of amplitude graph terms. Earlier states
-  use a different positional layout and must be regenerated.
+- State format is versioned with `state_manifest.toml` (`version = 14` currently).
+- Version 14 stores one numerator-bound-independent source-frame sign for each
+  generated CFF and rational component. The duplicate core/denominator sign fields
+  were removed from the positional binary layout; earlier saved states must be regenerated.
+- Version 13 stores the selected medium in graph parameter builders and the denominator
+  H-surfaces and zero-temperature Fermi-surface evaluators of amplitude graph terms.
+  Frozen SymJIT, C++, and assembly modes for amplitude and cross-section integrands
+  store `CompilationOptionsSnapshot`, including
+  `jit_direct_translation`: SymJIT replaces its bare optimization level, while the
+  C++ and assembly snapshots gain the new field. Earlier states use a different
+  positional layout and must be regenerated.
 - Version 12 names the square-root primitive `OnShellEnergy` and the CFF surface
   sum `Esurface`. Older states used `Esurface` for the square root and must be
   regenerated: importing those atoms with the new callbacks would change their

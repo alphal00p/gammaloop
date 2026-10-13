@@ -55,7 +55,12 @@ anchor = "load_state_manifest(&save_path)?"
 # parameter builders, as documented in architecture-current.typ.
 # Reviewed 2026-10-10: the version-13 comment also names the persisted Fermi-surface
 # evaluators, matching the persistence contract; State::load is unchanged.
-digest = "47952d64e1fcf3a60c47be4d28afa23785d4da66"
+# Reviewed 2026-10-13: state version 14 consolidates generated-CFF source-frame
+# signs; architecture-current.typ records the changed binary layout and regeneration.
+# Reviewed 2026-10-14: the version-13 history now also records denominator H-surfaces
+# and frozen compilation snapshots. Only comments changed;
+# version 14 and the exact-version load guard are unchanged.
+digest = "14af7bc3f714515eef6a56f61bb80b3ad55b33e6"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"

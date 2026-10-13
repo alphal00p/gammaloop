@@ -1074,6 +1074,25 @@ impl DeterministicRng {
 }
 
 #[cfg(test)]
+impl crate::GeneratedThreeDExpression {
+    fn source_conversion(&self) -> f64 {
+        // Evaluation already includes positive 1/(2E) factors. Each rational
+        // component needs (-1)^N and its source frame,
+        // exactly as in the typed GammaLoop source adapter.
+        self.energy_factor_components
+            .iter()
+            .fold(1.0, |factor, component| {
+                factor
+                    * crate::CffGlobalPrefactorSign::from_exponent(
+                        component.internal_edge_ids.len(),
+                    )
+                    .product(component.source_frame)
+                    .factor() as f64
+            })
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
@@ -1218,14 +1237,7 @@ mod tests {
         let bounded_raw = evaluate_expression(&parsed, &bounded.expression, "1", &input)
             .unwrap()
             .value;
-        assert_eq!(
-            scalar.core_global_prefactor_sign,
-            bounded.core_global_prefactor_sign
-        );
-        assert_eq!(
-            scalar.denominator_only_global_prefactor_sign,
-            bounded.denominator_only_global_prefactor_sign
-        );
+        assert_eq!(scalar.source_frame, bounded.source_frame);
         let scale = scalar_raw
             .abs()
             .max(bounded_raw.abs())
@@ -1872,12 +1884,12 @@ mod tests {
             )
             .unwrap()
             .value
-                * disconnected_generated.core_global_prefactor_sign.factor() as f64;
+                * disconnected_generated.source_frame.factor() as f64;
             let generalized =
                 evaluate_expression(&parsed, &generated.expression, numerator, &input)
                     .unwrap()
                     .value
-                    * generated.core_global_prefactor_sign.factor() as f64;
+                    * generated.source_frame.factor() as f64;
             let scale = generalized
                 .abs()
                 .max(disconnected_value.abs())
@@ -1895,7 +1907,7 @@ mod tests {
             )
             .unwrap()
             .value
-                * quadratic_generated.core_global_prefactor_sign.factor() as f64;
+                * quadratic_generated.source_frame.factor() as f64;
             let disconnected_quadratic = evaluate_expression(
                 &disconnected,
                 &disconnected_quadratic_generated.expression,
@@ -1904,9 +1916,7 @@ mod tests {
             )
             .unwrap()
             .value
-                * disconnected_quadratic_generated
-                    .core_global_prefactor_sign
-                    .factor() as f64;
+                * disconnected_quadratic_generated.source_frame.factor() as f64;
             let quadratic_scale = quadratic
                 .abs()
                 .max(disconnected_quadratic.abs())
@@ -1925,9 +1935,7 @@ mod tests {
             )
             .unwrap()
             .value
-                * double_quadratic_generated
-                    .core_global_prefactor_sign
-                    .factor() as f64;
+                * double_quadratic_generated.source_frame.factor() as f64;
             let cograph_double_quadratic = evaluate_expression(
                 &cograph,
                 &cograph_double_quadratic_generated.expression,
@@ -1936,9 +1944,7 @@ mod tests {
             )
             .unwrap()
             .value
-                * cograph_double_quadratic_generated
-                    .core_global_prefactor_sign
-                    .factor() as f64
+                * cograph_double_quadratic_generated.source_frame.factor() as f64
                 * repeated_bubble_factor;
             let double_quadratic_scale = double_quadratic
                 .abs()
@@ -1947,13 +1953,9 @@ mod tests {
             assert!(
                 (double_quadratic - cograph_double_quadratic).abs()
                     <= 1.0e-10 * double_quadratic_scale,
-                "cut-aware attached-UV-bubble double-quadratic recursion differs from its cograph CFF times the repeated bubble at seed {seed}: generated={double_quadratic:e}, cograph generated times bubble={cograph_double_quadratic:e}, full core sign={} cograph core sign={}",
-                double_quadratic_generated
-                    .core_global_prefactor_sign
-                    .factor(),
-                cograph_double_quadratic_generated
-                    .core_global_prefactor_sign
-                    .factor(),
+                "cut-aware attached-UV-bubble double-quadratic recursion differs from its cograph CFF times the repeated bubble at seed {seed}: generated={double_quadratic:e}, cograph generated times bubble={cograph_double_quadratic:e}, full source frame={} cograph source frame={}",
+                double_quadratic_generated.source_frame.factor(),
+                cograph_double_quadratic_generated.source_frame.factor(),
             );
         }
     }
@@ -2094,7 +2096,7 @@ mod tests {
             crate::CffGlobalPrefactorSign::from_exponent(
                 graph.denominator_internal_edge_ids().len(),
             )
-            .product(generated.denominator_only_global_prefactor_sign)
+            .product(generated.source_frame)
             .factor() as f64
         };
 
@@ -2364,7 +2366,7 @@ mod tests {
                         * crate::CffGlobalPrefactorSign::from_exponent(
                             graphs[0].denominator_internal_edge_ids().len(),
                         )
-                        .product(common.denominator_only_global_prefactor_sign)
+                        .product(common.source_frame)
                         .factor() as f64;
                     let lower_input = EvaluationInput {
                         masses: vec![0.73; 5 - pinched_factors],
@@ -2383,7 +2385,7 @@ mod tests {
                                 .denominator_internal_edge_ids()
                                 .len(),
                         )
-                        .product(lower.denominator_only_global_prefactor_sign)
+                        .product(lower.source_frame)
                         .factor() as f64;
                     let scale = common_value
                         .abs()
@@ -2528,7 +2530,7 @@ mod tests {
                     * crate::CffGlobalPrefactorSign::from_exponent(
                         sextic.denominator_internal_edge_ids().len(),
                     )
-                    .product(split.denominator_only_global_prefactor_sign)
+                    .product(split.source_frame)
                     .factor() as f64;
                 let coherent_value = evaluate_expression(
                     &sextic,
@@ -2541,7 +2543,7 @@ mod tests {
                     * crate::CffGlobalPrefactorSign::from_exponent(
                         sextic.denominator_internal_edge_ids().len(),
                     )
-                    .product(coherent.denominator_only_global_prefactor_sign)
+                    .product(coherent.source_frame)
                     .factor() as f64;
                 let lower_value =
                     evaluate_expression(&quintic, &lower.expression, &retained, &quintic_input)
@@ -2550,7 +2552,7 @@ mod tests {
                         * crate::CffGlobalPrefactorSign::from_exponent(
                             quintic.denominator_internal_edge_ids().len(),
                         )
-                        .product(lower.denominator_only_global_prefactor_sign)
+                        .product(lower.source_frame)
                         .factor() as f64;
                 for (label, candidate) in [
                     ("split denominator", split_value),
@@ -2702,7 +2704,7 @@ mod tests {
                         * crate::CffGlobalPrefactorSign::from_exponent(
                             graphs[0].denominator_internal_edge_ids().len(),
                         )
-                        .product(generated[0].denominator_only_global_prefactor_sign)
+                        .product(generated[0].source_frame)
                         .factor() as f64;
                     let lower = evaluate_expression(
                         &graphs[1],
@@ -2715,7 +2717,7 @@ mod tests {
                         * crate::CffGlobalPrefactorSign::from_exponent(
                             graphs[1].denominator_internal_edge_ids().len(),
                         )
-                        .product(generated[1].denominator_only_global_prefactor_sign)
+                        .product(generated[1].source_frame)
                         .factor() as f64;
                     let scale = common.abs().max(lower.abs()).max(f64::MIN_POSITIVE);
                     if !(common.is_finite()
@@ -2723,10 +2725,10 @@ mod tests {
                         && (common - lower).abs() <= 1.0e-10 * scale)
                     {
                         failures.push(format!(
-                        "factorized UV cancellation, join_incidence={join_incidence}, reverse_uv={reverse_uv}, point {point}: common={common:e}, lower={lower:e}, ratio={}, common core={}, lower core={}, origins={origins:?}",
+                        "factorized UV cancellation, join_incidence={join_incidence}, reverse_uv={reverse_uv}, point {point}: common={common:e}, lower={lower:e}, ratio={}, common source frame={}, lower source frame={}, origins={origins:?}",
                         common / lower,
-                        generated[0].core_global_prefactor_sign.factor(),
-                        generated[1].core_global_prefactor_sign.factor(),
+                        generated[0].source_frame.factor(),
+                        generated[1].source_frame.factor(),
                     ));
                     }
                 }
@@ -2881,14 +2883,14 @@ mod tests {
         let parent_frame = crate::CffGlobalPrefactorSign::from_exponent(
             parsed.denominator_internal_edge_ids().len(),
         )
-        .product(source.denominator_only_global_prefactor_sign)
+        .product(source.source_frame)
         .factor() as f64;
         let residual_source =
             generate_3d_expression(&residual, &Generate3DExpressionOptions::default()).unwrap();
         let residual_frame = crate::CffGlobalPrefactorSign::from_exponent(
             residual.denominator_internal_edge_ids().len(),
         )
-        .product(residual_source.core_global_prefactor_sign)
+        .product(residual_source.source_frame)
         .factor() as f64;
         assert_eq!(parent_frame, -1.0);
         assert_eq!(residual_frame, -1.0);
@@ -2989,7 +2991,7 @@ mod tests {
         let parent_frame = crate::CffGlobalPrefactorSign::from_exponent(
             parent.denominator_internal_edge_ids().len(),
         )
-        .product(generated.denominator_only_global_prefactor_sign)
+        .product(generated.source_frame)
         .factor() as f64;
         assert_eq!(parent_frame, 1.0);
         let projected = generated.expression;
@@ -3036,9 +3038,9 @@ mod tests {
         let residual_frame = crate::CffGlobalPrefactorSign::from_exponent(
             residual.denominator_internal_edge_ids().len(),
         )
-        .product(residual_source.core_global_prefactor_sign)
+        .product(residual_source.source_frame)
         .factor() as f64;
-        // The retained rank-one contour has core frame +1; its two
+        // The retained rank-one contour has source frame +1; its two
         // denominator occurrences contribute even source parity.
         assert_eq!(residual_frame, 1.0);
         let projected_value = parent_frame * projected_value;
@@ -3136,30 +3138,6 @@ mod tests {
             },
         )
         .unwrap();
-        // Evaluation already includes positive 1/(2E) factors. Each rational
-        // component needs (-1)^N and its ordinary or generalized source frame,
-        // exactly as in the typed GammaLoop source adapter.
-        let source_conversion = |generated: &crate::GeneratedThreeDExpression| {
-            generated
-                .energy_factor_components
-                .iter()
-                .fold(1.0, |factor, component| {
-                    let frame = match component.ownership {
-                        crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
-                            component.core_global_prefactor_sign
-                        }
-                        crate::CffEnergyFactorOwnership::VariantLocal => {
-                            component.denominator_only_global_prefactor_sign
-                        }
-                    };
-                    factor
-                        * crate::CffGlobalPrefactorSign::from_exponent(
-                            component.internal_edge_ids.len(),
-                        )
-                        .product(frame)
-                        .factor() as f64
-                })
-        };
         let energies = residual
             .internal_edges
             .iter()
@@ -3255,7 +3233,7 @@ mod tests {
                 quartic_contour,
             ),
         ] {
-            let actual = source_conversion(generated)
+            let actual = generated.source_conversion()
                 * evaluate_expression(graph, &generated.expression, numerator, input)
                     .unwrap()
                     .value;
@@ -3351,26 +3329,7 @@ mod tests {
                 },
             )
             .unwrap();
-            let source_conversion =
-                generated
-                    .energy_factor_components
-                    .iter()
-                    .fold(1.0, |factor, component| {
-                        let frame = match component.ownership {
-                            crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                component.core_global_prefactor_sign
-                            }
-                            crate::CffEnergyFactorOwnership::VariantLocal => {
-                                component.denominator_only_global_prefactor_sign
-                            }
-                        };
-                        factor
-                            * crate::CffGlobalPrefactorSign::from_exponent(
-                                component.internal_edge_ids.len(),
-                            )
-                            .product(frame)
-                            .factor() as f64
-                    });
+            let source_conversion = generated.source_conversion();
             let actual = source_conversion
                 * evaluate_expression(&parsed, &generated.expression, "1", &input)
                     .unwrap()
@@ -3518,29 +3477,6 @@ mod tests {
         );
 
         let mut failures = Vec::new();
-        // Raw evaluation already includes the half-edge factors. Convert each
-        // independent source once using its declared ownership and parity.
-        let frame = |generated: &crate::GeneratedThreeDExpression| {
-            generated
-                .energy_factor_components
-                .iter()
-                .fold(1.0, |factor, component| {
-                    let convention = match component.ownership {
-                        crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
-                            component.core_global_prefactor_sign
-                        }
-                        crate::CffEnergyFactorOwnership::VariantLocal => {
-                            component.denominator_only_global_prefactor_sign
-                        }
-                    };
-                    factor
-                        * crate::CffGlobalPrefactorSign::from_exponent(
-                            component.internal_edge_ids.len(),
-                        )
-                        .product(convention)
-                        .factor() as f64
-                })
-        };
         for seed in [17, 1337, 9100] {
             let input = EvaluationInput::deterministic(
                 &parsed,
@@ -3608,11 +3544,11 @@ mod tests {
             )
             .unwrap()
             .value;
-            let x_framed = x_raw * frame(&x_bounded);
+            let x_framed = x_raw * x_bounded.source_conversion();
             let y_raw = evaluate_expression(&y_bubble, &y_scalar.expression, "1", &y_input)
                 .unwrap()
                 .value;
-            let y_framed = y_raw * frame(&y_scalar);
+            let y_framed = y_raw * y_scalar.source_conversion();
             let full_component_raw = evaluate_expression(
                 &parsed,
                 &component_local.expression,
@@ -3621,7 +3557,7 @@ mod tests {
             )
             .unwrap()
             .value;
-            let full_component_framed = full_component_raw * frame(&component_local);
+            let full_component_framed = full_component_raw * component_local.source_conversion();
             let isolated_product = x_framed * y_framed;
             let scale = isolated_product
                 .abs()
@@ -3661,7 +3597,7 @@ mod tests {
                     evaluate_expression(&parsed, &cross_component.expression, numerator, &input)
                         .unwrap()
                         .value;
-                expanded_generated += raw * frame(&cross_component);
+                expanded_generated += raw * cross_component.source_conversion();
             }
             let factorized_generated = evaluate_expression(
                 &parsed,
@@ -3671,7 +3607,7 @@ mod tests {
             )
             .unwrap()
             .value
-                * frame(&cross_component);
+                * cross_component.source_conversion();
             for (label, actual) in [
                 ("expanded source", expanded_generated),
                 ("factorized source", factorized_generated),
@@ -3790,12 +3726,12 @@ mod tests {
         let parent_frame = crate::CffGlobalPrefactorSign::from_exponent(
             parent.denominator_internal_edge_ids().len(),
         )
-        .product(parent_generated.denominator_only_global_prefactor_sign)
+        .product(parent_generated.source_frame)
         .factor() as f64;
         let residual_frame = crate::CffGlobalPrefactorSign::from_exponent(
             residual.denominator_internal_edge_ids().len(),
         )
-        .product(residual_generated.core_global_prefactor_sign)
+        .product(residual_generated.source_frame)
         .factor() as f64;
         let parent_value = parent_frame * parent_raw;
         let residual_value = residual_frame * residual_raw;
@@ -3876,7 +3812,7 @@ mod tests {
             evaluate_expression(parsed, &generated.expression, "edges[0][0]**2", &input)
                 .unwrap()
                 .value
-                * generated.core_global_prefactor_sign.factor() as f64
+                * generated.source_frame.factor() as f64
         };
         let forward = evaluate(&triangle(false));
         let reversed = evaluate(&triangle(true));
@@ -3899,6 +3835,52 @@ mod thermal_reference_tests {
         },
         surface::LinearSurfaceKind,
     };
+
+    impl crate::ThermalWeight {
+        // Independent numeric oracle: keep this separate from symbolic to_atom.
+        fn evaluate(&self, distribution: impl Fn(usize, i32, usize) -> f64) -> f64 {
+            self.numerators
+                .iter()
+                .map(|numerator| {
+                    let product = |sign| {
+                        numerator
+                            .positive_energies
+                            .iter()
+                            .map(|edge| distribution(edge.0, sign, 0))
+                            .chain(
+                                numerator
+                                    .negative_energies
+                                    .iter()
+                                    .map(|edge| distribution(edge.0, -sign, 0)),
+                            )
+                            .product::<f64>()
+                    };
+                    product(1) - product(-1)
+                })
+                .chain(self.distributions.iter().map(|factor| {
+                    distribution(factor.edge_id.0, factor.sign, factor.derivative_order)
+                }))
+                .product::<f64>()
+        }
+    }
+
+    impl ExpressionEvaluator<'_> {
+        fn scalar_variant_value(
+            &self,
+            variant: &crate::expression::CFFVariant,
+            thermal: f64,
+        ) -> Result<f64> {
+            let energy_product = variant
+                .half_edges
+                .iter()
+                .map(|edge| 2.0 * self.internal_energies[edge.0])
+                .product::<f64>();
+            Ok(
+                variant.prefactor.to_f64() * thermal * self.tree_sum(&variant.denominator)?
+                    / energy_product,
+            )
+        }
+    }
 
     // Independent bosonic reference at beta=1, mu=0, expressed through coth(E/2).
     fn bose_distribution_derivative(coth: f64, sign: i32, order: usize) -> f64 {
@@ -4074,26 +4056,7 @@ mod thermal_reference_tests {
                 );
                 let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
                 let energies = &evaluator.internal_energies;
-                let source_conversion =
-                    generated
-                        .energy_factor_components
-                        .iter()
-                        .fold(1.0, |factor, component| {
-                            let frame = match component.ownership {
-                                crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                    component.core_global_prefactor_sign
-                                }
-                                crate::CffEnergyFactorOwnership::VariantLocal => {
-                                    component.denominator_only_global_prefactor_sign
-                                }
-                            };
-                            factor
-                                * crate::CffGlobalPrefactorSign::from_exponent(
-                                    component.internal_edge_ids.len(),
-                                )
-                                .product(frame)
-                                .factor() as f64
-                        });
+                let source_conversion = generated.source_conversion();
                 for vacuum_limit in [true, false] {
                     if !vacuum_limit && medium_mode != MediumMode::ThermodynamicEquilibrium {
                         continue;
@@ -4181,36 +4144,7 @@ mod thermal_reference_tests {
                         let mut actual = 0.0;
                         for orientation in &expression.orientations {
                             for variant in &orientation.variants {
-                                let thermal = variant
-                                    .thermal_weight
-                                    .numerators
-                                    .iter()
-                                    .map(|numerator| {
-                                        let product = |sign| {
-                                            numerator
-                                                .positive_energies
-                                                .iter()
-                                                .map(|edge| distribution(edge.0, sign, 0))
-                                                .chain(
-                                                    numerator
-                                                        .negative_energies
-                                                        .iter()
-                                                        .map(|edge| distribution(edge.0, -sign, 0)),
-                                                )
-                                                .product::<f64>()
-                                        };
-                                        product(1) - product(-1)
-                                    })
-                                    .chain(variant.thermal_weight.distributions.iter().map(
-                                        |factor| {
-                                            distribution(
-                                                factor.edge_id.0,
-                                                factor.sign,
-                                                factor.derivative_order,
-                                            )
-                                        },
-                                    ))
-                                    .product::<f64>();
+                                let thermal = variant.thermal_weight.evaluate(distribution);
                                 // Reuse the full evaluator for every variant, including
                                 // numerator surfaces, maps and variant-local half edges.
                                 let mut branch = expression.clone();
@@ -4340,39 +4274,8 @@ mod thermal_reference_tests {
                         "{external_leg_count} external legs: dropped orientation {orientation_id}"
                     );
                     for variant in &orientation.variants {
-                        let thermal = variant
-                            .thermal_weight
-                            .numerators
-                            .iter()
-                            .map(|numerator| {
-                                let product = |sign| {
-                                    numerator
-                                        .positive_energies
-                                        .iter()
-                                        .map(|edge| distribution(edge.0, sign, 0))
-                                        .chain(
-                                            numerator
-                                                .negative_energies
-                                                .iter()
-                                                .map(|edge| distribution(edge.0, -sign, 0)),
-                                        )
-                                        .product::<f64>()
-                                };
-                                product(1) - product(-1)
-                            })
-                            .chain(variant.thermal_weight.distributions.iter().map(|factor| {
-                                distribution(factor.edge_id.0, factor.sign, factor.derivative_order)
-                            }))
-                            .product::<f64>();
-                        let energy_product = variant
-                            .half_edges
-                            .iter()
-                            .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
-                            .product::<f64>();
-                        let value = variant.prefactor.to_f64()
-                            * thermal
-                            * evaluator.tree_sum(&variant.denominator).unwrap()
-                            / energy_product;
+                        let thermal = variant.thermal_weight.evaluate(distribution);
+                        let value = evaluator.scalar_variant_value(variant, thermal).unwrap();
                         assert!(
                             value.is_finite(),
                             "{external_leg_count} external legs, p0={external_energy}: nonfinite orientation {orientation_id}"
@@ -4380,7 +4283,7 @@ mod thermal_reference_tests {
                         result += value;
                     }
                 }
-                result *= generated.core_global_prefactor_sign.factor() as f64;
+                result *= generated.source_frame.factor() as f64;
                 assert!(result.is_finite() && result != 0.0);
                 if external_energy == 0.0 {
                     // Independent beta=1 bosonic Matsubara sum:
@@ -4464,7 +4367,7 @@ mod thermal_reference_tests {
             Orientation::Reversed
         );
         let source_frame = crate::CffGlobalPrefactorSign::from_exponent(2)
-            .product(generated.denominator_only_global_prefactor_sign)
+            .product(generated.source_frame)
             .factor() as f64;
         for (numerator, expected) in [
             ("1", 1.0 / (4.0 * a * b)),
@@ -4698,26 +4601,7 @@ mod thermal_reference_tests {
                     let expression = &generated.expression;
                     let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
                     let energies = &evaluator.internal_energies;
-                    let source_conversion =
-                        generated
-                            .energy_factor_components
-                            .iter()
-                            .fold(1.0, |factor, component| {
-                                let frame = match component.ownership {
-                                    crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                        component.core_global_prefactor_sign
-                                    }
-                                    crate::CffEnergyFactorOwnership::VariantLocal => {
-                                        component.denominator_only_global_prefactor_sign
-                                    }
-                                };
-                                factor
-                                    * crate::CffGlobalPrefactorSign::from_exponent(
-                                        component.internal_edge_ids.len(),
-                                    )
-                                    .product(frame)
-                                    .factor() as f64
-                            });
+                    let source_conversion = generated.source_conversion();
                     for (fermion, mu, vacuum_limit) in [
                         (false, 0.0, true),
                         (false, 0.0, false),
@@ -4813,35 +4697,7 @@ mod thermal_reference_tests {
                                     (f64::from(sign) + hyperbolic(edge, pole_sign)) / 2.0
                                 };
                                 for variant in &orientation.variants {
-                                    let thermal = variant
-                                        .thermal_weight
-                                        .numerators
-                                        .iter()
-                                        .map(|numerator| {
-                                            let product = |sign| {
-                                                numerator
-                                                    .positive_energies
-                                                    .iter()
-                                                    .map(|edge| distribution(edge.0, sign, 0))
-                                                    .chain(
-                                                        numerator.negative_energies.iter().map(
-                                                            |edge| distribution(edge.0, -sign, 0),
-                                                        ),
-                                                    )
-                                                    .product::<f64>()
-                                            };
-                                            product(1) - product(-1)
-                                        })
-                                        .chain(variant.thermal_weight.distributions.iter().map(
-                                            |factor| {
-                                                distribution(
-                                                    factor.edge_id.0,
-                                                    factor.sign,
-                                                    factor.derivative_order,
-                                                )
-                                            },
-                                        ))
-                                        .product::<f64>();
+                                    let thermal = variant.thermal_weight.evaluate(distribution);
                                     let mut branch = expression.clone();
                                     branch.orientations = vec![orientation.clone()].into();
                                     branch.orientations[OrientationID(0)].variants =
@@ -5183,44 +5039,9 @@ mod thermal_reference_tests {
                         {
                             assert!(!orientation.variants.is_empty());
                             for variant in &orientation.variants {
-                                let thermal = variant
-                                    .thermal_weight
-                                    .numerators
-                                    .iter()
-                                    .map(|numerator| {
-                                        let product = |sign| {
-                                            numerator
-                                                .positive_energies
-                                                .iter()
-                                                .map(|edge| distribution(edge.0, sign, 0))
-                                                .chain(
-                                                    numerator
-                                                        .negative_energies
-                                                        .iter()
-                                                        .map(|edge| distribution(edge.0, -sign, 0)),
-                                                )
-                                                .product::<f64>()
-                                        };
-                                        product(1) - product(-1)
-                                    })
-                                    .chain(variant.thermal_weight.distributions.iter().map(
-                                        |factor| {
-                                            distribution(
-                                                factor.edge_id.0,
-                                                factor.sign,
-                                                factor.derivative_order,
-                                            )
-                                        },
-                                    ))
-                                    .product::<f64>();
-                                let term = variant.prefactor.to_f64()
-                                    * thermal
-                                    * evaluator.tree_sum(&variant.denominator).unwrap()
-                                    / variant
-                                        .half_edges
-                                        .iter()
-                                        .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
-                                        .product::<f64>();
+                                let thermal = variant.thermal_weight.evaluate(distribution);
+                                let term =
+                                    evaluator.scalar_variant_value(variant, thermal).unwrap();
                                 assert!(
                                     term.is_finite(),
                                     "{name}, {medium_mode:?}, part {part}, orientation {orientation_id}"
@@ -5229,7 +5050,7 @@ mod thermal_reference_tests {
                             }
                         }
                         value *= crate::CffGlobalPrefactorSign::from_exponent(edge_ids.len())
-                            .product(generated.core_global_prefactor_sign)
+                            .product(generated.source_frame)
                             .factor() as f64;
                         if part != 0 {
                             // Independent one-loop signed residue sum, including
@@ -5608,43 +5429,12 @@ mod thermal_reference_tests {
                     .iter()
                     .flat_map(|orientation| &orientation.variants)
                 {
-                    let thermal = variant
-                        .thermal_weight
-                        .numerators
-                        .iter()
-                        .map(|numerator| {
-                            let product = |sign| {
-                                numerator
-                                    .positive_energies
-                                    .iter()
-                                    .map(|edge| distribution(edge.0, sign, 0))
-                                    .chain(
-                                        numerator
-                                            .negative_energies
-                                            .iter()
-                                            .map(|edge| distribution(edge.0, -sign, 0)),
-                                    )
-                                    .product::<f64>()
-                            };
-                            product(1) - product(-1)
-                        })
-                        .chain(variant.thermal_weight.distributions.iter().map(|factor| {
-                            distribution(factor.edge_id.0, factor.sign, factor.derivative_order)
-                        }))
-                        .product::<f64>();
-                    let energy_product = variant
-                        .half_edges
-                        .iter()
-                        .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
-                        .product::<f64>();
-                    result += variant.prefactor.to_f64()
-                        * thermal
-                        * evaluator.tree_sum(&variant.denominator).unwrap()
-                        / energy_product;
+                    let thermal = variant.thermal_weight.evaluate(distribution);
+                    result += evaluator.scalar_variant_value(variant, thermal).unwrap();
                 }
                 // These references include positive 1/(2E) factors, without the
                 // shared engine's contour sign or the physical i^L phase.
-                result *= generated.core_global_prefactor_sign.factor() as f64;
+                result *= generated.source_frame.factor() as f64;
                 let difference = ((result - reference) / result).abs();
                 assert!(
                     difference < tolerance,

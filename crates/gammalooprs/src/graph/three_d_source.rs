@@ -4176,7 +4176,7 @@ mod tests {
         let source_sign = three_dimensional_reps::CffGlobalPrefactorSign::from_exponent(
             parsed.denominator_internal_edge_ids().len(),
         )
-        .product(generated.core_global_prefactor_sign)
+        .product(generated.source_frame)
         .factor();
         contour =
             contour.replace_multiple(mapper.exact_ose_replacements()) * Atom::num(source_sign);
@@ -5129,7 +5129,7 @@ mod tests {
         let source_sign = three_dimensional_reps::CffGlobalPrefactorSign::from_exponent(
             parsed.denominator_internal_edge_ids().len(),
         )
-        .product(generated.core_global_prefactor_sign)
+        .product(generated.source_frame)
         .factor();
         contour =
             contour.replace_multiple(mapper.exact_ose_replacements()) * Atom::num(source_sign);
@@ -7402,7 +7402,7 @@ mod tests {
         let source_sign = three_dimensional_reps::CffGlobalPrefactorSign::from_exponent(
             parsed.denominator_internal_edge_ids().len(),
         )
-        .product(pair_generated.core_global_prefactor_sign)
+        .product(pair_generated.source_frame)
         .factor();
         temporal_contour *= Atom::num(source_sign);
         let expected_contour = Atom::one() / (Atom::num(4) * positive_right_energy);
@@ -7721,26 +7721,16 @@ mod tests {
             distinct_samples,
             "contact rows must distinguish occurrence samples from fixed loop coordinates"
         );
-        // Follow the native raw-contour convention component by component.
-        // Variant-local Laurent terms already encode their generalized core
-        // sign and therefore use the denominator-only frame, as production
-        // gamma_loop_prefactor_conversion does for those components.
+        // Follow the native raw-contour convention component by component,
+        // using the same numerator-bound-independent source frame as production.
         let source_sign = generated
             .energy_factor_components
             .iter()
             .fold(1, |sign, component| {
-                let frame = match component.ownership {
-                    three_dimensional_reps::CffEnergyFactorOwnership::GlobalSourceProduct => {
-                        component.core_global_prefactor_sign
-                    }
-                    three_dimensional_reps::CffEnergyFactorOwnership::VariantLocal => {
-                        component.denominator_only_global_prefactor_sign
-                    }
-                };
                 sign * three_dimensional_reps::CffGlobalPrefactorSign::from_exponent(
                     component.internal_edge_ids.len(),
                 )
-                .product(frame)
+                .product(component.source_frame)
                 .factor()
             });
         let e0 = Atom::var(symbolica::symbol!("pinched_affine_test::E0"));
