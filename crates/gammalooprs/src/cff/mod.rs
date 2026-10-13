@@ -27,7 +27,7 @@ use crate::{
         },
         generation::{ExactCffPreparationKey, PreparationKey, PreparationValue},
         orientations::GraphOrientation,
-        surface::{GammaLoopLinearEnergyExpr, GammaLoopSurfaceCache, LinearEnergyExpr},
+        surface::{GammaLoopSurfaceCache, LinearEnergyExpr},
     },
     graph::{
         ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
@@ -241,9 +241,7 @@ impl PlannedExactSourceNumerator {
             }
             // The existing source mapper remains the only authority for exact
             // OSE aliases and affine external shifts, including UV class IDs.
-            let basis = unit
-                .to_atom_gs(&[])
-                .replace_multiple(self.mapper.exact_ose_replacements());
+            let basis = self.mapper.source_energy_atom(&unit);
             // The scope is part of the formal itself, so expression-local
             // persistence retains it even after this family is recomposed.
             let parameter = coefficient.call_args([scope.clone(), Atom::num(parameters.len())]);
@@ -1058,6 +1056,7 @@ impl Graph {
             analysis_numerator,
             context,
             &[],
+            &BTreeMap::new(),
         )
     }
 
@@ -1077,6 +1076,7 @@ impl Graph {
         analysis_numerator: &Atom,
         context: Option<&mut Local4dProjectionContext>,
         classes: &[CanonicalUvDenominatorClass],
+        fixed_external_momenta: &BTreeMap<EdgeIndex, Atom>,
     ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
         self.cff_from_4d_denominators_in_uv_coordinates(
             denominators,
@@ -1088,6 +1088,7 @@ impl Graph {
             analysis_numerator,
             context,
             classes,
+            fixed_external_momenta,
         )
     }
 
@@ -1103,6 +1104,7 @@ impl Graph {
         analysis_numerator: &Atom,
         context: Option<&mut Local4dProjectionContext>,
         classes: &[CanonicalUvDenominatorClass],
+        fixed_external_momenta: &BTreeMap<EdgeIndex, Atom>,
     ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
         let (
             generated,
@@ -1131,6 +1133,7 @@ impl Graph {
                     .into_iter()
                     .collect(),
                 coordinates: coordinates.map(|(lmb, frame)| (lmb.clone(), frame)),
+                fixed_external_momenta: fixed_external_momenta.clone(),
                 classes: classes.to_vec(),
                 numerator: analysis_numerator.clone(),
                 options: options.clone(),
@@ -1168,7 +1171,8 @@ impl Graph {
                         key.uv_edges.iter().copied(),
                         key.boundary_hedges.iter().copied(),
                     )?
-                };
+                }
+                .with_fixed_external_momenta(&key.fixed_external_momenta)?;
                 source_build_time = reconstruction_started.elapsed();
                 let preparation_started = Instant::now();
                 let preparation = Arc::new(self.prepare_3d_expression_for_4d_term(
@@ -1357,12 +1361,15 @@ impl Graph {
                 exact_source_numerator: Some(exact_source_numerator.clone()),
             };
             for orientation in expr.orientations {
-                let expression = orientation
+                let source_expression = orientation
                     .to_atom_gs()
                     .replace_multiple(&replacement_rules)
                     .replace_multiple(exact_source_numerator.mapper.exact_ose_replacements())
                     * &cff_energy_factor
                     * &cff_normalization;
+                let expression = exact_source_numerator
+                    .mapper
+                    .bind_source_externals(&source_expression);
                 // Distinct exact factors remain in `expression`. The
                 // orientation is deliberately source-local: its affine map
                 // evaluates the complete parent numerator directly, rather
@@ -2055,6 +2062,7 @@ mod tests {
             &Atom::one(),
             None,
             &[],
+            &BTreeMap::new(),
         )?;
         let exact_term = exact
             .terms
@@ -2251,6 +2259,7 @@ mod tests {
             &Atom::one(),
             None,
             &[],
+            &BTreeMap::new(),
         )?;
         Ok(())
     }
@@ -5947,6 +5956,7 @@ mod tests {
                 &Atom::one(),
                 None,
                 &[],
+                &BTreeMap::new(),
             )?;
 
             let ordinary_raw_sum = |cff: &CutCFF| {
@@ -6384,6 +6394,7 @@ mod tests {
             &Atom::one(),
             None,
             &[],
+            &BTreeMap::new(),
         )?;
         let exact_raw = |cff: &CutCFF| -> Result<Atom> {
             Ok(cff

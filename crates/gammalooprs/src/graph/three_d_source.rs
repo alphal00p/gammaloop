@@ -77,6 +77,7 @@ pub(crate) struct GraphThreeDSource<'a> {
     // parent loop crossing the UV crown is an external source coordinate, not
     // an inactive loop to be discarded by the child residue map.
     exact_coordinates: Option<(LoopMomentumBasis, ExactUvSubLmbFrame)>,
+    fixed_external_momenta: BTreeMap<EdgeIndex, Atom>,
     exact_denominators: Option<&'a [FourDDenominator]>,
     exact_signatures: Vec<MomentumSignature>,
     // Exact incidence is inherited from the source graph. An unexpanded exact
@@ -148,6 +149,7 @@ pub(crate) struct ExactSourceEnergyMapper {
     uv_classes: BTreeMap<UvDenominatorClassId, (Atom, Vec<ExactSourceOwnerOccurrence>)>,
     cut_alias_edges: AHashSet<EdgeIndex>,
     exact_ose_replacements: Vec<Replacement>,
+    fixed_external_momenta: BTreeMap<EdgeIndex, Atom>,
 }
 
 /// Exact immutable mapping identity. Source incidence is certified separately;
@@ -163,6 +165,7 @@ pub(crate) struct ExactSourceMappingContext {
     uv_classes: BTreeMap<UvDenominatorClassId, (Atom, Vec<ExactSourceOwnerOccurrence>)>,
     cut_alias_edges: BTreeSet<EdgeIndex>,
     on_shell_replacements: Vec<(Atom, Atom)>,
+    fixed_external_momenta: BTreeMap<EdgeIndex, Atom>,
 }
 
 impl ExactSourceMappingContext {
@@ -210,6 +213,11 @@ impl ExactSourceMappingContext {
                 })
                 .sum::<usize>()
             + self.cut_alias_edges.len() * (std::mem::size_of::<EdgeIndex>() + 32)
+            + self
+                .fixed_external_momenta
+                .values()
+                .map(|momentum| 64 + momentum.as_view().get_byte_size())
+                .sum::<usize>()
             + self
                 .on_shell_replacements
                 .iter()
@@ -338,6 +346,7 @@ impl ExactSourceEnergyMapper {
             uv_classes: self.uv_classes.clone(),
             cut_alias_edges: self.cut_alias_edges.iter().copied().collect(),
             on_shell_replacements,
+            fixed_external_momenta: self.fixed_external_momenta.clone(),
         })
     }
 
@@ -350,6 +359,48 @@ impl ExactSourceEnergyMapper {
 
     pub(crate) fn exact_ose_replacements(&self) -> &[Replacement] {
         &self.exact_ose_replacements
+    }
+
+    /// Emit only coordinates belonging to this exact source. Call this before
+    /// combining source values with live spectator or parent expressions.
+    pub(crate) fn bind_source_externals(&self, atom: &Atom) -> Atom {
+        atom.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if ![GS.emr_mom, GS.emr_vec].contains(&momentum.get_symbol())
+                || momentum.get_nargs() < 2
+            {
+                return;
+            }
+            let Ok(edge) = usize::try_from(momentum.get(0)).map(EdgeIndex) else {
+                return;
+            };
+            let Some(fixed) = self.fixed_external_momenta.get(&edge) else {
+                return;
+            };
+            let indices = momentum
+                .iter()
+                .skip(1)
+                .map(|index| index.to_owned())
+                .collect::<Vec<_>>();
+            let vector = GS.resolve_os_momenta(&GS.indexed_momentum(fixed, &indices));
+            **output = if momentum.get_symbol() == GS.emr_vec {
+                vector
+                    - GS.resolve_os_momenta(&GS.indexed_momentum(fixed, &[GS.cind(0)]))
+                        * GS.energy_delta(&indices[0])
+            } else {
+                vector
+            };
+        })
+    }
+
+    pub(crate) fn source_energy_atom(&self, energy: &LinearEnergyExpr) -> Atom {
+        self.bind_source_externals(
+            &energy
+                .to_atom_gs(&[])
+                .replace_multiple(&self.exact_ose_replacements),
+        )
     }
 
     /// Expose only the serial exact occurrences reconstructed from each source
@@ -517,7 +568,9 @@ impl ExactSourceEnergyMapper {
         // neutral source-loop parameters, independently of leaf assignments.
         let mut diagonal = vec![Atom::Zero; edge_count];
         for occurrence in self.source_edge_occurrences.values().flatten() {
-            let temporal = GS.indexed_momentum(&occurrence.raw_momentum, &[GS.cind(0)]);
+            let temporal = self.bind_source_externals(
+                &GS.indexed_momentum(&occurrence.raw_momentum, &[GS.cind(0)]),
+            );
             diagonal[occurrence.energy_edge_id] = Atom::num(occurrence.raw_to_parsed_sign)
                 * self.map_numerator_factor(
                     &parameters[..loop_count],
@@ -544,8 +597,20 @@ impl ExactSourceEnergyMapper {
                         + GS.emr_mom(owner, GS.cind(0)) * GS.energy_delta(momentum.get(1));
                 }
             });
+            let fixed_energies = self
+                .fixed_external_momenta
+                .keys()
+                .map(|edge| {
+                    self.bind_source_externals(&crate::utils::external_energy_atom_from_index(
+                        *edge,
+                    ))
+                })
+                .collect::<Vec<_>>();
             let is_energy = |view: AtomView<'_>| {
-                matches!(view, AtomView::Fun(energy)
+                fixed_energies
+                    .iter()
+                    .any(|energy| energy.as_view() == view || (-energy).as_view() == view)
+                    || matches!(view, AtomView::Fun(energy)
                 if energy.get_nargs() == 2
                     && (energy.get_symbol() == parameter
                         || ((energy.get_symbol() == GS.emr_mom
@@ -623,7 +688,8 @@ impl ExactSourceEnergyMapper {
                         || !self.edge_coordinates.iter().any(|(edge, _, _)| *edge == owner) { return; }
                     hard
                 } else { return; };
-                **output = GS.indexed_momentum(&hard, &[momentum.get(1).to_owned()]);
+                **output = self.bind_source_externals(
+                    &GS.indexed_momentum(&hard, &[momentum.get(1).to_owned()]));
             });
             let expected = self.map_numerator_factor(
                 &parameters[..loop_count], &[], &reference, &BTreeMap::new(),
@@ -669,9 +735,7 @@ impl ExactSourceEnergyMapper {
                 .ok_or_else(|| {
                     eyre::eyre!("exact source row omits required energy parameter {index}")
                 })?;
-                Ok(energy
-                    .to_atom_gs(&[])
-                    .replace_multiple(&self.exact_ose_replacements))
+                Ok(self.source_energy_atom(energy))
             })
             .collect()
     }
@@ -775,7 +839,8 @@ impl ExactSourceEnergyMapper {
         }
         let external_shift = |terms: &[(EdgeIndex, SignOrZero)]| {
             terms.iter().fold(Atom::Zero, |sum, (edge, sign)| {
-                let energy = crate::utils::external_energy_atom_from_index(*edge);
+                let energy = self
+                    .bind_source_externals(&crate::utils::external_energy_atom_from_index(*edge));
                 match sign {
                     SignOrZero::Zero => sum,
                     SignOrZero::Plus => sum + energy,
@@ -788,11 +853,18 @@ impl ExactSourceEnergyMapper {
         let mink_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::var(W_.a__)]);
         let mut tag_mapping_error = None;
         let mut has_local_provenance = false;
+        let numerator = GS.resolve_os_momenta(numerator);
         let tagged_numerator = numerator.replace_map(|view, _, output| {
             let AtomView::Fun(momentum) = view else {
                 return;
             };
             if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() != 2 {
+                return;
+            }
+            if usize::try_from(momentum.get(0)).ok().is_some_and(|edge| {
+                self.fixed_external_momenta.contains_key(&EdgeIndex(edge))
+            }) {
+                **output = self.bind_source_externals(&view.to_owned());
                 return;
             }
             let (reference, role, hard) = if let Some(class) = GS.uv_class_data(momentum.get(0)) {
@@ -811,6 +883,7 @@ impl ExactSourceEnergyMapper {
                 // Coordinate membership remains authoritative after a pinch:
                 // absence of a pole cannot remove a fixed affine carrier.
                 if !self.edge_coordinates.iter().any(|(edge, _, _)| *edge == owner) {
+                    **output = Atom::from(momentum.to_owned());
                     return;
                 }
                 (EnergyReference::Physical(owner), Some(role), hard)
@@ -829,7 +902,7 @@ impl ExactSourceEnergyMapper {
             // sampled temporal part follows its certified occurrence lift.
             let erased = GS.indexed_momentum(&hard, &[index.to_owned()]);
             if !concrete_temporal && !abstract_index {
-                **output = erased;
+                **output = self.bind_source_externals(&erased);
                 return;
             }
             let Some((occurrence, energy)) = selected_occurrences.get(&reference) else {
@@ -837,7 +910,7 @@ impl ExactSourceEnergyMapper {
                     && role == Some(crate::utils::symbols::UvMomentumProvenanceRole::PhysicalSourceFixed)
                     && !self.source_edge_occurrences.contains_key(&owner)
                 {
-                    **output = erased;
+                    **output = self.bind_source_externals(&erased);
                     return;
                 }
                 tag_mapping_error.get_or_insert_with(|| eyre::eyre!(
@@ -915,7 +988,8 @@ impl ExactSourceEnergyMapper {
                         .finish();
                 }
             });
-            **output = spatial + signed_energy * GS.energy_delta(index.to_owned());
+            **output = self.bind_source_externals(&spatial)
+                + signed_energy * GS.energy_delta(index.to_owned());
         });
         if let Some(error) = tag_mapping_error {
             return Err(error);
@@ -1024,11 +1098,7 @@ impl ExactSourceEnergyMapper {
     fn energy_atoms(&self, energies: &[LinearEnergyExpr]) -> Vec<Atom> {
         energies
             .iter()
-            .map(|energy| {
-                energy
-                    .to_atom_gs(&[])
-                    .replace_multiple(&self.exact_ose_replacements)
-            })
+            .map(|energy| self.source_energy_atom(energy))
             .collect()
     }
 
@@ -1047,6 +1117,21 @@ impl ExactSourceEnergyMapper {
 }
 
 impl<'a> GraphThreeDSource<'a> {
+    pub(crate) fn with_fixed_external_momenta(
+        mut self,
+        bindings: &BTreeMap<EdgeIndex, Atom>,
+    ) -> Result<Self> {
+        for edge in bindings.keys() {
+            if !self.coordinate_lmb().ext_edges.contains(edge) {
+                return Err(eyre::eyre!(
+                    "fixed source momentum {edge} is not an external coordinate"
+                ));
+            }
+        }
+        self.fixed_external_momenta = bindings.clone();
+        Ok(self)
+    }
+
     pub(crate) fn new(
         graph: &'a Graph,
         contract_edges: &[EdgeIndex],
@@ -1217,6 +1302,7 @@ impl<'a> GraphThreeDSource<'a> {
             uv_edges: AHashSet::new(),
             exact_uv_boundary_hedges: Vec::new(),
             exact_coordinates: None,
+            fixed_external_momenta: BTreeMap::new(),
             exact_denominators: None,
             exact_signatures: Vec::new(),
             exact_parsed: None,
@@ -1688,6 +1774,7 @@ impl<'a> GraphThreeDSource<'a> {
             uv_edges,
             exact_uv_boundary_hedges,
             exact_coordinates: coordinates.map(|(lmb, frame)| (lmb.clone(), frame)),
+            fixed_external_momenta: BTreeMap::new(),
             exact_denominators: Some(denominators),
             exact_signatures,
             exact_parsed: None,
@@ -2155,6 +2242,7 @@ impl<'a> GraphThreeDSource<'a> {
             source_edge_occurrences,
             cut_alias_edges: self.initial_state_cut_edges.clone(),
             exact_ose_replacements,
+            fixed_external_momenta: self.fixed_external_momenta.clone(),
         }
     }
 
@@ -2418,6 +2506,15 @@ impl<'a> GraphThreeDSource<'a> {
     }
 
     fn denominator_on_shell_energy(&self, denominator: &FourDDenominator) -> Result<Atom> {
+        if !self.fixed_external_momenta.is_empty()
+            && self.uv_edges.contains(&denominator.source_edge)
+        {
+            let signature = denominator.momentum_signature_in_lmb(self.coordinate_lmb(), true)?;
+            let mut canonical = denominator.clone();
+            canonical.momentum =
+                CanonicalUvDenominatorClass::momentum(&signature, self.coordinate_lmb());
+            return Ok(canonical.on_shell_energy());
+        }
         if self.uv_edges.contains(&denominator.source_edge)
             && self
                 .exact_coordinates
@@ -5245,6 +5342,7 @@ mod tests {
             uv_classes: BTreeMap::new(),
             source_edge_occurrences: BTreeMap::new(),
             cut_alias_edges: AHashSet::new(),
+            fixed_external_momenta: BTreeMap::new(),
             exact_ose_replacements: vec![Replacement::new(
                 crate::utils::ose_atom_from_index(exact_ose_edge).to_pattern(),
                 exact_energy.to_pattern(),
@@ -5328,6 +5426,7 @@ mod tests {
                 }],
             )]),
             cut_alias_edges: AHashSet::new(),
+            fixed_external_momenta: BTreeMap::new(),
             exact_ose_replacements: Vec::new(),
         };
 
@@ -5383,6 +5482,7 @@ mod tests {
                     .collect(),
             )]),
             cut_alias_edges: AHashSet::new(),
+            fixed_external_momenta: BTreeMap::new(),
             exact_ose_replacements: occurrences
                 .iter()
                 .map(|occurrence| {
@@ -5433,6 +5533,7 @@ mod tests {
                     .collect(),
             )]),
             cut_alias_edges: AHashSet::new(),
+            fixed_external_momenta: BTreeMap::new(),
             exact_ose_replacements: occurrences
                 .iter()
                 .map(|occurrence| {
@@ -5487,6 +5588,7 @@ mod tests {
                         .collect(),
                 )]),
                 cut_alias_edges: AHashSet::new(),
+                fixed_external_momenta: BTreeMap::new(),
                 exact_ose_replacements: occurrences
                     .iter()
                     .map(|occurrence| {
@@ -5600,6 +5702,7 @@ mod tests {
                             .collect(),
                     )]),
                     cut_alias_edges: AHashSet::new(),
+                    fixed_external_momenta: BTreeMap::new(),
                     exact_ose_replacements: occurrences
                         .iter()
                         .map(|occurrence| {
@@ -6098,6 +6201,7 @@ mod tests {
                     .collect(),
             )]),
             cut_alias_edges: AHashSet::new(),
+            fixed_external_momenta: BTreeMap::new(),
             exact_ose_replacements: occurrences
                 .iter()
                 .map(|occurrence| {
@@ -6187,6 +6291,7 @@ mod tests {
                 })
                 .collect(),
             cut_alias_edges: AHashSet::new(),
+            fixed_external_momenta: BTreeMap::new(),
             exact_ose_replacements: Vec::new(),
         };
         let contacts = [
@@ -6395,6 +6500,7 @@ mod tests {
                 }],
             )]),
             cut_alias_edges: AHashSet::new(),
+            fixed_external_momenta: BTreeMap::new(),
             exact_ose_replacements: vec![
                 Replacement::new(
                     crate::utils::ose_atom_from_index(literal_occurrence).to_pattern(),
@@ -6537,6 +6643,7 @@ mod tests {
                     .collect(),
             )]),
             cut_alias_edges: AHashSet::from([cut_edge]),
+            fixed_external_momenta: BTreeMap::new(),
             exact_ose_replacements: Vec::new(),
         };
         let edge_energy_map = [

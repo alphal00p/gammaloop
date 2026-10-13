@@ -11,7 +11,10 @@ use crate::{
         overlap_numerators::NumeratorJetCache,
     },
 };
-use idenso::shorthands::UndoShorthands;
+use idenso::{
+    color::{ColorSimplifier, ColorSimplifySettings},
+    shorthands::UndoShorthands,
+};
 use linnet::half_edge::involution::Hedge;
 use spenso::{
     network::{ExecutionResult, Sequential, SmallestDegree, tags::SPENSO_TAG},
@@ -45,7 +48,7 @@ pub(crate) fn fixture(massless: bool) -> Result<(Graph, OwnedForestNode, OwnedFo
     Ok((graph, current, root))
 }
 
-fn scalar_component(atom: &Atom) -> Result<Atom> {
+pub(super) fn scalar_component(atom: &Atom) -> Result<Atom> {
     // Production intentionally keeps scalar inner products opaque. The
     // independent finite-component oracle must materialize them explicitly,
     // reserving fresh indices on this whole factorized diagnostic copy.
@@ -99,27 +102,62 @@ fn rational_coefficients(
     Ok(coefficients)
 }
 
-fn assert_rational_zero(
+pub(super) fn assert_rational_zero(
     label: &str,
     graph: &Graph,
     current: &OwnedForestNode,
     atom: &Atom,
 ) -> Result<()> {
     let mut numerators = NumeratorJetCache::default();
+    let mut zero_proofs = BTreeMap::<Atom, bool>::new();
     for (class, (denominators, numerator)) in rational_coefficients(graph, current, atom)?
         .into_iter()
         .enumerate()
     {
-        let certificate = numerators.canonicalize(&numerator.undo_dots::<Aind>()?)?;
-        let is_zero = certificate.is_zero;
+        // Close Dirac chains symbolically before finite component execution.
+        // The shared spin-algebra owner protects scalar products and leaves
+        // graph numerator products factorized, avoiding large matrix-entry
+        // circuits for a closed quark trace. It performs no Taylor operation.
+        let reduced = crate::uv::approx::integrated::simplify(&numerator)?;
+        let certificate = numerators.canonicalize(&reduced.undo_dots::<Aind>()?)?;
+        let is_zero = certificate.is_zero
+            || match certificate.key.as_view() {
+                AtomView::Fun(tensor)
+                    if tensor.get_symbol()
+                        == symbol!("gammalooprs::uv::overlap_numerator_tensor") =>
+                {
+                    tensor.iter().skip(1).all(|entry| {
+                        let AtomView::Fun(entry) = entry else {
+                            return false;
+                        };
+                        let value = entry.get(1).to_owned();
+                        *zero_proofs.entry(value.clone()).or_insert_with(|| {
+                            // Color representation metadata in a scalar
+                            // Casimir must not re-open the tensor network.
+                            // Substitute dimension identities only after all
+                            // finite color and spin slots have been executed.
+                            let value = value.simplify_color_with(
+                                ColorSimplifySettings {
+                                    simplify_non_color: false,
+                                    ..Default::default()
+                                }
+                                .with_cof_dimension_invariants(),
+                            );
+                            NumeratorJetCache::factorized_is_zero(value)
+                        })
+                    })
+                }
+                _ => false,
+            };
         if !is_zero {
             debug_tags!(#uv, #local, #four_d, #trace;
                 stage = "os_exact_oracle_failure",
                 label = label,
                 denominator_class = class,
                 file.denominators = ?denominators,
-                file.numerator = %numerator,
-                file.contracted_tensor = %certificate.key,
+                file.numerator = %numerator.to_plain_string(),
+                file.contracted_tensor = %certificate.key.to_plain_string(),
+                file.rational_expression = %atom.to_plain_string(),
                 "Nonzero factorized OS oracle tensor coefficient"
             );
         }
@@ -196,6 +234,56 @@ fn one_loop_reference(
         * (&massless_numerator * dot(&k, &p) - &mass * left_gamma_numerator * &k_zero)
         / vacuum.pow(3);
     Ok((on_shell, remainder, numerator))
+}
+
+#[test]
+fn exact_os_coefficients_use_fundamental_color_dimension_identities() -> Result<()> {
+    test_initialise()?;
+    let spectator = parse_lit!((color_a + color_b) * (color_c - color_d) ^ 11);
+    for dimension in [3, 5] {
+        let casimir = idenso::color_cas!(2, idenso::cof!(dimension as usize));
+        let index = idenso::color_idx!(2, idenso::cof!(dimension as usize));
+        let dimension_ratio = Atom::num(dimension * dimension - 1) / Atom::num(dimension);
+        let settings = ColorSimplifySettings {
+            simplify_non_color: false,
+            ..Default::default()
+        }
+        .with_cof_dimension_invariants();
+        let difference = casimir.pow(2) - &dimension_ratio * &casimir * index;
+        assert!(
+            (&spectator * difference)
+                .simplify_color_with(settings)
+                .is_zero(),
+        );
+        assert_eq!(
+            (&spectator * casimir).simplify_color_with(settings),
+            &spectator * dimension_ratio / Atom::num(2),
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn symbolic_spin_reduction_preserves_os_phase_order_and_scalar_factors() -> Result<()> {
+    test_initialise()?;
+    let (graph, current, root) = fixture(false)?;
+    let (_, _, numerator) = one_loop_reference(&graph, &current, &root)?;
+    let spectator = parse_lit!((spin_a + spin_b) * (spin_c + spin_d) ^ 11);
+    let mut tensors = NumeratorJetCache::default();
+    for original in [numerator.clone(), gamma_zero_at_port(&graph, &numerator, 1)] {
+        let reduced = crate::uv::approx::integrated::simplify(&original)?;
+        // This comparison deliberately uses the original finite component
+        // engine directly, without the symbolic reduction under test.
+        assert!(
+            tensors
+                .canonicalize(&(&original - &reduced).undo_dots::<Aind>()?)?
+                .is_zero,
+            "symbolic spin reduction must preserve the exact QCD phase and ordered gamma0 insertion",
+        );
+        let factored = crate::uv::approx::integrated::simplify(&(&spectator * &original))?;
+        assert_eq!(factored, &spectator * reduced);
+    }
+    Ok(())
 }
 
 #[test]
