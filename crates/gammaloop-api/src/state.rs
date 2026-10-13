@@ -1625,6 +1625,8 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 15 gives each orientation-specific Fermi sector a one-entry evaluator
+// catalogue indexed locally from zero. Older full-catalogue sectors must be regenerated.
 // Version 14 stores one source-frame sign per generated CFF and rational component,
 // replacing the duplicate core/denominator signs in the positional bincode layout.
 // Version 13 persists the selected medium in graph parameter builders. Amplitude graph
@@ -1652,7 +1654,7 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // regenerated rather than decoded as the new expression type.
 // Local UV forest contributions remain compatible with this layout because
 // they are combined into one persisted integrand before evaluator construction.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 14;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 15;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

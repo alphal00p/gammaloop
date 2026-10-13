@@ -10,7 +10,10 @@ use crate::{
         evaluators::{ActiveF64Backend, EvaluatorMethod},
     },
     processes::Amplitude,
-    settings::runtime::{HFunction, HFunctionSettings},
+    settings::{
+        global::OrientationPattern,
+        runtime::{DiscreteGraphSamplingSettings, HFunction, HFunctionSettings},
+    },
     utils::load_generic_model,
 };
 
@@ -145,6 +148,7 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
             unreachable!()
         };
         assert!(!generated.data.graph_terms[0].fermi_surfaces.is_empty());
+        let orientation_count = generated.data.graph_terms[0].orientations.len();
         assert_eq!(
             generated.data.graph_terms[0]
                 .threshold_counterterm
@@ -225,6 +229,23 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
                             && (value.im.0 / expected_imaginary - 1.0).abs() < 1e-11,
                         "explicit={explicit}, compile={compile}, method={method:?}, mu_sign={mu_sign}, profile={profile:?}, sigma={sigma}, momentum={coordinates:?}: {value:?} != i*{expected_imaginary}"
                     );
+                    if !explicit && *method == EvaluatorMethod::SingleParametric {
+                        let mut selected_sum = Complex::new(F(0.0), F(0.0));
+                        for orientation in 0..orientation_count {
+                            let selected = MomentumSpaceEvaluationInput {
+                                orientation: Some(orientation),
+                                ..input.clone()
+                            };
+                            selected_sum += runtime
+                                .evaluate_momentum_configuration(&signed_model, &selected, false)?
+                                .integrand_result;
+                        }
+                        assert!(
+                            selected_sum.re.0.abs() < 1e-12 * expected_imaginary.abs()
+                                && (selected_sum.im.0 / expected_imaginary - 1.0).abs() < 1e-11,
+                            "selected orientations must sum to the analytic contour: {selected_sum:?} != i*{expected_imaginary}"
+                        );
+                    }
                     last_point = Some((input, value));
                 }
             }
@@ -293,6 +314,225 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
             let error = restored.warm_up(&shifted_model).unwrap_err();
             assert!(error.to_string().contains("h_function"), "{error}");
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn production_fermi_orientations_preserve_filters_and_mc_weights() -> Result<()> {
+    let (mut model, mut card, mut global, settings) = cold_dense_setup()?;
+    card.insert("MB".into(), Complex::new_re(F(3.0)));
+    card.insert("muB".into(), Complex::new_re(F(15.0)));
+    model.apply_param_card(&card)?;
+    let graphs = Graph::from_string(
+        r#"digraph filtered_fermi_cycle {
+            node [num=1]; edge [num=1 particle="b"];
+            A -> B [id=0 lmb_id=0]; B -> A [id=1];
+        }"#,
+        &model,
+    )?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .stack_size(256 * 1024 * 1024)
+        .build()?;
+    // Outside the Fermi sea the regular medium term vanishes: a nonzero
+    // result here certifies that the selected Fermi surface contributes.
+    let input = MomentumSpaceEvaluationInput {
+        loop_momenta: vec![ThreeMomentum::new(F(5.0), F(-2.0), F(1.0))],
+        integrator_weight: F(1.0),
+        graph_id: Some(0),
+        group_id: None,
+        orientation: None,
+        channel_id: None,
+    };
+    let continuous = Sample::Continuous(F(1.0), vec![F(0.31), F(0.27), F(0.61)]);
+    for compile in [false, true] {
+        global.generation.evaluator.compile = compile;
+        global.generation.orientation_pattern = Default::default();
+        let mut full = Amplitude::from_graph_list("filtered_fermi_cycle", graphs.clone())?;
+        full.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+        full.build_integrand(
+            &model,
+            "filtered_fermi_cycle",
+            &global,
+            (&settings).into(),
+            &pool,
+        )?;
+        let runtime = full.integrand.as_mut().unwrap();
+        runtime.warm_up(&model)?;
+        let ProcessIntegrand::Amplitude(generated) = &*runtime else {
+            unreachable!()
+        };
+        let term = &generated.data.graph_terms[0];
+        assert!(!term.fermi_surfaces.is_empty());
+        let count = term.orientations.len();
+        assert_eq!(
+            term.original_integrand
+                .production_orientation_ids()
+                .iter()
+                .map(|id| id.0)
+                .collect_vec(),
+            (0..count).collect_vec()
+        );
+        let pattern = OrientationPattern::from_orientation(term.orientations.last().unwrap());
+        let selected_ids = term
+            .orientations
+            .iter_enumerated()
+            .filter_map(|(id, orientation)| pattern.filter(orientation).then_some(id.0))
+            .collect_vec();
+        assert!(!selected_ids.is_empty() && selected_ids.len() < count && selected_ids[0] > 0);
+        global.generation.orientation_pattern = pattern.clone();
+        let mut subset = Amplitude::from_graph_list("filtered_fermi_cycle", graphs.clone())?;
+        subset.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+        subset.build_integrand(
+            &model,
+            "filtered_fermi_cycle",
+            &global,
+            (&settings).into(),
+            &pool,
+        )?;
+        let filtered = subset.integrand.as_mut().unwrap();
+        filtered.warm_up(&model)?;
+        let ProcessIntegrand::Amplitude(generated) = &*filtered else {
+            unreachable!()
+        };
+        let term = &generated.data.graph_terms[0];
+        assert!(!term.fermi_surfaces.is_empty());
+        assert_eq!(
+            term.original_integrand
+                .production_orientation_ids()
+                .iter()
+                .map(|id| id.0)
+                .collect_vec(),
+            selected_ids
+        );
+        let mut nonzero_filtered_surface = false;
+        for mu_sign in [-1.0, 1.0] {
+            card.insert("muB".into(), Complex::new_re(F(mu_sign * 15.0)));
+            model.apply_param_card(&card)?;
+            *runtime.get_mut_settings() = settings.clone();
+            runtime.warm_up(&model)?;
+            filtered.warm_up(&model)?;
+            let mut selected_values = Vec::new();
+            for orientation in 0..count {
+                selected_values.push(
+                    runtime
+                        .evaluate_momentum_configuration(
+                            &model,
+                            &MomentumSpaceEvaluationInput {
+                                orientation: Some(orientation),
+                                ..input.clone()
+                            },
+                            false,
+                        )?
+                        .integrand_result,
+                );
+            }
+            let expected = selected_ids
+                .iter()
+                .fold(Complex::<F<f64>>::new_zero(), |sum, id| {
+                    sum + selected_values[*id]
+                });
+            nonzero_filtered_surface |= expected.im.0.abs() > 1e-12;
+            runtime.get_mut_settings().general.orientation_pat = pattern.clone();
+            runtime.warm_up(&model)?;
+            let ProcessIntegrand::Amplitude(generated) = &*runtime else {
+                unreachable!()
+            };
+            assert_eq!(
+                generated.data.graph_terms[0]
+                    .orientation_filter
+                    .included_iter()
+                    .map(|id| id.0)
+                    .collect_vec(),
+                selected_ids
+            );
+            // Both filters renumber the visible catalogue. Its index zero
+            // must still select the original nonzero production ID.
+            for (orientation, expected) in [
+                (None, expected),
+                (Some(0), selected_values[selected_ids[0]]),
+            ] {
+                let selected = MomentumSpaceEvaluationInput {
+                    orientation,
+                    ..input.clone()
+                };
+                for value in [
+                    runtime
+                        .evaluate_momentum_configuration(&model, &selected, false)?
+                        .integrand_result,
+                    filtered
+                        .evaluate_momentum_configuration(&model, &selected, false)?
+                        .integrand_result,
+                ] {
+                    assert!(
+                        (value.re.0 - expected.re.0).abs() < 1e-13
+                            && (value.im.0 - expected.im.0).abs() < 1e-13,
+                        "compile={compile}, mu_sign={mu_sign}, orientation={orientation:?}: filtered {value:?} != {expected:?}"
+                    );
+                }
+            }
+
+            *runtime.get_mut_settings() = settings.clone();
+            runtime.warm_up(&model)?;
+            let summed = runtime
+                .evaluate_sample_precise(
+                    &continuous,
+                    &model,
+                    continuous.get_weight(),
+                    false,
+                    Complex::new_zero(),
+                )?
+                .try_into_f64()?;
+            let expected = summed.integrand_result
+                * summed.parameterization_jacobian.unwrap()
+                * summed.integrator_weight;
+            assert!(expected.im.0.is_finite() && expected.im.0.abs() > 1e-12);
+            runtime.get_mut_settings().sampling =
+                SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                    sample_orientations: true,
+                    sampling_type: DiscreteGraphSamplingType::Default(
+                        settings.sampling.get_parameterization_settings().unwrap(),
+                    ),
+                    ..Default::default()
+                });
+            runtime.warm_up(&model)?;
+            let mut average = Complex::<F<f64>>::new_zero();
+            for orientation in 0..count {
+                // Deliberately unequal probabilities expose missing or doubled
+                // inverse-probability weights in the actual MC sample path.
+                let probability = 2.0 * (orientation + 1) as f64 / (count * (count + 1)) as f64;
+                let sample = Sample::Discrete(
+                    F(1.0 / probability),
+                    0,
+                    Some(Box::new(Sample::Discrete(
+                        F(1.0),
+                        orientation,
+                        Some(Box::new(continuous.clone())),
+                    ))),
+                );
+                let selected = runtime
+                    .evaluate_sample_precise(
+                        &sample,
+                        &model,
+                        sample.get_weight(),
+                        false,
+                        Complex::new_zero(),
+                    )?
+                    .try_into_f64()?;
+                assert_eq!(selected.integrator_weight, F(1.0 / probability));
+                average += selected.integrand_result
+                    * selected.parameterization_jacobian.unwrap()
+                    * selected.integrator_weight
+                    * F(probability);
+            }
+            assert!(
+                (average.re.0 - expected.re.0).abs() < 1e-11 * expected.im.0.abs()
+                    && (average.im.0 / expected.im.0 - 1.0).abs() < 1e-11,
+                "compile={compile}, mu_sign={mu_sign}: MC expectation {average:?} != {expected:?}"
+            );
+        }
+        assert!(nonzero_filtered_surface);
     }
     Ok(())
 }

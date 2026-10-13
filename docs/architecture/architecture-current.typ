@@ -379,7 +379,12 @@ retaining factorized smooth coefficients and shared numerator definitions.
 It runs after vacuum subtraction and both local and integrated UV contributions
 have been assembled. Parametric orientation branches select the complete residue
 key before fixing orientation signs; explicit orientation sums are extracted
-once. Distinct signed chemical-potential supports stay separate, and the
+once. Each parametric sector compiles only its originating orientation, with
+local evaluator index zero mapped to that orientation's production residue-map ID.
+Runtime sampling and filtering still select sectors by the graph's orientation ID;
+all evaluator methods then evaluate the sector's complete one-entry catalogue.
+This avoids selecting and evaluating inactive catalogue entries for every sector.
+Distinct signed chemical-potential supports stay separate, and the
 ordinary bulk retains its existing evaluator path. Only fermions with a chemical
 potential have Fermi surfaces. A missing chemical potential is zero, and warm-up
 restricts bosons to `|mu| < m` or `m = mu = 0`; their zero-temperature occupation
@@ -1125,7 +1130,10 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 14` currently).
+- State format is versioned with `state_manifest.toml` (`version = 15` currently).
+- Version 15 stores one-entry coefficient catalogues for orientation-specific Fermi
+  sectors, evaluated with local index zero. Older full-catalogue sectors use different
+  index semantics and must be regenerated even though the encoded field layout is unchanged.
 - Version 14 stores one numerator-bound-independent source-frame sign for each
   generated CFF and rational component. The duplicate core/denominator sign fields
   were removed from the positional binary layout; earlier saved states must be regenerated.
