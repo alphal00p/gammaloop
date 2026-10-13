@@ -118,9 +118,19 @@ impl FeynmanDiagram {
             }
             let particle = by_name
                 .or(by_pdg)
-                .ok_or_else(|| DiagramError::MissingDotAttribute {
-                    target: target.clone(),
-                    attribute: "particle or pdg",
+                .ok_or_else(|| {
+                    if attributes.contains_key("mass") {
+                        DiagramError::InvalidDotAttribute {
+                            target: target.clone(),
+                            attribute: "mass",
+                            value: "mass-only edges are unsupported; specify a model particle with `particle` or `pdg`".into(),
+                        }
+                    } else {
+                        DiagramError::MissingDotAttribute {
+                            target: target.clone(),
+                            attribute: "particle or pdg",
+                        }
+                    }
                 })?;
             let expected_orientation = if model.particle_is_self_conjugate(particle) {
                 Orientation::Undirected

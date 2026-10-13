@@ -71,6 +71,12 @@ first. Threshold finalization removes the initial-state attachment tree from bot
 recomputing their crossing boundary, including loop-carrying crossings. Regenerated inventories
 can differ from earlier exports.
 
+Old GammaLoop DOT files using the previous `particle_id`/`vertex_rule_id` layout are
+unsupported; re-export them using the current annotated format. Compact DOT identifies
+particles by `particle` or `pdg`. Mass-only edges are unsupported, including a `mass`
+attribute inherited from edge defaults: select a scalar model particle and configure its
+model mass. A DOT `mass` attribute does not define a particle or override its model mass.
+
 The default loop momentum basis of a cross-section diagram no longer lets a cut edge carry part
 of the beam momenta, such as `K + P1`: GammaLoop rescales loop momenta about the origin of this
 basis, which must lie inside every cut energy surface. Regenerated cross sections can therefore

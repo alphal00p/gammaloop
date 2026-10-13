@@ -4788,6 +4788,40 @@ commands = ["quit -n"]
     }
 
     #[test]
+    fn state_load_rejects_pre_request_state_before_payload_decoding() {
+        let temp = tempdir().unwrap();
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 9\n").unwrap();
+        // Every required path exists, but neither the model nor symbolic payload can decode.
+        // The v10 guard must win before loading either or initializing state/logging.
+        fs::write(temp.path().join("model.json"), b"invalid model payload").unwrap();
+        fs::write(
+            temp.path().join("symbolica_state.bin"),
+            b"invalid symbolic payload",
+        )
+        .unwrap();
+        fs::create_dir(temp.path().join("processes")).unwrap();
+        let error = State::load(temp.path().to_owned(), None, None)
+            .err()
+            .expect("pre-Request state must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains("State version 9 predates the supported version 10"),
+            "{message}"
+        );
+        assert!(message.contains("cannot be migrated"), "{message}");
+        assert!(message.contains("regenerate the saved state"), "{message}");
+        assert_eq!(
+            fs::read(temp.path().join("model.json")).unwrap(),
+            b"invalid model payload"
+        );
+        assert_eq!(
+            fs::read(temp.path().join("symbolica_state.bin")).unwrap(),
+            b"invalid symbolic payload"
+        );
+        assert!(!temp.path().join("logs").exists());
+    }
+
+    #[test]
     fn state_manifest_requires_an_explicit_version() {
         let temp = tempdir().unwrap();
         fs::write(temp.path().join(STATE_MANIFEST_FILE), "").unwrap();

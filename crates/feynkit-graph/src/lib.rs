@@ -2810,6 +2810,73 @@ mod tests {
     }
 
     #[test]
+    fn compact_dot_rejects_mass_only_edges_including_defaults() {
+        for dot in [
+            "digraph { a -> b [mass=1]; }",
+            "digraph { edge [mass=1]; a -> b; }",
+        ] {
+            let error = FeynmanDiagram::from_dot(scalar_model(), dot).unwrap_err();
+            assert!(matches!(
+                &error,
+                DiagramError::InvalidDotAttribute {
+                    attribute: "mass",
+                    ..
+                }
+            ));
+            let message = error.to_string();
+            assert!(
+                message.contains("mass-only edges are unsupported"),
+                "{message}"
+            );
+            assert!(message.contains("`particle` or `pdg`"), "{message}");
+        }
+        assert!(matches!(
+            FeynmanDiagram::from_dot(scalar_model(), "digraph { a -> b; }"),
+            Err(DiagramError::MissingDotAttribute {
+                attribute: "particle or pdg",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn compact_dot_keeps_mass_metadata_with_explicit_particle_or_pdg() {
+        let model = scalar_model();
+        let baseline = FeynmanDiagram::from_dot(
+            model.clone(),
+            r#"digraph mass_metadata {
+            edge [particle="phi"]; ext [style=invis]; ext -> a; a -> ext; a -> ext;
+        }"#,
+        )
+        .unwrap();
+        for identifier in [r#"particle="phi""#, "pdg=25"] {
+            for (defaults, local) in [("edge [mass=123];", ""), ("", ", mass=123")] {
+                let input = format!(
+                    "digraph mass_metadata {{ {defaults} ext [style=invis]; ext -> a [{identifier}{local}]; a -> ext [{identifier}]; a -> ext [{identifier}]; }}"
+                );
+                let imported = DotDiagram::from_dot(model.clone(), &input).unwrap();
+                imported.diagram.validate().unwrap();
+                let incoming = imported
+                    .diagram
+                    .edges()
+                    .filter_map(|(id, _, edge)| {
+                        edge.external
+                            .as_ref()
+                            .is_some_and(|leg| leg.state == ExternalState::Incoming)
+                            .then_some(id)
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(incoming.len(), 1);
+                assert_eq!(imported.attributes.edges[incoming[0].0]["mass"], "123");
+                assert_eq!(
+                    imported.diagram.to_json().unwrap(),
+                    baseline.to_json().unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
     fn compact_dot_records_attributes_and_explicit_factors() {
         let model = scalar_model();
         let dot = DotDiagram::from_dot(
