@@ -749,8 +749,8 @@ impl FourDSector {
                     != neutral.expression().collect_compact_factors()
             {
                 crate::debug_tags!(#generation, #uv, #local, #four_d, #trace;
-                    file.source_numerator = %neutral.expression(),
-                    file.projected_numerator = %projected_neutral.expression(),
+                    file.source_numerator = %neutral.expression().to_canonical_string(),
+                    file.projected_numerator = %projected_neutral.expression().to_canonical_string(),
                     "Canonical UV numerator certificate failed"
                 );
                 return Err(eyre!(

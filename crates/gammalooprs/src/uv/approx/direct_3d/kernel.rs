@@ -343,6 +343,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     active_subgraph: Option<SuBitGraph>,
     lmb: &LoopMomentumBasis,
     integrands: &DirectResidueBranches,
+    on_shell: Option<&DirectResidueBranches>,
 ) -> Result<DirectResidueBranches> {
     let active_subgraph = active_subgraph
         .as_ref()
@@ -374,11 +375,11 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     // Tag only the numerator introduced by this component.  Replacing the
     // same model mass in the accumulated CFF atom would also tag a disjoint
     // sibling that happens to use the same particle species.
-    for mass in physical_masses {
+    for mass in &physical_masses {
         let tagged = numerator
             .expression()
             .replace(mass.clone())
-            .with(&mass * &mass_scope);
+            .with(mass * &mass_scope);
         debug_tags!(#uv, #local, #trace;
             stage = "direct_3d_numerator_mass_scope",
             mass = %mass,
@@ -475,14 +476,27 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             )?;
             soft.zip_add(&uv_remainder)
         }
-        ApproximationType::OS => Err(eyre!(
-            "local on-shell/OS counterterms require the projected-4D route; set uv.local_uv_cts_from_expanded_4d_integrands=true and generation.explicit_orientation_sum_only=true; direct 3D OS counterterms are not yet implemented"
-        )),
+        ApproximationType::OS => {
+            let on_shell = on_shell.ok_or_else(|| eyre!(
+                "direct OS requires its component-owned on-shell source before the Taylor operation"
+            ))?;
+            let remainder = started.zip_add(&-on_shell.clone())?;
+            let ultraviolet = Direct3dApproximation::t(
+                Local3DDeformation::Ordinary,
+                ctx,
+                current,
+                given,
+                &remainder,
+                active_subgraph.as_ref(),
+                lmb,
+            )?;
+            on_shell.zip_add(&ultraviolet)
+        }
         ApproximationType::Unsubtracted => panic!("should have been kept out of the wood"),
     }
 }
 
-fn start<S: ForestNodeLike>(
+pub(super) fn start<S: ForestNodeLike>(
     ctx: &UVCtx<'_>,
     current: &S,
     cff: &Atom,
@@ -994,6 +1008,14 @@ impl Direct3dApproximation<'_> {
 #[cfg(test)]
 #[path = "soft_tests.rs"]
 mod soft_tests;
+
+#[cfg(test)]
+#[path = "on_shell_tests.rs"]
+mod on_shell_tests;
+
+#[cfg(test)]
+#[path = "on_shell_soft_tests.rs"]
+mod on_shell_soft_tests;
 
 #[cfg(test)]
 #[path = "pole_audit.rs"]

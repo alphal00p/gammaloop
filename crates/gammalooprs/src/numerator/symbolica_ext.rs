@@ -840,7 +840,29 @@ impl NumeratorAtomExt for AtomView<'_> {
         );
         let series = native_series.to_atom();
         if numerator_family_keys.is_empty() {
-            return Ok((independent * series).collect_compact_factors());
+            let started = std::time::Instant::now();
+            crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "factor_preserving_series_join_start", depth,
+                independent_bytes = independent.as_view().get_byte_size(),
+                series_bytes = series.as_view().get_byte_size(),
+                "Joining the independent factor with the Taylor coefficients"
+            );
+            let joined = independent * series;
+            crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "factor_preserving_series_collect_start", depth,
+                elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                input_bytes = joined.as_view().get_byte_size(),
+                "Collecting compact Taylor factors"
+            );
+            let started = std::time::Instant::now();
+            let collected = joined.collect_compact_factors();
+            crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "factor_preserving_series_collect_done", depth,
+                elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                output_bytes = collected.as_view().get_byte_size(),
+                "Collected compact Taylor factors"
+            );
+            return Ok(collected);
         }
         // Reject nonlinear or hidden occurrences before polynomial collection
         // can distribute powers or products of coefficient families.

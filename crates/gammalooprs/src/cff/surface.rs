@@ -10,7 +10,8 @@ pub use three_dimensional_reps::surface::{
 
 use linnet::{half_edge::involution::EdgeIndex, num_traits::SignOrZero};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
+    domains::rational::Rational,
     id::{Pattern, Replacement},
 };
 
@@ -42,9 +43,79 @@ impl SurfaceAtom for Hsurface {
 
 pub trait GammaLoopLinearEnergyExpr {
     fn to_atom_gs(&self, cut_edges: &[EdgeIndex]) -> Atom;
+
+    /// Invert an affine physical-energy row, certifying its complete scalar
+    /// expression before it becomes a direct numerator sampling map.
+    fn from_atom_gs(atom: &Atom) -> color_eyre::Result<Self>
+    where
+        Self: Sized;
 }
 
 impl GammaLoopLinearEnergyExpr for LinearEnergyExpr {
+    fn from_atom_gs(atom: &Atom) -> color_eyre::Result<Self> {
+        // Only this small affine row is expanded, never its graph numerator
+        // or a CFF denominator sum.
+        let expanded = atom.expand();
+        let terms = if let AtomView::Add(sum) = expanded.as_view() {
+            sum.iter().collect::<Vec<_>>()
+        } else {
+            vec![expanded.as_view()]
+        };
+        let mut result = Self::zero();
+        for term in terms {
+            let factors = if let AtomView::Mul(product) = term {
+                product.iter().collect::<Vec<_>>()
+            } else {
+                vec![term]
+            };
+            let mut coefficient = Rational::from(1);
+            let mut basis = None;
+            for factor in factors {
+                if let Ok(number) = Rational::try_from(factor) {
+                    coefficient *= number;
+                } else if basis.replace(factor).is_some() {
+                    return Err(eyre::eyre!("source energy row is not affine: {atom}"));
+                }
+            }
+            match basis {
+                None => result.constant += coefficient,
+                Some(AtomView::Var(variable))
+                    if variable.get_symbol() == GS.numerator_sampling_scale =>
+                {
+                    result.uniform_scale_coeff += coefficient;
+                }
+                Some(AtomView::Fun(function))
+                    if function.get_symbol() == GS.ose && function.get_nargs() == 1 =>
+                {
+                    result.internal_terms.push((
+                        EdgeIndex(usize::try_from(function.get(0)).map_err(|_| {
+                            eyre::eyre!("source pole has no physical edge owner: {atom}")
+                        })?),
+                        coefficient,
+                    ));
+                }
+                Some(AtomView::Fun(function))
+                    if function.get_symbol() == GS.emr_mom
+                        && function.get_nargs() == 2
+                        && function.get(1) == GS.cind(0).as_view() =>
+                {
+                    result.external_terms.push((
+                        EdgeIndex(usize::try_from(function.get(0)).map_err(|_| {
+                            eyre::eyre!("source external energy has no physical owner: {atom}")
+                        })?),
+                        coefficient,
+                    ));
+                }
+                _ => return Err(eyre::eyre!("unresolved basis in source energy row: {atom}")),
+            }
+        }
+        let result = result.canonical();
+        if !(result.to_atom_gs(&[]) - atom).expand().is_zero() {
+            return Err(eyre::eyre!("source energy row failed exact reconstruction"));
+        }
+        Ok(result)
+    }
+
     fn to_atom_gs(&self, cut_edges: &[EdgeIndex]) -> Atom {
         let internal = self
             .internal_terms

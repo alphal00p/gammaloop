@@ -1111,7 +1111,6 @@ impl ExactSourceEnergyMapper {
         Ok(tagged_numerator.replace_multiple(&replacements))
     }
 
-    #[cfg(test)]
     fn energy_atoms(&self, energies: &[LinearEnergyExpr]) -> Vec<Atom> {
         energies
             .iter()

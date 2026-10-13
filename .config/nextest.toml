@@ -62,6 +62,15 @@ not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) 
     test(=uv::tests::failing::tri_box_tri_LU) or
     test(=uv::tests::failing::tta_uv)
 ) and not (
+    test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_os_in_os_forest_has_bounded_radial_soft_controls) or
+    test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_os_in_ir_forest_has_bounded_radial_soft_controls) or
+    test(=uv::approx::direct_3d::kernel::on_shell_tests::proper_direct_completed_two_loop_os_parent_keeps_live_cograph) or
+    test(=uv::approx::direct_3d::kernel::on_shell_tests::proper_direct_bare_two_loop_os_parent_keeps_live_cograph) or
+    test(=uv::approx::direct_3d::kernel::on_shell_tests::proper_direct_two_loop_os_finite_prefix_keeps_live_cograph) or
+    test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forests_match_independent_component_jets) or
+    test(=uv::approx::local_4d::on_shell_forest_tests::three_loop_open_spinor_hard_coefficient_has_exact_finite_certificate) or
+    test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_generic_hard_limits) or
+    test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_correlated_hard_limits) or
     test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=se1l_uv) or
     test(=integrations::scalar_mercedes) or
@@ -195,6 +204,12 @@ test-group = "symbolica-singleton"
 filter = "test(/^uv::hedge_poset::tests::bugblatter$/) or test(/^aaa$/)"
 test-group = "gammalooprs-diagnostics"
 
+[[profile.default.overrides]]
+filter = "test(/^uv::approx::direct_3d::kernel::on_shell_tests::direct_os_quark_in_gluon_complete_forest_matches_at_(first|second)_point$/)"
+# Each complete open-spinor comparison peaks near 11 GiB. Reserve the worker
+# while retaining the ordinary four-minute bound for each case.
+threads-required = "num-test-threads"
+
 # These UV fixtures share generated-state directories across test processes.
 
 [[profile.default.overrides]]
@@ -315,6 +330,15 @@ store-success-output = true
 [profile.ci_slow]
 inherits = "ci_full"
 default-filter = '''
+test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_os_in_os_forest_has_bounded_radial_soft_controls) or
+test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_os_in_ir_forest_has_bounded_radial_soft_controls) or
+test(=uv::approx::direct_3d::kernel::on_shell_tests::proper_direct_completed_two_loop_os_parent_keeps_live_cograph) or
+test(=uv::approx::direct_3d::kernel::on_shell_tests::proper_direct_bare_two_loop_os_parent_keeps_live_cograph) or
+test(=uv::approx::direct_3d::kernel::on_shell_tests::proper_direct_two_loop_os_finite_prefix_keeps_live_cograph) or
+test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forests_match_independent_component_jets) or
+test(=uv::approx::local_4d::on_shell_forest_tests::three_loop_open_spinor_hard_coefficient_has_exact_finite_certificate) or
+test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_generic_hard_limits) or
+test(=uv::approx::local_4d::on_shell_forest_tests::full_three_loop_os_forest_removes_correlated_hard_limits) or
 test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=se1l_uv) or
     test(=integrations::scalar_mercedes) or

@@ -5343,7 +5343,7 @@ fn massive_top_self_energy_local_os_dispatch_uses_projected_four_d() -> Result<(
 }
 
 #[test]
-fn paper_appendix_b1_os_child_requires_validated_nested_policy() {
+fn paper_appendix_b1_os_child_projects_with_live_parent_momentum() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const NAME: &str = "paper_appendix_b1_nested_gluon_self_energy_os";
     let state_path = get_tests_workspace_path()
