@@ -60,7 +60,10 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-14: the version-13 history now also records denominator H-surfaces
 # and frozen compilation snapshots. Only comments changed;
 # version 14 and the exact-version load guard are unchanged.
-digest = "14af7bc3f714515eef6a56f61bb80b3ad55b33e6"
+# Reviewed 2026-10-14: version 15 rejects saved Fermi coefficient catalogues with
+# the previous global-index semantics; the one-entry catalogue mapping and
+# regeneration requirement are documented in architecture-current.typ.
+digest = "b07adbd4a1cf8299414e885a2de300264295388c"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"

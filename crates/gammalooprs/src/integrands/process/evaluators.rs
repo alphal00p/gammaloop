@@ -62,7 +62,7 @@ use symbolica::{
     prelude::*,
 };
 use tracing::{debug, instrument};
-use typed_index_collections::TiVec;
+use typed_index_collections::TiSlice;
 
 use crate::{
     GammaLoopContext,
@@ -108,7 +108,7 @@ pub enum SingleOrAllOrientations<'a, OID> {
         id: OID,
     },
     All {
-        all: &'a TiVec<OID, EdgeVec<Orientation>>,
+        all: &'a TiSlice<OID, EdgeVec<Orientation>>,
         filter: &'a SubSet<OID>,
     },
 }
@@ -183,7 +183,7 @@ pub enum SingleOrAllOrientationsIterator<'a, OID> {
         id: OID,
     },
     All {
-        all: &'a TiVec<OID, EdgeVec<Orientation>>,
+        all: &'a TiSlice<OID, EdgeVec<Orientation>>,
         filter: SubSetIter<'a, OID>,
     },
 }
@@ -3554,6 +3554,7 @@ mod hyperbolic_tests;
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+    use typed_index_collections::TiVec;
 
     use idenso::{dirac::AGS, representations::Bispinor};
     use linnet::half_edge::involution::EdgeIndex;

@@ -2,6 +2,7 @@ use std::{
     collections::HashSet,
     fs::{self},
     path::Path,
+    sync::LazyLock,
     time::Instant,
 };
 
@@ -27,7 +28,7 @@ use symbolica::{
 };
 use three_dimensional_reps::utils::rank_i64;
 use tracing::{debug, info, instrument, warn};
-use typed_index_collections::{TiVec, ti_vec};
+use typed_index_collections::{TiSlice, TiVec, ti_vec};
 
 use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
@@ -51,7 +52,7 @@ use crate::{
             CompiledSamplingMap, ParamBuilder, SamplingChannelBridge,
             SamplingChannelCompileContext, SamplingChannelId, SamplingMapDefinition,
             SurfaceRadialMap,
-            evaluators::{ActiveF64Backend, EvaluatorStack},
+            evaluators::{ActiveF64Backend, EvaluatorStack, SingleOrAllOrientations},
             fermi_surface::{FermiSurfaceEvaluator, FermiSurfaceSector},
             graph_to_group_id_for_group_structure,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
@@ -302,10 +303,6 @@ impl AmplitudeGraphTerm {
             orientation_count = orientations.len(),
             "Generation timing milestone"
         );
-        let orientation_catalog = (!settings.generation.explicit_orientation_sum_only).then_some((
-            orientations.as_slice().as_ref(),
-            production_orientation_ids.as_slice(),
-        ));
         let mut bulk_integrand = graph.derived_data.all_mighty_integrand.clone();
         let mut fermi_surfaces = Vec::new();
         if FermiSurfaceSector::is_present(&bulk_integrand)? {
@@ -333,6 +330,12 @@ impl AmplitudeGraphTerm {
                     .unwrap_or_else(Atom::one);
                 let (bulk, sectors) = FermiSurfaceSector::extract(&graph.graph, &branch)?;
                 bulk_integrand += bulk * &selector;
+                let orientation_catalog = orientation_id.map(|id| {
+                    (
+                        std::slice::from_ref(&orientations[id]),
+                        std::slice::from_ref(&production_orientation_ids[id.0]),
+                    )
+                });
                 for mut sector in sectors {
                     sector.coefficient *= &selector;
                     let (evaluator, timings) = FermiSurfaceEvaluator::new(
@@ -1002,18 +1005,32 @@ impl AmplitudeGraphTerm {
             .pop()
             .unwrap()
             .unwrap_real();
+        static SECTOR_ORIENTATION_FILTER: LazyLock<SubSet<OrientationID>> =
+            LazyLock::new(|| SubSet::full(1));
         for (orientation_id, sector) in &mut self.fermi_surfaces {
-            if orientation_id
-                .is_some_and(|id| !orientations.iter().any(|(selected, _)| selected == id))
-            {
-                continue;
-            }
+            let sector_orientations = if let Some(id) = *orientation_id {
+                let selected = match orientations {
+                    SingleOrAllOrientations::Single { id: selected, .. } => selected == id,
+                    SingleOrAllOrientations::All { filter, .. } => filter[id],
+                };
+                if !selected {
+                    continue;
+                }
+                // This sector's complete catalogue has one entry, at local
+                // index zero, regardless of its channel in the full amplitude.
+                SingleOrAllOrientations::All {
+                    all: TiSlice::from_ref(std::slice::from_ref(&self.orientations[id])),
+                    filter: &SECTOR_ORIENTATION_FILTER,
+                }
+            } else {
+                orientations
+            };
             result += sector.evaluate(
                 momentum_sample,
                 &self.graph,
                 context.settings,
                 &mut self.param_builder,
-                orientations,
+                sector_orientations,
                 context.evaluation_metadata,
             )?;
         }
