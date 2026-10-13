@@ -15,8 +15,8 @@ use idenso::{
 use linnet::half_edge::{
     HedgeGraph,
     builder::HedgeGraphBuilder,
-    involution::{EdgeIndex, HedgePair},
-    subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
+    involution::{EdgeIndex, Flow, HedgePair},
+    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
 };
 use spenso::{
     network::{
@@ -44,8 +44,8 @@ use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
     debug_tags,
-    graph::{LMBext, LoopMomentumBasis},
-    numerator::aind::Aind,
+    graph::{Graph, LMBext, LoopMomentumBasis},
+    numerator::{aind::Aind, ufo::UFO},
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -178,7 +178,281 @@ impl Rooted for IntegratedCts {
     }
 }
 
-fn simplify(
+impl Graph {
+    /// Certify the minimal-QCD two-loop insertion for which the parent soft
+    /// jet integrates to zero: a quark self-energy in an equal-mass quark
+    /// bubble with two external gluons. Scheme and completed-child ownership
+    /// are checked by the caller; this certifies topology and actual rules.
+    pub(crate) fn has_qcd_self_energy_insertion_ward_identity(
+        &self,
+        model: &crate::model::Model,
+        parent: &SuBitGraph,
+        child: &SuBitGraph,
+    ) -> bool {
+        if parent == child
+            || !parent.includes(child)
+            || self.n_loops(parent) != 2
+            || self.n_loops(child) != 1
+            || self.underlying.connected_components(parent).len() != 1
+            || self.underlying.connected_components(child).len() != 1
+        {
+            return false;
+        }
+        let child_crown = self.dummy_less_full_crown(child);
+        let boundary = child_crown.included_iter().collect::<Vec<_>>();
+        if boundary.len() != 2 || self.flow(boundary[0]) == self.flow(boundary[1]) {
+            return false;
+        }
+        let reference = &self[self[&boundary[0]]];
+        let Some(quark) = reference
+            .particle
+            .particle()
+            .and_then(|id| model.particle_by_id(id).ok())
+        else {
+            return false;
+        };
+        let mass = reference.mass_atom(model);
+        let flavour = quark.pdg_code.abs();
+        if mass.is_zero()
+            || !quark.is_spinor()
+            || quark.color.abs() != 3
+            || !(1..=6).contains(&flavour)
+        {
+            return false;
+        }
+        let is_quark = |edge: &crate::graph::Edge| {
+            edge.mass_atom(model) == mass
+                && edge
+                    .particle
+                    .particle()
+                    .and_then(|id| model.particle_by_id(id).ok())
+                    .is_some_and(|particle| {
+                        particle.is_spinor()
+                            && particle.color.abs() == 3
+                            && particle.pdg_code.abs() == flavour
+                    })
+        };
+        let is_gluon = |edge: &crate::graph::Edge| {
+            edge.mass_atom(model).is_zero()
+                && edge
+                    .particle
+                    .particle()
+                    .and_then(|id| model.particle_by_id(id).ok())
+                    .is_some_and(|particle| {
+                        particle.pdg_code == 21 && particle.is_vector() && particle.color == 8
+                    })
+        };
+        if !boundary.iter().all(|hedge| is_quark(&self[self[hedge]])) {
+            return false;
+        }
+        let parent_crown = self.dummy_less_full_crown(parent);
+        if parent_crown.included_iter().count() != 2
+            || !parent_crown
+                .included_iter()
+                .all(|hedge| is_gluon(&self[self[&hedge]]))
+        {
+            return false;
+        }
+        let child_edges = self.iter_edges_of(child).collect::<Vec<_>>();
+        if child_edges.len() != 2
+            || child_edges
+                .iter()
+                .filter(|(_, _, edge)| is_quark(edge.data))
+                .count()
+                != 1
+            || child_edges
+                .iter()
+                .filter(|(_, _, edge)| is_gluon(edge.data))
+                .count()
+                != 1
+        {
+            return false;
+        }
+        let cograph = parent.subtract(child);
+        let cograph_edges = self.iter_edges_of(&cograph).collect::<Vec<_>>();
+        if cograph_edges.len() != 3 || !cograph_edges.iter().all(|(_, _, edge)| is_quark(edge.data))
+        {
+            return false;
+        }
+        // Compare actual tensors in the source frame. Native and legacy
+        // propagators can differ only by compact slashes or dummy labels;
+        // the shared typed algebra certifies that normal-form equivalence.
+        let same_tensor = |expected: Atom, actual: &SymbolicTensor<IndexedStructure>| {
+            let certificate = (|| -> Result<bool> {
+                let expected =
+                    crate::graph::parse::NumeratorInterface::admit(expected.clone(), None)?
+                        .try_into_indexed()?;
+                let difference = expected.try_sub(actual)?;
+                Ok(simplify(&difference)?
+                    .coefficients_are_zero(spenso::shadowing::TensorCollectFilter::<0>::Tensors)?
+                    .is_true())
+            })();
+            if !certificate.as_ref().is_ok_and(|value| *value) {
+                debug_tags!(#uv, #integrated, #ward, #inspect;
+                    stage = "qcd_insertion_ward_tensor_certificate",
+                    graph = %self.name,
+                    result = ?certificate,
+                    file.expected = %expected.to_canonical_string(),
+                    file.actual = %actual.expression().to_canonical_string(),
+                    "Actual source tensor did not certify the minimal QCD Ward rule"
+                );
+            }
+            certificate.unwrap_or(false)
+        };
+        if !self.iter_nodes_of(parent).all(|(node, hedges, vertex)| {
+            let Some(rule) = vertex
+                .vertex_rule
+                .and_then(|id| model.vertex_rule_by_id(id).ok())
+            else {
+                return false;
+            };
+            if rule.particles.len() != 3 {
+                return false;
+            }
+            let position = |pdg| {
+                rule.particles
+                    .iter()
+                    .position(|id| {
+                        model
+                            .particle_by_id(*id)
+                            .is_ok_and(|particle| particle.pdg_code == pdg)
+                    })
+                    .map(|index| index + 1)
+            };
+            let (Some(anti), Some(fermion), Some(gluon)) =
+                (position(-flavour), position(flavour), position(21))
+            else {
+                return false;
+            };
+            let minimal_spin = function!(
+                UFO.gamma,
+                UFO.idx(gluon, 1),
+                UFO.idx(anti, 1),
+                UFO.idx(fermion, 1)
+            );
+            let minimal_color = function!(UFO.t, gluon, fermion, anti);
+            if rule.lorentz_structures.len() != 1
+                || !model
+                    .lorentz_structure_by_id(rule.lorentz_structures[0])
+                    .is_ok_and(|lorentz| lorentz.structure == minimal_spin)
+                || rule.color_structures != [minimal_color.clone()]
+                || rule.couplings.len() != 1
+                || rule.couplings[0].len() != 1
+            {
+                return false;
+            }
+            let Some(coupling) = rule.couplings[0][0].and_then(|id| model.coupling_by_id(id).ok())
+            else {
+                return false;
+            };
+            let Ok(node_label) = u16::try_from(node.0) else {
+                return false;
+            };
+            let mut hedges = hedges.collect::<Vec<_>>();
+            hedges.sort_by_key(|hedge| self.underlying[*hedge].ufo_order.value);
+            if hedges.len() != 3
+                || hedges.iter().enumerate().any(|(slot, hedge)| {
+                    usize::from(self.underlying[*hedge].ufo_order.value) != slot
+                })
+            {
+                return false;
+            }
+            let spin_slots = hedges
+                .iter()
+                .map(|hedge| {
+                    &self.underlying[*hedge]
+                        .num_indices
+                        .spin_indices
+                        .vertex_indices
+                })
+                .collect::<Vec<_>>();
+            let color_slots = hedges
+                .iter()
+                .map(|hedge| {
+                    &self.underlying[*hedge]
+                        .num_indices
+                        .color_indices
+                        .vertex_indices
+                })
+                .collect::<Vec<_>>();
+            let momenta = hedges
+                .iter()
+                .map(|hedge| (self.flow(*hedge), self[hedge]))
+                .collect::<Vec<_>>();
+            let Ok(spin) = UFO.reindex_spin(&spin_slots, &momenta, minimal_spin, |index| {
+                Aind::Vertex(node_label, index as u16)
+            }) else {
+                return false;
+            };
+            let Ok(color) = UFO.reindex_color(&color_slots, minimal_color, |index| {
+                Aind::Vertex(node_label, index as u16)
+            }) else {
+                return false;
+            };
+            same_tensor(
+                Atom::var(symbolica::symbol!(&format!("UFO::{}", coupling.name))) * color * spin,
+                &vertex.num.value,
+            )
+        }) {
+            return false;
+        }
+        self.iter_edges_of(parent).all(|(pair, edge_id, edge)| {
+            let HedgePair::Paired { source, sink } = pair else {
+                return false;
+            };
+            if edge
+                .data
+                .extra_data
+                .vakint_edge_power
+                .is_some_and(|power| power != 1)
+            {
+                return false;
+            }
+            let first = UFO.idx(1, 1);
+            let second = UFO.idx(2, 1);
+            let propagator = if is_quark(edge.data) {
+                let (left, right, sign) = if model
+                    .particle_by_id(edge.data.particle.particle().unwrap())
+                    .unwrap()
+                    .pdg_code
+                    > 0
+                {
+                    (second, first, 1)
+                } else {
+                    (first, second, -1)
+                };
+                Atom::i()
+                    * (Atom::num(sign) * function!(UFO.pslash, &left, &right)
+                        + &mass * function!(UFO.identity, left, right))
+            } else if is_gluon(edge.data) {
+                -Atom::i() * function!(UFO.metric, first, second)
+            } else {
+                return false;
+            };
+            let spin_slots = [
+                &self.underlying[source]
+                    .num_indices
+                    .spin_indices
+                    .edge_indices,
+                &self.underlying[sink].num_indices.spin_indices.edge_indices,
+            ];
+            UFO.reindex_spin(
+                &spin_slots,
+                &[(Flow::Source, edge_id), (Flow::Sink, edge_id)],
+                propagator,
+                |index| Aind::Edge(edge_id.0 as u16, index as u16),
+            )
+            .is_ok_and(|spin| {
+                same_tensor(
+                    spin * self.underlying[source].color_kronekers(&self.underlying[sink]),
+                    &edge.data.num.value,
+                )
+            })
+        })
+    }
+}
+
+pub(super) fn simplify(
     integrand: &SymbolicTensor<IndexedStructure>,
 ) -> Result<SymbolicTensor<IndexedStructure>> {
     let started = std::time::Instant::now();
@@ -317,8 +591,10 @@ impl Integrated<'_> {
                 // The local operation owns its integration policy. In the OS
                 // scheme this is the signed vacuum remainder -(U - UO); the
                 // physical O branch already supplies the on-shell mass shift
-                // and must never enter the finite MS-bar addback. Soft and
-                // ordinary components retain their complete signed expression.
+                // and must never enter the finite MS-bar addback. An enclosing
+                // soft operation can supply a vacuum-only payload after its
+                // integrated soft jet has been certified to vanish. Other
+                // components retain their complete signed expression.
                 let mut integrated = integrand.atom().with_checked_expression(Atom::Zero)?;
                 for sector in integrand.active_sectors() {
                     let physical = sector
@@ -326,6 +602,7 @@ impl Integrated<'_> {
                         .expression()
                         .replace(GS.integrated_loop_scale)
                         .with(Atom::one());
+                    let physical = GS.resolve_os_momenta(&physical);
                     let physical = sector.integration_atom().with_algebra_result(physical)?;
                     let simplified = simplify(&physical)?;
                     if !simplified.is_zero() {
@@ -2441,6 +2718,386 @@ mod tests {
                 .is_zero()
         );
         assert!(source.contains(&spectator));
+    }
+
+    #[test]
+    fn qcd_insertion_ward_certificate_checks_rules_and_propagators() -> Result<()> {
+        test_initialise()?;
+        let model = crate::utils::load_generic_model("sm");
+        let source = include_str!(
+            "../../../../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"
+        );
+        let mut graphs = Graph::import_dot(source, &model)?;
+        assert_eq!(graphs.len(), 1);
+        let graph = graphs.remove(0);
+        let external: SuBitGraph = graph.external_filter();
+        let parent = graph.full_filter().subtract(&external);
+        let mut child = graph.empty_subgraph::<SuBitGraph>();
+        for edge in [EdgeIndex(3), EdgeIndex(4)] {
+            child.add(graph[&edge].1);
+        }
+        assert!(graph.has_qcd_self_energy_insertion_ward_identity(&model, &parent, &child));
+
+        let node = graph.iter_nodes_of(&parent).next().unwrap().0;
+        let mut explicit = graph.clone();
+        explicit.underlying[node].num.autogenerated = false;
+        let original = &explicit.underlying[node].num.value;
+        explicit.underlying[node].num.value = original
+            .with_checked_expression(original.expression() * parse!("ward_noncanonical_vertex"))?;
+        assert!(!explicit.has_qcd_self_energy_insertion_ward_identity(&model, &parent, &child));
+        // The metadata bit cannot certify the actual rule: a custom factor
+        // marked generated must fail the same native tensor comparison.
+        explicit.underlying[node].num.autogenerated = true;
+        assert!(!explicit.has_qcd_self_energy_insertion_ward_identity(&model, &parent, &child));
+
+        let mut altered_propagator = graph.clone();
+        let original = &altered_propagator.underlying[EdgeIndex(2)].num.value;
+        altered_propagator.underlying[EdgeIndex(2)].num.value = original.with_checked_expression(
+            original.expression() * parse!("ward_noncanonical_propagator"),
+        )?;
+        assert!(
+            !altered_propagator
+                .has_qcd_self_energy_insertion_ward_identity(&model, &parent, &child)
+        );
+
+        // Canonical model records are immutable. Rebuild through their
+        // validated serialization boundary, then instantiate the changed rule
+        // in a newly imported graph instead of mutating an Arc or a runtime ID.
+        let rule = model.vertex_rule_by_id(graph.underlying[node].vertex_rule.unwrap())?;
+        let lorentz_name = &model
+            .lorentz_structure_by_id(rule.lorentz_structures[0])?
+            .name;
+        let mut definition = serde_json::to_value(&model)?;
+        let lorentz = definition["lorentz_structures"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|entry| entry["name"] == *lorentz_name)
+            .unwrap();
+        lorentz["structure"] = serde_json::to_value(
+            (function!(UFO.identity, UFO.idx(1, 1), UFO.idx(2, 1))
+                * function!(UFO.momentum, UFO.idx(3, 1), 1))
+            .to_canonical_string(),
+        )?;
+        let nonminimal_model: crate::model::Model = serde_json::from_value(definition)?;
+        let mut graphs = Graph::import_dot(source, &nonminimal_model)?;
+        assert_eq!(graphs.len(), 1);
+        let mut nonminimal = graphs.remove(0);
+        assert_ne!(
+            nonminimal.underlying[node].num.value,
+            graph.underlying[node].num.value
+        );
+        nonminimal.underlying[node].num.autogenerated = true;
+        assert!(nonminimal.underlying[node].num.autogenerated);
+        assert!(!nonminimal.has_qcd_self_energy_insertion_ward_identity(
+            &nonminimal_model,
+            &parent,
+            &child
+        ));
+
+        let mut graphs = Graph::import_dot(
+            include_str!(
+                "../../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+            ),
+            &model,
+        )?;
+        assert_eq!(graphs.len(), 1);
+        let quark_parent = graphs.remove(0);
+        let external: SuBitGraph = quark_parent.external_filter();
+        assert!(!quark_parent.has_qcd_self_energy_insertion_ward_identity(
+            &model,
+            &quark_parent.full_filter().subtract(&external),
+            &child
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn equal_mass_gluon_bubble_and_mass_insertion_obey_dimensional_ward_identity() -> Result<()> {
+        test_initialise()?;
+        let settings = vakint::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 5,
+            ..VakintSettings::default().true_settings()
+        };
+        let vakint = crate::utils::vakint()?;
+        let integrator = Integrated::new(vakint, &settings);
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let nu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let momentum = function!(GS.loop_mom, 1, mink.to_symbolic([]));
+        let radial = function!(SPENSO_TAG.dot, &momentum, &momentum);
+        let mass = parse!("ward_quark_mass");
+        let gamma =
+            |index: &Atom| function!(AGS.gamma, SPENSO_TAG.chain_in, SPENSO_TAG.chain_out, index);
+        let trace_two = function!(
+            SPENSO_TAG.trace,
+            Bispinor {}.new_rep(4).to_symbolic([]),
+            gamma(&mu),
+            gamma(&nu)
+        );
+        let trace_four = function!(
+            SPENSO_TAG.trace,
+            Bispinor {}.new_rep(4).to_symbolic([]),
+            gamma(&mu),
+            gamma(&momentum),
+            gamma(&nu),
+            gamma(&momentum)
+        );
+        let bubble = &trace_four + mass.pow(2) * &trace_two;
+        // S(r)^2 = dS(r)/dm. This is one insertion on the equal-mass
+        // fermion loop, equivalently half the mass derivative at q=0.
+        let mass_insertion =
+            &mass * (&radial + mass.pow(2)) * &trace_two + Atom::num(2) * &mass * &trace_four;
+
+        for (label, numerator, power) in
+            [("bubble", bubble, 2), ("mass insertion", mass_insertion, 3)]
+        {
+            let mut term = vakint::VakintTerm {
+                integral: function!(
+                    vakint::symbols::S.topo,
+                    function!(vakint_symbol!("I1L"), mass.pow(2), power)
+                ),
+                numerator: to_vakint_numerator(&simplify(&numerator)?)?,
+                vectors: vec![("k".into(), 1)],
+            };
+            term.tensor_reduce(vakint, &settings)?;
+            debug_tags!(#uv, #integrated, #vakint, #trace;
+                stage = "ward_reference_after_tensor_projection",
+                label,
+                file.numerator = %term.numerator.to_canonical_string(),
+                file.restored = %Integrated::restore_numerator(term.numerator.clone(), 0).to_canonical_string(),
+                "Dimensional Ward reference at the native tensor boundary"
+            );
+            term.numerator = integrator
+                .simplify_projected_numerator(&term.numerator, 0)
+                .wrap_err_with(|| {
+                    format!("{label}: dimensional algebra after tensor projection")
+                })?;
+            term.evaluate_integral(vakint, &settings)?;
+            assert!(
+                series(&term.numerator, 2)?.to_atom().expand().is_zero(),
+                "the {label} constant soft coefficient must vanish before multiplication by any Laurent-series child: {}",
+                term.numerator
+            );
+        }
+
+        // Independently certify the all-d identity before choosing an epsilon
+        // depth. The two IBP recurrences are exact meromorphic identities.
+        let d = Atom::var(GS.dim);
+        let i1 = parse!("ward_I1");
+        let i2 = (&d - Atom::num(2)) * &i1 / (Atom::num(2) * mass.pow(2));
+        let i3 = (&d - Atom::num(4)) * &i2 / (Atom::num(4) * mass.pow(2));
+        for identity in [
+            (Atom::num(2) / &d - Atom::one()) * &i1 + Atom::num(2) * mass.pow(2) / &d * &i2,
+            (Atom::num(4) / &d - Atom::one()) * &i2 + Atom::num(4) * mass.pow(2) / &d * &i3,
+        ] {
+            assert!(
+                identity
+                    .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)?
+                    .numerator
+                    .is_zero()
+            );
+        }
+        // The linear soft jet has an odd number of loop vectors and vanishes
+        // under the same d-dimensional angular projector, not by setting d=4.
+        let mut odd = vakint::VakintTerm {
+            integral: function!(
+                vakint::symbols::S.topo,
+                function!(vakint_symbol!("I1L"), mass.pow(2), 3)
+            ),
+            numerator: to_vakint_numerator(&(radial * function!(GS.loop_mom, 1, &mu)))?,
+            vectors: vec![("k".into(), 1)],
+        };
+        odd.tensor_reduce(vakint, &settings)?;
+        assert!(odd.numerator.is_zero());
+        Ok(())
+    }
+
+    #[test]
+    fn physical_on_shell_finite_prefix_keeps_epsilon_for_an_enclosing_pole() -> Result<()> {
+        test_initialise()?;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let settings = vakint::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 4,
+            ..VakintSettings::default().true_settings()
+        };
+        let mut vacuum = vakint::VakintTerm {
+            integral: function!(
+                vakint::symbols::S.topo,
+                function!(vakint_symbol!("I1L"), Atom::var(GS.m_uv_vacuum).pow(2), 2)
+            ),
+            // The independently derived signed OS field remainder, after
+            // stripping its common coupling and (p-slash - m) matrix.
+            numerator: Atom::one() - &epsilon,
+            vectors: vec![("k".into(), 1)],
+        };
+        vacuum.evaluate_integral(crate::utils::vakint()?, &settings)?;
+        let child_expansion = series(
+            &vacuum
+                .numerator
+                .replace(GS.mu_r_sq)
+                .with(Atom::one())
+                .replace(GS.m_uv_vacuum)
+                .with(Atom::one()),
+            2,
+        )?;
+        let child_source = SymbolicTensor::infer_indexed(child_expansion.to_atom())?;
+        let child = IntegratedCts::from_series(&child_source, &child_expansion, 4)?;
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
+        // A subsequent ordinary forest operation supplies its own minus.
+        let parent_pole = -&normalization * epsilon.pow(-1);
+        let finite_child = child.physical_finite_counterterm()?;
+        let complete_source =
+            finite_child.with_checked_expression(finite_child.expression() * &parent_pole)?;
+        let complete = IntegratedCts::from_series(
+            &complete_source,
+            &series(complete_source.expression(), 1)?,
+            8,
+        )?;
+        let premature_source = finite_child.with_checked_expression(
+            finite_child
+                .expression()
+                .replace(GS.dim_epsilon)
+                .with(Atom::Zero)
+                * parent_pole,
+        )?;
+        let prematurely_four_dimensional = IntegratedCts::from_series(
+            &premature_source,
+            &series(premature_source.expression(), 1)?,
+            8,
+        )?;
+        let finite = complete
+            .physical_finite_counterterm()?
+            .expression()
+            .replace(GS.dim_epsilon)
+            .with(Atom::Zero);
+        let expected = -normalization.pow(2) * pi.pow(2) / Atom::num(12);
+        assert!((finite - &expected).expand().is_zero());
+        assert!(!expected.is_zero());
+        assert!(
+            prematurely_four_dimensional
+                .physical_finite_counterterm()?
+                .is_zero(),
+            "dropping the child's epsilon term must lose the nonzero physical finite contribution"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nested_os_child_gluon_parent_keeps_local_mass_and_vacuum_scheme_input() -> Result<()> {
+        use crate::uv::{
+            UVgenerationSettings,
+            approx::local_4d::{
+                FourDTerm, Full4dCts, on_shell_forest_tests::nested_gluon_fixture, uv_limit,
+            },
+        };
+
+        test_initialise()?;
+        let (graph, parent, child, root) = nested_gluon_fixture()?;
+        assert!(graph.has_qcd_self_energy_insertion_ward_identity(
+            &graph.model,
+            parent.subgraph(),
+            child.subgraph()
+        ));
+        let settings = UVgenerationSettings {
+            generate_integrated: true,
+            add_marker: false,
+            ..Default::default()
+        };
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let seed = Full4dCts::from_factorized_local(&Local4dCts::root());
+        let child_local = uv_limit(&seed, &ctx, &child, &root, &child, &root)?;
+        let vakint_settings = vakint::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 4,
+            ..settings.vakint.true_settings()
+        };
+        let child_integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings).run(
+            &child_local,
+            &ctx,
+            &child,
+            &root,
+            &child,
+            &root,
+        )?;
+        assert!(
+            !child_integrated
+                .physical_finite_counterterm()?
+                .expression()
+                .derivative(GS.dim_epsilon)
+                .replace(GS.dim_epsilon)
+                .with(Atom::Zero)
+                .is_zero()
+        );
+        let completed = Full4dCts::recursion_input(
+            &child_local,
+            &child_integrated,
+            ApproximationType::OS,
+            false,
+            child.lmb(),
+        )?;
+        let parent_local = uv_limit(&completed, &ctx, &parent, &child, &parent, &child)?;
+        assert!(
+            parent_local.atom().expression().contains_symbol(GS.os_mom),
+            "the local parent H must retain the physical child on-shell contribution"
+        );
+        let mass = graph[EdgeIndex(3)].mass_atom(&graph.model);
+        let mut frozen_prefixes = 0;
+        for sector in parent_local.active_sectors() {
+            assert_ne!(
+                sector.integration_atom(),
+                &sector.atom,
+                "the completed-child soft branch stays local under the certified Ward policy"
+            );
+            let analytic = GS.resolve_os_momenta(sector.integration_atom().expression());
+            assert!(!analytic.contains_symbol(GS.os_mom));
+            let terms = FourDTerm::from_view(analytic.as_view())?;
+            assert!(!terms.is_empty());
+            for denominator in terms.iter().flat_map(|term| &term.denominators) {
+                assert!(
+                    denominator.mass_squared == Atom::var(GS.m_uv_expansion).pow(2)
+                        || denominator.mass_squared == Atom::var(GS.m_uv_vacuum).pow(2),
+                    "the analytic policy retained a non-vacuum mass: {}",
+                    denominator.mass_squared,
+                );
+                assert!(
+                    denominator
+                        .full_expr
+                        .pattern_match(&mass.to_pattern(), None, None)
+                        .next()
+                        .is_none()
+                );
+                assert!(!denominator.momentum.contains_symbol(GS.os_mom));
+            }
+            if !sector.frozen_lmbs().is_empty() {
+                frozen_prefixes += 1;
+                assert_eq!(sector.frozen_lmbs(), std::slice::from_ref(child.lmb()));
+                assert!(
+                    sector.atom.expression().contains_symbol(GS.dim_epsilon),
+                    "the enclosing Taylor operation must retain the finite child's positive epsilon orders"
+                );
+                assert_eq!(sector.active_components.len(), 1);
+                assert!(
+                    sector.active_components[0]
+                        .2
+                        .loop_edges
+                        .iter()
+                        .all(|edge| { !child.lmb().loop_edges.contains(edge) })
+                );
+            }
+        }
+        assert_eq!(
+            frozen_prefixes, 1,
+            "the integrated child coefficient has one localization owner"
+        );
+
+        // The same physical graph without a completed child is not covered
+        // by this Ward proof: its bare two-loop soft branch remains analytic.
+        let bare_parent = uv_limit(&seed, &ctx, &parent, &root, &parent, &root)?;
+        for sector in bare_parent.active_sectors() {
+            assert_eq!(sector.integration_atom(), &sector.atom);
+        }
+        Ok(())
     }
 
     #[test]
