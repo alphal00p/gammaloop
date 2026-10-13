@@ -810,9 +810,12 @@ impl Propagator {
     pub(crate) fn from_serializable_propagator(
         model: &Model,
         propagator: &SerializablePropagator,
+        zero_mass_replacements: &[Replacement],
     ) -> Propagator {
         let numerator = utils::parse_python_expression(propagator.numerator.as_str());
         let denominator = utils::parse_python_expression(propagator.denominator.as_str());
+        let numerator = numerator.replace_multiple(zero_mass_replacements);
+        let denominator = denominator.replace_multiple(zero_mass_replacements);
         let dod = (&numerator / &denominator).all_dod();
         Propagator {
             name: propagator.name.clone(),
@@ -2170,7 +2173,10 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             );
         }
 
-        self.update_name_dictionaries();
+        // Rebuild shared particles and the mass-dependent caches through the same
+        // constructor used for already-restricted UFO imports.
+        *self = Self::from_serializable_model(self.to_serializable());
+        self.validate_covariant_cut_multiplets()?;
 
         Ok(())
     }
@@ -2434,50 +2440,6 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         self.unresolved_particles = map;
     }
 
-    pub(crate) fn update_name_dictionaries(&mut self) {
-        self.order_name_to_position = self
-            .orders
-            .iter()
-            .enumerate()
-            .map(|(i, o)| (o.name.clone(), i))
-            .collect();
-
-        self.lorentz_structure_name_to_position = self
-            .lorentz_structures
-            .iter()
-            .enumerate()
-            .map(|(i, ls)| (ls.name.clone(), i))
-            .collect();
-
-        self.particle_name_to_position = self
-            .particles
-            .iter()
-            .enumerate()
-            .map(|(i, p)| (p.0.name.clone(), i))
-            .collect();
-
-        self.particle_pdg_to_position = self
-            .particles
-            .iter()
-            .enumerate()
-            .map(|(i, p)| (p.0.pdg_code, i))
-            .collect();
-
-        self.propagator_name_to_position = self
-            .propagators
-            .iter()
-            .enumerate()
-            .map(|(i, pr)| (pr.name.clone(), i))
-            .collect();
-
-        self.vertex_rule_name_to_position = self
-            .vertex_rules
-            .iter()
-            .enumerate()
-            .map(|(i, vr)| (vr.0.name.clone(), i))
-            .collect();
-    }
-
     pub(crate) fn from_serializable_model(serializable_model: SerializableModel) -> Model {
         //initialize the UFO and ETS symbols
 
@@ -2534,14 +2496,44 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             })
             .collect();
 
+        // A restricted mass is structural zero only when its internal expression
+        // fixes it to zero. External parameters remain tunable even at value 0.
+        let zero_mass_parameters = serializable_model
+            .particles
+            .iter()
+            .map(|particle| UFOSymbol::from(&particle.mass))
+            .filter(|mass| {
+                mass.is_zero()
+                    || model
+                        .parameters
+                        .get(&ParameterName(*mass))
+                        .is_some_and(|parameter| {
+                            parameter.nature == ParameterNature::Internal
+                                && parameter.expression.as_ref().is_some_and(|expression| {
+                                    expression
+                                        .replace(UFOSymbol::zero().0)
+                                        .with(Atom::Zero)
+                                        .is_zero()
+                                })
+                        })
+            })
+            .collect::<HashSet<_>>();
+        let zero_mass_replacements = zero_mass_parameters
+            .iter()
+            .map(|mass| Replacement::new(Atom::from(*mass).to_pattern(), Atom::Zero))
+            .collect::<Vec<_>>();
+
         // Extract particles
         model.particles = serializable_model
             .particles
             .iter()
             .enumerate()
             .map(|(i_part, serializable_particle)| {
-                let particle =
-                    Arc::new(Particle::from_serializable_particle(serializable_particle));
+                let mut particle = Particle::from_serializable_particle(serializable_particle);
+                if zero_mass_parameters.contains(&particle.mass.0) {
+                    particle.mass = ParameterName(UFOSymbol::zero());
+                }
+                let particle = Arc::new(particle);
                 model
                     .particle_name_to_position
                     .insert(particle.name.clone(), i_part);
@@ -2562,6 +2554,7 @@ n_couplings = format!("{}", self.couplings.len()).green(),
                 let propagator = Arc::new(Propagator::from_serializable_propagator(
                     &model,
                     serializable_propagator,
+                    &zero_mass_replacements,
                 ));
                 model
                     .propagator_name_to_position
@@ -2938,6 +2931,9 @@ mod test_polarization_sums;
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use spenso::algebra::complex::Complex;
     use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
@@ -2949,6 +2945,160 @@ mod tests {
     };
 
     use super::{ArcParticle, Model, UFOSymbol, parameter_display_sort_key};
+
+    #[test]
+    fn restricted_zero_masses_match_literal_zero_model() -> eyre::Result<()> {
+        let mut full = load_generic_model("sm");
+        for (name, value) in [("MS", 0.095), ("MC", 1.27)] {
+            full.get_parameter_mut(name)?.value = Some(Complex::new(F(value), F(0.0)));
+        }
+        let mut literal_zero = full.to_serializable();
+        for particle in &mut literal_zero.particles {
+            if matches!(particle.mass.as_str(), "MS" | "MC") {
+                particle.mass = "ZERO".into();
+            }
+        }
+        // An existing literal-ZERO fermion supplies the independent propagator oracle.
+        for propagator in &mut literal_zero.propagators {
+            let source = match propagator.particle.as_str() {
+                "s" | "c" => full.get_propagator_for_particle("u"),
+                "s~" | "c~" => full.get_propagator_for_particle("u~"),
+                _ => continue,
+            };
+            let source = super::SerializablePropagator::from_propagator(&source);
+            propagator.numerator = source.numerator;
+            propagator.denominator = source.denominator;
+        }
+        let mut literal_zero = Model::from_serializable_model(literal_zero);
+        let mut card = full.default_param_card();
+        for name in ["MS", "MC"] {
+            card.insert(UFOSymbol::from(name), Complex::new(F(0.0), F(0.0)));
+        }
+        literal_zero.simplify(&mut card.clone())?;
+        full.simplify(&mut card)?;
+        let expected = serde_json::to_value(literal_zero.to_serializable())?;
+        assert_eq!(serde_json::to_value(full.to_serializable())?, expected);
+
+        for name in ["s", "s~", "c", "c~"] {
+            let particle = full.get_particle(name);
+            assert!(particle.is_massless(), "{name}");
+            assert!(
+                full.unresolved_particles["QCD"].contains(&particle),
+                "{name}"
+            );
+        }
+        for name in ["MS", "MC"] {
+            assert_eq!(full.get_parameter(name).nature, ParameterNature::Internal);
+            assert!(!card.contains_key(&UFOSymbol::from(name)));
+        }
+
+        // Repeated restriction and serialization must preserve the structural result.
+        full.simplify(&mut card)?;
+        assert_eq!(serde_json::to_value(full.to_serializable())?, expected);
+        let reloaded = Model::from_str(serde_json::to_string(&full.to_serializable())?, "json")?;
+        assert_eq!(serde_json::to_value(reloaded.to_serializable())?, expected);
+        for model in [&full, &reloaded] {
+            for particle in model
+                .propagators
+                .iter()
+                .map(|propagator| &propagator.particle)
+                .chain(
+                    model
+                        .vertex_rules
+                        .iter()
+                        .flat_map(|vertex| &vertex.particles),
+                )
+                .chain(model.unresolved_particles.values().flatten())
+                .chain(model.particle_set_to_vertex_rules_map.keys().flatten())
+            {
+                assert!(Arc::ptr_eq(
+                    &particle.0,
+                    &model.get_particle(&particle.name).0,
+                ));
+            }
+            for vertices in model.particle_set_to_vertex_rules_map.values() {
+                for vertex in vertices {
+                    assert!(Arc::ptr_eq(
+                        &vertex.0,
+                        &model.get_vertex_rule(&vertex.name).0,
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn imported_internal_zero_masses_are_structurally_massless() -> eyre::Result<()> {
+        let full = load_generic_model("sm");
+        for expression in ["0", "0.0", "UFO::ZERO"] {
+            let mut serialized = full.to_serializable();
+            let mass = serialized
+                .parameters
+                .iter_mut()
+                .find(|parameter| parameter.name == "MS")
+                .unwrap();
+            mass.nature = ParameterNature::Internal;
+            mass.expression = Some(expression.into());
+            mass.value = None;
+            let imported = Model::from_str(serde_json::to_string(&serialized)?, "json")?;
+            for (name, control) in [("s", "u"), ("s~", "u~")] {
+                assert!(imported.get_particle(name).is_massless(), "{expression}");
+                let propagator = imported.get_propagator_for_particle(name);
+                let expected = full.get_propagator_for_particle(control);
+                assert_eq!(propagator.numerator, expected.numerator, "{expression}");
+                assert_eq!(propagator.denominator, expected.denominator, "{expression}");
+                assert!(
+                    imported.unresolved_particles["QCD"].contains(&imported.get_particle(name))
+                );
+            }
+            // A numerically zero external mass remains adjustable at the same import boundary.
+            assert!(!imported.get_particle("c").is_massless());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn external_zero_and_nonzero_restricted_masses_remain_symbolic() -> eyre::Result<()> {
+        let mut model = load_generic_model("sm");
+        let original = model.get_propagator_for_particle("s");
+        let mut card = model.default_param_card();
+        for value in [0.0, 0.095, 0.0] {
+            card.insert(UFOSymbol::from("MS"), Complex::new(F(value), F(0.0)));
+            model.apply_param_card(&card)?;
+            let reloaded =
+                Model::from_str(serde_json::to_string(&model.to_serializable())?, "json")?;
+            for model in [&model, &reloaded] {
+                for name in ["s", "s~"] {
+                    assert_eq!(model.get_particle(name).mass.0, UFOSymbol::from("MS"));
+                    assert!(!model.unresolved_particles["QCD"].contains(&model.get_particle(name)));
+                }
+                assert_eq!(model.get_parameter("MS").nature, ParameterNature::External);
+                assert_eq!(
+                    model.get_propagator_for_particle("s").numerator,
+                    original.numerator
+                );
+                assert_eq!(
+                    model.get_propagator_for_particle("s").denominator,
+                    original.denominator
+                );
+            }
+        }
+        card.insert(UFOSymbol::from("MS"), Complex::new(F(1.0e-30), F(0.0)));
+        model.simplify(&mut card)?;
+        assert_eq!(model.get_particle("s").mass.0, UFOSymbol::from("MS"));
+        assert_eq!(model.get_parameter("MS").nature, ParameterNature::External);
+        assert!(card.contains_key(&UFOSymbol::from("MS")));
+        assert_eq!(
+            model.get_propagator_for_particle("s").numerator,
+            original.numerator
+        );
+        assert_eq!(
+            model.get_propagator_for_particle("s").denominator,
+            original.denominator
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_encode_decode_arc_particle() {

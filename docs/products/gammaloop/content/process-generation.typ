@@ -8,6 +8,19 @@ directory. Start the command-line interface through the repository wrapper (`./g
 the Cargo-built executable, then generate processes, integrands, and integration jobs within
 that state.
 
+== Model import and restrictions
+
+JSON and UFO models use the same restriction semantics. With the default
+`--simplify-model=true`, applying a restriction freezes zero-valued parameters as constants.
+A mass fixed to exact zero is replaced by symbolic `ZERO` in particles and propagators.
+Diagram generation, unresolved-particle selection, and graph grouping then treat it as
+massless, just as if the model had declared `ZERO` from the start. Nonzero masses, however
+small, remain symbolic.
+
+Importing the full model or using `--simplify-model=false` retains adjustable external mass
+parameters. Runtime changes to their numerical values preserve the symbolic mass assignment
+used for generation, including when the new value is zero.
+
 == Choose a generation mode
 
 The interactive command tree separates cross sections, amplitudes, and operations on processes

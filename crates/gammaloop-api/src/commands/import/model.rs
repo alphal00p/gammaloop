@@ -750,13 +750,78 @@ fn canonical_dir_allow_abs_missing(p: &Path) -> Result<PathBuf> {
     }
 }
 
-#[cfg(all(test, feature = "ufo-import"))]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use gammalooprs::model::ParameterNature;
+    use gammalooprs::model::{ParameterNature, UFOSymbol};
     use spenso::algebra::complex::Complex;
+    #[cfg(feature = "ufo-import")]
     use symbolica::domains::rational::Rational;
 
+    #[test]
+    fn json_restrictions_canonicalize_only_fixed_zero_masses() -> Result<()> {
+        gammalooprs::initialisation::test_initialise()?;
+        let full = Model::from_str(file_to_string(&ensure_builtin_model("sm")?)?, "json")?;
+        for restriction in ["full", "default", "thermal", "thermal_s_mass"] {
+            for simplify_model in [false, true] {
+                let mut state = State::new_test();
+                ImportModel {
+                    path: format!("sm-{restriction}").into(),
+                    simplify_model,
+                }
+                .run(&mut state)?;
+                let massless = simplify_model && matches!(restriction, "default" | "thermal");
+                let expected_mass = if massless {
+                    UFOSymbol::zero()
+                } else {
+                    UFOSymbol::from("MS")
+                };
+                assert_eq!(
+                    state.model.get_parameter("MS").nature,
+                    if massless {
+                        ParameterNature::Internal
+                    } else {
+                        ParameterNature::External
+                    },
+                    "{restriction}, simplify={simplify_model}"
+                );
+                for (name, zero_mass_reference) in [("s", "d"), ("s~", "d~")] {
+                    let particle = state.model.get_particle(name);
+                    assert_eq!(particle.mass.0, expected_mass, "{restriction}: {name}");
+                    assert_eq!(
+                        state.model.unresolved_particles["QCD"].contains(&particle),
+                        massless,
+                        "{restriction}: {name}, simplify={simplify_model}"
+                    );
+                    let propagator = state.model.get_propagator(format!("{name}_propFeynman"));
+                    let reference = full.get_propagator(format!(
+                        "{}_propFeynman",
+                        if massless { zero_mass_reference } else { name }
+                    ));
+                    assert_eq!(propagator.particle.mass.0, expected_mass);
+                    assert_eq!(propagator.numerator, reference.numerator);
+                    assert_eq!(propagator.denominator, reference.denominator);
+                }
+                if !massless {
+                    // Runtime zeros remain adjustable and do not change particle structure.
+                    for ms in [0.0, 0.27] {
+                        state
+                            .model_parameters
+                            .insert("MS".into(), Complex::new_re(F(ms)));
+                        state.model.apply_param_card(&state.model_parameters)?;
+                        assert_eq!(
+                            state.model.get_parameter("MS").value,
+                            Some(Complex::new_re(F(ms)))
+                        );
+                        assert_eq!(state.model.get_particle("s").mass.0, UFOSymbol::from("MS"));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "ufo-import")]
     #[test]
     fn ufo_import_rejects_loader_without_chemical_potential_support() {
         for version in ["0.1.8", "dev"] {
@@ -771,6 +836,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "ufo-import")]
     #[test]
     fn ufo_and_json_restrictions_preserve_chemical_potentials() -> Result<()> {
         gammalooprs::initialisation::test_initialise()?;
@@ -812,7 +878,9 @@ mod tests {
                 assert_eq!(fresh.y_charge, saved.y_charge, "{name}");
                 assert_eq!(fresh.y_charge_right, saved.y_charge_right, "{name}");
                 assert_eq!(fresh.chemical_potential, saved.chemical_potential, "{name}");
+                assert_eq!(fresh.mass, saved.mass, "{restriction}: {name} pole mass");
                 let roundtrip = restored.get_particle(name);
+                assert_eq!(fresh.mass, roundtrip.mass, "{name} pole mass roundtrip");
                 assert_eq!(fresh.charge, roundtrip.charge, "{name} roundtrip");
                 assert_eq!(fresh.y_charge, roundtrip.y_charge, "{name} roundtrip");
                 assert_eq!(
@@ -826,6 +894,34 @@ mod tests {
             }
             assert_eq!(ufo.get_particle("u").charge, Rational::from((2, 3)));
             assert_eq!(ufo.get_particle("H").y_charge, None);
+            let massless = matches!(restriction, "default" | "thermal");
+            for (name, zero_mass_reference) in [("s", "d"), ("s~", "d~")] {
+                for model in [&ufo, &json, &restored] {
+                    let particle = model.get_particle(name);
+                    assert_eq!(
+                        particle.mass.0,
+                        if massless {
+                            UFOSymbol::zero()
+                        } else {
+                            UFOSymbol::from("MS")
+                        },
+                        "{restriction}: {name}"
+                    );
+                    assert_eq!(
+                        model.unresolved_particles["QCD"].contains(&particle),
+                        massless,
+                        "{restriction}: {name} unresolved"
+                    );
+                    let propagator = model.get_propagator(format!("{name}_propFeynman"));
+                    let reference = json.get_propagator(format!(
+                        "{}_propFeynman",
+                        if massless { zero_mass_reference } else { name }
+                    ));
+                    assert_eq!(propagator.particle.mass, particle.mass);
+                    assert_eq!(propagator.numerator, reference.numerator);
+                    assert_eq!(propagator.denominator, reference.denominator);
+                }
+            }
             if restriction == "default" {
                 assert_eq!(json.get_parameter("muB").nature, ParameterNature::Internal);
                 assert_eq!(
@@ -874,6 +970,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "ufo-import")]
     #[test]
     fn fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states() -> Result<()> {
         gammalooprs::initialisation::test_initialise()?;
