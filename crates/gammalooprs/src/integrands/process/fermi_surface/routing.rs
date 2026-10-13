@@ -84,7 +84,8 @@ impl FermiSurfaceProduct {
             .iter()
             .map(|factor| factor.edge_id)
             .collect::<Vec<_>>();
-        // Complete the active directions with independent fermion routes
+        // Complete the active directions with independent fermion routes that
+        // have chemical potentials and can carry occupation steps,
         // before choosing arbitrary spanning-tree chords. Otherwise an
         // untouched occupation step can acquire an artificial dependence on
         // a localized radius (e.g. the other fermion of a dotted sunset).
@@ -93,7 +94,10 @@ impl FermiSurfaceProduct {
             if basis_edges.len() == parent.loop_edges.len() {
                 break;
             }
-            if !pair.is_paired() || !edge.data.is_fermion() {
+            if !pair.is_paired()
+                || !edge.data.is_fermion()
+                || edge.data.chemical_potential_atom().is_none()
+            {
                 continue;
             }
             rows.push(
@@ -281,6 +285,64 @@ mod tests {
                 product.lmb().edge_signatures[EdgeIndex(2)].internal[LoopIndex(0)],
                 SignOrZero::Zero,
                 "the other occupation step must not depend on the localized radius"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn fermi_basis_prioritizes_occupation_steps_over_unstepped_fermions() -> Result<()> {
+        use three_dimensional_reps::ThermalDistributionCall;
+
+        use super::super::FermiSurfaceSector;
+        use crate::model::{ParameterName, UFOSymbol};
+
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph mixed_density_three_loop {
+            node [num=1]
+            edge [num=1]
+            D -> E [id=0 particle="e-" lmb_id=1]
+            E -> D [id=1 particle="e-"]
+            A -> C [id=2 particle="d" lmb_id=0]
+            C -> B [id=3 particle="d"]
+            B -> A [id=4 particle="d"]
+            A -> D [id=5 particle="a" lmb_id=2]
+            E -> B [id=6 particle="a"]
+        })?;
+        // Both unstepped lepton edges can fill the remaining loop slots, but
+        // doing so makes the quark occupation depend on the localized radius.
+        let unstepped_basis =
+            graph.lmb_with_loop_edges([EdgeIndex(2), EdgeIndex(0), EdgeIndex(1)].as_slice())?;
+        let active_slot = unstepped_basis
+            .loop_edges
+            .iter()
+            .position(|edge| *edge == EdgeIndex(2))
+            .unwrap();
+        assert_ne!(
+            unstepped_basis.edge_signatures[EdgeIndex(4)].internal[LoopIndex(active_slot)],
+            SignOrZero::Zero
+        );
+
+        let step = ThermalDistributionCall::atom(4, 0, 0, 1, 1);
+        let expression = ThermalDistributionCall::atom(2, 1, 0, 1, 1) * &step;
+        for chemical_potential in [None, Some(ParameterName(UFOSymbol::zero()))] {
+            for edge in [EdgeIndex(0), EdgeIndex(1)] {
+                let mut particle = graph[edge].particle().unwrap();
+                std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
+                graph.underlying[edge].particle = particle.into();
+                assert!(graph[edge].chemical_potential_atom().is_none());
+            }
+            let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+            assert!(bulk.is_zero());
+            assert_eq!(sectors.len(), 1);
+            assert_eq!(sectors[0].coefficient, step);
+            let lmb = sectors[0].product.lmb();
+            assert_eq!(lmb.loop_edges[LoopIndex(0)], EdgeIndex(2));
+            assert!(lmb.loop_edges.contains(&EdgeIndex(4)));
+            assert_eq!(
+                lmb.edge_signatures[EdgeIndex(4)].internal[LoopIndex(0)],
+                SignOrZero::Zero,
+                "the quark occupation must remain independent of the localized radius"
             );
         }
         Ok(())

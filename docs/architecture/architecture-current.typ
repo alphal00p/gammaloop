@@ -393,8 +393,9 @@ is then constant on `E > 0`, so extraction removes their positive orders and
 ignores their steps. Expanded keys with a repeated distribution are rejected.
 Residual fermion steps must be independent of the localized loop directions;
 unsupported moving step boundaries are rejected instead of differentiated pointwise.
-Basis completion first retains additional independent fermion routes before
-choosing arbitrary remaining graph chords. This keeps an untouched occupation
+Basis completion first retains additional independent fermion routes with chemical
+potentials before choosing arbitrary remaining graph chords. Fermions without an
+occupation step cannot displace these preferred routes. This keeps an untouched occupation
 step independent when the input basis mixes its momentum with a localized one,
 as in a dotted sunset with a boson and an undotted fermion as its input LMB.
 
