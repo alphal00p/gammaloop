@@ -73,6 +73,7 @@ class NativeCacheSmoke(unittest.TestCase):
         report = self.prepare(obj, prepared, progress=progress)
         self.assertEqual(report["status"], "complete")
         self.assertEqual(report["completed_roots"], 5)
+        self.assertEqual(report["options"]["batch_records"], 64)
         self.assertEqual(events[0], "running")
         self.assertEqual(events[-1], "complete")
         obj.load_cache(1, str(prepared), cache_policy="evict-aged-lfu")
@@ -225,6 +226,79 @@ class NativeCacheSmoke(unittest.TestCase):
         with self.assertRaises(ValueError):
             obj.evaluate_integral(integral(5))
 
+    def test_explicit_batch_target_changes_layout_not_reduction(self):
+        obj = engine()
+        output = self.scratch / "small-batches"
+        report = self.prepare(obj, output, batch_records=2)
+        self.assertEqual(report["status"], "complete")
+        self.assertEqual(report["completed_roots"], 5)
+        self.assertEqual(report["options"]["batch_records"], 2)
+        obj.load_cache(1, str(output))
+        disk = obj.cache_statistics(1)["disk"]
+        self.assertEqual(disk["records"], 5)
+        self.assertEqual(disk["chunks"], 3)
+        self.assertEqual(disk["chunks_read"], 0)
+        reference = engine()
+        for power in (1, 2, 4):
+            self.same(
+                obj.evaluate_integral(integral(power)),
+                reference.evaluate_integral(integral(power)),
+            )
+        self.assertEqual(obj.cache_statistics(1)["native"]["rule_applications"], 0)
+
+    def test_large_existing_chunk_loads_and_resumes_with_smaller_batch_target(self):
+        output = self.scratch / "old-large-chunk"
+        roots = [(0, [power]) for power in range(67)]
+        calls = 0
+
+        def progress(report):
+            nonlocal calls
+            if report["status"] == "running":
+                calls += 1
+                return calls <= 65
+
+        partial = engine().prepare_cache(
+            1,
+            str(output),
+            workload=roots,
+            batch_records=4096,
+            time_limit_seconds=30,
+            progress=progress,
+            progress_interval_seconds=0,
+        )
+        self.assertEqual(partial["status"], "cancelled")
+        self.assertEqual(partial["completed_roots"], 65)
+        self.assertIsNone(partial["checkpoint_failure"])
+        self.assertEqual(partial["options"]["batch_records"], 4096)
+
+        fresh = engine()
+        fresh.load_cache(1, str(output))
+        disk = fresh.cache_statistics(1)["disk"]
+        self.assertEqual(disk["chunks"], 1)
+        self.assertEqual(disk["records"], 65)
+        self.assertEqual(disk["chunks_read"], 0)
+        reference = engine()
+        self.same(
+            fresh.evaluate_integral(integral(64)),
+            reference.evaluate_integral(integral(64)),
+        )
+        self.assertEqual(fresh.cache_statistics(1)["native"]["rule_applications"], 0)
+
+        resumed = engine().prepare_cache(
+            1, str(output), workload=roots, time_limit_seconds=30
+        )
+        self.assertEqual(resumed["status"], "complete")
+        self.assertEqual(resumed["options"]["batch_records"], 64)
+        self.assertEqual(resumed["completed_roots"], 67)
+        self.assertEqual(resumed["reused_roots"], 65)
+        self.assertEqual(resumed["newly_stored_roots"], 2)
+        fresh.load_cache(1, str(output))
+        self.same(
+            fresh.evaluate_integral(integral(66)),
+            reference.evaluate_integral(integral(66)),
+        )
+        self.assertEqual(fresh.cache_statistics(1)["native"]["rule_applications"], 0)
+
     def test_native_work_releases_gil(self):
         obj = engine()
         ready = threading.Event()
@@ -277,6 +351,8 @@ class NativeCacheSmoke(unittest.TestCase):
             {"workload": ROOTS, "extra_dots": 1},
             {"progress": object()},
             {"progress_interval_seconds": float("nan")},
+            {"batch_records": 0},
+            {"batch_records": 4097},
         ):
             with self.assertRaises((TypeError, ValueError)):
                 obj.prepare_cache(1, str(path), **options)

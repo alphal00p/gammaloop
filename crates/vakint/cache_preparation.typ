@@ -179,6 +179,24 @@ callback. Inspect the returned status: completion, time-budget stop,
 cancellation, storage-budget stop, native resource refusal and failure are
 distinct. A partial report does not certify a completed workload.
 
+`options.storage.batch_records` is a preparation layout target, defaulting to
+64 staged roots across namespaces. Python exposes the same optional
+`batch_records` keyword. Positive values no larger than the independent native
+chunk record limit are accepted; zero or an oversized target is rejected before
+filesystem creation. Earlier byte/term or checkpoint limits may still flush a
+smaller batch. This target changes neither the selected roots nor their native
+admission, exact reduction, guards, or RAM/work allowances.
+
+The reader's default hard limit remains 4096 records per chunk. Existing larger
+chunks are therefore still loadable and resumable when the preparation target
+is reduced to 64. Changing that target does not change a workload's identity,
+rewrite completed chunks, or imply that an already loaded pack is repartitioned.
+The on-disk schema is unchanged. This separates a read-through cost choice from
+the decoder's safety ceiling; it is not a new cache algorithm. The layout
+implementation is pinned to RustRed `d44e3beea9de1370a9cdd6fff08cbfbb486c1c4e`.
+Its 53 native application tests pass, including exact record/ordered-guard/work
+parity across batch sizes and reuse of a larger existing chunk.
+
 `RustRedCacheWorkload::Explicit` supplies native integral keys with an explicit
 namespace index; the exact program bindings supply their family identity.
 `Finite` uses RustRed's finite A/R domain iterator. The default `Primer` selects
@@ -192,6 +210,9 @@ are finite operational choices, not physical power-counting envelopes. Every roo
 including one already stored during an earlier run, crosses the active native
 program's admission before reuse. The planner errors on its root/request cap;
 it never silently truncates the selected workload.
+Execution uses deterministic namespace round-robin order, not a cost-ranked or
+difficulty-ranked selection. A smaller chunk target does not select easier
+integrals or enlarge the admitted workload.
 
 Preparation does not attach its output. `Vakint::load_cache` explicitly attaches
 a trusted-generated read-only bundle. Disk misses may fill the configured native
@@ -238,9 +259,10 @@ The small #link("examples/native_cache.rs")[Rust cache example] demonstrates
 one-loop preparation, exact loaded/warm parity, a held-out reduction and a
 full portable snapshot. It creates only caller-specified new directories and
 does not evaluate new numerical masters. Its optimized local-patch runtime gate
-passes. The manifest and lockfile now select published RustRed revision
-`6a70dccfac11dbbaa9ffe3facfa5710b4f33a65f`; the corresponding actual-Git source
-check passes, including the Python module and stub-generation feature combination.
+passes. The first delivery selected published RustRed revision
+`6a70dccfac11dbbaa9ffe3facfa5710b4f33a65f`; its actual-Git source check passed,
+including the Python module and stub-generation feature combination. The current
+manifest and lockfile select the separately tested `d44e3bee` layout revision.
 The default five-root one-loop primer used 3,201 disk bytes. A full snapshot
 preserved five base references plus two resident records in 1,697 bytes, without
 copying preparation-job metadata. Restored held-out I5 matched exactly with zero
@@ -258,7 +280,7 @@ HepKit extension build, never a separately loaded second Symbolica kernel.
 workload; #link("tests/python/native_cache_smoke.py")[the host smoke tests]
 cover callbacks, interrupts, GIL release, snapshots and partial native overrides.
 
-The private complete Community wheel, SHA256
+The initial private complete Community wheel, SHA256
 `8ddfee95fcf7cd4e28658f0614e3b20291f1a92a15aefdf168e88604f645676d`,
 uses actual Git RustRed `6a70dccf`, Symbolica 3.0.1 and one shared native kernel.
 All eight smoke tests pass in 0.476 seconds. The first attempt passed seven;
@@ -269,11 +291,26 @@ The public Python example prepared five roots (3,212 charged bytes), made a full
 snapshot (1,716 bytes), and restored held-out I5 exactly with zero native rules.
 The environment and wheel are private validation artifacts, not a Community
 release or modification of a shared installation. No new master values were
-computed. The default four-loop primer remains unexecuted.
+computed. Completion of the full default four-loop primer is not yet established.
+
+The incremental private host rebuilt against actual Git `d44e3bee`, wheel SHA256
+`430276d333ec659e24fadcf8be7df152ebcaf9bf9f8d4ec30285074490aac380`,
+passes all ten Python cache tests in 0.762 seconds. The added controls verify the default
+64-record target, an explicit two-record target producing three chunks for five
+roots, invalid targets rejected before output creation, and larger-chunk resume.
+In a separate cross-version check, the preceding `6a70dccf` wheel produced one
+65-record chunk with no batch-target field in its checkpoint options. The new
+wheel loaded that unchanged pack and resumed a copy under the 64-record target:
+65 records were reused and two were newly completed. The source pack's hashes
+were unchanged. The public Python example also passed on the new host, using
+3,231 bytes for preparation and 1,716 bytes for its full snapshot. Installed
+native-module hashes were stable across all these checks. This is private
+runtime verification, not a Community publication or a full four-loop warmup.
 
 Preparation accepts `ram_bytes`, `disk_bytes`, `cache_policy` (`evict-lru`,
 `evict-aged-lfu` or `fail-on-limit`), optional native term/integral/rule ceilings,
-time/checkpoint/root allowances and `resume`. The workload is either the native
+time/checkpoint/root allowances, the independent `batch_records` layout target,
+and `resume`. The workload is either the native
 relative primer controlled by `extra_dots` / `numerator_rank`, or an explicit
 sequence of `(namespace, complete_integer_powers)` pairs; the two modes cannot
 be mixed. No network access or numerical master computation is introduced.

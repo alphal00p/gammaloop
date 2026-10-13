@@ -957,7 +957,7 @@ impl VakintWrapper {
     /// predicate. Python signals and callback errors stop cooperatively after
     /// the current native operation, checkpoint completed roots, then re-raise
     /// with `cache_report` attached when possible. No hard deadline is promised.
-    #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, extra_dots=None, numerator_rank=None, workload=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0))]
+    #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, batch_records=None, extra_dots=None, numerator_rank=None, workload=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0))]
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn prepare_cache(
         &self,
@@ -973,6 +973,7 @@ impl VakintWrapper {
         time_limit_seconds: Option<u64>,
         checkpoint_interval_seconds: Option<u64>,
         max_roots: Option<usize>,
+        batch_records: Option<usize>,
         extra_dots: Option<u32>,
         numerator_rank: Option<u32>,
         workload: Option<Vec<(usize, Vec<i64>)>>,
@@ -996,6 +997,9 @@ impl VakintWrapper {
         }
         if let Some(value) = max_roots {
             options.storage.max_roots = value;
+        }
+        if let Some(value) = batch_records {
+            options.storage.batch_records = value;
         }
         cache::apply_native_overrides(
             &mut options.native,
