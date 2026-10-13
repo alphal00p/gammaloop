@@ -275,6 +275,7 @@ impl Localizer<'_> {
                 term.powers.clone(),
                 raw_reports,
                 term.numerator.clone(),
+                term.on_shell_point.clone(),
                 Vec::<Atom>::new(),
                 vec![(residual_factor, Vec::<Atom>::new())],
             ));
@@ -300,8 +301,16 @@ impl Localizer<'_> {
                 .collect::<Vec<_>>();
             // Incidence uses the enclosing source scope, while denominator
             // owners retain this component's quotient topology and capacities.
-            for (component_denominators, classes, _, raw_reports, numerator, parameters, rows) in
-                &mut terms
+            for (
+                component_denominators,
+                classes,
+                _,
+                raw_reports,
+                numerator,
+                on_shell_point,
+                parameters,
+                rows,
+            ) in &mut terms
             {
                 if rows.is_empty() {
                     continue;
@@ -326,12 +335,28 @@ impl Localizer<'_> {
                     "Preparing shared factorized local-4D child numerator"
                 );
                 context.projected_component_requests += 1;
+                let point = on_shell_point
+                    .as_ref()
+                    .filter(|point| point.component == component);
+                let boundaries = if point.is_some() {
+                    graph
+                        .dummy_stripped_external_flows_of(source_scope)
+                        .included_iter()
+                        .collect::<Vec<_>>()
+                } else {
+                    Vec::new()
+                };
+                let frame = if point.is_some() {
+                    ExactUvSubLmbFrame::RetainedPhysicalCrown
+                } else {
+                    ExactUvSubLmbFrame::TaylorVacuum
+                };
                 let (mut cff, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
                     denominators,
                     uv_edges.iter().copied(),
-                    [],
+                    boundaries,
                     coordinate_lmb,
-                    ExactUvSubLmbFrame::TaylorVacuum,
+                    frame,
                     &child_cutset,
                     &options,
                     numerator.expression(),
@@ -369,6 +394,10 @@ impl Localizer<'_> {
                         )
                     })?;
                 let composition_started = Instant::now();
+                // Both source reconstruction certificates have passed. Bind
+                // this child's formal crown before any cograph is attached.
+                let bind =
+                    |atom: &Atom| point.map_or_else(|| atom.clone(), |point| point.bind(atom));
                 let mut next_rows = BTreeMap::<Vec<Atom>, Atom>::new();
                 for (carrier, arguments) in std::mem::take(rows) {
                     for (orientation, incoming) in cff_term.orientations.iter().zip(&argument_rows)
@@ -376,10 +405,10 @@ impl Localizer<'_> {
                         let arguments = arguments
                             .iter()
                             .cloned()
-                            .chain(incoming.iter().cloned())
+                            .chain(incoming.iter().map(&bind))
                             .collect();
                         *next_rows.entry(arguments).or_insert(Atom::Zero) +=
-                            &carrier * &orientation.expression * &production_prefactor;
+                            bind(&carrier) * bind(&orientation.expression) * &production_prefactor;
                     }
                 }
                 *rows = next_rows
@@ -388,7 +417,10 @@ impl Localizer<'_> {
                         (!carrier.is_zero()).then_some((carrier, arguments))
                     })
                     .collect();
-                *numerator = numerator.with_checked_expression(mapped)?;
+                *numerator = numerator.with_checked_expression(bind(&mapped))?;
+                if point.is_some() {
+                    *on_shell_point = None;
+                }
                 parameters.extend(new_parameters);
                 // Equal complete argument rows share one summed carrier. Other
                 // Taylor families remain separate ordinary bodies; adding them
@@ -404,6 +436,7 @@ impl Localizer<'_> {
                 mut powers,
                 mut reports,
                 numerator,
+                on_shell_point,
                 parameters,
                 rows,
             ) in terms
@@ -419,8 +452,7 @@ impl Localizer<'_> {
                 powers.retain(|class, _| sector.class(*class).component > component);
                 reports[component] = Default::default();
                 // Equal scalar spellings are insufficient for ranked zeros or
-                // differently ordered open ports. The retained body remains
-                // typed; this ordered key includes its complete logical interface.
+                // differently ordered open ports. Keep the complete interface.
                 let interface = numerator
                     .structure()
                     .logical_slots()
@@ -431,9 +463,10 @@ impl Localizer<'_> {
                     powers.clone(),
                     numerator.expression().clone(),
                     interface,
+                    on_shell_point.clone(),
                     parameters.clone(),
                 );
-                let (_, _, _, combined_reports, _, _, combined_rows) =
+                let (_, _, _, combined_reports, _, _, _, combined_rows) =
                     remaining.entry(key).or_insert_with(|| {
                         (
                             denominators,
@@ -441,6 +474,7 @@ impl Localizer<'_> {
                             powers,
                             vec![EnergyPowerCapMap::default(); reports.len()],
                             numerator,
+                            on_shell_point,
                             parameters,
                             BTreeMap::<Vec<Atom>, Atom>::new(),
                         )
@@ -457,13 +491,23 @@ impl Localizer<'_> {
             terms = remaining
                 .into_values()
                 .map(
-                    |(denominators, classes, powers, reports, numerator, parameters, rows)| {
+                    |(
+                        denominators,
+                        classes,
+                        powers,
+                        reports,
+                        numerator,
+                        on_shell_point,
+                        parameters,
+                        rows,
+                    )| {
                         (
                             denominators,
                             classes,
                             powers,
                             reports,
                             numerator,
+                            on_shell_point,
                             parameters,
                             rows.into_iter()
                                 .filter_map(|(arguments, carrier)| {
@@ -481,7 +525,7 @@ impl Localizer<'_> {
                 elapsed_ms = composition_time.as_secs_f64() * 1000.0,
                 families_before,
                 remaining_requests = terms.len(),
-                remaining_states = terms.iter().map(|(_, _, _, _, _, _, rows)| rows.len()).sum::<usize>(),
+                remaining_states = terms.iter().map(|(_, _, _, _, _, _, _, rows)| rows.len()).sum::<usize>(),
                 "Composed scalar argument rows for shared UV numerator families"
             );
             context.numerator_rows.clear();
@@ -499,7 +543,7 @@ impl Localizer<'_> {
         let composition_started = Instant::now();
         let mut active = Atom::Zero;
         let mut definitions = Vec::new();
-        for (_, _, _, _, numerator, parameters, rows) in terms {
+        for (_, _, _, _, numerator, _, parameters, rows) in terms {
             if rows.is_empty() || numerator.is_zero() {
                 continue;
             }
@@ -683,7 +727,7 @@ mod tests {
     use idenso::tensor::SymbolicTensor;
     use linnet::half_edge::{
         involution::EdgeIndex,
-        subgraph::{InternalSubGraph, SubSetOps},
+        subgraph::{InternalSubGraph, SuBitGraph, SubSetOps},
     };
     use symbolica::{
         atom::{AtomCore, FunctionBuilder},

@@ -27,8 +27,12 @@ evaluator_method = "SingleParametric"
 logfile_directive = "off"
 display_directive = "info"
 
+[cli_settings.global.generation]
+explicit_orientation_sum_only = true
+
 [cli_settings.global.generation.uv]
-generate_integrated = false
+generate_integrated = true
+local_uv_cts_from_expanded_4d_integrands = true
 add_marker = false
 inner_products = true
 orchestrator = "hedge_poset"
