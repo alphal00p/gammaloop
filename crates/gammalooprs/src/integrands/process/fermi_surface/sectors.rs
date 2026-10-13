@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 use color_eyre::eyre::{Result, ensure, eyre};
 use linnet::half_edge::involution::EdgeIndex;
 use symbolica::atom::{Atom, AtomCore, AtomView};
-use three_dimensional_reps::ThermalDistributionFactor;
+use three_dimensional_reps::{ThermalDistributionCall, ThermalDistributionFactor};
 
 use crate::{
-    graph::Graph, integrands::process::param_builder::ThermalDistributionCall,
-    momentum::SignOrZero, numerator::symbolica_ext::NumeratorAtomExt, utils::GS, uv::uv_graph::UVE,
+    graph::Graph, momentum::SignOrZero, numerator::symbolica_ext::NumeratorAtomExt, utils::GS,
+    uv::uv_graph::UVE,
 };
 
 use super::FermiSurfaceProduct;
@@ -41,14 +41,16 @@ impl FermiSurfaceSector {
             if let AtomView::Fun(function) = atom
                 && function.get_symbol() == GS.thermal_distribution
             {
-                let call = ThermalDistributionCall::try_from(atom).and_then(|call| {
-                    ensure!(
-                        call.temperature_flag.is_zero() || call.temperature_flag.is_one(),
-                        "Thermal distribution temperature flag must be zero or one, got {}",
-                        call.temperature_flag
-                    );
-                    Ok(call)
-                });
+                let call = ThermalDistributionCall::try_from(atom)
+                    .map_err(Into::into)
+                    .and_then(|call| {
+                        ensure!(
+                            call.temperature_flag.is_zero() || call.temperature_flag.is_one(),
+                            "Thermal distribution temperature flag must be zero or one, got {}",
+                            call.temperature_flag
+                        );
+                        Ok(call)
+                    });
                 match call {
                     Ok(call) => {
                         if !calls
@@ -250,11 +252,11 @@ mod tests {
         let y = Atom::var(symbol!("fermi_sector_y"));
         let numerator = function!(symbol!("fermi_sector_numerator"), &x, &y);
         let coefficient = numerator * (&x + Atom::num(1)) * (&y + Atom::num(2));
-        let independent_step = GS.thermal_distribution(3, 0, 0, -1, -1);
-        let bulk = Atom::num(7) * GS.thermal_distribution(1, 3, 1, 1, 1);
+        let independent_step = ThermalDistributionCall::atom(3, 0, 0, -1, -1);
+        let bulk = Atom::num(7) * ThermalDistributionCall::atom(1, 3, 1, 1, 1);
         for derivative_order in [2, 3] {
             for sign in [-1, 0, 1] {
-                let delta = GS.thermal_distribution(1, derivative_order as i64, 0, sign, 1);
+                let delta = ThermalDistributionCall::atom(1, derivative_order as i64, 0, sign, 1);
                 let expression = &bulk
                     + function!(GS.thermal_weight_wrapper, &delta)
                         * &coefficient
@@ -286,9 +288,9 @@ mod tests {
     #[test]
     fn fermi_sectors_keep_opposite_chemical_supports_and_independent_products() -> Result<()> {
         let graph = routing::test_graph()?;
-        let plus = GS.thermal_distribution(1, 1, 0, 1, 1);
-        let minus = GS.thermal_distribution(1, 1, 0, 1, -1);
-        let second = GS.thermal_distribution(3, 2, 0, -1, -1);
+        let plus = ThermalDistributionCall::atom(1, 1, 0, 1, 1);
+        let minus = ThermalDistributionCall::atom(1, 1, 0, 1, -1);
+        let second = ThermalDistributionCall::atom(3, 2, 0, -1, -1);
         let expression =
             Atom::num(2) * &plus + Atom::num(3) * &minus + Atom::num(5) * &plus * &second;
         let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
@@ -304,7 +306,7 @@ mod tests {
                     sector.coefficient.clone(),
                     |coefficient, (factor, orientation)| {
                         coefficient
-                            * GS.thermal_distribution(
+                            * ThermalDistributionCall::atom(
                                 factor.edge_id.0 as i64,
                                 factor.derivative_order as i64,
                                 0,
@@ -323,12 +325,12 @@ mod tests {
     fn fermi_sector_detector_accepts_unresolved_orientation_and_ignores_regular_weights()
     -> Result<()> {
         let graph = routing::test_graph()?;
-        let unresolved = GS.thermal_distribution(1, 1, 0, 1, GS.sign(EdgeIndex(1)));
+        let unresolved = ThermalDistributionCall::atom(1, 1, 0, 1, GS.sign(EdgeIndex(1)));
         assert!(FermiSurfaceSector::is_present(&unresolved)?);
         assert!(FermiSurfaceSector::extract(&graph, &unresolved).is_err());
         for expression in [
-            GS.thermal_distribution(1, 0, 0, 1, 1),
-            GS.thermal_distribution(1, 2, 1, 1, 1),
+            ThermalDistributionCall::atom(1, 0, 0, 1, 1),
+            ThermalDistributionCall::atom(1, 2, 1, 1, 1),
         ] {
             assert!(!FermiSurfaceSector::is_present(&expression)?);
             let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
@@ -338,7 +340,7 @@ mod tests {
         for derivative_order in [1, 3] {
             let (bulk, sectors) = FermiSurfaceSector::extract(
                 &graph,
-                &GS.thermal_distribution(4, derivative_order, 0, 1, 1),
+                &ThermalDistributionCall::atom(4, derivative_order, 0, 1, 1),
             )?;
             assert!(bulk.is_zero());
             assert!(sectors.is_empty());
@@ -356,8 +358,8 @@ mod tests {
             B -> A [id=1]
         })?;
         assert!(graph[EdgeIndex(0)].chemical_potential_atom().is_some());
-        let step = GS.thermal_distribution(1, 0, 0, 1, 1);
-        let expression = GS.thermal_distribution(0, 2, 0, 1, 1) * &step + &step;
+        let step = ThermalDistributionCall::atom(1, 0, 0, 1, 1);
+        let expression = ThermalDistributionCall::atom(0, 2, 0, 1, 1) * &step + &step;
         let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
         assert_eq!(bulk, step);
         assert!(sectors.is_empty());
@@ -367,7 +369,7 @@ mod tests {
     #[test]
     fn fermi_sector_extraction_rejects_undefined_products_and_uncertified_steps() -> Result<()> {
         let graph = routing::test_graph()?;
-        let delta = GS.thermal_distribution(1, 1, 0, 1, 1);
+        let delta = ThermalDistributionCall::atom(1, 1, 0, 1, 1);
         // Only polynomial expansion exposes this square.
         let expanded = (&delta + Atom::var(symbol!("fermi_sector_x"))) * (&delta + Atom::num(2));
         let Err(error) = FermiSurfaceSector::extract(&graph, &expanded) else {
@@ -381,16 +383,16 @@ mod tests {
             delta.clone().pow(2),
             delta.clone().pow(-1),
             function!(symbol!("fermi_sector_hidden"), &delta),
-            &delta * GS.thermal_distribution(0, 1, 0, 1, 1),
-            &delta * GS.thermal_distribution(1, 2, 0, 1, 1),
-            &delta * GS.thermal_distribution(1, 0, 0, 1, 1),
-            &delta * GS.thermal_distribution(0, 0, 0, 1, 1),
+            &delta * ThermalDistributionCall::atom(0, 1, 0, 1, 1),
+            &delta * ThermalDistributionCall::atom(1, 2, 0, 1, 1),
+            &delta * ThermalDistributionCall::atom(1, 0, 0, 1, 1),
+            &delta * ThermalDistributionCall::atom(0, 0, 0, 1, 1),
             &delta * GS.heaviside(Atom::var(symbol!("fermi_sector_hidden_step"))),
-            GS.thermal_distribution(99, 1, 0, 1, 1),
-            GS.thermal_distribution(1, 1, 0, 2, 1),
-            GS.thermal_distribution(1, 1, 0, 1, 0),
-            GS.thermal_distribution(1, -1, 0, 1, 1),
-            GS.thermal_distribution(1, 1, 2, 1, 1),
+            ThermalDistributionCall::atom(99, 1, 0, 1, 1),
+            ThermalDistributionCall::atom(1, 1, 0, 2, 1),
+            ThermalDistributionCall::atom(1, 1, 0, 1, 0),
+            ThermalDistributionCall::atom(1, -1, 0, 1, 1),
+            ThermalDistributionCall::atom(1, 1, 2, 1, 1),
             function!(GS.thermal_distribution, 1, 1, 0, 1),
         ] {
             assert!(

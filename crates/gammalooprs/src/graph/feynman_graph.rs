@@ -23,7 +23,7 @@ use symbolica::{
     symbol,
     transcendental::{coth, csch, sech, tanh},
 };
-use three_dimensional_reps::{MediumMode, ThermalDistributionFactor};
+use three_dimensional_reps::{MediumMode, ThermalDistributionCall, ThermalDistributionFactor};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -149,24 +149,30 @@ impl Graph {
                     // Keep all offsets available to direct distribution calls,
                     // including positive orders not emitted by CFF recursion.
                     for contour in [-1, 0, 1] {
+                        let lhs = ThermalDistributionCall::atom(
+                            edge.0 as i64,
+                            derivative_order as i64,
+                            temperature_flag.clone(),
+                            contour,
+                            orientation_sign,
+                        );
+                        let AtomView::Fun(call) = lhs.as_view() else {
+                            unreachable!("thermal distribution builder returns a function");
+                        };
+                        // Function-map tags are the call prefix before its one
+                        // runtime argument, the physical orientation.
+                        let tags = call
+                            .iter()
+                            .take(call.get_nargs() - 1)
+                            .map(|arg| arg.to_owned())
+                            .collect();
                         entries.push(FnMapEntry {
                             inlining: InliningPolicy::Always,
                             is_alias: false,
-                            lhs: GS.thermal_distribution(
-                                edge.0 as i64,
-                                derivative_order as i64,
-                                temperature_flag.clone(),
-                                contour,
-                                orientation_sign,
-                            ),
+                            lhs,
                             rhs: body.replace(thermal_sign).with(Atom::num(contour)),
                             args: vec![orientation_sign.into()],
-                            tags: vec![
-                                Atom::num(edge.0 as i64),
-                                Atom::num(derivative_order as i64),
-                                temperature_flag.clone(),
-                                Atom::num(contour),
-                            ],
+                            tags,
                         });
                     }
                     previous_body = Some(body);

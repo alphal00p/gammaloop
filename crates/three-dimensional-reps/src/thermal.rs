@@ -4,13 +4,83 @@ use bincode::{Decode, Encode};
 use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder},
     function,
     id::Replacement,
     symbol,
 };
 
-use crate::symbols::{S, sign};
+use crate::symbols::{S, sign, thermal_distribution_symbol};
+
+/// The tagged arguments of an N call, before physical orientations are resolved.
+pub struct ThermalDistributionCall {
+    pub edge: EdgeIndex,
+    pub derivative_order: usize,
+    pub temperature_flag: Atom,
+    pub thermal_sign: Atom,
+    pub orientation_sign: Atom,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ThermalDistributionCallError {
+    #[error("Thermal distribution must be an N call with five arguments, got {0}")]
+    InvalidCall(Atom),
+    #[error("Thermal distribution edge must be a non-negative integer, got {0}")]
+    InvalidEdge(Atom),
+    #[error("Thermal distribution derivative order must be a non-negative integer, got {0}")]
+    InvalidDerivativeOrder(Atom),
+}
+
+impl ThermalDistributionCall {
+    /// Build a concrete call or a wildcard pattern using the same argument layout.
+    pub fn atom<'a>(
+        edge: impl Into<AtomOrView<'a>>,
+        derivative_order: impl Into<AtomOrView<'a>>,
+        temperature_flag: impl Into<AtomOrView<'a>>,
+        thermal_sign: impl Into<AtomOrView<'a>>,
+        orientation_sign: impl Into<AtomOrView<'a>>,
+    ) -> Atom {
+        FunctionBuilder::new(thermal_distribution_symbol())
+            .add_arg(edge)
+            .add_arg(derivative_order)
+            .add_arg(temperature_flag)
+            .add_arg(thermal_sign)
+            .add_arg(orientation_sign)
+            .finish()
+    }
+}
+
+impl TryFrom<AtomView<'_>> for ThermalDistributionCall {
+    type Error = ThermalDistributionCallError;
+
+    fn try_from(atom: AtomView<'_>) -> Result<Self, Self::Error> {
+        let [
+            edge,
+            derivative_order,
+            temperature_flag,
+            thermal_sign,
+            orientation_sign,
+        ] = match atom {
+            AtomView::Fun(function) if function.get_symbol() == thermal_distribution_symbol() => {
+                <[_; 5]>::try_from(function.iter().collect::<Vec<_>>()).ok()
+            }
+            _ => None,
+        }
+        .ok_or_else(|| ThermalDistributionCallError::InvalidCall(atom.to_owned()))?;
+        let edge = usize::try_from(edge)
+            .map_err(|_| ThermalDistributionCallError::InvalidEdge(edge.to_owned()))?;
+        let derivative_order = usize::try_from(derivative_order).map_err(|_| {
+            ThermalDistributionCallError::InvalidDerivativeOrder(derivative_order.to_owned())
+        })?;
+        Ok(Self {
+            edge: EdgeIndex(edge),
+            derivative_order,
+            temperature_flag: temperature_flag.to_owned(),
+            thermal_sign: thermal_sign.to_owned(),
+            orientation_sign: orientation_sign.to_owned(),
+        })
+    }
+}
 
 /// The vacuum, or an equilibrium medium whose distribution functions weight CFF terms.
 /// Temperature and chemical potentials stay symbolic; `ZeroTemperatureEquilibrium`
@@ -71,13 +141,12 @@ impl ThermalDistributionFactor {
     pub(crate) fn to_atom(self, is_finite_temperature: bool) -> Atom {
         // Keep the chemical-potential orientation visible to selection before
         // evaluator construction expands the distribution body.
-        function!(
-            S.thermal_distribution,
+        ThermalDistributionCall::atom(
             self.edge_id.0 as i64,
             self.derivative_order as i64,
             i64::from(is_finite_temperature),
             self.sign,
-            sign(self.edge_id)
+            sign(self.edge_id),
         )
     }
 }
@@ -243,22 +312,20 @@ impl ThermalWeight {
             "orientation_"
         );
         weight
-            .replace(function!(
-                S.thermal_distribution,
+            .replace(ThermalDistributionCall::atom(
                 edge,
                 0,
                 temperature,
                 sign,
-                orientation
+                orientation,
             ))
             .with(ThermalDistributionFactor::vacuum_atom(0, Atom::var(sign)))
-            .replace(function!(
-                S.thermal_distribution,
+            .replace(ThermalDistributionCall::atom(
                 edge,
                 derivative,
                 temperature,
                 sign,
-                orientation
+                orientation,
             ))
             // All remaining factors have positive derivative order.
             .with(ThermalDistributionFactor::vacuum_atom(1, Atom::var(sign)))
@@ -279,14 +346,14 @@ impl ThermalWeight {
             AtomView::Num(_) => Atom::Zero,
             AtomView::Fun(function) if function.get_symbol() == S.thermal_distribution => {
                 // Only order zero has a nonzero vacuum value.
-                let arguments = function.iter().collect::<Vec<_>>();
-                function!(
-                    S.thermal_distribution,
-                    arguments[0],
-                    arguments[1],
-                    arguments[2],
+                let call = ThermalDistributionCall::try_from(weight)
+                    .expect("thermal weights contain valid distribution calls");
+                ThermalDistributionCall::atom(
+                    call.edge.0 as i64,
+                    call.derivative_order as i64,
+                    call.temperature_flag,
                     -1,
-                    arguments[4]
+                    call.orientation_sign,
                 )
             }
             AtomView::Add(sum) => sum.iter().map(Self::vacuum_difference).sum(),
@@ -342,27 +409,15 @@ pub static VACUUM_SUBTRACTION: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
 pub static OCCUPATION_FORM: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     let (edge, temperature, sign, orientation) =
         symbol!("edge_", "temperature_", "sign_", "orientation_");
-    [function!(
-        S.thermal_distribution,
-        edge,
-        0,
-        temperature,
-        sign,
-        orientation
-    )
-    .to_pattern()
-    .replace_with(
-        (ThermalDistributionFactor::vacuum_atom(0, Atom::var(sign))
-            + function!(
-                S.thermal_distribution,
-                edge,
-                0,
-                temperature,
-                -1,
-                orientation
-            ))
-        .to_pattern(),
-    )]
+    [
+        ThermalDistributionCall::atom(edge, 0, temperature, sign, orientation)
+            .to_pattern()
+            .replace_with(
+                (ThermalDistributionFactor::vacuum_atom(0, Atom::var(sign))
+                    + ThermalDistributionCall::atom(edge, 0, temperature, -1, orientation))
+                .to_pattern(),
+            ),
+    ]
 });
 
 #[cfg(test)]
@@ -534,13 +589,12 @@ mod tests {
             let partial = product
                 .to_atom()
                 .replace_multiple(&*VACUUM_SUBTRACTION)
-                .replace(function!(
-                    S.thermal_distribution,
+                .replace(ThermalDistributionCall::atom(
                     2,
                     0,
                     flag,
                     contour,
-                    sign(EdgeIndex(2))
+                    sign(EdgeIndex(2)),
                 ))
                 .with(ThermalDistributionFactor::vacuum_atom(
                     0,
@@ -815,13 +869,12 @@ mod tests {
                         for derivative_order in 0..4 {
                             for orientation in [-1, 1] {
                                 atom = atom
-                                    .replace(function!(
-                                        S.thermal_distribution,
+                                    .replace(ThermalDistributionCall::atom(
                                         edge,
                                         derivative_order,
                                         i64::from(medium_mode.is_finite_temperature()),
                                         sign,
-                                        orientation
+                                        orientation,
                                     ))
                                     .with(Atom::num(i64::from(sign == 1 && derivative_order == 0)));
                             }
@@ -879,13 +932,12 @@ mod tests {
             );
             let atom = expression.to_atom(AllOrientations);
             for orientation in [-1, 1] {
-                let factor = function!(
-                    S.thermal_distribution,
+                let factor = ThermalDistributionCall::atom(
                     0,
                     0,
                     i64::from(medium_mode.is_finite_temperature()),
                     0,
-                    orientation
+                    orientation,
                 );
                 assert_ne!(atom.replace(factor).with(Atom::Zero), atom);
             }

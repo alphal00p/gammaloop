@@ -37,6 +37,8 @@ pub use surface::{
     EsurfaceCollection, EsurfaceID, HsurfaceCollection, HsurfaceID, HybridSurface, HybridSurfaceID,
     LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind, SurfaceAtom, SurfaceCache,
 };
-pub use thermal::{MediumMode, ThermalDistributionFactor, ThermalNumerator, ThermalWeight};
+pub use thermal::{
+    MediumMode, ThermalDistributionCall, ThermalDistributionFactor, ThermalNumerator, ThermalWeight,
+};
 pub use utils::StringSerializedAtom;
 pub use validator::{GraphValidation, validate_parsed_graph};

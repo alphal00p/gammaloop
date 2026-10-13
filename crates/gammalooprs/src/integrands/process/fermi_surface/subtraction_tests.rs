@@ -1,7 +1,7 @@
 use color_eyre::Result;
 use spenso::algebra::complex::Complex;
 use symbolica::atom::AtomCore;
-use three_dimensional_reps::thermal::OCCUPATION_FORM;
+use three_dimensional_reps::{ThermalDistributionCall, thermal::OCCUPATION_FORM};
 
 use crate::{
     dot,
@@ -75,7 +75,7 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
                     sector.coefficient.clone(),
                     |coefficient, (factor, orientation)| {
                         coefficient
-                            * GS.thermal_distribution(
+                            * ThermalDistributionCall::atom(
                                 factor.edge_id.0 as i64,
                                 factor.derivative_order as i64,
                                 0,
