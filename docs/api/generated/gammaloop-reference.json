@@ -15248,7 +15248,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "Accept zero tails or sustained decay when no reliable power-law fit exists",
+          "help": "Accept zero tails or sustained accelerating decay when no reliable power-law fit exists",
           "required": false,
           "positional": false,
           "index": null,
