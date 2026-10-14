@@ -90,7 +90,7 @@ use crate::{
     graph::{FeynmanGraph, Graph},
     integrands::process::ProcessIntegrand,
     model::Model,
-    settings::global::GenerationSettings,
+    settings::global::{GenerationSettings, MediumMode},
 };
 
 use crate::graph::parse::complete_group_parsing;
@@ -1213,6 +1213,13 @@ impl AmplitudeGraph {
         component: &S,
         config: AnalyticalEvaluationConfig<'_>,
     ) -> Result<Atom> {
+        if self.graph.param_builder.medium_mode != MediumMode::Vacuum {
+            return Err(eyre!(
+                "Analytical evaluation with Vakint does not support thermal modes (graph '{}', mode {:?}); use inspect or integrate for medium-dependent results",
+                self.graph.name,
+                self.graph.param_builder.medium_mode
+            ));
+        }
         let mut true_settings = config.true_settings.clone();
         let pysec_dec_enabled_in_vakint = true_settings.evaluation_order.0.iter().find_map(|o| {
             if let EvaluationMethod::PySecDec(opts) = o {
