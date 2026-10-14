@@ -33,4 +33,4 @@ typed-index-collections = { workspace = true, features = [
 display = ["dep:tabled", "dep:nu-ansi-term"]
 eval = ["dep:serde_json"]
 json_schema = ["dep:schemars"]
-python_api = ["dep:pyo3"]
+python = ["dep:pyo3"]

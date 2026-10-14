@@ -7,7 +7,7 @@ use gammalooprs::utils::F;
 #[cfg(feature = "ufo-import")]
 use pyo3::sync::PyOnceLock;
 use std::path::{Path, PathBuf};
-#[cfg(feature = "cli")]
+#[cfg(any(feature = "cli", test))]
 use std::{collections::BTreeMap, sync::OnceLock};
 
 use schemars::JsonSchema;
@@ -27,7 +27,7 @@ use crate::state::State;
 static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/models/json");
 #[cfg(feature = "cli")]
 static BUILTIN_MODEL_NAMES: OnceLock<Vec<String>> = OnceLock::new();
-#[cfg(feature = "cli")]
+#[cfg(any(feature = "cli", test))]
 static BUILTIN_MODEL_RESTRICTIONS: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -325,7 +325,7 @@ pub(crate) fn builtin_json_model_names() -> &'static [String] {
     BUILTIN_MODEL_NAMES.get_or_init(scan_builtin_json_model_names)
 }
 
-#[cfg(feature = "cli")]
+#[cfg(any(feature = "cli", test))]
 pub(crate) fn builtin_json_model_restriction_names(model: &str) -> Option<&'static [String]> {
     BUILTIN_MODEL_RESTRICTIONS
         .get_or_init(scan_builtin_json_model_restriction_names)
@@ -685,7 +685,7 @@ fn scan_builtin_json_model_names() -> Vec<String> {
     names
 }
 
-#[cfg(feature = "cli")]
+#[cfg(any(feature = "cli", test))]
 fn scan_builtin_json_model_restriction_names() -> BTreeMap<String, Vec<String>> {
     BUILTIN_MODELS
         .dirs()

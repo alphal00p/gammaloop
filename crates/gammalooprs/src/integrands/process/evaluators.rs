@@ -6262,7 +6262,13 @@ mod tests {
         ] {
             for evaluator in &mut evaluators {
                 if let Some(optimization) = optimization {
-                    evaluator.activate_symjit(optimization).unwrap();
+                    evaluator
+                        .activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: optimization,
+                            jit_direct_translation: false,
+                            ..Default::default()
+                        })
+                        .unwrap();
                 } else {
                     evaluator.activate_eager();
                 }

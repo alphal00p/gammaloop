@@ -12,14 +12,14 @@
   hasUfoWheel = builtins.hasAttr system ufoWheelTags;
   # Compile the integration crate once; groups select disjoint test binaries.
   testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
-  testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo_support"] else [];
+  testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo-import"] else [];
   # Isolated CFF tests must retain their numerical evaluation oracles.
   testFeatures."three-dimensional-reps" = ["eval"];
   groups = [
     {
       name = "core";
       runtimeUfoLoader = hasUfoWheel;
-      # Shared Python stub generation also enables ufo_support. Preserve the
+      # Shared Python stub generation also enables ufo-import. Preserve the
       # wheel guard for actual imports while retaining loader-version validation.
       # Archive filtersets reject test() predicates, so apply this only when running.
       runFilter =
