@@ -49,6 +49,7 @@ impl FMFT {
         muv_sq_atom: &Atom,
         options: &FMFTOptions,
     ) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(crate::data_assets::ALL, "vakint/numerics/fmft_numerics/")?;
         let settings = &self.settings;
         let normalization = vk_parse!(
             format!(

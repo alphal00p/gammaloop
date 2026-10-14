@@ -1,6 +1,12 @@
 use std::path::Path;
 
 fn main() {
+    symbolica_data::Asset::generate(
+        &std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()),
+        &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("data_assets.rs"),
+        &std::collections::BTreeMap::new(),
+    )
+    .unwrap();
     println!("cargo:rerun-if-env-changed=EXTRA_MACOS_LIBS_FOR_GNU_GCC");
 
     if cfg!(target_os = "macos") && std::env::var_os("EXTRA_MACOS_LIBS_FOR_GNU_GCC").is_some() {

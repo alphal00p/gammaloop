@@ -100,6 +100,7 @@ impl FMFT {
     }
 
     pub fn expand_masters(&self, result: AtomView) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(crate::data_assets::ALL, "vakint/numerics/fmft_numerics/")?;
         let mut r = result.to_owned();
         r.repeat_map(Box::new(move |av: AtomView| {
             let mut res = av.to_owned();
@@ -127,6 +128,7 @@ impl FMFT {
     }
 
     pub fn substitute_masters(&self, result: AtomView) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(crate::data_assets::ALL, "vakint/numerics/fmft_numerics/")?;
         let processed_constants = MASTERS_NUMERIC_SUBSTITUTIONS
             .iter()
             .map(|(src, (trgt, condition))| {
@@ -162,6 +164,7 @@ impl FMFT {
     }
 
     pub fn substitute_poly_gamma(&self, result: AtomView) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(crate::data_assets::ALL, "vakint/numerics/fmft_numerics/")?;
         let processed_constants = POLY_GAMMA_SUBSTITUTIONS
             .iter()
             .map(|(src, trgt)| {
@@ -203,6 +206,7 @@ impl FMFT {
     }
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(crate::data_assets::ALL, "vakint/numerics/fmft_numerics/")?;
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Fmft);
         let processed_constants = ADDITIONAL_CONSTANTS
             .iter()
@@ -409,7 +413,9 @@ impl Vakint {
             ahash::RandomState,
         > = std::collections::HashSet::default();
 
-        let template = Template::parse_template(TEMPLATES.get("run_fmft.txt").unwrap()).unwrap();
+        let template =
+            Template::parse_template(TEMPLATES.get("run_fmft.txt").unwrap().text()?.as_ref())
+                .unwrap();
         let mut vars: HashMap<String, String> = HashMap::new();
         vars.insert("numerator".into(), numerator_string);
         vars.insert("integral".into(), integral_string);

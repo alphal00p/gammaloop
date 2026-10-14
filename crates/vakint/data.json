@@ -1,0 +1,3149 @@
+{
+  "schema": 1,
+  "assets": [
+    {
+      "constant": "ALPHALOOP_NUMERICS_0000",
+      "name": "vakint/numerics/alphaloop_numerics/0000.txt",
+      "path": "data/numerics/alphaloop_numerics/0000.txt",
+      "description": "alphaloop_numerics: exact source expression 0, original precision retained"
+    },
+    {
+      "constant": "ALPHALOOP_NUMERICS_0001",
+      "name": "vakint/numerics/alphaloop_numerics/0001.txt",
+      "path": "data/numerics/alphaloop_numerics/0001.txt",
+      "description": "alphaloop_numerics: exact source expression 1, original precision retained"
+    },
+    {
+      "constant": "ALPHALOOP_NUMERICS_0002",
+      "name": "vakint/numerics/alphaloop_numerics/0002.txt",
+      "path": "data/numerics/alphaloop_numerics/0002.txt",
+      "description": "alphaloop_numerics: exact source expression 2, original precision retained"
+    },
+    {
+      "constant": "ALPHALOOP_NUMERICS_0003",
+      "name": "vakint/numerics/alphaloop_numerics/0003.txt",
+      "path": "data/numerics/alphaloop_numerics/0003.txt",
+      "description": "alphaloop_numerics: exact source expression 3, original precision retained"
+    },
+    {
+      "constant": "ALPHALOOP_NUMERICS_0004",
+      "name": "vakint/numerics/alphaloop_numerics/0004.txt",
+      "path": "data/numerics/alphaloop_numerics/0004.txt",
+      "description": "alphaloop_numerics: exact source expression 4, original precision retained"
+    },
+    {
+      "constant": "ALPHALOOP_NUMERICS_0005",
+      "name": "vakint/numerics/alphaloop_numerics/0005.txt",
+      "path": "data/numerics/alphaloop_numerics/0005.txt",
+      "description": "alphaloop_numerics: exact source expression 5, original precision retained"
+    },
+    {
+      "constant": "ALPHALOOP_NUMERICS_0006",
+      "name": "vakint/numerics/alphaloop_numerics/0006.txt",
+      "path": "data/numerics/alphaloop_numerics/0006.txt",
+      "description": "alphaloop_numerics: exact source expression 6, original precision retained"
+    },
+    {
+      "constant": "ALPHALOOP_NUMERICS_0007",
+      "name": "vakint/numerics/alphaloop_numerics/0007.txt",
+      "path": "data/numerics/alphaloop_numerics/0007.txt",
+      "description": "alphaloop_numerics: exact source expression 7, original precision retained"
+    },
+    {
+      "constant": "FMFT_NUMERICS_0000",
+      "name": "vakint/numerics/fmft_numerics/0000.txt",
+      "path": "data/numerics/fmft_numerics/0000.txt",
+      "description": "fmft_numerics: exact source expression 0, original precision retained"
+    },
+    {
+      "constant": "FMFT_NUMERICS_0001",
+      "name": "vakint/numerics/fmft_numerics/0001.txt",
+      "path": "data/numerics/fmft_numerics/0001.txt",
+      "description": "fmft_numerics: exact source expression 1, original precision retained"
+    },
+    {
+      "constant": "FMFT_NUMERICS_0002",
+      "name": "vakint/numerics/fmft_numerics/0002.txt",
+      "path": "data/numerics/fmft_numerics/0002.txt",
+      "description": "fmft_numerics: exact source expression 2, original precision retained"
+    },
+    {
+      "constant": "FMFT_NUMERICS_0003",
+      "name": "vakint/numerics/fmft_numerics/0003.txt",
+      "path": "data/numerics/fmft_numerics/0003.txt",
+      "description": "fmft_numerics: exact source expression 3, original precision retained"
+    },
+    {
+      "constant": "FMFT_NUMERICS_0004",
+      "name": "vakint/numerics/fmft_numerics/0004.txt",
+      "path": "data/numerics/fmft_numerics/0004.txt",
+      "description": "fmft_numerics: exact source expression 4, original precision retained"
+    },
+    {
+      "constant": "FMFT_NUMERICS_0005",
+      "name": "vakint/numerics/fmft_numerics/0005.txt",
+      "path": "data/numerics/fmft_numerics/0005.txt",
+      "description": "fmft_numerics: exact source expression 5, original precision retained"
+    },
+    {
+      "constant": "FMFT_NUMERICS_0006",
+      "name": "vakint/numerics/fmft_numerics/0006.txt",
+      "path": "data/numerics/fmft_numerics/0006.txt",
+      "description": "fmft_numerics: exact source expression 6, original precision retained"
+    },
+    {
+      "constant": "FMFT_NUMERICS_0007",
+      "name": "vakint/numerics/fmft_numerics/0007.txt",
+      "path": "data/numerics/fmft_numerics/0007.txt",
+      "description": "fmft_numerics: exact source expression 7, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0000",
+      "name": "vakint/numerics/matad_numerics/0000.txt",
+      "path": "data/numerics/matad_numerics/0000.txt",
+      "description": "matad_numerics: exact source expression 0, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0001",
+      "name": "vakint/numerics/matad_numerics/0001.txt",
+      "path": "data/numerics/matad_numerics/0001.txt",
+      "description": "matad_numerics: exact source expression 1, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0002",
+      "name": "vakint/numerics/matad_numerics/0002.txt",
+      "path": "data/numerics/matad_numerics/0002.txt",
+      "description": "matad_numerics: exact source expression 2, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0003",
+      "name": "vakint/numerics/matad_numerics/0003.txt",
+      "path": "data/numerics/matad_numerics/0003.txt",
+      "description": "matad_numerics: exact source expression 3, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0004",
+      "name": "vakint/numerics/matad_numerics/0004.txt",
+      "path": "data/numerics/matad_numerics/0004.txt",
+      "description": "matad_numerics: exact source expression 4, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0005",
+      "name": "vakint/numerics/matad_numerics/0005.txt",
+      "path": "data/numerics/matad_numerics/0005.txt",
+      "description": "matad_numerics: exact source expression 5, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0006",
+      "name": "vakint/numerics/matad_numerics/0006.txt",
+      "path": "data/numerics/matad_numerics/0006.txt",
+      "description": "matad_numerics: exact source expression 6, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0007",
+      "name": "vakint/numerics/matad_numerics/0007.txt",
+      "path": "data/numerics/matad_numerics/0007.txt",
+      "description": "matad_numerics: exact source expression 7, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0008",
+      "name": "vakint/numerics/matad_numerics/0008.txt",
+      "path": "data/numerics/matad_numerics/0008.txt",
+      "description": "matad_numerics: exact source expression 8, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0009",
+      "name": "vakint/numerics/matad_numerics/0009.txt",
+      "path": "data/numerics/matad_numerics/0009.txt",
+      "description": "matad_numerics: exact source expression 9, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0010",
+      "name": "vakint/numerics/matad_numerics/0010.txt",
+      "path": "data/numerics/matad_numerics/0010.txt",
+      "description": "matad_numerics: exact source expression 10, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0011",
+      "name": "vakint/numerics/matad_numerics/0011.txt",
+      "path": "data/numerics/matad_numerics/0011.txt",
+      "description": "matad_numerics: exact source expression 11, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0012",
+      "name": "vakint/numerics/matad_numerics/0012.txt",
+      "path": "data/numerics/matad_numerics/0012.txt",
+      "description": "matad_numerics: exact source expression 12, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0013",
+      "name": "vakint/numerics/matad_numerics/0013.txt",
+      "path": "data/numerics/matad_numerics/0013.txt",
+      "description": "matad_numerics: exact source expression 13, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0014",
+      "name": "vakint/numerics/matad_numerics/0014.txt",
+      "path": "data/numerics/matad_numerics/0014.txt",
+      "description": "matad_numerics: exact source expression 14, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0015",
+      "name": "vakint/numerics/matad_numerics/0015.txt",
+      "path": "data/numerics/matad_numerics/0015.txt",
+      "description": "matad_numerics: exact source expression 15, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0016",
+      "name": "vakint/numerics/matad_numerics/0016.txt",
+      "path": "data/numerics/matad_numerics/0016.txt",
+      "description": "matad_numerics: exact source expression 16, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0017",
+      "name": "vakint/numerics/matad_numerics/0017.txt",
+      "path": "data/numerics/matad_numerics/0017.txt",
+      "description": "matad_numerics: exact source expression 17, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0018",
+      "name": "vakint/numerics/matad_numerics/0018.txt",
+      "path": "data/numerics/matad_numerics/0018.txt",
+      "description": "matad_numerics: exact source expression 18, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0019",
+      "name": "vakint/numerics/matad_numerics/0019.txt",
+      "path": "data/numerics/matad_numerics/0019.txt",
+      "description": "matad_numerics: exact source expression 19, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0020",
+      "name": "vakint/numerics/matad_numerics/0020.txt",
+      "path": "data/numerics/matad_numerics/0020.txt",
+      "description": "matad_numerics: exact source expression 20, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0021",
+      "name": "vakint/numerics/matad_numerics/0021.txt",
+      "path": "data/numerics/matad_numerics/0021.txt",
+      "description": "matad_numerics: exact source expression 21, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0022",
+      "name": "vakint/numerics/matad_numerics/0022.txt",
+      "path": "data/numerics/matad_numerics/0022.txt",
+      "description": "matad_numerics: exact source expression 22, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0023",
+      "name": "vakint/numerics/matad_numerics/0023.txt",
+      "path": "data/numerics/matad_numerics/0023.txt",
+      "description": "matad_numerics: exact source expression 23, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0024",
+      "name": "vakint/numerics/matad_numerics/0024.txt",
+      "path": "data/numerics/matad_numerics/0024.txt",
+      "description": "matad_numerics: exact source expression 24, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0025",
+      "name": "vakint/numerics/matad_numerics/0025.txt",
+      "path": "data/numerics/matad_numerics/0025.txt",
+      "description": "matad_numerics: exact source expression 25, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0026",
+      "name": "vakint/numerics/matad_numerics/0026.txt",
+      "path": "data/numerics/matad_numerics/0026.txt",
+      "description": "matad_numerics: exact source expression 26, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0027",
+      "name": "vakint/numerics/matad_numerics/0027.txt",
+      "path": "data/numerics/matad_numerics/0027.txt",
+      "description": "matad_numerics: exact source expression 27, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0028",
+      "name": "vakint/numerics/matad_numerics/0028.txt",
+      "path": "data/numerics/matad_numerics/0028.txt",
+      "description": "matad_numerics: exact source expression 28, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0029",
+      "name": "vakint/numerics/matad_numerics/0029.txt",
+      "path": "data/numerics/matad_numerics/0029.txt",
+      "description": "matad_numerics: exact source expression 29, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0030",
+      "name": "vakint/numerics/matad_numerics/0030.txt",
+      "path": "data/numerics/matad_numerics/0030.txt",
+      "description": "matad_numerics: exact source expression 30, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0031",
+      "name": "vakint/numerics/matad_numerics/0031.txt",
+      "path": "data/numerics/matad_numerics/0031.txt",
+      "description": "matad_numerics: exact source expression 31, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0032",
+      "name": "vakint/numerics/matad_numerics/0032.txt",
+      "path": "data/numerics/matad_numerics/0032.txt",
+      "description": "matad_numerics: exact source expression 32, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0033",
+      "name": "vakint/numerics/matad_numerics/0033.txt",
+      "path": "data/numerics/matad_numerics/0033.txt",
+      "description": "matad_numerics: exact source expression 33, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0034",
+      "name": "vakint/numerics/matad_numerics/0034.txt",
+      "path": "data/numerics/matad_numerics/0034.txt",
+      "description": "matad_numerics: exact source expression 34, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0035",
+      "name": "vakint/numerics/matad_numerics/0035.txt",
+      "path": "data/numerics/matad_numerics/0035.txt",
+      "description": "matad_numerics: exact source expression 35, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0036",
+      "name": "vakint/numerics/matad_numerics/0036.txt",
+      "path": "data/numerics/matad_numerics/0036.txt",
+      "description": "matad_numerics: exact source expression 36, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0037",
+      "name": "vakint/numerics/matad_numerics/0037.txt",
+      "path": "data/numerics/matad_numerics/0037.txt",
+      "description": "matad_numerics: exact source expression 37, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0038",
+      "name": "vakint/numerics/matad_numerics/0038.txt",
+      "path": "data/numerics/matad_numerics/0038.txt",
+      "description": "matad_numerics: exact source expression 38, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0039",
+      "name": "vakint/numerics/matad_numerics/0039.txt",
+      "path": "data/numerics/matad_numerics/0039.txt",
+      "description": "matad_numerics: exact source expression 39, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0040",
+      "name": "vakint/numerics/matad_numerics/0040.txt",
+      "path": "data/numerics/matad_numerics/0040.txt",
+      "description": "matad_numerics: exact source expression 40, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0041",
+      "name": "vakint/numerics/matad_numerics/0041.txt",
+      "path": "data/numerics/matad_numerics/0041.txt",
+      "description": "matad_numerics: exact source expression 41, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0042",
+      "name": "vakint/numerics/matad_numerics/0042.txt",
+      "path": "data/numerics/matad_numerics/0042.txt",
+      "description": "matad_numerics: exact source expression 42, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0043",
+      "name": "vakint/numerics/matad_numerics/0043.txt",
+      "path": "data/numerics/matad_numerics/0043.txt",
+      "description": "matad_numerics: exact source expression 43, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0044",
+      "name": "vakint/numerics/matad_numerics/0044.txt",
+      "path": "data/numerics/matad_numerics/0044.txt",
+      "description": "matad_numerics: exact source expression 44, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0045",
+      "name": "vakint/numerics/matad_numerics/0045.txt",
+      "path": "data/numerics/matad_numerics/0045.txt",
+      "description": "matad_numerics: exact source expression 45, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0046",
+      "name": "vakint/numerics/matad_numerics/0046.txt",
+      "path": "data/numerics/matad_numerics/0046.txt",
+      "description": "matad_numerics: exact source expression 46, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0047",
+      "name": "vakint/numerics/matad_numerics/0047.txt",
+      "path": "data/numerics/matad_numerics/0047.txt",
+      "description": "matad_numerics: exact source expression 47, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0048",
+      "name": "vakint/numerics/matad_numerics/0048.txt",
+      "path": "data/numerics/matad_numerics/0048.txt",
+      "description": "matad_numerics: exact source expression 48, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0049",
+      "name": "vakint/numerics/matad_numerics/0049.txt",
+      "path": "data/numerics/matad_numerics/0049.txt",
+      "description": "matad_numerics: exact source expression 49, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0050",
+      "name": "vakint/numerics/matad_numerics/0050.txt",
+      "path": "data/numerics/matad_numerics/0050.txt",
+      "description": "matad_numerics: exact source expression 50, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0051",
+      "name": "vakint/numerics/matad_numerics/0051.txt",
+      "path": "data/numerics/matad_numerics/0051.txt",
+      "description": "matad_numerics: exact source expression 51, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0052",
+      "name": "vakint/numerics/matad_numerics/0052.txt",
+      "path": "data/numerics/matad_numerics/0052.txt",
+      "description": "matad_numerics: exact source expression 52, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0053",
+      "name": "vakint/numerics/matad_numerics/0053.txt",
+      "path": "data/numerics/matad_numerics/0053.txt",
+      "description": "matad_numerics: exact source expression 53, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0054",
+      "name": "vakint/numerics/matad_numerics/0054.txt",
+      "path": "data/numerics/matad_numerics/0054.txt",
+      "description": "matad_numerics: exact source expression 54, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0055",
+      "name": "vakint/numerics/matad_numerics/0055.txt",
+      "path": "data/numerics/matad_numerics/0055.txt",
+      "description": "matad_numerics: exact source expression 55, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0056",
+      "name": "vakint/numerics/matad_numerics/0056.txt",
+      "path": "data/numerics/matad_numerics/0056.txt",
+      "description": "matad_numerics: exact source expression 56, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0057",
+      "name": "vakint/numerics/matad_numerics/0057.txt",
+      "path": "data/numerics/matad_numerics/0057.txt",
+      "description": "matad_numerics: exact source expression 57, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0058",
+      "name": "vakint/numerics/matad_numerics/0058.txt",
+      "path": "data/numerics/matad_numerics/0058.txt",
+      "description": "matad_numerics: exact source expression 58, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0059",
+      "name": "vakint/numerics/matad_numerics/0059.txt",
+      "path": "data/numerics/matad_numerics/0059.txt",
+      "description": "matad_numerics: exact source expression 59, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0060",
+      "name": "vakint/numerics/matad_numerics/0060.txt",
+      "path": "data/numerics/matad_numerics/0060.txt",
+      "description": "matad_numerics: exact source expression 60, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0061",
+      "name": "vakint/numerics/matad_numerics/0061.txt",
+      "path": "data/numerics/matad_numerics/0061.txt",
+      "description": "matad_numerics: exact source expression 61, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0062",
+      "name": "vakint/numerics/matad_numerics/0062.txt",
+      "path": "data/numerics/matad_numerics/0062.txt",
+      "description": "matad_numerics: exact source expression 62, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0063",
+      "name": "vakint/numerics/matad_numerics/0063.txt",
+      "path": "data/numerics/matad_numerics/0063.txt",
+      "description": "matad_numerics: exact source expression 63, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0064",
+      "name": "vakint/numerics/matad_numerics/0064.txt",
+      "path": "data/numerics/matad_numerics/0064.txt",
+      "description": "matad_numerics: exact source expression 64, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0065",
+      "name": "vakint/numerics/matad_numerics/0065.txt",
+      "path": "data/numerics/matad_numerics/0065.txt",
+      "description": "matad_numerics: exact source expression 65, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0066",
+      "name": "vakint/numerics/matad_numerics/0066.txt",
+      "path": "data/numerics/matad_numerics/0066.txt",
+      "description": "matad_numerics: exact source expression 66, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0067",
+      "name": "vakint/numerics/matad_numerics/0067.txt",
+      "path": "data/numerics/matad_numerics/0067.txt",
+      "description": "matad_numerics: exact source expression 67, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0068",
+      "name": "vakint/numerics/matad_numerics/0068.txt",
+      "path": "data/numerics/matad_numerics/0068.txt",
+      "description": "matad_numerics: exact source expression 68, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0069",
+      "name": "vakint/numerics/matad_numerics/0069.txt",
+      "path": "data/numerics/matad_numerics/0069.txt",
+      "description": "matad_numerics: exact source expression 69, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0070",
+      "name": "vakint/numerics/matad_numerics/0070.txt",
+      "path": "data/numerics/matad_numerics/0070.txt",
+      "description": "matad_numerics: exact source expression 70, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0071",
+      "name": "vakint/numerics/matad_numerics/0071.txt",
+      "path": "data/numerics/matad_numerics/0071.txt",
+      "description": "matad_numerics: exact source expression 71, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0072",
+      "name": "vakint/numerics/matad_numerics/0072.txt",
+      "path": "data/numerics/matad_numerics/0072.txt",
+      "description": "matad_numerics: exact source expression 72, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0073",
+      "name": "vakint/numerics/matad_numerics/0073.txt",
+      "path": "data/numerics/matad_numerics/0073.txt",
+      "description": "matad_numerics: exact source expression 73, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0074",
+      "name": "vakint/numerics/matad_numerics/0074.txt",
+      "path": "data/numerics/matad_numerics/0074.txt",
+      "description": "matad_numerics: exact source expression 74, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0075",
+      "name": "vakint/numerics/matad_numerics/0075.txt",
+      "path": "data/numerics/matad_numerics/0075.txt",
+      "description": "matad_numerics: exact source expression 75, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0076",
+      "name": "vakint/numerics/matad_numerics/0076.txt",
+      "path": "data/numerics/matad_numerics/0076.txt",
+      "description": "matad_numerics: exact source expression 76, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0077",
+      "name": "vakint/numerics/matad_numerics/0077.txt",
+      "path": "data/numerics/matad_numerics/0077.txt",
+      "description": "matad_numerics: exact source expression 77, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0078",
+      "name": "vakint/numerics/matad_numerics/0078.txt",
+      "path": "data/numerics/matad_numerics/0078.txt",
+      "description": "matad_numerics: exact source expression 78, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0079",
+      "name": "vakint/numerics/matad_numerics/0079.txt",
+      "path": "data/numerics/matad_numerics/0079.txt",
+      "description": "matad_numerics: exact source expression 79, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0080",
+      "name": "vakint/numerics/matad_numerics/0080.txt",
+      "path": "data/numerics/matad_numerics/0080.txt",
+      "description": "matad_numerics: exact source expression 80, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0081",
+      "name": "vakint/numerics/matad_numerics/0081.txt",
+      "path": "data/numerics/matad_numerics/0081.txt",
+      "description": "matad_numerics: exact source expression 81, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0082",
+      "name": "vakint/numerics/matad_numerics/0082.txt",
+      "path": "data/numerics/matad_numerics/0082.txt",
+      "description": "matad_numerics: exact source expression 82, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0083",
+      "name": "vakint/numerics/matad_numerics/0083.txt",
+      "path": "data/numerics/matad_numerics/0083.txt",
+      "description": "matad_numerics: exact source expression 83, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0084",
+      "name": "vakint/numerics/matad_numerics/0084.txt",
+      "path": "data/numerics/matad_numerics/0084.txt",
+      "description": "matad_numerics: exact source expression 84, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0085",
+      "name": "vakint/numerics/matad_numerics/0085.txt",
+      "path": "data/numerics/matad_numerics/0085.txt",
+      "description": "matad_numerics: exact source expression 85, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0086",
+      "name": "vakint/numerics/matad_numerics/0086.txt",
+      "path": "data/numerics/matad_numerics/0086.txt",
+      "description": "matad_numerics: exact source expression 86, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0087",
+      "name": "vakint/numerics/matad_numerics/0087.txt",
+      "path": "data/numerics/matad_numerics/0087.txt",
+      "description": "matad_numerics: exact source expression 87, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0088",
+      "name": "vakint/numerics/matad_numerics/0088.txt",
+      "path": "data/numerics/matad_numerics/0088.txt",
+      "description": "matad_numerics: exact source expression 88, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0089",
+      "name": "vakint/numerics/matad_numerics/0089.txt",
+      "path": "data/numerics/matad_numerics/0089.txt",
+      "description": "matad_numerics: exact source expression 89, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0090",
+      "name": "vakint/numerics/matad_numerics/0090.txt",
+      "path": "data/numerics/matad_numerics/0090.txt",
+      "description": "matad_numerics: exact source expression 90, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0091",
+      "name": "vakint/numerics/matad_numerics/0091.txt",
+      "path": "data/numerics/matad_numerics/0091.txt",
+      "description": "matad_numerics: exact source expression 91, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0092",
+      "name": "vakint/numerics/matad_numerics/0092.txt",
+      "path": "data/numerics/matad_numerics/0092.txt",
+      "description": "matad_numerics: exact source expression 92, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0093",
+      "name": "vakint/numerics/matad_numerics/0093.txt",
+      "path": "data/numerics/matad_numerics/0093.txt",
+      "description": "matad_numerics: exact source expression 93, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0094",
+      "name": "vakint/numerics/matad_numerics/0094.txt",
+      "path": "data/numerics/matad_numerics/0094.txt",
+      "description": "matad_numerics: exact source expression 94, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0095",
+      "name": "vakint/numerics/matad_numerics/0095.txt",
+      "path": "data/numerics/matad_numerics/0095.txt",
+      "description": "matad_numerics: exact source expression 95, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0096",
+      "name": "vakint/numerics/matad_numerics/0096.txt",
+      "path": "data/numerics/matad_numerics/0096.txt",
+      "description": "matad_numerics: exact source expression 96, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0097",
+      "name": "vakint/numerics/matad_numerics/0097.txt",
+      "path": "data/numerics/matad_numerics/0097.txt",
+      "description": "matad_numerics: exact source expression 97, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0098",
+      "name": "vakint/numerics/matad_numerics/0098.txt",
+      "path": "data/numerics/matad_numerics/0098.txt",
+      "description": "matad_numerics: exact source expression 98, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0099",
+      "name": "vakint/numerics/matad_numerics/0099.txt",
+      "path": "data/numerics/matad_numerics/0099.txt",
+      "description": "matad_numerics: exact source expression 99, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0100",
+      "name": "vakint/numerics/matad_numerics/0100.txt",
+      "path": "data/numerics/matad_numerics/0100.txt",
+      "description": "matad_numerics: exact source expression 100, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0101",
+      "name": "vakint/numerics/matad_numerics/0101.txt",
+      "path": "data/numerics/matad_numerics/0101.txt",
+      "description": "matad_numerics: exact source expression 101, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0102",
+      "name": "vakint/numerics/matad_numerics/0102.txt",
+      "path": "data/numerics/matad_numerics/0102.txt",
+      "description": "matad_numerics: exact source expression 102, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0103",
+      "name": "vakint/numerics/matad_numerics/0103.txt",
+      "path": "data/numerics/matad_numerics/0103.txt",
+      "description": "matad_numerics: exact source expression 103, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0104",
+      "name": "vakint/numerics/matad_numerics/0104.txt",
+      "path": "data/numerics/matad_numerics/0104.txt",
+      "description": "matad_numerics: exact source expression 104, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0105",
+      "name": "vakint/numerics/matad_numerics/0105.txt",
+      "path": "data/numerics/matad_numerics/0105.txt",
+      "description": "matad_numerics: exact source expression 105, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0106",
+      "name": "vakint/numerics/matad_numerics/0106.txt",
+      "path": "data/numerics/matad_numerics/0106.txt",
+      "description": "matad_numerics: exact source expression 106, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0107",
+      "name": "vakint/numerics/matad_numerics/0107.txt",
+      "path": "data/numerics/matad_numerics/0107.txt",
+      "description": "matad_numerics: exact source expression 107, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0108",
+      "name": "vakint/numerics/matad_numerics/0108.txt",
+      "path": "data/numerics/matad_numerics/0108.txt",
+      "description": "matad_numerics: exact source expression 108, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0109",
+      "name": "vakint/numerics/matad_numerics/0109.txt",
+      "path": "data/numerics/matad_numerics/0109.txt",
+      "description": "matad_numerics: exact source expression 109, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0110",
+      "name": "vakint/numerics/matad_numerics/0110.txt",
+      "path": "data/numerics/matad_numerics/0110.txt",
+      "description": "matad_numerics: exact source expression 110, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0111",
+      "name": "vakint/numerics/matad_numerics/0111.txt",
+      "path": "data/numerics/matad_numerics/0111.txt",
+      "description": "matad_numerics: exact source expression 111, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0112",
+      "name": "vakint/numerics/matad_numerics/0112.txt",
+      "path": "data/numerics/matad_numerics/0112.txt",
+      "description": "matad_numerics: exact source expression 112, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0113",
+      "name": "vakint/numerics/matad_numerics/0113.txt",
+      "path": "data/numerics/matad_numerics/0113.txt",
+      "description": "matad_numerics: exact source expression 113, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0114",
+      "name": "vakint/numerics/matad_numerics/0114.txt",
+      "path": "data/numerics/matad_numerics/0114.txt",
+      "description": "matad_numerics: exact source expression 114, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0115",
+      "name": "vakint/numerics/matad_numerics/0115.txt",
+      "path": "data/numerics/matad_numerics/0115.txt",
+      "description": "matad_numerics: exact source expression 115, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0116",
+      "name": "vakint/numerics/matad_numerics/0116.txt",
+      "path": "data/numerics/matad_numerics/0116.txt",
+      "description": "matad_numerics: exact source expression 116, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0117",
+      "name": "vakint/numerics/matad_numerics/0117.txt",
+      "path": "data/numerics/matad_numerics/0117.txt",
+      "description": "matad_numerics: exact source expression 117, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0118",
+      "name": "vakint/numerics/matad_numerics/0118.txt",
+      "path": "data/numerics/matad_numerics/0118.txt",
+      "description": "matad_numerics: exact source expression 118, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0119",
+      "name": "vakint/numerics/matad_numerics/0119.txt",
+      "path": "data/numerics/matad_numerics/0119.txt",
+      "description": "matad_numerics: exact source expression 119, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0120",
+      "name": "vakint/numerics/matad_numerics/0120.txt",
+      "path": "data/numerics/matad_numerics/0120.txt",
+      "description": "matad_numerics: exact source expression 120, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0121",
+      "name": "vakint/numerics/matad_numerics/0121.txt",
+      "path": "data/numerics/matad_numerics/0121.txt",
+      "description": "matad_numerics: exact source expression 121, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0122",
+      "name": "vakint/numerics/matad_numerics/0122.txt",
+      "path": "data/numerics/matad_numerics/0122.txt",
+      "description": "matad_numerics: exact source expression 122, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0123",
+      "name": "vakint/numerics/matad_numerics/0123.txt",
+      "path": "data/numerics/matad_numerics/0123.txt",
+      "description": "matad_numerics: exact source expression 123, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0124",
+      "name": "vakint/numerics/matad_numerics/0124.txt",
+      "path": "data/numerics/matad_numerics/0124.txt",
+      "description": "matad_numerics: exact source expression 124, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0125",
+      "name": "vakint/numerics/matad_numerics/0125.txt",
+      "path": "data/numerics/matad_numerics/0125.txt",
+      "description": "matad_numerics: exact source expression 125, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0126",
+      "name": "vakint/numerics/matad_numerics/0126.txt",
+      "path": "data/numerics/matad_numerics/0126.txt",
+      "description": "matad_numerics: exact source expression 126, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0127",
+      "name": "vakint/numerics/matad_numerics/0127.txt",
+      "path": "data/numerics/matad_numerics/0127.txt",
+      "description": "matad_numerics: exact source expression 127, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0128",
+      "name": "vakint/numerics/matad_numerics/0128.txt",
+      "path": "data/numerics/matad_numerics/0128.txt",
+      "description": "matad_numerics: exact source expression 128, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0129",
+      "name": "vakint/numerics/matad_numerics/0129.txt",
+      "path": "data/numerics/matad_numerics/0129.txt",
+      "description": "matad_numerics: exact source expression 129, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0130",
+      "name": "vakint/numerics/matad_numerics/0130.txt",
+      "path": "data/numerics/matad_numerics/0130.txt",
+      "description": "matad_numerics: exact source expression 130, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0131",
+      "name": "vakint/numerics/matad_numerics/0131.txt",
+      "path": "data/numerics/matad_numerics/0131.txt",
+      "description": "matad_numerics: exact source expression 131, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0132",
+      "name": "vakint/numerics/matad_numerics/0132.txt",
+      "path": "data/numerics/matad_numerics/0132.txt",
+      "description": "matad_numerics: exact source expression 132, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0133",
+      "name": "vakint/numerics/matad_numerics/0133.txt",
+      "path": "data/numerics/matad_numerics/0133.txt",
+      "description": "matad_numerics: exact source expression 133, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0134",
+      "name": "vakint/numerics/matad_numerics/0134.txt",
+      "path": "data/numerics/matad_numerics/0134.txt",
+      "description": "matad_numerics: exact source expression 134, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0135",
+      "name": "vakint/numerics/matad_numerics/0135.txt",
+      "path": "data/numerics/matad_numerics/0135.txt",
+      "description": "matad_numerics: exact source expression 135, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0136",
+      "name": "vakint/numerics/matad_numerics/0136.txt",
+      "path": "data/numerics/matad_numerics/0136.txt",
+      "description": "matad_numerics: exact source expression 136, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0137",
+      "name": "vakint/numerics/matad_numerics/0137.txt",
+      "path": "data/numerics/matad_numerics/0137.txt",
+      "description": "matad_numerics: exact source expression 137, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0138",
+      "name": "vakint/numerics/matad_numerics/0138.txt",
+      "path": "data/numerics/matad_numerics/0138.txt",
+      "description": "matad_numerics: exact source expression 138, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0139",
+      "name": "vakint/numerics/matad_numerics/0139.txt",
+      "path": "data/numerics/matad_numerics/0139.txt",
+      "description": "matad_numerics: exact source expression 139, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0140",
+      "name": "vakint/numerics/matad_numerics/0140.txt",
+      "path": "data/numerics/matad_numerics/0140.txt",
+      "description": "matad_numerics: exact source expression 140, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0141",
+      "name": "vakint/numerics/matad_numerics/0141.txt",
+      "path": "data/numerics/matad_numerics/0141.txt",
+      "description": "matad_numerics: exact source expression 141, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0142",
+      "name": "vakint/numerics/matad_numerics/0142.txt",
+      "path": "data/numerics/matad_numerics/0142.txt",
+      "description": "matad_numerics: exact source expression 142, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0143",
+      "name": "vakint/numerics/matad_numerics/0143.txt",
+      "path": "data/numerics/matad_numerics/0143.txt",
+      "description": "matad_numerics: exact source expression 143, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0144",
+      "name": "vakint/numerics/matad_numerics/0144.txt",
+      "path": "data/numerics/matad_numerics/0144.txt",
+      "description": "matad_numerics: exact source expression 144, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0145",
+      "name": "vakint/numerics/matad_numerics/0145.txt",
+      "path": "data/numerics/matad_numerics/0145.txt",
+      "description": "matad_numerics: exact source expression 145, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0146",
+      "name": "vakint/numerics/matad_numerics/0146.txt",
+      "path": "data/numerics/matad_numerics/0146.txt",
+      "description": "matad_numerics: exact source expression 146, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0147",
+      "name": "vakint/numerics/matad_numerics/0147.txt",
+      "path": "data/numerics/matad_numerics/0147.txt",
+      "description": "matad_numerics: exact source expression 147, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0148",
+      "name": "vakint/numerics/matad_numerics/0148.txt",
+      "path": "data/numerics/matad_numerics/0148.txt",
+      "description": "matad_numerics: exact source expression 148, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0149",
+      "name": "vakint/numerics/matad_numerics/0149.txt",
+      "path": "data/numerics/matad_numerics/0149.txt",
+      "description": "matad_numerics: exact source expression 149, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0150",
+      "name": "vakint/numerics/matad_numerics/0150.txt",
+      "path": "data/numerics/matad_numerics/0150.txt",
+      "description": "matad_numerics: exact source expression 150, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0151",
+      "name": "vakint/numerics/matad_numerics/0151.txt",
+      "path": "data/numerics/matad_numerics/0151.txt",
+      "description": "matad_numerics: exact source expression 151, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0152",
+      "name": "vakint/numerics/matad_numerics/0152.txt",
+      "path": "data/numerics/matad_numerics/0152.txt",
+      "description": "matad_numerics: exact source expression 152, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0153",
+      "name": "vakint/numerics/matad_numerics/0153.txt",
+      "path": "data/numerics/matad_numerics/0153.txt",
+      "description": "matad_numerics: exact source expression 153, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0154",
+      "name": "vakint/numerics/matad_numerics/0154.txt",
+      "path": "data/numerics/matad_numerics/0154.txt",
+      "description": "matad_numerics: exact source expression 154, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0155",
+      "name": "vakint/numerics/matad_numerics/0155.txt",
+      "path": "data/numerics/matad_numerics/0155.txt",
+      "description": "matad_numerics: exact source expression 155, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0156",
+      "name": "vakint/numerics/matad_numerics/0156.txt",
+      "path": "data/numerics/matad_numerics/0156.txt",
+      "description": "matad_numerics: exact source expression 156, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0157",
+      "name": "vakint/numerics/matad_numerics/0157.txt",
+      "path": "data/numerics/matad_numerics/0157.txt",
+      "description": "matad_numerics: exact source expression 157, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0158",
+      "name": "vakint/numerics/matad_numerics/0158.txt",
+      "path": "data/numerics/matad_numerics/0158.txt",
+      "description": "matad_numerics: exact source expression 158, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0159",
+      "name": "vakint/numerics/matad_numerics/0159.txt",
+      "path": "data/numerics/matad_numerics/0159.txt",
+      "description": "matad_numerics: exact source expression 159, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0160",
+      "name": "vakint/numerics/matad_numerics/0160.txt",
+      "path": "data/numerics/matad_numerics/0160.txt",
+      "description": "matad_numerics: exact source expression 160, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0161",
+      "name": "vakint/numerics/matad_numerics/0161.txt",
+      "path": "data/numerics/matad_numerics/0161.txt",
+      "description": "matad_numerics: exact source expression 161, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0162",
+      "name": "vakint/numerics/matad_numerics/0162.txt",
+      "path": "data/numerics/matad_numerics/0162.txt",
+      "description": "matad_numerics: exact source expression 162, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0163",
+      "name": "vakint/numerics/matad_numerics/0163.txt",
+      "path": "data/numerics/matad_numerics/0163.txt",
+      "description": "matad_numerics: exact source expression 163, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0164",
+      "name": "vakint/numerics/matad_numerics/0164.txt",
+      "path": "data/numerics/matad_numerics/0164.txt",
+      "description": "matad_numerics: exact source expression 164, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0165",
+      "name": "vakint/numerics/matad_numerics/0165.txt",
+      "path": "data/numerics/matad_numerics/0165.txt",
+      "description": "matad_numerics: exact source expression 165, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0166",
+      "name": "vakint/numerics/matad_numerics/0166.txt",
+      "path": "data/numerics/matad_numerics/0166.txt",
+      "description": "matad_numerics: exact source expression 166, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0167",
+      "name": "vakint/numerics/matad_numerics/0167.txt",
+      "path": "data/numerics/matad_numerics/0167.txt",
+      "description": "matad_numerics: exact source expression 167, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0168",
+      "name": "vakint/numerics/matad_numerics/0168.txt",
+      "path": "data/numerics/matad_numerics/0168.txt",
+      "description": "matad_numerics: exact source expression 168, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0169",
+      "name": "vakint/numerics/matad_numerics/0169.txt",
+      "path": "data/numerics/matad_numerics/0169.txt",
+      "description": "matad_numerics: exact source expression 169, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0170",
+      "name": "vakint/numerics/matad_numerics/0170.txt",
+      "path": "data/numerics/matad_numerics/0170.txt",
+      "description": "matad_numerics: exact source expression 170, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0171",
+      "name": "vakint/numerics/matad_numerics/0171.txt",
+      "path": "data/numerics/matad_numerics/0171.txt",
+      "description": "matad_numerics: exact source expression 171, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0172",
+      "name": "vakint/numerics/matad_numerics/0172.txt",
+      "path": "data/numerics/matad_numerics/0172.txt",
+      "description": "matad_numerics: exact source expression 172, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0173",
+      "name": "vakint/numerics/matad_numerics/0173.txt",
+      "path": "data/numerics/matad_numerics/0173.txt",
+      "description": "matad_numerics: exact source expression 173, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0174",
+      "name": "vakint/numerics/matad_numerics/0174.txt",
+      "path": "data/numerics/matad_numerics/0174.txt",
+      "description": "matad_numerics: exact source expression 174, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0175",
+      "name": "vakint/numerics/matad_numerics/0175.txt",
+      "path": "data/numerics/matad_numerics/0175.txt",
+      "description": "matad_numerics: exact source expression 175, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0176",
+      "name": "vakint/numerics/matad_numerics/0176.txt",
+      "path": "data/numerics/matad_numerics/0176.txt",
+      "description": "matad_numerics: exact source expression 176, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0177",
+      "name": "vakint/numerics/matad_numerics/0177.txt",
+      "path": "data/numerics/matad_numerics/0177.txt",
+      "description": "matad_numerics: exact source expression 177, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0178",
+      "name": "vakint/numerics/matad_numerics/0178.txt",
+      "path": "data/numerics/matad_numerics/0178.txt",
+      "description": "matad_numerics: exact source expression 178, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0179",
+      "name": "vakint/numerics/matad_numerics/0179.txt",
+      "path": "data/numerics/matad_numerics/0179.txt",
+      "description": "matad_numerics: exact source expression 179, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0180",
+      "name": "vakint/numerics/matad_numerics/0180.txt",
+      "path": "data/numerics/matad_numerics/0180.txt",
+      "description": "matad_numerics: exact source expression 180, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0181",
+      "name": "vakint/numerics/matad_numerics/0181.txt",
+      "path": "data/numerics/matad_numerics/0181.txt",
+      "description": "matad_numerics: exact source expression 181, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0182",
+      "name": "vakint/numerics/matad_numerics/0182.txt",
+      "path": "data/numerics/matad_numerics/0182.txt",
+      "description": "matad_numerics: exact source expression 182, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0183",
+      "name": "vakint/numerics/matad_numerics/0183.txt",
+      "path": "data/numerics/matad_numerics/0183.txt",
+      "description": "matad_numerics: exact source expression 183, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0184",
+      "name": "vakint/numerics/matad_numerics/0184.txt",
+      "path": "data/numerics/matad_numerics/0184.txt",
+      "description": "matad_numerics: exact source expression 184, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0185",
+      "name": "vakint/numerics/matad_numerics/0185.txt",
+      "path": "data/numerics/matad_numerics/0185.txt",
+      "description": "matad_numerics: exact source expression 185, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0186",
+      "name": "vakint/numerics/matad_numerics/0186.txt",
+      "path": "data/numerics/matad_numerics/0186.txt",
+      "description": "matad_numerics: exact source expression 186, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0187",
+      "name": "vakint/numerics/matad_numerics/0187.txt",
+      "path": "data/numerics/matad_numerics/0187.txt",
+      "description": "matad_numerics: exact source expression 187, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0188",
+      "name": "vakint/numerics/matad_numerics/0188.txt",
+      "path": "data/numerics/matad_numerics/0188.txt",
+      "description": "matad_numerics: exact source expression 188, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0189",
+      "name": "vakint/numerics/matad_numerics/0189.txt",
+      "path": "data/numerics/matad_numerics/0189.txt",
+      "description": "matad_numerics: exact source expression 189, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0190",
+      "name": "vakint/numerics/matad_numerics/0190.txt",
+      "path": "data/numerics/matad_numerics/0190.txt",
+      "description": "matad_numerics: exact source expression 190, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0191",
+      "name": "vakint/numerics/matad_numerics/0191.txt",
+      "path": "data/numerics/matad_numerics/0191.txt",
+      "description": "matad_numerics: exact source expression 191, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0192",
+      "name": "vakint/numerics/matad_numerics/0192.txt",
+      "path": "data/numerics/matad_numerics/0192.txt",
+      "description": "matad_numerics: exact source expression 192, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0193",
+      "name": "vakint/numerics/matad_numerics/0193.txt",
+      "path": "data/numerics/matad_numerics/0193.txt",
+      "description": "matad_numerics: exact source expression 193, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0194",
+      "name": "vakint/numerics/matad_numerics/0194.txt",
+      "path": "data/numerics/matad_numerics/0194.txt",
+      "description": "matad_numerics: exact source expression 194, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0195",
+      "name": "vakint/numerics/matad_numerics/0195.txt",
+      "path": "data/numerics/matad_numerics/0195.txt",
+      "description": "matad_numerics: exact source expression 195, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0196",
+      "name": "vakint/numerics/matad_numerics/0196.txt",
+      "path": "data/numerics/matad_numerics/0196.txt",
+      "description": "matad_numerics: exact source expression 196, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0197",
+      "name": "vakint/numerics/matad_numerics/0197.txt",
+      "path": "data/numerics/matad_numerics/0197.txt",
+      "description": "matad_numerics: exact source expression 197, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0198",
+      "name": "vakint/numerics/matad_numerics/0198.txt",
+      "path": "data/numerics/matad_numerics/0198.txt",
+      "description": "matad_numerics: exact source expression 198, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0199",
+      "name": "vakint/numerics/matad_numerics/0199.txt",
+      "path": "data/numerics/matad_numerics/0199.txt",
+      "description": "matad_numerics: exact source expression 199, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0200",
+      "name": "vakint/numerics/matad_numerics/0200.txt",
+      "path": "data/numerics/matad_numerics/0200.txt",
+      "description": "matad_numerics: exact source expression 200, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0201",
+      "name": "vakint/numerics/matad_numerics/0201.txt",
+      "path": "data/numerics/matad_numerics/0201.txt",
+      "description": "matad_numerics: exact source expression 201, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0202",
+      "name": "vakint/numerics/matad_numerics/0202.txt",
+      "path": "data/numerics/matad_numerics/0202.txt",
+      "description": "matad_numerics: exact source expression 202, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0203",
+      "name": "vakint/numerics/matad_numerics/0203.txt",
+      "path": "data/numerics/matad_numerics/0203.txt",
+      "description": "matad_numerics: exact source expression 203, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0204",
+      "name": "vakint/numerics/matad_numerics/0204.txt",
+      "path": "data/numerics/matad_numerics/0204.txt",
+      "description": "matad_numerics: exact source expression 204, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0205",
+      "name": "vakint/numerics/matad_numerics/0205.txt",
+      "path": "data/numerics/matad_numerics/0205.txt",
+      "description": "matad_numerics: exact source expression 205, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0206",
+      "name": "vakint/numerics/matad_numerics/0206.txt",
+      "path": "data/numerics/matad_numerics/0206.txt",
+      "description": "matad_numerics: exact source expression 206, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0207",
+      "name": "vakint/numerics/matad_numerics/0207.txt",
+      "path": "data/numerics/matad_numerics/0207.txt",
+      "description": "matad_numerics: exact source expression 207, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0208",
+      "name": "vakint/numerics/matad_numerics/0208.txt",
+      "path": "data/numerics/matad_numerics/0208.txt",
+      "description": "matad_numerics: exact source expression 208, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0209",
+      "name": "vakint/numerics/matad_numerics/0209.txt",
+      "path": "data/numerics/matad_numerics/0209.txt",
+      "description": "matad_numerics: exact source expression 209, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0210",
+      "name": "vakint/numerics/matad_numerics/0210.txt",
+      "path": "data/numerics/matad_numerics/0210.txt",
+      "description": "matad_numerics: exact source expression 210, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0211",
+      "name": "vakint/numerics/matad_numerics/0211.txt",
+      "path": "data/numerics/matad_numerics/0211.txt",
+      "description": "matad_numerics: exact source expression 211, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0212",
+      "name": "vakint/numerics/matad_numerics/0212.txt",
+      "path": "data/numerics/matad_numerics/0212.txt",
+      "description": "matad_numerics: exact source expression 212, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0213",
+      "name": "vakint/numerics/matad_numerics/0213.txt",
+      "path": "data/numerics/matad_numerics/0213.txt",
+      "description": "matad_numerics: exact source expression 213, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0214",
+      "name": "vakint/numerics/matad_numerics/0214.txt",
+      "path": "data/numerics/matad_numerics/0214.txt",
+      "description": "matad_numerics: exact source expression 214, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0215",
+      "name": "vakint/numerics/matad_numerics/0215.txt",
+      "path": "data/numerics/matad_numerics/0215.txt",
+      "description": "matad_numerics: exact source expression 215, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0216",
+      "name": "vakint/numerics/matad_numerics/0216.txt",
+      "path": "data/numerics/matad_numerics/0216.txt",
+      "description": "matad_numerics: exact source expression 216, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0217",
+      "name": "vakint/numerics/matad_numerics/0217.txt",
+      "path": "data/numerics/matad_numerics/0217.txt",
+      "description": "matad_numerics: exact source expression 217, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0218",
+      "name": "vakint/numerics/matad_numerics/0218.txt",
+      "path": "data/numerics/matad_numerics/0218.txt",
+      "description": "matad_numerics: exact source expression 218, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0219",
+      "name": "vakint/numerics/matad_numerics/0219.txt",
+      "path": "data/numerics/matad_numerics/0219.txt",
+      "description": "matad_numerics: exact source expression 219, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0220",
+      "name": "vakint/numerics/matad_numerics/0220.txt",
+      "path": "data/numerics/matad_numerics/0220.txt",
+      "description": "matad_numerics: exact source expression 220, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0221",
+      "name": "vakint/numerics/matad_numerics/0221.txt",
+      "path": "data/numerics/matad_numerics/0221.txt",
+      "description": "matad_numerics: exact source expression 221, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0222",
+      "name": "vakint/numerics/matad_numerics/0222.txt",
+      "path": "data/numerics/matad_numerics/0222.txt",
+      "description": "matad_numerics: exact source expression 222, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0223",
+      "name": "vakint/numerics/matad_numerics/0223.txt",
+      "path": "data/numerics/matad_numerics/0223.txt",
+      "description": "matad_numerics: exact source expression 223, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0224",
+      "name": "vakint/numerics/matad_numerics/0224.txt",
+      "path": "data/numerics/matad_numerics/0224.txt",
+      "description": "matad_numerics: exact source expression 224, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0225",
+      "name": "vakint/numerics/matad_numerics/0225.txt",
+      "path": "data/numerics/matad_numerics/0225.txt",
+      "description": "matad_numerics: exact source expression 225, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0226",
+      "name": "vakint/numerics/matad_numerics/0226.txt",
+      "path": "data/numerics/matad_numerics/0226.txt",
+      "description": "matad_numerics: exact source expression 226, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0227",
+      "name": "vakint/numerics/matad_numerics/0227.txt",
+      "path": "data/numerics/matad_numerics/0227.txt",
+      "description": "matad_numerics: exact source expression 227, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0228",
+      "name": "vakint/numerics/matad_numerics/0228.txt",
+      "path": "data/numerics/matad_numerics/0228.txt",
+      "description": "matad_numerics: exact source expression 228, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0229",
+      "name": "vakint/numerics/matad_numerics/0229.txt",
+      "path": "data/numerics/matad_numerics/0229.txt",
+      "description": "matad_numerics: exact source expression 229, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0230",
+      "name": "vakint/numerics/matad_numerics/0230.txt",
+      "path": "data/numerics/matad_numerics/0230.txt",
+      "description": "matad_numerics: exact source expression 230, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0231",
+      "name": "vakint/numerics/matad_numerics/0231.txt",
+      "path": "data/numerics/matad_numerics/0231.txt",
+      "description": "matad_numerics: exact source expression 231, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0232",
+      "name": "vakint/numerics/matad_numerics/0232.txt",
+      "path": "data/numerics/matad_numerics/0232.txt",
+      "description": "matad_numerics: exact source expression 232, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0233",
+      "name": "vakint/numerics/matad_numerics/0233.txt",
+      "path": "data/numerics/matad_numerics/0233.txt",
+      "description": "matad_numerics: exact source expression 233, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0234",
+      "name": "vakint/numerics/matad_numerics/0234.txt",
+      "path": "data/numerics/matad_numerics/0234.txt",
+      "description": "matad_numerics: exact source expression 234, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0235",
+      "name": "vakint/numerics/matad_numerics/0235.txt",
+      "path": "data/numerics/matad_numerics/0235.txt",
+      "description": "matad_numerics: exact source expression 235, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0236",
+      "name": "vakint/numerics/matad_numerics/0236.txt",
+      "path": "data/numerics/matad_numerics/0236.txt",
+      "description": "matad_numerics: exact source expression 236, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0237",
+      "name": "vakint/numerics/matad_numerics/0237.txt",
+      "path": "data/numerics/matad_numerics/0237.txt",
+      "description": "matad_numerics: exact source expression 237, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0238",
+      "name": "vakint/numerics/matad_numerics/0238.txt",
+      "path": "data/numerics/matad_numerics/0238.txt",
+      "description": "matad_numerics: exact source expression 238, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0239",
+      "name": "vakint/numerics/matad_numerics/0239.txt",
+      "path": "data/numerics/matad_numerics/0239.txt",
+      "description": "matad_numerics: exact source expression 239, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0240",
+      "name": "vakint/numerics/matad_numerics/0240.txt",
+      "path": "data/numerics/matad_numerics/0240.txt",
+      "description": "matad_numerics: exact source expression 240, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0241",
+      "name": "vakint/numerics/matad_numerics/0241.txt",
+      "path": "data/numerics/matad_numerics/0241.txt",
+      "description": "matad_numerics: exact source expression 241, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0242",
+      "name": "vakint/numerics/matad_numerics/0242.txt",
+      "path": "data/numerics/matad_numerics/0242.txt",
+      "description": "matad_numerics: exact source expression 242, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0243",
+      "name": "vakint/numerics/matad_numerics/0243.txt",
+      "path": "data/numerics/matad_numerics/0243.txt",
+      "description": "matad_numerics: exact source expression 243, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0244",
+      "name": "vakint/numerics/matad_numerics/0244.txt",
+      "path": "data/numerics/matad_numerics/0244.txt",
+      "description": "matad_numerics: exact source expression 244, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0245",
+      "name": "vakint/numerics/matad_numerics/0245.txt",
+      "path": "data/numerics/matad_numerics/0245.txt",
+      "description": "matad_numerics: exact source expression 245, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0246",
+      "name": "vakint/numerics/matad_numerics/0246.txt",
+      "path": "data/numerics/matad_numerics/0246.txt",
+      "description": "matad_numerics: exact source expression 246, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0247",
+      "name": "vakint/numerics/matad_numerics/0247.txt",
+      "path": "data/numerics/matad_numerics/0247.txt",
+      "description": "matad_numerics: exact source expression 247, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0248",
+      "name": "vakint/numerics/matad_numerics/0248.txt",
+      "path": "data/numerics/matad_numerics/0248.txt",
+      "description": "matad_numerics: exact source expression 248, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0249",
+      "name": "vakint/numerics/matad_numerics/0249.txt",
+      "path": "data/numerics/matad_numerics/0249.txt",
+      "description": "matad_numerics: exact source expression 249, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0250",
+      "name": "vakint/numerics/matad_numerics/0250.txt",
+      "path": "data/numerics/matad_numerics/0250.txt",
+      "description": "matad_numerics: exact source expression 250, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0251",
+      "name": "vakint/numerics/matad_numerics/0251.txt",
+      "path": "data/numerics/matad_numerics/0251.txt",
+      "description": "matad_numerics: exact source expression 251, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0252",
+      "name": "vakint/numerics/matad_numerics/0252.txt",
+      "path": "data/numerics/matad_numerics/0252.txt",
+      "description": "matad_numerics: exact source expression 252, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0253",
+      "name": "vakint/numerics/matad_numerics/0253.txt",
+      "path": "data/numerics/matad_numerics/0253.txt",
+      "description": "matad_numerics: exact source expression 253, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0254",
+      "name": "vakint/numerics/matad_numerics/0254.txt",
+      "path": "data/numerics/matad_numerics/0254.txt",
+      "description": "matad_numerics: exact source expression 254, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0255",
+      "name": "vakint/numerics/matad_numerics/0255.txt",
+      "path": "data/numerics/matad_numerics/0255.txt",
+      "description": "matad_numerics: exact source expression 255, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0256",
+      "name": "vakint/numerics/matad_numerics/0256.txt",
+      "path": "data/numerics/matad_numerics/0256.txt",
+      "description": "matad_numerics: exact source expression 256, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0257",
+      "name": "vakint/numerics/matad_numerics/0257.txt",
+      "path": "data/numerics/matad_numerics/0257.txt",
+      "description": "matad_numerics: exact source expression 257, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0258",
+      "name": "vakint/numerics/matad_numerics/0258.txt",
+      "path": "data/numerics/matad_numerics/0258.txt",
+      "description": "matad_numerics: exact source expression 258, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0259",
+      "name": "vakint/numerics/matad_numerics/0259.txt",
+      "path": "data/numerics/matad_numerics/0259.txt",
+      "description": "matad_numerics: exact source expression 259, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0260",
+      "name": "vakint/numerics/matad_numerics/0260.txt",
+      "path": "data/numerics/matad_numerics/0260.txt",
+      "description": "matad_numerics: exact source expression 260, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0261",
+      "name": "vakint/numerics/matad_numerics/0261.txt",
+      "path": "data/numerics/matad_numerics/0261.txt",
+      "description": "matad_numerics: exact source expression 261, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0262",
+      "name": "vakint/numerics/matad_numerics/0262.txt",
+      "path": "data/numerics/matad_numerics/0262.txt",
+      "description": "matad_numerics: exact source expression 262, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0263",
+      "name": "vakint/numerics/matad_numerics/0263.txt",
+      "path": "data/numerics/matad_numerics/0263.txt",
+      "description": "matad_numerics: exact source expression 263, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0264",
+      "name": "vakint/numerics/matad_numerics/0264.txt",
+      "path": "data/numerics/matad_numerics/0264.txt",
+      "description": "matad_numerics: exact source expression 264, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0265",
+      "name": "vakint/numerics/matad_numerics/0265.txt",
+      "path": "data/numerics/matad_numerics/0265.txt",
+      "description": "matad_numerics: exact source expression 265, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0266",
+      "name": "vakint/numerics/matad_numerics/0266.txt",
+      "path": "data/numerics/matad_numerics/0266.txt",
+      "description": "matad_numerics: exact source expression 266, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0267",
+      "name": "vakint/numerics/matad_numerics/0267.txt",
+      "path": "data/numerics/matad_numerics/0267.txt",
+      "description": "matad_numerics: exact source expression 267, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0268",
+      "name": "vakint/numerics/matad_numerics/0268.txt",
+      "path": "data/numerics/matad_numerics/0268.txt",
+      "description": "matad_numerics: exact source expression 268, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0269",
+      "name": "vakint/numerics/matad_numerics/0269.txt",
+      "path": "data/numerics/matad_numerics/0269.txt",
+      "description": "matad_numerics: exact source expression 269, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0270",
+      "name": "vakint/numerics/matad_numerics/0270.txt",
+      "path": "data/numerics/matad_numerics/0270.txt",
+      "description": "matad_numerics: exact source expression 270, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0271",
+      "name": "vakint/numerics/matad_numerics/0271.txt",
+      "path": "data/numerics/matad_numerics/0271.txt",
+      "description": "matad_numerics: exact source expression 271, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0272",
+      "name": "vakint/numerics/matad_numerics/0272.txt",
+      "path": "data/numerics/matad_numerics/0272.txt",
+      "description": "matad_numerics: exact source expression 272, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0273",
+      "name": "vakint/numerics/matad_numerics/0273.txt",
+      "path": "data/numerics/matad_numerics/0273.txt",
+      "description": "matad_numerics: exact source expression 273, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0274",
+      "name": "vakint/numerics/matad_numerics/0274.txt",
+      "path": "data/numerics/matad_numerics/0274.txt",
+      "description": "matad_numerics: exact source expression 274, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0275",
+      "name": "vakint/numerics/matad_numerics/0275.txt",
+      "path": "data/numerics/matad_numerics/0275.txt",
+      "description": "matad_numerics: exact source expression 275, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0276",
+      "name": "vakint/numerics/matad_numerics/0276.txt",
+      "path": "data/numerics/matad_numerics/0276.txt",
+      "description": "matad_numerics: exact source expression 276, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0277",
+      "name": "vakint/numerics/matad_numerics/0277.txt",
+      "path": "data/numerics/matad_numerics/0277.txt",
+      "description": "matad_numerics: exact source expression 277, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0278",
+      "name": "vakint/numerics/matad_numerics/0278.txt",
+      "path": "data/numerics/matad_numerics/0278.txt",
+      "description": "matad_numerics: exact source expression 278, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0279",
+      "name": "vakint/numerics/matad_numerics/0279.txt",
+      "path": "data/numerics/matad_numerics/0279.txt",
+      "description": "matad_numerics: exact source expression 279, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0280",
+      "name": "vakint/numerics/matad_numerics/0280.txt",
+      "path": "data/numerics/matad_numerics/0280.txt",
+      "description": "matad_numerics: exact source expression 280, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0281",
+      "name": "vakint/numerics/matad_numerics/0281.txt",
+      "path": "data/numerics/matad_numerics/0281.txt",
+      "description": "matad_numerics: exact source expression 281, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0282",
+      "name": "vakint/numerics/matad_numerics/0282.txt",
+      "path": "data/numerics/matad_numerics/0282.txt",
+      "description": "matad_numerics: exact source expression 282, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0283",
+      "name": "vakint/numerics/matad_numerics/0283.txt",
+      "path": "data/numerics/matad_numerics/0283.txt",
+      "description": "matad_numerics: exact source expression 283, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0284",
+      "name": "vakint/numerics/matad_numerics/0284.txt",
+      "path": "data/numerics/matad_numerics/0284.txt",
+      "description": "matad_numerics: exact source expression 284, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0285",
+      "name": "vakint/numerics/matad_numerics/0285.txt",
+      "path": "data/numerics/matad_numerics/0285.txt",
+      "description": "matad_numerics: exact source expression 285, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0286",
+      "name": "vakint/numerics/matad_numerics/0286.txt",
+      "path": "data/numerics/matad_numerics/0286.txt",
+      "description": "matad_numerics: exact source expression 286, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0287",
+      "name": "vakint/numerics/matad_numerics/0287.txt",
+      "path": "data/numerics/matad_numerics/0287.txt",
+      "description": "matad_numerics: exact source expression 287, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0288",
+      "name": "vakint/numerics/matad_numerics/0288.txt",
+      "path": "data/numerics/matad_numerics/0288.txt",
+      "description": "matad_numerics: exact source expression 288, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0289",
+      "name": "vakint/numerics/matad_numerics/0289.txt",
+      "path": "data/numerics/matad_numerics/0289.txt",
+      "description": "matad_numerics: exact source expression 289, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0290",
+      "name": "vakint/numerics/matad_numerics/0290.txt",
+      "path": "data/numerics/matad_numerics/0290.txt",
+      "description": "matad_numerics: exact source expression 290, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0291",
+      "name": "vakint/numerics/matad_numerics/0291.txt",
+      "path": "data/numerics/matad_numerics/0291.txt",
+      "description": "matad_numerics: exact source expression 291, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0292",
+      "name": "vakint/numerics/matad_numerics/0292.txt",
+      "path": "data/numerics/matad_numerics/0292.txt",
+      "description": "matad_numerics: exact source expression 292, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0293",
+      "name": "vakint/numerics/matad_numerics/0293.txt",
+      "path": "data/numerics/matad_numerics/0293.txt",
+      "description": "matad_numerics: exact source expression 293, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0294",
+      "name": "vakint/numerics/matad_numerics/0294.txt",
+      "path": "data/numerics/matad_numerics/0294.txt",
+      "description": "matad_numerics: exact source expression 294, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0295",
+      "name": "vakint/numerics/matad_numerics/0295.txt",
+      "path": "data/numerics/matad_numerics/0295.txt",
+      "description": "matad_numerics: exact source expression 295, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0296",
+      "name": "vakint/numerics/matad_numerics/0296.txt",
+      "path": "data/numerics/matad_numerics/0296.txt",
+      "description": "matad_numerics: exact source expression 296, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0297",
+      "name": "vakint/numerics/matad_numerics/0297.txt",
+      "path": "data/numerics/matad_numerics/0297.txt",
+      "description": "matad_numerics: exact source expression 297, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0298",
+      "name": "vakint/numerics/matad_numerics/0298.txt",
+      "path": "data/numerics/matad_numerics/0298.txt",
+      "description": "matad_numerics: exact source expression 298, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0299",
+      "name": "vakint/numerics/matad_numerics/0299.txt",
+      "path": "data/numerics/matad_numerics/0299.txt",
+      "description": "matad_numerics: exact source expression 299, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0300",
+      "name": "vakint/numerics/matad_numerics/0300.txt",
+      "path": "data/numerics/matad_numerics/0300.txt",
+      "description": "matad_numerics: exact source expression 300, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0301",
+      "name": "vakint/numerics/matad_numerics/0301.txt",
+      "path": "data/numerics/matad_numerics/0301.txt",
+      "description": "matad_numerics: exact source expression 301, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0302",
+      "name": "vakint/numerics/matad_numerics/0302.txt",
+      "path": "data/numerics/matad_numerics/0302.txt",
+      "description": "matad_numerics: exact source expression 302, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0303",
+      "name": "vakint/numerics/matad_numerics/0303.txt",
+      "path": "data/numerics/matad_numerics/0303.txt",
+      "description": "matad_numerics: exact source expression 303, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0304",
+      "name": "vakint/numerics/matad_numerics/0304.txt",
+      "path": "data/numerics/matad_numerics/0304.txt",
+      "description": "matad_numerics: exact source expression 304, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0305",
+      "name": "vakint/numerics/matad_numerics/0305.txt",
+      "path": "data/numerics/matad_numerics/0305.txt",
+      "description": "matad_numerics: exact source expression 305, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0306",
+      "name": "vakint/numerics/matad_numerics/0306.txt",
+      "path": "data/numerics/matad_numerics/0306.txt",
+      "description": "matad_numerics: exact source expression 306, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0307",
+      "name": "vakint/numerics/matad_numerics/0307.txt",
+      "path": "data/numerics/matad_numerics/0307.txt",
+      "description": "matad_numerics: exact source expression 307, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0308",
+      "name": "vakint/numerics/matad_numerics/0308.txt",
+      "path": "data/numerics/matad_numerics/0308.txt",
+      "description": "matad_numerics: exact source expression 308, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0309",
+      "name": "vakint/numerics/matad_numerics/0309.txt",
+      "path": "data/numerics/matad_numerics/0309.txt",
+      "description": "matad_numerics: exact source expression 309, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0310",
+      "name": "vakint/numerics/matad_numerics/0310.txt",
+      "path": "data/numerics/matad_numerics/0310.txt",
+      "description": "matad_numerics: exact source expression 310, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0311",
+      "name": "vakint/numerics/matad_numerics/0311.txt",
+      "path": "data/numerics/matad_numerics/0311.txt",
+      "description": "matad_numerics: exact source expression 311, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0312",
+      "name": "vakint/numerics/matad_numerics/0312.txt",
+      "path": "data/numerics/matad_numerics/0312.txt",
+      "description": "matad_numerics: exact source expression 312, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0313",
+      "name": "vakint/numerics/matad_numerics/0313.txt",
+      "path": "data/numerics/matad_numerics/0313.txt",
+      "description": "matad_numerics: exact source expression 313, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0314",
+      "name": "vakint/numerics/matad_numerics/0314.txt",
+      "path": "data/numerics/matad_numerics/0314.txt",
+      "description": "matad_numerics: exact source expression 314, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0315",
+      "name": "vakint/numerics/matad_numerics/0315.txt",
+      "path": "data/numerics/matad_numerics/0315.txt",
+      "description": "matad_numerics: exact source expression 315, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0316",
+      "name": "vakint/numerics/matad_numerics/0316.txt",
+      "path": "data/numerics/matad_numerics/0316.txt",
+      "description": "matad_numerics: exact source expression 316, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0317",
+      "name": "vakint/numerics/matad_numerics/0317.txt",
+      "path": "data/numerics/matad_numerics/0317.txt",
+      "description": "matad_numerics: exact source expression 317, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0318",
+      "name": "vakint/numerics/matad_numerics/0318.txt",
+      "path": "data/numerics/matad_numerics/0318.txt",
+      "description": "matad_numerics: exact source expression 318, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0319",
+      "name": "vakint/numerics/matad_numerics/0319.txt",
+      "path": "data/numerics/matad_numerics/0319.txt",
+      "description": "matad_numerics: exact source expression 319, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0320",
+      "name": "vakint/numerics/matad_numerics/0320.txt",
+      "path": "data/numerics/matad_numerics/0320.txt",
+      "description": "matad_numerics: exact source expression 320, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0321",
+      "name": "vakint/numerics/matad_numerics/0321.txt",
+      "path": "data/numerics/matad_numerics/0321.txt",
+      "description": "matad_numerics: exact source expression 321, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0322",
+      "name": "vakint/numerics/matad_numerics/0322.txt",
+      "path": "data/numerics/matad_numerics/0322.txt",
+      "description": "matad_numerics: exact source expression 322, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0323",
+      "name": "vakint/numerics/matad_numerics/0323.txt",
+      "path": "data/numerics/matad_numerics/0323.txt",
+      "description": "matad_numerics: exact source expression 323, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0324",
+      "name": "vakint/numerics/matad_numerics/0324.txt",
+      "path": "data/numerics/matad_numerics/0324.txt",
+      "description": "matad_numerics: exact source expression 324, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0325",
+      "name": "vakint/numerics/matad_numerics/0325.txt",
+      "path": "data/numerics/matad_numerics/0325.txt",
+      "description": "matad_numerics: exact source expression 325, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0326",
+      "name": "vakint/numerics/matad_numerics/0326.txt",
+      "path": "data/numerics/matad_numerics/0326.txt",
+      "description": "matad_numerics: exact source expression 326, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0327",
+      "name": "vakint/numerics/matad_numerics/0327.txt",
+      "path": "data/numerics/matad_numerics/0327.txt",
+      "description": "matad_numerics: exact source expression 327, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0328",
+      "name": "vakint/numerics/matad_numerics/0328.txt",
+      "path": "data/numerics/matad_numerics/0328.txt",
+      "description": "matad_numerics: exact source expression 328, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0329",
+      "name": "vakint/numerics/matad_numerics/0329.txt",
+      "path": "data/numerics/matad_numerics/0329.txt",
+      "description": "matad_numerics: exact source expression 329, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0330",
+      "name": "vakint/numerics/matad_numerics/0330.txt",
+      "path": "data/numerics/matad_numerics/0330.txt",
+      "description": "matad_numerics: exact source expression 330, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0331",
+      "name": "vakint/numerics/matad_numerics/0331.txt",
+      "path": "data/numerics/matad_numerics/0331.txt",
+      "description": "matad_numerics: exact source expression 331, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0332",
+      "name": "vakint/numerics/matad_numerics/0332.txt",
+      "path": "data/numerics/matad_numerics/0332.txt",
+      "description": "matad_numerics: exact source expression 332, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0333",
+      "name": "vakint/numerics/matad_numerics/0333.txt",
+      "path": "data/numerics/matad_numerics/0333.txt",
+      "description": "matad_numerics: exact source expression 333, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0334",
+      "name": "vakint/numerics/matad_numerics/0334.txt",
+      "path": "data/numerics/matad_numerics/0334.txt",
+      "description": "matad_numerics: exact source expression 334, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0335",
+      "name": "vakint/numerics/matad_numerics/0335.txt",
+      "path": "data/numerics/matad_numerics/0335.txt",
+      "description": "matad_numerics: exact source expression 335, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0336",
+      "name": "vakint/numerics/matad_numerics/0336.txt",
+      "path": "data/numerics/matad_numerics/0336.txt",
+      "description": "matad_numerics: exact source expression 336, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0337",
+      "name": "vakint/numerics/matad_numerics/0337.txt",
+      "path": "data/numerics/matad_numerics/0337.txt",
+      "description": "matad_numerics: exact source expression 337, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0338",
+      "name": "vakint/numerics/matad_numerics/0338.txt",
+      "path": "data/numerics/matad_numerics/0338.txt",
+      "description": "matad_numerics: exact source expression 338, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0339",
+      "name": "vakint/numerics/matad_numerics/0339.txt",
+      "path": "data/numerics/matad_numerics/0339.txt",
+      "description": "matad_numerics: exact source expression 339, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0340",
+      "name": "vakint/numerics/matad_numerics/0340.txt",
+      "path": "data/numerics/matad_numerics/0340.txt",
+      "description": "matad_numerics: exact source expression 340, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0341",
+      "name": "vakint/numerics/matad_numerics/0341.txt",
+      "path": "data/numerics/matad_numerics/0341.txt",
+      "description": "matad_numerics: exact source expression 341, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0342",
+      "name": "vakint/numerics/matad_numerics/0342.txt",
+      "path": "data/numerics/matad_numerics/0342.txt",
+      "description": "matad_numerics: exact source expression 342, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0343",
+      "name": "vakint/numerics/matad_numerics/0343.txt",
+      "path": "data/numerics/matad_numerics/0343.txt",
+      "description": "matad_numerics: exact source expression 343, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0344",
+      "name": "vakint/numerics/matad_numerics/0344.txt",
+      "path": "data/numerics/matad_numerics/0344.txt",
+      "description": "matad_numerics: exact source expression 344, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0345",
+      "name": "vakint/numerics/matad_numerics/0345.txt",
+      "path": "data/numerics/matad_numerics/0345.txt",
+      "description": "matad_numerics: exact source expression 345, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0346",
+      "name": "vakint/numerics/matad_numerics/0346.txt",
+      "path": "data/numerics/matad_numerics/0346.txt",
+      "description": "matad_numerics: exact source expression 346, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0347",
+      "name": "vakint/numerics/matad_numerics/0347.txt",
+      "path": "data/numerics/matad_numerics/0347.txt",
+      "description": "matad_numerics: exact source expression 347, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0348",
+      "name": "vakint/numerics/matad_numerics/0348.txt",
+      "path": "data/numerics/matad_numerics/0348.txt",
+      "description": "matad_numerics: exact source expression 348, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0349",
+      "name": "vakint/numerics/matad_numerics/0349.txt",
+      "path": "data/numerics/matad_numerics/0349.txt",
+      "description": "matad_numerics: exact source expression 349, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0350",
+      "name": "vakint/numerics/matad_numerics/0350.txt",
+      "path": "data/numerics/matad_numerics/0350.txt",
+      "description": "matad_numerics: exact source expression 350, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0351",
+      "name": "vakint/numerics/matad_numerics/0351.txt",
+      "path": "data/numerics/matad_numerics/0351.txt",
+      "description": "matad_numerics: exact source expression 351, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0352",
+      "name": "vakint/numerics/matad_numerics/0352.txt",
+      "path": "data/numerics/matad_numerics/0352.txt",
+      "description": "matad_numerics: exact source expression 352, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0353",
+      "name": "vakint/numerics/matad_numerics/0353.txt",
+      "path": "data/numerics/matad_numerics/0353.txt",
+      "description": "matad_numerics: exact source expression 353, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0354",
+      "name": "vakint/numerics/matad_numerics/0354.txt",
+      "path": "data/numerics/matad_numerics/0354.txt",
+      "description": "matad_numerics: exact source expression 354, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0355",
+      "name": "vakint/numerics/matad_numerics/0355.txt",
+      "path": "data/numerics/matad_numerics/0355.txt",
+      "description": "matad_numerics: exact source expression 355, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0356",
+      "name": "vakint/numerics/matad_numerics/0356.txt",
+      "path": "data/numerics/matad_numerics/0356.txt",
+      "description": "matad_numerics: exact source expression 356, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0357",
+      "name": "vakint/numerics/matad_numerics/0357.txt",
+      "path": "data/numerics/matad_numerics/0357.txt",
+      "description": "matad_numerics: exact source expression 357, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0358",
+      "name": "vakint/numerics/matad_numerics/0358.txt",
+      "path": "data/numerics/matad_numerics/0358.txt",
+      "description": "matad_numerics: exact source expression 358, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0359",
+      "name": "vakint/numerics/matad_numerics/0359.txt",
+      "path": "data/numerics/matad_numerics/0359.txt",
+      "description": "matad_numerics: exact source expression 359, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0360",
+      "name": "vakint/numerics/matad_numerics/0360.txt",
+      "path": "data/numerics/matad_numerics/0360.txt",
+      "description": "matad_numerics: exact source expression 360, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0361",
+      "name": "vakint/numerics/matad_numerics/0361.txt",
+      "path": "data/numerics/matad_numerics/0361.txt",
+      "description": "matad_numerics: exact source expression 361, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0362",
+      "name": "vakint/numerics/matad_numerics/0362.txt",
+      "path": "data/numerics/matad_numerics/0362.txt",
+      "description": "matad_numerics: exact source expression 362, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0363",
+      "name": "vakint/numerics/matad_numerics/0363.txt",
+      "path": "data/numerics/matad_numerics/0363.txt",
+      "description": "matad_numerics: exact source expression 363, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0364",
+      "name": "vakint/numerics/matad_numerics/0364.txt",
+      "path": "data/numerics/matad_numerics/0364.txt",
+      "description": "matad_numerics: exact source expression 364, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0365",
+      "name": "vakint/numerics/matad_numerics/0365.txt",
+      "path": "data/numerics/matad_numerics/0365.txt",
+      "description": "matad_numerics: exact source expression 365, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0366",
+      "name": "vakint/numerics/matad_numerics/0366.txt",
+      "path": "data/numerics/matad_numerics/0366.txt",
+      "description": "matad_numerics: exact source expression 366, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0367",
+      "name": "vakint/numerics/matad_numerics/0367.txt",
+      "path": "data/numerics/matad_numerics/0367.txt",
+      "description": "matad_numerics: exact source expression 367, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0368",
+      "name": "vakint/numerics/matad_numerics/0368.txt",
+      "path": "data/numerics/matad_numerics/0368.txt",
+      "description": "matad_numerics: exact source expression 368, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0369",
+      "name": "vakint/numerics/matad_numerics/0369.txt",
+      "path": "data/numerics/matad_numerics/0369.txt",
+      "description": "matad_numerics: exact source expression 369, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0370",
+      "name": "vakint/numerics/matad_numerics/0370.txt",
+      "path": "data/numerics/matad_numerics/0370.txt",
+      "description": "matad_numerics: exact source expression 370, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0371",
+      "name": "vakint/numerics/matad_numerics/0371.txt",
+      "path": "data/numerics/matad_numerics/0371.txt",
+      "description": "matad_numerics: exact source expression 371, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0372",
+      "name": "vakint/numerics/matad_numerics/0372.txt",
+      "path": "data/numerics/matad_numerics/0372.txt",
+      "description": "matad_numerics: exact source expression 372, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0373",
+      "name": "vakint/numerics/matad_numerics/0373.txt",
+      "path": "data/numerics/matad_numerics/0373.txt",
+      "description": "matad_numerics: exact source expression 373, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0374",
+      "name": "vakint/numerics/matad_numerics/0374.txt",
+      "path": "data/numerics/matad_numerics/0374.txt",
+      "description": "matad_numerics: exact source expression 374, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0375",
+      "name": "vakint/numerics/matad_numerics/0375.txt",
+      "path": "data/numerics/matad_numerics/0375.txt",
+      "description": "matad_numerics: exact source expression 375, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0376",
+      "name": "vakint/numerics/matad_numerics/0376.txt",
+      "path": "data/numerics/matad_numerics/0376.txt",
+      "description": "matad_numerics: exact source expression 376, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0377",
+      "name": "vakint/numerics/matad_numerics/0377.txt",
+      "path": "data/numerics/matad_numerics/0377.txt",
+      "description": "matad_numerics: exact source expression 377, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0378",
+      "name": "vakint/numerics/matad_numerics/0378.txt",
+      "path": "data/numerics/matad_numerics/0378.txt",
+      "description": "matad_numerics: exact source expression 378, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0379",
+      "name": "vakint/numerics/matad_numerics/0379.txt",
+      "path": "data/numerics/matad_numerics/0379.txt",
+      "description": "matad_numerics: exact source expression 379, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0380",
+      "name": "vakint/numerics/matad_numerics/0380.txt",
+      "path": "data/numerics/matad_numerics/0380.txt",
+      "description": "matad_numerics: exact source expression 380, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0381",
+      "name": "vakint/numerics/matad_numerics/0381.txt",
+      "path": "data/numerics/matad_numerics/0381.txt",
+      "description": "matad_numerics: exact source expression 381, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0382",
+      "name": "vakint/numerics/matad_numerics/0382.txt",
+      "path": "data/numerics/matad_numerics/0382.txt",
+      "description": "matad_numerics: exact source expression 382, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0383",
+      "name": "vakint/numerics/matad_numerics/0383.txt",
+      "path": "data/numerics/matad_numerics/0383.txt",
+      "description": "matad_numerics: exact source expression 383, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0384",
+      "name": "vakint/numerics/matad_numerics/0384.txt",
+      "path": "data/numerics/matad_numerics/0384.txt",
+      "description": "matad_numerics: exact source expression 384, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0385",
+      "name": "vakint/numerics/matad_numerics/0385.txt",
+      "path": "data/numerics/matad_numerics/0385.txt",
+      "description": "matad_numerics: exact source expression 385, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0386",
+      "name": "vakint/numerics/matad_numerics/0386.txt",
+      "path": "data/numerics/matad_numerics/0386.txt",
+      "description": "matad_numerics: exact source expression 386, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0387",
+      "name": "vakint/numerics/matad_numerics/0387.txt",
+      "path": "data/numerics/matad_numerics/0387.txt",
+      "description": "matad_numerics: exact source expression 387, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0388",
+      "name": "vakint/numerics/matad_numerics/0388.txt",
+      "path": "data/numerics/matad_numerics/0388.txt",
+      "description": "matad_numerics: exact source expression 388, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0389",
+      "name": "vakint/numerics/matad_numerics/0389.txt",
+      "path": "data/numerics/matad_numerics/0389.txt",
+      "description": "matad_numerics: exact source expression 389, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0390",
+      "name": "vakint/numerics/matad_numerics/0390.txt",
+      "path": "data/numerics/matad_numerics/0390.txt",
+      "description": "matad_numerics: exact source expression 390, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0391",
+      "name": "vakint/numerics/matad_numerics/0391.txt",
+      "path": "data/numerics/matad_numerics/0391.txt",
+      "description": "matad_numerics: exact source expression 391, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0392",
+      "name": "vakint/numerics/matad_numerics/0392.txt",
+      "path": "data/numerics/matad_numerics/0392.txt",
+      "description": "matad_numerics: exact source expression 392, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0393",
+      "name": "vakint/numerics/matad_numerics/0393.txt",
+      "path": "data/numerics/matad_numerics/0393.txt",
+      "description": "matad_numerics: exact source expression 393, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0394",
+      "name": "vakint/numerics/matad_numerics/0394.txt",
+      "path": "data/numerics/matad_numerics/0394.txt",
+      "description": "matad_numerics: exact source expression 394, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0395",
+      "name": "vakint/numerics/matad_numerics/0395.txt",
+      "path": "data/numerics/matad_numerics/0395.txt",
+      "description": "matad_numerics: exact source expression 395, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0396",
+      "name": "vakint/numerics/matad_numerics/0396.txt",
+      "path": "data/numerics/matad_numerics/0396.txt",
+      "description": "matad_numerics: exact source expression 396, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0397",
+      "name": "vakint/numerics/matad_numerics/0397.txt",
+      "path": "data/numerics/matad_numerics/0397.txt",
+      "description": "matad_numerics: exact source expression 397, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0398",
+      "name": "vakint/numerics/matad_numerics/0398.txt",
+      "path": "data/numerics/matad_numerics/0398.txt",
+      "description": "matad_numerics: exact source expression 398, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0399",
+      "name": "vakint/numerics/matad_numerics/0399.txt",
+      "path": "data/numerics/matad_numerics/0399.txt",
+      "description": "matad_numerics: exact source expression 399, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0400",
+      "name": "vakint/numerics/matad_numerics/0400.txt",
+      "path": "data/numerics/matad_numerics/0400.txt",
+      "description": "matad_numerics: exact source expression 400, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0401",
+      "name": "vakint/numerics/matad_numerics/0401.txt",
+      "path": "data/numerics/matad_numerics/0401.txt",
+      "description": "matad_numerics: exact source expression 401, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0402",
+      "name": "vakint/numerics/matad_numerics/0402.txt",
+      "path": "data/numerics/matad_numerics/0402.txt",
+      "description": "matad_numerics: exact source expression 402, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0403",
+      "name": "vakint/numerics/matad_numerics/0403.txt",
+      "path": "data/numerics/matad_numerics/0403.txt",
+      "description": "matad_numerics: exact source expression 403, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0404",
+      "name": "vakint/numerics/matad_numerics/0404.txt",
+      "path": "data/numerics/matad_numerics/0404.txt",
+      "description": "matad_numerics: exact source expression 404, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0405",
+      "name": "vakint/numerics/matad_numerics/0405.txt",
+      "path": "data/numerics/matad_numerics/0405.txt",
+      "description": "matad_numerics: exact source expression 405, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0406",
+      "name": "vakint/numerics/matad_numerics/0406.txt",
+      "path": "data/numerics/matad_numerics/0406.txt",
+      "description": "matad_numerics: exact source expression 406, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0407",
+      "name": "vakint/numerics/matad_numerics/0407.txt",
+      "path": "data/numerics/matad_numerics/0407.txt",
+      "description": "matad_numerics: exact source expression 407, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0408",
+      "name": "vakint/numerics/matad_numerics/0408.txt",
+      "path": "data/numerics/matad_numerics/0408.txt",
+      "description": "matad_numerics: exact source expression 408, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0409",
+      "name": "vakint/numerics/matad_numerics/0409.txt",
+      "path": "data/numerics/matad_numerics/0409.txt",
+      "description": "matad_numerics: exact source expression 409, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0410",
+      "name": "vakint/numerics/matad_numerics/0410.txt",
+      "path": "data/numerics/matad_numerics/0410.txt",
+      "description": "matad_numerics: exact source expression 410, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0411",
+      "name": "vakint/numerics/matad_numerics/0411.txt",
+      "path": "data/numerics/matad_numerics/0411.txt",
+      "description": "matad_numerics: exact source expression 411, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0412",
+      "name": "vakint/numerics/matad_numerics/0412.txt",
+      "path": "data/numerics/matad_numerics/0412.txt",
+      "description": "matad_numerics: exact source expression 412, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0413",
+      "name": "vakint/numerics/matad_numerics/0413.txt",
+      "path": "data/numerics/matad_numerics/0413.txt",
+      "description": "matad_numerics: exact source expression 413, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0414",
+      "name": "vakint/numerics/matad_numerics/0414.txt",
+      "path": "data/numerics/matad_numerics/0414.txt",
+      "description": "matad_numerics: exact source expression 414, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0415",
+      "name": "vakint/numerics/matad_numerics/0415.txt",
+      "path": "data/numerics/matad_numerics/0415.txt",
+      "description": "matad_numerics: exact source expression 415, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0416",
+      "name": "vakint/numerics/matad_numerics/0416.txt",
+      "path": "data/numerics/matad_numerics/0416.txt",
+      "description": "matad_numerics: exact source expression 416, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0417",
+      "name": "vakint/numerics/matad_numerics/0417.txt",
+      "path": "data/numerics/matad_numerics/0417.txt",
+      "description": "matad_numerics: exact source expression 417, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0418",
+      "name": "vakint/numerics/matad_numerics/0418.txt",
+      "path": "data/numerics/matad_numerics/0418.txt",
+      "description": "matad_numerics: exact source expression 418, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0419",
+      "name": "vakint/numerics/matad_numerics/0419.txt",
+      "path": "data/numerics/matad_numerics/0419.txt",
+      "description": "matad_numerics: exact source expression 419, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0420",
+      "name": "vakint/numerics/matad_numerics/0420.txt",
+      "path": "data/numerics/matad_numerics/0420.txt",
+      "description": "matad_numerics: exact source expression 420, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0421",
+      "name": "vakint/numerics/matad_numerics/0421.txt",
+      "path": "data/numerics/matad_numerics/0421.txt",
+      "description": "matad_numerics: exact source expression 421, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0422",
+      "name": "vakint/numerics/matad_numerics/0422.txt",
+      "path": "data/numerics/matad_numerics/0422.txt",
+      "description": "matad_numerics: exact source expression 422, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0423",
+      "name": "vakint/numerics/matad_numerics/0423.txt",
+      "path": "data/numerics/matad_numerics/0423.txt",
+      "description": "matad_numerics: exact source expression 423, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0424",
+      "name": "vakint/numerics/matad_numerics/0424.txt",
+      "path": "data/numerics/matad_numerics/0424.txt",
+      "description": "matad_numerics: exact source expression 424, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0425",
+      "name": "vakint/numerics/matad_numerics/0425.txt",
+      "path": "data/numerics/matad_numerics/0425.txt",
+      "description": "matad_numerics: exact source expression 425, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0426",
+      "name": "vakint/numerics/matad_numerics/0426.txt",
+      "path": "data/numerics/matad_numerics/0426.txt",
+      "description": "matad_numerics: exact source expression 426, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0427",
+      "name": "vakint/numerics/matad_numerics/0427.txt",
+      "path": "data/numerics/matad_numerics/0427.txt",
+      "description": "matad_numerics: exact source expression 427, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0428",
+      "name": "vakint/numerics/matad_numerics/0428.txt",
+      "path": "data/numerics/matad_numerics/0428.txt",
+      "description": "matad_numerics: exact source expression 428, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0429",
+      "name": "vakint/numerics/matad_numerics/0429.txt",
+      "path": "data/numerics/matad_numerics/0429.txt",
+      "description": "matad_numerics: exact source expression 429, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0430",
+      "name": "vakint/numerics/matad_numerics/0430.txt",
+      "path": "data/numerics/matad_numerics/0430.txt",
+      "description": "matad_numerics: exact source expression 430, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0431",
+      "name": "vakint/numerics/matad_numerics/0431.txt",
+      "path": "data/numerics/matad_numerics/0431.txt",
+      "description": "matad_numerics: exact source expression 431, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0432",
+      "name": "vakint/numerics/matad_numerics/0432.txt",
+      "path": "data/numerics/matad_numerics/0432.txt",
+      "description": "matad_numerics: exact source expression 432, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0433",
+      "name": "vakint/numerics/matad_numerics/0433.txt",
+      "path": "data/numerics/matad_numerics/0433.txt",
+      "description": "matad_numerics: exact source expression 433, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0434",
+      "name": "vakint/numerics/matad_numerics/0434.txt",
+      "path": "data/numerics/matad_numerics/0434.txt",
+      "description": "matad_numerics: exact source expression 434, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0435",
+      "name": "vakint/numerics/matad_numerics/0435.txt",
+      "path": "data/numerics/matad_numerics/0435.txt",
+      "description": "matad_numerics: exact source expression 435, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0436",
+      "name": "vakint/numerics/matad_numerics/0436.txt",
+      "path": "data/numerics/matad_numerics/0436.txt",
+      "description": "matad_numerics: exact source expression 436, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0437",
+      "name": "vakint/numerics/matad_numerics/0437.txt",
+      "path": "data/numerics/matad_numerics/0437.txt",
+      "description": "matad_numerics: exact source expression 437, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0438",
+      "name": "vakint/numerics/matad_numerics/0438.txt",
+      "path": "data/numerics/matad_numerics/0438.txt",
+      "description": "matad_numerics: exact source expression 438, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0439",
+      "name": "vakint/numerics/matad_numerics/0439.txt",
+      "path": "data/numerics/matad_numerics/0439.txt",
+      "description": "matad_numerics: exact source expression 439, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0440",
+      "name": "vakint/numerics/matad_numerics/0440.txt",
+      "path": "data/numerics/matad_numerics/0440.txt",
+      "description": "matad_numerics: exact source expression 440, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0441",
+      "name": "vakint/numerics/matad_numerics/0441.txt",
+      "path": "data/numerics/matad_numerics/0441.txt",
+      "description": "matad_numerics: exact source expression 441, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0442",
+      "name": "vakint/numerics/matad_numerics/0442.txt",
+      "path": "data/numerics/matad_numerics/0442.txt",
+      "description": "matad_numerics: exact source expression 442, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0443",
+      "name": "vakint/numerics/matad_numerics/0443.txt",
+      "path": "data/numerics/matad_numerics/0443.txt",
+      "description": "matad_numerics: exact source expression 443, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0444",
+      "name": "vakint/numerics/matad_numerics/0444.txt",
+      "path": "data/numerics/matad_numerics/0444.txt",
+      "description": "matad_numerics: exact source expression 444, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0445",
+      "name": "vakint/numerics/matad_numerics/0445.txt",
+      "path": "data/numerics/matad_numerics/0445.txt",
+      "description": "matad_numerics: exact source expression 445, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0446",
+      "name": "vakint/numerics/matad_numerics/0446.txt",
+      "path": "data/numerics/matad_numerics/0446.txt",
+      "description": "matad_numerics: exact source expression 446, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0447",
+      "name": "vakint/numerics/matad_numerics/0447.txt",
+      "path": "data/numerics/matad_numerics/0447.txt",
+      "description": "matad_numerics: exact source expression 447, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0448",
+      "name": "vakint/numerics/matad_numerics/0448.txt",
+      "path": "data/numerics/matad_numerics/0448.txt",
+      "description": "matad_numerics: exact source expression 448, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0449",
+      "name": "vakint/numerics/matad_numerics/0449.txt",
+      "path": "data/numerics/matad_numerics/0449.txt",
+      "description": "matad_numerics: exact source expression 449, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0450",
+      "name": "vakint/numerics/matad_numerics/0450.txt",
+      "path": "data/numerics/matad_numerics/0450.txt",
+      "description": "matad_numerics: exact source expression 450, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0451",
+      "name": "vakint/numerics/matad_numerics/0451.txt",
+      "path": "data/numerics/matad_numerics/0451.txt",
+      "description": "matad_numerics: exact source expression 451, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0452",
+      "name": "vakint/numerics/matad_numerics/0452.txt",
+      "path": "data/numerics/matad_numerics/0452.txt",
+      "description": "matad_numerics: exact source expression 452, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0453",
+      "name": "vakint/numerics/matad_numerics/0453.txt",
+      "path": "data/numerics/matad_numerics/0453.txt",
+      "description": "matad_numerics: exact source expression 453, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0454",
+      "name": "vakint/numerics/matad_numerics/0454.txt",
+      "path": "data/numerics/matad_numerics/0454.txt",
+      "description": "matad_numerics: exact source expression 454, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0455",
+      "name": "vakint/numerics/matad_numerics/0455.txt",
+      "path": "data/numerics/matad_numerics/0455.txt",
+      "description": "matad_numerics: exact source expression 455, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0456",
+      "name": "vakint/numerics/matad_numerics/0456.txt",
+      "path": "data/numerics/matad_numerics/0456.txt",
+      "description": "matad_numerics: exact source expression 456, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0457",
+      "name": "vakint/numerics/matad_numerics/0457.txt",
+      "path": "data/numerics/matad_numerics/0457.txt",
+      "description": "matad_numerics: exact source expression 457, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0458",
+      "name": "vakint/numerics/matad_numerics/0458.txt",
+      "path": "data/numerics/matad_numerics/0458.txt",
+      "description": "matad_numerics: exact source expression 458, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0459",
+      "name": "vakint/numerics/matad_numerics/0459.txt",
+      "path": "data/numerics/matad_numerics/0459.txt",
+      "description": "matad_numerics: exact source expression 459, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0460",
+      "name": "vakint/numerics/matad_numerics/0460.txt",
+      "path": "data/numerics/matad_numerics/0460.txt",
+      "description": "matad_numerics: exact source expression 460, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0461",
+      "name": "vakint/numerics/matad_numerics/0461.txt",
+      "path": "data/numerics/matad_numerics/0461.txt",
+      "description": "matad_numerics: exact source expression 461, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0462",
+      "name": "vakint/numerics/matad_numerics/0462.txt",
+      "path": "data/numerics/matad_numerics/0462.txt",
+      "description": "matad_numerics: exact source expression 462, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0463",
+      "name": "vakint/numerics/matad_numerics/0463.txt",
+      "path": "data/numerics/matad_numerics/0463.txt",
+      "description": "matad_numerics: exact source expression 463, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0464",
+      "name": "vakint/numerics/matad_numerics/0464.txt",
+      "path": "data/numerics/matad_numerics/0464.txt",
+      "description": "matad_numerics: exact source expression 464, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0465",
+      "name": "vakint/numerics/matad_numerics/0465.txt",
+      "path": "data/numerics/matad_numerics/0465.txt",
+      "description": "matad_numerics: exact source expression 465, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0466",
+      "name": "vakint/numerics/matad_numerics/0466.txt",
+      "path": "data/numerics/matad_numerics/0466.txt",
+      "description": "matad_numerics: exact source expression 466, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0467",
+      "name": "vakint/numerics/matad_numerics/0467.txt",
+      "path": "data/numerics/matad_numerics/0467.txt",
+      "description": "matad_numerics: exact source expression 467, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0468",
+      "name": "vakint/numerics/matad_numerics/0468.txt",
+      "path": "data/numerics/matad_numerics/0468.txt",
+      "description": "matad_numerics: exact source expression 468, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0469",
+      "name": "vakint/numerics/matad_numerics/0469.txt",
+      "path": "data/numerics/matad_numerics/0469.txt",
+      "description": "matad_numerics: exact source expression 469, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0470",
+      "name": "vakint/numerics/matad_numerics/0470.txt",
+      "path": "data/numerics/matad_numerics/0470.txt",
+      "description": "matad_numerics: exact source expression 470, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0471",
+      "name": "vakint/numerics/matad_numerics/0471.txt",
+      "path": "data/numerics/matad_numerics/0471.txt",
+      "description": "matad_numerics: exact source expression 471, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0472",
+      "name": "vakint/numerics/matad_numerics/0472.txt",
+      "path": "data/numerics/matad_numerics/0472.txt",
+      "description": "matad_numerics: exact source expression 472, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0473",
+      "name": "vakint/numerics/matad_numerics/0473.txt",
+      "path": "data/numerics/matad_numerics/0473.txt",
+      "description": "matad_numerics: exact source expression 473, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0474",
+      "name": "vakint/numerics/matad_numerics/0474.txt",
+      "path": "data/numerics/matad_numerics/0474.txt",
+      "description": "matad_numerics: exact source expression 474, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0475",
+      "name": "vakint/numerics/matad_numerics/0475.txt",
+      "path": "data/numerics/matad_numerics/0475.txt",
+      "description": "matad_numerics: exact source expression 475, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0476",
+      "name": "vakint/numerics/matad_numerics/0476.txt",
+      "path": "data/numerics/matad_numerics/0476.txt",
+      "description": "matad_numerics: exact source expression 476, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0477",
+      "name": "vakint/numerics/matad_numerics/0477.txt",
+      "path": "data/numerics/matad_numerics/0477.txt",
+      "description": "matad_numerics: exact source expression 477, original precision retained"
+    },
+    {
+      "constant": "MATAD_NUMERICS_0478",
+      "name": "vakint/numerics/matad_numerics/0478.txt",
+      "path": "data/numerics/matad_numerics/0478.txt",
+      "description": "matad_numerics: exact source expression 478, original precision retained"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_BMW_CANDIDATES_RRBIN_GZ",
+      "name": "vakint/rustred/four_loop/bmw.candidates.rrbin.gz",
+      "path": "data/rustred/four_loop/bmw.candidates.rrbin.gz",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: bmw.candidates.rrbin.gz"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_BMW_CSV",
+      "name": "vakint/rustred/four_loop/bmw.csv",
+      "path": "data/rustred/four_loop/bmw.csv",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: bmw.csv"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_BMW_RRCAT_BIN_GZ",
+      "name": "vakint/rustred/four_loop/bmw.rrcat.bin.gz",
+      "path": "data/rustred/four_loop/bmw.rrcat.bin.gz",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: bmw.rrcat.bin.gz"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_BMW_RRNORM_BIN",
+      "name": "vakint/rustred/four_loop/bmw.rrnorm.bin",
+      "path": "data/rustred/four_loop/bmw.rrnorm.bin",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: bmw.rrnorm.bin"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_FG_CANDIDATES_RRBIN_GZ",
+      "name": "vakint/rustred/four_loop/fg.candidates.rrbin.gz",
+      "path": "data/rustred/four_loop/fg.candidates.rrbin.gz",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: fg.candidates.rrbin.gz"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_FG_CSV",
+      "name": "vakint/rustred/four_loop/fg.csv",
+      "path": "data/rustred/four_loop/fg.csv",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: fg.csv"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_FG_RRCAT_BIN_GZ",
+      "name": "vakint/rustred/four_loop/fg.rrcat.bin.gz",
+      "path": "data/rustred/four_loop/fg.rrcat.bin.gz",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: fg.rrcat.bin.gz"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_FG_RRNORM_BIN",
+      "name": "vakint/rustred/four_loop/fg.rrnorm.bin",
+      "path": "data/rustred/four_loop/fg.rrnorm.bin",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: fg.rrnorm.bin"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_H_CANDIDATES_RRBIN_GZ",
+      "name": "vakint/rustred/four_loop/h.candidates.rrbin.gz",
+      "path": "data/rustred/four_loop/h.candidates.rrbin.gz",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: h.candidates.rrbin.gz"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_H_CSV",
+      "name": "vakint/rustred/four_loop/h.csv",
+      "path": "data/rustred/four_loop/h.csv",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: h.csv"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_H_RRCAT_BIN_GZ",
+      "name": "vakint/rustred/four_loop/h.rrcat.bin.gz",
+      "path": "data/rustred/four_loop/h.rrcat.bin.gz",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: h.rrcat.bin.gz"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_H_RRNORM_BIN",
+      "name": "vakint/rustred/four_loop/h.rrnorm.bin",
+      "path": "data/rustred/four_loop/h.rrnorm.bin",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: h.rrnorm.bin"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_X_CANDIDATES_RRBIN_GZ",
+      "name": "vakint/rustred/four_loop/x.candidates.rrbin.gz",
+      "path": "data/rustred/four_loop/x.candidates.rrbin.gz",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: x.candidates.rrbin.gz"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_X_CSV",
+      "name": "vakint/rustred/four_loop/x.csv",
+      "path": "data/rustred/four_loop/x.csv",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: x.csv"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_X_RRCAT_BIN_GZ",
+      "name": "vakint/rustred/four_loop/x.rrcat.bin.gz",
+      "path": "data/rustred/four_loop/x.rrcat.bin.gz",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: x.rrcat.bin.gz"
+    },
+    {
+      "constant": "DATA_RUSTRED_FOUR_LOOP_X_RRNORM_BIN",
+      "name": "vakint/rustred/four_loop/x.rrnorm.bin",
+      "path": "data/rustred/four_loop/x.rrnorm.bin",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: x.rrnorm.bin"
+    },
+    {
+      "constant": "DATA_RUSTRED_UNIT_MASS_VACUUM_K1_RRBIN",
+      "name": "vakint/rustred/unit_mass_vacuum_k1.rrbin",
+      "path": "data/rustred/unit_mass_vacuum_k1.rrbin",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: unit_mass_vacuum_k1.rrbin"
+    },
+    {
+      "constant": "DATA_RUSTRED_UNIT_MASS_VACUUM_K3_RRBIN",
+      "name": "vakint/rustred/unit_mass_vacuum_k3.rrbin",
+      "path": "data/rustred/unit_mass_vacuum_k3.rrbin",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: unit_mass_vacuum_k3.rrbin"
+    },
+    {
+      "constant": "DATA_RUSTRED_UNIT_MASS_VACUUM_K6_RRBIN",
+      "name": "vakint/rustred/unit_mass_vacuum_k6.rrbin",
+      "path": "data/rustred/unit_mass_vacuum_k6.rrbin",
+      "description": "Vakint RustRed reduction program, catalog or normalization data: unit_mass_vacuum_k6.rrbin"
+    },
+    {
+      "constant": "FORM_SRC_ALPHALOOP_INTEGRATEDUV_FRM",
+      "name": "vakint/form_src/alphaloop/integrateduv.frm",
+      "path": "form_src/alphaloop/integrateduv.frm",
+      "description": "Vakint FORM source or execution template: integrateduv.frm"
+    },
+    {
+      "constant": "FORM_SRC_ALPHALOOP_PVTAB10_H",
+      "name": "vakint/form_src/alphaloop/pvtab10.h",
+      "path": "form_src/alphaloop/pvtab10.h",
+      "description": "Vakint FORM source or execution template: pvtab10.h"
+    },
+    {
+      "constant": "FORM_SRC_ALPHALOOP_TENSORREDUCE_FRM",
+      "name": "vakint/form_src/alphaloop/tensorreduce.frm",
+      "path": "form_src/alphaloop/tensorreduce.frm",
+      "description": "Vakint FORM source or execution template: tensorreduce.frm"
+    },
+    {
+      "constant": "FORM_SRC_FMFT_FMFT_FRM",
+      "name": "vakint/form_src/fmft/fmft.frm",
+      "path": "form_src/fmft/fmft.frm",
+      "description": "Vakint FORM source or execution template: fmft.frm"
+    },
+    {
+      "constant": "FORM_SRC_MATAD_MATAD_NG_HH",
+      "name": "vakint/form_src/matad/matad-ng.hh",
+      "path": "form_src/matad/matad-ng.hh",
+      "description": "Vakint FORM source or execution template: matad-ng.hh"
+    },
+    {
+      "constant": "TEMPLATES_RUN_ALPHALOOP_INTEGRAL_EVALUATION_TXT",
+      "name": "vakint/templates/run_alphaloop_integral_evaluation.txt",
+      "path": "templates/run_alphaloop_integral_evaluation.txt",
+      "description": "Vakint FORM source or execution template: run_alphaloop_integral_evaluation.txt"
+    },
+    {
+      "constant": "TEMPLATES_RUN_FMFT_TXT",
+      "name": "vakint/templates/run_fmft.txt",
+      "path": "templates/run_fmft.txt",
+      "description": "Vakint FORM source or execution template: run_fmft.txt"
+    },
+    {
+      "constant": "TEMPLATES_RUN_MATAD_TXT",
+      "name": "vakint/templates/run_matad.txt",
+      "path": "templates/run_matad.txt",
+      "description": "Vakint FORM source or execution template: run_matad.txt"
+    },
+    {
+      "constant": "TEMPLATES_RUN_PYSECDEC_TEMPLATE_TXT",
+      "name": "vakint/templates/run_pySecDec_template.txt",
+      "path": "templates/run_pySecDec_template.txt",
+      "description": "Vakint FORM source or execution template: run_pySecDec_template.txt"
+    },
+    {
+      "constant": "TEMPLATES_RUN_TENSOR_REDUCTION_TXT",
+      "name": "vakint/templates/run_tensor_reduction.txt",
+      "path": "templates/run_tensor_reduction.txt",
+      "description": "Vakint FORM source or execution template: run_tensor_reduction.txt"
+    }
+  ]
+}

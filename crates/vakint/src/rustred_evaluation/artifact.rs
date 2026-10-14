@@ -5,9 +5,9 @@ use rustred::foundry::artifact::{ArtifactPersistenceError, ArtifactSchemaVersion
 use super::RustRedEvaluationError;
 use super::terminal::{TerminalCatalog, TerminalManifest, TerminalSource};
 
-const K1_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k1.rrbin");
-const K3_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k3.rrbin");
-const K6_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k6.rrbin");
+const K1_ASSET: symbolica_data::Asset = crate::data_assets::DATA_RUSTRED_UNIT_MASS_VACUUM_K1_RRBIN;
+const K3_ASSET: symbolica_data::Asset = crate::data_assets::DATA_RUSTRED_UNIT_MASS_VACUUM_K3_RRBIN;
+const K6_ASSET: symbolica_data::Asset = crate::data_assets::DATA_RUSTRED_UNIT_MASS_VACUUM_K6_RRBIN;
 
 const K1_ALGORITHM_ID: &str = "rustred.generated.one-loop-unit-mass-tadpole.v1";
 const K1_FAMILY_FINGERPRINT: &str = "rustred-integral-family-v2;N37:rustred-one-loop-unit-mass-tadpole-v1;L1;1:k;E0;P1;1:d;Q1,0,1;M;RY1,1;I+1;X1;Y1,1;I+1;X0;D1;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;G0;U1;RY1,0;Y1,1;I+1;X0;";
@@ -21,8 +21,8 @@ fn decode_current_artifact(bytes: &[u8]) -> Result<ClosedArtifact, ArtifactPersi
     ClosedArtifact::decode_durable(bytes)
 }
 
-// The embedded files and the pinned RustRed revision are one atomic build-time
-// contract. These are trusted generated native Symbolica payloads, not arbitrary
+// The shipped files and the pinned RustRed revision are one atomic versioned
+// contract. These are verified generated native Symbolica payloads, not arbitrary
 // user files. Decode and replay only the current RustRed schema: obsolete schemas
 // intentionally have no Vakint migration, compatibility reader, or fallback.
 struct FamilyAssets {
@@ -48,7 +48,10 @@ static K1_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
         "-Gam(1,1)/(ep*(ep-1))",
     )];
     load_assets(
-        K1_BYTES,
+        K1_ASSET
+            .bytes()
+            .map_err(|error| error.to_string())?
+            .as_ref(),
         &TerminalManifest::new(
             ArtifactSchemaVersion::V6,
             K1_ALGORITHM_ID,
@@ -63,7 +66,10 @@ static K3_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
         TerminalSource::exact_matad_basis(&[1, 1, 1], "-miT111"),
     ];
     load_assets(
-        K3_BYTES,
+        K3_ASSET
+            .bytes()
+            .map_err(|error| error.to_string())?
+            .as_ref(),
         &TerminalManifest::new(
             ArtifactSchemaVersion::V6,
             K3_ALGORITHM_ID,
@@ -75,7 +81,10 @@ static K3_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
 
 static K6_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
     load_assets(
-        K6_BYTES,
+        K6_ASSET
+            .bytes()
+            .map_err(|error| error.to_string())?
+            .as_ref(),
         &TerminalManifest::new(
             ArtifactSchemaVersion::V6,
             K6_ALGORITHM_ID,
@@ -119,6 +128,17 @@ impl ArtifactFamily {
     }
 
     pub(super) fn artifact(self) -> Result<&'static ClosedArtifact, RustRedEvaluationError> {
+        let asset = match self {
+            Self::UnitMassVacuumK1 => K1_ASSET,
+            Self::UnitMassVacuumK3 => K3_ASSET,
+            Self::UnitMassVacuumK6 => K6_ASSET,
+        };
+        asset
+            .bytes()
+            .map_err(|error| RustRedEvaluationError::ArtifactLoad {
+                family: self.name(),
+                detail: error.to_string(),
+            })?;
         let loaded = match self {
             Self::UnitMassVacuumK1 => &*K1_ASSETS,
             Self::UnitMassVacuumK3 => &*K3_ASSETS,
@@ -134,6 +154,17 @@ impl ArtifactFamily {
     }
 
     pub(super) fn terminals(self) -> Result<&'static TerminalCatalog, RustRedEvaluationError> {
+        let asset = match self {
+            Self::UnitMassVacuumK1 => K1_ASSET,
+            Self::UnitMassVacuumK3 => K3_ASSET,
+            Self::UnitMassVacuumK6 => K6_ASSET,
+        };
+        asset
+            .bytes()
+            .map_err(|error| RustRedEvaluationError::ArtifactLoad {
+                family: self.name(),
+                detail: error.to_string(),
+            })?;
         let loaded = match self {
             Self::UnitMassVacuumK1 => &*K1_ASSETS,
             Self::UnitMassVacuumK3 => &*K3_ASSETS,
@@ -191,7 +222,7 @@ mod tests {
     };
 
     use super::{
-        ArtifactFamily, K1_BYTES, K3_BYTES, decode_current_artifact, shipped_family_for_loop_count,
+        ArtifactFamily, K1_ASSET, K3_ASSET, decode_current_artifact, shipped_family_for_loop_count,
     };
 
     #[test]
@@ -225,13 +256,28 @@ mod tests {
         // Symbol IDs in the saved state can depend on unrelated ambient symbols.
         // Compare all structural records and ordered native coefficient values,
         // including their variable maps, rather than process-local wire IDs.
-        assert!(equivalent_generated_programs(&k1, K1_BYTES, Default::default()).unwrap());
-        assert!(equivalent_generated_programs(&k3, K3_BYTES, Default::default()).unwrap());
+        assert!(
+            equivalent_generated_programs(
+                &k1,
+                K1_ASSET.bytes().unwrap().as_ref(),
+                Default::default()
+            )
+            .unwrap()
+        );
+        assert!(
+            equivalent_generated_programs(
+                &k3,
+                K3_ASSET.bytes().unwrap().as_ref(),
+                Default::default()
+            )
+            .unwrap()
+        );
     }
 
     #[test]
     fn embedded_artifact_contract_rejects_obsolete_schemas() {
-        let envelope = inspect_program(K1_BYTES, Default::default()).unwrap();
+        let envelope =
+            inspect_program(K1_ASSET.bytes().unwrap().as_ref(), Default::default()).unwrap();
         let program = envelope.section(SectionTag::PROGRAM).unwrap();
         let proof_magic = b"RRPROOF\0";
         assert!(program.starts_with(proof_magic));

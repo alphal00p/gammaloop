@@ -4,7 +4,7 @@
 //! RustRed's candidate applier finds guarded, descending rules ending in the
 //! declared terminal catalog. Unknown leaves remain errors. Discovery and
 //! FMFT terminal preparation are offline tasks, never runtime fallbacks.
-//! Native Symbolica programs are trusted, build-time embedded data from the
+//! Native Symbolica programs are verified, externally supplied data from the
 //! pinned RustRed/Symbolica stack, not a public untrusted-file input boundary.
 
 use std::sync::{Arc, LazyLock};
@@ -47,38 +47,43 @@ fn catalog_limits() -> BinaryIoLimits {
 struct Input {
     label: &'static str,
     csv: &'static str,
-    program: &'static [u8],
-    catalog: &'static [u8],
-    normalization: &'static [u8],
-}
-
-macro_rules! input {
-    ($name:literal) => {
-        Input {
-            label: concat!("four-loop-", $name),
-            csv: include_str!(concat!("../../data/rustred/four_loop/", $name, ".csv")),
-            program: include_bytes!(concat!(
-                "../../data/rustred/four_loop/",
-                $name,
-                ".candidates.rrbin.gz"
-            )),
-            catalog: include_bytes!(concat!(
-                "../../data/rustred/four_loop/",
-                $name,
-                ".rrcat.bin.gz"
-            )),
-            normalization: include_bytes!(concat!(
-                "../../data/rustred/four_loop/",
-                $name,
-                ".rrnorm.bin"
-            )),
-        }
-    };
+    program: symbolica_data::Asset,
+    catalog: symbolica_data::Asset,
+    normalization: symbolica_data::Asset,
 }
 
 // Labels are asset identifiers only. Selection below uses the retained
 // simultaneous momentum witness, never a topology/integral name.
-const INPUTS: [Input; 4] = [input!("h"), input!("fg"), input!("bmw"), input!("x")];
+const INPUTS: [Input; 4] = [
+    Input {
+        label: "four-loop-h",
+        csv: include_str!("../../data/rustred/four_loop/h.csv"),
+        program: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_H_CANDIDATES_RRBIN_GZ,
+        catalog: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_H_RRCAT_BIN_GZ,
+        normalization: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_H_RRNORM_BIN,
+    },
+    Input {
+        label: "four-loop-fg",
+        csv: include_str!("../../data/rustred/four_loop/fg.csv"),
+        program: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_FG_CANDIDATES_RRBIN_GZ,
+        catalog: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_FG_RRCAT_BIN_GZ,
+        normalization: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_FG_RRNORM_BIN,
+    },
+    Input {
+        label: "four-loop-bmw",
+        csv: include_str!("../../data/rustred/four_loop/bmw.csv"),
+        program: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_BMW_CANDIDATES_RRBIN_GZ,
+        catalog: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_BMW_RRCAT_BIN_GZ,
+        normalization: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_BMW_RRNORM_BIN,
+    },
+    Input {
+        label: "four-loop-x",
+        csv: include_str!("../../data/rustred/four_loop/x.csv"),
+        program: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_X_CANDIDATES_RRBIN_GZ,
+        catalog: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_X_RRCAT_BIN_GZ,
+        normalization: crate::data_assets::DATA_RUSTRED_FOUR_LOOP_X_RRNORM_BIN,
+    },
+];
 
 struct Descriptor {
     physical_momenta: Vec<Atom>,
@@ -172,8 +177,15 @@ fn descriptor(source: &str) -> Result<Descriptor, String> {
 fn load(index: usize) -> Result<ExperimentalRustRed, String> {
     let input = &INPUTS[index];
     let descriptor = &DESCRIPTORS.as_ref().map_err(Clone::clone)?[index];
-    let bytes = super::experimental::compressed::decode(input.program, MAX_PROGRAM_BYTES)
-        .map_err(|error| format!("decompress {}: {error}", input.label))?;
+    let bytes = super::experimental::compressed::decode(
+        input
+            .program
+            .bytes()
+            .map_err(|error| error.to_string())?
+            .as_ref(),
+        MAX_PROGRAM_BYTES,
+    )
+    .map_err(|error| format!("decompress {}: {error}", input.label))?;
     let limits = CandidateBundleLimits {
         max_bundle_bytes: MAX_PROGRAM_BYTES,
         max_collection_entries: 8_000_000,
@@ -187,7 +199,11 @@ fn load(index: usize) -> Result<ExperimentalRustRed, String> {
         return Err("shipped program differs from its physical/auxiliary descriptor".into());
     }
     let catalog = OfflineTerminalCatalog::decode_generated_compressed(
-        input.catalog,
+        input
+            .catalog
+            .bytes()
+            .map_err(|error| error.to_string())?
+            .as_ref(),
         family.fingerprint(),
         family.denominator_count(),
         catalog_limits(),
@@ -196,7 +212,11 @@ fn load(index: usize) -> Result<ExperimentalRustRed, String> {
         Arc::new(family),
         descriptor.physical_momenta.clone(),
         reducer,
-        input.normalization,
+        input
+            .normalization
+            .bytes()
+            .map_err(|error| error.to_string())?
+            .as_ref(),
     )?;
     catalog.require_complete()?;
     catalog.require_exact_keys(native.output_terminals())?;
@@ -271,6 +291,10 @@ pub(super) fn evaluate(
     options: &RustRedEvaluationOptions,
 ) -> Result<Atom, VakintError> {
     let index = select(&matched.canonical_topology)?;
+    let input = &INPUTS[index];
+    for asset in [input.program, input.catalog, input.normalization] {
+        asset.bytes()?;
+    }
     let program =
         loaded(index)
             .as_ref()
@@ -341,9 +365,11 @@ mod tests {
                 .iter()
                 .zip([(386, 22), (145, 16), (179, 17), (445, 19)])
         {
-            let bytes =
-                super::super::experimental::compressed::decode(input.program, MAX_PROGRAM_BYTES)
-                    .unwrap();
+            let bytes = super::super::experimental::compressed::decode(
+                input.program.bytes().unwrap().as_ref(),
+                MAX_PROGRAM_BYTES,
+            )
+            .unwrap();
             let (family, reducer) = load_generated_candidate_bundle::<10>(
                 &bytes,
                 CandidateBundleLimits {
@@ -356,7 +382,7 @@ mod tests {
             )
             .unwrap();
             let plan = TerminalNormalizationPlan::decode_generated(
-                input.normalization,
+                input.normalization.bytes().unwrap().as_ref(),
                 &family,
                 reducer.terminals(),
                 reducer.ordering(),
@@ -379,7 +405,7 @@ mod tests {
             );
             assert!(plan.canonical_terminals().is_subset(plan.raw_terminals()));
             let catalog = OfflineTerminalCatalog::decode_generated_compressed(
-                input.catalog,
+                input.catalog.bytes().unwrap().as_ref(),
                 family.fingerprint(),
                 family.denominator_count(),
                 catalog_limits(),

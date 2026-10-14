@@ -168,6 +168,7 @@ impl MATAD {
     }
 
     pub fn substitute_masters_directly(&self, result: AtomView) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(crate::data_assets::ALL, "vakint/numerics/matad_numerics/")?;
         MasterPrecisionWarnings::new(&self.settings).check_substitutions(
             result,
             DIRECT_SUBSTITUTIONS
@@ -256,6 +257,7 @@ impl MATAD {
     }
 
     pub fn substitute_poly_gamma(&self, result: AtomView) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(crate::data_assets::ALL, "vakint/numerics/matad_numerics/")?;
         MasterPrecisionWarnings::new(&self.settings).check_substitutions(
             result,
             POLY_GAMMA_SUBSTITUTIONS
@@ -307,6 +309,7 @@ impl MATAD {
     }
 
     pub fn substitute_hpls(&self, result: AtomView) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(crate::data_assets::ALL, "vakint/numerics/matad_numerics/")?;
         MasterPrecisionWarnings::new(&self.settings).check_substitutions(
             result,
             HPL_SUBSTITUTIONS
@@ -336,6 +339,7 @@ impl MATAD {
     }
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(crate::data_assets::ALL, "vakint/numerics/matad_numerics/")?;
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Matad);
         MasterPrecisionWarnings::new(&self.settings).check_substitutions(
             result,
@@ -733,7 +737,9 @@ impl Vakint {
             ahash::RandomState,
         > = HashSet::default();
 
-        let template = Template::parse_template(TEMPLATES.get("run_matad.txt").unwrap()).unwrap();
+        let template =
+            Template::parse_template(TEMPLATES.get("run_matad.txt").unwrap().text()?.as_ref())
+                .unwrap();
         let mut vars: HashMap<String, String> = HashMap::new();
         vars.insert("numerator".into(), numerator_string);
 

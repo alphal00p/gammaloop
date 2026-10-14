@@ -7,6 +7,9 @@ pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
 mod master_precision;
+pub mod data_assets {
+    include!(concat!(env!("OUT_DIR"), "/data_assets.rs"));
+}
 pub mod matad;
 pub mod matad_numerics;
 pub mod rustred_evaluation;
@@ -189,50 +192,20 @@ fn create_unique_tmp_run_dir(base_dir: Option<&str>, prefix: &str) -> std::io::R
 static MINIMAL_FORM_VERSION: &str = "4.2.1";
 static MINIMAL_PYSECDEC_VERSION: &str = "1.6.4";
 
-static FORM_SRC: phf::Map<&'static str, &'static str> = phf_map! {
-    "integrateduv.frm" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/alphaloop/integrateduv.frm"
-    )),
-    "tensorreduce.frm" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/alphaloop/tensorreduce.frm"
-    )),
-    "pvtab10.h" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/alphaloop/pvtab10.h"
-    )),
-    "fmft.frm" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/fmft/fmft.frm"
-    )),
-    "matad-ng.hh" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/matad/matad-ng.hh"
-    )),
+static FORM_SRC: phf::Map<&'static str, symbolica_data::Asset> = phf_map! {
+    "integrateduv.frm" =>  data_assets::FORM_SRC_ALPHALOOP_INTEGRATEDUV_FRM,
+    "tensorreduce.frm" =>  data_assets::FORM_SRC_ALPHALOOP_TENSORREDUCE_FRM,
+    "pvtab10.h" =>  data_assets::FORM_SRC_ALPHALOOP_PVTAB10_H,
+    "fmft.frm" =>  data_assets::FORM_SRC_FMFT_FMFT_FRM,
+    "matad-ng.hh" =>  data_assets::FORM_SRC_MATAD_MATAD_NG_HH,
 };
 
-static TEMPLATES: phf::Map<&'static str, &'static str> = phf_map! {
-    "run_tensor_reduction.txt" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_tensor_reduction.txt"
-    )),
-    "run_alphaloop_integral_evaluation.txt" => include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_alphaloop_integral_evaluation.txt"
-    )),
-    "run_pySecDec_template.txt" => include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_pySecDec_template.txt"
-    )),
-    "run_matad.txt" => include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_matad.txt"
-    )),
-    "run_fmft.txt" => include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_fmft.txt"
-    )),
+static TEMPLATES: phf::Map<&'static str, symbolica_data::Asset> = phf_map! {
+    "run_tensor_reduction.txt" =>  data_assets::TEMPLATES_RUN_TENSOR_REDUCTION_TXT,
+    "run_alphaloop_integral_evaluation.txt" => data_assets::TEMPLATES_RUN_ALPHALOOP_INTEGRAL_EVALUATION_TXT,
+    "run_pySecDec_template.txt" => data_assets::TEMPLATES_RUN_PYSECDEC_TEMPLATE_TXT,
+    "run_matad.txt" => data_assets::TEMPLATES_RUN_MATAD_TXT,
+    "run_fmft.txt" => data_assets::TEMPLATES_RUN_FMFT_TXT,
 };
 
 #[derive(Error, Debug)]
@@ -2623,8 +2596,14 @@ impl VakintTerm {
                 );
         }
 
-        let template =
-            Template::parse_template(TEMPLATES.get("run_tensor_reduction.txt").unwrap()).unwrap();
+        let template = Template::parse_template(
+            TEMPLATES
+                .get("run_tensor_reduction.txt")
+                .unwrap()
+                .text()?
+                .as_ref(),
+        )
+        .unwrap();
 
         let mut vars: HashMap<String, String> = HashMap::new();
         let (form_header_additions, form_expression, indices) =
@@ -5072,9 +5051,14 @@ Evaluated (n_loops=1, mu_r=1) :
             vars.insert("couplings_prefactor".into(), "'1'".into());
             vars.insert("couplings_values".into(), "{}".into());
 
-            let template =
-                Template::parse_template(TEMPLATES.get("run_pySecDec_template.txt").unwrap())
-                    .unwrap();
+            let template = Template::parse_template(
+                TEMPLATES
+                    .get("run_pySecDec_template.txt")
+                    .unwrap()
+                    .text()?
+                    .as_ref(),
+            )
+            .unwrap();
 
             let rendered = template
                 .render(&RenderOptions {
@@ -5242,6 +5226,7 @@ Evaluated (n_loops=1, mu_r=1) :
         integral_specs: &ReplacementRules,
         opts: &AlphaLoopOptions,
     ) -> Result<Atom, VakintError> {
+        symbolica_data::Asset::prepare(data_assets::ALL, "vakint/numerics/alphaloop_numerics/")?;
         let integral = integral_specs.canonical_topology.get_integral();
 
         debug!(
@@ -5356,7 +5341,9 @@ Evaluated (n_loops=1, mu_r=1) :
         let template = Template::parse_template(
             TEMPLATES
                 .get("run_alphaloop_integral_evaluation.txt")
-                .unwrap(),
+                .unwrap()
+                .text()?
+                .as_ref(),
         )
         .unwrap();
 
@@ -6286,7 +6273,10 @@ Evaluated (n_loops=1, mu_r=1) :
         let tmp_dir = create_unique_tmp_run_dir(temporary_directory.as_deref(), "vakint_temp")?;
 
         for resource in resources.iter() {
-            fs::write(tmp_dir.join(resource), FORM_SRC.get(resource).unwrap())?;
+            fs::write(
+                tmp_dir.join(resource),
+                FORM_SRC.get(resource).unwrap().bytes()?.as_ref(),
+            )?;
         }
         fs::write(tmp_dir.join(&input.0), &input.1)?;
         let mut cmd = Command::new(settings.form_exe_path.as_str());

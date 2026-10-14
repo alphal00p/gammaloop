@@ -59,3 +59,14 @@ python_stubgen = [
   "symbolica/python_stubgen",
 ]
 symbolica_community_module = ["dep:pyo3", "dep:pyo3-stub-gen-derive", "symbolica/python_export", "feynkit-ingress", "dep:feynkit-py"]
+
+[package.metadata.symbolica-data]
+manifest = "data.json"
+
+[dependencies.symbolica-data]
+git = "https://github.com/alphal00p/gammaloop"
+branch = "feynkit"
+
+[build-dependencies.symbolica-data]
+git = "https://github.com/alphal00p/gammaloop"
+branch = "feynkit"
