@@ -1991,9 +1991,9 @@ mod tests {
     #[test]
     fn model_refresh_preserves_persisted_parameter_order_and_dual_seeds() {
         test_initialise().unwrap();
-        let model = Model::from_file(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+        let model = Model::from_str(
+            include_str!("../../../../../assets/models/json/scalars/scalars_2p_3p.json").into(),
+            "json",
         )
         .unwrap();
         let mut builder = ParamBuilder::<f64>::new_empty();

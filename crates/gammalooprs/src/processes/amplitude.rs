@@ -4591,9 +4591,9 @@ pub mod test {
     #[test]
     fn raised_amplitude_constituents_reject_different_group_ids() {
         test_initialise().unwrap();
-        let model = crate::model::Model::from_file(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+        let model = crate::model::Model::from_str(
+            include_str!("../../../../assets/models/json/scalars/scalars_2p_3p.json").into(),
+            "json",
         )
         .unwrap();
         let mut graph = AmplitudeGraph::new(
@@ -4673,9 +4673,9 @@ pub mod test {
             .stack_size(32 * 1024 * 1024)
             .spawn(|| {
                 test_initialise().unwrap();
-                let model = crate::model::Model::from_file(
-                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                        .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+                let model = crate::model::Model::from_str(
+                    include_str!("../../../../assets/models/json/scalars/scalars_2p_3p.json").into(),
+                    "json",
                 )
                 .unwrap();
                 let mut graph = Graph::from_string(
