@@ -129,7 +129,7 @@
     "orders": [
       ["QED", 1]
     ],
-    "value": [0.0, 0.0]
+    "value": [-0.00729454338257259, 0.0]
   }, {
     "expression": "-1*UFO::{}::I2x23",
     "name": "GC_19",
@@ -164,7 +164,7 @@
     "orders": [
       ["QED", 1]
     ],
-    "value": [0.0, 0.0]
+    "value": [0.00729454338257259, 0.0]
   }, {
     "expression": "UFO::{}::I3x23",
     "name": "GC_24",
@@ -591,14 +591,14 @@
     "orders": [
       ["QED", 1]
     ],
-    "value": [0.0, 0.0]
+    "value": [0.0, -0.005158021091476534]
   }, {
     "expression": "(1/2)^(1/2)*UFO::{}::yc",
     "name": "GC_85",
     "orders": [
       ["QED", 1]
     ],
-    "value": [0.0, 0.0]
+    "value": [0.005158021091476534, 0.0]
   }, {
     "expression": "-1*UFO::{}::ye",
     "name": "GC_86",
@@ -1091,7 +1091,7 @@
     "name": "ymc",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [1.27, 0.0]
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -1155,7 +1155,7 @@
     "name": "MC",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [1.27, 0.0]
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1467,7 +1467,7 @@
     "name": "yc",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0, 0.0]
+    "value": [0.00729454338257259, 0.0]
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::yme",
     "lhablock": null,
@@ -1555,7 +1555,7 @@
     "name": "I2x22",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.00729454338257259, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x2)*UFO::{}::yt",
     "lhablock": null,
@@ -1595,7 +1595,7 @@
     "name": "I3x22",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0]
+    "value": [0.00729454338257259, 0.0]
   }, {
     "expression": "UFO::{}::CKM2x3*UFO::{}::yc",
     "lhablock": null,

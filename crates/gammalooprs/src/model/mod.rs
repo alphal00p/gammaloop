@@ -3055,7 +3055,9 @@ mod tests {
 
     #[test]
     fn imported_internal_zero_masses_are_structurally_massless() -> eyre::Result<()> {
-        let full = load_generic_model("sm");
+        let mut full = load_generic_model("sm");
+        // Keep a numerically zero external mass as the adjustable control.
+        full.get_parameter_mut("MC")?.value = Some(Complex::new_re(F(0.0)));
         for expression in ["0", "0.0", "UFO::ZERO"] {
             let mut serialized = full.to_serializable();
             for name in ["MS", "muQ", "muLe"] {

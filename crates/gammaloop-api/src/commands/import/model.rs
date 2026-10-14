@@ -786,10 +786,16 @@ mod tests {
                     ("u", "MU", "ymu", "yu", 0.0022),
                     ("d", "MD", "ymd", "yd", 0.0047),
                     ("s", "MS", "yms", "ys", 0.095),
+                    ("c", "MC", "ymc", "yc", 1.27),
                 ] {
-                    let restricted =
-                        restriction != "full" && !(restriction == "thermal_s_mass" && quark == "s");
-                    let massless = simplify_model && restricted;
+                    let expected_value = match (restriction, quark) {
+                        ("full", _) | ("thermal_s_mass", "s") | ("light_quarks_massless", "c") => {
+                            default
+                        }
+                        ("c_mass", "c") => 1.55,
+                        _ => 0.0,
+                    };
+                    let massless = simplify_model && expected_value == 0.0;
                     let expected_mass = if massless {
                         UFOSymbol::zero()
                     } else {
@@ -807,7 +813,7 @@ mod tests {
                         );
                         assert_eq!(
                             state.model.get_parameter(parameter).value,
-                            Some(Complex::new_re(F(if restricted { 0.0 } else { default }))),
+                            Some(Complex::new_re(F(expected_value))),
                             "{restriction}: {parameter}, simplify={simplify_model}"
                         );
                     }
@@ -899,6 +905,12 @@ mod tests {
                             assert!(value.re.abs() < 1.0e-15);
                             assert!((value.im + yukawa_mass / ve).abs() < 1.0e-15);
                         }
+                        for parameter in [mass, yukawa_input] {
+                            state
+                                .model_parameters
+                                .insert(parameter.into(), Complex::new_re(F(expected_value)));
+                        }
+                        state.model.apply_param_card(&state.model_parameters)?;
                     }
                 }
                 if restriction == "light_quarks_massless" {
@@ -1044,9 +1056,16 @@ mod tests {
                 ("u", "MU", "ymu", 0.0022),
                 ("d", "MD", "ymd", 0.0047),
                 ("s", "MS", "yms", 0.095),
+                ("c", "MC", "ymc", 1.27),
             ] {
-                let massless =
-                    restriction != "full" && !(restriction == "thermal_s_mass" && quark == "s");
+                let expected_value = match (restriction, quark) {
+                    ("full", _) | ("thermal_s_mass", "s") | ("light_quarks_massless", "c") => {
+                        default
+                    }
+                    ("c_mass", "c") => 1.55,
+                    _ => 0.0,
+                };
+                let massless = expected_value == 0.0;
                 for model in [&ufo, &json, &restored] {
                     for parameter in [mass, yukawa_input] {
                         assert_eq!(
@@ -1060,7 +1079,7 @@ mod tests {
                         );
                         assert_eq!(
                             model.get_parameter(parameter).value,
-                            Some(Complex::new_re(F(if massless { 0.0 } else { default }))),
+                            Some(Complex::new_re(F(expected_value))),
                             "{restriction}: {parameter}"
                         );
                     }
