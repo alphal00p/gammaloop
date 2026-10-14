@@ -62,6 +62,7 @@
       "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib"
       "packages.x86_64-linux.crate-test-binaries-spenso-macros"
       "packages.x86_64-linux.crate-test-binaries-spynso3"
+      "packages.x86_64-linux.crate-test-binaries-symbolica-data"
       "packages.x86_64-linux.crate-test-binaries-symbolica-utils"
     ];
     "checks.x86_64-linux.gammaloop-nextest-binaries-vakint" = [
@@ -166,6 +167,9 @@
     ];
     "packages.x86_64-linux.crate-test-binaries-spynso3" = [
       "packages.x86_64-linux.crate-test-dependencies-spynso3"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-symbolica-data" = [
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-data"
     ];
     "packages.x86_64-linux.crate-test-binaries-symbolica-utils" = [
       "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
@@ -448,7 +452,12 @@
       "packages.x86_64-linux.crate-test-dependencies-spenso"
       "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
       "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-data"
       "packages.x86_64-linux.crate-test-dependencies-typst-renderer"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-symbolica-data" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     ];
     "packages.x86_64-linux.crate-test-dependencies-symbolica-utils" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -462,6 +471,7 @@
     "packages.x86_64-linux.crate-test-dependencies-typst-renderer" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-symbolica-data"
     ];
     "packages.x86_64-linux.crate-test-dependencies-vakint" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -566,6 +576,7 @@
     "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib"
     "packages.x86_64-linux.crate-test-binaries-spenso-macros"
     "packages.x86_64-linux.crate-test-binaries-spynso3"
+    "packages.x86_64-linux.crate-test-binaries-symbolica-data"
     "packages.x86_64-linux.crate-test-binaries-symbolica-utils"
     "packages.x86_64-linux.crate-test-binaries-three-dimensional-reps"
     "packages.x86_64-linux.crate-test-binaries-typst-renderer"
@@ -601,6 +612,7 @@
     "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
     "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
     "packages.x86_64-linux.crate-test-dependencies-spynso3"
+    "packages.x86_64-linux.crate-test-dependencies-symbolica-data"
     "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
     "packages.x86_64-linux.crate-test-dependencies-three-dimensional-reps"
     "packages.x86_64-linux.crate-test-dependencies-typst-renderer"

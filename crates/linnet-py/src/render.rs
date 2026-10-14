@@ -833,6 +833,7 @@ impl PreparedRender {
     /// Compile with the embedded Rust compiler and offline package store.
     pub fn compile(&self, format: &str) -> PyResult<Vec<Vec<u8>>> {
         typst_renderer::Document::new(&self.root, &self.package_store, &self.files)
+            .map_err(PyRuntimeError::new_err)?
             .compile(format)
             .map_err(PyRuntimeError::new_err)
     }

@@ -2363,6 +2363,8 @@ dependencies = [
  "num-integer",
  "num-traits",
  "numerica",
+ "proc-macro2",
+ "quote",
  "rand 0.8.6",
  "regex",
  "regex-automata",
@@ -6357,6 +6359,7 @@ dependencies = [
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
+ "symbolica-data",
  "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
@@ -6558,6 +6561,15 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wide 1.7.0",
+]
+
+[[package]]
+name = "symbolica-data"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -7711,8 +7723,11 @@ name = "typst-renderer"
 version = "0.1.0"
 dependencies = [
  "comemo",
+ "serde_json",
+ "symbolica-data",
  "tempfile",
  "typst",
+ "typst-assets",
  "typst-html",
  "typst-kit",
  "typst-layout",
