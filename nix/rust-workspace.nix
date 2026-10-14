@@ -1228,13 +1228,7 @@
     packages = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/uv.lock"))).package;
     symbolica = lib.findFirst (package: package.name == "symbolica") null packages;
     loader = lib.findFirst (package: package.name == "ufo-model-loader") null packages;
-    wheelTag =
-      {
-        x86_64-linux = "manylinux_2_17_x86_64";
-        aarch64-darwin = "macosx_11_0_arm64";
-      }.${
-        system
-      } or (throw "The locked Symbolica ${symbolica.version} Python package has no wheel for ${system}; UFO import tests require x86_64-linux or aarch64-darwin.");
+    wheelTag = ci.ufoWheelTags.${system} or (throw "The locked Symbolica ${symbolica.version} Python package has no wheel for ${system}; UFO import tests require ${builtins.concatStringsSep " or " (builtins.attrNames ci.ufoWheelTags)}.");
     symbolicaWheel = lib.findFirst (wheel: lib.hasInfix wheelTag wheel.url) null symbolica.wheels;
     loaderWheel = builtins.head loader.wheels;
     pythonSymbolica = pythonPackages.buildPythonPackage {
@@ -1248,7 +1242,7 @@
       # validates both wheel imports and behavior with the CI runtime license.
       doCheck = false;
       dontUsePythonImportsCheck = true;
-      meta.platforms = ["x86_64-linux" "aarch64-darwin"];
+      meta.platforms = builtins.attrNames ci.ufoWheelTags;
     };
     ufoModelLoader = pythonPackages.buildPythonPackage {
       pname = loader.name;
