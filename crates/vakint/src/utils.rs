@@ -57,8 +57,14 @@ pub(crate) mod vakint_macros {
 
 #[macro_export]
 macro_rules! vakint_parse {
-    ($s: expr) => {{ symbolica::try_parse!($s, default_namespace = $crate::NAMESPACE) }};
-    ($s: expr, $ns: expr) => {{ symbolica::try_parse!($s, default_namespace = $ns) }};
+    ($s: expr) => {{
+        $crate::Vakint::initialize_vakint_symbols();
+        symbolica::try_parse!($s, default_namespace = $crate::NAMESPACE)
+    }};
+    ($s: expr, $ns: expr) => {{
+        $crate::Vakint::initialize_vakint_symbols();
+        symbolica::try_parse!($s, default_namespace = $ns)
+    }};
 }
 
 // #[macro_export]
@@ -75,6 +81,7 @@ macro_rules! vakint_parse {
 #[macro_export]
 macro_rules! vakint_symbol {
     ($s: expr) => {{
+        $crate::Vakint::initialize_vakint_symbols();
         if format!("{}", $s).starts_with(format!("{}::", $crate::NAMESPACE).as_str()) {
             match symbolica::try_parse!($s) {
                 Ok::<_, String>(a) => match a {

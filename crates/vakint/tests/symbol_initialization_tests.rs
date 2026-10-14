@@ -6,6 +6,57 @@ use symbolica::domains::float::{Complex, Float};
 use vakint::{Vakint, VakintSettings, symbols::S, vakint_parse};
 
 #[test]
+fn exported_macros_initialize_momentum_tags_in_a_fresh_process() {
+    const MODE: &str = "VAKINT_COLD_MACRO_TEST";
+    if let Ok(mode) = std::env::var(MODE) {
+        // Each branch runs before any Vakint instance or explicit symbol
+        // initialization, regardless of other tests' ordering or concurrency.
+        let head = match mode.as_str() {
+            "parse_default" => {
+                vakint_parse!("k(1,101)*p(2,101)").unwrap();
+                S.k
+            }
+            "parse_explicit_namespace" => {
+                vakint_parse!("k(1,101)*p(2,101)", "vakint").unwrap();
+                S.p
+            }
+            "symbol_unqualified" => vakint::vakint_symbol!("k"),
+            "symbol_qualified" => vakint::vakint_symbol!("vakint::p"),
+            _ => panic!("unknown cold initialization case"),
+        };
+        assert!(head.has_tag(&SPENSO_TAG.tensor));
+        assert!(head.has_tag(&SPENSO_TAG.rank1));
+        assert_eq!(S.mom, S.k);
+        Vakint::initialize_vakint_symbols();
+        Vakint::initialize_vakint_symbols();
+        Vakint::new().unwrap();
+        return;
+    }
+    for mode in [
+        "parse_default",
+        "parse_explicit_namespace",
+        "symbol_unqualified",
+        "symbol_qualified",
+    ] {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "exported_macros_initialize_momentum_tags_in_a_fresh_process",
+                "--nocapture",
+            ])
+            .env(MODE, mode)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "cold initialization case {mode} failed:\n{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+}
+
+#[test]
 fn public_initialization_preserves_namespaced_imaginary_placeholder() {
     Vakint::initialize_vakint_symbols();
     Vakint::initialize_vakint_symbols();
