@@ -1433,7 +1433,10 @@ fn notebook_html_fragment(document: &str) -> PyResult<String> {
 )]
 #[pyfunction]
 fn load_math_font(py: Python<'_>) -> PyResult<String> {
-    let font = PyBytes::new(py, include_bytes!("../typst/STIXTwoMath-Regular.woff2"));
+    let bytes = crate::data_assets::STIX_TWO_MATH
+        .bytes()
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+    let font = PyBytes::new(py, &bytes);
     let encoded: String = PyModule::import(py, "base64")?
         .call_method1("b64encode", (font,))?
         .call_method1("decode", ("ascii",))?

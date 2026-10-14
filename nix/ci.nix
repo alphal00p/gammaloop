@@ -69,6 +69,7 @@
         "spenso-macros"
         "spynso3"
         "symbolica-utils"
+        "symbolica-data"
       ];
     }
     {
