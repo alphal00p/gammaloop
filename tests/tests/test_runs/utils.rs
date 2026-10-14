@@ -1,4 +1,8 @@
 use super::*;
+pub(super) use gammaloop_integration_tests::evaluation_comparison::{
+    CertifiedZeroWeights, EventWeightComparison, assert_complex_approx_eq,
+    assert_evaluation_outputs_match, complex_distance, complex_ff64,
+};
 use gammalooprs::{
     observables::{HistogramSnapshot, HistogramSnapshotKind},
     utils::FloatLike,
@@ -208,6 +212,7 @@ pub(super) fn setup_scalar_topologies_cli(
 
 pub(super) fn setup_gg_hhh_threshold_amplitude_cli(
     test_name: &str,
+    generation: Option<gammalooprs::settings::global::GenerationSettings>,
 ) -> Result<gammaloop_integration_tests::CLIState> {
     let mut cli = get_test_cli(
         None,
@@ -216,13 +221,32 @@ pub(super) fn setup_gg_hhh_threshold_amplitude_cli(
         true,
     )?;
 
+    if let Some(generation) = generation {
+        cli.cli_settings.global.generation = generation;
+    }
+    let orientation_sampling = if cli
+        .cli_settings
+        .global
+        .generation
+        .explicit_orientation_sum_only
+        || cli
+            .cli_settings
+            .global
+            .generation
+            .three_dimensional_representations
+            .contains(&gammalooprs::settings::global::RepresentationMode::Ltd)
+    {
+        "summed"
+    } else {
+        "monte_carlo"
+    };
     run_commands(
         &mut cli,
         &[
             "import model sm-default",
             "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
             "set global kv global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=true",
-            r#"set default-runtime string '
+            &r#"set default-runtime string '
 [general]
 evaluator_method = "SingleParametric"
 enable_cache = false
@@ -255,7 +279,7 @@ helicities = [1, 1, 0, 0, 0]
 
 [sampling]
 graphs = "monte_carlo"
-orientations = "monte_carlo"
+orientations = "ORIENTATION_SAMPLING"
 lmb_multichanneling = true
 lmb_channels = "monte_carlo"
 
@@ -264,7 +288,8 @@ rotation_axis = []
 
 [subtraction]
 disable_threshold_subtraction = false
-'"#,
+'"#
+            .replace("ORIENTATION_SAMPLING", orientation_sampling),
             "remove processes",
             r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
                 --only-diagrams
@@ -348,12 +373,6 @@ pub(super) fn assert_integration_results_match_ignoring_timings(
         normalized_integration_result_json(lhs),
         normalized_integration_result_json(rhs),
     );
-}
-
-pub(super) fn complex_distance(lhs: Complex<f64>, rhs: Complex<f64>) -> f64 {
-    let delta_re = lhs.re - rhs.re;
-    let delta_im = lhs.im - rhs.im;
-    delta_re.hypot(delta_im)
 }
 
 pub(super) fn default_xspace_point_for(
@@ -454,32 +473,6 @@ pub(super) fn average_over_generated_helicity_processes(
     Ok(summed / processes.len() as f64)
 }
 
-pub(super) fn assert_complex_approx_eq(
-    actual: Complex<f64>,
-    expected: Complex<f64>,
-    context: impl std::fmt::Display,
-) {
-    let scale = actual
-        .re
-        .abs()
-        .max(actual.im.abs())
-        .max(expected.re.abs())
-        .max(expected.im.abs());
-    let relative_distance = if scale == 0.0 {
-        0.0
-    } else {
-        complex_distance(actual / scale, expected / scale)
-    };
-    assert!(
-        actual.re.is_finite()
-            && actual.im.is_finite()
-            && expected.re.is_finite()
-            && expected.im.is_finite()
-            && relative_distance <= 1.0e-10,
-        "{context}: actual={actual}, expected={expected}, relative distance={relative_distance}, tolerance=1e-10"
-    );
-}
-
 pub(super) fn mink_dot(left_edge: usize, right_edge: usize, dummy_index: usize) -> String {
     format!(
         "gammalooprs::Q({left_edge},spenso::mink(4,{dummy_index}))*gammalooprs::Q({right_edge},spenso::mink(4,{dummy_index}))",
@@ -516,137 +509,6 @@ pub(super) fn evaluate_xspace_process_with_events(
             orientations: None,
         },
     )
-}
-
-pub(super) fn complex_ff64(value: &Complex<F<f64>>) -> Complex<f64> {
-    Complex::new(value.re.0, value.im.0)
-}
-
-pub(super) fn assert_f64_approx_eq(actual: f64, expected: f64, context: &str) {
-    assert_complex_approx_eq(
-        Complex::new(actual, 0.0),
-        Complex::new(expected, 0.0),
-        context,
-    );
-}
-
-pub(super) fn assert_evaluation_outputs_match(
-    actual: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
-    expected: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
-    context: &str,
-) {
-    match (
-        actual.parameterization_jacobian.as_ref(),
-        expected.parameterization_jacobian.as_ref(),
-    ) {
-        (Some(actual), Some(expected)) => {
-            assert_f64_approx_eq(actual.0, expected.0, &format!("{context}: jacobian"));
-        }
-        (None, None) => {}
-        _ => panic!("{context}: jacobian presence differs"),
-    }
-    assert_f64_approx_eq(
-        actual.integrator_weight.0,
-        expected.integrator_weight.0,
-        &format!("{context}: integrator weight"),
-    );
-
-    assert_eq!(
-        actual.event_groups.len(),
-        expected.event_groups.len(),
-        "{context}: event-group count differs"
-    );
-    for (group_index, (actual_group, expected_group)) in actual
-        .event_groups
-        .iter()
-        .zip(expected.event_groups.iter())
-        .enumerate()
-    {
-        assert_eq!(
-            actual_group.len(),
-            expected_group.len(),
-            "{context}: event count differs in group {group_index}"
-        );
-        let actual_events = actual_group
-            .iter()
-            .sorted_by_key(|event| {
-                (
-                    event.cut_info.graph_group_id,
-                    event.cut_info.graph_id,
-                    event.cut_info.cut_id,
-                    event.cut_info.orientation_id,
-                    event.cut_info.sampling_channel_id,
-                )
-            })
-            .collect_vec();
-        let expected_events = expected_group
-            .iter()
-            .sorted_by_key(|event| {
-                (
-                    event.cut_info.graph_group_id,
-                    event.cut_info.graph_id,
-                    event.cut_info.cut_id,
-                    event.cut_info.orientation_id,
-                    event.cut_info.sampling_channel_id,
-                )
-            })
-            .collect_vec();
-
-        for (event_index, (actual_event, expected_event)) in
-            actual_events.iter().zip(expected_events.iter()).enumerate()
-        {
-            let event_context = format!(
-                "{context}: group {group_index} event {event_index}; actual cut={:?}; expected cut={:?}; actual additional={:?}; expected additional={:?}",
-                actual_event.cut_info,
-                expected_event.cut_info,
-                actual_event.additional_weights.weights,
-                expected_event.additional_weights.weights
-            );
-            assert_eq!(
-                actual_event.cut_info.cut_id, expected_event.cut_info.cut_id,
-                "{event_context}: cut id differs"
-            );
-            assert_eq!(
-                actual_event.cut_info.graph_id, expected_event.cut_info.graph_id,
-                "{event_context}: graph id differs"
-            );
-            assert_eq!(
-                actual_event.cut_info.graph_group_id, expected_event.cut_info.graph_group_id,
-                "{event_context}: graph-group id differs"
-            );
-            assert_eq!(
-                actual_event.cut_info.orientation_id, expected_event.cut_info.orientation_id,
-                "{event_context}: orientation id differs"
-            );
-            assert_complex_approx_eq(
-                complex_ff64(&actual_event.weight),
-                complex_ff64(&expected_event.weight),
-                format!("{event_context}: event weight"),
-            );
-            assert_eq!(
-                actual_event.additional_weights.weights.keys().collect_vec(),
-                expected_event
-                    .additional_weights
-                    .weights
-                    .keys()
-                    .collect_vec(),
-                "{event_context}: additional-weight keys differ"
-            );
-            for (key, expected_weight) in &expected_event.additional_weights.weights {
-                let actual_weight = &actual_event.additional_weights.weights[key];
-                assert_complex_approx_eq(
-                    complex_ff64(actual_weight),
-                    complex_ff64(expected_weight),
-                    format!("{event_context}: additional weight {key:?}"),
-                );
-            }
-        }
-    }
-    assert_complex_approx_eq(
-        complex_ff64(&actual.integrand_result),
-        complex_ff64(&expected.integrand_result),
-        format_args!("{context}: integrand result; actual={actual:?}; expected={expected:?}"),
-    );
 }
 
 pub(super) fn setup_epem_tth_spin_sum_cli(
@@ -795,7 +657,12 @@ fn comparisons_reject_nonfinite_and_large_relative_errors() {
         expected_output.integrand_result = Complex::new(F(expected.re), F(expected.im));
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                assert_evaluation_outputs_match(&actual_output, &expected_output, "invalid totals");
+                assert_evaluation_outputs_match(
+                    &actual_output,
+                    &expected_output,
+                    "invalid totals",
+                    EventWeightComparison::IndividualOrders,
+                );
             }))
             .is_err()
         );
@@ -817,6 +684,7 @@ fn comparisons_reject_nonfinite_and_large_relative_errors() {
                         &actual_output,
                         &expected_output,
                         "invalid real weight",
+                        EventWeightComparison::IndividualOrders,
                     );
                 }))
                 .is_err()
@@ -828,6 +696,849 @@ fn comparisons_reject_nonfinite_and_large_relative_errors() {
             Complex::new(value, value),
             Complex::new(value, value),
             "identical finite values",
+        );
+    }
+}
+
+#[test]
+fn rich_comparison_rejects_compensating_threshold_component_errors() {
+    use gammalooprs::{
+        integrands::evaluation::EvaluationResult,
+        observables::events::{
+            GenericEvent, GenericThresholdCountertermComponentWeight,
+            GenericThresholdCountertermEventInfo, ThresholdCountertermComponentOccurrence,
+        },
+    };
+
+    let mut expected = EvaluationResult::zero().into_output(false);
+    let mut event = GenericEvent::default();
+    event.additional_weights.threshold_counterterms = Some(GenericThresholdCountertermEventInfo {
+        original: Complex::new(F(0.0), F(0.0)),
+        components: [1.0, -1.0]
+            .into_iter()
+            .enumerate()
+            .map(
+                |(component_id, weight)| GenericThresholdCountertermComponentWeight {
+                    component_id,
+                    occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
+                        overlap_groups: Default::default(),
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                        lu_cut_order: Some(1),
+                    },
+                    multiplier_values: vec![F(1.0)].into(),
+                    effective_multiplier: F(1.0),
+                    bare: Some(Complex::new(F(weight), F(0.0))),
+                    weighted: Complex::new(F(weight), F(0.0)),
+                    evaluation_skipped: false,
+                },
+            )
+            .collect(),
+    });
+    expected.event_groups.push_singleton(event);
+    let mut actual = expected.clone();
+    let decomposition = actual.event_groups[0][0]
+        .additional_weights
+        .threshold_counterterms
+        .as_mut()
+        .unwrap();
+    decomposition.components[0].weighted.re = F(2.0);
+    decomposition.components[1].weighted.re = F(-2.0);
+    assert_eq!(decomposition.total(), Complex::new(F(0.0), F(0.0)));
+    for comparison in [
+        EventWeightComparison::IndividualOrders,
+        EventWeightComparison::PhysicalResidues,
+    ] {
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                assert_evaluation_outputs_match(
+                    &actual,
+                    &expected,
+                    "compensating simple-pole CT errors",
+                    comparison,
+                );
+            }))
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn rich_comparison_sums_only_one_physical_raised_residue() {
+    use gammalooprs::{
+        integrands::evaluation::EvaluationResult,
+        observables::events::{
+            GenericEvent, GenericThresholdCountertermComponentWeight,
+            GenericThresholdCountertermEventInfo,
+            ThresholdCountertermComponentOccurrence as Occurrence,
+        },
+    };
+
+    let mut expected = EvaluationResult::zero().into_output(false);
+    let mut event = GenericEvent::default();
+    event
+        .kinematic_configuration
+        .1
+        .push([F(5.0), F(1.0), F(2.0), F(3.0)].into());
+    event.additional_weights.threshold_counterterms = Some(GenericThresholdCountertermEventInfo {
+        original: Complex::new(F(0.0), F(0.0)),
+        components: (0..2)
+            .cartesian_product(1..=2)
+            .map(|(component_id, order)| {
+                let weight = (component_id * 2 + order) as f64;
+                GenericThresholdCountertermComponentWeight {
+                    component_id,
+                    occurrence: Occurrence::LocalUnitarity {
+                        overlap_groups: vec![0].into(),
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                        lu_cut_order: Some(order),
+                    },
+                    multiplier_values: vec![F(2.0)].into(),
+                    effective_multiplier: F(2.0),
+                    bare: Some(Complex::new(F(weight), F(0.0))),
+                    weighted: Complex::new(F(2.0 * weight), F(0.0)),
+                    evaluation_skipped: false,
+                }
+            })
+            .collect(),
+    });
+    event.weight = event
+        .additional_weights
+        .threshold_counterterms
+        .as_ref()
+        .unwrap()
+        .total();
+    expected.event_groups.push_singleton(event);
+    let rejected = |actual: &_, expected: &_, context, comparison| {
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                assert_evaluation_outputs_match(actual, expected, context, comparison);
+            }))
+            .is_err(),
+            "{context} was accepted"
+        );
+    };
+
+    // A source-zero certificate describes each complete residue, not its
+    // off-shell derivative coefficients. Both CFF partials can be nonzero.
+    let mut zero_residues = expected.clone();
+    let event = &mut zero_residues.event_groups[0][0];
+    event.weight = Complex::new_re(F(0.0));
+    for (component, weight) in event
+        .additional_weights
+        .threshold_counterterms
+        .as_mut()
+        .unwrap()
+        .components
+        .iter_mut()
+        .zip([1.0, -1.0, 2.0, -2.0])
+    {
+        component.bare = Some(Complex::new_re(F(weight)));
+        component.weighted = Complex::new_re(F(2.0 * weight));
+    }
+    let zeros = CertifiedZeroWeights {
+        threshold_components: [(0, 0, 0), (0, 0, 1)].into(),
+        dimensionless_tolerance: 1e-10,
+        e_cm: 2.0,
+        energy_dimension: 3,
+        ..Default::default()
+    };
+    for individual_orders in [true, false] {
+        let comparison = EventWeightComparison::CertifiedZeros {
+            individual_orders,
+            weights: &zeros,
+        };
+        assert_evaluation_outputs_match(
+            &zero_residues,
+            &zero_residues,
+            "nonzero partials of zero physical residues",
+            comparison,
+        );
+        let mut invalid = zero_residues.clone();
+        let components = &mut invalid.event_groups[0][0]
+            .additional_weights
+            .threshold_counterterms
+            .as_mut()
+            .unwrap()
+            .components;
+        components[0].bare.as_mut().unwrap().re.0 += 1.0;
+        components[2].bare.as_mut().unwrap().re.0 -= 1.0;
+        rejected(
+            &invalid,
+            &zero_residues,
+            "zero certificate cannot combine distinct residues",
+            comparison,
+        );
+    }
+
+    let mut redistributed = expected.clone();
+    let components = &mut redistributed.event_groups[0][0]
+        .additional_weights
+        .threshold_counterterms
+        .as_mut()
+        .unwrap()
+        .components;
+    components[0].bare.as_mut().unwrap().re.0 += 3.0;
+    components[0].weighted.re.0 += 6.0;
+    components[1].bare.as_mut().unwrap().re.0 -= 3.0;
+    components[1].weighted.re.0 -= 6.0;
+    assert_evaluation_outputs_match(
+        &redistributed,
+        &expected,
+        "same physical residue",
+        EventWeightComparison::PhysicalResidues,
+    );
+    rejected(
+        &redistributed,
+        &expected,
+        "CFF orders remain strict",
+        EventWeightComparison::IndividualOrders,
+    );
+
+    // Missing partial rows and a different maximum order are permitted when
+    // they describe the same complete physical residue and observable.
+    let mut fewer_rows = expected.clone();
+    let components = &mut fewer_rows.event_groups[0][0]
+        .additional_weights
+        .threshold_counterterms
+        .as_mut()
+        .unwrap()
+        .components;
+    components[0].bare = Some(Complex::new(F(3.0), F(0.0)));
+    components[0].weighted = Complex::new(F(6.0), F(0.0));
+    if let Occurrence::LocalUnitarity { lu_cut_order, .. } = &mut components[0].occurrence {
+        *lu_cut_order = Some(3);
+    }
+    components.remove(1);
+    assert_evaluation_outputs_match(
+        &fewer_rows,
+        &expected,
+        "different partial decomposition",
+        EventWeightComparison::PhysicalResidues,
+    );
+
+    for distinction in ["component", "overlap", "threshold side"] {
+        let mut reference = expected.clone();
+        let components = &mut reference.event_groups[0][0]
+            .additional_weights
+            .threshold_counterterms
+            .as_mut()
+            .unwrap()
+            .components;
+        for component in &mut components[2..] {
+            if distinction != "component" {
+                component.component_id = 0;
+            }
+            if let Occurrence::LocalUnitarity {
+                overlap_groups,
+                left_threshold_order,
+                right_threshold_order,
+                ..
+            } = &mut component.occurrence
+            {
+                if distinction == "overlap" {
+                    overlap_groups[0] = 1;
+                } else if distinction == "threshold side" {
+                    *left_threshold_order = None;
+                    *right_threshold_order = Some(1);
+                }
+            }
+        }
+        let mut actual = reference.clone();
+        let decomposition = actual.event_groups[0][0]
+            .additional_weights
+            .threshold_counterterms
+            .as_mut()
+            .unwrap();
+        for (index, shift) in [(0, 1.0), (2, -1.0)] {
+            decomposition.components[index].bare.as_mut().unwrap().re.0 += shift;
+            decomposition.components[index].weighted.re.0 += 2.0 * shift;
+        }
+        assert_eq!(decomposition.total(), reference.event_groups[0][0].weight);
+        rejected(
+            &actual,
+            &reference,
+            distinction,
+            EventWeightComparison::PhysicalResidues,
+        );
+    }
+
+    let mut two_cuts = expected.clone();
+    let mut second_cut = two_cuts.event_groups[0][0].clone();
+    second_cut.cut_info.cut_id = 1;
+    two_cuts.event_groups[0].push(second_cut);
+    let mut shifted_cuts = two_cuts.clone();
+    for (event, shift) in shifted_cuts.event_groups[0].iter_mut().zip([1.0, -1.0]) {
+        let component = &mut event
+            .additional_weights
+            .threshold_counterterms
+            .as_mut()
+            .unwrap()
+            .components[0];
+        component.bare.as_mut().unwrap().re.0 += shift;
+        component.weighted.re.0 += 2.0 * shift;
+        event.weight.re.0 += 2.0 * shift;
+    }
+    assert_eq!(
+        shifted_cuts.event_groups[0]
+            .iter()
+            .map(|event| event.weight.re.0)
+            .sum::<f64>(),
+        two_cuts.event_groups[0]
+            .iter()
+            .map(|event| event.weight.re.0)
+            .sum::<f64>()
+    );
+    rejected(
+        &shifted_cuts,
+        &two_cuts,
+        "compensating errors in different physical cuts",
+        EventWeightComparison::PhysicalResidues,
+    );
+
+    for distinction in [
+        "cut",
+        "graph",
+        "channel",
+        "observable",
+        "multiplier",
+        "bare",
+        "skipped",
+    ] {
+        let mut actual = redistributed.clone();
+        let event = &mut actual.event_groups[0][0];
+        match distinction {
+            "cut" => event.cut_info.cut_id += 1,
+            "graph" => event.cut_info.graph_id += 1,
+            "channel" => event.cut_info.sampling_channel_id = Some(1),
+            "observable" => {
+                event.kinematic_configuration.1[0] = [F(6.0), F(1.0), F(2.0), F(3.0)].into()
+            }
+            "multiplier" => {
+                event
+                    .additional_weights
+                    .threshold_counterterms
+                    .as_mut()
+                    .unwrap()
+                    .components[0]
+                    .multiplier_values[0] = F(3.0)
+            }
+            "bare" => {
+                event
+                    .additional_weights
+                    .threshold_counterterms
+                    .as_mut()
+                    .unwrap()
+                    .components[0]
+                    .bare
+                    .as_mut()
+                    .unwrap()
+                    .re
+                    .0 += 1.0
+            }
+            "skipped" => {
+                event
+                    .additional_weights
+                    .threshold_counterterms
+                    .as_mut()
+                    .unwrap()
+                    .components[0]
+                    .evaluation_skipped = true
+            }
+            _ => unreachable!(),
+        }
+        rejected(
+            &actual,
+            &expected,
+            distinction,
+            EventWeightComparison::PhysicalResidues,
+        );
+    }
+}
+
+#[test]
+fn rich_comparison_bounds_component_underflow_after_normalization() {
+    use gammalooprs::{
+        integrands::evaluation::EvaluationResult,
+        observables::events::{
+            AdditionalWeightKey, GenericEvent, GenericThresholdCountertermComponentWeight,
+            GenericThresholdCountertermEventInfo, ThresholdCountertermComponentOccurrence,
+        },
+    };
+
+    let threshold = AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 };
+    let factor_key = AdditionalWeightKey::FullMultiplicativeFactor;
+    let mut expected = EvaluationResult::zero().into_output(false);
+    expected.integrator_weight = F(1.0);
+    let mut event = GenericEvent::default();
+    for key in [AdditionalWeightKey::Original, threshold] {
+        event
+            .additional_weights
+            .weights
+            .insert(key, Complex::new_re(F(0.0)));
+    }
+    event
+        .additional_weights
+        .weights
+        .insert(factor_key, Complex::new_re(F(1.0)));
+    event.additional_weights.threshold_counterterms = Some(GenericThresholdCountertermEventInfo {
+        original: Complex::new_re(F(0.0)),
+        components: vec![GenericThresholdCountertermComponentWeight {
+            component_id: 0,
+            occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
+                overlap_groups: Default::default(),
+                left_threshold_order: Some(1),
+                right_threshold_order: None,
+                lu_cut_order: Some(1),
+            },
+            multiplier_values: vec![F(1.0)].into(),
+            effective_multiplier: F(1.0),
+            bare: Some(Complex::new_re(F(0.0))),
+            weighted: Complex::new_re(F(0.0)),
+            evaluation_skipped: false,
+        }],
+    });
+    expected.event_groups.push_singleton(event);
+    for comparison in [
+        EventWeightComparison::IndividualOrders,
+        EventWeightComparison::PhysicalResidues,
+    ] {
+        let rejected = |actual: &_, expected: &_, context| {
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    assert_evaluation_outputs_match(actual, expected, context, comparison);
+                }))
+                .is_err(),
+                "{context} was accepted"
+            );
+        };
+        // Actual GL43/GL47 reporting-boundary tails, including their remaining
+        // event factors. The ordinary original weights are unchanged.
+        for (tail, factor) in [
+            (Complex::new(F(3.034e-321), F(7e-323)), 252.21491664745935),
+            (Complex::new(F(1.84797234e-315), F(0.0)), 324.89999920591896),
+        ] {
+            let mut reference = expected.clone();
+            reference.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(factor_key, Complex::new_re(F(factor)));
+            let mut actual = reference.clone();
+            actual.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(threshold, tail);
+            assert_evaluation_outputs_match(
+                &actual,
+                &reference,
+                "reported threshold tail",
+                comparison,
+            );
+        }
+
+        let tail = f64::MIN_POSITIVE / 4.0;
+        for field in ["raw", "original", "bare", "weighted", "event", "total"] {
+            for value in [tail, f64::NAN, f64::INFINITY] {
+                let mut actual = expected.clone();
+                let event = &mut actual.event_groups[0][0];
+                let decomposition = event
+                    .additional_weights
+                    .threshold_counterterms
+                    .as_mut()
+                    .unwrap();
+                let value = Complex::new(F(value), F(-value));
+                match field {
+                    "raw" => {
+                        event.additional_weights.weights.insert(threshold, value);
+                    }
+                    "original" => decomposition.original = value,
+                    "bare" => decomposition.components[0].bare = Some(value),
+                    "weighted" => decomposition.components[0].weighted = value,
+                    "event" => event.weight = value,
+                    "total" => actual.integrand_result = value,
+                    _ => unreachable!(),
+                }
+                if value.re.0.is_finite() {
+                    assert_evaluation_outputs_match(&actual, &expected, field, comparison);
+                } else {
+                    rejected(&actual, &expected, field);
+                }
+            }
+        }
+        for factor in [
+            Complex::new_re(F(8.0)),
+            Complex::new(F(0.0), F(8.0)),
+            Complex::new_re(F(f64::NAN)),
+            Complex::new_re(F(f64::INFINITY)),
+        ] {
+            let mut reference = expected.clone();
+            reference.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(factor_key, factor);
+            let mut actual = reference.clone();
+            actual.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(threshold, Complex::new_re(F(tail)));
+            rejected(
+                &actual,
+                &reference,
+                "remaining complex factor rescues a component or is nonfinite",
+            );
+        }
+        for field in [
+            "bare",
+            "total",
+            "unknown factor",
+            "separate factor",
+            "normal raw",
+        ] {
+            let mut reference = expected.clone();
+            if field == "bare" {
+                let component = &mut reference.event_groups[0][0]
+                    .additional_weights
+                    .threshold_counterterms
+                    .as_mut()
+                    .unwrap()
+                    .components[0];
+                component.effective_multiplier = F(8.0);
+                component.multiplier_values[0] = F(8.0);
+            } else if field == "total" {
+                reference.parameterization_jacobian = Some(F(8.0));
+            } else if field == "unknown factor" {
+                reference.event_groups[0][0]
+                    .additional_weights
+                    .weights
+                    .remove(&factor_key);
+            } else if field == "separate factor" || field == "normal raw" {
+                reference.event_groups[0][0]
+                    .additional_weights
+                    .weights
+                    .insert(factor_key, Complex::new_re(F(0.0)));
+            }
+            let mut actual = reference.clone();
+            let event = &mut actual.event_groups[0][0];
+            match field {
+                "bare" => {
+                    event
+                        .additional_weights
+                        .threshold_counterterms
+                        .as_mut()
+                        .unwrap()
+                        .components[0]
+                        .bare = Some(Complex::new_re(F(tail)))
+                }
+                "total" => actual.integrand_result = Complex::new_re(F(tail)),
+                "unknown factor" => {
+                    event
+                        .additional_weights
+                        .weights
+                        .insert(threshold, Complex::new_re(F(tail)));
+                }
+                "separate factor" => {
+                    event
+                        .additional_weights
+                        .weights
+                        .insert(factor_key, Complex::new_re(F(tail)));
+                }
+                "normal raw" => {
+                    event
+                        .additional_weights
+                        .weights
+                        .insert(threshold, Complex::new_re(F(1.0)));
+                }
+                _ => unreachable!(),
+            }
+            rejected(&actual, &reference, field);
+        }
+        for sign in [-1.0, 1.0] {
+            let mut reference = expected.clone();
+            reference.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(factor_key, Complex::new(F(1.0), F(sign)));
+            let mut actual = reference.clone();
+            actual.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(threshold, Complex::new(F(3.0 * tail), F(3.0 * tail)));
+            rejected(
+                &actual,
+                &reference,
+                "two subnormal raw phases reinforce one normal physical phase",
+            );
+            reference.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(threshold, Complex::new_re(F(3.0 * tail)));
+            actual.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(threshold, Complex::new(F(3.0 * tail), F(1.2 * tail)));
+            rejected(
+                &actual,
+                &reference,
+                "erasing only one raw phase changes a normal physical phase",
+            );
+            reference.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(threshold, Complex::new_re(F(0.0)));
+            actual.event_groups[0][0]
+                .additional_weights
+                .weights
+                .insert(threshold, Complex::new(F(tail), F(tail)));
+            assert_evaluation_outputs_match(
+                &actual,
+                &reference,
+                "both mixed physical phases remain subnormal",
+                comparison,
+            );
+        }
+        let mut large_factor = expected.clone();
+        large_factor.event_groups[0][0]
+            .additional_weights
+            .weights
+            .insert(factor_key, Complex::new(F(f64::MAX), F(f64::MAX)));
+        assert_evaluation_outputs_match(
+            &large_factor,
+            &large_factor,
+            "finite factor with overflowing underflow bound",
+            comparison,
+        );
+        for swap in [false, true] {
+            let mut reference = expected.clone();
+            let mut actual = expected.clone();
+            for (output, normal, tiny) in [(&mut reference, 1.0, 0.0), (&mut actual, 2.0, tail)] {
+                let weight = if swap {
+                    Complex::new(F(tiny), F(normal))
+                } else {
+                    Complex::new(F(normal), F(tiny))
+                };
+                output.event_groups[0][0]
+                    .additional_weights
+                    .weights
+                    .insert(threshold, weight);
+            }
+            rejected(
+                &actual,
+                &reference,
+                "the other phase must retain its normal-scale comparison",
+            );
+        }
+    }
+}
+
+#[test]
+fn certified_zero_weights_follow_energy_dimensions_and_event_normalization() {
+    use gammalooprs::{
+        integrands::evaluation::EvaluationResult,
+        observables::events::{
+            AdditionalWeightKey, GenericEvent, GenericThresholdCountertermComponentWeight,
+            GenericThresholdCountertermEventInfo, ThresholdCountertermComponentOccurrence,
+        },
+    };
+
+    for dimension in [3, 5] {
+        for energy in [1.0_f64, 2.0, 7.0] {
+            let physical_scale = energy.powi(dimension);
+            // Three spatial loop measures and one decay flux have dimension 8.
+            // The raw additional weights carry the complementary dimension.
+            let normalization = 1000.0 * energy.powi(8);
+            let zeros = CertifiedZeroWeights {
+                original_cuts: [(0, 0)].into(),
+                threshold_cuts: [(0, 0)].into(),
+                threshold_components: [(0, 0, 0)].into(),
+                all_cuts_zero: true,
+                dimensionless_tolerance: 1e-10,
+                e_cm: energy,
+                energy_dimension: dimension,
+            };
+            let mut expected = EvaluationResult::zero().into_output(false);
+            let mut event = GenericEvent::default();
+            for key in [
+                AdditionalWeightKey::Original,
+                AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+            ] {
+                event
+                    .additional_weights
+                    .weights
+                    .insert(key, Complex::new_re(F(0.0)));
+            }
+            event.additional_weights.weights.insert(
+                AdditionalWeightKey::FullMultiplicativeFactor,
+                Complex::new_re(F(normalization)),
+            );
+            event.additional_weights.threshold_counterterms =
+                Some(GenericThresholdCountertermEventInfo {
+                    original: Complex::new_re(F(0.0)),
+                    components: vec![GenericThresholdCountertermComponentWeight {
+                        component_id: 0,
+                        occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
+                            overlap_groups: Default::default(),
+                            left_threshold_order: Some(1),
+                            right_threshold_order: None,
+                            lu_cut_order: Some(1),
+                        },
+                        multiplier_values: vec![F(1.0)].into(),
+                        effective_multiplier: F(1.0),
+                        bare: Some(Complex::new_re(F(0.0))),
+                        weighted: Complex::new_re(F(0.0)),
+                        evaluation_skipped: false,
+                    }],
+                });
+            expected.event_groups.push_singleton(event);
+            let mut actual = expected.clone();
+            let event = &mut actual.event_groups[0][0];
+            event.weight.re = F(5e-11 * physical_scale);
+            event
+                .additional_weights
+                .weights
+                .get_mut(&AdditionalWeightKey::Original)
+                .unwrap()
+                .re = F(2e-11 * physical_scale / normalization);
+            event
+                .additional_weights
+                .weights
+                .get_mut(&AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 })
+                .unwrap()
+                .re = F(3e-11 * physical_scale / normalization);
+            let decomposition = event
+                .additional_weights
+                .threshold_counterterms
+                .as_mut()
+                .unwrap();
+            decomposition.original.re = F(2e-11 * physical_scale);
+            decomposition.components[0].bare.as_mut().unwrap().re = F(3e-11 * physical_scale);
+            decomposition.components[0].weighted.re = F(3e-11 * physical_scale);
+            actual.integrand_result.re = event.weight.re;
+            for individual_orders in [true, false] {
+                let comparison = EventWeightComparison::CertifiedZeros {
+                    individual_orders,
+                    weights: &zeros,
+                };
+                assert_evaluation_outputs_match(&actual, &expected, "dimensioned zero", comparison);
+                for field in [
+                    "raw",
+                    "bare",
+                    "weighted",
+                    "original",
+                    "event",
+                    "total",
+                    "multiplier",
+                    "skip",
+                ] {
+                    let mut invalid = actual.clone();
+                    let event = &mut invalid.event_groups[0][0];
+                    let decomposition = event
+                        .additional_weights
+                        .threshold_counterterms
+                        .as_mut()
+                        .unwrap();
+                    match field {
+                        "raw" => {
+                            event
+                                .additional_weights
+                                .weights
+                                .get_mut(&AdditionalWeightKey::Original)
+                                .unwrap()
+                                .re = F(2e-10 * physical_scale / normalization)
+                        }
+                        "bare" => {
+                            decomposition.components[0].bare.as_mut().unwrap().re =
+                                F(2e-10 * physical_scale)
+                        }
+                        "weighted" => {
+                            decomposition.components[0].weighted.re = F(2e-10 * physical_scale)
+                        }
+                        "original" => decomposition.original.re = F(2e-10 * physical_scale),
+                        "event" => event.weight.re = F(2e-10 * physical_scale),
+                        "total" => invalid.integrand_result.re = F(2e-10 * physical_scale),
+                        "multiplier" => decomposition.components[0].effective_multiplier = F(2.0),
+                        "skip" => decomposition.components[0].evaluation_skipped = true,
+                        _ => unreachable!(),
+                    }
+                    assert!(
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            assert_evaluation_outputs_match(&invalid, &expected, field, comparison);
+                        }))
+                        .is_err(),
+                        "zero bound accepted invalid {field} at E_cm={energy}, dimension={dimension}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn certified_zero_weights_do_not_cover_other_physical_residues() {
+    use gammalooprs::{
+        integrands::evaluation::EvaluationResult,
+        observables::events::{AdditionalWeightKey, GenericEvent},
+    };
+    let zeros = CertifiedZeroWeights {
+        original_cuts: [(0, 0)].into(),
+        // This physical cut has a nonzero threshold: only its original is zero.
+        dimensionless_tolerance: 1e-10,
+        e_cm: 2.0,
+        energy_dimension: 3,
+        ..Default::default()
+    };
+    let mut expected = EvaluationResult::zero().into_output(false);
+    for cut_id in [0, 1] {
+        let mut event = GenericEvent::default();
+        event.cut_info.cut_id = cut_id;
+        event
+            .additional_weights
+            .weights
+            .insert(AdditionalWeightKey::Original, Complex::new_re(F(0.0)));
+        event.additional_weights.weights.insert(
+            AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+            Complex::new_re(F(1e-12)),
+        );
+        event.additional_weights.weights.insert(
+            AdditionalWeightKey::FullMultiplicativeFactor,
+            Complex::new_re(F(1.0)),
+        );
+        expected.event_groups.push_singleton(event);
+    }
+    let comparison = EventWeightComparison::CertifiedZeros {
+        individual_orders: false,
+        weights: &zeros,
+    };
+    for field in ["other_original", "threshold", "event", "total", "cut_id"] {
+        let mut invalid = expected.clone();
+        match field {
+            "other_original" => {
+                invalid.event_groups[1][0]
+                    .additional_weights
+                    .weights
+                    .get_mut(&AdditionalWeightKey::Original)
+                    .unwrap()
+                    .re = F(1e-12)
+            }
+            "threshold" => {
+                invalid.event_groups[0][0]
+                    .additional_weights
+                    .weights
+                    .get_mut(&AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 })
+                    .unwrap()
+                    .re = F(2e-12)
+            }
+            "event" => invalid.event_groups[0][0].weight.re = F(1e-12),
+            "total" => invalid.integrand_result.re = F(1e-12),
+            "cut_id" => invalid.event_groups[1][0].cut_info.cut_id = 2,
+            _ => unreachable!(),
+        }
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                assert_evaluation_outputs_match(&invalid, &expected, field, comparison);
+            }))
+            .is_err(),
+            "zero bound leaked to uncertified {field}"
         );
     }
 }

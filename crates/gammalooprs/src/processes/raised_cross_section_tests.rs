@@ -551,7 +551,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             assert_eq!(generated.left_thresholds.first().unwrap().max_occurence, 2);
             assert_eq!(generated.right_thresholds.first().unwrap().max_occurence, 2);
             assert_eq!(
-                generated
+                generated.integrands[&three_dimensional_reps::generation::RepresentationMode::Cff]
                     .left_atoms
                     .first()
                     .unwrap()
@@ -562,7 +562,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                 single_indices(ThresholdCountertermSide::Left),
             );
             assert_eq!(
-                generated
+                generated.integrands[&three_dimensional_reps::generation::RepresentationMode::Cff]
                     .right_atoms
                     .first()
                     .unwrap()
@@ -572,9 +572,15 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     .collect::<BTreeSet<_>>(),
                 single_indices(ThresholdCountertermSide::Right),
             );
-            assert_eq!(generated.iterated.iter().count(), 1);
             assert_eq!(
-                generated
+                generated.integrands[&three_dimensional_reps::generation::RepresentationMode::Cff]
+                    .iterated
+                    .iter()
+                    .count(),
+                1
+            );
+            assert_eq!(
+                generated.integrands[&three_dimensional_reps::generation::RepresentationMode::Cff]
                     .iterated
                     .iter()
                     .next()
@@ -629,7 +635,8 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                 assert_eq!(multipliers.left_variants().len(), 1);
                 assert_eq!(multipliers.right_variants().len(), 1);
                 assert_eq!(
-                    evaluators
+                    evaluators.integrands
+                        [&three_dimensional_reps::generation::RepresentationMode::Cff]
                         .left_thresholds_evaluator
                         .first()
                         .unwrap()
@@ -639,7 +646,8 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     single_indices(ThresholdCountertermSide::Left),
                 );
                 assert_eq!(
-                    evaluators
+                    evaluators.integrands
+                        [&three_dimensional_reps::generation::RepresentationMode::Cff]
                         .right_thresholds_evaluator
                         .first()
                         .unwrap()
@@ -649,7 +657,8 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     single_indices(ThresholdCountertermSide::Right),
                 );
                 assert_eq!(
-                    evaluators
+                    evaluators.integrands
+                        [&three_dimensional_reps::generation::RepresentationMode::Cff]
                         .iterated_evaluator
                         .iter()
                         .next()
@@ -2632,9 +2641,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
             let generated = &cross_section.supergraphs[0];
             let production = &generated
                 .derived_data
-                .global_cff_expression
-                .as_ref()
-                .unwrap()
+                .expressions[&three_dimensional_reps::generation::RepresentationMode::Cff]
                 .expression;
             let group = generated
                 .derived_data
@@ -2645,7 +2652,10 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                 .unwrap();
             let residues = production
                 .clone()
-                .select_esurface_residue(&group.related_esurface_group);
+                .select_esurface_residue(
+                    &group.related_esurface_group,
+                    three_dimensional_reps::RepresentationMode::Cff,
+                );
             for target in targets {
                 let id = production
                     .surfaces

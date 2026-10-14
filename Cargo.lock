@@ -2073,6 +2073,7 @@ dependencies = [
  "spenso-hep-lib",
  "symbolica",
  "symbolica-utils",
+ "symjit",
  "tabled",
  "thiserror 2.0.18",
  "three-dimensional-reps",
@@ -6114,6 +6115,7 @@ version = "0.1.0"
 dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
+ "clap",
  "itertools 0.14.0",
  "linnet",
  "nu-ansi-term",

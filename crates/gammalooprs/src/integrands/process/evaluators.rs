@@ -1,3 +1,6 @@
+mod parametric_rows;
+pub(crate) use parametric_rows::ParametricResidueRows;
+
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
@@ -88,6 +91,7 @@ use crate::{
         f128,
         hyperdual_utils::{DualOrNot, new_from_values},
     },
+    uv::ParametricIntegrandTerm,
 };
 
 type ParsingTensorMap<'a> = dyn Fn(ParamTensor<ShadowedStructure<Aind>>) -> Result<ParamTensor<ShadowedStructure<Aind>>>
@@ -284,15 +288,22 @@ impl Default for EvaluatorMethod {
     }
 }
 
+type SingleParametricAuxiliary = (Vec<Atom>, GenericEvaluator);
+
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct EvaluatorStack {
     pub(crate) explicit_orientation_sum_only: bool,
+    /// Internal coefficient/dispatch rows, independent of physical orientations.
+    pub(crate) parametric_rows: Option<ParametricResidueRows>,
     /// Original generalized-3D-representation map key for each dense runtime
     /// orientation channel. Physical edge directions alone do not identify a
     /// raised-energy/contact residue map.
     production_orientation_ids: Vec<OrientationID>,
     pub single_parametric: GenericEvaluator,
+    /// Carrier ports and their shared output table, evaluated once per sample.
+    /// The row catalogue maps ports to outputs independently of their identities.
+    pub(crate) single_parametric_auxiliary: Option<SingleParametricAuxiliary>,
     pub iterative: Option<(GenericEvaluator, usize)>,
     // pub iterative_function_map: Option<GenericEvaluator>,
     pub summed_function_map: Option<GenericEvaluator>,
@@ -474,7 +485,7 @@ impl EvaluatorStack {
     }
 
     pub(crate) fn generic_evaluator_count(&self) -> usize {
-        let mut count = 1;
+        let mut count = 1 + usize::from(self.single_parametric_auxiliary.is_some());
         if self.iterative.is_some() {
             count += 1;
         }
@@ -495,16 +506,19 @@ impl EvaluatorStack {
     fn new_single_parametric(
         parametric_atoms: Vec<AliasedAtom>,
         param_builder: &ParamBuilder,
+        physical_functions: &[FnMapEntry],
+        mut parametric_rows: Option<&mut ParametricResidueRows>,
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
-    ) -> Result<GenericEvaluator> {
+    ) -> Result<(GenericEvaluator, Option<SingleParametricAuxiliary>)> {
         let _progress_guard = crate::processes::enter_detailed_progress_span(
             "Generating Single Parametric Evaluator",
         );
         let opt_settings = settings.optimization_settings();
 
-        GenericEvaluator::new_from_builder(
-            parametric_atoms.into_iter().map(|atom| {
+        let mut atoms = parametric_atoms
+            .into_iter()
+            .map(|atom| {
                 let map = |atom| {
                     GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
                         atom,
@@ -517,12 +531,111 @@ impl EvaluatorStack {
                     mapped.register_alias(alias, map(body));
                 }
                 mapped
-            }),
-            param_builder,
-            dual_shape.clone(),
+            })
+            .collect::<Vec<_>>();
+        let mut params = (&param_builder.pairs)
+            .into_iter()
+            .flat_map(|pair| pair.params.clone())
+            .collect::<Vec<_>>();
+        if let Some(rows) = parametric_rows.as_deref_mut() {
+            // A catalogue may build several evaluator policies; each starts
+            // from the original coefficient interface, including policies
+            // which deliberately keep all operations in the row program.
+            rows.input_columns = (0..rows.parameters.len()).collect();
+            rows.auxiliary_parameters.clear();
+            rows.auxiliary_values.clear();
+            rows.auxiliary_shared_outputs = 0;
+            rows.auxiliary_gathers = vec![Vec::new(); rows.rows.len()];
+        }
+        // Extract only calls that survive the original symbolic function
+        // boundary. Earlier unfolding (including retained-dual lowering) can
+        // cancel singular intermediate expressions and must remain unchanged.
+        let single_parametric_auxiliary = if let Some(rows) = parametric_rows.as_deref_mut()
+            && rows.rows.len() > 1
+            && !settings.do_fn_map_replacements
+            && !(dual_shape.is_some()
+                && param_builder
+                    .reps
+                    .iter()
+                    .any(|entry| entry.inlining == InliningPolicy::Never))
+        {
+            let port_symbol = loop {
+                let scope = NETWORK_SCALAR_ALIAS_SCOPE.fetch_add(1, Ordering::Relaxed);
+                let name = format!("gammalooprs::evaluator_physical_{scope}");
+                if !symbolica::state::State::symbol_iter().any(|(symbol, existing)| {
+                    existing == name || symbol.get_aliases().iter().any(|alias| alias == &name)
+                }) {
+                    break symbol!(name.as_str());
+                }
+            };
+            rows.extract_physical_scalars(
+                &mut atoms,
+                &params,
+                &param_builder.reps,
+                physical_functions.len(),
+                port_symbol,
+            )
+            .map(|(ports, roots, definitions)| {
+                crate::debug_tags!(#generation, #profile, #compile, #summary;
+                    stage = "evaluator_single_parametric_physical_scalars",
+                    auxiliary_outputs = roots.len(), carrier_ports = ports.len(),
+                    coefficient_rows = rows.rows.len(),
+                    "Prepared shared scalar and numerator values for the complete residue sum"
+                );
+                let mut auxiliary_params = params.clone();
+                auxiliary_params.extend(rows.auxiliary_parameters.iter().cloned());
+                let dual_config = dual_shape.clone().map(|shape| {
+                    let zeros = (params.len()..auxiliary_params.len())
+                        .flat_map(|parameter| {
+                            (1..shape.len()).map(move |component| (parameter, component))
+                        })
+                        .collect();
+                    (shape, zeros)
+                });
+                let evaluator = GenericEvaluator::new_from_raw_params(
+                    roots,
+                    &auxiliary_params,
+                    &param_builder.fn_map,
+                    definitions,
+                    opt_settings.clone(),
+                    dual_config,
+                    settings,
+                )?;
+                Ok::<_, eyre::Report>((ports, evaluator))
+            })
+            .transpose()?
+        } else {
+            None
+        };
+        if let Some((ports, _)) = &single_parametric_auxiliary {
+            params.extend(ports.iter().cloned());
+        }
+        // Auxiliary ports carry full physical jets. Only exact coefficient and
+        // selector ports have statically zero derivative components.
+        let row_start = params.len();
+        if let Some(rows) = parametric_rows {
+            params.extend(
+                rows.input_columns
+                    .iter()
+                    .map(|&column| rows.parameters[column].clone()),
+            );
+        }
+        let dual_config = dual_shape.clone().map(|shape| {
+            let zeros = (row_start..params.len())
+                .flat_map(|parameter| (1..shape.len()).map(move |component| (parameter, component)))
+                .collect();
+            (shape, zeros)
+        });
+        let evaluator = GenericEvaluator::new_from_raw_params(
+            atoms,
+            &params,
+            &param_builder.fn_map,
+            param_builder.reps.clone(),
             opt_settings.clone(),
+            dual_config,
             settings,
-        )
+        )?;
+        Ok((evaluator, single_parametric_auxiliary))
     }
     #[instrument(skip_all)]
     fn new_iterative(
@@ -553,10 +666,11 @@ impl EvaluatorStack {
                             // keep their names. Only bodies still reached after
                             // selection are specialized and retained.
                             let select = Self::residue_map_selector(orientation, *production_id);
-                            let selected = Self::select_reachable(
+                            let selected = Self::specialize_aliases(
+                                atom.get_root(),
                                 atom,
                                 |atom| GS.collect_orientation_if(select(atom)),
-                                Atom::clone,
+                                None,
                             );
                             debug!(
                                 "Selected iterative residue-map branch {}: {}",
@@ -608,9 +722,13 @@ impl EvaluatorStack {
                 for (orientation, production_id) in
                     orientations.iter().zip(production_orientation_ids)
                 {
-                    let (root, aliases) =
-                        Self::select_orientation(atom, orientation, *production_id)
-                            .into_inner_with_aliases();
+                    let (root, aliases) = Self::specialize_aliases(
+                        atom.get_root(),
+                        atom,
+                        Self::residue_map_selector(orientation, *production_id),
+                        Some(production_id.0),
+                    )
+                    .into_inner_with_aliases();
                     let call = FunctionBuilder::new(GS.integrand)
                         .add_arg(i)
                         .add_arg(production_id.0)
@@ -658,32 +776,13 @@ impl EvaluatorStack {
 
     /// Specialize the selected alias DAG from its root. Alias handles remain
     /// opaque, and dependencies are discovered only after branch selection, so
-    /// inactive scalar bodies never enter orientation substitution.
-    fn select_orientation(
+    /// inactive scalar bodies never enter orientation or coefficient substitution.
+    /// An absent scope preserves the owner's keys when only reachability changes.
+    fn specialize_aliases(
+        root: &Atom,
         atom: &AliasedAtom,
-        orientation: &EdgeVec<Orientation>,
-        production_id: OrientationID,
-    ) -> AliasedAtom {
-        Self::select_reachable(
-            atom,
-            Self::residue_map_selector(orientation, production_id),
-            |alias| {
-                let function = alias.as_fun_view().unwrap();
-                FunctionBuilder::new(function.get_symbol())
-                    .add_args(function.iter())
-                    .add_arg(production_id.0)
-                    .finish()
-            },
-        )
-    }
-
-    /// Apply `select` to the root and to each alias body reached from it after
-    /// selection, renaming every reached handle with the injective `scope`.
-    /// Unreached aliases are neither selected nor retained.
-    fn select_reachable(
-        atom: &AliasedAtom,
-        select: impl Fn(&Atom) -> Atom,
-        scope: impl Fn(&Atom) -> Atom,
+        specialize: impl Fn(&Atom) -> Atom,
+        scope_id: Option<usize>,
     ) -> AliasedAtom {
         let aliases = atom.get_aliases();
         let max_handle_bytes = aliases
@@ -693,9 +792,9 @@ impl EvaluatorStack {
             .unwrap_or(0);
         let mut renames = HashMap::<Atom, Atom>::new();
         let mut pending = Vec::new();
-        let specialize =
+        let select =
             |expression: &Atom, renames: &mut HashMap<Atom, Atom>, pending: &mut Vec<Atom>| {
-                select(expression).replace_map(|view, _, out| {
+                specialize(expression).replace_map(|view, _, out| {
                     if view.get_data().len() <= max_handle_bytes
                         && let Some((alias, _)) = aliases.get_key_value(view.get_data())
                     {
@@ -703,16 +802,24 @@ impl EvaluatorStack {
                             // Register before traversing the body: shared
                             // dependencies are visited once, including cycles.
                             pending.push(alias.clone());
-                            scope(alias)
+                            scope_id.map_or_else(
+                                || alias.clone(),
+                                |scope_id| {
+                                    let function = alias.as_fun_view().unwrap();
+                                    FunctionBuilder::new(function.get_symbol())
+                                        .add_args(function.iter())
+                                        .add_arg(scope_id)
+                                        .finish()
+                                },
+                            )
                         });
                         out.set_from_view(&scoped.as_view());
                     }
                 })
             };
-        let mut selected =
-            AliasedAtom::from(specialize(atom.get_root(), &mut renames, &mut pending));
+        let mut selected = AliasedAtom::from(select(root, &mut renames, &mut pending));
         while let Some(alias) = pending.pop() {
-            let body = specialize(&aliases[&alias], &mut renames, &mut pending);
+            let body = select(&aliases[&alias], &mut renames, &mut pending);
             selected.register_alias(renames[&alias].clone(), body);
         }
         selected
@@ -741,7 +848,12 @@ impl EvaluatorStack {
                     .iter()
                     .zip(production_orientation_ids)
                     .map(|(orientation, production_id)| {
-                        let selected = Self::select_orientation(atom, orientation, *production_id);
+                        let selected = Self::specialize_aliases(
+                            atom.get_root(),
+                            atom,
+                            Self::residue_map_selector(orientation, *production_id),
+                            Some(production_id.0),
+                        );
                         selected_alias_bodies += selected.get_aliases().len();
                         selected
                     })
@@ -798,11 +910,6 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
-        let mut direct_settings = *settings;
-        direct_settings.iterative_orientation_optimization = false;
-        direct_settings.summed_function_map = false;
-        direct_settings.summed = false;
-
         let atoms = atoms
             .iter()
             .map(Self::sum_residue_map_selectors)
@@ -811,10 +918,10 @@ impl EvaluatorStack {
             &atoms,
             param_builder,
             numerator_definitions,
-            &[],
-            &[],
+            &[EdgeVec::from_iter(std::iter::empty::<Orientation>())],
+            &[OrientationID(0)],
             dual_shape,
-            &direct_settings,
+            settings,
         )?;
         stack.explicit_orientation_sum_only = true;
         Ok((stack, timings))
@@ -824,10 +931,44 @@ impl EvaluatorStack {
         integrand: &Atom,
         param_builder: &ParamBuilder,
         numerator_definitions: &[Arc<FnMapEntry>],
+        parametric_terms: &[ParametricIntegrandTerm],
         orientation_catalog: Option<(&[EdgeVec<Orientation>], &[OrientationID])>,
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
+        if !parametric_terms.is_empty() {
+            let (atoms, guards, rows) = ParametricResidueRows::lower(integrand, parametric_terms)?;
+            let dummy_orientations = [EdgeVec::from_iter(std::iter::empty::<Orientation>())];
+            let dummy_ids = [OrientationID(0)];
+            let (orientations, ids) =
+                orientation_catalog.unwrap_or((&dummy_orientations, &dummy_ids));
+            let atoms = if orientation_catalog.is_none() {
+                atoms.iter().map(Self::sum_residue_map_selectors).collect()
+            } else {
+                atoms
+            };
+            let definitions = numerator_definitions
+                .iter()
+                .cloned()
+                .chain(
+                    parametric_terms
+                        .iter()
+                        .map(|term| Arc::clone(&term.numerator)),
+                )
+                .collect::<Vec<_>>();
+            let (mut stack, timings) = Self::new_with_rows(
+                &atoms,
+                param_builder,
+                &definitions,
+                orientations,
+                ids,
+                dual_shape,
+                settings,
+                Some((rows, guards)),
+            )?;
+            stack.explicit_orientation_sum_only = orientation_catalog.is_none();
+            return Ok((stack, timings));
+        }
         match orientation_catalog {
             Some((orientations, production_orientation_ids)) => Self::new_with_timings(
                 std::slice::from_ref(integrand),
@@ -860,6 +1001,7 @@ impl EvaluatorStack {
             atom_index,
             settings,
             tensor_map,
+            |_| false,
             |net, scalar_aliases, term_index| {
                 let root = match net.result_scalar()? {
                     ExecutionResult::One => Atom::num(1),
@@ -934,6 +1076,7 @@ impl EvaluatorStack {
         atom_index: usize,
         settings: &EvaluatorSettings,
         tensor_map: Option<&ParsingTensorMap<'_>>,
+        alias_scalar: impl Fn(&Atom) -> bool,
         mut finish: impl FnMut(&ParsingNet, &ScalarAliases, usize) -> Result<AliasedAtom>,
     ) -> Result<AliasedAtom> {
         let atom_started = std::time::Instant::now();
@@ -1258,7 +1401,8 @@ impl EvaluatorStack {
 
                 // println!("Net: {}", net.dot_pretty());
                 let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
-                    scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+                    (scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+                        || alias_scalar(scalar))
                         // Keep guards visible until they enclose the complete branch,
                         // including inverses in neighboring scalar factors. These
                         // definitions precede generated handles, so selector structure
@@ -1507,36 +1651,13 @@ impl EvaluatorStack {
                     // Each occurrence owns private contractions; only its free
                     // ports can connect it to other factors in this template.
                     let interface = interfaces[family].as_ref().unwrap();
-                    let mut private_indices = HashMap::new();
-                    let body = definition.rhs.replace_map(|part, _, output| {
-                        if let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(part) {
-                            if !interface.contains(&part.to_owned()) {
-                                let fresh =
-                                    private_indices.entry(slot.aind()).or_insert_with(|| {
-                                        loop {
-                                            let name = format!(
-                                                "{}_index_{next_index}",
-                                                argument_symbol.get_name()
-                                            );
-                                            next_index += 1;
-                                            if occupied_symbols.insert(name.clone()) {
-                                                break Atom::var(symbol!(&name));
-                                            }
-                                        }
-                                    });
-                                **output = slot.rep().to_symbolic([fresh.clone()]);
-                            } else {
-                                // A dual slot owns its inner representation;
-                                // do not revisit that as a separate base slot.
-                                output.set_from_view(&part);
+                    let body = definition.rhs.freshen_private_indices(interface, || {
+                        loop {
+                            let name = format!("{}_index_{next_index}", argument_symbol.get_name());
+                            next_index += 1;
+                            if occupied_symbols.insert(name.clone()) {
+                                break Atom::var(symbol!(&name));
                             }
-                        } else if let AtomView::Fun(function) = part
-                            && !part.is_tensorial(StrictTensorFilter::Tagged)
-                            && ![*SYM, *ANTISYM, *CYCLIC].contains(&function.get_symbol())
-                        {
-                            // Scalar function payloads are opaque to the
-                            // tensor interface, including parameter aliases.
-                            output.set_from_view(&part);
                         }
                     });
 
@@ -1871,6 +1992,15 @@ impl EvaluatorStack {
         let mut components = HashMap::<Vec<Atom>, FamilyComponents>::new();
         let mut shadows = HashMap::new();
         let mut generated = Vec::new();
+        let physical_inputs = (&param_builder.pairs)
+            .into_iter()
+            .flat_map(|pair| pair.params.iter().cloned())
+            .collect::<HashSet<_>>();
+        let max_input_bytes = physical_inputs
+            .iter()
+            .map(|input| input.as_view().get_data().len())
+            .max()
+            .unwrap_or(0);
         for (family_index, definition) in definitions.iter().enumerate() {
             if !referenced.contains(&family_index) {
                 continue;
@@ -1911,6 +2041,39 @@ impl EvaluatorStack {
                 family_index,
                 settings,
                 None,
+                |scalar| {
+                    // Keep short sums visible during contraction when the final
+                    // component is inlined. Aliasing and restoring them afterwards
+                    // changes the algebra presented to Horner and loses sharing.
+                    // Non-inlined components retain these scalar functions.
+                    if inlining == InliningPolicy::Always {
+                        return false;
+                    }
+                    // Functions and physical input keys stay opaque; exact formals
+                    // shadow either in this body.
+                    let mut has_formal = false;
+                    let mut has_sum = false;
+                    scalar.visitor(&mut |view| {
+                        if has_formal && has_sum {
+                            return false;
+                        }
+                        if view.get_data().len() <= max_formal_bytes
+                            && formal_positions.contains_key(view.get_data())
+                        {
+                            has_formal = true;
+                            return false;
+                        }
+                        if (view.get_data().len() <= max_input_bytes
+                            && physical_inputs.contains(view.get_data()))
+                            || matches!(view, AtomView::Fun(_))
+                        {
+                            return false;
+                        }
+                        has_sum |= matches!(view, AtomView::Add(_));
+                        true
+                    });
+                    has_formal && has_sum
+                },
                 |net, scalar_aliases, term_index| {
                     let tensor = match net.result_tensor(TENSORLIB.read().unwrap().deref())? {
                         ExecutionResult::One => return Ok(Atom::num(1).into()),
@@ -1922,9 +2085,16 @@ impl EvaluatorStack {
                         .map(|rep| Ok((usize::try_from(rep.dim)?, !rep.rep.is_base())))
                         .collect::<Result<Vec<_>>>()?;
                     let tags = vec![Atom::num(family_index), Atom::num(term_index)];
-                    let (_, aliases) = net
+                    let (_, mut aliases) = net
                         .aliased_atom(scalar_aliases, Atom::Zero)
                         .into_inner_with_aliases();
+                    // Match ordinary scalar preparation before assigning the
+                    // retained definitions their minimal formal dependencies.
+                    for (alias, body) in &mut aliases {
+                        if *body != *alias {
+                            *body = body.collect_compact_factors();
+                        }
+                    }
                     let mut handles = aliases.keys().cloned().collect::<Vec<_>>();
                     handles.sort();
                     let handle_positions = handles
@@ -2032,11 +2202,11 @@ impl EvaluatorStack {
                     }
                     let mut populated = HashMap::new();
                     for (index, body) in tensor.iter_flat() {
+                        let body = body.collect_compact_factors();
                         if body.is_zero() {
                             continue;
                         }
                         let index = Atom::from(tensor.co_expanded_index(index)?);
-                        let body = body.to_owned();
                         let positions = argument_positions(&body);
                         populated.insert(index.clone(), positions.clone());
                         generated.push(FnMapEntry {
@@ -2287,6 +2457,9 @@ impl EvaluatorStack {
             generated_definitions = generated.len(), retained_generated_definitions = reachable.len(),
             "Retained numerator functions after outer tensor contraction"
         );
+        // Keep each scalar numerator body as one reusable program. The
+        // coefficient rows at call sites remain source-local, including in a
+        // complete LTD sum and in independently projected UV children.
         for (index, entry) in generated.into_iter().enumerate() {
             if reachable.contains(&index) {
                 builder
@@ -2307,6 +2480,30 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
+        Self::new_with_rows(
+            atoms,
+            param_builder,
+            numerator_definitions,
+            orientations,
+            production_orientation_ids,
+            dual_shape,
+            settings,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn new_with_rows<A: AtomCore>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        numerator_definitions: &[Arc<FnMapEntry>],
+        orientations: &[EdgeVec<Orientation>],
+        production_orientation_ids: &[OrientationID],
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+        parametric_rows: Option<(ParametricResidueRows, Vec<Atom>)>,
+    ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let (mut parametric_rows, parametric_guards) = parametric_rows.unzip();
         if orientations.len() != production_orientation_ids.len() {
             return Err(eyre!(
                 "runtime orientation catalog has {} physical entries but {} exact residue-map IDs",
@@ -2345,6 +2542,9 @@ impl EvaluatorStack {
                 break symbol!(name.as_str());
             }
         };
+        // Borrow the original physical definitions, before preprocessing appends
+        // generated numerator components to its cloned builder.
+        let physical_functions = &param_builder.reps;
         let (parsed_atoms, prepared_builder) = Self::preprocess_numerator_families(
             atoms,
             param_builder,
@@ -2362,6 +2562,17 @@ impl EvaluatorStack {
             .into_iter()
             .map(|atom| Self::share_scalar_factors(atom, &prepared_builder))
             .collect::<Vec<_>>();
+        let parsed_atoms = match &parametric_rows {
+            Some(rows) => vec![
+                rows.join_preprocessed(
+                    parsed_atoms,
+                    parametric_guards
+                        .as_deref()
+                        .expect("parametric row guards are present"),
+                ),
+            ],
+            None => parsed_atoms,
+        };
         let param_builder = &prepared_builder;
         timings.spenso_time += spenso_started.elapsed();
         crate::debug_tags!(#generation, #profile, #compile, #summary;
@@ -2374,11 +2585,38 @@ impl EvaluatorStack {
         );
 
         let symbolica_started = std::time::Instant::now();
+        // Specialization is deliberately below the shared tensor preprocessing
+        // boundary. Explicit evaluators consume this derived view, including the
+        // argument-free summed function map; SingleParametric retains the
+        // original generic products.
+        let specialized_atoms = if (settings.iterative_orientation_optimization
+            || settings.summed
+            || settings.summed_function_map)
+            && let Some(rows) = &parametric_rows
+        {
+            Some(
+                parsed_atoms
+                    .iter()
+                    .map(|atom| {
+                        rows.rows
+                            .iter()
+                            .enumerate()
+                            .map(|(id, row)| rows.specialize(atom, row, id))
+                            .try_fold(AliasedAtom::default(), |sum, atom| {
+                                sum.try_add(&atom).map_err(|error| eyre!(error))
+                            })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            )
+        } else {
+            None
+        };
+        let explicit_atoms = specialized_atoms.as_deref().unwrap_or(&parsed_atoms);
         let iterative_started = std::time::Instant::now();
         let iterative = if settings.iterative_orientation_optimization {
             Some(
                 Self::new_iterative(
-                    &parsed_atoms,
+                    explicit_atoms,
                     param_builder,
                     orientations,
                     production_orientation_ids,
@@ -2404,7 +2642,7 @@ impl EvaluatorStack {
         let summed_function_map = if settings.summed_function_map {
             Some(
                 Self::new_summed_function_map(
-                    &parsed_atoms,
+                    explicit_atoms,
                     param_builder,
                     orientations,
                     production_orientation_ids,
@@ -2430,7 +2668,7 @@ impl EvaluatorStack {
         let summed = if settings.summed {
             Some(
                 Self::new_summed(
-                    &parsed_atoms,
+                    explicit_atoms,
                     param_builder,
                     orientations,
                     production_orientation_ids,
@@ -2455,9 +2693,15 @@ impl EvaluatorStack {
         let single_started = std::time::Instant::now();
         // The optional variants have finished borrowing these scalars. Transfer
         // them to the final evaluator instead of retaining a second full copy.
-        let single_parametric =
-            Self::new_single_parametric(parsed_atoms, param_builder, &dual_shape, settings)
-                .with_context(|| "Failed to create parametric")?;
+        let (single_parametric, single_parametric_auxiliary) = Self::new_single_parametric(
+            parsed_atoms,
+            param_builder,
+            physical_functions,
+            parametric_rows.as_mut(),
+            &dual_shape,
+            settings,
+        )
+        .with_context(|| "Failed to create parametric")?;
         crate::debug_tags!(#generation, #profile, #compile, #summary;
             stage = "evaluator_stack_new_single_parametric_done",
             orientation_count = orientations.len(),
@@ -2479,8 +2723,10 @@ impl EvaluatorStack {
         Ok((
             EvaluatorStack {
                 explicit_orientation_sum_only: false,
+                parametric_rows,
                 production_orientation_ids: production_orientation_ids.to_vec(),
                 single_parametric,
+                single_parametric_auxiliary,
                 iterative,
                 summed_function_map,
                 summed,
@@ -2502,11 +2748,7 @@ impl EvaluatorStack {
         for (orientation_id, e) in orientations.iter() {
             input.set_residue_map_id(self.production_orientation_ids[usize::from(orientation_id)]);
             input.set_orientation_values(e);
-            let output = evaluate_evaluator(
-                &mut self.single_parametric,
-                input.as_slice(),
-                evaluation_metadata,
-            );
+            let output = self.evaluate_single_parametric(input.as_slice(), evaluation_metadata);
             if let Some(result) = &mut result {
                 for (r, v) in result.iter_mut().zip(output) {
                     *r += v;
@@ -2516,6 +2758,68 @@ impl EvaluatorStack {
             }
         }
         result.unwrap()
+    }
+
+    fn evaluate_single_parametric<T: FloatLike>(
+        &mut self,
+        input: &[Complex<F<T>>],
+        metadata: &mut EvaluationMetaData,
+    ) -> Vec<DualOrNot<Complex<F<T>>>> {
+        let prepared_input;
+        let mut auxiliary_output = Vec::new();
+        let input = if let Some((ports, evaluator)) = &mut self.single_parametric_auxiliary {
+            let rows = self
+                .parametric_rows
+                .as_ref()
+                .expect("single-parametric auxiliary requires coefficient rows");
+            let shape_len = evaluator.dual_shape.as_ref().map_or(1, Vec::len);
+            let output_size = evaluator.compute_out_size();
+            let prototype = input
+                .first()
+                .map_or_else(|| F(T::new_zero()), |value| value.re.clone());
+            let zero = Complex::new_re(prototype.zero());
+            let mut auxiliary_input = input.to_vec();
+            auxiliary_input.resize(
+                input.len() + rows.auxiliary_values.len() * shape_len,
+                zero.clone(),
+            );
+            for (index, value) in rows.auxiliary_values.iter().enumerate() {
+                auxiliary_input[input.len() + index * shape_len] =
+                    Complex::new_re(prototype.from_rational(value));
+            }
+            auxiliary_output.resize(output_size, zero.clone());
+            let start = std::time::Instant::now();
+            <T as GenericEvaluatorFloat>::evaluate_into(
+                evaluator,
+                &auxiliary_input,
+                &mut auxiliary_output,
+            );
+            metadata.evaluator_evaluation_time = metadata
+                .evaluator_evaluation_time
+                .saturating_add(start.elapsed());
+            let mut prepared = Vec::with_capacity(input.len() + ports.len() * shape_len);
+            prepared.extend_from_slice(input);
+            // Ports have their own identity in the generic carrier, even when
+            // several ports gather the same native auxiliary output. Copy the
+            // row-invariant prefix once and let the original row loop gather
+            // the remaining full jets in its original accumulation order.
+            prepared
+                .extend_from_slice(&auxiliary_output[..rows.auxiliary_shared_outputs * shape_len]);
+            prepared.resize(input.len() + ports.len() * shape_len, zero);
+            prepared_input = prepared;
+            prepared_input.as_slice()
+        } else {
+            input
+        };
+        match &self.parametric_rows {
+            Some(rows) => rows.evaluate(
+                &mut self.single_parametric,
+                input,
+                &auxiliary_output,
+                metadata,
+            ),
+            None => evaluate_evaluator(&mut self.single_parametric, input, metadata),
+        }
     }
 
     fn evaluate_iterative<'a, T: FloatLike>(
@@ -2620,13 +2924,19 @@ impl EvaluatorStack {
                 ));
             }
 
-            // The atom already contains the complete orientation sum, so
-            // applying orientation selection again would double count it.
-            return Ok(evaluate_evaluator(
-                &mut self.single_parametric,
-                input.as_slice(),
-                evaluation_metadata,
-            ));
+            // The complete expression owns each independent source sum. Its
+            // internal numerator calls retain their small coefficient rows;
+            // no production-orientation loop may broadcast UV child sums.
+            return match settings.general.evaluator_method {
+                EvaluatorMethod::SingleParametric => {
+                    Ok(self.evaluate_single_parametric(input.as_slice(), evaluation_metadata))
+                }
+                EvaluatorMethod::Iterative => self.evaluate_iterative(input, evaluation_metadata),
+                EvaluatorMethod::SummedFunctionMap => {
+                    self.evaluate_summed_fnmap(input, evaluation_metadata)
+                }
+                EvaluatorMethod::Summed => self.evaluate_summed(input, evaluation_metadata),
+            };
         }
 
         if !orientations.is_all()
@@ -2676,6 +2986,16 @@ impl EvaluatorStack {
             frozen_mode,
         )?;
 
+        if let Some((_, auxiliary)) = &mut self.single_parametric_auxiliary {
+            let auxiliary_name = format!("{name}_single_parametric_auxiliary");
+            auxiliary.compile_external(
+                path.as_ref().join(&auxiliary_name).with_extension("cpp"),
+                &auxiliary_name,
+                path.as_ref().join(&auxiliary_name).with_extension("so"),
+                frozen_mode,
+            )?;
+        }
+
         if let Some((iterative, _)) = &mut self.iterative {
             iterative.compile_external(
                 path.as_ref()
@@ -2722,6 +3042,9 @@ impl EvaluatorStack {
         mut f: impl FnMut(&mut GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         f(&mut self.single_parametric)?;
+        if let Some((_, auxiliary)) = &mut self.single_parametric_auxiliary {
+            f(auxiliary)?;
+        }
 
         if let Some((iterative, _)) = &mut self.iterative {
             f(iterative)?;
@@ -2757,6 +3080,8 @@ pub struct GenericEvaluator {
     pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
     pub dual_shape: Option<Vec<Vec<usize>>>,
+    /// Derivative inputs known to vanish; these also protect singular unused derivatives.
+    pub zero_components: Vec<(usize, usize)>,
     pub arb: ExpressionEvaluator<Complex<F<ArbPrec>>>,
     /// Only sampling programs warm this source lane; physical evaluators keep it empty.
     pub(crate) sampling_fixed256: RuntimeCache<ExpressionEvaluator<Complex<F<SamplingFloat>>>>,
@@ -2982,8 +3307,8 @@ impl GenericEvaluator {
             "Evaluator timing milestone"
         );
         let atoms: Vec<AliasedAtom> = atoms.into_iter().map(Into::into).collect();
-        // A fresh symbol also avoids definitions supplied only through the
-        // opaque FunctionMap; its registration API silently keeps duplicate keys.
+        // A fresh symbol also avoids collisions with definitions supplied only
+        // through the opaque FunctionMap.
         let alias_symbol = loop {
             let scope = NETWORK_SCALAR_ALIAS_SCOPE.fetch_add(1, Ordering::Relaxed);
             let name = format!("gammalooprs::evaluator_retained_scalar_{scope}");
@@ -3064,8 +3389,67 @@ impl GenericEvaluator {
             .iter()
             .filter(|entry| entry.inlining == InliningPolicy::Never && !entry.is_alias)
             .count();
-        let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
-        for (atom_index, n) in exprs.iter().enumerate() {
+        let retained_dual = dual_shape.is_some()
+            && fn_map_entries
+                .iter()
+                .any(|entry| entry.inlining == InliningPolicy::Never);
+        let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> =
+            if retained_dual {
+                use super::retained_dual::{RetainedFunctionDefinition, build_dual_evaluator};
+                let mut definitions = fn_map_entries
+                    .iter()
+                    .map(|entry| RetainedFunctionDefinition {
+                        lhs: entry.lhs.clone(),
+                        rhs: entry.rhs.clone(),
+                        tags: entry.tags.clone(),
+                        args: entry.args.clone(),
+                        retained: entry.inlining == InliningPolicy::Never,
+                        is_alias: entry.is_alias,
+                    })
+                    .collect::<Vec<_>>();
+                let mut dual_fn_map = fn_map.clone();
+                for expression in &exprs {
+                    for (alias, body) in expression.get_aliases() {
+                        dual_fn_map
+                            .add_aliases([(alias.clone(), body.clone())])
+                            .map_err(|error| eyre!(error))?;
+                        definitions.push(RetainedFunctionDefinition {
+                            lhs: alias.clone(),
+                            rhs: body.clone(),
+                            tags: alias
+                                .as_fun_view()
+                                .unwrap()
+                                .iter()
+                                .map(|tag| tag.to_owned())
+                                .collect(),
+                            args: Vec::new(),
+                            retained: false,
+                            is_alias: true,
+                        });
+                    }
+                }
+                let roots = exprs
+                    .iter()
+                    .map(|expression| expression.get_root().clone())
+                    .collect::<Vec<_>>();
+                Some(
+                    build_dual_evaluator(
+                        &roots,
+                        params,
+                        &dual_fn_map,
+                        &definitions,
+                        dual_shape.clone().unwrap(),
+                        zero_components.clone(),
+                        optimization_settings.clone(),
+                    )
+                    .map_err(|error| {
+                        eyre!("Failed to dualize retained numerator programs: {error}")
+                    })?,
+                )
+            } else {
+                None
+            };
+        for (atom_index, n) in exprs.iter().enumerate().filter(|_| !retained_dual) {
             // Optional source capture includes recorded function bodies as well
             // as the aliased outer atom. Keep all numerators factorized.
             crate::debug_tags!(#generation, #compile, #evaluator_input, #dump;
@@ -3082,13 +3466,15 @@ impl GenericEvaluator {
                 }))?,
                 "Factorized evaluator source before construction"
             );
+        }
+        if !retained_dual && !exprs.is_empty() {
             let build_started = std::time::Instant::now();
-            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
                 stage = "evaluator_symbolica_build_start",
-                atom_index,
-                atom_bytes = n.get_byte_size(),
-                root_bytes = n.get_root().as_view().get_byte_size(),
-                scalar_alias_count = n.get_aliases().len(),
+                atom_count = exprs.len(),
+                atom_bytes = exprs.iter().map(AliasedAtom::get_byte_size).sum::<usize>(),
+                root_bytes = exprs.iter().map(|atom| atom.get_root().as_view().get_byte_size()).sum::<usize>(),
+                scalar_alias_count = exprs.iter().map(|atom| atom.get_aliases().len()).sum::<usize>(),
                 recorded_function_count = fn_map_entries.len(),
                 recorded_function_body_bytes,
                 max_recorded_function_body_bytes,
@@ -3096,53 +3482,65 @@ impl GenericEvaluator {
                 dual = dual_shape.is_some(),
                 "Evaluator timing milestone"
             );
-            let eval: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = n
-                .get_root()
-                .evaluator(params)
-                .function_map(fn_map.clone())
-                .add_aliases(n.get_aliases().iter().map(|(alias, body)| (alias.clone(), body.clone())))
-                .map_err(|e| eyre!(e))?
-                .optimization_settings(optimization_settings.clone())
-                .build()
-                .map_err(|e| {
-                    let mut settings = SpensoPrintSettings::compact().nice_symbolica();
-                    settings.max_line_length = Some(120);
-                    settings.hide_all_namespaces = false;
-                    eyre!(
-                        "Failed to create evaluator for atom: {:120}\n: {}, with params: \n {:120}, and fn_map_entries: \n {}",
-                        n.printer(settings),
-                        e,
-                        params
+            // The aliases have already been scoped per output above. Register
+            // them after the function map, whose setter replaces existing entries.
+            // Build all ordered outputs together instead of repeatedly optimizing
+            // and merging the growing program; numerator bodies remain shared.
+            let roots = exprs.iter().map(AliasedAtom::get_root).collect::<Vec<_>>();
+            let eval: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+                Atom::evaluator_multiple(&roots, params)
+                    .function_map(fn_map.clone())
+                    .add_aliases(exprs.iter().flat_map(|atom| {
+                        atom.get_aliases()
                             .iter()
-                            .map(|a| a.to_string())
-                            .collect::<Vec<_>>()
-                            .join(", "),
-                        fn_map_entries
+                            .map(|(alias, body)| (alias.clone(), body.clone()))
+                    }))
+                    .map_err(|error| eyre!(error))?
+                    .optimization_settings(optimization_settings.clone())
+                    .build()
+                    .map_err(|error| {
+                        // Keep output indices in an error, without formatting all
+                        // source expressions during successful construction.
+                        let outputs = exprs
                             .iter()
-                            .map(|a| format!("{}->{}\n",a.lhs,a.rhs))
+                            .enumerate()
+                            .map(|(index, atom)| {
+                                let mut settings =
+                                    SpensoPrintSettings::compact().nice_symbolica();
+                                settings.max_line_length = Some(120);
+                                settings.hide_all_namespaces = false;
+                                format!("output[{index}]: {:120}", atom.printer(settings))
+                            })
                             .collect::<Vec<_>>()
-                            .join(", "),
-                    )
-                })?;
+                            .join("\n");
+                        eyre!(
+                            "Failed to create evaluator for {} ordered outputs: {error}\n{outputs}\nwith params: {}, and fn_map_entries: {}",
+                            exprs.len(),
+                            params
+                                .iter()
+                                .map(|atom| atom.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                            fn_map_entries
+                                .iter()
+                                .map(|entry| format!("{}->{}\n", entry.lhs, entry.rhs))
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                        )
+                    })?;
 
             let operations = eval.count_operations();
-            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
                 stage = "evaluator_symbolica_build_done",
+                atom_count = exprs.len(),
                 root_additions = operations.additions,
                 root_multiplications = operations.multiplications,
                 root_inversions = operations.inversions,
                 root_function_calls = operations.function_calls,
-                atom_index,
                 elapsed_ms = build_started.elapsed().as_secs_f64() * 1000.0,
                 "Evaluator timing milestone"
             );
-            tree = Some(if let Some(mut tree) = tree {
-                tree.merge(eval, settings.cpe_iterations)
-                    .map_err(|e| eyre!("Failed to merge evaluators: {}", e))?;
-                tree
-            } else {
-                eval
-            });
+            tree = Some(eval);
         }
 
         let mut tree = tree.ok_or_else(|| eyre!("No expressions to evaluate"))?;
@@ -3185,9 +3583,11 @@ impl GenericEvaluator {
             stage = "evaluator_numeric_programs_start",
             "Evaluator timing milestone"
         );
-        if let Some(dual_shape) = &dual_shape {
+        if let Some(dual_shape) = &dual_shape
+            && !retained_dual
+        {
             let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
-            let dualizer = Dualizer::new(dual, zero_components);
+            let dualizer = Dualizer::new(dual, zero_components.clone());
             tree = tree
                 .vectorize(&dualizer)
                 .map_err(|error| eyre!("Failed to vectorize evaluator: {error}"))?;
@@ -3219,6 +3619,7 @@ impl GenericEvaluator {
             f64_eager,
             f128,
             dual_shape,
+            zero_components,
             arb,
             sampling_fixed256: RuntimeCache::default(),
             loaded_f64_compiled: RuntimeCache::default(),
@@ -3322,10 +3723,38 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<T>>]) -> Complex<F<T>>;
 
+    /// Write all scalar or flattened dual outputs into a caller-owned buffer.
+    fn evaluate_into(
+        generic_evaluator: &mut GenericEvaluator,
+        params: &[Complex<F<T>>],
+        out: &mut [Complex<F<T>>],
+    );
+
     #[allow(clippy::type_complexity)]
     fn get_evaluator(
         generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<T>>]) -> Vec<DualOrNot<Complex<F<T>>>>;
+    ) -> impl FnMut(&[Complex<F<T>>]) -> Vec<DualOrNot<Complex<F<T>>>> {
+        let out_size = generic_evaluator.compute_out_size();
+        let mut out = vec![Complex::default(); out_size];
+        let dual_builder = generic_evaluator
+            .dual_shape
+            .as_ref()
+            .map(|shape| HyperDual::<Complex<F<T>>>::new(shape.clone()));
+        move |params: &[Complex<F<T>>]| {
+            out.resize_with(out_size, Complex::default);
+            Self::evaluate_into(generic_evaluator, params, &mut out);
+            if let Some(dual_builder) = &dual_builder {
+                out.chunks(dual_builder.values.len())
+                    .map(|chunk| DualOrNot::Dual(new_from_values(dual_builder, chunk)))
+                    .collect()
+            } else {
+                std::mem::take(&mut out)
+                    .into_iter()
+                    .map(DualOrNot::NonDual)
+                    .collect()
+            }
+        }
+    }
 
     #[allow(clippy::too_many_arguments)]
     fn get_parameters<'a>(
@@ -3376,46 +3805,35 @@ impl GenericEvaluatorFloat for f64 {
         }
     }
 
-    fn get_evaluator(
+    fn evaluate_into(
         generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<DualOrNot<Complex<F<Self>>>> {
-        |params: &[Complex<F<f64>>]| {
-            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
-            match generic_evaluator.active_f64_backend() {
-                ActiveF64Backend::Eager => {
-                    generic_evaluator.f64_eager.evaluate(params, &mut out);
-                }
-                ActiveF64Backend::Cpp | ActiveF64Backend::Assembly => {
-                    let compiled = generic_evaluator
-                        .loaded_f64_compiled
-                        .as_mut()
-                        .expect("compiled f64 backend should be activated before evaluation");
-                    unsafe {
-                        compiled.evaluate(
-                            transmute::<&[Complex<F<f64>>], &[Complex<f64>]>(params),
-                            transmute::<&mut [Complex<F<f64>>], &mut [Complex<f64>]>(&mut out),
-                        );
-                    }
-                }
-                ActiveF64Backend::Symjit => {
-                    let compiled = generic_evaluator
-                        .symjit_f64
-                        .as_mut()
-                        .expect("symjit f64 backend should be activated before evaluation");
-                    compiled.evaluate(params, &mut out);
+        params: &[Complex<F<f64>>],
+        out: &mut [Complex<F<f64>>],
+    ) {
+        assert_eq!(
+            out.len(),
+            generic_evaluator.compute_out_size(),
+            "Incorrect evaluator output length"
+        );
+        match generic_evaluator.active_f64_backend() {
+            ActiveF64Backend::Eager => generic_evaluator.f64_eager.evaluate(params, out),
+            ActiveF64Backend::Cpp | ActiveF64Backend::Assembly => {
+                let compiled = generic_evaluator
+                    .loaded_f64_compiled
+                    .as_mut()
+                    .expect("compiled f64 backend should be activated before evaluation");
+                unsafe {
+                    compiled.evaluate(
+                        transmute::<&[Complex<F<f64>>], &[Complex<f64>]>(params),
+                        transmute::<&mut [Complex<F<f64>>], &mut [Complex<f64>]>(out),
+                    );
                 }
             }
-
-            if let Some(dual_shape) = &generic_evaluator.dual_shape {
-                let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
-                let dual_size = dual_builder.values.len();
-
-                out.chunks(dual_size)
-                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
-                    .collect()
-            } else {
-                out.into_iter().map(DualOrNot::NonDual).collect()
-            }
+            ActiveF64Backend::Symjit => generic_evaluator
+                .symjit_f64
+                .as_mut()
+                .expect("symjit f64 backend should be activated before evaluation")
+                .evaluate(params, out),
         }
     }
 
@@ -3496,25 +3914,17 @@ macro_rules! impl_eager_evaluator_float {
                 |params: &[Complex<F<Self>>]| ($program).evaluate_single(params)
             }
 
-            fn get_evaluator(
+            fn evaluate_into(
                 $evaluator: &mut GenericEvaluator,
-            ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<DualOrNot<Complex<F<Self>>>> {
-                |params: &[Complex<F<Self>>]| {
-                    // info!("USING COMPLEX EAGER MULTIPLE");
-                    let mut out = vec![Complex::default(); $evaluator.compute_out_size()];
-                    ($program).evaluate(params, &mut out);
-
-                    if let Some(dual_shape) = &$evaluator.dual_shape {
-                        let dual_builder = HyperDual::<Complex<F<Self>>>::new(dual_shape.clone());
-                        let dual_size = dual_builder.values.len();
-
-                        out.chunks(dual_size)
-                            .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
-                            .collect()
-                    } else {
-                        out.into_iter().map(DualOrNot::NonDual).collect()
-                    }
-                }
+                params: &[Complex<F<Self>>],
+                out: &mut [Complex<F<Self>>],
+            ) {
+                assert_eq!(
+                    out.len(),
+                    $evaluator.compute_out_size(),
+                    "Incorrect evaluator output length"
+                );
+                ($program).evaluate(params, out);
             }
 
             fn get_parameters<'a>(
@@ -3843,7 +4253,7 @@ mod tests {
             .add_tagged_function(
                 original,
                 vec![Atom::num(0)],
-                String::new(),
+                Default::default(),
                 Vec::<Indeterminate>::new(),
                 x + 11,
             )
@@ -4160,6 +4570,139 @@ mod tests {
     }
 
     #[test]
+    fn shared_numerator_components_compact_before_pruning() {
+        use spenso::network::library::symbolic::ETS;
+
+        test_initialise().unwrap();
+        let family = symbol!("evaluator_test::compact_numerator_family");
+        let q = Atom::var(symbol!("evaluator_test::compact_numerator_q"));
+        let r = Atom::var(symbol!("evaluator_test::compact_numerator_r"));
+        let x = Atom::var(symbol!("evaluator_test::compact_numerator_x"));
+        let y = Atom::var(symbol!("evaluator_test::compact_numerator_y"));
+        let mu = parse_lit!(spenso::mink(4, 1));
+        let nu = parse_lit!(spenso::mink(4, 2));
+        let contraction = GS.energy_delta(mu.as_view())
+            * GS.energy_delta(nu.as_view())
+            * function!(ETS.metric, &mu, &nu);
+        let contractions = [
+            contraction.clone(),
+            contraction,
+            GS.delta_vec.call_args([GS.cind(1), mu.clone()])
+                * GS.energy_delta(nu.as_view())
+                * function!(ETS.metric, mu, nu),
+        ];
+        let weight = Atom::add_many((1..512).map(|i| (&x + i).pow(2)));
+        let large = Atom::add_many((1..512).flat_map(|i| {
+            let term = (&x + i).pow(2);
+            [&q * &term, &y * term]
+        }));
+        assert!(large.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES);
+        let sources = [&q * &x + &q * &y, large, r.clone()];
+        let expected_bodies = [&q * (&x + &y), (&q + &y) * weight];
+        assert_ne!(sources[0], expected_bodies[0]);
+        assert_ne!(sources[1], expected_bodies[1]);
+        let definitions = sources
+            .iter()
+            .enumerate()
+            .map(|(tag, scalar)| {
+                Arc::new(FnMapEntry {
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                    lhs: function!(family, tag, &q, &r),
+                    rhs: scalar * &contractions[tag],
+                    tags: vec![Atom::num(tag)],
+                    args: [&q, &r]
+                        .into_iter()
+                        .map(|arg| Indeterminate::try_from(arg.clone()).unwrap())
+                        .collect(),
+                })
+            })
+            .collect::<Vec<_>>();
+        let roots = [
+            function!(family, 0, 3, 11),
+            function!(family, 0, 5, 13),
+            function!(family, 1, 3, 17),
+            function!(family, 1, 5, 19),
+            function!(family, 2, 3, 23),
+        ];
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x, y].into_iter().collect();
+        builder.pairs.update_ranges();
+        let settings = EvaluatorSettings::default();
+        let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
+            &roots,
+            &builder,
+            &definitions,
+            &settings,
+            symbol!("evaluator_test::compact_numerator_scalar"),
+            InliningPolicy::Always,
+        )
+        .unwrap();
+        // Both a contracted component and a retained large scalar alias are
+        // compacted before assigning their minimal formal dependencies. The
+        // temporal-spatial contraction separately verifies sparse-zero pruning.
+        for (expected, source) in expected_bodies.iter().zip(&sources) {
+            assert!(prepared.reps.iter().any(|entry| entry.rhs == expected));
+            assert!(expected.as_view().get_byte_size() < source.as_view().get_byte_size());
+        }
+        assert!(
+            prepared
+                .reps
+                .iter()
+                .all(|entry| entry.args.iter().all(|arg| *arg == q))
+        );
+        assert!(atoms[4].get_root().is_zero());
+        assert!(
+            prepared
+                .reps
+                .iter()
+                .all(|entry| entry.tags[0] != Atom::num(2))
+        );
+        for ((definition, source), contraction) in definitions.iter().zip(sources).zip(contractions)
+        {
+            assert_eq!(definition.rhs, source * contraction);
+        }
+        let mut evaluator = GenericEvaluator::new_from_builder(
+            atoms,
+            &prepared,
+            Some(crate::utils::hyperdual_utils::simple_n_deriv_shape(1)),
+            settings.optimization_settings(),
+            &settings,
+        )
+        .unwrap();
+        let values = [0.0, 1.0, 7.0, 0.0].map(|v| Complex::new_re(F(v)));
+        let w = (1..512).map(|i| i * i).sum::<i64>() as f64;
+        let dw = (1..512).map(|i| 2 * i).sum::<i64>() as f64;
+        for compiled in [false, true] {
+            if compiled {
+                evaluator
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O0,
+                        ..Default::default()
+                    })
+                    .unwrap();
+            }
+            let actual = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut evaluator)(&values);
+            assert_eq!(actual.len(), roots.len());
+            for (actual, expected) in actual.iter().zip([
+                [21.0, 3.0],
+                [35.0, 5.0],
+                [10.0 * w, 10.0 * dw],
+                [12.0 * w, 12.0 * dw],
+                [0.0, 0.0],
+            ]) {
+                let DualOrNot::Dual(actual) = actual else {
+                    panic!("expected dual result")
+                };
+                assert_eq!(
+                    actual.values,
+                    expected.map(|v| Complex::new_re(F(v))).to_vec()
+                );
+            }
+        }
+    }
+
+    #[test]
     fn shared_numerator_components_prune_only_unused_formals_through_aliases() {
         test_initialise().unwrap();
         let family = symbol!("evaluator_test::pruned_numerator_family");
@@ -4282,6 +4825,351 @@ mod tests {
                 );
             }
         }
+
+        // Short affine energy sums stay visible for inlined components and
+        // share scalar definitions otherwise, including sums under Mul.
+        let x = Atom::var(symbol!("evaluator_test::short_affine_x"));
+        let y = Atom::var(symbol!("evaluator_test::short_affine_y"));
+        let p = Atom::var(symbol!("evaluator_test::short_affine_p"));
+        let r = Atom::var(symbol!("evaluator_test::short_affine_r"));
+        let gate = Atom::var(symbol!("evaluator_test::short_affine_gate"));
+        let q = function!(symbol!("evaluator_test::short_affine_q"), 0);
+        let unused = function!(symbol!("evaluator_test::short_affine_q"), 1);
+        let index = parse_lit!(spenso::mink(4, 19));
+        let temporal = GS.energy_delta(index.as_view());
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params =
+            [x.clone(), y.clone(), p.clone(), r.clone(), gate.clone()]
+                .into_iter()
+                .collect();
+        builder.pairs.update_ranges();
+        builder
+            .add_function(
+                GS.tree_denom_wrapper,
+                vec![
+                    Indeterminate::try_from(Atom::var(symbol!(
+                        "evaluator_test::short_affine_tree_arg"
+                    )))
+                    .unwrap(),
+                ],
+                Atom::var(symbol!("evaluator_test::short_affine_tree_arg")),
+            )
+            .unwrap();
+        let tree = function!(GS.tree_denom_wrapper, (&x * &x + 4).pow(-1));
+        for spectator in [false, true] {
+            let affine = &q * &x + &y;
+            let weight = if spectator { affine * (&x + 1) } else { affine };
+            assert!(weight.as_view().get_byte_size() < NETWORK_SCALAR_ALIAS_MIN_BYTES);
+            let definition = Arc::new(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 2, q.clone(), unused.clone()),
+                rhs: &weight * &temporal,
+                tags: vec![Atom::num(2)],
+                args: [q.clone(), unused.clone()]
+                    .into_iter()
+                    .map(|arg| Indeterminate::try_from(arg).unwrap())
+                    .collect(),
+            });
+            let roots = [
+                &tree * function!(family, 2, p.clone(), 17) * &temporal,
+                function!(Symbol::IF, gate.clone(), x.pow(-1), 0)
+                    * function!(family, 2, r.clone(), 23)
+                    * &temporal,
+            ];
+            for inlining in [InliningPolicy::Always, InliningPolicy::Never] {
+                let settings = EvaluatorSettings {
+                    store_atom: true,
+                    ..Default::default()
+                };
+                let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
+                    &roots,
+                    &builder,
+                    std::slice::from_ref(&definition),
+                    &settings,
+                    symbol!("evaluator_test::short_affine_scalar"),
+                    inlining,
+                )
+                .unwrap();
+                let coefficients = prepared
+                    .reps
+                    .iter()
+                    .filter(|entry| {
+                        entry
+                            .lhs
+                            .as_fun_view()
+                            .unwrap()
+                            .get_symbol()
+                            .get_name()
+                            .starts_with("gammalooprs::numerator_coefficient_")
+                    })
+                    .collect::<Vec<_>>();
+                let components = prepared
+                    .reps
+                    .iter()
+                    .filter(|entry| {
+                        entry
+                            .lhs
+                            .as_fun_view()
+                            .unwrap()
+                            .get_symbol()
+                            .get_name()
+                            .starts_with("gammalooprs::numerator_component_")
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(components.len(), 1);
+                let scalar_body =
+                    if inlining == InliningPolicy::Always {
+                        assert!(coefficients.is_empty());
+                        components[0]
+                    } else {
+                        assert_eq!(coefficients.len(), 1);
+                        assert!(components[0].rhs.contains_symbol(
+                            coefficients[0].lhs.as_fun_view().unwrap().get_symbol()
+                        ));
+                        coefficients[0]
+                    };
+                assert_eq!(scalar_body.args.len(), 1);
+                let restored = scalar_body
+                    .rhs
+                    .replace(Atom::from(scalar_body.args[0].clone()).to_pattern())
+                    .with(q.clone());
+                assert_eq!(restored, weight.collect_compact_factors());
+                assert!(prepared.reps.iter().all(|entry| entry.args.len() <= 1));
+                assert_eq!(scalar_body.inlining, inlining);
+                assert!(prepared.reps.iter().all(|entry| {
+                    !entry
+                        .args
+                        .contains(&Indeterminate::try_from(unused.clone()).unwrap())
+                }));
+                assert_eq!(prepared.reps[0], builder.reps[0]);
+                assert!(atoms[0].get_root().contains_symbol(GS.tree_denom_wrapper));
+                assert_eq!(definition.rhs, &weight * &temporal);
+                for dual_shape in [
+                    None,
+                    Some(crate::utils::hyperdual_utils::simple_n_deriv_shape(2)),
+                ] {
+                    let width = dual_shape.as_ref().map_or(1, |shape| shape.len());
+                    let mut evaluator = GenericEvaluator::new_from_builder(
+                        atoms.clone(),
+                        &prepared,
+                        dual_shape,
+                        settings.optimization_settings(),
+                        &settings,
+                    )
+                    .unwrap();
+                    if width == 1 && inlining == InliningPolicy::Always {
+                        let operations = evaluator.f64_eager.count_operations();
+                        assert!(
+                            operations.additions <= 12 && operations.multiplications <= 24,
+                            "short affine sums lost their compact native boundary: {operations:?}"
+                        );
+                    }
+                    for symjit in [false, true] {
+                        if symjit {
+                            evaluator
+                                .activate_symjit(&CompilationOptionsSnapshot {
+                                    optimization_level: CompilationOptimizationLevel::O0,
+                                    ..Default::default()
+                                })
+                                .unwrap();
+                        }
+                        for (x_value, r_value, active) in [
+                            (0.0, 1.0, false),
+                            (0.0, 1.0, true),
+                            (2.0, 1.0, true),
+                            (2.0, 2.0, true),
+                        ] {
+                            let mut values =
+                                [x_value, 3.0, 1.0, r_value, if active { 1.0 } else { 0.0 }]
+                                    .into_iter()
+                                    .flat_map(|value| {
+                                        std::iter::once(Complex::new_re(F(value)))
+                                            .chain((1..width).map(|_| Complex::new_re(F(0.0))))
+                                    })
+                                    .collect::<Vec<_>>();
+                            if width > 1 {
+                                values[1] = Complex::new_re(F(1.0));
+                            }
+                            let mut expected = Vec::new();
+                            for (row, slope) in [1.0, r_value].into_iter().enumerate() {
+                                let base = slope * x_value + 3.0;
+                                let (f, df, ddf) = if spectator {
+                                    (
+                                        base * (x_value + 1.0),
+                                        base + slope * (x_value + 1.0),
+                                        2.0 * slope,
+                                    )
+                                } else {
+                                    (base, slope, 0.0)
+                                };
+                                expected.push(if row == 0 {
+                                    let d = x_value * x_value + 4.0;
+                                    [
+                                        f / d,
+                                        df / d - 2.0 * x_value * f / (d * d),
+                                        ddf / d - 4.0 * x_value * df / (d * d) - 2.0 * f / (d * d)
+                                            + 8.0 * x_value * x_value * f / (d * d * d),
+                                    ]
+                                } else if active {
+                                    [
+                                        f / x_value,
+                                        df / x_value - f / (x_value * x_value),
+                                        ddf / x_value - 2.0 * df / (x_value * x_value)
+                                            + 2.0 * f / (x_value * x_value * x_value),
+                                    ]
+                                } else {
+                                    [0.0; 3]
+                                });
+                            }
+                            let actual = <f64 as GenericEvaluatorFloat>::get_evaluator(
+                                &mut evaluator,
+                            )(&values);
+                            assert_eq!(actual.len(), expected.len());
+                            for (row, (actual, expected)) in actual.iter().zip(expected).enumerate()
+                            {
+                                if row == 1 && active && x_value == 0.0 {
+                                    let values = match actual {
+                                        DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                                        DualOrNot::Dual(value) => value.values.as_slice(),
+                                    };
+                                    assert!(values.iter().all(|value| {
+                                        !value.re.0.is_finite() || !value.im.0.is_finite()
+                                    }));
+                                    continue;
+                                }
+                                let expected = expected[..width]
+                                    .iter()
+                                    .map(|value| Complex::new_re(F(*value)))
+                                    .collect::<Vec<_>>();
+                                match actual {
+                                    DualOrNot::NonDual(value) => assert_eq!(*value, expected[0]),
+                                    // Native jets store Taylor coefficients; the oracle uses derivatives.
+                                    DualOrNot::Dual(value) => assert_eq!(
+                                        crate::utils::hyperdual_utils::extract_t_derivatives_complex(
+                                            value.clone(),
+                                        ),
+                                        expected
+                                    ),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nested_retained_numerator_coefficients_compile_with_distinct_bodies() {
+        test_initialise().unwrap();
+        let family = symbol!("evaluator_test::compiled_nested_numerator_family");
+        let q = Atom::var(symbol!("evaluator_test::compiled_nested_numerator_q"));
+        let x = Atom::var(symbol!("evaluator_test::compiled_nested_numerator_x"));
+        let vector = SPENSO_TAG.tensor_symbol("evaluator_test::compiled_nested_numerator_vector");
+        let index = parse_lit!(spenso::mink(4, 1));
+        let definitions = [2, 3]
+            .into_iter()
+            .enumerate()
+            .map(|(tag, power)| {
+                let weight = Atom::add_many((1..512).map(|i| (&x + i).pow(power)));
+                assert!(weight.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES);
+                Arc::new(FnMapEntry {
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                    lhs: function!(family, tag, q.clone()),
+                    rhs: &q * weight * GS.energy_delta(index.as_view()),
+                    tags: vec![Atom::num(tag)],
+                    args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+                })
+            })
+            .collect::<Vec<_>>();
+        let roots = [
+            function!(family, 0, 3) * function!(vector, index.clone()),
+            function!(family, 1, 5) * function!(vector, index),
+        ];
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x, function!(vector, function!(AIND_SYMBOLS.cind, 0))]
+            .into_iter()
+            .collect();
+        builder.pairs.update_ranges();
+        let settings = EvaluatorSettings::default();
+        let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
+            &roots,
+            &builder,
+            &definitions,
+            &settings,
+            symbol!("evaluator_test::compiled_nested_numerator_scalar"),
+            InliningPolicy::Never,
+        )
+        .unwrap();
+        let mut evaluator = GenericEvaluator::new_from_builder(
+            atoms,
+            &prepared,
+            None,
+            settings.optimization_settings(),
+            &settings,
+        )
+        .unwrap();
+        let program = evaluator.f64_eager.export_instructions();
+        let nested_definitions = program
+            .sub_evaluators
+            .iter()
+            .flat_map(|sub| &sub.instructions.sub_evaluators)
+            .map(|sub| (sub.symbol, sub.tags.clone()))
+            .collect::<HashSet<_>>();
+        assert!(
+            nested_definitions.len() >= 2,
+            "distinct large scalar coefficients must remain separate nested programs"
+        );
+        let values = [2.0, 7.0].map(|value| Complex::new_re(F(value)));
+        let expected = [
+            21 * (1..512).map(|i: i64| (i + 2).pow(2)).sum::<i64>(),
+            35 * (1..512).map(|i: i64| (i + 2).pow(3)).sum::<i64>(),
+        ]
+        .map(|value| Complex::new_re(F(value as f64)));
+        let directory = std::env::temp_dir().join(format!(
+            "gammaloop-nested-numerator-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let options = crate::settings::global::CompilationOptionsSnapshot {
+            optimization_level: CompilationOptimizationLevel::O0,
+            compiler: "g++".into(),
+            ..Default::default()
+        };
+        for mode in [
+            None,
+            Some(FrozenCompilationMode::Cpp(options.clone())),
+            Some(FrozenCompilationMode::Assembly(options)),
+        ] {
+            let name = mode
+                .as_ref()
+                .map_or("eager", |mode| mode.active_backend_name());
+            if let Some(mode) = &mode {
+                evaluator
+                    .compile_external(
+                        directory.join(format!("{name}.cpp")),
+                        "nested_numerator",
+                        directory.join(format!("{name}.so")),
+                        mode,
+                    )
+                    .unwrap();
+            }
+            let actual = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut evaluator)(&values);
+            assert_eq!(actual.len(), expected.len());
+            for (actual, expected) in actual.iter().zip(&expected) {
+                let DualOrNot::NonDual(actual) = actual else {
+                    panic!("expected scalar numerator components")
+                };
+                assert_eq!(actual, expected, "{name} nested numerator coefficient");
+            }
+        }
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -4397,8 +5285,25 @@ mod tests {
         .unwrap();
         // Both argument rows reuse one closed scalar body, rather than the
         // separately materialized open components of either numerator.
-        assert_eq!(prepared.reps.len(), 1);
-        assert_eq!(prepared.reps[0].args.len(), 2);
+        let components = prepared
+            .reps
+            .iter()
+            .filter(|entry| {
+                entry
+                    .lhs
+                    .as_fun_view()
+                    .unwrap()
+                    .get_symbol()
+                    .get_name()
+                    .starts_with("gammalooprs::numerator_component_")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(components.len(), 1);
+        assert_eq!(components[0].args.len(), 2);
+        assert_eq!(
+            components[0].tags.last(),
+            Some(&function!(AIND_SYMBOLS.cind))
+        );
         let mut evaluator = GenericEvaluator::new_from_builder(
             atoms,
             &prepared,
@@ -4493,8 +5398,25 @@ mod tests {
             InliningPolicy::Always,
         )
         .unwrap();
-        assert_eq!(prepared.reps.len(), 1);
-        assert_eq!(prepared.reps[0].args.len(), 1);
+        let components = prepared
+            .reps
+            .iter()
+            .filter(|entry| {
+                entry
+                    .lhs
+                    .as_fun_view()
+                    .unwrap()
+                    .get_symbol()
+                    .get_name()
+                    .starts_with("gammalooprs::numerator_component_")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(components.len(), 1);
+        assert_eq!(components[0].args.len(), 1);
+        assert_eq!(
+            components[0].tags.last(),
+            Some(&function!(AIND_SYMBOLS.cind))
+        );
         let mut evaluator = GenericEvaluator::new_from_builder(
             atoms,
             &prepared,
@@ -4615,7 +5537,7 @@ mod tests {
         });
         let root = function!(family, 0, 2 * &x + 3) * function!(family, 0, &x + 2);
         let mut builder = ParamBuilder::new_empty();
-        builder.pairs.additional_params = std::iter::once(x)
+        builder.pairs.additional_params = std::iter::once(x.clone())
             .chain((0..4).flat_map(|i| {
                 [
                     function!(p, function!(AIND_SYMBOLS.cind, i)),
@@ -4624,18 +5546,40 @@ mod tests {
             }))
             .collect();
         builder.pairs.update_ranges();
-        let settings = EvaluatorSettings::default();
+        let settings = EvaluatorSettings {
+            summed_function_map: true,
+            summed: true,
+            iterative_orientation_optimization: true,
+            ..Default::default()
+        };
         let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
             &[root],
             &builder,
-            &[definition],
+            &[Arc::clone(&definition)],
             &settings,
             symbol!("evaluator_test::repeated_joint_scalar"),
             InliningPolicy::Always,
         )
         .unwrap();
-        assert_eq!(prepared.reps.len(), 1);
-        assert_eq!(prepared.reps[0].args.len(), 2);
+        let components = prepared
+            .reps
+            .iter()
+            .filter(|entry| {
+                entry
+                    .lhs
+                    .as_fun_view()
+                    .unwrap()
+                    .get_symbol()
+                    .get_name()
+                    .starts_with("gammalooprs::numerator_component_")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(components.len(), 1);
+        assert_eq!(components[0].args.len(), 2);
+        assert_eq!(
+            components[0].tags.last(),
+            Some(&function!(AIND_SYMBOLS.cind))
+        );
         let mut evaluator = GenericEvaluator::new_from_builder(
             atoms,
             &prepared,
@@ -4657,6 +5601,108 @@ mod tests {
         // Each body owns its contraction, including slots inside sym.
         // Sharing those indices incorrectly replaces (p.r)^2 by p^2 r^2.
         assert_eq!(actual.values, vec![Complex::new_re(F(1382400.0)); 2]);
+
+        // The typed Cartesian-row product must preserve the same private
+        // contractions before its single generic body reaches preprocessing.
+        let cut = crate::cff::CutCFFIndex::new_all_none();
+        let slope = Atom::from(definition.args[0].clone());
+        let shift = Atom::var(symbol!("evaluator_test::repeated_joint_shift"));
+        let typed_args = vec![
+            definition.args[0].clone(),
+            Indeterminate::try_from(shift.clone()).unwrap(),
+        ];
+        let typed_definition = Arc::new(FnMapEntry {
+            lhs: symbol!("gammalooprs::uv::numerator_family").call_args(
+                definition
+                    .tags
+                    .iter()
+                    .cloned()
+                    .chain(typed_args.iter().cloned().map(Atom::from)),
+            ),
+            rhs: definition
+                .rhs
+                .replace(slope.to_pattern())
+                .with(&slope * &x + shift),
+            args: typed_args,
+            ..definition.as_ref().clone()
+        });
+        let factor = |slope: i64, shift: i64| {
+            crate::uv::Integrands::from_iter([(cut, Atom::Zero)])
+                .with_parametric_terms([(
+                    cut,
+                    ParametricIntegrandTerm::new(
+                        Arc::clone(&typed_definition),
+                        vec![crate::uv::ParametricIntegrandRow {
+                            coefficients: vec![Rational::from(slope), Rational::from(shift)],
+                            carrier: Atom::one(),
+                            source_keys: Vec::new(),
+                        }],
+                    )
+                    .unwrap(),
+                )])
+                .unwrap()
+        };
+        let product = factor(2, 3).zip_mul(&factor(1, 2)).unwrap();
+        let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+            product.atom(&cut).unwrap(),
+            &builder,
+            product.numerators(),
+            product.parametric_terms(&cut),
+            None,
+            Some(crate::utils::hyperdual_utils::simple_n_deriv_shape(1)),
+            &settings,
+        )
+        .unwrap();
+        let orientations =
+            TiVec::<OrientationID, _>::from_iter([EdgeVec::from_iter(std::iter::empty::<
+                Orientation,
+            >())]);
+        let filter = SubSet::full(1);
+        for symjit in [false, true] {
+            if symjit {
+                stack
+                    .for_each_generic_evaluator_mut(|evaluator| {
+                        evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: CompilationOptimizationLevel::O0,
+                            ..Default::default()
+                        })
+                    })
+                    .unwrap();
+            }
+            for method in [
+                EvaluatorMethod::SingleParametric,
+                EvaluatorMethod::SummedFunctionMap,
+                EvaluatorMethod::Summed,
+                EvaluatorMethod::Iterative,
+            ] {
+                let mut runtime = RuntimeSettings::default();
+                runtime.general.evaluator_method = method.clone();
+                let output = stack
+                    .evaluate(
+                        InputParams {
+                            values: SliceMut::Owned(values.clone()),
+                            residue_map_id_start: 0,
+                            orientations_start: 0,
+                            multiplicative_offset: 2,
+                        },
+                        SingleOrAllOrientations::All {
+                            all: &orientations,
+                            filter: &filter,
+                        },
+                        &runtime,
+                        &mut EvaluationMetaData::new_empty(),
+                    )
+                    .unwrap();
+                let [DualOrNot::Dual(actual)] = output.as_slice() else {
+                    panic!("expected typed product dual output")
+                };
+                assert_eq!(
+                    actual.values,
+                    vec![Complex::new_re(F(1382400.0)); 2],
+                    "{method:?}, SymJIT={symjit}",
+                );
+            }
+        }
     }
 
     #[test]
@@ -4952,7 +5998,7 @@ mod tests {
                     EvaluatorMethod::Summed,
                 ] {
                     let mut runtime = RuntimeSettings::default();
-                    runtime.general.evaluator_method = method;
+                    runtime.general.evaluator_method = method.clone();
                     let actual = scalar_value(
                         stack
                             .evaluate(make_input(), all, &runtime, &mut metadata)
@@ -5078,7 +6124,7 @@ mod tests {
                         EvaluatorMethod::Summed,
                     ] {
                         let mut runtime = RuntimeSettings::default();
-                        runtime.general.evaluator_method = method;
+                        runtime.general.evaluator_method = method.clone();
                         let actual = scalar_value(
                             decoded
                                 .evaluate(make_input(), all, &runtime, &mut metadata)
@@ -5432,6 +6478,3375 @@ mod tests {
     }
 
     #[test]
+    fn complete_source_sums_share_numerators_and_count_each_row_once() {
+        test_initialise().unwrap();
+        let q = Atom::var(symbol!("evaluator_test::complete_sum_q"));
+        let r = Atom::var(symbol!("evaluator_test::complete_sum_r"));
+        let x = Atom::var(symbol!("evaluator_test::complete_sum_x"));
+        let family = symbol!("evaluator_test::complete_sum_family");
+        let definition = Arc::new(FnMapEntry {
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+            lhs: function!(family, 0, q.clone(), r.clone()),
+            rhs: (&q * &x + 1).pow(4) * (&r * &x + 2),
+            tags: vec![Atom::num(0)],
+            args: vec![
+                Indeterminate::try_from(q.clone()).unwrap(),
+                Indeterminate::try_from(r).unwrap(),
+            ],
+        });
+        // The narrow family's single row runs beside the wide Cartesian sum,
+        // retaining its own numerator and open tensor interface.
+        let temporal = GS.energy_delta(parse_lit!(spenso::mink(4, 1)));
+        let narrow_definition = Arc::new(FnMapEntry {
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+            lhs: function!(family, 1, q.clone()),
+            rhs: (&q * &x + 3).pow(2) * &temporal,
+            tags: vec![Atom::num(1)],
+            args: vec![Indeterminate::try_from(q).unwrap()],
+        });
+        let constant_definition = Arc::new(FnMapEntry {
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+            lhs: function!(family, 2),
+            rhs: x.pow(2) + 7,
+            tags: vec![Atom::num(2)],
+            args: Vec::new(),
+        });
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x.clone()].into_iter().collect();
+        let tree_argument = Atom::var(symbol!("evaluator_test::complete_sum_tree_argument"));
+        builder
+            .add_function_entry(FnMapEntry {
+                lhs: function!(GS.tree_denom_wrapper, tree_argument.clone()),
+                rhs: tree_argument.clone(),
+                args: vec![Indeterminate::try_from(tree_argument).unwrap()],
+                tags: Vec::new(),
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            })
+            .unwrap();
+        let parameter_count = builder.pairs.update_ranges();
+        let orientations =
+            TiVec::<OrientationID, _>::from_iter([EdgeVec::from_iter([Orientation::Default])]);
+        let filter = SubSet::full(orientations.len());
+        for (inline_numerator_functions, with_tree_factor) in
+            [(true, false), (false, false), (true, true), (false, true)]
+        {
+            let settings = EvaluatorSettings {
+                iterative_orientation_optimization: true,
+                inline_numerator_functions,
+                summed_function_map: true,
+                summed: true,
+                ..Default::default()
+            };
+            let tree_factor = if with_tree_factor {
+                function!(GS.tree_denom_wrapper, (x.pow(2) + 4).pow(-1))
+            } else {
+                Atom::one()
+            };
+            let mut numerator_program_shapes = None;
+            for rows in [2, 4, 8] {
+                // The UV child owns its sum, while this addback has no production
+                // row at all. A global loop over production rows duplicates both.
+                let term = ParametricIntegrandTerm {
+                    numerator: Arc::clone(&definition),
+                    rows: (1..=rows)
+                        .flat_map(|i| {
+                            let carrier = &tree_factor * i;
+                            (0..=3).map(move |j| crate::uv::ParametricIntegrandRow {
+                                coefficients: vec![Rational::from(i), Rational::from(j)],
+                                carrier: carrier.clone(),
+                                source_keys: Vec::new(),
+                            })
+                        })
+                        .collect(),
+                };
+                let terms = [
+                    term,
+                    ParametricIntegrandTerm {
+                        numerator: Arc::clone(&narrow_definition),
+                        rows: vec![crate::uv::ParametricIntegrandRow {
+                            coefficients: vec![Rational::one()],
+                            carrier: 3 * &temporal,
+                            source_keys: Vec::new(),
+                        }],
+                    },
+                    ParametricIntegrandTerm {
+                        numerator: Arc::clone(&constant_definition),
+                        // Duplicate rows and cancellation must keep this
+                        // independent source sum once beside the scalar 5.
+                        rows: [2, 3, 7, -7]
+                            .into_iter()
+                            .map(|carrier| crate::uv::ParametricIntegrandRow {
+                                coefficients: Vec::new(),
+                                carrier: Atom::num(carrier),
+                                source_keys: Vec::new(),
+                            })
+                            .collect(),
+                    },
+                ];
+                // At x=2 the nontrivial tree denominator is exactly 1/8.
+                // It multiplies only the wide source, leaving both independent
+                // sources and the scalar addback unchanged.
+                let wide = (1..=rows).map(|i: i64| i * (2 * i + 1).pow(4)).sum::<i64>()
+                    * (0..=3).map(|i| 2 * i + 2).sum::<i64>();
+                let expected = wide as f64 / if with_tree_factor { 8.0 } else { 1.0 }
+                    + (3 * 5i64.pow(2) + 5 * (4 + 7) + 5) as f64;
+                let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+                    &Atom::num(5),
+                    &builder,
+                    &[],
+                    &terms,
+                    None,
+                    None,
+                    &settings,
+                )
+                .unwrap();
+                assert_eq!(
+                    stack.parametric_rows.as_ref().unwrap().rows.len(),
+                    rows as usize * 4
+                );
+                let program = stack.single_parametric.f64_eager.export_instructions();
+                // Final inlining is independent of the earlier shared tensor
+                // lowering and complete source rows. When bodies remain retained,
+                // their shapes must not grow with the number of calling rows.
+                let mut shapes = program
+                    .sub_evaluators
+                    .iter()
+                    .map(|sub| (sub.tags.clone(), sub.instructions.instructions.len()))
+                    .collect::<Vec<_>>();
+                shapes.sort();
+                if inline_numerator_functions {
+                    assert!(shapes.is_empty());
+                } else {
+                    assert!(!shapes.is_empty());
+                    assert_eq!(
+                        numerator_program_shapes.get_or_insert_with(|| shapes.clone()),
+                        &shapes
+                    );
+                }
+                let program_count = shapes.len();
+                if rows == 8 {
+                    let encoded =
+                        bincode::encode_to_vec(&stack, bincode::config::standard()).unwrap();
+                    let mut state = Vec::new();
+                    State::export(&mut state).unwrap();
+                    let state_map = State::import(&mut Cursor::new(state), None).unwrap();
+                    let model = Model::default();
+                    (stack, _) = bincode::decode_from_slice_with_context(
+                        &encoded,
+                        bincode::config::standard(),
+                        GammaLoopContextContainer {
+                            state_map: &state_map,
+                            model: &model,
+                        },
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        stack
+                            .single_parametric
+                            .f64_eager
+                            .export_instructions()
+                            .sub_evaluators
+                            .len(),
+                        program_count
+                    );
+                }
+                let input = || {
+                    let mut values = vec![Complex::new_re(F(0.0)); parameter_count];
+                    values[builder.pairs.additional_params.value_range.start] =
+                        Complex::new_re(F(2.0));
+                    InputParams {
+                        values: SliceMut::Owned(values),
+                        residue_map_id_start: builder.pairs.residue_map_id.value_range.start,
+                        orientations_start: builder.pairs.orientations.value_range.start,
+                        multiplicative_offset: 1,
+                    }
+                };
+                let mut metadata = EvaluationMetaData::new_empty();
+                for compiled in [false, true] {
+                    if compiled {
+                        stack
+                            .for_each_generic_evaluator_mut(|evaluator| {
+                                evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                                    optimization_level: CompilationOptimizationLevel::O0,
+                                    ..Default::default()
+                                })
+                            })
+                            .unwrap();
+                    }
+                    for method in [
+                        EvaluatorMethod::SingleParametric,
+                        EvaluatorMethod::Iterative,
+                        EvaluatorMethod::SummedFunctionMap,
+                        EvaluatorMethod::Summed,
+                    ] {
+                        let mut runtime = RuntimeSettings::default();
+                        runtime.general.evaluator_method = method.clone();
+                        let result = stack
+                            .evaluate(
+                                input(),
+                                SingleOrAllOrientations::All {
+                                    all: &orientations,
+                                    filter: &filter,
+                                },
+                                &runtime,
+                                &mut metadata,
+                            )
+                            .unwrap();
+                        assert_eq!(
+                            scalar_value(result),
+                            Complex::new_re(F(expected)),
+                            "{method:?}, {rows} rows, inline={inline_numerator_functions}, tree={with_tree_factor}, compiled={compiled}"
+                        );
+                    }
+                }
+                if rows == 8 {
+                    let directory = std::env::temp_dir().join(format!(
+                        "gammaloop-complete-sum-{}-{}",
+                        std::process::id(),
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_nanos()
+                    ));
+                    std::fs::create_dir_all(&directory).unwrap();
+                    let options = crate::settings::global::CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O0,
+                        compiler: "g++".into(),
+                        ..Default::default()
+                    };
+                    for mode in [
+                        FrozenCompilationMode::Cpp(options.clone()),
+                        FrozenCompilationMode::Assembly(options),
+                    ] {
+                        let name = mode.active_backend_name();
+                        let mut program_index = 0;
+                        stack
+                            .for_each_generic_evaluator_mut(|evaluator| {
+                                let label = format!("{name}-{program_index}");
+                                program_index += 1;
+                                evaluator.compile_external(
+                                    directory.join(format!("{label}.cpp")),
+                                    "complete_sum",
+                                    directory.join(format!("{label}.so")),
+                                    &mode,
+                                )
+                            })
+                            .unwrap();
+                        assert_eq!(program_index, stack.generic_evaluator_count());
+                        assert_eq!(
+                            scalar_value(
+                                stack
+                                    .evaluate(
+                                        input(),
+                                        SingleOrAllOrientations::All {
+                                            all: &orientations,
+                                            filter: &filter,
+                                        },
+                                        &RuntimeSettings::default(),
+                                        &mut metadata,
+                                    )
+                                    .unwrap()
+                            ),
+                            Complex::new_re(F(expected)),
+                            "{name} complete source sum, inline={inline_numerator_functions}, tree={with_tree_factor}"
+                        );
+                    }
+                    std::fs::remove_dir_all(directory).unwrap();
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn flat_native_outputs_preserve_buffers_precision_and_mixed_jets() {
+        test_initialise().unwrap();
+        let x = Atom::var(symbol!("evaluator_test::flat_x"));
+        let y = Atom::var(symbol!("evaluator_test::flat_y"));
+        let gate = Atom::var(symbol!("evaluator_test::flat_gate"));
+        let precise = Rational::new(9_007_199_254_740_993i64, 9_007_199_254_740_992i64);
+        let roots = [
+            x.pow(2) * &y + Atom::num(precise.clone()),
+            Symbol::IF.call_args([gate.clone(), x.pow(-1), y.pow(2)]),
+        ];
+        fn check<T: FloatLike>(evaluator: &mut GenericEvaluator, precise: &Rational) {
+            let zero = F(T::new_zero());
+            let width = evaluator.dual_shape.as_ref().map_or(1, Vec::len);
+            assert!(width == 1 || width == 4);
+            let sentinel = Complex::new_re(zero.from_usize(17));
+            let mut output = vec![sentinel.clone(); evaluator.compute_out_size() + 2];
+            for point in [0, 2, -2, 0] {
+                let x = zero.from_i64(point);
+                let y = zero.from_usize(3);
+                let mut input = vec![Complex::new_re(zero.clone()); 3 * width];
+                input[0] = Complex::new_re(x.clone());
+                input[width] = Complex::new_re(y.clone());
+                input[2 * width] = Complex::new_re(zero.from_usize(usize::from(point != 0)));
+                if width > 1 {
+                    input[1] = Complex::new_re(zero.one());
+                    input[width + 2] = Complex::new_re(zero.one());
+                }
+                let output_end = output.len() - 1;
+                <T as GenericEvaluatorFloat>::evaluate_into(
+                    evaluator,
+                    &input,
+                    &mut output[1..output_end],
+                );
+                assert_eq!(output[0], sentinel);
+                assert_eq!(output[output_end], sentinel);
+                let wrapped = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&input)
+                    .into_iter()
+                    .flat_map(|value| match value {
+                        DualOrNot::Dual(dual) => dual.values,
+                        DualOrNot::NonDual(value) => vec![value],
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(output[1..output_end], wrapped);
+                let first = [
+                    x.powi(2) * &y + zero.from_rational(precise),
+                    zero.from_usize(2) * &x * &y,
+                    x.powi(2),
+                    zero.from_usize(2) * &x,
+                ];
+                // x=0 must never evaluate the pole, including its physical jets.
+                let second = if point == 0 {
+                    [
+                        y.powi(2),
+                        zero.clone(),
+                        zero.from_usize(2) * &y,
+                        zero.clone(),
+                    ]
+                } else {
+                    [x.powi(-1), -x.powi(-2), zero.clone(), zero.clone()]
+                };
+                for (actual, expected) in wrapped.iter().zip(
+                    first
+                        .into_iter()
+                        .take(width)
+                        .chain(second.into_iter().take(width)),
+                ) {
+                    assert!(
+                        (&actual.re - &expected).abs()
+                            <= (expected.abs() + zero.one())
+                                * zero.epsilon()
+                                * zero.from_usize(128),
+                        "flat output differs at x={point}, width={width}: {actual:?} != {expected:?}"
+                    );
+                    assert_eq!(actual.im, zero);
+                }
+                if point == 0 && zero.epsilon() < zero.from_usize(2).powi(-60) {
+                    assert!(wrapped[0].re > zero.one());
+                }
+            }
+            // Caller-owned extents must be checked before a compiled backend
+            // receives the pointer, not merely by the eager implementation.
+            let input = vec![Complex::new_re(zero); 3 * width];
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    <T as GenericEvaluatorFloat>::evaluate_into(evaluator, &input, &mut []);
+                }))
+                .is_err()
+            );
+        }
+        let directory = std::env::temp_dir().join(format!(
+            "gammaloop-flat-native-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        for shape in [
+            None,
+            Some(vec![vec![0, 0], vec![1, 0], vec![0, 1], vec![1, 1]]),
+        ] {
+            let settings = EvaluatorSettings::default();
+            let mut evaluator = GenericEvaluator::new_from_raw_params(
+                roots.clone(),
+                &[x.clone(), y.clone(), gate.clone()],
+                &FunctionMap::new(),
+                vec![],
+                settings.optimization_settings(),
+                shape.map(|shape| {
+                    let zeros = (1..shape.len()).map(|component| (2, component)).collect();
+                    (shape, zeros)
+                }),
+                &settings,
+            )
+            .unwrap();
+            check::<f64>(&mut evaluator, &precise);
+            check::<f128>(&mut evaluator, &precise);
+            check::<ArbPrec>(&mut evaluator, &precise);
+            // Sampling owns this warmup in production. Exercise its existing
+            // source-only lane because the shared wrapper dispatches it too.
+            let sampling = evaluator
+                .rational
+                .as_ref()
+                .unwrap()
+                .clone()
+                .map_coeff(&|r| {
+                    Complex::new(
+                        F::<SamplingFloat>::from(&r.re),
+                        F::<SamplingFloat>::from(&r.im),
+                    )
+                });
+            evaluator.sampling_fixed256.set(sampling);
+            check::<SamplingFloat>(&mut evaluator, &precise);
+            for optimization in [
+                CompilationOptimizationLevel::O0,
+                CompilationOptimizationLevel::O2,
+            ] {
+                evaluator
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: optimization,
+                        ..Default::default()
+                    })
+                    .unwrap();
+                check::<f64>(&mut evaluator, &precise);
+            }
+            let options = crate::settings::global::CompilationOptionsSnapshot {
+                optimization_level: CompilationOptimizationLevel::O0,
+                compiler: "g++".into(),
+                ..Default::default()
+            };
+            for mode in [
+                FrozenCompilationMode::Cpp(options.clone()),
+                FrozenCompilationMode::Assembly(options),
+            ] {
+                let label = format!(
+                    "{}-{}",
+                    mode.active_backend_name(),
+                    evaluator.compute_out_size()
+                );
+                evaluator
+                    .compile_external(
+                        directory.join(format!("{label}.cpp")),
+                        "flat_native_outputs",
+                        directory.join(format!("{label}.so")),
+                        &mode,
+                    )
+                    .unwrap();
+                check::<f64>(&mut evaluator, &precise);
+            }
+            evaluator.activate_eager();
+            check::<f64>(&mut evaluator, &precise);
+        }
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn generated_numerator_tables_preserve_argument_roles_and_native_jets() {
+        test_initialise().unwrap();
+        let x = Atom::var(symbol!("evaluator_test::batched_role_x"));
+        let y = Atom::var(symbol!("evaluator_test::batched_role_y"));
+        let columns = (0..4)
+            .map(|i| function!(symbol!("evaluator_test::batched_role_column"), i))
+            .collect::<Vec<_>>();
+        let [q, r, s, t] = columns.as_slice() else {
+            unreachable!()
+        };
+        let formals = (0..3)
+            .map(|i| function!(symbol!("evaluator_test::batched_role_formal"), i))
+            .collect::<Vec<_>>();
+        let [a, b, c] = formals.as_slice() else {
+            unreachable!()
+        };
+        let n = symbol!("evaluator_test::batched_role_numerator");
+        let definition = FnMapEntry {
+            lhs: function!(n, a.clone(), b.clone(), c.clone()),
+            rhs: a * x.pow(2) * &y + b * &x * y.pow(2) + c * &x * &y,
+            tags: Vec::new(),
+            args: formals
+                .iter()
+                .cloned()
+                .map(|a| Indeterminate::try_from(a).unwrap())
+                .collect(),
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+        };
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x, y].into_iter().collect();
+        let input_count = builder.pairs.update_ranges();
+        let x_index = builder.pairs.additional_params.value_range.start;
+        builder.add_function_entry(definition.clone()).unwrap();
+        let atoms = [
+            function!(n, q.clone(), r.clone(), q.clone()),
+            function!(n, s.clone(), t.clone(), s.clone()),
+            function!(n, q.clone(), r.clone(), r.clone()),
+            function!(n, q.clone(), 1, q.clone()),
+        ];
+        fn check<T: FloatLike>(stack: &mut EvaluatorStack, input_count: usize, x_index: usize) {
+            let zero = F(T::new_zero());
+            let width = stack
+                .single_parametric
+                .dual_shape
+                .as_ref()
+                .map_or(1, Vec::len);
+            for point in [0, 2, -2, 2] {
+                let x = zero.from_i64(point);
+                let y = zero.from_usize(3);
+                let mut input = vec![Complex::new_re(zero.clone()); input_count * width];
+                input[x_index * width] = Complex::new_re(x.clone());
+                input[(x_index + 1) * width] = Complex::new_re(y.clone());
+                if width > 1 {
+                    input[x_index * width + 1] = Complex::new_re(zero.one());
+                    input[(x_index + 1) * width + 2] = Complex::new_re(zero.one());
+                }
+                let outputs =
+                    stack.evaluate_single_parametric(&input, &mut EvaluationMetaData::new_empty());
+                assert_eq!(outputs.len(), 4);
+                // Independent coefficient sums for the four original calls.
+                for (output, [a, b, c]) in
+                    outputs
+                        .iter()
+                        .zip([[3, 5, 3], [3, 5, 3], [3, 5, 5], [3, 3, 3]])
+                {
+                    let a = zero.from_usize(a);
+                    let b = zero.from_usize(b);
+                    let c = zero.from_usize(c);
+                    let expected = [
+                        &a * x.powi(2) * &y + &b * &x * y.powi(2) + &c * &x * &y,
+                        zero.from_usize(2) * &a * &x * &y + &b * y.powi(2) + &c * &y,
+                        &a * x.powi(2) + zero.from_usize(2) * &b * &x * &y + &c * &x,
+                        zero.from_usize(2) * (&a * &x + &b * &y) + &c,
+                    ];
+                    let values = match output {
+                        DualOrNot::Dual(value) => value.values.as_slice(),
+                        DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                    };
+                    assert_eq!(values.len(), width);
+                    for (actual, expected) in values.iter().zip(expected) {
+                        assert_eq!(*actual, Complex::new_re(expected));
+                    }
+                }
+            }
+        }
+        for shape in [
+            None,
+            Some(vec![vec![0, 0], vec![1, 0], vec![0, 1], vec![1, 1]]),
+        ] {
+            let mut rows = ParametricResidueRows {
+                parameters: columns.clone(),
+                input_columns: (0..4).collect(),
+                rows: [[1, 1, 1, 1], [2, 3, 2, 3], [0, 1, 0, 1]]
+                    .map(|row| row.map(Rational::from).to_vec())
+                    .to_vec(),
+                ..Default::default()
+            };
+            let (main, auxiliary) = EvaluatorStack::new_single_parametric(
+                atoms.iter().cloned().map(AliasedAtom::from).collect(),
+                &builder,
+                &[],
+                Some(&mut rows),
+                &shape,
+                &EvaluatorSettings {
+                    store_atom: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(builder.reps, vec![definition.clone()]);
+            let (ports, program) = auxiliary
+                .as_ref()
+                .expect("repeated native numerator calls are batched");
+            assert_eq!(
+                ports.len(),
+                4,
+                "original carrier call identities stay distinct"
+            );
+            assert_eq!(rows.auxiliary_shared_outputs, 0);
+            assert!(rows.input_columns.is_empty());
+            assert_eq!(program.exprs_len, 9);
+            assert_eq!(rows.auxiliary_gathers.len(), 3);
+            let carrier_columns = main
+                .exprs
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|root| {
+                    ports
+                        .iter()
+                        .position(|port| port == root)
+                        .expect("each output keeps its original caller port")
+                })
+                .collect::<Vec<_>>();
+            for gather in &rows.auxiliary_gathers {
+                let gather = carrier_columns
+                    .iter()
+                    .map(|&column| gather[column])
+                    .collect::<Vec<_>>();
+                assert_eq!(gather.len(), 4);
+                assert!(gather.iter().all(Option::is_some));
+                assert_eq!(
+                    gather[0], gather[1],
+                    "equal argument-role patterns share outputs"
+                );
+                assert_ne!(
+                    gather[0], gather[2],
+                    "distinct argument columns do not become equal"
+                );
+                assert_ne!(
+                    gather[0], gather[3],
+                    "a dynamic value of one remains distinct from literal one"
+                );
+            }
+            let mut stack = EvaluatorStack {
+                explicit_orientation_sum_only: false,
+                parametric_rows: Some(rows),
+                production_orientation_ids: Vec::new(),
+                single_parametric: main,
+                single_parametric_auxiliary: auxiliary,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            };
+            check::<f64>(&mut stack, input_count, x_index);
+            check::<f128>(&mut stack, input_count, x_index);
+            check::<ArbPrec>(&mut stack, input_count, x_index);
+            for optimization in [
+                CompilationOptimizationLevel::O0,
+                CompilationOptimizationLevel::O2,
+            ] {
+                stack
+                    .for_each_generic_evaluator_mut(|evaluator| {
+                        evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: optimization,
+                            ..Default::default()
+                        })
+                    })
+                    .unwrap();
+                check::<f64>(&mut stack, input_count, x_index);
+            }
+        }
+    }
+
+    #[test]
+    fn row_scalar_leaves_preserve_alias_scopes_precision_and_mixed_jets() {
+        test_initialise().unwrap();
+        let x = Atom::var(symbol!("evaluator_test::row_scalar_x"));
+        let y = Atom::var(symbol!("evaluator_test::row_scalar_y"));
+        let q = function!(symbol!("evaluator_test::row_scalar_q"));
+        let gate = Atom::var(symbol!("evaluator_test::row_scalar_gate"));
+        let alias = function!(symbol!("evaluator_test::row_scalar_alias"));
+        let physical_alias = function!(symbol!("evaluator_test::row_scalar_physical_alias"));
+        let formal = Atom::var(symbol!("evaluator_test::row_scalar_formal"));
+        let other_formal = Atom::var(symbol!("evaluator_test::row_scalar_other_formal"));
+        let one = symbol!("evaluator_test::row_scalar_one");
+        let two = symbol!("evaluator_test::row_scalar_two");
+        let precise = Rational::new(9_007_199_254_740_993i64, 9_007_199_254_740_992i64);
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x.clone(), y.clone()].into_iter().collect();
+        let input_count = builder.pairs.update_ranges();
+        let x_index = builder.pairs.additional_params.value_range.start;
+        // Exact native inputs take precedence over ordinary definitions with
+        // the same key, including during scalar dependency rebinding.
+        builder
+            .add_function_entry(FnMapEntry {
+                lhs: q.clone(),
+                rhs: x.clone(),
+                tags: Vec::new(),
+                args: Vec::new(),
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            })
+            .unwrap();
+        let scalar_functions = [
+            FnMapEntry {
+                lhs: function!(GS.tree_denom_wrapper, formal.clone()),
+                rhs: formal.clone(),
+                tags: Vec::new(),
+                args: vec![Indeterminate::try_from(formal.clone()).unwrap()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            },
+            FnMapEntry {
+                lhs: function!(one, formal.clone()),
+                rhs: formal.pow(2) * &y,
+                tags: Vec::new(),
+                args: vec![Indeterminate::try_from(formal.clone()).unwrap()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            },
+            FnMapEntry {
+                lhs: function!(two, 7, formal.clone(), other_formal.clone()),
+                rhs: &formal * &other_formal + formal.pow(2),
+                tags: vec![Atom::num(7)],
+                args: vec![
+                    Indeterminate::try_from(formal.clone()).unwrap(),
+                    Indeterminate::try_from(other_formal).unwrap(),
+                ],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            },
+        ];
+        for definition in &scalar_functions {
+            builder.add_function_entry(definition.clone()).unwrap();
+        }
+        let physical_functions = builder.reps.clone();
+        let n1 = symbol!("evaluator_test::row_scalar_generated_one");
+        let n2 = symbol!("evaluator_test::row_scalar_generated_two");
+        let numerators = [
+            FnMapEntry {
+                lhs: function!(n1, formal.clone()),
+                rhs: &formal * &x,
+                tags: Vec::new(),
+                args: vec![Indeterminate::try_from(formal.clone()).unwrap()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            },
+            FnMapEntry {
+                lhs: function!(n2, formal.clone()),
+                rhs: &formal + &y,
+                tags: Vec::new(),
+                args: vec![Indeterminate::try_from(formal.clone()).unwrap()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            },
+        ];
+        for definition in &numerators {
+            builder.add_function_entry(definition.clone()).unwrap();
+        }
+        let row_tree_factor = function!(
+            GS.tree_denom_wrapper,
+            (q.pow(2) * x.pow(2) + 1).pow(-2) * (y.pow(2) + 2).pow(-1)
+        );
+        let mut selected =
+            AliasedAtom::from(Symbol::IF.call_args([gate.clone(), alias.clone(), -&q]));
+        selected.register_alias(alias.clone(), &q * &physical_alias);
+        selected.register_alias(physical_alias, x.pow(2) * &y);
+        let mut other_owner = AliasedAtom::from(alias.clone());
+        other_owner.register_alias(alias.clone(), &q * &x * y.pow(2));
+        let tree_factor = function!(
+            GS.tree_denom_wrapper,
+            (x.pow(2) + 1).pow(-2) * (y.pow(2) + 2).pow(-1)
+        );
+        let atoms = vec![
+            q.clone().into(),
+            (-&q).into(),
+            selected,
+            other_owner,
+            // This unchanged identity wrapper blocked the complete scalar
+            // branch in the physical massless soft-counterterm fixture.
+            Symbol::IF
+                .call_args([
+                    gate.clone(),
+                    function!(GS.tree_denom_wrapper, 1) * function!(one, &q * &x),
+                    -&q * &y,
+                ])
+                .into(),
+            (function!(two, 7, &q * &x, y.clone()) * function!(GS.tree_denom_wrapper, 1)).into(),
+            // Keep the nontrivial product of tree propagators outside the
+            // complete source sum, including both ordinary scalar calls.
+            (&tree_factor * (function!(one, &q * &x) + function!(two, 7, &q * &x, y.clone())))
+                .into(),
+            // The wrapper factor multiplies the complete selected scalar sum
+            // and two generated numerator calls; none is distributed or inlined.
+            (&row_tree_factor
+                * function!(n1, q.clone())
+                * function!(n2, q.clone())
+                * (Symbol::IF.call_args([gate.clone(), &x + &y, &x - &y]) + 1))
+                .into(),
+        ];
+        fn check<T: FloatLike>(
+            stack: &mut EvaluatorStack,
+            baseline: &mut GenericEvaluator,
+            original_rows: &ParametricResidueRows,
+            input_count: usize,
+            x_index: usize,
+            precise: &Rational,
+        ) {
+            let zero = F(T::new_zero());
+            let width = stack
+                .single_parametric
+                .dual_shape
+                .as_ref()
+                .map_or(1, Vec::len);
+            let p = zero.from_rational(precise);
+            let sum = &p + zero.from_usize(2);
+            let squares = p.powi(2) + zero.from_usize(4);
+            for point in [0, 2, -2, 2] {
+                let x = zero.from_i64(point);
+                let y = zero.from_usize(3);
+                let two = zero.from_usize(2);
+                let mut input = vec![Complex::new_re(zero.clone()); input_count * width];
+                input[x_index * width] = Complex::new_re(x.clone());
+                input[(x_index + 1) * width] = Complex::new_re(y.clone());
+                if width > 1 {
+                    input[x_index * width + 1] = Complex::new_re(zero.one());
+                    input[(x_index + 1) * width + 2] = Complex::new_re(zero.one());
+                }
+                let output =
+                    stack.evaluate_single_parametric(&input, &mut EvaluationMetaData::new_empty());
+                let unbatched = original_rows.evaluate(
+                    baseline,
+                    &input,
+                    &[],
+                    &mut EvaluationMetaData::new_empty(),
+                );
+                // The seventh source is F(x,y) P(x,y). Compute both jets
+                // independently, then use the mixed product rule.
+                let xden = x.powi(2) + zero.one();
+                let yden = y.powi(2) + &two;
+                let factor = [
+                    xden.powi(-2) * yden.powi(-1),
+                    -zero.from_usize(4) * &x * xden.powi(-3) * yden.powi(-1),
+                    -&two * &y * xden.powi(-2) * yden.powi(-2),
+                    zero.from_usize(8) * &x * &y * xden.powi(-3) * yden.powi(-2),
+                ];
+                let polynomial = [
+                    &sum * &x * &y + &squares * x.powi(2) * (&y + zero.one()),
+                    &sum * &y + &two * &squares * &x * (&y + zero.one()),
+                    &sum * &x + &squares * x.powi(2),
+                    &sum + &two * &squares * &x,
+                ];
+                // Sum the two complete graph products independently. Here
+                // N1(q)=q*x, N2(q)=q+y and the scalar branch is x+sign*y+1.
+                let mut graph_product: [_; 4] = std::array::from_fn(|_| zero.clone());
+                for (coefficient, sign) in [(p.clone(), -1), (two.clone(), 1)] {
+                    let sign = zero.from_i64(sign);
+                    let q2 = coefficient.powi(2);
+                    let u = &q2 * x.powi(2) + zero.one();
+                    let v = y.powi(2) + &two;
+                    let f = [
+                        u.powi(-2) * v.powi(-1),
+                        -zero.from_usize(4) * &q2 * &x * u.powi(-3) * v.powi(-1),
+                        -&two * &y * u.powi(-2) * v.powi(-2),
+                        zero.from_usize(8) * &q2 * &x * &y * u.powi(-3) * v.powi(-2),
+                    ];
+                    let h = &coefficient + &y;
+                    let k = &x + &sign * &y + zero.one();
+                    let p = [
+                        &coefficient * &x * &h * &k,
+                        &coefficient * &h * (&k + &x),
+                        &coefficient * &x * (&k + &sign * &h),
+                        &coefficient * (&k + &x + &sign * &h),
+                    ];
+                    for (sum, value) in graph_product.iter_mut().zip([
+                        &f[0] * &p[0],
+                        &f[1] * &p[0] + &f[0] * &p[1],
+                        &f[2] * &p[0] + &f[0] * &p[2],
+                        &f[3] * &p[0] + &f[1] * &p[2] + &f[2] * &p[1] + &f[0] * &p[3],
+                    ]) {
+                        *sum += value;
+                    }
+                }
+                let expected = [
+                    [sum.clone(), zero.clone(), zero.clone(), zero.clone()],
+                    [-&sum, zero.clone(), zero.clone(), zero.clone()],
+                    [
+                        &two * x.powi(2) * &y - &p,
+                        zero.from_usize(4) * &x * &y,
+                        &two * x.powi(2),
+                        zero.from_usize(4) * &x,
+                    ],
+                    [
+                        &sum * &x * y.powi(2),
+                        &sum * y.powi(2),
+                        &two * &sum * &x * &y,
+                        &two * &sum * &y,
+                    ],
+                    [
+                        zero.from_usize(4) * x.powi(2) * &y - &p * &y,
+                        zero.from_usize(8) * &x * &y,
+                        zero.from_usize(4) * x.powi(2) - &p,
+                        zero.from_usize(8) * &x,
+                    ],
+                    [
+                        &sum * &x * &y + &squares * x.powi(2),
+                        &sum * &y + &two * &squares * &x,
+                        &sum * &x,
+                        sum.clone(),
+                    ],
+                    [
+                        &factor[0] * &polynomial[0],
+                        &factor[1] * &polynomial[0] + &factor[0] * &polynomial[1],
+                        &factor[2] * &polynomial[0] + &factor[0] * &polynomial[2],
+                        &factor[3] * &polynomial[0]
+                            + &factor[1] * &polynomial[2]
+                            + &factor[2] * &polynomial[1]
+                            + &factor[0] * &polynomial[3],
+                    ],
+                    graph_product,
+                ];
+                assert_eq!(output.len(), expected.len());
+                assert_eq!(output.len(), unbatched.len());
+                for ((output, unbatched), expected) in output.iter().zip(&unbatched).zip(expected) {
+                    let values = match output {
+                        DualOrNot::Dual(value) => value.values.as_slice(),
+                        DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                    };
+                    let reference = match unbatched {
+                        DualOrNot::Dual(value) => value.values.as_slice(),
+                        DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                    };
+                    assert_eq!(values.len(), width);
+                    assert_eq!(reference.len(), width);
+                    for ((actual, unbatched), expected) in
+                        values.iter().zip(reference).zip(expected)
+                    {
+                        assert!(
+                            (actual.re.clone() - &unbatched.re).abs()
+                                <= (expected.abs() + zero.one())
+                                    * zero.epsilon()
+                                    * zero.from_usize(128)
+                        );
+                        assert_eq!(actual.im, unbatched.im);
+                        assert!(
+                            (actual.re.clone() - &expected).abs()
+                                <= (expected.abs() + zero.one())
+                                    * zero.epsilon()
+                                    * zero.from_usize(128)
+                        );
+                        assert_eq!(actual.im, zero);
+                    }
+                }
+            }
+        }
+        let directory = std::env::temp_dir().join(format!(
+            "gammaloop-row-scalars-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        for shape in [
+            None,
+            Some(vec![vec![0, 0], vec![1, 0], vec![0, 1], vec![1, 1]]),
+        ] {
+            let mut rows = ParametricResidueRows {
+                parameters: vec![q.clone(), gate.clone()],
+                input_columns: vec![0, 1],
+                rows: vec![
+                    vec![precise.clone(), Rational::zero()],
+                    vec![Rational::from(2), Rational::one()],
+                ],
+                ..Default::default()
+            };
+            let original_rows = rows.clone();
+            let parameters = (&builder.pairs)
+                .into_iter()
+                .flat_map(|pair| pair.params.clone())
+                .chain(rows.parameters.iter().cloned())
+                .collect::<Vec<_>>();
+            let settings = EvaluatorSettings {
+                store_atom: true,
+                ..Default::default()
+            };
+            let mut baseline = GenericEvaluator::new_from_raw_params(
+                atoms.clone(),
+                &parameters,
+                &builder.fn_map,
+                builder.reps.clone(),
+                settings.optimization_settings(),
+                shape.clone().map(|shape| {
+                    let zeros = (input_count..parameters.len())
+                        .flat_map(|p| (1..shape.len()).map(move |component| (p, component)))
+                        .collect();
+                    (shape, zeros)
+                }),
+                &settings,
+            )
+            .unwrap();
+            let (main, auxiliary) = EvaluatorStack::new_single_parametric(
+                atoms.clone(),
+                &builder,
+                &physical_functions,
+                Some(&mut rows),
+                &shape,
+                &settings,
+            )
+            .unwrap();
+            let (ports, program) = auxiliary.as_ref().expect("row scalar leaves are gathered");
+            assert_eq!(ports.len(), 11);
+            assert_eq!(program.exprs_len, 22);
+            assert!(
+                main.exprs
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .take(7)
+                    .all(|root| ports.contains(root)),
+                "each complete output moves to one port, including the identity-wrapped scalar branch"
+            );
+            let whole_source_port = main.exprs.as_ref().unwrap()[6].clone();
+            let whole_source_column = ports
+                .iter()
+                .position(|port| port == &whole_source_port)
+                .unwrap();
+            for gather in &rows.auxiliary_gathers {
+                let root = &program.exprs.as_ref().unwrap()[gather[whole_source_column].unwrap()];
+                let AtomView::Mul(product) = root.as_view() else {
+                    panic!("the tree denominator must factorize the complete source");
+                };
+                assert!(product.iter().any(|part| part == tree_factor.as_view()));
+                assert!(product.iter().any(|part| matches!(part, AtomView::Add(_))));
+                let mut wrappers = 0;
+                root.visitor(&mut |view| {
+                    if let AtomView::Fun(call) = view
+                        && call.get_symbol() == GS.tree_denom_wrapper
+                    {
+                        wrappers += 1;
+                    }
+                    true
+                });
+                assert_eq!(
+                    wrappers, 1,
+                    "the common factor is not distributed into its source sum"
+                );
+            }
+            let AtomView::Mul(graph_factors) = main.exprs.as_ref().unwrap()[7].as_view() else {
+                panic!("the graph numerator product must remain factored in the carrier");
+            };
+            assert_eq!(graph_factors.iter().count(), 4);
+            let graph_columns = graph_factors
+                .iter()
+                .filter_map(|factor| ports.iter().position(|port| port.as_view() == factor))
+                .collect::<Vec<_>>();
+            assert_eq!(graph_columns.len(), 3);
+            let scalar_factor = graph_factors
+                .iter()
+                .find(|factor| matches!(factor, AtomView::Add(_)))
+                .expect("the selected scalar sum remains one carrier factor");
+            let scalar_column = ports
+                .iter()
+                .position(|port| scalar_factor == (port + 1).as_view())
+                .expect("the sum retains its distinct selector port and constant");
+            for (row, gather) in rows.auxiliary_gathers.iter().enumerate() {
+                let roots = graph_columns
+                    .iter()
+                    .map(|&column| &program.exprs.as_ref().unwrap()[gather[column].unwrap()])
+                    .collect::<Vec<_>>();
+                let calls = [n1, n2].map(|head| {
+                    let found = roots
+                        .iter()
+                        .filter_map(|root| root.as_fun_view())
+                        .filter(|call| call.get_symbol() == head)
+                        .collect::<Vec<_>>();
+                    assert_eq!(
+                        found.len(),
+                        1,
+                        "each numerator retains one distinct call factor"
+                    );
+                    found[0]
+                });
+                let role = calls[0].iter().next().unwrap().to_owned();
+                assert_eq!(calls[1].iter().next().unwrap(), role.as_view());
+                assert!(rows.auxiliary_parameters.contains(&role));
+                let expected_tree = row_tree_factor
+                    .replace(q.to_pattern())
+                    .with(role.to_pattern());
+                assert_eq!(
+                    roots.iter().filter(|root| ***root == expected_tree).count(),
+                    1,
+                    "the exact coefficient stays a native input in the single outer denominator factor"
+                );
+                assert_eq!(
+                    program.exprs.as_ref().unwrap()[gather[scalar_column].unwrap()],
+                    if row == 0 { &x - &y } else { &x + &y },
+                    "only the selector leaf is gathered; the tree factor and numerator product are not distributed"
+                );
+            }
+            for definition in scalar_functions.iter().chain(&numerators) {
+                assert!(
+                    program.fn_map_entries.contains(definition),
+                    "ordinary function bodies and signatures remain shared and unchanged"
+                );
+                assert!(
+                    program.exprs.as_ref().unwrap().iter().any(|root| root
+                        .as_view()
+                        .contains_symbol(definition.lhs.as_fun_view().unwrap().get_symbol())),
+                    "auxiliary roots keep the ordinary call instead of expanding its body"
+                );
+            }
+            assert!(
+                program.fn_map_entries.iter().any(|entry| entry.is_alias)
+                    && program.fn_map_entries.iter().all(|entry| entry.is_alias
+                        || scalar_functions.contains(entry)
+                        || numerators.contains(entry)),
+                "owned aliases are retained; the colliding ordinary q() definition is shadowed by its input"
+            );
+            assert_eq!(rows.auxiliary_shared_outputs, 0);
+            assert!(rows.input_columns.is_empty());
+            assert!(rows.auxiliary_values.contains(&precise));
+            for gather in &rows.auxiliary_gathers {
+                assert_eq!(gather.len(), 11);
+                assert!(gather.iter().all(Option::is_some));
+            }
+            for column in 0..11 {
+                assert_ne!(
+                    rows.auxiliary_gathers[0][column], rows.auxiliary_gathers[1][column],
+                    "an unchanged alias handle still has row-dependent RHS bindings"
+                );
+            }
+            let mut stack = EvaluatorStack {
+                explicit_orientation_sum_only: false,
+                parametric_rows: Some(rows),
+                production_orientation_ids: Vec::new(),
+                single_parametric: main,
+                single_parametric_auxiliary: auxiliary,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            };
+            check::<f64>(
+                &mut stack,
+                &mut baseline,
+                &original_rows,
+                input_count,
+                x_index,
+                &precise,
+            );
+            check::<f128>(
+                &mut stack,
+                &mut baseline,
+                &original_rows,
+                input_count,
+                x_index,
+                &precise,
+            );
+            check::<ArbPrec>(
+                &mut stack,
+                &mut baseline,
+                &original_rows,
+                input_count,
+                x_index,
+                &precise,
+            );
+            for optimization in [
+                CompilationOptimizationLevel::O0,
+                CompilationOptimizationLevel::O2,
+            ] {
+                stack
+                    .for_each_generic_evaluator_mut(|evaluator| {
+                        evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: optimization,
+                            ..Default::default()
+                        })
+                    })
+                    .unwrap();
+                check::<f64>(
+                    &mut stack,
+                    &mut baseline,
+                    &original_rows,
+                    input_count,
+                    x_index,
+                    &precise,
+                );
+            }
+            let options = crate::settings::global::CompilationOptionsSnapshot {
+                optimization_level: CompilationOptimizationLevel::O0,
+                compiler: "g++".into(),
+                ..Default::default()
+            };
+            for (backend, mode) in [
+                ("cpp", FrozenCompilationMode::Cpp(options.clone())),
+                ("asm", FrozenCompilationMode::Assembly(options)),
+            ] {
+                let name = format!(
+                    "row_scalars_{backend}_{}",
+                    shape.as_ref().map_or(1, Vec::len)
+                );
+                stack.compile(&name, &directory, &mode).unwrap();
+                check::<f64>(
+                    &mut stack,
+                    &mut baseline,
+                    &original_rows,
+                    input_count,
+                    x_index,
+                    &precise,
+                );
+            }
+        }
+        for case in [
+            "captured_row",
+            "unknown_call",
+            "cycle",
+            "caller_alias",
+            "generated_dependency",
+            "row_tag",
+            "alias_tag",
+        ] {
+            let opaque = symbol!("evaluator_test::row_scalar_opaque");
+            let generated = symbol!("evaluator_test::row_scalar_generated");
+            let tags = match case {
+                "row_tag" => vec![function!(opaque, q.clone())],
+                "alias_tag" => vec![alias.clone()],
+                _ => Vec::new(),
+            };
+            let mut definitions = vec![FnMapEntry {
+                lhs: one.call_args(tags.iter().chain(std::iter::once(&formal))),
+                rhs: match case {
+                    "captured_row" => &formal * &q,
+                    "unknown_call" => function!(opaque, formal.clone()),
+                    "cycle" => function!(one, formal.clone()),
+                    "caller_alias" => &formal * &alias,
+                    "generated_dependency" => function!(generated, formal.clone()),
+                    "row_tag" | "alias_tag" => &formal * &x,
+                    _ => unreachable!(),
+                },
+                tags: tags.clone(),
+                args: vec![Indeterminate::try_from(formal.clone()).unwrap()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            }];
+            if case == "generated_dependency" {
+                definitions.push(FnMapEntry {
+                    lhs: function!(generated, formal.clone()),
+                    rhs: &formal * &x,
+                    tags: Vec::new(),
+                    args: vec![Indeterminate::try_from(formal.clone()).unwrap()],
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                });
+            }
+            let call = one.call_args(tags.iter().chain(std::iter::once(&q)));
+            let mut atom = AliasedAtom::from(&call * &x + x.pow(2));
+            if matches!(case, "caller_alias" | "alias_tag") {
+                atom.register_alias(alias.clone(), y.clone());
+            }
+            let mut rows = ParametricResidueRows {
+                parameters: vec![q.clone()],
+                input_columns: vec![0],
+                rows: vec![vec![Rational::zero()], vec![Rational::one()]],
+                ..Default::default()
+            };
+            let original = atom.get_root().clone();
+            let extracted = rows.extract_physical_scalars(
+                std::slice::from_mut(&mut atom),
+                &[x.clone(), y.clone()],
+                &definitions,
+                1,
+                symbol!("evaluator_test::row_scalar_negative_port"),
+            );
+            if case == "alias_tag" {
+                // A definition key containing a caller alias makes the whole
+                // owner ambiguous before individual calls are classified.
+                assert!(extracted.is_none());
+                assert_eq!(atom.get_root(), &original);
+                continue;
+            }
+            let (_, roots, retained) =
+                extracted.expect("the independent physical scalar still moves");
+            assert_eq!(roots.len(), 1, "{case}: ordinary call must remain opaque");
+            assert_eq!(roots[0].get_root(), &x.pow(2), "{case}");
+            assert!(
+                retained.is_empty(),
+                "{case}: unsafe ordinary body is not moved"
+            );
+            assert!(rows.auxiliary_values.is_empty(), "{case}");
+            assert!(atom.get_root().as_view().contains_symbol(one), "{case}");
+        }
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn generated_numerator_tables_preserve_dynamic_domains_and_fallbacks() {
+        test_initialise().unwrap();
+        let x = Atom::var(symbol!("evaluator_test::batched_domain_x"));
+        let q = Atom::var(symbol!("evaluator_test::batched_domain_q"));
+        let r = Atom::var(symbol!("evaluator_test::batched_domain_r"));
+        let dispatch = Atom::var(symbol!("evaluator_test::batched_domain_dispatch"));
+        let a = Atom::var(symbol!("evaluator_test::batched_domain_formal"));
+        let n = symbol!("evaluator_test::batched_domain_numerator");
+        let opaque = symbol!("evaluator_test::batched_domain_opaque");
+        let metadata = function!(symbol!("evaluator_test::batched_domain_metadata"), 7);
+        let capture = function!(symbol!("evaluator_test::batched_domain_capture"));
+        let alias = function!(symbol!("evaluator_test::batched_domain_alias"));
+        let terminal = Symbol::IF.call_args([x.clone(), Atom::one(), Atom::Zero]);
+        for case in [
+            "zero_factor",
+            "near_one",
+            "compound",
+            "captured",
+            "opaque_tagged_capture",
+            "recorded_tagged_capture",
+            "physical_guard",
+            "shared_physical_guard",
+            "distinct_calls",
+            "alias_call",
+            "nested_guard",
+            "physical_if_terminal",
+            "alias_if_terminal",
+            "row_if_terminal",
+            "row_if_boolean_terminal",
+            "scalar_ratio",
+            "scalar_repeated_column",
+            "scalar_captured",
+            "scalar_physical_guard",
+            "alias_selector",
+            "wrapped_inactive_scalar",
+            "compound_distinct_guards",
+            "never",
+            "replacement",
+        ] {
+            let terminal = if case == "row_if_boolean_terminal" {
+                Symbol::IF.call_args([q.clone(), Atom::one(), Atom::Zero])
+            } else {
+                terminal.clone()
+            };
+            let mut builder = ParamBuilder::new_empty();
+            builder.pairs.additional_params = if case == "physical_if_terminal" {
+                [x.clone(), terminal.clone()].into_iter().collect()
+            } else {
+                [x.clone()].into_iter().collect()
+            };
+            let input_count = builder.pairs.update_ranges();
+            let x_index = builder.pairs.additional_params.value_range.start;
+            if matches!(case, "captured" | "scalar_captured") {
+                builder
+                    .add_function_entry(FnMapEntry {
+                        lhs: capture.clone(),
+                        rhs: r.clone(),
+                        tags: Vec::new(),
+                        args: Vec::new(),
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                    })
+                    .unwrap();
+            }
+            if case == "opaque_tagged_capture" {
+                builder
+                    .add_function_entry(FnMapEntry {
+                        lhs: function!(opaque, 0),
+                        rhs: x.pow(2),
+                        tags: vec![Atom::num(0)],
+                        args: Vec::new(),
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                    })
+                    .unwrap();
+                // This supported direct registration is intentionally absent
+                // from reps. Sharing a head with a recorded overload does not
+                // certify its signature or its captured global row parameter.
+                FnMapEntry {
+                    lhs: function!(opaque, 1),
+                    rhs: q.clone(),
+                    tags: vec![Atom::num(1)],
+                    args: Vec::new(),
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                }
+                .register(&mut builder.fn_map)
+                .unwrap();
+            }
+            if case == "recorded_tagged_capture" {
+                builder
+                    .add_function_entry(FnMapEntry {
+                        lhs: function!(opaque, metadata.clone()),
+                        rhs: r.clone(),
+                        tags: vec![metadata.clone()],
+                        args: Vec::new(),
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                    })
+                    .unwrap();
+            }
+            if case == "wrapped_inactive_scalar" {
+                builder
+                    .add_function_entry(FnMapEntry {
+                        lhs: function!(GS.tree_denom_wrapper, a.clone()),
+                        rhs: a.clone(),
+                        tags: Vec::new(),
+                        args: vec![Indeterminate::try_from(a.clone()).unwrap()],
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                    })
+                    .unwrap();
+            }
+            let physical_functions = builder.reps.clone();
+            let body = match case {
+                "zero_factor" => &a / &x,
+                "nested_guard" => &x / &a,
+                "near_one" => Symbol::IF.call_args([&a - 1, x.pow(-1), &x + 7]),
+                "captured" => &a * &x + &capture,
+                "physical_guard" | "distinct_calls" => x.pow(-1),
+                _ => &a * x.pow(2),
+            };
+            let definition = FnMapEntry {
+                lhs: function!(n, a.clone()),
+                rhs: body,
+                tags: Vec::new(),
+                args: vec![Indeterminate::try_from(a.clone()).unwrap()],
+                inlining: if case == "never" {
+                    InliningPolicy::Never
+                } else {
+                    InliningPolicy::Always
+                },
+                is_alias: false,
+            };
+            builder.add_function_entry(definition.clone()).unwrap();
+            let mut atom = AliasedAtom::from(match case {
+                "compound" => function!(n, &q - &r),
+                "opaque_tagged_capture" => function!(opaque, 1) + x.pow(2),
+                "recorded_tagged_capture" => function!(opaque, metadata.clone()) + x.pow(2),
+                "physical_guard" => {
+                    Symbol::IF.call_args([x.clone(), function!(n, q.clone()), Atom::Zero])
+                }
+                "shared_physical_guard" => {
+                    function!(n, q.clone())
+                        + Symbol::IF.call_args([x.clone(), function!(n, q.clone()), Atom::Zero])
+                }
+                "nested_guard" => Symbol::IF.call_args([
+                    Symbol::IF.call_args([r.clone(), q.clone(), Atom::Zero]),
+                    function!(n, q.clone()),
+                    Atom::Zero,
+                ]),
+                "physical_if_terminal"
+                | "alias_if_terminal"
+                | "row_if_terminal"
+                | "row_if_boolean_terminal" => {
+                    Symbol::IF.call_args([q.clone(), terminal.clone(), Atom::Zero])
+                }
+                "compound_distinct_guards" => {
+                    Symbol::IF.call_args([q.clone(), x.pow(-1), Atom::Zero])
+                        - Symbol::IF.call_args([r.clone(), x.pow(-1), Atom::Zero])
+                        + 1
+                }
+                "distinct_calls" => alias.clone(),
+                "scalar_ratio" | "scalar_repeated_column" => alias.clone(),
+                "scalar_captured" => &capture + x.pow(2),
+                "scalar_physical_guard" => {
+                    Symbol::IF.call_args([x.clone(), &q / &x, Atom::Zero]) + x.pow(2)
+                }
+                "alias_selector" | "wrapped_inactive_scalar" => {
+                    Symbol::IF.call_args([dispatch.clone(), alias.clone(), Atom::Zero])
+                }
+                _ => function!(n, q.clone()),
+            });
+            if matches!(case, "scalar_ratio" | "scalar_repeated_column") {
+                // Distinct columns must remain distinct native inputs even
+                // when every sampled value agrees, including the 0/0 row.
+                atom.register_alias(
+                    alias.clone(),
+                    &q / if case == "scalar_ratio" { &r } else { &q },
+                );
+            }
+            if matches!(case, "alias_selector" | "wrapped_inactive_scalar") {
+                // Follow only the pure Boolean selector behind the handle;
+                // its singular arm is inactive even at x=0 and q=0.
+                atom.register_alias(
+                    alias.clone(),
+                    Symbol::IF.call_args([
+                        r.clone(),
+                        if case == "wrapped_inactive_scalar" {
+                            function!(GS.tree_denom_wrapper, &q / &x)
+                        } else {
+                            &q / &x
+                        },
+                        &q * x.pow(2) + 1,
+                    ]),
+                );
+            }
+            if case == "distinct_calls" {
+                // Do not merge these ORIGINAL call sites, even when their
+                // gathered numeric output indices coincide: Inf-Inf must not
+                // be replaced by a normalized literal zero.
+                atom.register_alias(
+                    alias.clone(),
+                    function!(n, q.clone()) - function!(n, r.clone()),
+                );
+            }
+            if case == "alias_if_terminal" {
+                // An IF-shaped alias is an opaque terminal of the outer
+                // selector. Its body and lexical owner must remain intact.
+                atom.register_alias(terminal.clone(), &x + 7);
+            }
+            if case == "alias_call" {
+                atom.register_alias(function!(n, q.clone()), &q * &x + 4);
+            }
+            let rows = ParametricResidueRows {
+                parameters: vec![
+                    q.clone(),
+                    r.clone(),
+                    if matches!(case, "row_if_terminal" | "row_if_boolean_terminal") {
+                        terminal.clone()
+                    } else {
+                        dispatch.clone()
+                    },
+                ],
+                input_columns: vec![0, 1, 2],
+                rows: if matches!(case, "row_if_terminal" | "row_if_boolean_terminal") {
+                    // The exact IF-shaped row input is not its apparent syntax.
+                    // Both rows activate the selector, whose values sum to five.
+                    [[1, 0, 2], [1, 1, 3]]
+                        .map(|row| row.map(Rational::from).to_vec())
+                        .to_vec()
+                } else if case == "near_one" {
+                    vec![
+                        vec![
+                            Rational::new(9_007_199_254_740_993i64, 9_007_199_254_740_992i64),
+                            Rational::zero(),
+                            Rational::zero(),
+                        ],
+                        vec![
+                            Rational::new(18_014_398_509_481_985i64, 18_014_398_509_481_984i64),
+                            Rational::one(),
+                            Rational::one(),
+                        ],
+                    ]
+                } else if matches!(case, "alias_selector" | "wrapped_inactive_scalar") {
+                    [[0, 0, 1], [1, 0, 1]]
+                        .map(|row| row.map(Rational::from).to_vec())
+                        .to_vec()
+                } else if case == "nested_guard" {
+                    [[1, 1, 0], [1, 1, 1], [0, 1, 0], [0, 0, 1]]
+                        .map(|row| row.map(Rational::from).to_vec())
+                        .to_vec()
+                } else {
+                    [[0, 0, 0], [1, 1, 1]]
+                        .map(|row| row.map(Rational::from).to_vec())
+                        .to_vec()
+                },
+                ..Default::default()
+            };
+            let parameters = (&builder.pairs)
+                .into_iter()
+                .flat_map(|pair| pair.params.clone())
+                .chain(rows.parameters.iter().cloned())
+                .collect::<Vec<_>>();
+            for shape in [None, Some(vec![vec![0], vec![1]])] {
+                let width = shape.as_ref().map_or(1, Vec::len);
+                let settings = EvaluatorSettings {
+                    do_fn_map_replacements: case == "replacement",
+                    store_atom: true,
+                    ..Default::default()
+                };
+                let mut baseline = GenericEvaluator::new_from_raw_params(
+                    [atom.clone()],
+                    &parameters,
+                    &builder.fn_map,
+                    builder.reps.clone(),
+                    settings.optimization_settings(),
+                    shape.clone().map(|shape| {
+                        let zeros = (input_count..parameters.len())
+                            .flat_map(|p| (1..shape.len()).map(move |component| (p, component)))
+                            .collect();
+                        (shape, zeros)
+                    }),
+                    &settings,
+                )
+                .unwrap();
+                let mut prepared_rows = rows.clone();
+                let (main, auxiliary) = EvaluatorStack::new_single_parametric(
+                    vec![atom.clone()],
+                    &builder,
+                    &physical_functions,
+                    Some(&mut prepared_rows),
+                    &shape,
+                    &settings,
+                )
+                .unwrap();
+                let numerator_batched = matches!(
+                    case,
+                    "zero_factor"
+                        | "near_one"
+                        | "distinct_calls"
+                        | "nested_guard"
+                        | "shared_physical_guard"
+                );
+                let scalar_batched = matches!(
+                    case,
+                    "physical_if_terminal"
+                        | "alias_if_terminal"
+                        | "opaque_tagged_capture"
+                        | "recorded_tagged_capture"
+                        | "scalar_captured"
+                        | "scalar_physical_guard"
+                );
+                let row_scalar_batched = matches!(
+                    case,
+                    "scalar_ratio"
+                        | "alias_call"
+                        | "alias_selector"
+                        | "wrapped_inactive_scalar"
+                        | "row_if_terminal"
+                        | "row_if_boolean_terminal"
+                );
+                assert_eq!(
+                    auxiliary.is_some(),
+                    numerator_batched
+                        || scalar_batched
+                        || row_scalar_batched
+                        || case == "compound_distinct_guards",
+                    "{case}, shape={shape:?}"
+                );
+                if scalar_batched {
+                    assert!(prepared_rows.auxiliary_values.is_empty());
+                    assert_eq!(auxiliary.as_ref().unwrap().0.len(), 1);
+                    assert_eq!(auxiliary.as_ref().unwrap().1.exprs_len, 1);
+                }
+                if numerator_batched {
+                    assert!(!prepared_rows.auxiliary_values.is_empty());
+                    assert!(
+                        auxiliary
+                            .as_ref()
+                            .unwrap()
+                            .1
+                            .fn_map_entries
+                            .contains(&definition)
+                    );
+                }
+                if row_scalar_batched {
+                    assert!(!prepared_rows.auxiliary_values.is_empty());
+                    assert!(prepared_rows.input_columns.is_empty());
+                    assert_eq!(auxiliary.as_ref().unwrap().0.len(), 1);
+                    assert_eq!(auxiliary.as_ref().unwrap().1.exprs_len, 2);
+                }
+                if case == "compound_distinct_guards" {
+                    let (ports, program) = auxiliary.as_ref().unwrap();
+                    assert_eq!(ports.len(), 2);
+                    assert_ne!(ports[0], ports[1]);
+                    assert_eq!(program.exprs_len, 1);
+                    assert_eq!(program.exprs.as_ref().unwrap(), &vec![x.pow(-1)]);
+                    assert_eq!(prepared_rows.auxiliary_shared_outputs, 0);
+                    assert!(prepared_rows.auxiliary_values.is_empty());
+                    assert!(prepared_rows.input_columns.is_empty());
+                    assert_eq!(
+                        prepared_rows.auxiliary_gathers,
+                        vec![vec![None, None], vec![Some(0), Some(0)]]
+                    );
+                    let root = &main.exprs.as_ref().unwrap()[0];
+                    assert!(
+                        *root == &ports[0] - &ports[1] + 1 || *root == &ports[1] - &ports[0] + 1,
+                        "distinct guards keep distinct caller ports even when their pole output is shared"
+                    );
+                }
+                if case == "scalar_captured" {
+                    assert!(prepared_rows.input_columns.contains(&1));
+                }
+                if matches!(case, "alias_selector" | "wrapped_inactive_scalar") {
+                    assert!(
+                        !auxiliary
+                            .as_ref()
+                            .unwrap()
+                            .1
+                            .exprs
+                            .as_ref()
+                            .unwrap()
+                            .iter()
+                            .any(|root| root.as_view().contains_symbol(Symbol::IF))
+                    );
+                }
+                if case == "opaque_tagged_capture" {
+                    assert_eq!(
+                        prepared_rows.input_columns, rows.input_columns,
+                        "an unrecorded overload can capture any original row input"
+                    );
+                    assert_eq!(
+                        prepared_rows.auxiliary_shared_outputs, 1,
+                        "the independent x² scalar forces signature pruning to run"
+                    );
+                }
+                if case == "recorded_tagged_capture" {
+                    assert_eq!(
+                        prepared_rows.input_columns,
+                        [1],
+                        "metadata tags do not capture columns; the definition's free r does"
+                    );
+                }
+                if case == "shared_physical_guard" {
+                    assert!(
+                        prepared_rows.input_columns.contains(&0),
+                        "the hidden physical-guard call still needs its original coefficient"
+                    );
+                }
+                if case == "nested_guard" {
+                    assert!(
+                        prepared_rows
+                            .auxiliary_values
+                            .iter()
+                            .all(|value| value == &Rational::one())
+                    );
+                    assert!(
+                        prepared_rows.auxiliary_gathers[2..]
+                            .iter()
+                            .all(|row| row.iter().any(Option::is_none))
+                    );
+                }
+                if case == "distinct_calls" {
+                    assert_eq!(auxiliary.as_ref().unwrap().0.len(), 2);
+                    for gather in &prepared_rows.auxiliary_gathers {
+                        assert_eq!(gather.len(), 2);
+                        assert!(gather[0].is_some());
+                        assert_eq!(gather[0], gather[1]);
+                    }
+                }
+                let mut stack = EvaluatorStack {
+                    explicit_orientation_sum_only: false,
+                    parametric_rows: Some(prepared_rows),
+                    production_orientation_ids: Vec::new(),
+                    single_parametric: main,
+                    single_parametric_auxiliary: auxiliary,
+                    iterative: None,
+                    summed_function_map: None,
+                    summed: None,
+                };
+                for compiled in [false, true] {
+                    if compiled {
+                        baseline
+                            .activate_symjit(&CompilationOptionsSnapshot {
+                                optimization_level: CompilationOptimizationLevel::O2,
+                                ..Default::default()
+                            })
+                            .unwrap();
+                        stack
+                            .for_each_generic_evaluator_mut(|evaluator| {
+                                evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                                    optimization_level: CompilationOptimizationLevel::O2,
+                                    ..Default::default()
+                                })
+                            })
+                            .unwrap();
+                    }
+                    for point in [0., 0.5, -0.5] {
+                        let mut input = vec![Complex::new_re(F(0.0)); input_count * width];
+                        input[x_index * width] = Complex::new_re(F(point));
+                        if case == "physical_if_terminal" {
+                            // Deliberately independent of x: at x=0 the raw
+                            // IF syntax would be zero, while this input is 7.
+                            input[(x_index + 1) * width] = Complex::new_re(F(7.0));
+                            if width > 1 {
+                                input[(x_index + 1) * width + 1] = Complex::new_re(F(2.0));
+                            }
+                        }
+                        if width > 1 {
+                            input[x_index * width + 1] = Complex::new_re(F(1.0));
+                        }
+                        let old = rows.evaluate(
+                            &mut baseline,
+                            &input,
+                            &[],
+                            &mut EvaluationMetaData::new_empty(),
+                        );
+                        let new = stack.evaluate_single_parametric(
+                            &input,
+                            &mut EvaluationMetaData::new_empty(),
+                        );
+                        assert_eq!(old.len(), new.len());
+                        if case == "wrapped_inactive_scalar" {
+                            let values = match &new[0] {
+                                DualOrNot::Dual(value) => value.values.as_slice(),
+                                DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                            };
+                            assert_eq!(
+                                values,
+                                [2. + point * point, 2. * point]
+                                    .into_iter()
+                                    .take(width)
+                                    .map(|v| Complex::new_re(F(v)))
+                                    .collect::<Vec<_>>(),
+                                "the inactive tree_denoms(q/x) argument is never evaluated, including 0/0 at x=0"
+                            );
+                        }
+                        if case == "compound_distinct_guards" && point == 0. {
+                            let values = match &old[0] {
+                                DualOrNot::Dual(value) => value.values.as_slice(),
+                                DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                            };
+                            assert!(
+                                values.iter().any(|value| !value.re.0.is_finite() || !value.im.0.is_finite()),
+                                "the original distinct guards must actually exercise active Inf-Inf"
+                            );
+                        }
+                        if matches!(case, "row_if_terminal" | "row_if_boolean_terminal") {
+                            let values = match &new[0] {
+                                DualOrNot::Dual(value) => value.values.as_slice(),
+                                DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                            };
+                            assert_eq!(
+                                values,
+                                [5., 0.]
+                                    .into_iter()
+                                    .take(width)
+                                    .map(|value| Complex::new_re(F(value)))
+                                    .collect::<Vec<_>>()
+                            );
+                        }
+                        if matches!(case, "opaque_tagged_capture" | "recorded_tagged_capture") {
+                            let values = match &new[0] {
+                                DualOrNot::Dual(value) => value.values.as_slice(),
+                                DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                            };
+                            assert_eq!(
+                                values,
+                                [1. + 2. * point * point, 4. * point]
+                                    .into_iter()
+                                    .take(width)
+                                    .map(|v| Complex::new_re(F(v)))
+                                    .collect::<Vec<_>>()
+                            );
+                        }
+                        for (old, new) in old.iter().zip(&new) {
+                            let old = match old {
+                                DualOrNot::Dual(v) => v.values.as_slice(),
+                                DualOrNot::NonDual(v) => std::slice::from_ref(v),
+                            };
+                            let new = match new {
+                                DualOrNot::Dual(v) => v.values.as_slice(),
+                                DualOrNot::NonDual(v) => std::slice::from_ref(v),
+                            };
+                            assert_eq!(old.len(), new.len());
+                            for (old, new) in old.iter().zip(new) {
+                                for (old, new) in [(old.re.0, new.re.0), (old.im.0, new.im.0)] {
+                                    assert_eq!(
+                                        old.is_finite(),
+                                        new.is_finite(),
+                                        "{case}, x={point}, shape={shape:?}, compiled={compiled}"
+                                    );
+                                    assert_eq!(old.is_nan(), new.is_nan(), "{case}");
+                                    if old.is_infinite() {
+                                        assert_eq!(old, new, "{case}");
+                                    }
+                                    if old.is_finite() {
+                                        assert!(
+                                            (old - new).abs()
+                                                <= (old.abs() + 1.) * f64::EPSILON * 64.,
+                                            "{case}: {old} != {new}"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn physical_functions_preserve_complete_rows_and_native_higher_jets() {
+        test_initialise().unwrap();
+        let x = Atom::var(symbol!("evaluator_test::physical_function_x"));
+        let q = Atom::var(symbol!("evaluator_test::physical_function_q"));
+        let energy = function!(symbol!("evaluator_test::physical_energy"));
+        let family = symbol!("evaluator_test::physical_family");
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x.clone()].into_iter().collect();
+        let input_count = builder.pairs.update_ranges();
+        let x_index = builder.pairs.additional_params.value_range.start;
+        let energy_definition = FnMapEntry {
+            lhs: energy.clone(),
+            rhs: (x.pow(2) + 1).pow((1, 2)),
+            tags: Vec::new(),
+            args: Vec::new(),
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+        };
+        builder
+            .add_function_entry(energy_definition.clone())
+            .unwrap();
+        let terms = [
+            (q.clone(), energy.clone()),
+            (Atom::one(), (&energy + &q).pow(-1)),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(tag, (rhs, carrier))| ParametricIntegrandTerm {
+            numerator: Arc::new(FnMapEntry {
+                lhs: function!(family, tag, q.clone()),
+                rhs,
+                tags: vec![Atom::num(tag)],
+                args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            }),
+            rows: (1..=3)
+                .map(|coefficient| crate::uv::ParametricIntegrandRow {
+                    coefficients: vec![Rational::from(coefficient)],
+                    carrier: carrier.clone(),
+                    source_keys: Vec::new(),
+                })
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+        fn check<T: FloatLike>(stack: &mut EvaluatorStack, input_count: usize, x_index: usize) {
+            let zero = F(T::new_zero());
+            let orientations =
+                TiVec::<OrientationID, _>::from_iter([EdgeVec::from_iter(std::iter::empty::<
+                    Orientation,
+                >())]);
+            let filter = SubSet::full(1);
+            for method in [
+                EvaluatorMethod::SingleParametric,
+                EvaluatorMethod::SummedFunctionMap,
+                EvaluatorMethod::Summed,
+                EvaluatorMethod::Iterative,
+            ] {
+                for (value, first, second) in
+                    [(0, 1, 0), (1, -2, 1), (-2, 3, -1), (0, 0, 2), (1, -2, 1)]
+                {
+                    let x = zero.from_i64(value);
+                    let dx = zero.from_i64(first);
+                    let d2x = zero.from_i64(second);
+                    let energy = (x.powi(2) + zero.one()).sqrt();
+                    let de = &x * &dx / &energy;
+                    let d2e = (dx.powi(2) + zero.from_usize(2) * &x * &d2x)
+                        / (zero.from_usize(2) * &energy)
+                        - x.powi(2) * dx.powi(2) / (zero.from_usize(2) * energy.powi(3));
+                    let mut expected_value = zero.from_usize(6) * &energy;
+                    let mut slope = zero.from_usize(6);
+                    let mut curvature = zero.clone();
+                    for coefficient in 1..=3 {
+                        let denominator = &energy + zero.from_usize(coefficient);
+                        expected_value += denominator.powi(-1);
+                        slope -= denominator.powi(-2);
+                        curvature += denominator.powi(-3);
+                    }
+                    let expected = [
+                        expected_value,
+                        &slope * &de,
+                        slope * d2e + curvature * de.powi(2),
+                    ];
+                    let mut values = vec![Complex::new_re(zero.clone()); input_count * 3];
+                    values[x_index * 3] = Complex::new_re(x);
+                    values[x_index * 3 + 1] = Complex::new_re(dx);
+                    values[x_index * 3 + 2] = Complex::new_re(d2x);
+                    let input = InputParams {
+                        values: SliceMut::Owned(values),
+                        residue_map_id_start: 0,
+                        orientations_start: 0,
+                        multiplicative_offset: 3,
+                    };
+                    let mut runtime = RuntimeSettings::default();
+                    runtime.general.evaluator_method = method.clone();
+                    let output = stack
+                        .evaluate(
+                            input,
+                            SingleOrAllOrientations::All {
+                                all: &orientations,
+                                filter: &filter,
+                            },
+                            &runtime,
+                            &mut EvaluationMetaData::new_empty(),
+                        )
+                        .unwrap();
+                    let [DualOrNot::Dual(output)] = output.as_slice() else {
+                        panic!("expected one complete higher-jet output")
+                    };
+                    for (actual, expected) in output.values.iter().zip(expected) {
+                        assert!(
+                            (actual.re.clone() - &expected).abs()
+                                <= (expected.abs() + zero.one())
+                                    * zero.epsilon()
+                                    * zero.from_usize(128),
+                            "{method:?}, x={value}, seed=({first},{second}): {actual:?} != {expected:?}"
+                        );
+                        assert_eq!(actual.im, zero);
+                    }
+                }
+            }
+        }
+        for inline_numerator_functions in [false, true] {
+            for store_atom in [false, true] {
+                let settings = EvaluatorSettings {
+                    inline_numerator_functions,
+                    store_atom,
+                    summed: true,
+                    summed_function_map: true,
+                    iterative_orientation_optimization: true,
+                    ..Default::default()
+                };
+                let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+                    &Atom::Zero,
+                    &builder,
+                    &[],
+                    &terms,
+                    None,
+                    Some(vec![vec![0], vec![1], vec![2]]),
+                    &settings,
+                )
+                .unwrap();
+                let (ports, auxiliary) = stack
+                    .single_parametric_auxiliary
+                    .as_ref()
+                    .expect("energy is reached on all three rows");
+                // The guarded energy, numerator, and complete reciprocal
+                // scalar keep distinct ports. The reciprocal now binds q as
+                // a native input inside each gathered leaf.
+                assert_eq!(ports.len(), 3);
+                assert_eq!(auxiliary.fn_map_entries.len(), 2);
+                assert_eq!(auxiliary.fn_map_entries[0], energy_definition);
+                let numerator = &auxiliary.fn_map_entries[1];
+                assert_eq!(numerator.args.len(), 1);
+                assert_eq!(numerator.rhs, Atom::from(numerator.args[0].clone()));
+                assert_eq!(auxiliary.exprs_len, 7);
+                assert_eq!(
+                    stack
+                        .parametric_rows
+                        .as_ref()
+                        .unwrap()
+                        .auxiliary_shared_outputs,
+                    0
+                );
+                assert_eq!(stack.generic_evaluator_count(), 5);
+                let rows = stack.parametric_rows.as_ref().unwrap();
+                assert_eq!(rows.rows.len(), 3);
+                assert!(rows.auxiliary_gathers.iter().all(|row| row.len() == 3));
+                let mut gathered_outputs = (0..3)
+                    .map(|port| {
+                        rows.auxiliary_gathers
+                            .iter()
+                            .map(|row| {
+                                row[port].expect("all three source ports are active on every row")
+                            })
+                            .collect::<HashSet<_>>()
+                            .len()
+                    })
+                    .collect::<Vec<_>>();
+                gathered_outputs.sort_unstable();
+                assert_eq!(gathered_outputs, [1, 3, 3]);
+                assert_eq!(
+                    stack.single_parametric.zero_components,
+                    (input_count + ports.len()
+                        ..input_count + ports.len() + rows.input_columns.len())
+                        .flat_map(|p| (1..3).map(move |component| (p, component)))
+                        .collect::<Vec<_>>()
+                );
+                check::<f64>(&mut stack, input_count, x_index);
+                check::<f128>(&mut stack, input_count, x_index);
+                check::<ArbPrec>(&mut stack, input_count, x_index);
+                let encoded = bincode::encode_to_vec(&stack, bincode::config::standard()).unwrap();
+                let mut state = Vec::new();
+                State::export(&mut state).unwrap();
+                let state_map = State::import(&mut Cursor::new(state), None).unwrap();
+                let model = Model::default();
+                (stack, _) = bincode::decode_from_slice_with_context(
+                    &encoded,
+                    bincode::config::standard(),
+                    GammaLoopContextContainer {
+                        state_map: &state_map,
+                        model: &model,
+                    },
+                )
+                .unwrap();
+                for optimization in [
+                    CompilationOptimizationLevel::O0,
+                    CompilationOptimizationLevel::O2,
+                ] {
+                    stack
+                        .for_each_generic_evaluator_mut(|evaluator| {
+                            evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                                optimization_level: optimization,
+                                ..Default::default()
+                            })
+                        })
+                        .unwrap();
+                    assert_eq!(
+                        stack
+                            .single_parametric_auxiliary
+                            .as_ref()
+                            .unwrap()
+                            .1
+                            .active_f64_backend(),
+                        ActiveF64Backend::Symjit
+                    );
+                    check::<f64>(&mut stack, input_count, x_index);
+                }
+            }
+        }
+        // Literal normalization removed sqrt(x²) before evaluator construction.
+        // It must remain finite at x=0; extraction never recovers that root.
+        let literal = x.pow(2).pow((1, 2)).pow(2);
+        assert_eq!(literal, x.pow(2));
+        let rows = ParametricResidueRows {
+            input_columns: vec![0],
+            parameters: vec![q],
+            rows: vec![vec![Rational::one()], vec![Rational::from(2)]],
+            ..Default::default()
+        };
+        for do_fn_map_replacements in [false, true] {
+            let settings = EvaluatorSettings {
+                do_fn_map_replacements,
+                ..Default::default()
+            };
+            let mut prepared_rows = rows.clone();
+            let (evaluator, auxiliary) = EvaluatorStack::new_single_parametric(
+                vec![literal.clone().into()],
+                &builder,
+                &builder.reps,
+                Some(&mut prepared_rows),
+                &Some(vec![vec![0], vec![1], vec![2]]),
+                &settings,
+            )
+            .unwrap();
+            let mut stack = EvaluatorStack {
+                explicit_orientation_sum_only: false,
+                parametric_rows: Some(prepared_rows),
+                production_orientation_ids: Vec::new(),
+                single_parametric: evaluator,
+                single_parametric_auxiliary: auxiliary,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            };
+            let mut values = vec![Complex::new_re(F(0.0)); input_count * 3];
+            values[x_index * 3 + 1] = Complex::new_re(F(1.0));
+            let output =
+                stack.evaluate_single_parametric(&values, &mut EvaluationMetaData::new_empty());
+            let [DualOrNot::Dual(output)] = output.as_slice() else {
+                panic!("expected literal jet")
+            };
+            assert_eq!(
+                output.values,
+                [0., 0., 2.].map(|value| Complex::new_re(F(value)))
+            );
+        }
+    }
+
+    #[test]
+    fn physical_functions_preserve_opaque_numerators_and_lazy_fallbacks() {
+        test_initialise().unwrap();
+        let x = Atom::var(symbol!("evaluator_test::physical_boundary_x"));
+        let q = Atom::var(symbol!("evaluator_test::physical_boundary_q"));
+        let energy = function!(symbol!("evaluator_test::physical_boundary_energy"));
+        let pole = function!(symbol!("evaluator_test::physical_boundary_pole"));
+        let numerator = function!(symbol!("evaluator_test::physical_boundary_numerator"));
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x.clone()].into_iter().collect();
+        let input_count = builder.pairs.update_ranges();
+        let x_index = builder.pairs.additional_params.value_range.start;
+        for (lhs, rhs) in [
+            (energy.clone(), (x.pow(2) + 1).pow((1, 2))),
+            (pole.clone(), x.pow(-1)),
+        ] {
+            builder
+                .add_function_entry(FnMapEntry {
+                    lhs,
+                    rhs,
+                    tags: Vec::new(),
+                    args: Vec::new(),
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                })
+                .unwrap();
+        }
+        let mut prepared_builder = builder.clone();
+        prepared_builder
+            .add_function_entry(FnMapEntry {
+                lhs: numerator.clone(),
+                rhs: x.pow(2) + 2,
+                tags: Vec::new(),
+                args: Vec::new(),
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            })
+            .unwrap();
+        let rows = ParametricResidueRows {
+            input_columns: vec![0],
+            parameters: vec![q.clone()],
+            rows: vec![vec![Rational::one()], vec![Rational::from(2)]],
+            ..Default::default()
+        };
+        // A closed numerator can have the same physical-only dependency pattern
+        // as an OSE. Its owner, not its function name or formal arity, excludes it.
+        // The pole is active only under a physical predicate and must stay lazy.
+        let atom =
+            &energy + &numerator + &q + Symbol::IF.call_args([x.clone(), pole.clone(), Atom::Zero]);
+        for dual in [false, true] {
+            let shape = dual.then(|| vec![vec![0], vec![1], vec![2]]);
+            let size = if dual { 3 } else { 1 };
+            let mut prepared_rows = rows.clone();
+            let (evaluator, auxiliary) = EvaluatorStack::new_single_parametric(
+                vec![atom.clone().into()],
+                &prepared_builder,
+                &builder.reps,
+                Some(&mut prepared_rows),
+                &shape,
+                &EvaluatorSettings::default(),
+            )
+            .unwrap();
+            let (ports, program) = auxiliary.as_ref().unwrap();
+            assert_eq!(ports.len(), 2);
+            assert_eq!(program.exprs_len, 3);
+            assert_eq!(prepared_rows.auxiliary_shared_outputs, 1);
+            assert_eq!(prepared_rows.auxiliary_gathers.len(), 2);
+            assert_ne!(
+                prepared_rows.auxiliary_gathers[0],
+                prepared_rows.auxiliary_gathers[1]
+            );
+            assert_eq!(program.fn_map_entries, vec![builder.reps[0].clone()]);
+            assert!(
+                evaluator
+                    .fn_map_entries
+                    .iter()
+                    .any(|entry| entry.lhs == numerator)
+            );
+            prepared_rows.rows.truncate(1);
+            prepared_rows.auxiliary_gathers.truncate(1);
+            let mut stack = EvaluatorStack {
+                explicit_orientation_sum_only: false,
+                parametric_rows: Some(prepared_rows),
+                production_orientation_ids: Vec::new(),
+                single_parametric: evaluator,
+                single_parametric_auxiliary: auxiliary,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            };
+            for compiled in [false, true] {
+                if compiled {
+                    stack
+                        .for_each_generic_evaluator_mut(|evaluator| {
+                            evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                                optimization_level: CompilationOptimizationLevel::O2,
+                                ..Default::default()
+                            })
+                        })
+                        .unwrap();
+                }
+                for (point, expected) in [
+                    (0., [4., 0., 1.5]),
+                    (
+                        1.,
+                        [
+                            2.0f64.sqrt() + 5.,
+                            1. + 1. / 2.0f64.sqrt(),
+                            2. + 1. / (4. * 2.0f64.sqrt()),
+                        ],
+                    ),
+                ] {
+                    let mut input = vec![Complex::new_re(F(0.0)); input_count * size];
+                    input[x_index * size] = Complex::new_re(F(point));
+                    if dual {
+                        input[x_index * size + 1] = Complex::new_re(F(1.0));
+                    }
+                    let output = stack
+                        .evaluate_single_parametric(&input, &mut EvaluationMetaData::new_empty());
+                    let values = match &output[0] {
+                        DualOrNot::Dual(value) => value.values.as_slice(),
+                        DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                    };
+                    for (actual, expected) in values.iter().zip(expected) {
+                        assert!(
+                            (actual.re.0 - expected).abs() < 1.0e-13,
+                            "{actual:?} != {expected}; x={point}, dual={dual}, compiled={compiled}"
+                        );
+                        assert_eq!(actual.im, F(0.0));
+                    }
+                }
+            }
+        }
+        // Explicit unfolding and retained-dual lowering have different symbolic
+        // cancellation boundaries. They retain the existing unsplit evaluator.
+        for retained in [false, true] {
+            let mut fallback_builder = builder.clone();
+            if retained {
+                fallback_builder.reps[0].inlining = InliningPolicy::Never;
+                fallback_builder.fn_map = FunctionMap::new();
+                for entry in &fallback_builder.reps {
+                    entry.register(&mut fallback_builder.fn_map).unwrap();
+                }
+            }
+            let settings = EvaluatorSettings {
+                do_fn_map_replacements: !retained,
+                ..Default::default()
+            };
+            let mut prepared_rows = rows.clone();
+            let (mut evaluator, auxiliary) = EvaluatorStack::new_single_parametric(
+                vec![(&energy + &q).into()],
+                &fallback_builder,
+                &fallback_builder.reps,
+                Some(&mut prepared_rows),
+                &Some(vec![vec![0], vec![1], vec![2]]),
+                &settings,
+            )
+            .unwrap();
+            assert!(auxiliary.is_none());
+            if retained {
+                assert!(
+                    evaluator
+                        .fn_map_entries
+                        .iter()
+                        .any(|entry| entry.inlining == InliningPolicy::Never)
+                );
+            }
+            let mut input = vec![Complex::new_re(F(0.0)); (input_count + 1) * 3];
+            input[x_index * 3 + 1] = Complex::new_re(F(1.0));
+            input[input_count * 3] = Complex::new_re(F(1.0));
+            let output = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut evaluator)(&input);
+            let [DualOrNot::Dual(output)] = output.as_slice() else {
+                panic!("expected fallback jet")
+            };
+            assert_eq!(
+                output.values,
+                [2., 0., 0.5].map(|value| Complex::new_re(F(value)))
+            );
+        }
+    }
+
+    #[test]
+    fn physical_function_activity_requires_native_boolean_selectors() {
+        test_initialise().unwrap();
+        let x = Atom::var(symbol!("evaluator_test::activity_physical_x"));
+        let q = Atom::var(symbol!("evaluator_test::activity_row_q"));
+        let dispatch = Atom::var(symbol!("evaluator_test::activity_dispatch"));
+        let energy = function!(symbol!("evaluator_test::activity_energy"));
+        let pole = function!(symbol!("evaluator_test::activity_pole"));
+        let composite = Symbol::IF.call_args([q.clone(), Atom::one(), Atom::Zero]);
+        for case in [
+            "local_alias",
+            "physical_input",
+            "alias_inside_selector",
+            "rounded_rational",
+        ] {
+            let mut builder = ParamBuilder::new_empty();
+            builder.pairs.additional_params = if case == "physical_input" {
+                [x.clone(), composite.clone()].into_iter().collect()
+            } else {
+                [x.clone()].into_iter().collect()
+            };
+            let input_count = builder.pairs.update_ranges();
+            let parameters = (&builder.pairs)
+                .into_iter()
+                .flat_map(|pair| pair.params.clone())
+                .collect::<Vec<_>>();
+            let x_index = parameters
+                .iter()
+                .position(|parameter| parameter == &x)
+                .unwrap();
+            for (lhs, rhs) in [(energy.clone(), x.pow(2) + 1), (pole.clone(), x.pow(-1))] {
+                builder
+                    .add_function_entry(FnMapEntry {
+                        lhs,
+                        rhs,
+                        tags: Vec::new(),
+                        args: Vec::new(),
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                    })
+                    .unwrap();
+            }
+            let wrapper = symbol!("evaluator_test::activity_selector_wrapper");
+            let local = Atom::var(symbol!("evaluator_test::activity_selector_local"));
+            let formal = Atom::var(symbol!("evaluator_test::activity_selector_formal"));
+            let selector = if case == "alias_inside_selector" {
+                function!(wrapper, local.clone())
+            } else {
+                q.clone()
+            };
+            if case == "alias_inside_selector" {
+                builder
+                    .add_function_entry(FnMapEntry {
+                        lhs: function!(wrapper, formal.clone()),
+                        rhs: formal.clone(),
+                        tags: Vec::new(),
+                        args: vec![Indeterminate::try_from(formal).unwrap()],
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                    })
+                    .unwrap();
+            }
+            let rows = ParametricResidueRows {
+                input_columns: vec![0, 1],
+                parameters: vec![selector.clone(), dispatch.clone()],
+                rows: if case == "rounded_rational" {
+                    // Distinct exact coefficients both round to one in Double.
+                    vec![
+                        vec![
+                            Rational::new(9_007_199_254_740_993i64, 9_007_199_254_740_992i64),
+                            Rational::zero(),
+                        ],
+                        vec![
+                            Rational::new(18_014_398_509_481_985i64, 18_014_398_509_481_984i64),
+                            Rational::one(),
+                        ],
+                    ]
+                } else {
+                    vec![
+                        vec![Rational::one(), Rational::zero()],
+                        vec![Rational::one(), Rational::one()],
+                    ]
+                },
+                ..Default::default()
+            };
+            let condition = if case == "rounded_rational" {
+                &q - 1
+            } else if case == "alias_inside_selector" {
+                selector
+            } else {
+                composite.clone()
+            };
+            let mut atom = AliasedAtom::from(
+                &energy + Symbol::IF.call_args([condition, pole.clone(), Atom::Zero]),
+            );
+            if case == "local_alias" {
+                atom.register_alias(composite.clone(), x.clone());
+            }
+            if case == "alias_inside_selector" {
+                atom.register_alias(local, x.clone());
+            }
+            for dual in [false, true] {
+                let shape = dual.then(|| vec![vec![0], vec![1]]);
+                let width = if dual { 2 } else { 1 };
+                let mut prepared_rows = rows.clone();
+                let (main, auxiliary) = EvaluatorStack::new_single_parametric(
+                    vec![atom.clone()],
+                    &builder,
+                    &builder.reps,
+                    Some(&mut prepared_rows),
+                    &shape,
+                    &EvaluatorSettings::default(),
+                )
+                .unwrap();
+                // This owner shadows a subatom of a row key. The scalar
+                // extractor conservatively keeps the entire owner unsplit.
+                if case == "alias_inside_selector" {
+                    assert!(auxiliary.is_none());
+                } else {
+                    assert_eq!(auxiliary.as_ref().unwrap().0.len(), 1, "{case}");
+                    assert_eq!(
+                        auxiliary.as_ref().unwrap().1.fn_map_entries,
+                        vec![builder.reps[0].clone()]
+                    );
+                }
+                let mut stack = EvaluatorStack {
+                    explicit_orientation_sum_only: false,
+                    parametric_rows: Some(prepared_rows),
+                    production_orientation_ids: Vec::new(),
+                    single_parametric: main,
+                    single_parametric_auxiliary: auxiliary,
+                    iterative: None,
+                    summed_function_map: None,
+                    summed: None,
+                };
+                for compiled in [false, true] {
+                    if compiled {
+                        stack
+                            .for_each_generic_evaluator_mut(|evaluator| {
+                                evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                                    optimization_level: CompilationOptimizationLevel::O2,
+                                    ..Default::default()
+                                })
+                            })
+                            .unwrap();
+                    }
+                    let mut input = vec![Complex::new_re(F(0.0)); input_count * width];
+                    if dual {
+                        input[x_index * width + 1] = Complex::new_re(F(1.0));
+                    }
+                    let result = stack
+                        .evaluate_single_parametric(&input, &mut EvaluationMetaData::new_empty());
+                    let values = match &result[0] {
+                        DualOrNot::Dual(value) => value.values.clone(),
+                        DualOrNot::NonDual(value) => vec![*value],
+                    };
+                    assert_eq!(
+                        values,
+                        [2., 0.]
+                            .into_iter()
+                            .take(width)
+                            .map(|value| Complex::new_re(F(value)))
+                            .collect::<Vec<_>>(),
+                        "{case}, dual={dual}, compiled={compiled}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn physical_aliases_preserve_native_domains_and_mixed_jets() {
+        test_initialise().unwrap();
+        let x = Atom::var(symbol!("evaluator_test::physical_alias_x"));
+        let y = Atom::var(symbol!("evaluator_test::physical_alias_y"));
+        let q = Atom::var(symbol!("evaluator_test::physical_alias_q"));
+        let a = function!(symbol!("evaluator_test::physical_alias"), 0);
+        let b = function!(symbol!("evaluator_test::physical_alias"), 1);
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x.clone(), y.clone()].into_iter().collect();
+        let input_count = builder.pairs.update_ranges();
+        let x_index = builder.pairs.additional_params.value_range.start;
+        let y_index = x_index + 1;
+        let parameters = (&builder.pairs)
+            .into_iter()
+            .flat_map(|pair| pair.params.clone())
+            .chain([q.clone()])
+            .collect::<Vec<_>>();
+        let rows = ParametricResidueRows {
+            input_columns: vec![0],
+            parameters: vec![q.clone()],
+            rows: vec![vec![Rational::zero()], vec![Rational::one()]],
+            ..Default::default()
+        };
+        // These are caller-local aliases, not literal algebraic subexpressions.
+        // Compare against the existing unsplit GenericEvaluator boundary, with
+        // the same exact row table and zero derivative seeds for its coefficients.
+        let cases = [
+            ("reciprocal", vec![(a.clone(), x.pow(-1))], a.pow(-1), 1),
+            (
+                "root_squared",
+                vec![(a.clone(), x.pow(2).pow((1, 2)))],
+                a.pow(2),
+                1,
+            ),
+            ("zero_row_pole", vec![(a.clone(), x.pow(-1))], &q * &a, 1),
+            (
+                "cancel_distinct",
+                vec![(a.clone(), x.pow(-1)), (b.clone(), x.pow(-1))],
+                &a - &b + 1,
+                1,
+            ),
+            (
+                "cancel_nested",
+                vec![(a.clone(), x.pow(-1)), (b.clone(), &a + 1)],
+                &b - &a,
+                1,
+            ),
+            (
+                "parent_only",
+                vec![
+                    (a.clone(), x.pow(2) + y.pow(2) + 1),
+                    (b.clone(), (&a + 1).pow(-1) * &x * &y),
+                ],
+                &q * &b,
+                1,
+            ),
+            (
+                "parent_and_child",
+                vec![
+                    (a.clone(), x.pow(2) + y.pow(2) + 1),
+                    (b.clone(), (&a + 1).pow(-1) * &x * &y),
+                ],
+                &q * &b + &a,
+                1,
+            ),
+            (
+                "compound_mul",
+                vec![(
+                    a.clone(),
+                    &x * &y * Symbol::IF.call_args([q.clone(), x.pow(2) + 1, y.pow(2) + 2]),
+                )],
+                a.clone(),
+                1,
+            ),
+            (
+                "compound_add",
+                vec![(
+                    a.clone(),
+                    Symbol::IF.call_args([q.clone(), x.pow(2) * &y, &x * y.pow(2)]) + &x * &y,
+                )],
+                a.clone(),
+                2,
+            ),
+            (
+                "compound_inactive_pole",
+                vec![(
+                    a.clone(),
+                    &x * &y
+                        * Symbol::IF.call_args([
+                            q.clone(),
+                            Symbol::IF.call_args([q.clone(), x.pow(2) + 1, x.pow(-1)]),
+                            &y + 1,
+                        ]),
+                )],
+                a.clone(),
+                1,
+            ),
+            // Keep both native operations: the zero branch must not turn
+            // physical Inf * 0 into a symbolically normalized zero.
+            (
+                "compound_zero_inf",
+                vec![(a.clone(), x.pow(-1))],
+                &a * Symbol::IF.call_args([q.clone(), Atom::one(), Atom::Zero]),
+                2,
+            ),
+            (
+                "compound_overflow",
+                vec![(a.clone(), x.pow(2)), (b.clone(), x.pow(2))],
+                Symbol::IF.call_args([q.clone(), a.clone(), Atom::Zero])
+                    - Symbol::IF.call_args([q.clone(), b.clone(), Atom::Zero]),
+                2,
+            ),
+            // An alias eliminated by normalization has no reachable use.
+            ("dead_alias", vec![(a.clone(), x.pow(-1))], &a / &a, 0),
+            ("input_copy", vec![(a.clone(), x.clone())], &a + &q, 1),
+            (
+                "physical_guard",
+                vec![(a.clone(), x.pow(-1))],
+                Symbol::IF.call_args([x.clone(), a.clone(), Atom::Zero]),
+                0,
+            ),
+        ];
+        #[allow(clippy::too_many_arguments)]
+        fn compare<T: FloatLike>(
+            baseline: &mut GenericEvaluator,
+            stack: &mut EvaluatorStack,
+            rows: &ParametricResidueRows,
+            input_count: usize,
+            x_index: usize,
+            y_index: usize,
+            shape: &Option<Vec<Vec<usize>>>,
+            case: &str,
+        ) {
+            let zero = F(T::new_zero());
+            let width = shape.as_ref().map_or(1, Vec::len);
+            let mixed = shape.as_ref().is_some_and(|shape| shape[0].len() == 2);
+            for point in [0, 1, -1, 2]
+                .into_iter()
+                .filter(|point| *point != 2 || case == "compound_overflow")
+            {
+                let mut input = vec![Complex::new_re(zero.clone()); input_count * width];
+                input[x_index * width] = Complex::new_re(if point == 2 {
+                    zero.from_usize(10).powi(200) // Finite binary64 input; its square overflows.
+                } else {
+                    zero.from_i64(point) / zero.from_usize(2)
+                });
+                input[y_index * width] = Complex::new_re(zero.from_usize(2));
+                if width > 1 {
+                    input[x_index * width + 1] = Complex::new_re(zero.one());
+                }
+                if mixed {
+                    input[y_index * width + 2] = Complex::new_re(zero.one());
+                }
+                let old =
+                    rows.evaluate(baseline, &input, &[], &mut EvaluationMetaData::new_empty());
+                let new =
+                    stack.evaluate_single_parametric(&input, &mut EvaluationMetaData::new_empty());
+                assert_eq!(old.len(), new.len());
+                if matches!(
+                    case,
+                    "compound_mul" | "compound_add" | "compound_inactive_pole"
+                ) && (width == 1 || mixed)
+                {
+                    let x = input[x_index * width].re.clone();
+                    let y = input[y_index * width].re.clone();
+                    let two = zero.from_usize(2);
+                    let three = zero.from_usize(3);
+                    // Independent complete two-row sums and mixed derivatives;
+                    // all chosen probes and coefficients are exactly dyadic.
+                    let expected = match case {
+                        "compound_mul" => [
+                            &x * &y * (x.powi(2) + y.powi(2) + &three),
+                            &three * x.powi(2) * &y + y.powi(3) + &three * &y,
+                            x.powi(3) + &three * &x * y.powi(2) + &three * &x,
+                            &three * (x.powi(2) + y.powi(2) + zero.one()),
+                        ],
+                        "compound_add" => [
+                            &x * &y * (&x + &y + &two),
+                            &two * &x * &y + y.powi(2) + &two * &y,
+                            x.powi(2) + &two * &x * &y + &two * &x,
+                            &two * (&x + &y + zero.one()),
+                        ],
+                        _ => [
+                            &x * &y * (x.powi(2) + &y + &two),
+                            &three * x.powi(2) * &y + y.powi(2) + &two * &y,
+                            x.powi(3) + &two * &x * &y + &two * &x,
+                            &three * x.powi(2) + &two * &y + &two,
+                        ],
+                    };
+                    let values = match &new[0] {
+                        DualOrNot::Dual(value) => value.values.as_slice(),
+                        DualOrNot::NonDual(value) => std::slice::from_ref(value),
+                    };
+                    for (actual, expected) in values.iter().zip(expected) {
+                        assert_eq!(*actual, Complex::new_re(expected), "{case}");
+                    }
+                }
+                for (old, new) in old.iter().zip(&new) {
+                    let values = |value: &DualOrNot<Complex<F<T>>>| match value {
+                        DualOrNot::Dual(value) => value.values.clone(),
+                        DualOrNot::NonDual(value) => vec![value.clone()],
+                    };
+                    for (old, new) in values(old).into_iter().zip(values(new)) {
+                        for (old, new) in [(old.re, new.re), (old.im, new.im)] {
+                            let finite = old.to_f64().is_finite();
+                            assert_eq!(
+                                finite,
+                                new.to_f64().is_finite(),
+                                "domain changed at x={point}/2, shape={shape:?}"
+                            );
+                            if case.starts_with("compound_") {
+                                assert_eq!(old.to_f64().is_nan(), new.to_f64().is_nan(), "{case}");
+                                if old.to_f64().is_infinite() {
+                                    assert_eq!(old.to_f64(), new.to_f64(), "{case}");
+                                }
+                            }
+                            if finite {
+                                assert!(
+                                    (&old - &new).abs()
+                                        <= (old.abs() + zero.one())
+                                            * zero.epsilon()
+                                            * zero.from_usize(128),
+                                    "alias jet differs at x={point}/2, shape={shape:?}: {old:?} != {new:?}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (name, aliases, root, expected_ports) in cases {
+            let mut atom = AliasedAtom::from(root);
+            for (key, body) in aliases {
+                atom.register_alias(key, body);
+            }
+            for shape in [
+                None,
+                Some(vec![vec![0], vec![1]]),
+                Some(vec![vec![0], vec![1], vec![2]]),
+                Some(vec![vec![0], vec![1], vec![2], vec![3]]),
+                Some(vec![vec![0, 0], vec![1, 0], vec![0, 1], vec![1, 1]]),
+            ] {
+                let settings = EvaluatorSettings {
+                    store_atom: name.starts_with("compound_"),
+                    ..Default::default()
+                };
+                let mut baseline = GenericEvaluator::new_from_raw_params(
+                    [atom.clone()],
+                    &parameters,
+                    &builder.fn_map,
+                    builder.reps.clone(),
+                    settings.optimization_settings(),
+                    shape.clone().map(|shape| {
+                        let zeros = (1..shape.len())
+                            .map(|component| (input_count, component))
+                            .collect();
+                        (shape, zeros)
+                    }),
+                    &settings,
+                )
+                .unwrap();
+                let mut prepared_rows = rows.clone();
+                let (main, auxiliary) = EvaluatorStack::new_single_parametric(
+                    vec![atom.clone()],
+                    &builder,
+                    &builder.reps,
+                    Some(&mut prepared_rows),
+                    &shape,
+                    &settings,
+                )
+                .unwrap();
+                assert_eq!(
+                    auxiliary.as_ref().map_or(0, |(ports, _)| ports.len()),
+                    expected_ports,
+                    "{name}"
+                );
+                if name.starts_with("compound_") {
+                    let (ports, auxiliary) = auxiliary.as_ref().unwrap();
+                    let (output_count, shared) = match name {
+                        "compound_add" => (3, 1),
+                        "compound_zero_inf" => (2, 1),
+                        _ => (2, 0),
+                    };
+                    assert_eq!(auxiliary.exprs_len, output_count);
+                    assert_eq!(prepared_rows.auxiliary_shared_outputs, shared);
+                    assert!(prepared_rows.input_columns.is_empty());
+                    assert!(prepared_rows.auxiliary_values.is_empty());
+                    assert_eq!(prepared_rows.auxiliary_gathers.len(), 2);
+                    assert!(
+                        prepared_rows
+                            .auxiliary_gathers
+                            .iter()
+                            .all(|row| row.len() == ports.len() - shared)
+                    );
+                    let root = &main.exprs.as_ref().unwrap()[0];
+                    let aliases = main.fn_map_entries.iter().filter(|entry| entry.is_alias);
+                    assert_eq!(
+                        aliases.clone().count(),
+                        usize::from(matches!(
+                            name,
+                            "compound_mul" | "compound_add" | "compound_inactive_pole"
+                        ))
+                    );
+                    let carrier = aliases
+                        .clone()
+                        .find(|entry| entry.lhs == *root)
+                        .map_or(root, |entry| &entry.rhs);
+                    let roots = auxiliary
+                        .exprs
+                        .as_ref()
+                        .unwrap()
+                        .iter()
+                        .map(|root| {
+                            auxiliary
+                                .fn_map_entries
+                                .iter()
+                                .find(|entry| entry.is_alias && entry.lhs == *root)
+                                .map_or_else(|| root.clone(), |entry| entry.rhs.clone())
+                        })
+                        .collect::<Vec<_>>();
+                    let expected_carrier = match name {
+                        "compound_mul" | "compound_inactive_pole" => &x * &y * &ports[0],
+                        "compound_add" => &ports[0] + &ports[1],
+                        "compound_zero_inf" => &ports[0] * &ports[1],
+                        _ => {
+                            assert_ne!(ports[0], ports[1]);
+                            assert!(
+                                *carrier == &ports[0] - &ports[1]
+                                    || *carrier == &ports[1] - &ports[0]
+                            );
+                            carrier.clone()
+                        }
+                    };
+                    assert_eq!(carrier, &expected_carrier);
+                    if shared == 1 {
+                        assert_eq!(
+                            roots[0],
+                            if name == "compound_add" {
+                                &x * &y
+                            } else {
+                                x.pow(-1)
+                            }
+                        );
+                    }
+                    if matches!(name, "compound_zero_inf" | "compound_overflow") {
+                        assert!(
+                            prepared_rows.auxiliary_gathers[0]
+                                .iter()
+                                .all(Option::is_none)
+                        );
+                        for output in &prepared_rows.auxiliary_gathers[1] {
+                            assert_eq!(
+                                roots[output.unwrap()],
+                                if name == "compound_zero_inf" {
+                                    Atom::one()
+                                } else {
+                                    x.pow(2)
+                                }
+                            );
+                        }
+                        if name == "compound_overflow" {
+                            assert_ne!(
+                                auxiliary.exprs.as_ref().unwrap()[0],
+                                auxiliary.exprs.as_ref().unwrap()[1],
+                                "distinct owned alias handles are retained"
+                            );
+                            assert_ne!(
+                                prepared_rows.auxiliary_gathers[1][0],
+                                prepared_rows.auxiliary_gathers[1][1]
+                            );
+                        }
+                    } else {
+                        let leaves = match name {
+                            "compound_mul" => [y.pow(2) + 2, x.pow(2) + 1],
+                            "compound_add" => [&x * y.pow(2), x.pow(2) * &y],
+                            _ => [&y + 1, x.pow(2) + 1],
+                        };
+                        for (gather, leaf) in prepared_rows.auxiliary_gathers.iter().zip(leaves) {
+                            assert_eq!(gather.len(), 1);
+                            assert_eq!(roots[gather[0].unwrap()], leaf);
+                        }
+                    }
+                }
+                let mut stack = EvaluatorStack {
+                    explicit_orientation_sum_only: false,
+                    parametric_rows: Some(prepared_rows),
+                    production_orientation_ids: Vec::new(),
+                    single_parametric: main,
+                    single_parametric_auxiliary: auxiliary,
+                    iterative: None,
+                    summed_function_map: None,
+                    summed: None,
+                };
+                compare::<f64>(
+                    &mut baseline,
+                    &mut stack,
+                    &rows,
+                    input_count,
+                    x_index,
+                    y_index,
+                    &shape,
+                    name,
+                );
+                // Singular-point status is exercised in binary64 above; these
+                // regular mixed-axis aliases also certify full native precision.
+                if matches!(
+                    name,
+                    "parent_and_child" | "compound_mul" | "compound_add" | "compound_inactive_pole"
+                ) && shape.as_ref().is_some_and(|shape| shape[0].len() == 2)
+                {
+                    compare::<f128>(
+                        &mut baseline,
+                        &mut stack,
+                        &rows,
+                        input_count,
+                        x_index,
+                        y_index,
+                        &shape,
+                        name,
+                    );
+                    compare::<ArbPrec>(
+                        &mut baseline,
+                        &mut stack,
+                        &rows,
+                        input_count,
+                        x_index,
+                        y_index,
+                        &shape,
+                        name,
+                    );
+                }
+                baseline
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O2,
+                        ..Default::default()
+                    })
+                    .unwrap();
+                stack
+                    .for_each_generic_evaluator_mut(|evaluator| {
+                        evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: CompilationOptimizationLevel::O2,
+                            ..Default::default()
+                        })
+                    })
+                    .unwrap();
+                compare::<f64>(
+                    &mut baseline,
+                    &mut stack,
+                    &rows,
+                    input_count,
+                    x_index,
+                    y_index,
+                    &shape,
+                    name,
+                );
+            }
+        }
+        // Native preparation renames caller aliases before exact input lookup,
+        // including an alias key occurring inside a function-shaped input key.
+        // Register P(t)=t so the renamed P(q) remains a valid original program.
+        let p = symbol!("evaluator_test::physical_alias_input_wrapper");
+        let t = Atom::var(symbol!("evaluator_test::physical_alias_formal"));
+        for composite in [false, true] {
+            let input = if composite {
+                function!(p, x.clone())
+            } else {
+                x.clone()
+            };
+            let mut scoped_builder = ParamBuilder::new_empty();
+            scoped_builder.pairs.additional_params = [input.clone()].into_iter().collect();
+            let count = scoped_builder.pairs.update_ranges();
+            if composite {
+                scoped_builder
+                    .add_function_entry(FnMapEntry {
+                        lhs: function!(p, t.clone()),
+                        rhs: t.clone(),
+                        tags: Vec::new(),
+                        args: vec![Indeterminate::try_from(t.clone()).unwrap()],
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                    })
+                    .unwrap();
+            }
+            let mut atom = AliasedAtom::from(a.clone());
+            atom.register_alias(a.clone(), input);
+            atom.register_alias(x.clone(), q.clone());
+            let mut prepared_rows = rows.clone();
+            let (evaluator, auxiliary) = EvaluatorStack::new_single_parametric(
+                vec![atom],
+                &scoped_builder,
+                &scoped_builder.reps,
+                Some(&mut prepared_rows),
+                &Some(vec![vec![0], vec![1]]),
+                &EvaluatorSettings::default(),
+            )
+            .unwrap();
+            assert!(
+                auxiliary.is_none(),
+                "a caller alias shadows a physical input key"
+            );
+            let mut stack = EvaluatorStack {
+                explicit_orientation_sum_only: false,
+                parametric_rows: Some(prepared_rows),
+                production_orientation_ids: Vec::new(),
+                single_parametric: evaluator,
+                single_parametric_auxiliary: auxiliary,
+                iterative: None,
+                summed_function_map: None,
+                summed: None,
+            };
+            let input = vec![Complex::new_re(F(0.0)); count * 2];
+            let result =
+                stack.evaluate_single_parametric(&input, &mut EvaluationMetaData::new_empty());
+            let [DualOrNot::Dual(result)] = result.as_slice() else {
+                panic!("expected dual output")
+            };
+            assert_eq!(
+                result.values,
+                [1., 0.].map(|value| Complex::new_re(F(value)))
+            );
+        }
+        // Equal alias handles in different roots belong to different owners.
+        // They must remain separate outputs with their own captured definitions.
+        let mut first = AliasedAtom::from(a.clone());
+        first.register_alias(a.clone(), x.pow(2) + 1);
+        let mut second = AliasedAtom::from(a.clone());
+        second.register_alias(a.clone(), x.pow(2) + 2);
+        let mut prepared_rows = rows.clone();
+        let (main, auxiliary) = EvaluatorStack::new_single_parametric(
+            vec![first, second],
+            &builder,
+            &builder.reps,
+            Some(&mut prepared_rows),
+            &None,
+            &EvaluatorSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(auxiliary.as_ref().unwrap().0.len(), 2);
+        let mut stack = EvaluatorStack {
+            explicit_orientation_sum_only: false,
+            parametric_rows: Some(prepared_rows),
+            production_orientation_ids: Vec::new(),
+            single_parametric: main,
+            single_parametric_auxiliary: auxiliary,
+            iterative: None,
+            summed_function_map: None,
+            summed: None,
+        };
+        let input = vec![Complex::new_re(F(0.0)); input_count];
+        let result = stack.evaluate_single_parametric(&input, &mut EvaluationMetaData::new_empty());
+        let result = result
+            .into_iter()
+            .map(|value| {
+                let DualOrNot::NonDual(value) = value else {
+                    panic!("expected scalar")
+                };
+                value
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(result, [2., 4.].map(|value| Complex::new_re(F(value))));
+
+        // Ordinary function bodies resolve global aliases in their own scope.
+        // An identically named caller alias cannot certify a captured row port.
+        let global = function!(symbol!("evaluator_test::physical_alias_global"));
+        let ordinary = function!(symbol!("evaluator_test::physical_alias_global_user"));
+        let mut scoped_builder = builder.clone();
+        // Keep the captured global alias in the opaque map, not the recorded
+        // candidate definitions, so this specifically checks scope reset rather
+        // than the conservative owner-key collision rejection.
+        scoped_builder
+            .fn_map
+            .add_aliases([(global.clone(), q.clone())])
+            .unwrap();
+        scoped_builder
+            .add_function_entry(FnMapEntry {
+                lhs: ordinary.clone(),
+                rhs: global.clone(),
+                tags: Vec::new(),
+                args: Vec::new(),
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            })
+            .unwrap();
+        let mut atom = AliasedAtom::from(a.clone());
+        atom.register_alias(a.clone(), &ordinary + 1);
+        atom.register_alias(global, x.clone());
+        let mut prepared_rows = rows.clone();
+        let (evaluator, auxiliary) = EvaluatorStack::new_single_parametric(
+            vec![atom],
+            &scoped_builder,
+            &scoped_builder.reps,
+            Some(&mut prepared_rows),
+            &None,
+            &EvaluatorSettings::default(),
+        )
+        .unwrap();
+        assert!(auxiliary.is_none());
+        let mut stack = EvaluatorStack {
+            explicit_orientation_sum_only: false,
+            parametric_rows: Some(prepared_rows),
+            production_orientation_ids: Vec::new(),
+            single_parametric: evaluator,
+            single_parametric_auxiliary: auxiliary,
+            iterative: None,
+            summed_function_map: None,
+            summed: None,
+        };
+        let input = vec![Complex::new_re(F(0.0)); input_count];
+        let result = stack.evaluate_single_parametric(&input, &mut EvaluationMetaData::new_empty());
+        let [DualOrNot::NonDual(result)] = result.as_slice() else {
+            panic!("expected scalar")
+        };
+        assert_eq!(*result, Complex::new_re(F(3.0)));
+    }
+
+    #[test]
+    fn joint_rows_preserve_native_precision_derivatives_and_inactive_terms() {
+        test_initialise().unwrap();
+        let q = Atom::var(symbol!("evaluator_test::joint_precision_q"));
+        let x = Atom::var(symbol!("evaluator_test::joint_precision_x"));
+        let family = symbol!("evaluator_test::joint_precision_family");
+        let precise = Rational::new(9_007_199_254_740_993i64, 9_007_199_254_740_992i64);
+        let terms = [
+            (
+                &q * x.pow(2),
+                vec![precise.clone(), Rational::one(), Rational::from(4)],
+            ),
+            // This shorter source must contribute twice, not once per row of
+            // the longer source. Its carriers share a singular scalar factor
+            // but have distinct rational weights; the inactive q=1 probe below
+            // must still skip the singular carrier in the inactive tail.
+            (q.pow(-1) * &x, vec![Rational::from(2), Rational::from(3)]),
+            // This independent source shares the previous activity guard.
+            // Both complete products and their poles must remain lazy after
+            // the preprocessed scalar bodies are grouped into one branch.
+            (
+                (&q - 1).pow(-1) * &x * 2,
+                vec![Rational::from(2), Rational::from(3)],
+            ),
+            // Its coefficient is a constant zero. An unpruned tangent of
+            // sqrt(q) would introduce 0 / sqrt(0) into physical derivatives.
+            (
+                q.pow(Atom::num(Rational::new(1, 2))) * &x,
+                vec![Rational::zero()],
+            ),
+            // This column disappears into an exact literal call argument. Its
+            // coefficient must still survive beyond binary64 precision.
+            (q.clone(), vec![precise.clone()]),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(tag, (rhs, rows))| ParametricIntegrandTerm {
+            numerator: Arc::new(FnMapEntry {
+                lhs: function!(family, tag, q.clone()),
+                rhs,
+                tags: vec![Atom::num(tag)],
+                args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            }),
+            rows: rows
+                .into_iter()
+                .map(|coefficient| {
+                    let carrier = if tag == 1 {
+                        // q equals this exact row coefficient on active rows,
+                        // preserving x/(q-1) while exposing shared carrier work.
+                        Atom::num(coefficient.clone()) * (&q - 1).pow(-1)
+                    } else {
+                        Atom::one()
+                    };
+                    crate::uv::ParametricIntegrandRow {
+                        coefficients: vec![coefficient],
+                        carrier,
+                        source_keys: Vec::new(),
+                    }
+                })
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x].into_iter().collect();
+        let input_count = builder.pairs.update_ranges();
+        let x_index = builder.pairs.additional_params.value_range.start;
+        fn check<T: FloatLike>(
+            stack: &mut EvaluatorStack,
+            input_count: usize,
+            x_index: usize,
+            precise: &Rational,
+        ) {
+            let zero = F(T::new_zero());
+            let sum_q = zero.from_rational(precise) + zero.from_usize(5);
+            let linear = zero.from_rational(&Rational::new(9, 2));
+            let orientations =
+                TiVec::<OrientationID, _>::from_iter([EdgeVec::from_iter(std::iter::empty::<
+                    Orientation,
+                >())]);
+            let filter = SubSet::full(1);
+            for method in [
+                EvaluatorMethod::SingleParametric,
+                EvaluatorMethod::SummedFunctionMap,
+                EvaluatorMethod::Summed,
+                EvaluatorMethod::Iterative,
+            ] {
+                // Repeated and zero probes detect stale scratch values, including tangents.
+                for (x, tangent) in [(3, 1), (1, -2), (0, 0), (3, 1)] {
+                    let x = zero.from_i64(x);
+                    let tangent = zero.from_i64(tangent);
+                    let expected = [
+                        x.powi(2) * &sum_q
+                            + &linear * &x
+                            + zero.from_usize(5)
+                            + zero.from_rational(precise),
+                        (zero.from_usize(2) * &x * &sum_q + &linear) * &tangent,
+                    ];
+                    let mut values = vec![Complex::new_re(zero.clone()); input_count * 2];
+                    values[2 * x_index] = Complex::new_re(x.clone());
+                    values[2 * x_index + 1] = Complex::new_re(tangent.clone());
+                    let input = InputParams {
+                        values: SliceMut::Owned(values),
+                        residue_map_id_start: 0,
+                        orientations_start: 0,
+                        multiplicative_offset: 2,
+                    };
+                    let mut runtime = RuntimeSettings::default();
+                    runtime.general.evaluator_method = method.clone();
+                    let output = stack
+                        .evaluate(
+                            input,
+                            SingleOrAllOrientations::All {
+                                all: &orientations,
+                                filter: &filter,
+                            },
+                            &runtime,
+                            &mut EvaluationMetaData::new_empty(),
+                        )
+                        .unwrap();
+                    let [DualOrNot::Dual(value)] = output.as_slice() else {
+                        panic!("expected one dual result")
+                    };
+                    for (actual, expected) in value.values.iter().zip(&expected) {
+                        assert!(
+                            (actual.re.clone() - expected).abs()
+                                <= expected.abs() * zero.epsilon() * zero.from_usize(64),
+                            "{method:?}: {actual:?} != {expected:?}"
+                        );
+                        assert_eq!(actual.im, zero);
+                    }
+                    if x == zero.from_usize(3) && zero.epsilon() < zero.from_usize(2).powi(-60) {
+                        assert!(value.values[0].re > zero.from_rational(&Rational::new(147, 2)));
+                    }
+                }
+            }
+            // At the final ordinal both short families are absent. Force their
+            // shared inactive coefficient port to a singular value; the common
+            // guard must skip the factored scalar pole, the other numerator's
+            // pole, and their physical tangents.
+            let mut inactive = stack.clone();
+            let rows = inactive.parametric_rows.as_mut().unwrap();
+            let inactive_port = (0..rows.parameters.len())
+                .find(|&column| {
+                    rows.rows
+                        .iter()
+                        .map(|row| row[column].clone())
+                        .collect::<Vec<_>>()
+                        == [2, 3, 3].map(Rational::from)
+                })
+                .unwrap();
+            let mut last = rows.rows.last().unwrap().clone();
+            last[inactive_port] = Rational::one();
+            rows.rows = vec![last];
+            if let Some(last) = rows.auxiliary_gathers.last().cloned() {
+                rows.auxiliary_gathers = vec![last];
+            }
+            let mut input = vec![Complex::new_re(zero.clone()); input_count * 2];
+            input[x_index * 2] = Complex::new_re(zero.from_usize(3));
+            input[x_index * 2 + 1] = Complex::new_re(zero.one());
+            let output =
+                inactive.evaluate_single_parametric(&input, &mut EvaluationMetaData::new_empty());
+            let [DualOrNot::Dual(value)] = output.as_slice() else {
+                panic!("expected guarded dual output")
+            };
+            assert_eq!(
+                value.values,
+                [36, 24].map(|v| Complex::new_re(zero.from_usize(v)))
+            );
+        }
+        for store_atom in [false, true] {
+            for (inline_numerator_functions, do_fn_map_replacements) in
+                [(false, false), (true, true), (true, false)]
+            {
+                let settings = EvaluatorSettings {
+                    store_atom,
+                    do_fn_map_replacements,
+                    inline_numerator_functions,
+                    summed_function_map: true,
+                    summed: true,
+                    iterative_orientation_optimization: true,
+                    ..Default::default()
+                };
+                let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+                    &Atom::num(5),
+                    &builder,
+                    &[],
+                    &terms,
+                    None,
+                    Some(vec![vec![0], vec![1]]),
+                    &settings,
+                )
+                .unwrap();
+                let rows = stack.parametric_rows.as_ref().unwrap();
+                assert_eq!(rows.rows.len(), 3);
+                assert_eq!(
+                    stack.single_parametric.zero_components,
+                    (input_count
+                        + stack
+                            .single_parametric_auxiliary
+                            .as_ref()
+                            .map_or(0, |(ports, _)| ports.len())
+                        ..input_count
+                            + stack
+                                .single_parametric_auxiliary
+                                .as_ref()
+                                .map_or(0, |(ports, _)| ports.len())
+                            + rows.input_columns.len())
+                        .map(|p| (p, 1))
+                        .collect::<Vec<_>>()
+                );
+                check::<f64>(&mut stack, input_count, x_index, &precise);
+                check::<f128>(&mut stack, input_count, x_index, &precise);
+                check::<ArbPrec>(&mut stack, input_count, x_index, &precise);
+                for optimization in [
+                    CompilationOptimizationLevel::O0,
+                    CompilationOptimizationLevel::O2,
+                ] {
+                    stack
+                        .for_each_generic_evaluator_mut(|evaluator| {
+                            evaluator.activate_symjit(&CompilationOptionsSnapshot {
+                                optimization_level: optimization,
+                                ..Default::default()
+                            })
+                        })
+                        .unwrap();
+                    check::<f64>(&mut stack, input_count, x_index, &precise);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn joint_rows_support_an_empty_physical_signature_without_losing_precision() {
+        test_initialise().unwrap();
+        let q = Atom::var(symbol!("evaluator_test::constant_joint_row"));
+        let family = symbol!("evaluator_test::constant_joint_family");
+        let term = ParametricIntegrandTerm {
+            numerator: Arc::new(FnMapEntry {
+                lhs: function!(family, 0, q.clone()),
+                rhs: q.clone(),
+                tags: vec![Atom::num(0)],
+                args: vec![Indeterminate::try_from(q).unwrap()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            }),
+            rows: [
+                Rational::new(9_007_199_254_740_993i64, 9_007_199_254_740_992i64),
+                Rational::from(-1),
+            ]
+            .into_iter()
+            .map(|value| crate::uv::ParametricIntegrandRow {
+                coefficients: vec![value],
+                carrier: Atom::one(),
+                source_keys: Vec::new(),
+            })
+            .collect(),
+        };
+        let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+            &Atom::Zero,
+            &ParamBuilder::new_empty(),
+            &[],
+            &[term],
+            None,
+            None,
+            &EvaluatorSettings::default(),
+        )
+        .unwrap();
+        let actual =
+            stack.evaluate_single_parametric::<ArbPrec>(&[], &mut EvaluationMetaData::new_empty());
+        let expected =
+            F::<ArbPrec>::default().from_rational(&Rational::new(1, 9_007_199_254_740_992i64));
+        assert!(expected > expected.zero());
+        assert_eq!(
+            actual.into_iter().next().unwrap().unwrap_real(),
+            Complex::new_re(expected)
+        );
+    }
+
+    #[test]
     fn shared_sparse_numerator_family_preserves_open_indices_and_residue_map_modes() {
         test_initialise().unwrap();
         let q = Atom::var(symbol!("evaluator_test::sparse_numerator_q"));
@@ -5522,7 +9937,7 @@ mod tests {
                     EvaluatorMethod::Summed,
                 ] {
                     let mut runtime = RuntimeSettings::default();
-                    runtime.general.evaluator_method = method;
+                    runtime.general.evaluator_method = method.clone();
                     assert_eq!(
                         scalar_value(
                             stack
@@ -5610,10 +10025,13 @@ mod tests {
         source.register_alias(opaque, y.clone());
         source.register_alias(dead, (&sign - 1).pow(-1));
 
-        let selected = EvaluatorStack::select_orientation(
+        let selected = EvaluatorStack::specialize_aliases(
+            source.get_root(),
             &source,
-            &EdgeVec::from_iter([Orientation::Default]),
-            selected_id,
+            |expression| {
+                EdgeVec::from_iter([Orientation::Default]).select(selected_id.select(expression))
+            },
+            Some(selected_id.0),
         );
         assert_eq!(selected.get_aliases().len(), 3);
         assert!(!selected.get_aliases().contains_key(&function!(head, 2, 7)));
@@ -5625,10 +10043,11 @@ mod tests {
         // would keep `dead` for its occurrence inside the opaque key, the
         // inactive body selected to 0^-1 is not retained.
         let orientation = EdgeVec::from_iter([Orientation::Default]);
-        let iterative = EvaluatorStack::select_reachable(
+        let iterative = EvaluatorStack::specialize_aliases(
+            source.get_root(),
             &source,
             |atom| GS.collect_orientation_if(orientation.select(selected_id.select(atom))),
-            Atom::clone,
+            None,
         );
         assert_eq!(iterative.get_aliases().len(), 3);
         assert!(!iterative.get_aliases().contains_key(&function!(head, 2)));
@@ -5669,10 +10088,11 @@ mod tests {
             .into_iter()
             .enumerate()
         {
-            let selected = EvaluatorStack::select_orientation(
+            let selected = EvaluatorStack::specialize_aliases(
+                source.get_root(),
                 &source,
-                &orientations[index],
-                production_ids[index],
+                |expression| orientations[index].select(production_ids[index].select(expression)),
+                Some(production_ids[index].0),
             );
             assert_eq!(selected.get_aliases().len(), 2);
             assert_eq!(selected.into_inner(), expected);
@@ -5864,6 +10284,83 @@ mod tests {
                     ),
                     Complex::new_re(F(17.0))
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn summed_function_map_dualizes_retained_calls_inside_aliases_without_source_storage() {
+        let x = parse_lit!(evaluator_test::summed_retained_x);
+        let z = parse_lit!(evaluator_test::summed_retained_z);
+        let function = symbol!("evaluator_test::summed_retained_function");
+        let alias = function!(symbol!("evaluator_test::summed_retained_alias"), 0);
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x.clone()].into_iter().collect();
+        builder.pairs.update_ranges();
+        builder
+            .add_function_entry(FnMapEntry {
+                lhs: function!(function, 0, &z),
+                rhs: z.pow(2),
+                tags: vec![Atom::num(0)],
+                args: vec![Indeterminate::try_from(z.clone()).unwrap()],
+                inlining: InliningPolicy::Never,
+                is_alias: false,
+            })
+            .unwrap();
+        let ids = [OrientationID(4), OrientationID(9)];
+        let mut source = AliasedAtom::from(alias.clone());
+        source.register_alias(
+            alias,
+            (ids[0].atom() + 2 * ids[1].atom()) * function!(function, 0, x),
+        );
+        let orientations = [
+            EdgeVec::from_iter(std::iter::empty::<Orientation>()),
+            EdgeVec::from_iter(std::iter::empty::<Orientation>()),
+        ];
+        // Row substitution must precede function-map lowering as well. The
+        // first row discards the singular alias before specializing its body;
+        // the second retains it with weight 1/2. Both reuse the numerator.
+        let coefficient = parse_lit!(evaluator_test::summed_retained_coefficient);
+        let pole = function!(symbol!("evaluator_test::summed_retained_pole"), 0);
+        let mut row_source = source
+            .clone()
+            .map_root(|root| Symbol::IF.call_args([&coefficient - 1, &pole * &root, root]));
+        row_source.register_alias(pole, (&coefficient - 1).pow(-1));
+        let rows = ParametricResidueRows {
+            parameters: vec![coefficient],
+            rows: vec![vec![Rational::from(1)], vec![Rational::from(3)]],
+            ..Default::default()
+        };
+        let specialized = rows
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(id, row)| rows.specialize(&row_source, row, id))
+            .fold(AliasedAtom::default(), |sum, row| {
+                sum.try_add(&row).unwrap()
+            });
+        for (source, expected) in [(source, [27.0, 18.0]), (specialized, [40.5, 27.0])] {
+            for store_atom in [false, true] {
+                let settings = EvaluatorSettings {
+                    store_atom,
+                    ..Default::default()
+                };
+                let mut evaluator = EvaluatorStack::new_summed_function_map(
+                    std::slice::from_ref(&source),
+                    &builder,
+                    &orientations,
+                    &ids,
+                    &Some(vec![vec![0], vec![1]]),
+                    &settings,
+                )
+                .unwrap();
+                let mut output = [Complex::new_re(F(0.0)); 2];
+                evaluator.f64_eager.evaluate(
+                    &[Complex::new_re(F(3.0)), Complex::new_re(F(1.0))],
+                    &mut output,
+                );
+                assert_eq!(output, expected.map(|value| Complex::new_re(F(value))));
+                assert_eq!(evaluator.exprs.is_some(), store_atom);
             }
         }
     }
@@ -6183,43 +10680,97 @@ mod tests {
     #[test]
     fn evaluator_retained_aliases_skip_inactive_singular_definitions() {
         let x = Atom::var(symbol!("evaluator_test::retained_singular_x"));
+        let y = Atom::var(symbol!("evaluator_test::retained_singular_y"));
+        let mass = Atom::var(symbol!("evaluator_test::retained_singular_mass"));
         let active = function!(symbol!("evaluator_test::retained_singular"), 0);
         let finite = function!(symbol!("evaluator_test::retained_singular"), 1);
-        let mut atom =
+        let dead = function!(symbol!("evaluator_test::retained_singular"), 2);
+        let mut first =
             AliasedAtom::from(Symbol::IF.call_args([x.clone(), active.clone(), finite.clone()]));
-        atom.register_alias(active, x.pow(-1));
-        atom.register_alias(finite, &x + 7);
-        for do_fn_map_replacements in [false, true] {
-            let settings = EvaluatorSettings {
-                do_fn_map_replacements,
-                ..Default::default()
-            };
-            let mut evaluator = GenericEvaluator::new_from_raw_params(
-                [atom.clone()],
-                std::slice::from_ref(&x),
-                &FunctionMap::new(),
-                vec![],
-                settings.optimization_settings(),
-                None,
-                &settings,
-            )
-            .unwrap();
-            for compiled in [false, true] {
-                if compiled {
-                    evaluator
-                        .activate_symjit(&CompilationOptionsSnapshot {
-                            optimization_level: CompilationOptimizationLevel::O0,
-                            ..Default::default()
-                        })
-                        .unwrap();
-                }
-                for (input, expected) in [(0.0, 7.0), (2.0, 0.5)] {
-                    assert_eq!(
-                        <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut evaluator)(&[
-                            Complex::new_re(F(input))
-                        ]),
-                        Complex::new_re(F(expected))
-                    );
+        first.register_alias(active.clone(), x.pow(-1));
+        first.register_alias(finite.clone(), &x + 7 + mass.pow((1, 2)));
+        first.register_alias(dead.clone(), (&x - &y).pow(-1));
+        // The same handles have different bodies in the second output owner.
+        // Neither their registration nor another output's active branch may
+        // make an inactive or entirely unreachable pole execute.
+        let mut second =
+            AliasedAtom::from(Symbol::IF.call_args([y.clone(), active.clone(), finite.clone()]));
+        second.register_alias(active, y.pow(-1));
+        second.register_alias(finite, &y + 11);
+        second.register_alias(dead, (&x + &y).pow(-1));
+        let roots = [second.clone(), first, second];
+        for store_atom in [false, true] {
+            for do_fn_map_replacements in [false, true] {
+                for shape in [
+                    None,
+                    Some(vec![vec![0, 0], vec![1, 0], vec![0, 1], vec![1, 1]]),
+                ] {
+                    let settings = EvaluatorSettings {
+                        store_atom,
+                        do_fn_map_replacements,
+                        ..Default::default()
+                    };
+                    let width = shape.as_ref().map_or(1, Vec::len);
+                    let zeros = (1..width)
+                        .map(|component| (2, component))
+                        .collect::<Vec<_>>();
+                    let mut evaluator = GenericEvaluator::new_from_raw_params(
+                        roots.clone(),
+                        &[x.clone(), y.clone(), mass.clone()],
+                        &FunctionMap::new(),
+                        vec![],
+                        settings.optimization_settings(),
+                        shape.map(|shape| (shape, zeros.clone())),
+                        &settings,
+                    )
+                    .unwrap();
+                    assert_eq!(evaluator.exprs_len, roots.len());
+                    assert_eq!(evaluator.zero_components, zeros);
+                    assert_eq!(evaluator.exprs.is_some(), store_atom);
+                    for compiled in [false, true] {
+                        if compiled {
+                            evaluator
+                                .activate_symjit(&CompilationOptionsSnapshot {
+                                    optimization_level: CompilationOptimizationLevel::O0,
+                                    ..Default::default()
+                                })
+                                .unwrap();
+                        }
+                        for (x, y) in [(0.0_f64, 0.0_f64), (2.0, 0.0), (0.0, 2.0), (2.0, 4.0)] {
+                            let mut input = vec![Complex::new_re(F(0.0)); 3 * width];
+                            input[0] = Complex::new_re(F(x));
+                            input[width] = Complex::new_re(F(y));
+                            if width > 1 {
+                                input[1] = Complex::new_re(F(1.0));
+                                input[width + 2] = Complex::new_re(F(1.0));
+                            }
+                            let first = if x == 0.0 {
+                                [7.0, 1.0, 0.0, 0.0]
+                            } else {
+                                [x.recip(), -x.powi(-2), 0.0, 0.0]
+                            };
+                            let second = if y == 0.0 {
+                                [11.0, 0.0, 1.0, 0.0]
+                            } else {
+                                [y.recip(), 0.0, -y.powi(-2), 0.0]
+                            };
+                            let expected = [second, first, second]
+                                .into_iter()
+                                .flat_map(|jet| jet.into_iter().take(width))
+                                .map(|value| Complex::new_re(F(value)))
+                                .collect::<Vec<_>>();
+                            let actual = <f64 as GenericEvaluatorFloat>::get_evaluator(
+                                &mut evaluator,
+                            )(&input)
+                            .into_iter()
+                            .flat_map(|value| match value {
+                                DualOrNot::NonDual(value) => vec![value],
+                                DualOrNot::Dual(dual) => dual.values,
+                            })
+                            .collect::<Vec<_>>();
+                            assert_eq!(actual, expected);
+                        }
+                    }
                 }
             }
         }

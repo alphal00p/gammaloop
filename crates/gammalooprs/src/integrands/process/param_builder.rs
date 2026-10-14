@@ -1367,7 +1367,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             new.add_tagged_function::<Symbol>(
                 function.get_symbol(),
                 function.iter().map(|arg| arg.to_owned()).collect(),
-                lhs.to_string(),
+                Default::default(),
                 vec![],
                 rhs,
             )
@@ -1389,7 +1389,7 @@ impl<T: FloatLike> ParamBuilder<T> {
                         Atom::num(edge_id.0 as i64),
                         Atom::from(ExpandedIndex::from_iter([i])),
                     ],
-                    format!("Q({edge_id}, {i})"),
+                    Default::default(),
                     vec![],
                     lmb.loop_atom(
                         edge_id,
@@ -1986,6 +1986,41 @@ mod tests {
         assert!(cache.get(usize::MAX).is_none());
         assert_eq!(cache.len, usize::MAX);
         assert_eq!(cache.cache.iter().flatten().count(), 64);
+    }
+
+    #[test]
+    fn model_refresh_preserves_persisted_parameter_order_and_dual_seeds() {
+        test_initialise().unwrap();
+        let model = Model::from_file(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+        )
+        .unwrap();
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        builder.pairs.model_parameters = model.generate_params().into_iter().collect();
+        let size = builder.pairs.model_parameters.params.len();
+        builder.values = vec![vec![Complex::new_re(F(0.0)); size]];
+        builder.update_model_values(&model);
+        let expected = builder.values[0].iter().rev().cloned().collect::<Vec<_>>();
+        assert_ne!(builder.values[0], expected);
+
+        builder.pairs.model_parameters.params.reverse();
+        builder.values[0].fill(Complex::new_re(F(-7.0)));
+        builder.initialize_duals(3);
+        for values in builder.values.iter_mut().skip(1) {
+            values.fill(Complex::new_re(F(-7.0)));
+        }
+        builder.update_model_values(&model);
+        for (index, values) in builder.values.iter().enumerate() {
+            for (components, expected) in values.chunks(index + 1).zip(&expected) {
+                assert_eq!(&components[0], expected);
+                assert!(
+                    components[1..]
+                        .iter()
+                        .all(|seed| *seed == Complex::new_re(F(-7.0)))
+                );
+            }
+        }
     }
 
     #[test]

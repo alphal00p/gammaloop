@@ -1,7 +1,8 @@
 = UV renormalization architecture
 <uv-renormalization-architecture>
 #quote(block: true)[
-#strong[Reviewed:] 2026-10-01 against jj change `xuoqsyop`
+#strong[Reviewed:] 2026-10-10 for shared soft/UV preparation and factorized
+CFF/LTD projection.
 
 #strong[Lifecycle:] Current implementation architecture. Unsupported
 prescription paths are recorded explicitly under
@@ -40,7 +41,8 @@ The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defa
 modes:
 
 - `legacy_dag_forest` computes the established `Approximation` DAG and
-  remains the reference implementation for connected graphs.
+  remains the reference implementation for connected graphs. It does not
+  compute disconnected UV unions; those require `hedge_poset`.
 - `hedge_poset` is the default. It unfolds commuting UV operations into
   trace levels and stores their results in a compute store. It supports
   disconnected unions.
@@ -52,6 +54,26 @@ modes:
 The backends share analytic operations and result types. Scheduling,
 dependency lookup, caching, and disconnected-component composition
 belong to the orchestrator because their traversal models differ.
+
+Generation supplies all requested three-dimensional representations in
+their configured order to one orchestrator call. Each backend unfolds its
+forest once and computes the local four-dimensional Taylor terms and
+integrated Vakint counterterms during the first representation pass.
+Subsequent passes reuse those values and rebuild the cut-dependent 3D
+projection and final integrand for the selected representation. Each
+completed result is extracted before the next pass replaces the transient
+cut store. `compare` performs this shared preparation independently for
+each backend and compares the result for every requested representation.
+
+One bounded projection cache remains local to the graph and backend across
+all requested representations, so equal canonical Taylor sectors are reused.
+Exact source and native-generation cache identities retain the full generation
+options, including the representation and occurrence-local bounds. Each pass
+reports only its own additional shared preparation time. Cached
+payloads retain their certified numerator assignment; reuse never turns
+independent Taylor sources into one capacity or coefficient sum. An LTD
+source contributes its complete residue sum once, with its own numerator
+maps, rather than once per possible production-orientation host.
 
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
@@ -235,7 +257,84 @@ its own tag. The normalized frozen kernels remain outside the Taylor operation.
 This preserves the engineering weight of finite mass vertices without rescaling
 unrelated factors in a disconnected product.
 
-The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, performs the factorized minimax EMR dispatch needed for derivative-created occurrences, and only then projects that completed term to CFF. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
+The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, and certifies the signed numerator mapping and denominator reconstruction before projecting that completed term to the requested representation. CFF selects a factorized EMR capacity assignment. Ordinary LTD retains the certified physical affine assignment without numerator-degree analysis; repeated LTD poles require bounds for exact finite sampling. Canonical denominator classes also gate the raw physical degree report, so diagnostic reporting does not reintroduce degree analysis for ordinary LTD. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
+
+For both CFF and LTD with local UV counterterms from four dimensions,
+`Integrands` owns two disjoint additive payloads per cut order: ordinary scalar
+contributions and `ParametricIntegrandTerm` values. Each term retains one
+factorized `FnMapEntry` numerator product, ordered coefficient formals, and
+`ParametricIntegrandRow` values containing exact rational coefficients, a scalar
+carrier and the source-map keys which produced it. There is no concrete copy of
+those numerator rows in the scalar payload.
+
+Multiplying independent factors creates Cartesian rows within one term. Each
+factor keeps its own private tensor contractions: the existing numerator index
+walker freshens private labels before joining generic bodies, while preserving
+free slots at the physical child/cograph interface and opaque scalar payloads.
+Adding forests or independent counterterm sources concatenates additive terms; an
+independent scalar addback is included once. Identical generic templates may
+share a term, but each row keeps its own carrier and native source provenance
+through physical mapping and cut selection. In particular, equal coefficient
+vectors do not authorize merging different source maps at that stage. The
+outer cograph maps the child numerator and scalar carrier with the same
+certified affine map. Markers and frozen localizers multiply carriers, while
+semantic numerator transformations visit each shared body explicitly.
+Private linear weights distinguish child rows while selecting the outer route.
+After routing, one coefficient collection recovers their scalar carriers and
+checks that no constant, nonlinear or hidden weight remains. This avoids one
+complete-expression substitution per child row without expanding a numerator.
+
+Final integrated addbacks use the same storage: the analytic finite coefficient
+and the exact final cograph/global numerator form one generic product before
+source-map substitution. Its scalar carrier contains the reduced denominator
+and smooth localization factors. Final assembly does not multiply the cograph
+again. Direct CFF3D replay retains its existing mapped finite coefficient because
+subsequent Taylor operations must still see that expression.
+
+The evaluator receives the generic products and their completed row tables.
+After physical localization and source-level formal pruning, equal complete
+coefficient vectors within a family share a summed scalar carrier. Independent
+additive families then run together by local row ordinal, with the longest family
+setting the number of evaluator calls. A family's rows retain their complete
+Cartesian products of child and cograph sources; only the independent outer sums
+are zipped. Exact coefficient columns share a port only when their full sequences
+agree, while constant columns bind exact literals. Sparse activity guards exclude
+shorter families' inactive tails, and the ordinary scalar contribution runs once
+at ordinal zero. Whole numerator/carrier guards are attached after shared tensor
+preprocessing, preserving open tensor contractions and skipping inactive singular
+numerators. Scalar products with identical activity guards share one lazy branch.
+
+For `SingleParametric`, a Rust loop supplies every exact row of this common
+catalogue and sums the results. An auxiliary program shares physical scalar
+work, binds row-dependent scalar leaves through exact native inputs, and
+evaluates distinct argument assignments to the prepared numerator
+functions. Each original row gathers these values through distinct carrier
+ports, without substituting or expanding a numerator body per residue.
+Closed scalar functions with formal arguments remain calls in the shared
+program; their actual arguments and global captures are checked in their
+respective scopes. Generated scalar selector trees keep complete original
+carriers at their leaves, including their factored tree denominators. The gather
+table reuses each eligible leaf without pulling common factors across branches.
+Boolean selectors nested inside a scalar sum or product gather their selected
+leaves through distinct caller ports. The enclosing arithmetic stays in the
+carrier, so inactive zeros do not normalize products or cancel singular terms.
+Ordinary calls with conditional actual arguments remain opaque.
+Exact coefficient and selector inputs follow the unchanged physical prefix and these
+auxiliary ports in a reusable buffer; only columns needed by the remaining
+carrier enter its native signature. The summed methods bind the same
+preprocessed catalogue only at evaluator assembly. Tensor preprocessing can
+discard further formals; this does not trigger another row-coalescing pass.
+The complete source catalogue, native residue inventory and independent-source
+counting remain unchanged.
+
+This storage applies to the complete production term and integrated addbacks
+when the local-4D option is enabled, as well as proper projected UV sectors. The
+direct CFF/from3D Taylor path retains its existing keyed-family representation.
+Diagnostic expression exports explicitly materialize the typed payload; saved
+amplitude data retains `Integrands` as its sole symbolic authority. Earlier saved
+states and standalone archives must be regenerated after the layout change.
+
+Requesting LTD requires local UV counterterms from expanded four-dimensional integrands and a complete orientation sum. Mixed CFF/LTD generation uses that same UV setting for both representations. Individual raised threshold residue-order coefficients may differ between CFF and LTD. Their complete contribution for each physical degenerate cut/residue must agree locally, with all pieces multiplying the same observable function grouped together. LTD threshold localization uses its own denominator factors and never reconstructs CFF to fix those individual coefficients.
 
 == Marker Representation
 <marker-representation>
@@ -336,6 +435,8 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   `local_uv_cts_from_expanded_4d_integrands` for medium modes and vacuum
   subtraction; their thermal-weight ownership is documented in
   #link("architecture-current.typ#3-2-cff-production-and-numerator-energy-ownership")[the current architecture].
+- LTD is vacuum-only and uses the projected local-4D route. Direct local-3D Taylor
+  subtraction and orientation-local evaluation remain CFF-only.
 - The legacy DAG executor constructs union-shaped nodes but does not
   execute multi-parent unions. Disconnected generation therefore
   requires the hedge-poset backend.

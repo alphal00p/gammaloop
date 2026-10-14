@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     fs::{self},
     path::Path,
     sync::LazyLock,
@@ -11,7 +11,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
 
 use colored::Colorize;
-use eyre::{Context, eyre};
+use eyre::{Context, ensure, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
@@ -26,7 +26,7 @@ use symbolica::{
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
-use three_dimensional_reps::utils::rank_i64;
+use three_dimensional_reps::{RepresentationMode, utils::rank_i64};
 use tracing::{debug, info, instrument, warn};
 use typed_index_collections::{TiSlice, TiVec, ti_vec};
 
@@ -82,7 +82,8 @@ use crate::{
         amplitude_counterterm::{
             AmplitudeCountertermAtom, AmplitudeCountertermComponentEvaluation,
             AmplitudeCountertermData, AmplitudeCountertermEvaluation,
-            AmplitudeLocalCountertermEvaluation, OverlapStructureWithKinematics,
+            AmplitudeCountertermEvaluator, AmplitudeLocalCountertermEvaluation,
+            OverlapStructureWithKinematics,
         },
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
@@ -104,7 +105,7 @@ use super::{
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
-    pub original_integrand: EvaluatorStack,
+    pub original_integrand: BTreeMap<RepresentationMode, EvaluatorStack>,
     pub(crate) fermi_surfaces: Vec<(Option<OrientationID>, FermiSurfaceEvaluator)>,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
     production_orientation_keys: Vec<String>,
@@ -113,7 +114,7 @@ pub struct AmplitudeGraphTerm {
     pub esurfaces: EsurfaceCollection,
     /// Mixed-sign surfaces in the denominators of the selected orientations,
     /// revalidated against the runtime masses and externals.
-    denominator_hsurfaces: Vec<HsurfaceID>,
+    denominator_hsurfaces: Vec<(RepresentationMode, Vec<HsurfaceID>)>,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
@@ -200,40 +201,45 @@ impl AmplitudeGraphTerm {
             return Err(eyre!("Generation interrupted by user"));
         }
         let mut stats = GraphGenerationStats::default();
-        let production_orientation_ids = graph
+        for &representation in &settings.generation.three_dimensional_representations {
+            stats.representation_mut(representation);
+        }
+        let first_representation = settings.generation.three_dimensional_representations[0];
+        let source = &graph.derived_data.representations[&first_representation];
+        let orientation_catalogues = graph
             .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .expression
-            .orientations
-            .iter_enumerated()
-            .filter_map(|(orientation_id, orientation)| {
-                (settings.generation.explicit_orientation_sum_only
-                    || settings.generation.orientation_pattern.filter(orientation))
-                .then_some(orientation_id)
+            .representations
+            .iter()
+            .map(|(representation, source)| {
+                let ids = source
+                    .expression
+                    .expression
+                    .orientations
+                    .iter_enumerated()
+                    .filter_map(|(id, orientation)| {
+                        (settings.generation.requires_complete_orientation_sum()
+                            || settings.generation.orientation_pattern.filter(orientation))
+                        .then_some(id)
+                    })
+                    .collect_vec();
+                let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = ids
+                    .iter()
+                    .map(|id| {
+                        source.expression.expression.orientations[*id]
+                            .data
+                            .orientation
+                            .clone()
+                    })
+                    .collect();
+                (*representation, (ids, orientations))
             })
-            .collect_vec();
+            .collect::<BTreeMap<_, _>>();
+        let (production_orientation_ids, orientations) =
+            &orientation_catalogues[&first_representation];
         let selected_generation_orientations = production_orientation_ids
             .iter()
-            .map(|orientation_id| {
-                &graph
-                    .derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap()
-                    .expression
-                    .orientations[*orientation_id]
-            })
+            .map(|id| &source.expression.expression.orientations[*id])
             .collect_vec();
-        // Every generalized residue map is a separate runtime channel. Its
-        // physical directions are metadata and therefore must not deduplicate
-        // maps that differ only by numerator/M sampling data.
-        let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
-            selected_generation_orientations
-                .iter()
-                .map(|orientation| orientation.data.orientation.clone())
-                .collect();
         let production_orientation_keys = selected_generation_orientations
             .iter()
             .map(|orientation| orientation.residue_map_key())
@@ -271,14 +277,28 @@ impl AmplitudeGraphTerm {
                 _ => None,
             })
             .collect::<HashSet<_>>();
-        let denominator_hsurfaces = selected_denominators
+        let denominator_hsurfaces = settings
+            .generation
+            .three_dimensional_representations
             .iter()
-            .filter_map(|surface| match surface {
-                HybridSurfaceID::Hsurface(hsurface_id) => Some(*hsurface_id),
-                _ => None,
+            .map(|representation| {
+                let source = &graph.derived_data.representations[representation];
+                let (ids, _) = &orientation_catalogues[representation];
+                let surfaces = ids
+                    .iter()
+                    .flat_map(|id| {
+                        source.expression.expression.orientations[*id].iter_denominator_nodes()
+                    })
+                    .filter_map(|node| match node.data {
+                        HybridSurfaceID::Hsurface(id) => Some(id),
+                        _ => None,
+                    })
+                    .sorted()
+                    .dedup()
+                    .collect_vec();
+                (*representation, surfaces)
             })
-            .sorted()
-            .collect_vec();
+            .collect();
         crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
             stage = "amplitude_graph_term_esurfaces_done",
             graph = %graph.graph.name,
@@ -288,7 +308,7 @@ impl AmplitudeGraphTerm {
         );
 
         crate::debug_tags!(#generation, #graph, #orientation, #compile, #dump;
-            orientation_parametric_integrand = %graph.derived_data.resolved_integrand()?.printer(LOGPRINTOPTS.clone()),
+            orientation_parametric_integrand = %source.resolved_integrand()?.printer(LOGPRINTOPTS.clone()),
             "Building evaluator for all orientations \n{}",
             graph.graph.param_builder.table()
         );
@@ -303,81 +323,104 @@ impl AmplitudeGraphTerm {
             orientation_count = orientations.len(),
             "Generation timing milestone"
         );
-        let mut bulk_integrand = graph.derived_data.all_mighty_integrand.clone();
+        let mut original_integrand = BTreeMap::new();
         let mut fermi_surfaces = Vec::new();
-        if FermiSurfaceSector::is_present(&bulk_integrand)? {
-            let branches = if settings.generation.explicit_orientation_sum_only {
-                vec![(None, bulk_integrand.clone())]
-            } else {
-                orientations
-                    .iter_enumerated()
-                    .zip(&production_orientation_ids)
-                    .map(|((id, orientation), production_id)| {
-                        // Eliminate inactive residue maps before resolving edge
-                        // directions, just as the ordinary evaluator does.
-                        let selected = production_id.select(&bulk_integrand);
+        for (representation, source) in &graph.derived_data.representations {
+            let representation_started = std::time::Instant::now();
+            let (ids, directions) = &orientation_catalogues[representation];
+            let cut = crate::cff::CutCFFIndex::new_all_none();
+            let mut bulk_integrand = source
+                .all_mighty_integrand
+                .atom(&cut)
+                .expect("every integrand cut has a registered scalar lane")
+                .clone();
+            let mut fermi_timings = crate::processes::EvaluatorBuildTimings::default();
+            let mut fermi_count = 0;
+            if FermiSurfaceSector::is_present(&bulk_integrand)? {
+                ensure!(
+                    *representation == RepresentationMode::Cff,
+                    "Fermi-surface localization requires the CFF representation"
+                );
+                ensure!(
+                    source
+                        .all_mighty_integrand
+                        .parametric_terms(&cut)
+                        .is_empty(),
+                    "Fermi-surface localization requires the local-3D scalar lane"
+                );
+                let branches = if settings.generation.requires_complete_orientation_sum() {
+                    vec![(None, bulk_integrand.clone())]
+                } else {
+                    directions
+                        .iter_enumerated()
+                        .zip(ids)
+                        .map(|((id, orientation), production_id)| {
+                            let selected = production_id.select(&bulk_integrand);
+                            (
+                                Some(id),
+                                GS.collect_orientation_if(orientation.select(selected)),
+                            )
+                        })
+                        .collect()
+                };
+                bulk_integrand = Atom::Zero;
+                for (orientation_id, branch) in branches {
+                    let selector = orientation_id
+                        .map(|id| ids[id.0].atom())
+                        .unwrap_or_else(Atom::one);
+                    let (bulk, sectors) = FermiSurfaceSector::extract(&graph.graph, &branch)?;
+                    bulk_integrand += bulk * &selector;
+                    let catalogue = orientation_id.map(|id| {
                         (
-                            Some(id),
-                            GS.collect_orientation_if(orientation.select(selected)),
+                            std::slice::from_ref(&directions[id]),
+                            std::slice::from_ref(&ids[id.0]),
                         )
-                    })
-                    .collect()
-            };
-            bulk_integrand = Atom::Zero;
-            for (orientation_id, branch) in branches {
-                let selector = orientation_id
-                    .map(|id| production_orientation_ids[id.0].atom())
-                    .unwrap_or_else(Atom::one);
-                let (bulk, sectors) = FermiSurfaceSector::extract(&graph.graph, &branch)?;
-                bulk_integrand += bulk * &selector;
-                let orientation_catalog = orientation_id.map(|id| {
-                    (
-                        std::slice::from_ref(&orientations[id]),
-                        std::slice::from_ref(&production_orientation_ids[id.0]),
-                    )
-                });
-                for mut sector in sectors {
-                    sector.coefficient *= &selector;
-                    let (evaluator, timings) = FermiSurfaceEvaluator::new(
-                        &graph.graph,
-                        sector,
-                        &graph.graph.param_builder,
-                        &graph.derived_data.all_mighty_numerators,
-                        orientation_catalog,
-                        &settings.generation.evaluator,
-                    )?;
-                    stats.add_evaluator_build_timings(timings);
-                    stats.evaluator_count += evaluator.generic_evaluator_count();
-                    fermi_surfaces.push((orientation_id, evaluator));
+                    });
+                    for mut sector in sectors {
+                        sector.coefficient *= &selector;
+                        let (evaluator, timings) = FermiSurfaceEvaluator::new(
+                            &graph.graph,
+                            sector,
+                            &graph.graph.param_builder,
+                            source.all_mighty_integrand.numerators(),
+                            catalogue,
+                            &settings.generation.evaluator,
+                        )?;
+                        fermi_timings += timings;
+                        fermi_count += evaluator.generic_evaluator_count();
+                        fermi_surfaces.push((orientation_id, evaluator));
+                    }
                 }
             }
+            let (evaluator, mut evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
+                &bulk_integrand,
+                &graph.graph.param_builder,
+                source.all_mighty_integrand.numerators(),
+                source.all_mighty_integrand.parametric_terms(&cut),
+                (!settings.generation.requires_complete_orientation_sum())
+                    .then_some((directions.as_slice().as_ref(), ids.as_slice())),
+                None,
+                &settings.generation.evaluator,
+            )?;
+            evaluator_timings += fermi_timings;
+            stats.record_evaluator_build(
+                *representation,
+                evaluator_timings,
+                evaluator.generic_evaluator_count() + fermi_count,
+                representation_started.elapsed(),
+            );
+            original_integrand.insert(*representation, evaluator);
+            if crate::is_interrupted() {
+                return Err(eyre!("Generation interrupted by user"));
+            }
         }
-        let (original_integrand, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
-            &bulk_integrand,
-            &graph.graph.param_builder,
-            &graph.derived_data.all_mighty_numerators,
-            (!settings.generation.explicit_orientation_sum_only).then_some((
-                orientations.as_slice().as_ref(),
-                &production_orientation_ids,
-            )),
-            None,
-            &settings.generation.evaluator,
-        )?;
         crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
             stage = "amplitude_graph_term_original_evaluator_done",
             graph = %graph.graph.name,
-            evaluator_count = original_integrand.generic_evaluator_count(),
+            evaluator_count = stats.timings.evaluator_count,
             elapsed_ms = original_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            spenso_ms = evaluator_timings.spenso_time.as_secs_f64() * 1000.0,
-            symbolica_ms = evaluator_timings.symbolica_time.as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
-        if crate::is_interrupted() {
-            return Err(eyre!("Generation interrupted by user"));
-        }
-        stats.add_evaluator_build_timings(evaluator_timings);
-        stats.evaluator_count += original_integrand.generic_evaluator_count();
 
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
         let resolved = graph.derived_data.resolved_threshold_counterterms.as_ref();
@@ -401,10 +444,8 @@ impl AmplitudeGraphTerm {
                 .collect();
 
         if threshold_counterterm.legacy_equivalent {
-            let mut threshold_evaluators =
-                Vec::with_capacity(graph.derived_data.threshold_counterterms.len());
-            let active_mask: TiVec<RaisedEsurfaceId, bool> = graph
-                .derived_data
+            let mut threshold_evaluators = Vec::with_capacity(source.threshold_counterterms.len());
+            let active_mask: TiVec<RaisedEsurfaceId, bool> = source
                 .threshold_counterterms
                 .iter_enumerated()
                 .map(|(raised_esurface_id, _)| {
@@ -414,47 +455,59 @@ impl AmplitudeGraphTerm {
             crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
                 stage = "amplitude_graph_term_threshold_setup_done",
                 graph = %graph.graph.name,
-                threshold_count = graph.derived_data.threshold_counterterms.len(),
+                threshold_count = source.threshold_counterterms.len(),
                 active_threshold_count = active_mask.iter().filter(|active| **active).count(),
                 "Generation timing milestone"
             );
-            for (raised_esurface_id, ct) in
-                graph.derived_data.threshold_counterterms.iter_enumerated()
-            {
+            for (raised_esurface_id, _) in source.threshold_counterterms.iter_enumerated() {
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }
-                let masked_counterterm = if active_mask[raised_esurface_id] {
-                    ct.clone()
-                } else {
-                    ct.zero_like()
+                let mut evaluator = AmplitudeCountertermEvaluator {
+                    evaluator_stacks: BTreeMap::new(),
                 };
-                let (evaluator, evaluator_timings) = masked_counterterm.to_evaluator_with_timings(
-                    &graph.graph.param_builder,
-                    &orientations,
-                    &production_orientation_ids,
-                    settings,
-                );
-                stats.add_evaluator_build_timings(evaluator_timings);
-                stats.evaluator_count += evaluator.generic_evaluator_count();
+                for (representation, payload) in &graph.derived_data.representations {
+                    let representation_started = std::time::Instant::now();
+                    let atom = &payload.threshold_counterterms[raised_esurface_id];
+                    let masked = if active_mask[raised_esurface_id] {
+                        atom.clone()
+                    } else {
+                        atom.zero_like()
+                    };
+                    let (ids, directions) = &orientation_catalogues[representation];
+                    let (built, timings) = masked.to_evaluator_with_timings(
+                        *representation,
+                        &graph.graph.param_builder,
+                        directions,
+                        ids,
+                        settings,
+                    );
+                    stats.record_evaluator_build(
+                        *representation,
+                        timings,
+                        built.generic_evaluator_count(),
+                        representation_started.elapsed(),
+                    );
+                    evaluator.evaluator_stacks.extend(built.evaluator_stacks);
+                }
                 threshold_evaluators.push(evaluator);
             }
             threshold_counterterm.evaluators = threshold_evaluators.into();
-            threshold_counterterm.generated_mask = graph
-                .derived_data
+            threshold_counterterm.generated_mask = source
                 .threshold_counterterms
                 .iter()
                 .map(AmplitudeCountertermAtom::is_generated)
                 .collect();
             threshold_counterterm.active_mask = active_mask;
             threshold_counterterm.helper_evaluators = if include_threshold_metadata {
+                let helper_started = std::time::Instant::now();
                 let max_order = graph
                     .derived_data
                     .raised_data
                     .pass_two_evaluator
                     .as_ref()
                     .map_or(0, Vec::len);
-                (1..=max_order)
+                let helpers = (1..=max_order)
                     .map(|order| {
                         crate::processes::threshold_counterterm_recording_helper(
                             order as u8,
@@ -462,7 +515,9 @@ impl AmplitudeGraphTerm {
                             &settings.generation.evaluator,
                         )
                     })
-                    .collect()
+                    .collect();
+                stats.timings.evaluator_symbolica_time += helper_started.elapsed();
+                helpers
             } else {
                 graph
                     .derived_data
@@ -471,16 +526,16 @@ impl AmplitudeGraphTerm {
                     .clone()
                     .unwrap_or_default()
             };
-            stats.evaluator_count += threshold_counterterm.helper_evaluators.len();
+            stats.timings.evaluator_count += threshold_counterterm.helper_evaluators.len();
         } else {
             let resolved = resolved.expect("generalized amplitude thresholds must be resolved");
             threshold_counterterm.variant_metadata = resolved.variants.clone();
-            if resolved.variants.len() != graph.derived_data.threshold_counterterm_variants.len() {
+            if resolved.variants.len() != source.threshold_counterterm_variants.len() {
                 return Err(eyre!(
                     "Graph '{}' has {} resolved threshold variants but {} symbolic variant counterterms",
                     graph.graph.name,
                     resolved.variants.len(),
-                    graph.derived_data.threshold_counterterm_variants.len(),
+                    source.threshold_counterterm_variants.len(),
                 ));
             }
 
@@ -549,11 +604,7 @@ impl AmplitudeGraphTerm {
                     )?;
             }
 
-            for (variant_id, symbolic) in graph
-                .derived_data
-                .threshold_counterterm_variants
-                .iter_enumerated()
-            {
+            for (variant_id, symbolic) in source.threshold_counterterm_variants.iter_enumerated() {
                 let variant = &resolved.variants[variant_id];
                 if symbolic.raised_esurface_id
                     != graph.derived_data.raised_esurface_ids
@@ -567,19 +618,33 @@ impl AmplitudeGraphTerm {
                 }
                 let active =
                     selected_generation_raised_esurfaces.contains(&symbolic.raised_esurface_id);
-                let masked = if active {
-                    symbolic.atom.clone()
-                } else {
-                    symbolic.atom.zero_like()
+                let mut evaluator = AmplitudeCountertermEvaluator {
+                    evaluator_stacks: BTreeMap::new(),
                 };
-                let (evaluator, evaluator_timings) = masked.to_evaluator_with_timings(
-                    &graph.graph.param_builder,
-                    &orientations,
-                    &production_orientation_ids,
-                    settings,
-                );
-                stats.add_evaluator_build_timings(evaluator_timings);
-                stats.evaluator_count += evaluator.generic_evaluator_count();
+                for (representation, payload) in &graph.derived_data.representations {
+                    let representation_started = std::time::Instant::now();
+                    let atom = &payload.threshold_counterterm_variants[variant_id].atom;
+                    let masked = if active {
+                        atom.clone()
+                    } else {
+                        atom.zero_like()
+                    };
+                    let (ids, directions) = &orientation_catalogues[representation];
+                    let (built, timings) = masked.to_evaluator_with_timings(
+                        *representation,
+                        &graph.graph.param_builder,
+                        directions,
+                        ids,
+                        settings,
+                    );
+                    stats.record_evaluator_build(
+                        *representation,
+                        timings,
+                        built.generic_evaluator_count(),
+                        representation_started.elapsed(),
+                    );
+                    evaluator.evaluator_stacks.extend(built.evaluator_stacks);
+                }
                 threshold_counterterm.variant_evaluators.push(evaluator);
                 threshold_counterterm
                     .variant_generated_mask
@@ -593,6 +658,7 @@ impl AmplitudeGraphTerm {
                     .push(variant.subspace.clone());
 
                 let max_order = variant.raised_esurface_group.max_occurence;
+                let helpers_started = std::time::Instant::now();
                 let helpers = (1..=max_order)
                     .map(|order| {
                         crate::processes::threshold_counterterm_pieces_helper(
@@ -602,7 +668,8 @@ impl AmplitudeGraphTerm {
                         )
                     })
                     .collect_vec();
-                stats.evaluator_count += helpers.len();
+                stats.timings.evaluator_symbolica_time += helpers_started.elapsed();
+                stats.timings.evaluator_count += helpers.len();
                 threshold_counterterm
                     .variant_helper_evaluators
                     .push(helpers);
@@ -658,10 +725,10 @@ impl AmplitudeGraphTerm {
         crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
             stage = "amplitude_graph_term_from_graph_done",
             graph = %graph.graph.name,
-            evaluator_count = stats.evaluator_count,
+            evaluator_count = stats.timings.evaluator_count,
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            spenso_ms = stats.evaluator_spenso_time.as_secs_f64() * 1000.0,
-            symbolica_ms = stats.evaluator_symbolica_time.as_secs_f64() * 1000.0,
+            spenso_ms = stats.timings.evaluator_spenso_time.as_secs_f64() * 1000.0,
+            symbolica_ms = stats.timings.evaluator_symbolica_time.as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
 
@@ -677,9 +744,11 @@ impl AmplitudeGraphTerm {
         Ok((
             AmplitudeGraphTerm {
                 orientation_filter: SubSet::full(orientations.len()),
-                orientations,
+                orientations: orientations.clone(),
                 production_orientation_keys,
-                explicit_orientation_sum_only: settings.generation.explicit_orientation_sum_only,
+                explicit_orientation_sum_only: settings
+                    .generation
+                    .requires_complete_orientation_sum(),
                 original_integrand,
                 fermi_surfaces,
                 tropical_sampler: graph.derived_data.tropical_sampler.clone(),
@@ -704,15 +773,7 @@ impl AmplitudeGraphTerm {
                     .expect("lmbs should have been created"),
                 threshold_counterterm,
                 estimated_scale: None,
-                esurfaces: graph
-                    .derived_data
-                    .cff_expression
-                    .as_ref()
-                    .expect("cff_expression should have been created")
-                    .expression
-                    .surfaces
-                    .esurface_cache
-                    .clone(),
+                esurfaces: source.expression.expression.surfaces.esurface_cache.clone(),
                 denominator_hsurfaces,
                 param_builder,
                 real_mass_vec: None,
@@ -742,8 +803,9 @@ impl AmplitudeGraphTerm {
         path: impl AsRef<Path>,
         override_existing: bool,
         frozen_mode: &FrozenCompilationMode,
-    ) -> Result<std::time::Duration> {
+    ) -> Result<GraphGenerationStats> {
         let compile_started = std::time::Instant::now();
+        let mut stats = GraphGenerationStats::default();
         let graph_path = path.as_ref().join(&self.graph.name);
 
         fs::create_dir_all(&graph_path).with_context(|| {
@@ -753,29 +815,49 @@ impl AmplitudeGraphTerm {
             )
         })?;
 
-        self.original_integrand.compile(
-            "orientation_parametric_integrand",
+        for (representation, evaluator) in &mut self.original_integrand {
+            let mode_started = Instant::now();
+            evaluator.compile(
+                format!("{representation}_orientation_parametric_integrand"),
+                &graph_path,
+                frozen_mode,
+            )?;
+            let elapsed = mode_started.elapsed();
+            let mode_stats = stats.representation_mut(*representation);
+            mode_stats.total_time += elapsed;
+            mode_stats.evaluator_compile_time += elapsed;
+        }
+
+        stats.merge_in_place(&self.threshold_counterterm.compile(
             &graph_path,
+            override_existing,
             frozen_mode,
-        )?;
+        )?);
+
         for (index, (_, sector)) in self.fermi_surfaces.iter_mut().enumerate() {
             sector.compile(format!("fermi_surface_{index}"), &graph_path, frozen_mode)?;
         }
 
-        self.threshold_counterterm
-            .compile(&graph_path, override_existing, frozen_mode)?;
-
-        Ok(compile_started.elapsed())
+        stats.timings.total_time = compile_started.elapsed();
+        stats.timings.evaluator_compile_time = stats.timings.total_time;
+        Ok(stats)
     }
 
     pub(crate) fn for_each_generic_evaluator_mut(
         &mut self,
-        mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
+        mut f: impl FnMut(
+            Option<RepresentationMode>,
+            &mut crate::integrands::process::GenericEvaluator,
+        ) -> Result<()>,
     ) -> Result<()> {
-        self.original_integrand
-            .for_each_generic_evaluator_mut(&mut f)?;
+        for (representation, evaluator) in &mut self.original_integrand {
+            evaluator
+                .for_each_generic_evaluator_mut(|evaluator| f(Some(*representation), evaluator))?;
+        }
         for (_, sector) in &mut self.fermi_surfaces {
-            sector.for_each_generic_evaluator_mut(&mut f)?;
+            sector.for_each_generic_evaluator_mut(|evaluator| {
+                f(Some(RepresentationMode::Cff), evaluator)
+            })?;
         }
         self.threshold_counterterm
             .for_each_generic_evaluator_mut(&mut f)?;
@@ -783,7 +865,10 @@ impl AmplitudeGraphTerm {
     }
 
     pub(crate) fn generic_evaluator_count(&self) -> usize {
-        self.original_integrand.generic_evaluator_count()
+        self.original_integrand
+            .values()
+            .map(EvaluatorStack::generic_evaluator_count)
+            .sum::<usize>()
             + self
                 .fermi_surfaces
                 .iter()
@@ -996,6 +1081,14 @@ impl AmplitudeGraphTerm {
         );
         let mut result = self
             .original_integrand
+            .get_mut(&context.representation)
+            .ok_or_else(|| {
+                eyre!(
+                    "Representation {} was not generated for graph '{}'",
+                    context.representation,
+                    self.graph.name
+                )
+            })?
             .evaluate(
                 input,
                 orientations,
@@ -1036,6 +1129,7 @@ impl AmplitudeGraphTerm {
         }
         // debug!("parambuilder 244: {}", self.param_builder);
         let counterterm_evaluation = self.threshold_counterterm.evaluate(
+            context.representation,
             momentum_sample,
             &self.graph,
             context.model,
@@ -1157,6 +1251,13 @@ impl GraphTerm for AmplitudeGraphTerm {
           err
     )]
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+        ensure!(
+            self.graph.param_builder.medium_mode == three_dimensional_reps::MediumMode::Vacuum
+                || !self
+                    .original_integrand
+                    .contains_key(&RepresentationMode::Ltd),
+            "LTD supports only vacuum calculations; regenerate this medium integrand with CFF"
+        );
         self.multi_channeling_setup.master_edge_masses.invalidate();
         self.multi_channeling_setup.invalidate_sampling();
         if self.explicit_orientation_sum_only {
@@ -1252,11 +1353,23 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.graph.param_builder.update_model_values(model)?;
         self.graph
             .validate_medium_parameters(model, settings.general.inverse_temperature)?;
-        self.graph.validate_denominator_hsurfaces(
-            model,
-            &externals,
-            &self.denominator_hsurfaces,
-        )?;
+        let generated_representations = self
+            .denominator_hsurfaces
+            .iter()
+            .map(|(representation, _)| *representation)
+            .collect_vec();
+        let selected_representations = settings
+            .stability
+            .levels
+            .iter()
+            .map(|level| level.resolved_representation(&generated_representations))
+            .collect::<Result<HashSet<_>>>()?;
+        for (representation, surfaces) in &self.denominator_hsurfaces {
+            if selected_representations.contains(representation) {
+                self.graph
+                    .validate_denominator_hsurfaces(model, &externals, surfaces)?;
+            }
+        }
         if !self.fermi_surfaces.is_empty() {
             // Fermi localization inserts the h-function as a unit scale integral.
             settings.lu_h_function.validate_normalized_profile()?;
@@ -2100,6 +2213,7 @@ pub struct AmplitudeIntegrand {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeIntegrandData {
+    pub three_d_representations: Vec<RepresentationMode>,
     pub rotations: Option<Vec<Rotation>>,
     pub name: String,
     pub compilation: FrozenCompilationMode,
@@ -2208,6 +2322,7 @@ impl AmplitudeIntegrand {
         Ok(Self {
             settings: self.settings.clone(),
             data: AmplitudeIntegrandData {
+                three_d_representations: self.data.three_d_representations.clone(),
                 rotations: self.data.rotations.clone(),
                 name: self.data.name.clone(),
                 compilation: self.data.compilation.clone(),
@@ -2385,7 +2500,7 @@ impl AmplitudeIntegrand {
         mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for graph_term in &mut self.data.graph_terms {
-            graph_term.for_each_generic_evaluator_mut(&mut f)?;
+            graph_term.for_each_generic_evaluator_mut(|_, evaluator| f(evaluator))?;
         }
         Ok(())
     }
@@ -2401,7 +2516,7 @@ impl AmplitudeIntegrand {
 
     pub(crate) fn prepare_runtime_backends_after_generation_with_compile_times(
         &mut self,
-    ) -> Result<Vec<std::time::Duration>> {
+    ) -> Result<Vec<GraphGenerationStats>> {
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
@@ -2413,13 +2528,24 @@ impl AmplitudeIntegrand {
                         return Err(eyre!("Generation interrupted by user"));
                     }
                     let compile_started = std::time::Instant::now();
-                    graph_term.for_each_generic_evaluator_mut(|evaluator| {
-                        evaluator.activate_symjit(options)
+                    let mut stats = GraphGenerationStats::default();
+                    graph_term.for_each_generic_evaluator_mut(|representation, evaluator| {
+                        let evaluator_started = Instant::now();
+                        evaluator.activate_symjit(options)?;
+                        if let Some(representation) = representation {
+                            let elapsed = evaluator_started.elapsed();
+                            let mode_stats = stats.representation_mut(representation);
+                            mode_stats.total_time += elapsed;
+                            mode_stats.evaluator_compile_time += elapsed;
+                        }
+                        Ok(())
                     })?;
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
-                    compile_times.push(compile_started.elapsed());
+                    stats.timings.total_time = compile_started.elapsed();
+                    stats.timings.evaluator_compile_time = stats.timings.total_time;
+                    compile_times.push(stats);
                 }
                 self.active_f64_backend.set(ActiveF64Backend::Symjit);
                 Ok(compile_times)
@@ -2432,7 +2558,10 @@ impl AmplitudeIntegrand {
                     Ok(())
                 })?;
                 self.active_f64_backend.set(ActiveF64Backend::Eager);
-                Ok(vec![std::time::Duration::ZERO; self.data.graph_terms.len()])
+                Ok(vec![
+                    GraphGenerationStats::default();
+                    self.data.graph_terms.len()
+                ])
             }
         }
     }
@@ -2506,7 +2635,7 @@ impl AmplitudeIntegrand {
         path: impl AsRef<Path> + Sync,
         override_existing: bool,
         thread_pool: &rayon::ThreadPool,
-    ) -> Result<Vec<(String, std::time::Duration)>> {
+    ) -> Result<Vec<(String, GraphGenerationStats)>> {
         let frozen_mode = self.data.compilation.clone();
         let compile_times = thread_pool.install(|| {
             self.data
@@ -2514,7 +2643,7 @@ impl AmplitudeIntegrand {
                 .par_iter_mut()
                 .map(|a| {
                     a.compile(path.as_ref(), override_existing, &frozen_mode)
-                        .map(|duration| (a.graph.name.clone(), duration))
+                        .map(|stats| (a.graph.name.clone(), stats))
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
@@ -2851,6 +2980,10 @@ impl AmplitudeIntegrand {
 }
 
 impl ProcessIntegrandImpl for AmplitudeIntegrand {
+    fn generated_representations(&self) -> &[RepresentationMode] {
+        &self.data.three_d_representations
+    }
+
     type G = AmplitudeGraphTerm;
 
     fn external_cache_id(&self) -> usize {
@@ -2906,7 +3039,11 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
     )]
     fn warm_up(&mut self, model: &Model) -> Result<()> {
         self.invalidate_runtime_caches();
-        validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
+        validate_process_runtime_settings(
+            &self.settings,
+            self.data.explicit_orientation_sum_only,
+            &self.data.three_d_representations,
+        )?;
 
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
@@ -2922,6 +3059,14 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
         );
 
         for a in self.data.graph_terms.iter_mut() {
+            ensure!(
+                a.graph.param_builder.medium_mode == three_dimensional_reps::MediumMode::Vacuum
+                    || !self
+                        .data
+                        .three_d_representations
+                        .contains(&RepresentationMode::Ltd),
+                "LTD supports only vacuum calculations; regenerate this medium integrand with CFF"
+            );
             a.warm_up(&self.settings, model)?;
         }
         for group in &self.data.graph_group_structure {
@@ -3533,6 +3678,355 @@ escalate_if_exact_zero = false
     }
 
     #[test]
+    fn mixed_representations_retry_at_same_precision_and_keep_only_accepted_events() -> Result<()> {
+        use crate::integrands::{
+            evaluation::StabilityStatus,
+            process::{MomentumSpaceEvaluationInput, evaluate_momentum_configuration_precise},
+        };
+        use crate::settings::runtime::{Precision, StabilityLevelSetting};
+
+        test_initialise()?;
+        let model = load_generic_model("scalars");
+        let graphs = Graph::from_string(
+            r#"digraph representation_stability {
+            node [num=1]; edge [particle=scalar_2];
+            e [style=invis];
+            e -> A:0 [id=2,particle=scalar_1];
+            B:1 -> e [id=3,particle=scalar_1];
+            A -> B [id=0,lmb_id=0];
+            A -> B [id=1];
+        }"#,
+            &model,
+        )?;
+        let mut amplitude = Amplitude::from_graph_list("representation_stability", graphs)?;
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+three_dimensional_representations = ["ltd", "cff"]
+override_lmb_heuristics = true
+[generation.uv]
+subtract_uv = false
+generate_integrated = false
+local_uv_cts_from_expanded_4d_integrands = true
+[generation.threshold_subtraction]
+enable_thresholds = false
+[generation.evaluator]
+compile = false
+"#,
+        )?;
+        let settings: RuntimeSettings = toml::from_str(
+            r#"
+[general]
+generate_events = true
+store_additional_weights_in_event = true
+[kinematics]
+e_cm = 1.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[1.0,0.0,0.0,0.0], "dependent"]
+helicities = [0,0]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_channels = "summed"
+"#,
+        )?;
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .use_current_thread()
+            .stack_size(32 * 1024 * 1024)
+            .build()?;
+        amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+        amplitude.build_integrand(
+            &model,
+            "representation_stability",
+            &global,
+            (&settings).into(),
+            &pool,
+        )?;
+        let ProcessIntegrand::Amplitude(generated) = amplitude.integrand.take().unwrap() else {
+            unreachable!()
+        };
+        for mode in [
+            three_dimensional_reps::MediumMode::ThermodynamicEquilibrium,
+            three_dimensional_reps::MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let mut invalid = generated.clone();
+            for term in &mut invalid.data.graph_terms {
+                term.graph.param_builder.medium_mode = mode;
+            }
+            let error = invalid.warm_up(&model).unwrap_err();
+            assert!(error.to_string().contains("LTD supports only vacuum"));
+        }
+        for enable_cache in [false, true] {
+            let mut generated = generated.clone();
+            // Runtime temperature values do not change the generated vacuum mode.
+            generated.settings.general.inverse_temperature = 123.0;
+            generated.settings.general.enable_cache = enable_cache;
+            let cff_level = StabilityLevelSetting {
+                three_dimensional_representation: Some(RepresentationMode::Cff),
+                escalate_for_large_weight_threshold: 0.0,
+                ..StabilityLevelSetting::default_double()
+            };
+            generated.settings.stability.levels = vec![cff_level];
+            generated.warm_up(&model)?;
+            let input = MomentumSpaceEvaluationInput {
+                loop_momenta: vec![ThreeMomentum::new(F(0.35), F(-0.2), F(0.45))],
+                integrator_weight: F(1.0),
+                graph_id: Some(0),
+                group_id: None,
+                orientation: None,
+                channel_id: None,
+            };
+            let baseline = evaluate_momentum_configuration_precise(
+                &mut generated,
+                &model,
+                &input,
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            let ltd_level = StabilityLevelSetting {
+                three_dimensional_representation: None,
+                escalate_for_large_weight_threshold: 1.0,
+                ..StabilityLevelSetting::default_double()
+            };
+            generated.settings.stability.levels = vec![ltd_level, cff_level];
+            generated.warm_up(&model)?;
+            let retried = evaluate_momentum_configuration_precise(
+                &mut generated,
+                &model,
+                &input,
+                F(1.0),
+                false,
+                Complex::new(F(1e-100), F(1e-100)),
+            )?
+            .try_into_f64()?;
+            let attempts = &retried.evaluation_metadata.stability_results;
+            assert_eq!(attempts.len(), 2);
+            assert_eq!(
+                (attempts[0].precision, attempts[0].representation),
+                (Precision::Double, RepresentationMode::Ltd)
+            );
+            assert!(matches!(attempts[0].status, StabilityStatus::Unstable(_)));
+            assert_eq!(
+                (attempts[1].precision, attempts[1].representation),
+                (Precision::Double, RepresentationMode::Cff)
+            );
+            assert!(matches!(attempts[1].status, StabilityStatus::Stable(_)));
+            assert_eq!(retried.integrand_result, baseline.integrand_result);
+            assert_eq!(
+                retried.evaluation_metadata.generated_event_count,
+                baseline.evaluation_metadata.generated_event_count
+            );
+            assert_eq!(
+                retried.evaluation_metadata.accepted_event_count,
+                baseline.evaluation_metadata.accepted_event_count
+            );
+            let weights = |result: &EvaluationResult| {
+                result
+                    .event_groups
+                    .iter()
+                    .flat_map(|group| group.iter())
+                    .map(|event| event.weight)
+                    .collect_vec()
+            };
+            assert!(!weights(&baseline).is_empty());
+            assert_eq!(weights(&retried), weights(&baseline));
+
+            generated.settings.stability.levels = vec![
+                ltd_level,
+                StabilityLevelSetting {
+                    escalate_for_large_weight_threshold: 1.0,
+                    ..cff_level
+                },
+                StabilityLevelSetting {
+                    three_dimensional_representation: Some(RepresentationMode::Cff),
+                    escalate_for_large_weight_threshold: 0.0,
+                    ..StabilityLevelSetting::default_quad()
+                },
+            ];
+            generated.warm_up(&model)?;
+            let escalated = evaluate_momentum_configuration_precise(
+                &mut generated,
+                &model,
+                &input,
+                F(1.0),
+                false,
+                Complex::new(F(1e-100), F(1e-100)),
+            )?
+            .try_into_f64()?;
+            let attempts = &escalated.evaluation_metadata.stability_results;
+            assert_eq!(
+                attempts
+                    .iter()
+                    .map(|attempt| (attempt.precision, attempt.representation))
+                    .collect_vec(),
+                [
+                    (Precision::Double, RepresentationMode::Ltd),
+                    (Precision::Double, RepresentationMode::Cff),
+                    (Precision::Quad, RepresentationMode::Cff),
+                ]
+            );
+            assert!(
+                attempts[..2]
+                    .iter()
+                    .all(|attempt| matches!(attempt.status, StabilityStatus::Unstable(_)))
+            );
+            assert!(matches!(attempts[2].status, StabilityStatus::Stable(_)));
+            let delta = escalated.integrand_result - baseline.integrand_result;
+            assert!(
+                delta.norm_squared().0
+                    < 1e-24 * baseline.integrand_result.norm_squared().0.max(1.0)
+            );
+            assert_eq!(
+                escalated.evaluation_metadata.generated_event_count,
+                baseline.evaluation_metadata.generated_event_count
+            );
+            assert_eq!(
+                escalated.evaluation_metadata.accepted_event_count,
+                baseline.evaluation_metadata.accepted_event_count
+            );
+            let escalated_weights = weights(&escalated);
+            let baseline_weights = weights(&baseline);
+            assert_eq!(escalated_weights.len(), baseline_weights.len());
+            for (actual, expected) in escalated_weights.iter().zip(&baseline_weights) {
+                assert!(
+                    (actual - expected).norm_squared().0
+                        < 1e-24 * expected.norm_squared().0.max(1.0)
+                );
+            }
+
+            // With no configured Arb level, forced Arb inherits the first attempt's
+            // omitted representation and resolves it against generation order.
+            let arb = evaluate_momentum_configuration_precise(
+                &mut generated,
+                &model,
+                &input,
+                F(1.0),
+                true,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            assert_eq!(arb.evaluation_metadata.stability_results.len(), 1);
+            let attempt = &arb.evaluation_metadata.stability_results[0];
+            assert_eq!(
+                (attempt.precision, attempt.representation),
+                (Precision::Arb, RepresentationMode::Ltd)
+            );
+            let delta = arb.integrand_result - baseline.integrand_result;
+            assert!(
+                delta.norm_squared().0
+                    < 1e-24 * baseline.integrand_result.norm_squared().0.max(1.0)
+            );
+
+            // A configured Arb attempt keeps its own representation even though
+            // the first ordinary attempt resolves to LTD.
+            generated
+                .settings
+                .stability
+                .levels
+                .push(StabilityLevelSetting {
+                    three_dimensional_representation: Some(RepresentationMode::Cff),
+                    ..StabilityLevelSetting::default_arb()
+                });
+            generated.warm_up(&model)?;
+            let configured_arb = evaluate_momentum_configuration_precise(
+                &mut generated,
+                &model,
+                &input,
+                F(1.0),
+                true,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            assert_eq!(
+                configured_arb.evaluation_metadata.stability_results.len(),
+                1
+            );
+            let attempt = &configured_arb.evaluation_metadata.stability_results[0];
+            assert_eq!(
+                (attempt.precision, attempt.representation),
+                (Precision::Arb, RepresentationMode::Cff)
+            );
+            let delta = configured_arb.integrand_result - baseline.integrand_result;
+            assert!(
+                delta.norm_squared().0
+                    < 1e-24 * baseline.integrand_result.norm_squared().0.max(1.0)
+            );
+
+            // At equal OSEs and zero external energy the two LTD residues
+            // separately hit an H pole. CFF must recover the same sample in
+            // double precision, without retaining the invalid attempt's events.
+            let spacelike: RuntimeSettings = toml::from_str(
+                r#"
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[0.0,1.0,0.0,0.0], "dependent"]
+helicities = [0,0]
+"#,
+            )?;
+            generated.settings.kinematics.externals = spacelike.kinematics.externals;
+            generated.settings.stability.rotation_axis.clear();
+            let h_surface_input = MomentumSpaceEvaluationInput {
+                loop_momenta: vec![ThreeMomentum::new(F(0.5), F(0.2), F(0.3))],
+                ..input
+            };
+            generated.settings.stability.levels = vec![cff_level];
+            generated.warm_up(&model)?;
+            let h_surface_baseline = evaluate_momentum_configuration_precise(
+                &mut generated,
+                &model,
+                &h_surface_input,
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            generated.settings.stability.levels = vec![
+                StabilityLevelSetting {
+                    escalate_for_large_weight_threshold: 0.0,
+                    ..ltd_level
+                },
+                cff_level,
+            ];
+            generated.warm_up(&model)?;
+            let recovered = evaluate_momentum_configuration_precise(
+                &mut generated,
+                &model,
+                &h_surface_input,
+                F(1.0),
+                false,
+                Complex::new_zero(),
+            )?
+            .try_into_f64()?;
+            assert_eq!(
+                recovered
+                    .evaluation_metadata
+                    .stability_results
+                    .iter()
+                    .map(|attempt| (attempt.precision, attempt.representation))
+                    .collect_vec(),
+                [
+                    (Precision::Double, RepresentationMode::Ltd),
+                    (Precision::Double, RepresentationMode::Cff)
+                ]
+            );
+            assert!(!recovered.evaluation_metadata.is_nan);
+            assert!(recovered.integrand_result.norm_squared().0 > 0.0);
+            assert_eq!(
+                recovered.integrand_result,
+                h_surface_baseline.integrand_result
+            );
+            assert_eq!(weights(&recovered), weights(&h_surface_baseline));
+        }
+        Ok(())
+    }
+
+    #[test]
     fn generated_triangle_joint_binds_without_prerequisites() -> Result<()> {
         use crate::integrands::process::GaussianReferenceFunction;
         test_initialise()?;
@@ -3690,6 +4184,7 @@ parent_lmb = [4]
                     &rotation,
                     &mut metadata,
                     Some(&canonical),
+                    three_dimensional_reps::RepresentationMode::Cff,
                 )
                 .unwrap_err();
                 assert!(matches!(
@@ -3715,6 +4210,7 @@ parent_lmb = [4]
                     &rotation,
                     &mut metadata,
                     Some(&canonical),
+                    three_dimensional_reps::RepresentationMode::Cff,
                 )?;
                 assert!(
                     !value.integrand_result.re.is_nan() && !value.integrand_result.re.is_infinite()
@@ -3985,6 +4481,7 @@ sampling_multichanneling = false
             &rotation,
             &mut crate::integrands::evaluation::EvaluationMetaData::new_empty(),
             Some(&canonical),
+            three_dimensional_reps::RepresentationMode::Cff,
         )?;
         assert!(
             (result.integrand_result.re.into_ff64().0 / summed.evaluation.integrand_result.re.0

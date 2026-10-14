@@ -42,8 +42,10 @@ class RusageInfoV2(ctypes.Structure):
 
 
 def snapshot(known, groups, proc_pid_rusage):
+    # A full process-table scan can stall briefly on a busy shared host. Failed
+    # reads still stop the workload; no stale memory sample is reused.
     rows = subprocess.check_output(
-        ["ps", "-axo", "pid=,ppid=,pgid=,rss="], text=True, timeout=2
+        ["ps", "-axo", "pid=,ppid=,pgid=,rss="], text=True, timeout=10
     )
     processes = {}
     for row in rows.splitlines():
@@ -73,6 +75,7 @@ def snapshot(known, groups, proc_pid_rusage):
                 error = ctypes.get_errno()
                 status = subprocess.run(
                     ["ps", "-p", str(pid), "-o", "stat="],
+                    check=False,
                     capture_output=True,
                     text=True,
                     timeout=2,
