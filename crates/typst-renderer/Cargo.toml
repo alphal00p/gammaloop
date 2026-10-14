@@ -13,7 +13,6 @@ full = [
     "typst-svg/pdf",
     "dep:typst-pdf",
     "dep:typst-render",
-    "typst-kit/embedded-fonts",
     "typst-kit/scan-fonts",
 ]
 
@@ -29,3 +28,19 @@ typst-render = { version = "=0.15.1", optional = true }
 typst-svg = "=0.15.1"
 
 tempfile = "3.8"
+
+[package.metadata.symbolica-data]
+manifest = "data.json"
+
+[dependencies.symbolica-data]
+path = "../symbolica-data"
+
+[build-dependencies.symbolica-data]
+path = "../symbolica-data"
+
+[build-dependencies.typst-assets]
+version = "=0.15.1"
+features = ["fonts"]
+
+[build-dependencies.serde_json]
+version = "1"

@@ -1,3 +1,7 @@
+pub mod data_assets {
+    include!(concat!(env!("OUT_DIR"), "/data_assets.rs"));
+}
+
 #[macro_use]
 mod documentation;
 

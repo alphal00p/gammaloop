@@ -1,4 +1,4 @@
-//! Offline Typst compilation with embedded fonts and an explicit package store.
+//! Offline Typst compilation with externally supplied fonts and an explicit package store.
 //! The same compiler runs natively and inside Pyodide; it never imports Python
 //! packages, invokes a subprocess, or downloads Typst packages.
 
@@ -6,7 +6,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     fs,
     path::Path,
-    sync::{LazyLock, Mutex},
+    sync::{Arc, Mutex},
 };
 
 use typst::LibraryExt;
@@ -20,28 +20,11 @@ use typst_library::{
     text::{Font, FontBook},
 };
 
-static FONTS: LazyLock<FontStore> = LazyLock::new(|| {
-    let mut fonts = FontStore::new();
-    #[cfg(feature = "full")]
-    fonts.extend(typst_kit::fonts::embedded());
-    // Typst equations request weight 450 (Book), not the 400 Regular face.
-    #[cfg(not(feature = "full"))]
-    for data in [
-        include_bytes!("../fonts/LibertinusSerif-Regular.otf").as_slice(),
-        include_bytes!("../fonts/LibertinusSerif-Bold.otf").as_slice(),
-        include_bytes!("../fonts/LibertinusSerif-Italic.otf").as_slice(),
-        include_bytes!("../fonts/LibertinusSerif-BoldItalic.otf").as_slice(),
-        include_bytes!("../fonts/NewCMMath-Book.otf").as_slice(),
-        include_bytes!("../fonts/NewCMMath-Bold.otf").as_slice(),
-        include_bytes!("../fonts/DejaVuSansMono.ttf").as_slice(),
-    ] {
-        fonts.extend(Font::iter(Bytes::new(data)).map(|font| {
-            let info = font.info().clone();
-            (font, info)
-        }));
-    }
-    fonts
-});
+pub mod data_assets {
+    include!(concat!(env!("OUT_DIR"), "/data_assets.rs"));
+}
+
+static FONTS: Mutex<Option<Arc<FontStore>>> = Mutex::new(None);
 
 /// One immutable render project. Authored sources override files staged on disk;
 /// package imports resolve exclusively within the supplied package directory.
@@ -51,8 +34,7 @@ pub struct Document<'a> {
     files: &'a BTreeMap<String, Vec<u8>>,
     sources: Mutex<HashMap<FileId, Source>>,
     library: LazyHash<Library>,
-    #[cfg(feature = "full")]
-    fonts: Option<FontStore>,
+    fonts: Arc<FontStore>,
 }
 
 impl<'a> Document<'a> {
@@ -62,7 +44,7 @@ impl<'a> Document<'a> {
         format: &str,
     ) -> Result<Vec<Vec<u8>>, String> {
         let root = tempfile::tempdir().map_err(|e| e.to_string())?;
-        Document::new(root.path(), root.path(), files).compile(format)
+        Document::new(root.path(), root.path(), files)?.compile(format)
     }
 
     /// A self-contained Typst export of an already drawn SVG figure.
@@ -70,29 +52,70 @@ impl<'a> Document<'a> {
         format!("#set page(width: auto, height: auto, margin: 0pt)\n#image(bytes({svg:?}))")
     }
 
-    pub fn new(root: &'a Path, packages: &'a Path, files: &'a BTreeMap<String, Vec<u8>>) -> Self {
-        #[cfg(feature = "full")]
-        let fonts = std::env::var_os("TYPST_FONT_PATHS").map(|paths| {
-            let mut fonts = FontStore::new();
-            for path in std::env::split_paths(&paths) {
-                fonts.extend(typst_kit::fonts::scan(&path));
+    fn fonts() -> Result<Arc<FontStore>, String> {
+        let mut cached = FONTS.lock().unwrap();
+        if let Some(fonts) = cached.as_ref() {
+            return Ok(fonts.clone());
+        }
+        let mut fonts = FontStore::new();
+        for asset in data_assets::ALL {
+            // Typst equations request weight 450 (Book), not the 400 Regular face.
+            #[cfg(not(feature = "full"))]
+            if !matches!(
+                asset.name.rsplit('/').next().unwrap(),
+                "LibertinusSerif-Regular.otf"
+                    | "LibertinusSerif-Bold.otf"
+                    | "LibertinusSerif-Italic.otf"
+                    | "LibertinusSerif-BoldItalic.otf"
+                    | "NewCMMath-Book.otf"
+                    | "NewCMMath-Bold.otf"
+                    | "DejaVuSansMono.ttf"
+            ) {
+                continue;
             }
-            fonts.extend(typst_kit::fonts::embedded());
-            fonts
-        });
-        Self {
+            let bytes = asset.bytes().map_err(|error| error.to_string())?;
+            fonts.extend(Font::iter(Bytes::new(bytes.to_vec())).map(|font| {
+                let info = font.info().clone();
+                (font, info)
+            }));
+        }
+        let fonts = Arc::new(fonts);
+        *cached = Some(fonts.clone());
+        Ok(fonts)
+    }
+
+    pub fn new(
+        root: &'a Path,
+        packages: &'a Path,
+        files: &'a BTreeMap<String, Vec<u8>>,
+    ) -> Result<Self, String> {
+        let mut fonts = Self::fonts()?;
+        #[cfg(feature = "full")]
+        if let Some(paths) = std::env::var_os("TYPST_FONT_PATHS") {
+            let mut custom = FontStore::new();
+            for path in std::env::split_paths(&paths) {
+                custom.extend(typst_kit::fonts::scan(&path));
+            }
+            for index in fonts.book().families().flat_map(|(_, indices)| indices) {
+                if let Some(font) = fonts.font(index) {
+                    let info = font.info().clone();
+                    custom.extend([(font, info)]);
+                }
+            }
+            fonts = Arc::new(custom);
+        }
+        Ok(Self {
             root,
             packages,
             files,
             sources: Mutex::new(HashMap::new()),
-            #[cfg(feature = "full")]
             fonts,
             library: LazyHash::new(
                 Library::builder()
                     .with_features([Feature::Html].into_iter().collect())
                     .build(),
             ),
-        }
+        })
     }
 
     /// Compile HTML as one document or SVG as one document per page.
@@ -176,11 +199,7 @@ impl World for Document<'_> {
         &self.library
     }
     fn book(&self) -> &LazyHash<FontBook> {
-        #[cfg(feature = "full")]
-        if let Some(fonts) = &self.fonts {
-            return fonts.book();
-        }
-        FONTS.book()
+        self.fonts.book()
     }
     fn main(&self) -> FileId {
         RootedPath::new(VirtualRoot::Project, VirtualPath::new("main.typ").unwrap()).intern()
@@ -217,11 +236,7 @@ impl World for Document<'_> {
             .map_err(|error| FileError::from_io(error, &path))
     }
     fn font(&self, index: usize) -> Option<Font> {
-        #[cfg(feature = "full")]
-        if let Some(fonts) = &self.fonts {
-            return fonts.font(index);
-        }
-        FONTS.font(index)
+        self.fonts.font(index)
     }
     fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
         None
@@ -246,8 +261,9 @@ mod tests {
         ] {
             let variant =
                 FontVariant::new(style, FontWeight::from_number(weight), FontStretch::NORMAL);
-            let index = FONTS.book().select(family, variant).unwrap();
-            let font = FONTS.font(index).unwrap();
+            let fonts = Document::fonts().unwrap();
+            let index = fonts.book().select(family, variant).unwrap();
+            let font = fonts.font(index).unwrap();
             assert_eq!(font.info().variant, variant, "{family}");
         }
     }
@@ -271,7 +287,7 @@ mod tests {
             "main.typ".to_owned(),
             b"#set page(width: auto, height: auto)\n$x^2 + 1$".to_vec(),
         )]);
-        let document = Document::new(root.path(), root.path(), &files);
+        let document = Document::new(root.path(), root.path(), &files).unwrap();
         assert!(
             String::from_utf8(document.compile("svg").unwrap().remove(0))
                 .unwrap()
