@@ -101,7 +101,7 @@ impl TryFrom<AtomView<'_>> for ThermalDistributionCall {
     Decode,
 )]
 #[cfg_attr(feature = "json_schema", derive(schemars::JsonSchema))]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[serde(rename_all = "snake_case")]
 pub enum MediumMode {
     #[default]

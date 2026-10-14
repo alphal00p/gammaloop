@@ -25,7 +25,7 @@ Serde serialization is always enabled.
 - `display`: colored/table expression summaries.
 - `eval`: optional eager f64 diagnostic evaluator and oracle tests.
 - `json_schema`: JSON schema support for `MediumMode`; enabled by GammaLoop.
-- `python_api`: Python bindings for `MediumMode`.
+- `python`: Python bindings for `MediumMode`.
 
 The compiled Symbolica runtime evaluator from the Python prototype is not part
 of this library crate. The normal workspace test suite enables `eval` through
