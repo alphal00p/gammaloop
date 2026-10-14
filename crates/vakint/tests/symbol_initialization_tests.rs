@@ -13,11 +13,18 @@ fn exported_macros_initialize_momentum_tags_in_a_fresh_process() {
         // initialization, regardless of other tests' ordering or concurrency.
         let head = match mode.as_str() {
             "parse_default" => {
-                vakint_parse!("k(1,101)*p(2,101)").unwrap();
+                let parsed = vakint_parse!("k(1,101)*p(2,101)").unwrap();
+                assert!(parsed.contains_symbol(S.k) && parsed.contains_symbol(S.p));
                 S.k
             }
             "parse_explicit_namespace" => {
-                vakint_parse!("k(1,101)*p(2,101)", "vakint").unwrap();
+                let parsed = vakint_parse!(
+                    "vakint::k(1,101)*vakint::p(2,101)+value",
+                    "cold_macro_namespace"
+                )
+                .unwrap();
+                assert!(parsed.contains_symbol(S.k) && parsed.contains_symbol(S.p));
+                assert!(parsed.contains_symbol(symbolica::symbol!("cold_macro_namespace::value")));
                 S.p
             }
             "symbol_unqualified" => vakint::vakint_symbol!("k"),

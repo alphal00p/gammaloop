@@ -132,8 +132,12 @@ fn clover_parent_routing_rejects_uncontracted_loop_components() {
     let input = vk_parse!("k(3,11)").unwrap() * clover;
     let error = prepare_candidate_integrals(&vakint, &settings, input.as_view(), &reducer)
         .expect_err("an uncontracted loop component is not a scalar spectator");
-    assert!(
-        error.to_string().contains("retains loop-vector components"),
-        "unexpected rejection: {error}"
-    );
+    let vakint::VakintError::RustRedEvaluation(
+        vakint::rustred_evaluation::RustRedEvaluationError::ScalarNumerator { detail },
+    ) = error
+    else {
+        panic!("unexpected rejection: {error}");
+    };
+    assert!(detail.contains("tensor projection of rank 1"), "{detail}");
+    assert!(detail.contains("run the tensor prepass first"), "{detail}");
 }
