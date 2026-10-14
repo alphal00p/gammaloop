@@ -195,6 +195,7 @@ pub(crate) struct OnShellProjectionPoint {
     coordinate: EdgeIndex,
     coordinate_sign: i32,
     mass: Atom,
+    velocity: [Atom; 4],
     source_edges: BTreeSet<EdgeIndex>,
 }
 
@@ -213,13 +214,15 @@ impl OnShellProjectionPoint {
             }
             if let AtomView::Fun(point) = view
                 && point.get_symbol() == GS.os_mom
-                && (point.get_nargs() == 2 || indexed && point.get_nargs() == 3)
+                && (point.get_nargs() == 6 || indexed && point.get_nargs() == 7)
                 && usize::try_from(point.get(0)).ok() == Some(usize::from(self.edge))
                 && point.get(1) == self.mass.as_view()
+                && (0..4)
+                    .all(|component| point.get(component + 2) == self.velocity[component].as_view())
             {
                 let mut momentum =
                     FunctionBuilder::new(GS.emr_mom).add_arg(usize::from(self.coordinate));
-                for index in point.iter().skip(2) {
+                for index in point.iter().skip(6) {
                     momentum = momentum.add_arg(index);
                 }
                 **output = Atom::num(self.coordinate_sign) * momentum.finish();
@@ -246,16 +249,20 @@ impl OnShellProjectionPoint {
             {
                 return;
             }
-            if momentum.get_symbol() == GS.emr_vec {
-                **output = Atom::Zero;
+            if momentum.get_symbol() == GS.emr_vec && momentum.get_nargs() == 2 {
+                let spatial = Atom::add_many((1..4).map(|component| {
+                    &self.velocity[component]
+                        * function!(GS.delta_vec, GS.cind(component), momentum.get(1))
+                }));
+                **output = Atom::num(self.coordinate_sign) * &self.mass * spatial;
             } else if momentum.get_symbol() == GS.emr_mom {
-                let mut point = FunctionBuilder::new(GS.os_mom)
-                    .add_arg(usize::from(self.edge))
-                    .add_arg(&self.mass);
-                for index in momentum.iter().skip(1) {
-                    point = point.add_arg(index);
-                }
-                **output = Atom::num(self.coordinate_sign) * point.finish();
+                let point = GS.on_shell_momentum(self.edge, &self.mass, &self.velocity);
+                let indices = momentum
+                    .iter()
+                    .skip(1)
+                    .map(|index| index.to_owned())
+                    .collect::<Vec<_>>();
+                **output = Atom::num(self.coordinate_sign) * GS.indexed_momentum(&point, &indices);
             }
         })
     }
@@ -268,7 +275,7 @@ impl OnShellProjectionPoint {
         (
             self.coordinate,
             Atom::num(self.coordinate_sign)
-                * function!(GS.os_mom, usize::from(self.edge), &self.mass),
+                * GS.on_shell_momentum(self.edge, &self.mass, &self.velocity),
         )
     }
 }
@@ -290,15 +297,22 @@ impl FourDTerm {
             let _ = denominator.momentum.replace_map(|view, _, _| {
                 if let AtomView::Fun(point) = view
                     && point.get_symbol() == GS.os_mom
-                    && point.get_nargs() == 2
+                    && point.get_nargs() == 6
                     && let Ok(edge) = usize::try_from(point.get(0))
                 {
-                    points.insert((component, EdgeIndex(edge), point.get(1).to_owned()));
+                    let velocity =
+                        std::array::from_fn(|component| point.get(component + 2).to_owned());
+                    points.insert((
+                        component,
+                        EdgeIndex(edge),
+                        point.get(1).to_owned(),
+                        velocity,
+                    ));
                 }
             });
         }
         let mut bindings = Vec::<OnShellProjectionPoint>::new();
-        for (component, edge, mass) in points {
+        for (component, edge, mass, velocity) in points {
             let component = component
                 .ok_or_else(|| eyre!("OS denominator point has no active component owner"))?;
             let (owners, source_scope, lmb) = &components[component];
@@ -349,6 +363,7 @@ impl FourDTerm {
                 coordinate: *coordinate,
                 coordinate_sign: *coordinate_sign,
                 mass,
+                velocity,
                 source_edges,
             };
             let lifted = point.lift(self.numerator.expression(), false);
@@ -797,7 +812,13 @@ impl CanonicalUvSector {
                             .on_shell_points
                             .iter()
                             .map(|point| {
-                                point.mass.as_view().get_byte_size() + point.source_edges.len() * 32
+                                point.mass.as_view().get_byte_size()
+                                    + point
+                                        .velocity
+                                        .iter()
+                                        .map(|value| value.as_view().get_byte_size())
+                                        .sum::<usize>()
+                                    + point.source_edges.len() * 32
                             })
                             .sum::<usize>()
                         + term.powers.len() * 64
@@ -1849,8 +1870,8 @@ impl Rooted for Local4dCts {
 }
 
 impl Graph {
-    /// Evaluate the complete component at its two rest-frame subtraction
-    /// points, inserting the projector on the outgoing spinor port. The
+    /// Evaluate the complete component at the two fixed points ±mass*velocity,
+    /// inserting the matching projector on the outgoing spinor port. The
     /// surrounding graph is absent from this component-local substitution.
     pub(crate) fn on_shell_branches(
         &self,
@@ -1858,6 +1879,7 @@ impl Graph {
         atom: &SymbolicTensor<IndexedStructure>,
         component: &SuBitGraph,
         lmb: &LoopMomentumBasis,
+        velocity: &[Atom; 4],
     ) -> Result<[SymbolicTensor<IndexedStructure>; 2]> {
         let crown = self.dummy_less_full_crown(component);
         let boundary = crown.included_iter().collect::<Vec<_>>();
@@ -1918,7 +1940,19 @@ impl Graph {
             ));
         }
         let dummy = cooking.try_cook(idenso::bis!(4, Atom::from(Aind::new_dummy())).as_view())?;
-        let gamma0 = SymbolicTensor::infer_indexed(idenso::gamma0!(&dummy, &port))?;
+        let lorentz = spenso::mink!(GS.dim, Atom::from(Aind::new_dummy()));
+        // Contract the contravariant spatial basis in Minkowski signature;
+        // this gives v0*gamma0 - sum_i vi*gamma^i without commuting spinors.
+        let spatial_velocity = Atom::add_many((1..4).map(|component| {
+            &velocity[component] * function!(GS.delta_vec, GS.cind(component), &lorentz)
+        }));
+        // Gamma tensors store (row, column, Lorentz). The outgoing source
+        // port is the matrix row, so left multiplication connects the
+        // projector column to the completed numerator's new row.
+        let slash_velocity = &velocity[0] * idenso::gamma0!(&port, &dummy)
+            + spatial_velocity * idenso::gamma!(&port, &dummy, &lorentz);
+        let slash_velocity =
+            SymbolicTensor::infer_indexed(cooking.try_cook(slash_velocity.as_view())?)?;
         let owned = self.paired_edges(component);
         let tagged = atom.expression().replace_map(|view, _, output| {
             let AtomView::Fun(momentum) = view else {
@@ -1980,7 +2014,7 @@ impl Graph {
             tagged.replace_multiple(self.uv_wrapped_replacement(component, lmb, &[W_.x___]));
         let external = boundary.iter().map(|hedge| self[hedge]).collect::<Vec<_>>();
         let [positive, negative] = [1, -1].map(|sigma| -> Result<_> {
-            let point = function!(GS.os_mom, usize::from(owner), Atom::num(sigma) * &mass);
+            let point = GS.on_shell_momentum(owner, &(Atom::num(sigma) * &mass), velocity);
             let evaluated = routed.replace_map(|view, _, output| {
                 if let AtomView::Fun(momentum) = view
                     && momentum.get_symbol() == GS.emr_mom
@@ -2003,9 +2037,9 @@ impl Graph {
                 .with(dummy.to_pattern());
             let (projected, _) = evaluated.with_transformed_expression(projected)?;
             // Contract the identity part directly. Each copy of the completed
-            // numerator remains factored; the gamma0 insertion retains its
+            // numerator remains factored; the slash-velocity insertion retains its
             // ordered spinor contraction through the fresh internal port.
-            let gamma_term = gamma0.clone().multiply(projected)?;
+            let gamma_term = slash_velocity.clone().multiply(projected)?;
             let gamma_term =
                 gamma_term.with_checked_expression(Atom::num(sigma) * gamma_term.expression())?;
             let branch = evaluated.try_add(&gamma_term)?;
@@ -2242,7 +2276,7 @@ impl Graph {
             } else {
                 tagged_hard.finish()
             };
-            // The rest-frame point is a physical-mass vector, not a live
+            // The fixed point is a physical-mass vector, not a live
             // component-external coordinate. S holds it fixed. U gives it
             // the same soft weight as its defining mass while scaling loops
             // inversely. Only this small linear momentum payload is split.
@@ -3247,6 +3281,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                             &grown,
                             current.subgraph(),
                             &lmb,
+                            &ctx.settings.on_shell_velocity()?,
                         )?;
                         let on_shell = positive.try_add(&negative)?;
                         // U acts on the completed projected expression, including
@@ -3467,6 +3502,259 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::parse::NumeratorInterface;
+
+    #[test]
+    fn boosted_projector_is_left_multiplication_in_explicit_weyl_components() -> Result<()> {
+        use crate::uv::approx::local_4d::on_shell_tests::{fixture, scalar_component};
+        test_initialise()?;
+        let (graph, current, _) = fixture(false)?;
+        let [incoming, outgoing] = [0, 1].map(|hedge| {
+            graph.underlying[Hedge(hedge)]
+                .edge_spin_slots()
+                .next()
+                .unwrap()
+                .to_atom()
+        });
+        // The single matrix unit E_(0,2) isolates one column of the left
+        // projector. This is a port-order oracle, not a physical UV numerator.
+        let matrix_unit = function!(GS.delta_vec, GS.cind(0), &outgoing)
+            * function!(GS.delta_vec, GS.cind(2), &incoming);
+        let matrix_unit = NumeratorInterface::admit(matrix_unit, None)?.try_into_indexed()?;
+        let velocity = [
+            Atom::num((5, 4)),
+            Atom::num((1, 4)),
+            Atom::num((1, 2)),
+            Atom::num((1, 2)),
+        ];
+        let branches = graph.on_shell_branches(
+            &graph.model,
+            &matrix_unit,
+            current.subgraph(),
+            current.lmb(),
+            &velocity,
+        )?;
+        for (sign, branch) in [1, -1].into_iter().zip(branches) {
+            let branch = NumeratorInterface::export(&branch).0;
+            // Independent Weyl matrices give the first column of
+            // (1 + sign*(v0 gamma0 - vi gamma^i))/2 explicitly.
+            let first_column = [
+                Atom::num((1, 2)),
+                Atom::Zero,
+                Atom::num(sign) * (&velocity[0] + &velocity[3]) / Atom::num(2),
+                Atom::num(sign) * (&velocity[1] + Atom::i() * &velocity[2]) / Atom::num(2),
+            ];
+            for (row, expected) in first_column.iter().enumerate() {
+                for column in 0..4 {
+                    // Keep gamma slots abstract until tensor execution. A
+                    // concrete slot substitution would leave an opaque scalar
+                    // gamma call instead of looking up its matrix entries.
+                    let component = &branch
+                        * function!(GS.delta_vec, GS.cind(row), &outgoing)
+                        * function!(GS.delta_vec, GS.cind(column), &incoming);
+                    let actual = scalar_component(&component.replace(GS.dim).with(4))?;
+                    assert_eq!(
+                        actual,
+                        if column == 2 {
+                            expected.clone()
+                        } else {
+                            Atom::Zero
+                        },
+                        "branch={sign}, row={row}, column={column}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn boosted_projectors_obey_exact_weyl_projector_algebra() -> Result<()> {
+        use crate::uv::approx::local_4d::on_shell_tests::{fixture, scalar_component};
+        test_initialise()?;
+        let (graph, current, _) = fixture(false)?;
+        let [incoming, outgoing] = [0, 1].map(|hedge| {
+            graph.underlying[Hedge(hedge)]
+                .edge_spin_slots()
+                .next()
+                .unwrap()
+                .to_atom()
+        });
+        let identity = function!(
+            spenso::network::library::symbolic::ETS.metric,
+            &outgoing,
+            &incoming
+        );
+        let matrix_unit = function!(GS.delta_vec, GS.cind(0), &outgoing)
+            * function!(GS.delta_vec, GS.cind(2), &incoming);
+        let matrix_unit = NumeratorInterface::admit(matrix_unit, None)?.try_into_indexed()?;
+        let identity = NumeratorInterface::admit(identity, None)?.try_into_indexed()?;
+        let component = |matrix: &SymbolicTensor<IndexedStructure>, row: usize, column: usize| {
+            let matrix = NumeratorInterface::export(matrix).0;
+            scalar_component(
+                &(matrix
+                    * function!(GS.delta_vec, GS.cind(row), &outgoing)
+                    * function!(GS.delta_vec, GS.cind(column), &incoming))
+                .replace(GS.dim)
+                .with(4),
+            )
+        };
+        for velocity in [
+            [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero],
+            [Atom::num((5, 4)), Atom::num((3, 4)), Atom::Zero, Atom::Zero],
+            [
+                Atom::num((5, 4)),
+                Atom::num((1, 4)),
+                Atom::num((1, 2)),
+                Atom::num((1, 2)),
+            ],
+        ] {
+            let [v0, v1, v2, v3] = &velocity;
+            // Independent Weyl blocks: slash(v) = [[0, v0*1-sigma.v],
+            // [v0*1+sigma.v, 0]]. No gamma construction or simplifier supplies
+            // these entries, including the imaginary sigma2 components.
+            let slash = [
+                [Atom::Zero, Atom::Zero, v0 - v3, -v1 + Atom::i() * v2],
+                [Atom::Zero, Atom::Zero, -v1 - Atom::i() * v2, v0 + v3],
+                [v0 + v3, v1 - Atom::i() * v2, Atom::Zero, Atom::Zero],
+                [v1 + Atom::i() * v2, v0 - v3, Atom::Zero, Atom::Zero],
+            ];
+            let branches = graph.on_shell_branches(
+                &graph.model,
+                &identity,
+                current.subgraph(),
+                current.lmb(),
+                &velocity,
+            )?;
+            let inserted = graph.on_shell_branches(
+                &graph.model,
+                &matrix_unit,
+                current.subgraph(),
+                current.lmb(),
+                &velocity,
+            )?;
+            let mut matrices = Vec::new();
+            for (branch_index, sign) in [1, -1].into_iter().enumerate() {
+                let mut matrix = Vec::new();
+                for (row, slash_row) in slash.iter().enumerate() {
+                    let mut entries = Vec::new();
+                    for (column, slash_entry) in slash_row.iter().enumerate() {
+                        let actual = component(&branches[branch_index], row, column)?;
+                        let expected = (Atom::num(i32::from(row == column))
+                            + Atom::num(sign) * slash_entry)
+                            / Atom::num(2);
+                        assert_eq!(actual, expected, "sign={sign}, row={row}, column={column}");
+                        entries.push(actual);
+                    }
+                    matrix.push(entries);
+                }
+                let mut differs_from_right_multiplication = false;
+                for (row, entries) in matrix.iter().enumerate() {
+                    for (column, right_entry) in matrix[2].iter().enumerate() {
+                        let left = if column == 2 {
+                            entries[0].clone()
+                        } else {
+                            Atom::Zero
+                        };
+                        let right = if row == 0 {
+                            right_entry.clone()
+                        } else {
+                            Atom::Zero
+                        };
+                        assert_eq!(component(&inserted[branch_index], row, column)?, left);
+                        differs_from_right_multiplication |= left != right;
+                    }
+                }
+                assert!(
+                    differs_from_right_multiplication,
+                    "E02 must distinguish P*E02 from E02*P"
+                );
+                matrices.push(matrix);
+            }
+            for row in 0..4 {
+                for column in 0..4 {
+                    assert_eq!(
+                        &matrices[0][row][column] + &matrices[1][row][column],
+                        Atom::num(i32::from(row == column)),
+                    );
+                    for left in 0..2 {
+                        for right in 0..2 {
+                            let product = Atom::add_many((0..4).map(|inner| {
+                                &matrices[left][row][inner] * &matrices[right][inner][column]
+                            }));
+                            assert_eq!(
+                                product,
+                                if left == right {
+                                    matrices[left][row][column].clone()
+                                } else {
+                                    Atom::Zero
+                                },
+                                "P{left}*P{right}, row={row}, column={column}",
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn boosted_point_projection_roundtrip_preserves_spatial_shift_and_component_owner() {
+        crate::initialisation::test_initialise().unwrap();
+        let velocity = [
+            Atom::num((3, 2)),
+            Atom::one(),
+            Atom::num((1, 2)),
+            Atom::Zero,
+        ];
+        let mass = Atom::var(symbol!("boosted_point_projection::mass"; Scalar));
+        for coordinate_sign in [1, -1] {
+            for branch_sign in [1, -1] {
+                let point = OnShellProjectionPoint {
+                    component: 0,
+                    edge: EdgeIndex(5),
+                    coordinate: EdgeIndex(9),
+                    coordinate_sign,
+                    mass: Atom::num(branch_sign) * &mass,
+                    velocity: velocity.clone(),
+                    source_edges: BTreeSet::from([EdgeIndex(2)]),
+                };
+                let fixed = GS.on_shell_momentum(point.edge, &point.mass, &velocity);
+                assert_eq!(point.restore(&point.lift(&fixed, false)), fixed);
+                let vector_slot = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+                let full_vector = point.bind(&GS.emr_mom(point.coordinate, &vector_slot));
+                let spatial_vector = point.bind(&GS.emr_vec(point.coordinate, &vector_slot));
+                let time = Atom::num(coordinate_sign) * &point.mass * &velocity[0];
+                assert!(
+                    (spatial_vector - (full_vector - time * GS.energy_delta(&vector_slot)))
+                        .expand()
+                        .is_zero()
+                );
+                for (component, velocity_component) in velocity.iter().enumerate() {
+                    let index = GS.cind(component);
+                    let indexed = GS.indexed_momentum(&fixed, std::slice::from_ref(&index));
+                    assert_eq!(point.restore(&point.lift(&indexed, true)), indexed);
+                    let expected = Atom::num(coordinate_sign) * &point.mass * velocity_component;
+                    assert_eq!(point.bind(&GS.emr_mom(point.coordinate, &index)), expected);
+                    assert_eq!(
+                        point.bind(&GS.emr_vec(point.coordinate, &index)),
+                        if component == 0 { Atom::Zero } else { expected },
+                    );
+                    // A carrier owned by a surrounding component is not this
+                    // projection's crown, even if its payload uses that coordinate.
+                    let tag = GS.uv_momentum_provenance_tag(
+                        Atom::num(12).as_view(),
+                        UvMomentumProvenanceRole::PhysicalSourceFixed,
+                        function!(GS.emr_mom, usize::from(point.coordinate)).as_view(),
+                    );
+                    let cograph = function!(GS.emr_mom, tag, &index);
+                    assert_eq!(point.bind(&cograph), cograph);
+                }
+            }
+        }
+    }
+
     use crate::{
         finalized_runtime_dot,
         graph::{Graph, GraphThreeDSource},

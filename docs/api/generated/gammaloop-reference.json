@@ -18151,6 +18151,19 @@
       "possible_values": []
     },
     {
+      "path": "cli.global.generation.uv.on_shell_subtraction_velocity",
+      "value_type": "array<string>",
+      "description": "Fixed future-directed unit four-velocity of the OS subtraction point,\nwith metric (+---). Exact rational components keep p_OS = mass * velocity\nsymbolic under enclosing Taylor operators; this never follows a loop momentum.",
+      "required": false,
+      "default": [
+        "1",
+        "0",
+        "0",
+        "0"
+      ],
+      "possible_values": []
+    },
+    {
       "path": "cli.global.generation.uv.orchestrator",
       "value_type": "UVOrchestrator",
       "description": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",
@@ -19306,9 +19319,25 @@
       "possible_values": []
     },
     {
+      "path": "runtime.stability.rotation_axis[].axis",
+      "value_type": "array<number>",
+      "description": "Nonzero rotation axis; normalization uses the active numeric precision.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
       "path": "runtime.stability.rotation_axis[].beta",
       "value_type": "number",
       "description": "Second Euler angle, in radians.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.rotation_axis[].cos_theta",
+      "value_type": "number",
+      "description": "Cosine of an angle in [0, pi]. Reverse the axis for the inverse rotation.\nZero selects an exact quarter turn without an approximate pi constant.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -19328,6 +19357,7 @@
       "required": true,
       "default": null,
       "possible_values": [
+        "axis_angle",
         "euler_angles",
         "none",
         "x",

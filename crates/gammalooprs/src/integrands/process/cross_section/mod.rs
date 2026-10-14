@@ -493,7 +493,16 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
                 "This integrand was generated with symmetrize_left_right_states=true, which assumes CP symmetry. Complex couplings or model updates can invalidate that assumption; verifying it at the current parameter point is the user's responsibility"
             );
         }
-        validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
+        validate_process_runtime_settings(
+            &self.settings,
+            self.data.explicit_orientation_sum_only,
+            &self
+                .data
+                .graph_terms
+                .iter()
+                .filter_map(|term| term.fixed_on_shell_spatial_velocity.as_ref())
+                .collect::<Vec<_>>(),
+        )?;
 
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
@@ -601,6 +610,7 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraphTerm {
+    pub(crate) fixed_on_shell_spatial_velocity: Option<[String; 3]>,
     pub integrand: TiVec<CutGroupId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
@@ -1405,6 +1415,11 @@ impl CrossSectionGraphTerm {
         Ok((
             Self {
                 integrand,
+                fixed_on_shell_spatial_velocity: graph
+                    .derived_data
+                    .cut_paramatric_integrand
+                    .iter()
+                    .find_map(|cut| cut.fixed_on_shell_spatial_velocity.clone()),
                 graph: graph.graph.clone(),
                 cut_esurface: graph.cut_esurface.clone(),
                 cuts: graph.cuts.clone(),

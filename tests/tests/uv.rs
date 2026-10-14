@@ -3108,6 +3108,7 @@ fn genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs() -> Res
 #[derive(Clone, Copy)]
 enum OsRouteFixture {
     PrimitiveTopSelfEnergy,
+    PrimitiveBoostedTopSelfEnergy,
     AppendixB1NestedOsChild,
     NestedOsTopSelfEnergy,
     SoftGluonInOsTop,
@@ -3127,6 +3128,12 @@ impl OsRouteFixture {
         match self {
             OsRouteFixture::PrimitiveTopSelfEnergy => (
                 LOCAL_OS_CARD,
+                LOCAL_OS_NAME,
+                LOCAL_OS_NAME,
+                &[&[19.0, -29.0, 37.0], &[-41.0, 13.0, 23.0]],
+            ),
+            OsRouteFixture::PrimitiveBoostedTopSelfEnergy => (
+                "local_os_top_self_energy_boosted.toml",
                 LOCAL_OS_NAME,
                 LOCAL_OS_NAME,
                 &[&[19.0, -29.0, 37.0], &[-41.0, 13.0, 23.0]],
@@ -3206,15 +3213,21 @@ fn run_os_route(
         .generation
         .uv
         .local_uv_cts_from_expanded_4d_integrands = projected;
-    if matches!(fixture, OsRouteFixture::PrimitiveTopSelfEnergy) {
+    if matches!(
+        fixture,
+        OsRouteFixture::PrimitiveTopSelfEnergy | OsRouteFixture::PrimitiveBoostedTopSelfEnergy
+    ) {
         // A moving on-shell quark distinguishes the live external momentum
-        // from the component's fixed rest-frame subtraction point.
+        // from the component's fixed subtraction point, also when boosted.
         cli.run_command(r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[180.08053753806934,0.0,0.0,50.0],"dependent"],"helicities":[1,1]}}'"#)?;
     }
     let generate_integrated = cli.cli_settings.global.generation.uv.generate_integrated;
     assert_eq!(
         generate_integrated,
-        matches!(fixture, OsRouteFixture::PrimitiveTopSelfEnergy),
+        matches!(
+            fixture,
+            OsRouteFixture::PrimitiveTopSelfEnergy | OsRouteFixture::PrimitiveBoostedTopSelfEnergy
+        ),
         "the primitive fixture includes integrated OS terms; the nested fixture is local-only"
     );
     let generation_started_unix_milliseconds = u64::try_from(
@@ -3263,7 +3276,8 @@ fn run_os_route(
         )?;
         assert!(value.value.re.is_finite() && value.value.im.is_finite());
         let minimum_magnitude = match fixture {
-            OsRouteFixture::PrimitiveTopSelfEnergy => 1.0e-16,
+            OsRouteFixture::PrimitiveTopSelfEnergy
+            | OsRouteFixture::PrimitiveBoostedTopSelfEnergy => 1.0e-16,
             _ => 0.0,
         };
         assert!(
@@ -3285,6 +3299,13 @@ fn run_os_route(
     }
     .into();
     report["generate_integrated"] = generate_integrated.into();
+    report["on_shell_subtraction_velocity"] = json!(
+        cli.cli_settings
+            .global
+            .generation
+            .uv
+            .on_shell_subtraction_velocity
+    );
     report["momentum_samples"] = json!(samples);
     report["route"] = route.into();
     report["route_index"] = 0.into();
@@ -3375,7 +3396,10 @@ impl OsRouteFixture {
                 prescription.massless_power_divergent = ApproximationType::Unsubtracted;
                 prescription.overrides.clear();
             }
-            if matches!(self, Self::PrimitiveTopSelfEnergy) {
+            if matches!(
+                self,
+                Self::PrimitiveTopSelfEnergy | Self::PrimitiveBoostedTopSelfEnergy
+            ) {
                 cli.run_command(r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[180.08053753806934,0.0,0.0,50.0],"dependent"],"helicities":[1,1]}}'"#)?;
             }
             cli.run_command("run generate")?;
@@ -3500,6 +3524,96 @@ fn local_os_primitive_orientations_have_local_uv_controls() -> Result<()> {
 fn local_os_integrated_generation_agrees_across_three_routes() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     OsRouteFixture::PrimitiveTopSelfEnergy.check_routes("os_route_matrix")
+}
+
+#[test]
+fn local_os_fixed_boosted_integrated_generation_agrees_across_three_routes() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    OsRouteFixture::PrimitiveBoostedTopSelfEnergy.check_routes("os_fixed_boosted_route_matrix")
+}
+
+#[test]
+fn local_os_fixed_boosted_rotation_policy_survives_state_reload() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    use gammalooprs::settings::runtime::RotationSetting;
+
+    let artifacts = gammaloop_integration_tests::new_test_artifact_dir("os_fixed_boosted_state")?;
+    let state_path = artifacts.join("state");
+    let mut cli = get_test_cli(
+        Some("local_os_top_self_energy_boosted.toml".into()),
+        &state_path,
+        None,
+        true,
+    )?;
+    cli.run_command("run generate")?;
+    let point = [19.0, -29.0, 37.0];
+    let expected = evaluate_momentum_sample(
+        &mut cli,
+        LOCAL_OS_NAME,
+        LOCAL_OS_NAME,
+        &point,
+        None,
+        f64::EPSILON,
+    )?;
+    cli.save_state()?;
+    let loaded = StateLoadOption {
+        state_folder: Some(state_path.clone()),
+        ..Default::default()
+    }
+    .load()?;
+    assert!(loaded.state_load_summary.is_some());
+    let mut loaded = CLIState {
+        state: loaded.state,
+        cli_settings: loaded.cli_settings,
+        default_runtime_settings: loaded.default_runtime_settings,
+        run_history: loaded.run_history,
+        session_state: loaded.session_state,
+    };
+    let actual = evaluate_momentum_sample(
+        &mut loaded,
+        LOCAL_OS_NAME,
+        LOCAL_OS_NAME,
+        &point,
+        None,
+        f64::EPSILON,
+    )?;
+    let difference =
+        (actual.value.re - expected.value.re).hypot(actual.value.im - expected.value.im);
+    let scale = expected.value.re.hypot(expected.value.im);
+    assert!(
+        difference
+            <= INSPECT_DEPENDENCE_ACCURACY_FACTOR
+                * actual.relative_accuracy.max(expected.relative_accuracy)
+                * scale
+    );
+    for state in [&mut cli, &mut loaded] {
+        let process = state
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(LOCAL_OS_NAME.into())))?;
+        let model = state.state.model.clone();
+        // Cloning a generated graph must retain its frozen reference even
+        // after runtime settings choose a different probe.
+        let mut integrand = state
+            .state
+            .process_list
+            .get_integrand_mut(process, LOCAL_OS_NAME)?
+            .clone();
+        integrand.get_mut_settings().stability.rotation_axis = vec![RotationSetting::EulerAngles {
+            alpha: 0.1,
+            beta: 0.2,
+            gamma: 0.3,
+        }];
+        let error = integrand.warm_up(&model).expect_err(
+            "a probe moving the generated OS reference must be rejected before evaluation",
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("fixed on-shell subtraction velocity")
+        );
+    }
+    clean_test(state_path);
+    Ok(())
 }
 
 #[test]

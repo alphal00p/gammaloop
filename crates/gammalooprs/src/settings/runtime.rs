@@ -5,7 +5,7 @@ use std::{
 
 use crate::cff::Esurface;
 use bincode_trait_derive::{Decode, Encode};
-use eyre::Result;
+use eyre::{Result, ensure};
 use linnet::half_edge::involution::EdgeVec;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -727,6 +727,60 @@ mod tests {
     use spenso::algebra::complex::Complex;
 
     #[test]
+    fn axis_angle_rotation_settings_roundtrip_and_reject_invalid_parameters() {
+        let setting: RotationSetting =
+            toml::from_str("type='axis_angle'\naxis=[1.0,2.0,2.0]\ncos_theta=0.0").unwrap();
+        setting.validate().unwrap();
+        assert_eq!(
+            toml::from_str::<RotationSetting>(&toml::to_string(&setting).unwrap()).unwrap(),
+            setting
+        );
+        assert_eq!(
+            serde_json::from_str::<RotationSetting>(&serde_json::to_string(&setting).unwrap())
+                .unwrap(),
+            setting
+        );
+        for axis in [[0.0; 3], [f64::NAN, 1.0, 0.0], [1.0, f64::INFINITY, 0.0]] {
+            assert!(
+                RotationSetting::AxisAngle {
+                    axis,
+                    cos_theta: 0.0
+                }
+                .validate()
+                .is_err()
+            );
+        }
+        for cos_theta in [f64::NAN, f64::INFINITY, -1.1, 1.1] {
+            assert!(
+                RotationSetting::AxisAngle {
+                    axis: [1.0, 2.0, 2.0],
+                    cos_theta
+                }
+                .validate()
+                .is_err()
+            );
+        }
+        for cos_theta in [-1.0, 0.0, 1.0] {
+            RotationSetting::AxisAngle {
+                axis: [1.0, 2.0, 2.0],
+                cos_theta,
+            }
+            .validate()
+            .unwrap();
+        }
+        assert!(
+            toml::from_str::<RotationSetting>("type='axis_angle'\naxis=[1.0,2.0]\ncos_theta=0.0")
+                .is_err()
+        );
+        assert!(
+            toml::from_str::<RotationSetting>(
+                "type='axis_angle'\naxis=[1.0,2.0,2.0]\ncos_theta=0.0\nangle=1.0"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn sampling_lu_h_profile_shorthand_and_table_share_one_definition() {
         let shorthand: SamplingChannelDefinition =
             toml::from_str("around='phase_space(cut(2,3))'\nradial_profile='lu_h'").unwrap();
@@ -1386,6 +1440,14 @@ pub enum RotationSetting {
         /// Third Euler angle, in radians.
         gamma: f64,
     },
+    #[serde(rename = "axis_angle")]
+    AxisAngle {
+        /// Nonzero rotation axis; normalization uses the active numeric precision.
+        axis: [f64; 3],
+        /// Cosine of an angle in [0, pi]. Reverse the axis for the inverse rotation.
+        /// Zero selects an exact quarter turn without an approximate pi constant.
+        cos_theta: f64,
+    },
 }
 
 impl Default for RotationSetting {
@@ -1395,6 +1457,21 @@ impl Default for RotationSetting {
 }
 
 impl RotationSetting {
+    pub(crate) fn validate(&self) -> Result<()> {
+        if let Self::AxisAngle { axis, cos_theta } = self {
+            ensure!(
+                axis.iter().all(|component| component.is_finite())
+                    && axis.iter().any(|component| *component != 0.0),
+                "axis-angle rotation requires a finite nonzero axis"
+            );
+            ensure!(
+                cos_theta.is_finite() && (-1.0..=1.0).contains(cos_theta),
+                "axis-angle rotation cosine must be finite and lie in [-1, 1]"
+            );
+        }
+        Ok(())
+    }
+
     pub(crate) fn rotation_method(&self) -> RotationMethod {
         match self {
             Self::Pi2X {} => RotationMethod::Pi2X,
@@ -1404,6 +1481,10 @@ impl RotationSetting {
             Self::EulerAngles { alpha, beta, gamma } => {
                 RotationMethod::EulerAngles(*alpha, *beta, *gamma)
             }
+            Self::AxisAngle { axis, cos_theta } => RotationMethod::AxisAngle {
+                axis: *axis,
+                cos_theta: *cos_theta,
+            },
         }
     }
 
@@ -1416,6 +1497,7 @@ impl RotationSetting {
             Self::EulerAngles { alpha, beta, gamma } => {
                 format!("euler {} {} {}", alpha, beta, gamma)
             }
+            Self::AxisAngle { axis, cos_theta } => format!("axis {:?}, cosine {}", axis, cos_theta),
         }
     }
 }

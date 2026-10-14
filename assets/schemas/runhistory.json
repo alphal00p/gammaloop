@@ -4333,6 +4333,36 @@
             "beta",
             "gamma"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "axis": {
+              "description": "Nonzero rotation axis; normalization uses the active numeric precision.",
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 3,
+              "minItems": 3
+            },
+            "cos_theta": {
+              "description": "Cosine of an angle in [0, pi]. Reverse the axis for the inverse rotation.\nZero selects an exact quarter turn without an approximate pi constant.",
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "axis_angle"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "axis",
+            "cos_theta"
+          ]
         }
       ]
     },
@@ -6110,6 +6140,15 @@
         "local_uv_cts_from_expanded_4d_integrands": {
           "description": "Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.\nRequires an explicit sum over all generated orientations.",
           "type": "boolean"
+        },
+        "on_shell_subtraction_velocity": {
+          "description": "Fixed future-directed unit four-velocity of the OS subtraction point,\nwith metric (+---). Exact rational components keep p_OS = mass * velocity\nsymbolic under enclosing Taylor operators; this never follows a loop momentum.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 4
         },
         "orchestrator": {
           "description": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",

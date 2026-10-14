@@ -2,8 +2,9 @@
 //! Source numerators remain factorized; only scalar denominator polynomials
 //! and the Taylor coefficients demanded by a component are materialized.
 
-use super::on_shell_tests::{assert_rational_zero, scalar_component};
+use super::on_shell_tests::{SpinReduction, assert_rational_zero, scalar_component};
 use super::*;
+use crate::uv::approx::integrated;
 use crate::{
     graph::parse::NumeratorInterface,
     initialisation::test_initialise,
@@ -14,7 +15,10 @@ use idenso::{
     tensor::{SymbolicNetExt, SymbolicNetParse},
 };
 use linnet::half_edge::{involution::Hedge, subgraph::ModifySubSet};
-use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
+use spenso::{
+    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+    structure::IndexedStructure,
+};
 
 #[derive(Clone, Copy)]
 pub(crate) struct Component {
@@ -48,6 +52,7 @@ impl Component {
 struct ForestOracle {
     graph: Graph,
     masses: Vec<Atom>,
+    velocity: [Atom; 4],
 }
 
 impl ForestOracle {
@@ -63,7 +68,11 @@ impl ForestOracle {
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
-        Ok(Self { graph, masses })
+        Ok(Self {
+            graph,
+            masses,
+            velocity: [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero],
+        })
     }
 
     fn root(&self) -> OwnedForestNode {
@@ -268,7 +277,11 @@ impl ForestOracle {
         let external = self.external_edges(node);
         let routed = self.route(atom, node);
         [1, -1].into_iter().fold(Atom::Zero, |sum, sigma| {
-            let point = function!(GS.os_mom, incoming, Atom::num(sigma) * &mass);
+            let point = GS.on_shell_momentum(
+                EdgeIndex(incoming),
+                &(Atom::num(sigma) * &mass),
+                &self.velocity,
+            );
             let evaluated = routed.replace_map(|view, _, output| {
                 if let AtomView::Fun(momentum) = view
                     && momentum.get_symbol() == GS.emr_mom
@@ -285,8 +298,22 @@ impl ForestOracle {
                 }
             });
             let dummy = idenso::bis!(4, Atom::from(Aind::new_dummy()));
-            let gamma =
-                idenso::gamma0!(&dummy, &port) * evaluated.replace(port.to_pattern()).with(dummy);
+            // The explicit fixed-vector basis is contracted with the
+            // Minkowski metric, which supplies the spatial minus signs.
+            let lorentz = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+            let slash = &self.velocity[0] * idenso::gamma0!(&port, &dummy)
+                + self
+                    .velocity
+                    .iter()
+                    .enumerate()
+                    .skip(1)
+                    .map(|(index, value)| {
+                        value
+                            * function!(GS.delta_vec, GS.cind(index), &lorentz)
+                            * idenso::gamma!(&port, &dummy, &lorentz)
+                    })
+                    .sum::<Atom>();
+            let gamma = slash * evaluated.replace(port.to_pattern()).with(dummy);
             sum + (evaluated + Atom::num(sigma) * gamma) / Atom::num(2)
         })
     }
@@ -329,6 +356,7 @@ impl ForestOracle {
             &self.graph,
             node,
             &(NumeratorInterface::export(&actual_source).0 - &source),
+            SpinReduction::SymbolicFirst,
         )?;
         let actual_u = t_raw(&actual_source, ctx, node, given_node, &lmb)?;
         let reference_u = self.jet(&source, node, true)?;
@@ -337,6 +365,7 @@ impl ForestOracle {
             &self.graph,
             node,
             &(NumeratorInterface::export(&actual_u).0 - reference_u),
+            SpinReduction::SymbolicFirst,
         )?;
         let (actual_refinement, reference_refinement) = match component.on_shell {
             Some(boundary) => {
@@ -345,6 +374,7 @@ impl ForestOracle {
                     &actual_source,
                     node.subgraph(),
                     &lmb,
+                    &self.velocity,
                 )?;
                 (
                     positive.try_add(&negative)?,
@@ -361,6 +391,7 @@ impl ForestOracle {
             &self.graph,
             node,
             &(NumeratorInterface::export(&actual_refinement).0 - &reference_refinement),
+            SpinReduction::SymbolicFirst,
         )?;
         let actual_overlap = t_raw(
             &actual_refinement
@@ -376,6 +407,7 @@ impl ForestOracle {
             &self.graph,
             node,
             &(NumeratorInterface::export(&actual_overlap).0 - reference_overlap),
+            SpinReduction::SymbolicFirst,
         )?;
         let completed = finalize(
             actual_u
@@ -486,7 +518,9 @@ impl ForestOracle {
             .replace(GS.m_uv_expansion)
             .with(GS.m_uv_vacuum)
             .replace(GS.dim_epsilon)
-            .with(Atom::Zero);
+            .with(Atom::Zero)
+            .replace(GS.integrated_loop_scale)
+            .with(Atom::one());
         assert!(!physical.contains_symbol(GS.uv_momentum_provenance));
         assert!(
             !physical.contains_symbol(Symbol::DERIVATIVE),
@@ -621,6 +655,7 @@ impl ForestOracle {
                 &self.graph,
                 node,
                 &coefficient,
+                SpinReduction::SymbolicFirst,
             )?;
             debug_tags!(#generation, #profile, #uv, #numerator, #summary;
                 stage = "os_hard_coefficient_done", label, power = %power,
@@ -724,6 +759,7 @@ impl ForestOracle {
             &self.graph,
             &child,
             &(NumeratorInterface::export(child_local.atom()).0 + certified_child),
+            SpinReduction::SymbolicFirst,
         )?;
         let completed_child = Full4dCts::from_factorized_local(&child_local);
         if child_spec.scheme == ApproximationType::OS && parent_spec.scheme == ApproximationType::IR
@@ -739,12 +775,14 @@ impl ForestOracle {
                 &self.graph,
                 &parent,
                 &(&reference_soft - &child_reference),
+                SpinReduction::SymbolicFirst,
             )?;
             assert_rational_zero(
                 "parent S of the actual completed OS child matches the independent jet",
                 &self.graph,
                 &parent,
                 &(NumeratorInterface::export(&actual_soft).0 - reference_soft),
+                SpinReduction::SymbolicFirst,
             )?;
         }
 
@@ -766,6 +804,7 @@ impl ForestOracle {
             &self.graph,
             &parent,
             &(NumeratorInterface::export(&production_cograph).0 - &cograph),
+            SpinReduction::SymbolicFirst,
         )?;
         let child_insertion = grow(&completed_child, &ctx, &parent, &child)?;
         assert_eq!(
@@ -778,12 +817,14 @@ impl ForestOracle {
             &self.graph,
             &parent,
             &(NumeratorInterface::export(parent_local.atom()).0 + certified_parent),
+            SpinReduction::SymbolicFirst,
         )?;
         assert_rational_zero(
             "nested forest completed-child family",
             &self.graph,
             &parent,
             &(NumeratorInterface::export(nested_local.atom()).0 - &nested_reference),
+            SpinReduction::SymbolicFirst,
         )?;
         if child_spec.scheme == ApproximationType::OS
             && parent_spec.scheme == ApproximationType::IR
@@ -808,6 +849,7 @@ impl ForestOracle {
                 &self.graph,
                 &parent,
                 &(analytic + ordinary - overlap),
+                SpinReduction::SymbolicFirst,
             )?;
         }
         let production_source = grow(&seed, &ctx, &parent, &root)?;
@@ -876,6 +918,7 @@ impl ForestOracle {
                 &self.graph,
                 &parent,
                 &self.jet(&Self::physical_limit(&complete), &parent, false)?,
+                SpinReduction::SymbolicFirst,
             )?;
         }
         if child_spec.scheme == ApproximationType::IR {
@@ -890,6 +933,7 @@ impl ForestOracle {
                     &child,
                     false,
                 )?,
+                SpinReduction::SymbolicFirst,
             )?;
         }
         // The bare source, signed child insertion, signed parent and signed
@@ -1031,10 +1075,13 @@ fn nested_child_scalar_soft_residues_distinguish_physical_and_os_points() -> Res
     let seed = Full4dCts::root();
     let source = grow(&seed, &ctx, &child, &root)?;
     let lmb = compatible_lmb(&ctx, &child, &root, &seed)?;
-    let [positive, negative] =
-        oracle
-            .graph
-            .on_shell_branches(&oracle.graph.model, &source, child.subgraph(), &lmb)?;
+    let [positive, negative] = oracle.graph.on_shell_branches(
+        &oracle.graph.model,
+        &source,
+        child.subgraph(),
+        &lmb,
+        &settings.on_shell_velocity()?,
+    )?;
     let mass = oracle.graph[EdgeIndex(3)].mass_atom(&oracle.graph.model);
     let radial_symbol = symbol!("os_forest_reference::soft_radius");
     let radius = Atom::var(radial_symbol);
@@ -1244,10 +1291,13 @@ fn parent_os_promotes_its_inherited_child_soft_carrier_to_a_physical_source() ->
         !inherited.is_empty(),
         "the physical child must carry its soft crown owner e2"
     );
-    let branches =
-        oracle
-            .graph
-            .on_shell_branches(&oracle.graph.model, &source, parent.subgraph(), &lmb)?;
+    let branches = oracle.graph.on_shell_branches(
+        &oracle.graph.model,
+        &source,
+        parent.subgraph(),
+        &lmb,
+        &settings.on_shell_velocity()?,
+    )?;
     for branch in &branches {
         let records = owner_two(branch.expression());
         assert!(
@@ -1280,6 +1330,7 @@ fn parent_os_promotes_its_inherited_child_soft_carrier_to_a_physical_source() ->
             .map(|branch| NumeratorInterface::export(branch).0)
             .sum::<Atom>()
             - reference),
+        SpinReduction::SymbolicFirst,
     )
 }
 
@@ -1359,6 +1410,7 @@ fn proper_two_loop_os_forest_in_three_loop_graph_keeps_owned_points_and_uv_limit
         &oracle.graph,
         &whole,
         &(NumeratorInterface::export(&production_cograph).0 - &cograph),
+        SpinReduction::SymbolicFirst,
     )?;
     let cograph_terms = FourDTerm::from_view(cograph.as_view())?;
     assert_eq!(cograph_terms.len(), 1);
@@ -1479,6 +1531,7 @@ fn full_three_loop_os_forests_match_independent_component_jets() -> Result<()> {
             &oracle.graph,
             node,
             &(NumeratorInterface::export(prefix.atom()).0 + certified),
+            SpinReduction::SymbolicFirst,
         )?;
     }
     let families = oracle.three_loop_families(&prefixes)?;
@@ -1498,6 +1551,7 @@ fn full_three_loop_os_forests_match_independent_component_jets() -> Result<()> {
             &oracle.graph,
             &whole,
             &(NumeratorInterface::export(&cograph).0 - oracle.source(&whole, given)),
+            SpinReduction::SymbolicFirst,
         )?;
         assert_eq!(
             families[2 * index],
@@ -1515,6 +1569,7 @@ fn full_three_loop_os_forests_match_independent_component_jets() -> Result<()> {
             &oracle.graph,
             &whole,
             &(&families[2 * index + 1] + certified),
+            SpinReduction::SymbolicFirst,
         )?;
     }
     // The four pairs are the eight ordered forests of gamma < Gamma < G.
@@ -1557,6 +1612,7 @@ fn three_loop_open_spinor_hard_coefficient_has_exact_finite_certificate() -> Res
         &oracle.graph,
         &whole,
         logarithmic,
+        SpinReduction::SymbolicFirst,
     )
 }
 
@@ -1641,6 +1697,7 @@ fn fig10_logarithmic_box_forest_families_cancel_at_the_parent_soft_point() -> Re
         &oracle.graph,
         &parent,
         &(&reference_soft - &completed_source),
+        SpinReduction::SymbolicFirst,
     )?;
     let lmb = compatible_lmb(&ctx, &parent, &child, &completed_child)?;
     let actual_soft = tilde_t_raw(&completed, &ctx, &parent, &child, &lmb)?;
@@ -1649,6 +1706,7 @@ fn fig10_logarithmic_box_forest_families_cancel_at_the_parent_soft_point() -> Re
         &oracle.graph,
         &parent,
         &(NumeratorInterface::export(&actual_soft).0 - &reference_soft),
+        SpinReduction::SymbolicFirst,
     )?;
     let ordinary = t_raw(&completed, &ctx, &parent, &child, &lmb)?;
     let overlap = t_raw(&actual_soft, &ctx, &parent, &child, &lmb)?;
@@ -1657,6 +1715,7 @@ fn fig10_logarithmic_box_forest_families_cancel_at_the_parent_soft_point() -> Re
         &oracle.graph,
         &parent,
         &NumeratorInterface::export(&ordinary.try_sub(&overlap)?).0,
+        SpinReduction::SymbolicFirst,
     )?;
     let nested = uv_limit(&completed_child, &ctx, &parent, &child, &parent, &child)?;
     assert_rational_zero(
@@ -1664,6 +1723,7 @@ fn fig10_logarithmic_box_forest_families_cancel_at_the_parent_soft_point() -> Re
         &oracle.graph,
         &parent,
         &(completed_source + NumeratorInterface::export(nested.atom()).0),
+        SpinReduction::SymbolicFirst,
     )
 }
 
@@ -1726,6 +1786,7 @@ fn disjoint_os_quark_components_keep_the_live_bridge_momentum() -> Result<()> {
             &oracle.graph,
             component,
             &(NumeratorInterface::export(actual).0 - reference),
+            SpinReduction::SymbolicFirst,
         )?;
     }
     // Each open component has its independent exact tensor certificate
@@ -1744,6 +1805,7 @@ fn disjoint_os_quark_components_keep_the_live_bridge_momentum() -> Result<()> {
         &oracle.graph,
         &full,
         &(NumeratorInterface::export(&grow_factor(&ctx, &full, &union)?).0 - &bridge),
+        SpinReduction::SymbolicFirst,
     )?;
     // Disjoint forests factor into two independently signed one-loop
     // remainders and their live bridge. Check the completed physical product
@@ -1815,4 +1877,563 @@ fn disjoint_os_quark_components_keep_the_live_bridge_momentum() -> Result<()> {
     });
     assert_eq!(point_owners, BTreeSet::from([0, 4]));
     Ok(())
+}
+
+impl ForestOracle {
+    fn rainbow_soft_coordinates(
+        &self,
+        input: &SymbolicTensor<IndexedStructure>,
+        external: &[Atom; 4],
+        radius: &Atom,
+    ) -> SymbolicTensor<IndexedStructure> {
+        let bound = input
+            .expression()
+            .replace_multiple(
+                self.masses
+                    .iter()
+                    .map(|mass| Replacement::new(mass.to_pattern(), Atom::num(12).to_pattern())),
+            )
+            .replace_map(|view, _, output| {
+                let AtomView::Fun(momentum) = view else {
+                    return;
+                };
+                if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() != 2 {
+                    return;
+                }
+                let Ok(owner) = usize::try_from(momentum.get(0)) else {
+                    return;
+                };
+                if owner > 2 {
+                    return;
+                }
+                let index = momentum.get(1);
+                let fixed = external
+                    .iter()
+                    .enumerate()
+                    .map(|(component, value)| {
+                        value * function!(GS.delta_vec, GS.cind(component), index)
+                    })
+                    .sum::<Atom>();
+                **output = if owner == 2 {
+                    fixed + radius * view.to_owned()
+                } else {
+                    fixed
+                };
+            });
+        let bound = input
+            .with_checked_expression(bound)
+            .expect("the fixed soft coordinates retain their native tensor interface");
+        finalize(bound).expect("the fixed soft coordinates retain their native tensor interface")
+    }
+
+    /// The massive rainbow uses r=e2 and l=e3. Its outer gluon is r-q;
+    /// approach it with r=q+rho*K while leaving the inner loop completely
+    /// symbolic. Only the required Laurent coefficients are constructed.
+    fn rainbow_soft_coefficients(
+        &self,
+        atom: &Atom,
+        node: &OwnedForestNode,
+        external: &[Atom; 4],
+        through_power: i64,
+    ) -> Result<BTreeMap<symbolica::domains::rational::Rational, Atom>> {
+        let variable = symbol!("os_forest_reference::rainbow_soft");
+        let radius = Atom::var(variable);
+        let physical = self.route(&Self::physical_limit(atom), node);
+        let mut coefficients = BTreeMap::new();
+        for term in FourDTerm::from_view(physical.as_view())? {
+            let numerator = SymbolicTensor::from(term.numerator)
+                .undo_dots()?
+                .try_into_indexed()?;
+            let scaled = self.rainbow_soft_coordinates(&numerator, external, &radius);
+            // This is the explicit independent finite-component jet boundary.
+            let mut scaled = NumeratorInterface::export(&scaled).0;
+            // The finite jet differentiates vector coefficients, not a compact
+            // gamma function's vector metadata. Reuse the same selective native
+            // materialization as the independent component jets above.
+            scaled = scaled
+                .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                    shorthand_parsing: ShorthandParsing::Expand {
+                        schoonschip: SchoonschipExpansionMode::full(),
+                        trace: false,
+                        chain: false,
+                    },
+                    ..Default::default()
+                })?
+                .simple_execute::<()>()?;
+            for denominator in term.denominators {
+                let polynomial = self.rainbow_soft_coordinates(
+                    &NumeratorInterface::admit(denominator.full_expr.clone(), None)?
+                        .try_into_indexed()?,
+                    external,
+                    &radius,
+                );
+                let polynomial =
+                    scalar_component(&NumeratorInterface::export(&polynomial).0)?.expand();
+                let leading = polynomial
+                    .series(variable, Atom::Zero, 2)?
+                    .get_trailing_exponent();
+                assert!(
+                    (symbolica::domains::rational::Rational::from(0)
+                        ..=symbolica::domains::rational::Rational::from(2))
+                        .contains(&leading),
+                    "a soft denominator is at most quadratic"
+                );
+                let polynomial = (polynomial / radius.pow(leading.clone())).expand();
+                assert!(!polynomial.replace(variable).with(Atom::Zero).is_zero());
+                scaled /= radius.pow(leading)
+                    * GS.den(
+                        usize::from(denominator.source_edge),
+                        denominator.momentum,
+                        denominator.mass_squared,
+                        polynomial,
+                    );
+            }
+            // rho^-4 is logarithmic with the four-dimensional radial measure;
+            // rho^-3 is the first absolutely integrable candidate.
+            let jet = scaled.series_preserving_factors(
+                variable,
+                Atom::Zero.as_view(),
+                through_power,
+                &[],
+            )?;
+            assert!(
+                !jet.contains_symbol(Symbol::DERIVATIVE),
+                "the rainbow soft jet must contain explicit coefficient derivatives"
+            );
+            for (power, coefficient) in jet.series(variable, Atom::Zero, through_power)?.terms() {
+                *coefficients.entry(power).or_insert(Atom::Zero) += coefficient;
+            }
+        }
+        Ok(coefficients)
+    }
+
+    fn assert_rainbow_soft_nonzero(&self, atom: &Atom, label: &str) -> Result<()> {
+        // A single exact rational point certifies non-identity; it never
+        // supplies a zero certificate. K=(2,1,0,0), l=(7,2,3,1) are away from
+        // every soft-coefficient pole in these massive fixtures.
+        let sampled = atom
+            .replace_map(|view, _, output| {
+                let AtomView::Fun(momentum) = view else {
+                    return;
+                };
+                if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() != 2 {
+                    return;
+                }
+                let Ok(owner) = usize::try_from(momentum.get(0)) else {
+                    return;
+                };
+                let AtomView::Fun(index) = momentum.get(1) else {
+                    return;
+                };
+                let Ok(component) = usize::try_from(index.get(0)) else {
+                    return;
+                };
+                if component >= 4 {
+                    return;
+                }
+                let point = if owner == 2 {
+                    [2, 1, 0, 0]
+                } else {
+                    [7, 2, 3, 1]
+                };
+                **output = Atom::num(point[component]);
+            })
+            .replace(function!(symbol!(
+                "os_forest_reference::frozen_child_localizer"
+            )))
+            .with(Atom::num(20) / (Atom::var(GS.pi).pow(2) * Atom::num(414).pow(2)))
+            .replace(GS.mu_r_sq)
+            .with(400)
+            .replace(GS.m_uv_vacuum)
+            .with(20)
+            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+            .with(W_.d_);
+        // Keep the small physical matrix product factorized. Symbolic gamma
+        // collection at a nonaxial fixed point manufactures large scalar sums.
+        let tensor = crate::uv::overlap_numerators::NumeratorJetCache::default()
+            .canonicalize(&sampled.undo_dots::<Aind>()?)?;
+        let mut nonzero = false;
+        tensor.key.visitor(&mut |view| {
+            let AtomView::Fun(entry) = view else {
+                return true;
+            };
+            if entry.get_symbol() != symbol!("gammalooprs::uv::overlap_entry") {
+                return true;
+            }
+            let value = entry
+                .get(1)
+                .to_owned()
+                .replace(idenso::color_cas!(2, idenso::cof!(3)))
+                .with(Atom::num(4) / Atom::num(3))
+                .replace(idenso::color_idx!(2, idenso::cof!(3)))
+                .with(Atom::one() / Atom::num(2))
+                .replace_map(|view, _, output| {
+                    if let AtomView::Fun(momentum) = view
+                        && momentum.get_symbol() == GS.emr_mom
+                        && momentum.get_nargs() == 2
+                        && let Ok(owner) = usize::try_from(momentum.get(0))
+                        && let AtomView::Fun(index) = momentum.get(1)
+                        && let Ok(component) = usize::try_from(index.get(0))
+                        && component < 4
+                    {
+                        let point = if owner == 2 {
+                            [2, 1, 0, 0]
+                        } else {
+                            [7, 2, 3, 1]
+                        };
+                        **output = Atom::num(point[component]);
+                    } else if let AtomView::Var(variable) = view
+                        && variable.get_symbol() != GS.pi
+                    {
+                        **output = Atom::one();
+                    }
+                });
+            // At this exact rational point, only an exactly nonzero scalar
+            // factorization certifies the control. Zero iterations take no
+            // numerical samples; an unresolved sum remains inconclusive.
+            nonzero |= value
+                .collect_compact_factors()
+                .check_zero_with(
+                    &symbolica::atom::ZeroTestSettings::default()
+                        .finite_field_samples(0)
+                        .numerical_samples(0)
+                        .exact_fallback(false),
+                )
+                .is_false();
+            !nonzero
+        });
+        assert!(
+            nonzero,
+            "{label}: an exact nonzero tensor component is required"
+        );
+        Ok(())
+    }
+
+    fn assert_boosted_rainbow_soft_limit(&mut self, velocity: [&str; 4]) -> Result<()> {
+        let external_velocity = UVgenerationSettings {
+            on_shell_subtraction_velocity: velocity.map(str::to_owned),
+            ..Default::default()
+        }
+        .on_shell_velocity()?;
+        let external = external_velocity
+            .clone()
+            .map(|component| Atom::num(12) * component);
+        let child = QUARK_CHILD.node(&self.graph)?;
+        let parent = QUARK_PARENT.node(&self.graph)?;
+        let root = self.root();
+        let seed = Full4dCts::root();
+        let matched_boost = velocity != ["1", "0", "0", "0"];
+        for (label, subtraction_velocity) in [("rest", ["1", "0", "0", "0"]), ("matched", velocity)]
+            .into_iter()
+            .filter(|(label, _)| matched_boost || *label == "rest")
+        {
+            let settings = UVgenerationSettings {
+                generate_integrated: true,
+                on_shell_subtraction_velocity: subtraction_velocity.map(str::to_owned),
+                ..Default::default()
+            };
+            self.velocity = settings.on_shell_velocity()?;
+            let ctx = UVCtx::new(&self.graph, &self.graph.model, &settings);
+            let child_local = uv_limit(&seed, &ctx, &child, &root, &child, &root)?;
+            let vakint_settings = vakint::VakintSettings {
+                number_of_terms_in_epsilon_expansion: 3,
+                evaluation_order: vakint::EvaluationOrder(vec![
+                    vakint::EvaluationMethod::AlphaLoop(vakint::AlphaLoopOptions {
+                        susbstitute_masters: false,
+                    }),
+                ]),
+                ..settings.vakint.true_settings()
+            };
+            let child_integrated = integrated::Integrated::new(
+                crate::utils::vakint()?,
+                &vakint_settings,
+            )
+            .run(&child_local, &ctx, &child, &root, &child, &root)?;
+            let completed_child = Full4dCts::recursion_input(
+                &child_local,
+                &child_integrated,
+                ApproximationType::OS,
+                false,
+                child.lmb(),
+            )?;
+            let parent_local = uv_limit(&seed, &ctx, &parent, &root, &parent, &root)?;
+            let nested_local = uv_limit(&completed_child, &ctx, &parent, &child, &parent, &child)?;
+            let bare = grow(&seed, &ctx, &parent, &root)?;
+            let local_child = Full4dCts::from_factorized_local(&child_local);
+            let insertion = grow(&local_child, &ctx, &parent, &child)?;
+            let finite_insertion =
+                grow(&completed_child, &ctx, &parent, &child)?.try_sub(&insertion)?;
+            let frozen = function!(symbol!("os_forest_reference::frozen_child_localizer"));
+            assert!(nested_local.recursive_completion().is_empty());
+            assert_eq!(
+                nested_local
+                    .active_sectors()
+                    .iter()
+                    .filter(|sector| !sector.frozen_lmbs().is_empty())
+                    .count(),
+                1,
+                "the complete parent operates on exactly one finite child prefix"
+            );
+            let nested = nested_local.active_sectors().iter().try_fold(
+                bare.with_checked_expression(Atom::Zero)?,
+                |sum, sector| -> Result<_> {
+                    let weighted = if sector.frozen_lmbs().is_empty() {
+                        sector.atom.clone()
+                    } else {
+                        assert_eq!(sector.frozen_lmbs(), std::slice::from_ref(child.lmb()));
+                        sector
+                            .atom
+                            .with_checked_expression(&frozen * sector.atom.expression())?
+                    };
+                    Ok(sum.try_add(&weighted)?)
+                },
+            )?;
+            let frozen_finite_insertion = finite_insertion
+                .with_checked_expression(&frozen * finite_insertion.expression())?;
+            let complete = bare
+                .try_add(&insertion)?
+                .try_add(parent_local.atom())?
+                .try_add(&nested)?
+                .try_add(&frozen_finite_insertion)?;
+
+            // Independent source and bounded U/O/UO jets certify all four
+            // local forest families. The analytic child is carried separately
+            // with its frozen localization owner through the actual recursion.
+            let child_reference =
+                -self.operation(&self.source(&child, &root), &child, QUARK_CHILD)?;
+            assert_rational_zero(
+                "boosted rainbow child operation",
+                &self.graph,
+                &child,
+                &(NumeratorInterface::export(child_local.atom()).0 - child_reference),
+                SpinReduction::SymbolicFirst,
+            )?;
+            let parent_operator = self.assert_operator_branches(
+                "boosted rainbow parent",
+                &parent,
+                QUARK_PARENT,
+                &ctx,
+                (&root, &seed),
+            )?;
+            assert_rational_zero(
+                "rainbow parent has exactly one forest minus sign",
+                &self.graph,
+                &parent,
+                &(NumeratorInterface::export(parent_local.atom()).0 + parent_operator),
+                SpinReduction::SymbolicFirst,
+            )?;
+            let nested_operator = self.assert_operator_branches(
+                "boosted rainbow nested parent",
+                &parent,
+                QUARK_PARENT,
+                &ctx,
+                (&child, &local_child),
+            )?;
+
+            let nested_local_family = nested_local
+                .active_sectors()
+                .iter()
+                .filter(|sector| sector.frozen_lmbs().is_empty())
+                .try_fold(
+                    bare.with_checked_expression(Atom::Zero)?,
+                    |sum, sector| -> Result<_> { Ok(sum.try_add(&sector.atom)?) },
+                )?;
+            assert_rational_zero(
+                "rainbow nested parent has exactly one additional forest minus sign",
+                &self.graph,
+                &parent,
+                &(NumeratorInterface::export(&nested_local_family).0 + nested_operator),
+                SpinReduction::SymbolicFirst,
+            )?;
+
+            // Independent leading-pole formula: the cograph has two massive
+            // quark lines r and one gluon r-q. At r=q+rho*K their leading
+            // polynomials are 2*rho*q.K, 2*rho*q.K and rho^2*K^2. This
+            // constructs gamma.(qslash+m).R_child.(qslash+m).gamma without
+            // using the Laurent extraction or any production Taylor routine.
+            let cograph = self.route(
+                &Self::physical_limit(&self.source(&parent, &child)),
+                &parent,
+            );
+            let cograph_terms = FourDTerm::from_view(cograph.as_view())?;
+            assert_eq!(cograph_terms.len(), 1);
+            assert_eq!(
+                cograph_terms[0]
+                    .denominators
+                    .iter()
+                    .map(|den| usize::from(den.source_edge))
+                    .collect::<BTreeSet<_>>(),
+                BTreeSet::from([2, 5, 6])
+            );
+            let cograph_term = cograph_terms.into_iter().next().unwrap();
+            let cograph_numerator = SymbolicTensor::from(cograph_term.numerator)
+                .undo_dots()?
+                .try_into_indexed()?;
+            let cograph_numerator =
+                self.rainbow_soft_coordinates(&cograph_numerator, &external, &Atom::Zero);
+            let child_finite = child_integrated.physical_finite_counterterm()?;
+            let frozen_child_finite =
+                child_finite.with_checked_expression(&frozen * child_finite.expression())?;
+            let child_completed = NumeratorInterface::admit(self.source(&child, &root), None)?
+                .try_into_indexed()?
+                .try_add(child_local.atom())?
+                .try_add(&frozen_child_finite)?;
+            let child_completed = child_completed.with_checked_expression(
+                self.route(&Self::physical_limit(child_completed.expression()), &parent),
+            )?;
+            let child_at_point =
+                self.rainbow_soft_coordinates(&child_completed, &external, &Atom::Zero);
+            let hard = function!(GS.emr_mom, 2);
+            let k_squared = (0..4)
+                .map(|index| {
+                    Atom::num(if index == 0 { 1 } else { -1 })
+                        * GS.emr_mom(EdgeIndex(2), GS.cind(index)).pow(2)
+                })
+                .sum::<Atom>();
+            let twice_q_dot_k = Atom::num(2)
+                * external
+                    .iter()
+                    .enumerate()
+                    .map(|(index, value)| {
+                        Atom::num(if index == 0 { 1 } else { -1 })
+                            * value
+                            * GS.emr_mom(EdgeIndex(2), GS.cind(index))
+                    })
+                    .sum::<Atom>();
+            let expected_source_coefficient = NumeratorInterface::export(&cograph_numerator).0
+                * NumeratorInterface::export(&child_at_point).0
+                / (GS.den(6, &hard, Atom::Zero, k_squared)
+                    * GS.den(2, &hard, Atom::num(144), &twice_q_dot_k)
+                    * GS.den(5, &hard, Atom::num(144), twice_q_dot_k));
+            let source = bare
+                .try_add(&insertion)?
+                .try_add(&frozen_finite_insertion)?;
+            let source_coefficients = self.rainbow_soft_coefficients(
+                &NumeratorInterface::export(&source).0,
+                &parent,
+                &external,
+                -3,
+            )?;
+            assert_rational_zero(
+                "rainbow leading pole equals independent doubled-quark cograph formula",
+                &self.graph,
+                &parent,
+                &(source_coefficients.get(&(-4).into()).unwrap() - &expected_source_coefficient),
+                SpinReduction::FiniteComponents,
+            )?;
+            if label == "matched" || !matched_boost {
+                assert_rational_zero(
+                    "matched completed child removes the cograph logarithmic coefficient",
+                    &self.graph,
+                    &parent,
+                    &expected_source_coefficient,
+                    SpinReduction::FiniteComponents,
+                )?;
+            }
+
+            // Overall analytic addbacks have no live loop momentum in their
+            // coefficient. Their actual normalized spatial kernel is regular
+            // on this stratum, so an arbitrary overall coefficient cannot
+            // contribute to either negative power tested here. The child
+            // localizer above stays frozen during the parent operation.
+            let overall_localizer = GS
+                .localizing_integrand(parent.lmb())
+                .replace(function!(GS.localizing_integrand, W_.a_))
+                .with(W_.a_);
+            for power in self
+                .rainbow_soft_coefficients(&overall_localizer, &parent, &external, 0)?
+                .into_keys()
+            {
+                assert!(
+                    power >= 0,
+                    "the overall analytic localizer is regular, not merely free of logarithmic soft poles"
+                );
+            }
+
+            let coefficients = self.rainbow_soft_coefficients(
+                &NumeratorInterface::export(&complete).0,
+                &parent,
+                &external,
+                -3,
+            )?;
+            for (power, coefficient) in &coefficients {
+                assert!(*power >= -4, "no worse than the doubled-fermion soft pole");
+                if *power <= -4 {
+                    if matched_boost && label == "rest" {
+                        self.assert_rainbow_soft_nonzero(
+                            coefficient,
+                            "boosted on-shell rainbow with rest-frame subtraction",
+                        )?;
+                    } else {
+                        assert_rational_zero(
+                            "matched complete rainbow logarithmic soft coefficient",
+                            &self.graph,
+                            &parent,
+                            coefficient,
+                            SpinReduction::FiniteComponents,
+                        )?;
+                    }
+                }
+            }
+            if label == "matched" || !matched_boost {
+                self.assert_rainbow_soft_nonzero(
+                    coefficients
+                        .get(&(-3).into())
+                        .expect("the first integrable soft power is retained"),
+                    "matched complete rainbow has a nonzero rho^-3 coefficient",
+                )?;
+            }
+            let logarithmic = coefficients
+                .get(&(-4).into())
+                .expect("the soft jet retains its logarithmic coefficient");
+            if matched_boost && label == "rest" {
+                // At a different fixed subtraction point, parent U and both
+                // parent O branches lack this outer-gluon soft denominator.
+                // The complete rho^-4 coefficient must therefore equal the
+                // actual cograph insertion of the completed child exactly.
+                assert_rational_zero(
+                    "rest prescription retains precisely the completed-child soft coefficient",
+                    &self.graph,
+                    &parent,
+                    &(logarithmic - &expected_source_coefficient),
+                    SpinReduction::FiniteComponents,
+                )?;
+            }
+            debug_tags!(#uv, #local, #soft, #summary;
+                stage = "boosted_rainbow_soft_certificate", label,
+                external_velocity = ?external_velocity,
+                logarithmic_coefficient_zero = !(matched_boost && label == "rest"),
+                coefficient_powers = ?coefficients.keys().collect::<Vec<_>>(),
+                "Certified the complete rainbow outer-soft Laurent coefficients"
+            );
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn complete_two_loop_rainbow_soft_limit_at_rest_matches_fixed_point() -> Result<()> {
+    test_initialise()?;
+    ForestOracle::new(include_str!(
+        "../../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+    ))?
+    .assert_boosted_rainbow_soft_limit(["1", "0", "0", "0"])
+}
+
+#[test]
+fn complete_two_loop_rainbow_soft_limit_at_axial_boost_compares_fixed_points() -> Result<()> {
+    test_initialise()?;
+    ForestOracle::new(include_str!(
+        "../../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+    ))?
+    .assert_boosted_rainbow_soft_limit(["5/4", "3/4", "0", "0"])
+}
+
+#[test]
+fn complete_two_loop_rainbow_soft_limit_at_nonaxial_boost_compares_fixed_points() -> Result<()> {
+    test_initialise()?;
+    ForestOracle::new(include_str!(
+        "../../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+    ))?
+    .assert_boosted_rainbow_soft_limit(["5/4", "1/4", "1/2", "1/2"])
 }

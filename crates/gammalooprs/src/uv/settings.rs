@@ -9,11 +9,17 @@ use crate::utils::{
         IsDefault, is_default_form_path, is_default_pysecdec_relative_precision,
         is_default_python_path, is_default_vakint_evaluation_methods,
         is_default_vakint_normalization, is_false, is_one_string, is_true, is_usize,
+        show_defaults_helper,
     },
 };
 use bincode_trait_derive::{Decode, Encode};
+use eyre::{Result, ensure, eyre};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    domains::rational::Rational,
+};
 use vakint::{
     AlphaLoopOptions, EvaluationMethod, FMFTOptions, MATADOptions, PySecDecOptions,
     TensorReductionMethod,
@@ -558,6 +564,11 @@ pub struct UVgenerationSettings {
     /// Default and counterterm-specific renormalization approximation schemes.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub renormalization_prescription: RenormalizationPrescriptionSettings,
+    /// Fixed future-directed unit four-velocity of the OS subtraction point,
+    /// with metric (+---). Exact rational components keep p_OS = mass * velocity
+    /// symbolic under enclosing Taylor operators; this never follows a loop momentum.
+    #[serde(skip_serializing_if = "Self::is_default_on_shell_subtraction_velocity")]
+    pub on_shell_subtraction_velocity: [String; 4],
     /// Vakint backend configuration for integrated ultraviolet counterterms.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vakint: VakintSettings,
@@ -577,12 +588,47 @@ impl Default for UVgenerationSettings {
             add_marker: false,
             keep_marker: true,
             renormalization_prescription: RenormalizationPrescriptionSettings::default(),
+            on_shell_subtraction_velocity: ["1", "0", "0", "0"].map(str::to_owned),
             vakint: VakintSettings::default(),
         }
     }
 }
 
 impl UVgenerationSettings {
+    fn is_default_on_shell_subtraction_velocity(velocity: &[String; 4]) -> bool {
+        show_defaults_helper(velocity == &["1", "0", "0", "0"])
+    }
+
+    /// Validate and parse a constant subtraction frame without a floating-point boundary.
+    pub(crate) fn on_shell_velocity(&self) -> Result<[Atom; 4]> {
+        let mut velocity = std::array::from_fn(|_| Atom::Zero);
+        for (component, value) in self.on_shell_subtraction_velocity.iter().enumerate() {
+            let atom =
+                Atom::parse(value, "gammalooprs::uv", Default::default()).map_err(|error| {
+                    eyre!("invalid OS subtraction velocity component {component}: {error}")
+                })?;
+            Rational::try_from(&atom).map_err(|_| eyre!(
+                "OS subtraction velocity component {component} must be an exact rational constant"
+            ))?;
+            velocity[component] = atom;
+        }
+        ensure!(
+            Rational::try_from(&velocity[0]).unwrap() > 0,
+            "OS subtraction velocity must be future-directed"
+        );
+        let norm = velocity[0].clone().pow(2)
+            - Atom::add_many(
+                velocity[1..]
+                    .iter()
+                    .map(|component| component.clone().pow(2)),
+            );
+        ensure!(
+            norm.is_one(),
+            "OS subtraction velocity must satisfy v0^2 - v1^2 - v2^2 - v3^2 = 1 exactly"
+        );
+        Ok(velocity)
+    }
+
     pub fn approximation_scheme_for(
         &self,
         ct_identifier: &CTIdentifier,
@@ -645,6 +691,70 @@ mod tests {
 
     fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
         values.into_iter().collect()
+    }
+
+    #[test]
+    fn fixed_on_shell_velocity_validates_exact_timelike_constants() {
+        let defaults = UVgenerationSettings::default();
+        assert_eq!(
+            defaults.on_shell_velocity().unwrap(),
+            [1, 0, 0, 0].map(symbolica::atom::Atom::num)
+        );
+        for components in [
+            ["5/4", "3/4", "0", "0"],
+            ["5/4", "0", "-3/4", "0"],
+            ["3/2", "1", "1/2", "0"],
+        ] {
+            let settings = UVgenerationSettings {
+                on_shell_subtraction_velocity: components.map(str::to_owned),
+                ..defaults.clone()
+            };
+            assert!(settings.on_shell_velocity().is_ok(), "{components:?}");
+        }
+        for components in [
+            ["-1", "0", "0", "0"],
+            ["1", "1", "0", "0"],
+            ["2", "0", "0", "0"],
+            ["v0", "0", "0", "0"],
+            ["sqrt(2)", "1", "0", "0"],
+            ["1", "Q(0,1)", "0", "0"],
+            ["1 +", "0", "0", "0"],
+        ] {
+            let settings = UVgenerationSettings {
+                on_shell_subtraction_velocity: components.map(str::to_owned),
+                ..defaults.clone()
+            };
+            assert!(settings.on_shell_velocity().is_err(), "{components:?}");
+        }
+    }
+
+    #[test]
+    fn fixed_on_shell_velocity_roundtrips_with_visible_defaults() {
+        use crate::utils::serde_utils::ShowDefaultsGuard;
+        let defaults = UVgenerationSettings::default();
+        let guard = ShowDefaultsGuard::new(false);
+        assert!(
+            !toml::to_string(&defaults)
+                .unwrap()
+                .contains("on_shell_subtraction_velocity")
+        );
+        let boosted = UVgenerationSettings {
+            on_shell_subtraction_velocity: ["5/4", "3/4", "0", "0"].map(str::to_owned),
+            ..defaults.clone()
+        };
+        let serialized = toml::to_string(&boosted).unwrap();
+        assert!(serialized.contains("on_shell_subtraction_velocity"));
+        assert_eq!(
+            toml::from_str::<UVgenerationSettings>(&serialized).unwrap(),
+            boosted
+        );
+        drop(guard);
+        let _guard = ShowDefaultsGuard::new(true);
+        assert!(
+            toml::to_string(&defaults)
+                .unwrap()
+                .contains("on_shell_subtraction_velocity")
+        );
     }
 
     #[test]

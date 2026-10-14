@@ -104,6 +104,7 @@ use super::{
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
+    pub(crate) fixed_on_shell_spatial_velocity: Option<[String; 3]>,
     pub original_integrand: EvaluatorStack,
     pub(crate) fermi_surfaces: Vec<(Option<OrientationID>, FermiSurfaceEvaluator)>,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
@@ -676,6 +677,10 @@ impl AmplitudeGraphTerm {
         let param_builder = runtime_graph.param_builder.clone();
         Ok((
             AmplitudeGraphTerm {
+                fixed_on_shell_spatial_velocity: graph
+                    .derived_data
+                    .fixed_on_shell_spatial_velocity
+                    .clone(),
                 orientation_filter: SubSet::full(orientations.len()),
                 orientations,
                 production_orientation_keys,
@@ -2913,7 +2918,16 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
     )]
     fn warm_up(&mut self, model: &Model) -> Result<()> {
         self.invalidate_runtime_caches();
-        validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
+        validate_process_runtime_settings(
+            &self.settings,
+            self.data.explicit_orientation_sum_only,
+            &self
+                .data
+                .graph_terms
+                .iter()
+                .filter_map(|term| term.fixed_on_shell_spatial_velocity.as_ref())
+                .collect::<Vec<_>>(),
+        )?;
 
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))

@@ -293,7 +293,19 @@ fn proper_direct_os_child_matches_projected_four_d_in_both_orientation_modes() -
 
 #[test]
 fn proper_direct_os_child_in_quark_matches_projected_four_d() -> Result<()> {
-    DirectForestFixture::OsQuarkInQuark.check(DirectForestTerms::Child, false)
+    // This proper component has a live surrounding quark line. Nonzero fixed
+    // spatial coordinates exercise its attachment boundary, which is absent
+    // from the full-domain primitive comparison. This remains pointwise route
+    // coverage; the exact source and reconstruction certificates run upstream.
+    for velocity in [["1", "0", "0", "0"], ["5/4", "1/4", "1/2", "1/2"]] {
+        DirectForestFixture::OsQuarkInQuark.check_points(
+            DirectForestTerms::Child,
+            false,
+            &[[7, 1, 2, 3], [11, -2, 1, 4]],
+            velocity,
+        )?;
+    }
+    Ok(())
 }
 
 #[test]
@@ -377,6 +389,7 @@ fn direct_os_quark_in_gluon_complete_forest_matches_at_first_point() -> Result<(
         DirectForestTerms::CompleteForest,
         false,
         &[[7, 1, 2, 3]],
+        ["1", "0", "0", "0"],
     )
 }
 
@@ -386,6 +399,7 @@ fn direct_os_quark_in_gluon_complete_forest_matches_at_second_point() -> Result<
         DirectForestTerms::CompleteForest,
         false,
         &[[11, -2, 1, 4]],
+        ["1", "0", "0", "0"],
     )
 }
 
@@ -470,6 +484,7 @@ impl DirectForestFixture {
         self,
         terms: DirectForestTerms,
         finite_prefix: bool,
+        velocity: [&str; 4],
     ) -> Result<(Graph, Vec<crate::uv::Integrands>)> {
         let complete_forest = matches!(terms, DirectForestTerms::CompleteForest);
         let bare_parent = matches!(terms, DirectForestTerms::BareParent);
@@ -526,6 +541,7 @@ impl DirectForestFixture {
             None
         };
         let settings = UVgenerationSettings {
+            on_shell_subtraction_velocity: velocity.map(str::to_owned),
             generate_integrated: finite_prefix,
             add_marker: false,
             local_uv_cts_from_expanded_4d_integrands: true,
@@ -931,7 +947,12 @@ impl DirectForestFixture {
     }
 
     fn check(self, terms: DirectForestTerms, finite_prefix: bool) -> Result<()> {
-        self.check_points(terms, finite_prefix, &[[7, 1, 2, 3], [11, -2, 1, 4]])
+        self.check_points(
+            terms,
+            finite_prefix,
+            &[[7, 1, 2, 3], [11, -2, 1, 4]],
+            ["1", "0", "0", "0"],
+        )
     }
 
     fn check_points(
@@ -939,10 +960,11 @@ impl DirectForestFixture {
         terms: DirectForestTerms,
         finite_prefix: bool,
         points: &[[i32; 4]],
+        velocity: [&str; 4],
     ) -> Result<()> {
         use crate::utils::{ArbPrec, F, FloatLike};
         use spenso::algebra::complex::Complex;
-        let (graph, expressions) = self.assemble(terms, finite_prefix)?;
+        let (graph, expressions) = self.assemble(terms, finite_prefix, velocity)?;
         let mut evaluators = expressions
             .iter()
             .enumerate()
@@ -1008,7 +1030,7 @@ impl DirectForestFixture {
                     assert!(
                         (value.clone() - reference).norm().re
                             <= &tolerance * (&scale + &tensor_scale),
-                        "{self:?} {label}, terms={terms:?}, finite={finite_prefix}, component={component:?}, p={external:?}: {value} versus {reference}"
+                        "{self:?} {label}, terms={terms:?}, finite={finite_prefix}, velocity={velocity:?}, component={component:?}, p={external:?}: {value} versus {reference}"
                     );
                 }
             }
@@ -1017,7 +1039,11 @@ impl DirectForestFixture {
     }
 
     pub(super) fn full_forest_evaluator(self, route: usize) -> Result<ForestTensorEvaluator> {
-        let (graph, expressions) = self.assemble(DirectForestTerms::CompleteForest, false)?;
+        let (graph, expressions) = self.assemble(
+            DirectForestTerms::CompleteForest,
+            false,
+            ["1", "0", "0", "0"],
+        )?;
         if matches!(
             self,
             Self::OsQuarkInGluon | Self::OsQuarkInQuark | Self::SoftGluonInQuark
@@ -2072,7 +2098,11 @@ fn direct_soft_gluon_shared_families_agree_at_identical_point() -> Result<()> {
     use crate::utils::{ArbPrec, F, FloatLike};
     test_initialise()?;
     let fixture = DirectForestFixture::SoftGluonInQuark;
-    let (graph, inputs) = fixture.assemble(DirectForestTerms::CompleteForest, false)?;
+    let (graph, inputs) = fixture.assemble(
+        DirectForestTerms::CompleteForest,
+        false,
+        ["1", "0", "0", "0"],
+    )?;
     let mut evaluator = ForestTensorEvaluator::new_shared(fixture, &graph, 1, &inputs[1])?;
     let reference: Atom = inputs[1].resolved()?.iter().map(|(_, atom)| atom).sum();
     let mut reference = ForestTensorEvaluator::new(fixture, &graph, 1, &reference)?;
@@ -2212,216 +2242,225 @@ fn primitive_direct_massless_os_equals_soft_refined_operation() -> Result<()> {
 #[test]
 fn primitive_direct_os_matches_projected_four_d_in_both_orientation_modes() -> Result<()> {
     test_initialise()?;
-    let (mut graph, current, root) = fixture(false)?;
-    let settings = UVgenerationSettings {
-        generate_integrated: false,
-        add_marker: false,
-        ..Default::default()
-    };
-    let bare_numerator = graph
-        .numerator(current.subgraph(), root.subgraph())?
-        .state
-        .expr;
-    let options = graph.denominator_only_cff_3d_expression_options();
-    let canonical_surfaces = graph.get_esurface_canonization(&graph.loop_momentum_basis);
-    let production = graph.generate_3d_expression_for_integrand(
-        &[],
-        &canonical_surfaces,
-        &options,
-        Some(bare_numerator.expression()),
-    )?;
-    let pattern = OrientationPattern::default();
-    let cutset = CutSet::empty(graph.n_hedges());
-    let orientation =
-        OrientationProjection::exact_expression(&production, &options, &pattern, false);
-    let localizer = Localizer::new(&cutset, orientation);
-    let ctx = UVCtx::new(&graph, &graph.model, &settings);
-    let local = uv_limit(
-        &Full4dCts::from_factorized_local(&Local4dCts::root()),
-        &ctx,
-        &current,
-        &root,
-        &current,
-        &root,
-    )?;
-    let mut projection_context = Local4dProjectionContext::default();
-    let mut projected = Atom::Zero;
-    for sector in local.projection_sectors()? {
-        let canonical = sector.canonical_projection(&graph)?;
-        let coefficient = localizer
-            .project_factorized_taylor_sector(&mut graph, &canonical, &mut projection_context)?
-            .resolved()?;
-        projected += coefficient
-            .iter()
-            .map(|(_, value)| value.clone())
-            .sum::<Atom>();
-    }
-
-    let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
-    let mut direct_values = Vec::new();
-    let mut direct_host_values = Vec::new();
-    for materialize_selectors in [false, true] {
-        let orientation = OrientationProjection::exact_expression(
-            &production,
+    for velocity in [
+        ["1", "0", "0", "0"],
+        ["5/4", "3/4", "0", "0"],
+        ["5/4", "1/4", "1/2", "1/2"],
+    ] {
+        let (mut graph, current, root) = fixture(false)?;
+        let settings = UVgenerationSettings {
+            on_shell_subtraction_velocity: velocity.map(str::to_owned),
+            generate_integrated: false,
+            add_marker: false,
+            ..Default::default()
+        };
+        let bare_numerator = graph
+            .numerator(current.subgraph(), root.subgraph())?
+            .state
+            .expr;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonical_surfaces = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonical_surfaces,
             &options,
-            &pattern,
-            !materialize_selectors,
-        );
+            Some(bare_numerator.expression()),
+        )?;
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let orientation =
+            OrientationProjection::exact_expression(&production, &options, &pattern, false);
         let localizer = Localizer::new(&cutset, orientation);
-        let source = Direct3dCts::root(&graph, localizer)?.branches()?;
-        // Build each representation using its actual orientation setting.
-        // Public guards remain while this private component kernel is checked.
-        // The forest owns exactly this one subtraction minus.
-        let point_source = Direct3dApproximation::new(localizer, &mut graph, &settings)
-            .on_shell_source(&current, &root, current.lmb(), &source, current.subgraph())?;
-        let direct = -apply_taylor(
-            &UVCtx::new(&graph, &graph.model, &settings),
-            orientation,
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let local = uv_limit(
+            &Full4dCts::from_factorized_local(&Local4dCts::root()),
+            &ctx,
             &current,
             &root,
-            Some(current.subgraph().clone()),
-            current.lmb(),
-            &source,
-            Some(&point_source),
+            &current,
+            &root,
         )?;
-        // Preserve the complete residue maps until each production host is
-        // selected. This checks the two independently constructed modes before
-        // summing orientations, including both fixed-point branches per host.
-        let selected = direct.materialize(true)?.resolved()?;
-        let selected = selected
-            .iter()
-            .map(|(_, value)| value.clone())
-            .sum::<Atom>();
-        let hosts = direct
-            .iter_keys()
-            .map(|(key, _)| key.selector_host)
-            .collect::<std::collections::BTreeSet<_>>();
-        let host_values = hosts
-            .iter()
-            .map(|host| (*host, host.select(&selected)))
-            .collect::<std::collections::BTreeMap<_, _>>();
-        let value = if materialize_selectors {
-            host_values.values().cloned().sum()
-        } else {
-            direct
-                .materialize(false)?
-                .resolved()?
+        let mut projection_context = Local4dProjectionContext::default();
+        let mut projected = Atom::Zero;
+        for sector in local.projection_sectors()? {
+            let canonical = sector.canonical_projection(&graph)?;
+            let coefficient = localizer
+                .project_factorized_taylor_sector(&mut graph, &canonical, &mut projection_context)?
+                .resolved()?;
+            projected += coefficient
                 .iter()
                 .map(|(_, value)| value.clone())
-                .sum()
-        };
-        direct_values.push(value);
-        direct_host_values.push(host_values);
-    }
-
-    for (spatial, external) in [([9, 12, 0], [11, 2, 3, 4]), ([9, -12, 0], [19, -2, 5, 3])] {
-        let specialize = |value: &Atom| -> Result<Atom> {
-            // Match the final evaluator boundary on both routes: direct
-            // source roots retain tree ownership wrappers, while the typed
-            // projection retains symbolic colour Casimirs until finalization.
-            // Use the established colour invariant rules, not a numeric CF
-            // replacement inferred from the difference under examination.
-            let value = GS
-                .erase_uv_momentum_provenance(value)
-                .replace(function!(GS.tree_denom_wrapper, W_.x_))
-                .with(W_.x_);
-            let cooking = CookSettings::indices()
-                .with_mode(CookMode::ReversibleEncoding)
-                .with_representation_payloads(true, true);
-            let value = bare_numerator
-                .with_checked_expression(cooking.try_cook(value.as_view())?)?
-                .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
-                    ..Default::default()
-                })?;
-            let value = cooking
-                .uncook(value.expression().as_view())
-                .replace(function!(*LOCAL_3D_MASS_SCOPE, W_.x_))
-                .with(Atom::one())
-                .replace(GS.dim)
-                .with(Atom::num(4))
-                .replace(mass.clone())
-                .with(Atom::num(8))
-                .replace(GS.m_uv_vacuum)
-                .with(Atom::num(20))
-                .replace(GS.m_uv_expansion)
-                .with(Atom::num(20));
-            let value = value.replace_multiple(graph.uv_spatial_wrapped_replacement(
-                current.subgraph(),
-                current.lmb(),
-                &[W_.x___],
-            ));
-            let value = value.replace_map(|view, _, output| {
-                let AtomView::Fun(momentum) = view else {
-                    return;
-                };
-                if ![GS.emr_mom, GS.emr_vec].contains(&momentum.get_symbol())
-                    || momentum.get_nargs() != 2
-                {
-                    return;
-                }
-                let Ok(edge) = usize::try_from(momentum.get(0)) else {
-                    return;
-                };
-                let values = match edge {
-                    0 | 1 => external,
-                    2 => [0, spatial[0], spatial[1], spatial[2]],
-                    _ => return,
-                };
-                let index = momentum.get(1);
-                if let AtomView::Fun(component) = index
-                    && component.get_symbol() == AIND_SYMBOLS.cind
-                    && component.get_nargs() == 1
-                    && let Ok(component @ 0..=3) = usize::try_from(component.get(0))
-                {
-                    **output = Atom::num(values[component]);
-                } else {
-                    let first = usize::from(momentum.get_symbol() == GS.emr_vec);
-                    **output = (first..=3)
-                        .map(|component| {
-                            Atom::num(values[component])
-                                * function!(GS.delta_vec, GS.cind(component), index)
-                        })
-                        .sum();
-                }
-            });
-            let value = value
-                .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
-                .with_map(|matched| matched.get(W_.prop_).unwrap().to_atom().sqrt());
-            Ok(GS.lower_esurfaces(&value))
-        };
-        let reference = specialize(&projected)?;
-        assert!(
-            !NumeratorJetCache::default()
-                .canonicalize(&reference.undo_dots::<Aind>()?)?
-                .is_zero,
-            "the primitive route comparison must retain a nonzero open-spinor counterterm"
-        );
-        assert_eq!(
-            direct_host_values[0].keys().collect::<Vec<_>>(),
-            direct_host_values[1].keys().collect::<Vec<_>>(),
-            "the two direct orientation modes must retain the same production hosts"
-        );
-        for (host, explicit) in &direct_host_values[0] {
-            let difference = specialize(explicit)? - specialize(&direct_host_values[1][host])?;
-            let certificate =
-                NumeratorJetCache::default().canonicalize(&difference.undo_dots::<Aind>()?)?;
-            assert!(
-                certificate.is_zero,
-                "direct OS orientation host {host:?}, k={spatial:?}, p={external:?}: {}",
-                certificate.key
-            );
+                .sum::<Atom>();
         }
-        for (mode, direct) in direct_values.iter().enumerate() {
-            let actual = specialize(direct)?;
-            let difference = &actual - &reference;
-            let certificate =
-                NumeratorJetCache::default().canonicalize(&difference.undo_dots::<Aind>()?)?;
-            assert!(
-                certificate.is_zero,
-                "direct OS selector mode {mode}, k={spatial:?}, p={external:?}: {}",
-                certificate.key
+
+        let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
+        let mut direct_values = Vec::new();
+        let mut direct_host_values = Vec::new();
+        for materialize_selectors in [false, true] {
+            let orientation = OrientationProjection::exact_expression(
+                &production,
+                &options,
+                &pattern,
+                !materialize_selectors,
             );
+            let localizer = Localizer::new(&cutset, orientation);
+            let source = Direct3dCts::root(&graph, localizer)?.branches()?;
+            // Build each representation using its actual orientation setting.
+            // Public guards remain while this private component kernel is checked.
+            // The forest owns exactly this one subtraction minus.
+            let point_source = Direct3dApproximation::new(localizer, &mut graph, &settings)
+                .on_shell_source(&current, &root, current.lmb(), &source, current.subgraph())?;
+            let direct = -apply_taylor(
+                &UVCtx::new(&graph, &graph.model, &settings),
+                orientation,
+                &current,
+                &root,
+                Some(current.subgraph().clone()),
+                current.lmb(),
+                &source,
+                Some(&point_source),
+            )?;
+            // Preserve the complete residue maps until each production host is
+            // selected. This checks the two independently constructed modes before
+            // summing orientations, including both fixed-point branches per host.
+            let selected = direct.materialize(true)?.resolved()?;
+            let selected = selected
+                .iter()
+                .map(|(_, value)| value.clone())
+                .sum::<Atom>();
+            let hosts = direct
+                .iter_keys()
+                .map(|(key, _)| key.selector_host)
+                .collect::<std::collections::BTreeSet<_>>();
+            let host_values = hosts
+                .iter()
+                .map(|host| (*host, host.select(&selected)))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            let value = if materialize_selectors {
+                host_values.values().cloned().sum()
+            } else {
+                direct
+                    .materialize(false)?
+                    .resolved()?
+                    .iter()
+                    .map(|(_, value)| value.clone())
+                    .sum()
+            };
+            direct_values.push(value);
+            direct_host_values.push(host_values);
+        }
+
+        for (spatial, external) in [([9, 12, 0], [11, 2, 3, 4]), ([9, -12, 0], [19, -2, 5, 3])] {
+            let specialize = |value: &Atom| -> Result<Atom> {
+                // Match the final evaluator boundary on both routes: direct
+                // source roots retain tree ownership wrappers, while the typed
+                // projection retains symbolic colour Casimirs until finalization.
+                // Use the established colour invariant rules, not a numeric CF
+                // replacement inferred from the difference under examination.
+                let value = GS
+                    .erase_uv_momentum_provenance(value)
+                    .replace(function!(GS.tree_denom_wrapper, W_.x_))
+                    .with(W_.x_);
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let value = bare_numerator
+                    .with_checked_expression(cooking.try_cook(value.as_view())?)?
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                        color: Some(
+                            ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                        ),
+                        ..Default::default()
+                    })?;
+                let value = cooking
+                    .uncook(value.expression().as_view())
+                    .replace(function!(*LOCAL_3D_MASS_SCOPE, W_.x_))
+                    .with(Atom::one())
+                    .replace(GS.dim)
+                    .with(Atom::num(4))
+                    .replace(mass.clone())
+                    .with(Atom::num(8))
+                    .replace(GS.m_uv_vacuum)
+                    .with(Atom::num(20))
+                    .replace(GS.m_uv_expansion)
+                    .with(Atom::num(20));
+                let value = value.replace_multiple(graph.uv_spatial_wrapped_replacement(
+                    current.subgraph(),
+                    current.lmb(),
+                    &[W_.x___],
+                ));
+                let value = value.replace_map(|view, _, output| {
+                    let AtomView::Fun(momentum) = view else {
+                        return;
+                    };
+                    if ![GS.emr_mom, GS.emr_vec].contains(&momentum.get_symbol())
+                        || momentum.get_nargs() != 2
+                    {
+                        return;
+                    }
+                    let Ok(edge) = usize::try_from(momentum.get(0)) else {
+                        return;
+                    };
+                    let values = match edge {
+                        0 | 1 => external,
+                        2 => [0, spatial[0], spatial[1], spatial[2]],
+                        _ => return,
+                    };
+                    let index = momentum.get(1);
+                    if let AtomView::Fun(component) = index
+                        && component.get_symbol() == AIND_SYMBOLS.cind
+                        && component.get_nargs() == 1
+                        && let Ok(component @ 0..=3) = usize::try_from(component.get(0))
+                    {
+                        **output = Atom::num(values[component]);
+                    } else {
+                        let first = usize::from(momentum.get_symbol() == GS.emr_vec);
+                        **output = (first..=3)
+                            .map(|component| {
+                                Atom::num(values[component])
+                                    * function!(GS.delta_vec, GS.cind(component), index)
+                            })
+                            .sum();
+                    }
+                });
+                let value = value
+                    .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
+                    .with_map(|matched| matched.get(W_.prop_).unwrap().to_atom().sqrt());
+                Ok(GS.lower_esurfaces(&value))
+            };
+            let reference = specialize(&projected)?;
+            assert!(
+                !NumeratorJetCache::default()
+                    .canonicalize(&reference.undo_dots::<Aind>()?)?
+                    .is_zero,
+                "the primitive route comparison must retain a nonzero open-spinor counterterm"
+            );
+            assert_eq!(
+                direct_host_values[0].keys().collect::<Vec<_>>(),
+                direct_host_values[1].keys().collect::<Vec<_>>(),
+                "the two direct orientation modes must retain the same production hosts"
+            );
+            for (host, explicit) in &direct_host_values[0] {
+                let difference = specialize(explicit)? - specialize(&direct_host_values[1][host])?;
+                let certificate =
+                    NumeratorJetCache::default().canonicalize(&difference.undo_dots::<Aind>()?)?;
+                assert!(
+                    certificate.is_zero,
+                    "direct OS velocity {velocity:?}, orientation host {host:?}, k={spatial:?}, p={external:?}: {}",
+                    certificate.key
+                );
+            }
+            for (mode, direct) in direct_values.iter().enumerate() {
+                let actual = specialize(direct)?;
+                let difference = &actual - &reference;
+                let certificate =
+                    NumeratorJetCache::default().canonicalize(&difference.undo_dots::<Aind>()?)?;
+                assert!(
+                    certificate.is_zero,
+                    "direct OS velocity {velocity:?}, selector mode {mode}, k={spatial:?}, p={external:?}: {}",
+                    certificate.key
+                );
+            }
         }
     }
     Ok(())

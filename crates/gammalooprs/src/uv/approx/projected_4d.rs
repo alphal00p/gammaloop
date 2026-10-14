@@ -911,155 +911,160 @@ mod tests {
             OrientationProjection::exact(&production, &options, &pattern, false),
         );
         let mut context = Local4dProjectionContext::default();
-        for sign in [1, -1] {
-            let point = function!(GS.os_mom, usize::from(external), Atom::num(sign) * &mass);
-            let shifted = &point - &loop_momentum;
-            let quark = GS.den(
-                1,
-                &loop_momentum,
-                mass.pow(2),
-                quadratic(&loop_momentum, mass.pow(2)),
-            );
-            let denominator = &quark * GS.den(2, &shifted, 0, quadratic(&shifted, Atom::Zero));
-            // The binding certificate preserves the complete pole polynomial,
-            // including explicit prescription data. This is a reconstruction
-            // check only; it does not enable additional contour prescriptions.
-            let prescription = Atom::var(symbol!("os_live_crown::prescription"));
-            let prescribed = [-1, 1]
-                .into_iter()
-                .map(|sign| {
-                    Atom::one()
-                        / (&quark
-                            * GS.den(
-                                2,
-                                &shifted,
-                                0,
-                                quadratic(&shifted, Atom::Zero)
-                                    + Atom::num(sign) * Atom::i() * &prescription,
-                            ))
-                })
-                .sum::<Atom>();
-            let certificate = FourDSector::new(
-                crate::graph::parse::NumeratorInterface::admit(prescribed, None)?
-                    .try_into_indexed()?,
-                vec![(owners.clone(), owners.clone(), lmb.clone())],
-                Vec::new(),
-            )
-            .canonical_projection(&graph)?;
-            assert_eq!(
-                certificate
-                    .classes
-                    .iter()
-                    .filter(|class| class.members.contains(&EdgeIndex(2)))
-                    .count(),
-                2,
-                "opposite explicit prescriptions must remain distinct denominator classes"
-            );
-            let invalid = &quark
-                * GS.den(
-                    2,
-                    &shifted,
-                    0,
-                    quadratic(&shifted, Atom::Zero) + GS.emr_mom(external, GS.cind(1)),
+        for velocity in [["1", "0", "0", "0"], ["5/4", "1/4", "1/2", "1/2"]] {
+            let velocity = UVgenerationSettings {
+                on_shell_subtraction_velocity: velocity.map(str::to_owned),
+                ..Default::default()
+            }
+            .on_shell_velocity()?;
+            for sign in [1, -1] {
+                let point = GS.on_shell_momentum(external, &(Atom::num(sign) * &mass), &velocity);
+                let shifted = &point - &loop_momentum;
+                let quark = GS.den(
+                    1,
+                    &loop_momentum,
+                    mass.pow(2),
+                    quadratic(&loop_momentum, mass.pow(2)),
                 );
-            let error = FourDSector::new(
-                crate::graph::parse::NumeratorInterface::admit(Atom::one() / invalid, None)?
-                    .try_into_indexed()?,
-                vec![(owners.clone(), owners.clone(), lmb.clone())],
-                Vec::new(),
-            )
-            .canonical_projection(&graph)
-            .expect_err(
-                "a live crown in the source polynomial cannot masquerade as the fixed point",
-            );
-            assert!(
-                error
-                    .to_string()
-                    .contains("OS denominator point-binding certificate failed")
-            );
-            for index in [0, 1] {
-                let live = function!(GS.emr_mom, &live_tag, GS.cind(index));
-                for use_shifted_carrier in [false, true] {
-                    let source = if use_shifted_carrier {
-                        function!(
-                            GS.emr_mom,
-                            GS.uv_momentum_provenance_tag(
-                                2,
-                                UvMomentumProvenanceRole::TaylorFixed,
-                                &shifted
-                            ),
-                            GS.cind(0)
-                        )
-                    } else {
-                        GS.indexed_momentum(&point, &[GS.cind(0)])
-                    };
-                    let numerator = source * &live;
-                    let sector = FourDSector::new(
-                        crate::graph::parse::NumeratorInterface::admit(
-                            &numerator / &denominator,
-                            None,
-                        )?
+                let denominator = &quark * GS.den(2, &shifted, 0, quadratic(&shifted, Atom::Zero));
+                // The binding certificate preserves the complete pole polynomial,
+                // including explicit prescription data. This is a reconstruction
+                // check only; it does not enable additional contour prescriptions.
+                let prescription = Atom::var(symbol!("os_live_crown::prescription"));
+                let prescribed = [-1, 1]
+                    .into_iter()
+                    .map(|sign| {
+                        Atom::one()
+                            / (&quark
+                                * GS.den(
+                                    2,
+                                    &shifted,
+                                    0,
+                                    quadratic(&shifted, Atom::Zero)
+                                        + Atom::num(sign) * Atom::i() * &prescription,
+                                ))
+                    })
+                    .sum::<Atom>();
+                let certificate = FourDSector::new(
+                    crate::graph::parse::NumeratorInterface::admit(prescribed, None)?
                         .try_into_indexed()?,
-                        vec![(owners.clone(), owners.clone(), lmb.clone())],
-                        Vec::new(),
+                    vec![(owners.clone(), owners.clone(), lmb.clone())],
+                    Vec::new(),
+                )
+                .canonical_projection(&graph)?;
+                assert_eq!(
+                    certificate
+                        .classes
+                        .iter()
+                        .filter(|class| class.members.contains(&EdgeIndex(2)))
+                        .count(),
+                    2,
+                    "opposite explicit prescriptions must remain distinct denominator classes"
+                );
+                let invalid = &quark
+                    * GS.den(
+                        2,
+                        &shifted,
+                        0,
+                        quadratic(&shifted, Atom::Zero) + GS.emr_mom(external, GS.cind(1)),
                     );
-                    let canonical = sector.canonical_projection(&graph)?;
-                    assert_eq!(canonical.terms.len(), 1);
-                    let term = &canonical.terms[0];
-                    assert_eq!(
-                        crate::graph::parse::NumeratorInterface::export(&term.source_numerator).0,
-                        numerator,
-                        "the raw factorized witness must retain both momentum domains"
-                    );
-                    // Factor sigma using sigma^2=1. This fixes numeric signs
-                    // independently of the production routing/certificate.
-                    let expected = Atom::num(sign)
-                        * (&mass
-                            - Atom::num(sign)
-                                * if use_shifted_carrier {
-                                    GS.emr_mom(EdgeIndex(1), GS.cind(0))
-                                } else {
-                                    Atom::Zero
-                                })
-                        * GS.emr_mom(external, GS.cind(index));
-                    assert_eq!(
-                        canonical
-                            .neutral_numerator(
-                                &term.source_numerator,
-                                &graph,
-                                &term.on_shell_points
+                let error = FourDSector::new(
+                    crate::graph::parse::NumeratorInterface::admit(Atom::one() / invalid, None)?
+                        .try_into_indexed()?,
+                    vec![(owners.clone(), owners.clone(), lmb.clone())],
+                    Vec::new(),
+                )
+                .canonical_projection(&graph)
+                .expect_err(
+                    "a live crown in the source polynomial cannot masquerade as the fixed point",
+                );
+                assert!(
+                    error
+                        .to_string()
+                        .contains("OS denominator point-binding certificate failed")
+                );
+                for index in [0, 1] {
+                    let live = function!(GS.emr_mom, &live_tag, GS.cind(index));
+                    for use_shifted_carrier in [false, true] {
+                        let source = if use_shifted_carrier {
+                            function!(
+                                GS.emr_mom,
+                                GS.uv_momentum_provenance_tag(
+                                    2,
+                                    UvMomentumProvenanceRole::TaylorFixed,
+                                    &shifted
+                                ),
+                                GS.cind(0)
+                            )
+                        } else {
+                            GS.indexed_momentum(&point, &[GS.cind(0)])
+                        };
+                        let numerator = source * &live;
+                        let sector = FourDSector::new(
+                            crate::graph::parse::NumeratorInterface::admit(
+                                &numerator / &denominator,
+                                None,
                             )?
-                            .expression(),
-                        &expected
-                    );
-                    assert_eq!(
-                        canonical
-                            .neutral_numerator(&term.numerator, &graph, &term.on_shell_points)?
-                            .expression(),
-                        &expected
-                    );
-                    let projected = localizer.project_factorized_taylor_sector(
-                        &mut graph,
-                        &canonical,
-                        &mut context,
-                    )?;
-                    assert!(!projected.numerators().is_empty());
-                    for entry in projected.numerators() {
-                        assert!(
-                            entry
-                                .rhs
-                                .expression()
-                                .pattern_match(&live.to_pattern(), None, None)
-                                .next()
-                                .is_some(),
-                            "source mapping must retain the typed live parent factor"
+                            .try_into_indexed()?,
+                            vec![(owners.clone(), owners.clone(), lmb.clone())],
+                            Vec::new(),
                         );
-                        if !use_shifted_carrier {
-                            assert_eq!(
-                                entry.rhs.expression(),
-                                &(Atom::num(sign) * &mass * &live),
-                                "source point binding must precede any lowering of the live parent carrier"
+                        let canonical = sector.canonical_projection(&graph)?;
+                        assert_eq!(canonical.terms.len(), 1);
+                        let term = &canonical.terms[0];
+                        assert_eq!(
+                            crate::graph::parse::NumeratorInterface::export(&term.source_numerator)
+                                .0,
+                            numerator,
+                            "the raw factorized witness must retain both momentum domains"
+                        );
+                        // Factor sigma using sigma^2=1. This fixes numeric signs
+                        // independently of the production routing/certificate.
+                        let expected = Atom::num(sign)
+                            * (&mass * &velocity[0]
+                                - Atom::num(sign)
+                                    * if use_shifted_carrier {
+                                        GS.emr_mom(EdgeIndex(1), GS.cind(0))
+                                    } else {
+                                        Atom::Zero
+                                    })
+                            * GS.emr_mom(external, GS.cind(index));
+                        for numerator in [&term.source_numerator, &term.numerator] {
+                            let neutral = canonical.neutral_numerator(
+                                numerator,
+                                &graph,
+                                &term.on_shell_points,
+                            )?;
+                            assert!(
+                                crate::uv::overlap_numerators::NumeratorJetCache::default()
+                                    .canonicalize(&(neutral.expression() - &expected))?
+                                    .is_zero,
+                                "the fixed point and live crown must agree exactly, allowing equivalent factored signs"
                             );
+                        }
+                        let projected = localizer.project_factorized_taylor_sector(
+                            &mut graph,
+                            &canonical,
+                            &mut context,
+                        )?;
+                        assert!(!projected.numerators().is_empty());
+                        for entry in projected.numerators() {
+                            assert!(
+                                entry
+                                    .rhs
+                                    .expression()
+                                    .pattern_match(&live.to_pattern(), None, None)
+                                    .next()
+                                    .is_some(),
+                                "source mapping must retain the typed live parent factor"
+                            );
+                            if !use_shifted_carrier {
+                                assert_eq!(
+                                    entry.rhs.expression(),
+                                    &(Atom::num(sign) * &mass * &velocity[0] * &live),
+                                    "source point binding must precede any lowering of the live parent carrier"
+                                );
+                            }
                         }
                     }
                 }
@@ -1123,7 +1128,11 @@ mod tests {
                 Atom::var(symbol!("os_projection_test::E_fermion"))
             };
             let point_energy = Atom::num(sign) * &branch_mass;
-            let point = function!(GS.os_mom, usize::from(external), &point_energy);
+            let point = GS.on_shell_momentum(
+                external,
+                &point_energy,
+                &UVgenerationSettings::default().on_shell_velocity()?,
+            );
             let gluon_momentum = &point - &loop_momentum;
             let quadratic = |momentum: &Atom, mass_squared: Atom| {
                 (0..=3).fold(-mass_squared, |sum, index| {

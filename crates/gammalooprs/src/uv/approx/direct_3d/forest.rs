@@ -311,6 +311,7 @@ struct DirectOnShellPreparation {
     scope_edge: EdgeIndex,
     mass: Atom,
     mass_scope: Atom,
+    velocity: [Atom; 4],
     physical_masses: BTreeSet<Atom>,
     fixed_coordinates: Vec<(EdgeIndex, i32)>,
 }
@@ -321,6 +322,7 @@ impl DirectOnShellPreparation {
         current: &S,
         given: &S,
         lmb: &LoopMomentumBasis,
+        velocity: [Atom; 4],
     ) -> Result<Self> {
         let numerator = graph
             .numerator(&current.reduced_subgraph(given), given.subgraph())?
@@ -330,8 +332,13 @@ impl DirectOnShellPreparation {
                 color: Some(ColorSimplifySettings::default()),
                 ..Default::default()
             })?;
-        let branches =
-            graph.on_shell_branches(&graph.model, &numerator, current.subgraph(), lmb)?;
+        let branches = graph.on_shell_branches(
+            &graph.model,
+            &numerator,
+            current.subgraph(),
+            lmb,
+            &velocity,
+        )?;
         let crown = graph.dummy_stripped_external_flows_of(current.subgraph());
         let incoming = crown
             .included_iter()
@@ -364,6 +371,7 @@ impl DirectOnShellPreparation {
             scope_edge,
             mass: graph[owner].mass_atom(&graph.model),
             mass_scope: function!(*LOCAL_3D_MASS_SCOPE, usize::from(scope_edge)),
+            velocity,
             physical_masses: graph
                 .iter_edges_of(current.subgraph())
                 .filter(|(pair, _, _)| pair.is_paired())
@@ -381,10 +389,10 @@ impl DirectOnShellPreparation {
     }
 
     fn point(&self, sigma: i32) -> Atom {
-        function!(
-            GS.os_mom,
-            usize::from(self.owner),
-            Atom::num(sigma) * &self.mass * &self.mass_scope
+        GS.on_shell_momentum(
+            self.owner,
+            &(Atom::num(sigma) * &self.mass * &self.mass_scope),
+            &self.velocity,
         )
     }
 
@@ -470,7 +478,13 @@ impl<'a> Direct3dApproximation<'a> {
                 &SymbolicTensor::infer_indexed(Atom::one())?,
             );
         }
-        let prepared = DirectOnShellPreparation::new(self.graph, current, given, lmb)?;
+        let prepared = DirectOnShellPreparation::new(
+            self.graph,
+            current,
+            given,
+            lmb,
+            self.settings.on_shell_velocity()?,
+        )?;
         // Scalar definitions may themselves contain parent external data.
         // Resolve only this scalar layer, preserving shared tensor bodies
         // and the frozen localization kernels held outside `active`.
@@ -519,16 +533,20 @@ impl<'a> Direct3dApproximation<'a> {
                     else {
                         return;
                     };
-                    **output = if momentum.get_symbol() == GS.emr_vec {
-                        Atom::Zero
+                    let indices = momentum
+                        .iter()
+                        .skip(1)
+                        .map(|index| index.to_owned())
+                        .collect::<Vec<_>>();
+                    let vector = GS.indexed_momentum(&point, &indices);
+                    let projected = if momentum.get_symbol() == GS.emr_vec {
+                        vector
+                            - GS.indexed_momentum(&point, &[GS.cind(0)])
+                                * GS.energy_delta(&indices[0])
                     } else {
-                        let indices = momentum
-                            .iter()
-                            .skip(1)
-                            .map(|index| index.to_owned())
-                            .collect::<Vec<_>>();
-                        Atom::num(*sign) * GS.indexed_momentum(&point, &indices)
+                        vector
                     };
+                    **output = Atom::num(*sign) * projected;
                 });
                 Ok(GS.resolve_os_momenta(&evaluated))
             })?);
@@ -544,7 +562,13 @@ impl<'a> Direct3dApproximation<'a> {
         given: &S,
         lmb: &LoopMomentumBasis,
     ) -> Result<Integrands> {
-        let prepared = DirectOnShellPreparation::new(self.graph, current, given, lmb)?;
+        let prepared = DirectOnShellPreparation::new(
+            self.graph,
+            current,
+            given,
+            lmb,
+            self.settings.on_shell_velocity()?,
+        )?;
         let crown = self
             .graph
             .dummy_stripped_external_flows_of(current.subgraph());

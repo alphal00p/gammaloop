@@ -238,7 +238,8 @@ pub struct GammaloopSymbols {
     /// Canonical spatial component `Q(edge, index___)`.
     pub emr_mom: Symbol,
     /// Component-local on-shell point: boundary owner, signed physical mass,
-    /// and optionally a vector index. The mass remains visible to outer jets.
+    /// four fixed velocity components, and optionally a vector index.
+    /// The mass remains visible to outer jets.
     pub(crate) os_mom: Symbol,
     /// UV-local provenance stored in the tag slot of `Q(...)` while applying a
     /// Taylor operator. Its arguments are the immutable source edge, its
@@ -1143,7 +1144,7 @@ impl GammaloopSymbols {
             let arity = if vector.get_symbol() == self.emr_mom {
                 1
             } else if vector.get_symbol() == self.os_mom {
-                2
+                6
             } else {
                 return;
             };
@@ -1160,15 +1161,36 @@ impl GammaloopSymbols {
         })
     }
 
+    /// A fixed component-owned point. The signed physical mass is kept as one
+    /// scalar argument so enclosing Taylor operations also scale its four-vector.
+    pub(crate) fn on_shell_momentum(
+        &self,
+        owner: EdgeIndex,
+        signed_mass: &Atom,
+        velocity: &[Atom; 4],
+    ) -> Atom {
+        FunctionBuilder::new(self.os_mom)
+            .add_arg(usize::from(owner))
+            .add_arg(signed_mass)
+            .add_args(velocity)
+            .finish()
+    }
+
     /// Lower indexed on-shell points, retaining bare vector metadata for
     /// exact denominator reconstruction.
     pub(crate) fn resolve_os_momenta(&self, atom: &Atom) -> Atom {
         atom.replace_map(|view, _, output| {
             if let AtomView::Fun(point) = view
                 && point.get_symbol() == self.os_mom
-                && point.get_nargs() == 3
+                && point.get_nargs() == 7
             {
-                **output = point.get(1) * self.energy_delta(point.get(2)).as_view();
+                let vector = Atom::add_many((0..4).map(|component| {
+                    point.get(component + 2).to_owned()
+                        * self
+                            .delta_vec
+                            .call_args([self.cind(component), point.get(6).to_owned()])
+                }));
+                **output = point.get(1) * vector.as_view();
             }
         })
     }
@@ -1369,6 +1391,60 @@ mod tests {
     use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 
     use super::*;
+
+    #[test]
+    fn fixed_on_shell_point_scales_with_its_physical_mass_in_every_component() {
+        crate::initialisation::test_initialise().unwrap();
+        let mass = symbol!("on_shell_point_scaling::mass"; Scalar);
+        let parameter = symbol!("on_shell_point_scaling::parameter"; Scalar);
+        let mass_atom = Atom::var(mass);
+        let scale = Atom::var(parameter);
+        // A unit timelike velocity with every spatial component nonzero.
+        let velocity = [
+            Atom::num((13, 8)),
+            Atom::num(1),
+            Atom::num((1, 2)),
+            Atom::num((5, 8)),
+        ];
+        for sign in [1, -1] {
+            let point =
+                GS.on_shell_momentum(EdgeIndex(7), &(Atom::num(sign) * &mass_atom), &velocity);
+            let scaled_point = point.replace(mass).with(&scale * &mass_atom);
+            assert_eq!(
+                scaled_point,
+                GS.on_shell_momentum(
+                    EdgeIndex(7),
+                    &(Atom::num(sign) * &scale * &mass_atom),
+                    &velocity
+                ),
+            );
+            assert_eq!(
+                GS.resolve_os_momenta(&point),
+                point,
+                "bare metadata stays available for denominator certificates"
+            );
+            for (component, value) in velocity.iter().enumerate() {
+                let indexed = GS.indexed_momentum(&point, &[GS.cind(component)]);
+                let resolved = GS.resolve_os_momenta(&indexed);
+                let expected = Atom::num(sign) * &mass_atom * value;
+                assert_eq!(resolved, expected);
+                assert_eq!(
+                    GS.resolve_os_momenta(
+                        &GS.indexed_momentum(&scaled_point, &[GS.cind(component)])
+                    ),
+                    &scale * &expected,
+                );
+                assert_eq!(
+                    resolved.replace(mass).with(&scale * &mass_atom),
+                    &scale * expected
+                );
+            }
+            assert_ne!(
+                point,
+                GS.on_shell_momentum(EdgeIndex(8), &(Atom::num(sign) * &mass_atom), &velocity)
+            );
+        }
+    }
 
     #[test]
     fn esurface_preserves_momentum_and_mass_substitutions() {
