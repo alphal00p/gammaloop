@@ -5938,9 +5938,13 @@ Evaluated (n_loops=1, mu_r=1) :
         // Native CAS functions are scalar even when they have two integer
         // arguments: polygamma(1, 3)^2 is not a squared indexed vector.
         let vector_head_condition = WildcardRestriction::Filter(Box::new(|matched| {
-            matches!(matched, Match::FunctionName(symbol)
-                if symbol.get_namespace() != "symbolica"
-                    || !symbolica::state::State::is_builtin(symbol.get_stripped_name()))
+            let symbol = match matched {
+                Match::Single(AtomView::Var(variable)) => variable.get_symbol(),
+                Match::FunctionName(symbol) => *symbol,
+                _ => return false,
+            };
+            symbol.get_namespace() != "symbolica"
+                || !symbolica::state::State::is_builtin(symbol.get_stripped_name())
         }));
 
         loop {

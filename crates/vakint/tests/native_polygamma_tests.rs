@@ -94,6 +94,7 @@ fn gamma_expansions_use_native_constants_and_keep_unknown_orders() {
 
 #[test]
 fn scalar_special_functions_are_not_lorentz_vectors() {
+    Vakint::initialize_vakint_symbols();
     let scalar = vakint_parse!(
         "symbolica::polygamma(2,z)^2+symbolica::polygamma(1,z)*symbolica::polygamma(2,z)\
          +g(mu,nu)*symbolica::polygamma(2,mu)*symbolica::polygamma(4,nu)"
@@ -109,6 +110,17 @@ fn scalar_special_functions_are_not_lorentz_vectors() {
         Vakint::convert_to_dot_notation(mixed.as_view()),
         expected.expand()
     );
+    for (input, expected) in [
+        ("k(1,mu)^2", "dot(k(1),k(1))"),
+        ("k(1,mu)^4", "dot(k(1),k(1))^2"),
+        ("g(mu,nu)*k(1,mu)*p(2,nu)", "dot(k(1),p(2))"),
+    ] {
+        assert_eq!(
+            Vakint::convert_to_dot_notation(vakint_parse!(input).unwrap().as_view()),
+            vakint_parse!(expected).unwrap(),
+            "{input}"
+        );
+    }
 }
 
 #[test]
