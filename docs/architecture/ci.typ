@@ -74,11 +74,15 @@ selected component crates and all forwarded selectors, since a selector can
 activate an optional dependency on a selected root. Expanded feature vectors still define
 cache contexts and workspace checks.
 
-Core API tests import UFO models using Python packages pinned in `uv.lock`.
-These dependencies enter the runtime environment through `PYTHONPATH`; they do
-not change the shared compiler interpreter or compiled test archives. The locked
-Symbolica Python wheels support Linux on x86-64 and macOS on ARM. Requesting this
-runtime on Linux ARM reports the missing upstream wheel.
+On platforms with a locked Symbolica wheel, core API tests import UFO models
+using Python packages pinned in `uv.lock`. These dependencies enter the runtime
+environment through `PYTHONPATH`; they do not change the shared compiler
+interpreter or compiled test archives. The wheel tags in `nix/ci.nix` define the
+supported platforms: Linux on x86-64 and macOS on ARM. On Linux ARM, the core
+group omits this runtime and excludes the two UFO-import tests through a Nextest
+run-time filter, while loader-version validation still runs. Archive filtersets
+cannot select individual tests. Explicitly requesting
+`gammaloop-ufo-python-runtime` on Linux ARM reports the missing upstream wheel.
 
 The NLO acceptance cases share one executable. Their assertions, workloads
 and runtime worker reservations are unchanged.

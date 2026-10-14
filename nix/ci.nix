@@ -5,7 +5,11 @@
 }: let
   # Symbolica 3.0.0 has no aarch64-linux wheel. Exercise UFO imports on the
   # platforms with a published wheel; the remaining model tests run everywhere.
-  hasUfoWheel = builtins.elem system ["x86_64-linux" "aarch64-darwin"];
+  ufoWheelTags = {
+    x86_64-linux = "manylinux_2_17_x86_64";
+    aarch64-darwin = "macosx_11_0_arm64";
+  };
+  hasUfoWheel = builtins.hasAttr system ufoWheelTags;
   # Compile the integration crate once; groups select disjoint test binaries.
   testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
   testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo_support"] else [];
@@ -424,6 +428,7 @@ in {
   inherit
     groups
     testFeatures
+    ufoWheelTags
     workspaceDependencyClosureFor
     workspaceTestComponentRepresentativeFor
     workspaceTestComponentMembers
