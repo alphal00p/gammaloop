@@ -374,7 +374,19 @@ fn explicit_loopback_http_download_matches_local_import_and_refuses_large_respon
                 .set_read_timeout(Some(Duration::from_secs(10)))
                 .unwrap();
             let mut request = [0u8; 4096];
-            stream.read(&mut request).unwrap();
+            let mut received = 0;
+            while !request[..received]
+                .windows(4)
+                .any(|part| part == b"\r\n\r\n")
+            {
+                assert!(
+                    received < request.len(),
+                    "loopback request headers too large"
+                );
+                let count = stream.read(&mut request[received..]).unwrap();
+                assert_ne!(count, 0, "loopback request ended before its headers");
+                received += count;
+            }
             let _ = write!(
                 stream,
                 "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
