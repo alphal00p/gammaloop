@@ -2742,6 +2742,7 @@
       "additionalProperties": false
     },
     "MediumMode": {
+      "description": "The vacuum, or an equilibrium medium whose distribution functions weight CFF terms.\nTemperature and chemical potentials stay symbolic; `ZeroTemperatureEquilibrium`\ntakes the zero-temperature limit of the distributions.",
       "type": "string",
       "enum": [
         "vacuum",
@@ -5694,7 +5695,7 @@
       "type": "object",
       "properties": {
         "allow_vanishing_missing_fits": {
-          "description": "Accept missing power-law fits when the sampled limit vanishes",
+          "description": "Accept zero tails or sustained accelerating decay when no reliable power-law fit exists",
           "type": "boolean"
         },
         "analyse_analytically": {

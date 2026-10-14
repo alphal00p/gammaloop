@@ -359,6 +359,7 @@
       "additionalProperties": false
     },
     "MediumMode": {
+      "description": "The vacuum, or an equilibrium medium whose distribution functions weight CFF terms.\nTemperature and chemical potentials stay symbolic; `ZeroTemperatureEquilibrium`\ntakes the zero-temperature limit of the distributions.",
       "type": "string",
       "enum": [
         "vacuum",
