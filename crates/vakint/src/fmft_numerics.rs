@@ -20,7 +20,7 @@ pub static MASTERS_EXPANSION: LazyLock<HashMap<Atom, (Atom, symbolica::id::Condi
         ( vk_parse!("PR4d_exact").unwrap(), ( vk_parse!("ep^-3*( -7/6 ) + ep^-2*( -215/48 ) + ep^-1*( -965/96-7/3*Zeta(2) )").unwrap(), Condition::default() )  ), 
         ( vk_parse!("PR5").unwrap(), ( vk_parse!("PR5_exact + PR5ep0+ep*PR5ep1+ep^2*Oep(2,I_PR5)").unwrap(), Condition::default() )  ),
         ( vk_parse!("PR5_exact").unwrap(), ( vk_parse!("ep^-4*( 3/2 ) + ep^-3*( 19/2 ) + ep^-2*( 67/2+3*Zeta(2) ) + ep^-1*( 127/2+19*Zeta(2)-5*Zeta(3) )").unwrap(), Condition::default() )  ), 
-        ( vk_parse!("PR6").unwrap(), ( vk_parse!("PR6_exact + PR6ep0+PR6ep1+ep^2*Oep(2,I_PR6)").unwrap(), Condition::default() )  ),
+        ( vk_parse!("PR6").unwrap(), ( vk_parse!("PR6_exact + PR6ep0+ep*PR6ep1+ep^2*Oep(2,I_PR6)").unwrap(), Condition::default() )  ),
         ( vk_parse!("PR6_exact").unwrap(), ( vk_parse!("ep^-4*( 1 ) + ep^-3*( 20/3 ) + ep^-2*( 29+2*Zeta(2)-27*S2 ) + ep^-1*( 181/3-2*T1ep+13/3*Zeta(2)-81*S2-16/3*Zeta(3) )").unwrap(), Condition::default() )  ), 
         ( vk_parse!("PR7").unwrap(), ( vk_parse!("PR7_exact + ep*PR7ep1+ep^2*Oep(2,I_PR7)").unwrap(), Condition::default() )  ),
         ( vk_parse!("PR7_exact").unwrap(), ( vk_parse!("ep^-4*( 13/8 ) + ep^-3*( 491/48 ) + ep^-2*( 3719/96+13/4*Zeta(2)-81/4*S2 ) + ep^-1*( 13741/192-3/2*T1ep+329/24*Zeta(2)-459/8*S2-2/3*Zeta(3) ) + ( 381313/10368-3/2*T1ep2-1/4*PR4fin-5/4*PR4dfin-17/4*T1ep+6805/144*Zeta(2)-1593/16*S2-81/4*S2*Zeta(2)+153/16*Zeta(4)+61/2*Zeta(3) )").unwrap(), Condition::default() )  ), 

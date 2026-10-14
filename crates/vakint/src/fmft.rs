@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
+#[cfg(test)]
+mod expansion_tests;
 mod finalize;
 #[cfg(test)]
 mod routing_tests;
