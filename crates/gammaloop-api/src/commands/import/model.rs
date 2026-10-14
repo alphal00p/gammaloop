@@ -1022,6 +1022,24 @@ mod tests {
             }
             assert_eq!(ufo.get_particle("u").charge, Rational::from((2, 3)));
             assert_eq!(ufo.get_particle("H").y_charge, None);
+            for model in [&ufo, &json, &restored] {
+                for (particle, parameter) in [
+                    ("e-", "mue"),
+                    ("e+", "minus_mue"),
+                    ("ve", "muve"),
+                    ("ve~", "minus_muve"),
+                ] {
+                    assert_eq!(
+                        model.get_particle(particle).chemical_potential.unwrap().0,
+                        if restriction == "full" {
+                            UFOSymbol::from(parameter)
+                        } else {
+                            UFOSymbol::zero()
+                        },
+                        "{restriction}: {particle} chemical potential"
+                    );
+                }
+            }
             for (quark, mass, yukawa_input, default) in [
                 ("u", "MU", "ymu", 0.0022),
                 ("d", "MD", "ymd", 0.0047),

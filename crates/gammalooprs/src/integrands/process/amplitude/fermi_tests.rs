@@ -636,7 +636,8 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
     // vanish. Their raised lines previously failed generation (a boson) and
     // the first sample (a degenerate massless onset).
     let (model, _, mut global, settings) = cold_dense_setup()?;
-    let mut literal_zero_model = model.clone();
+    let adjustable_model = load_generic_model("sm");
+    let mut literal_zero_model = adjustable_model.clone();
     for particle in &mut literal_zero_model.particles {
         if matches!(particle.name.as_str(), "e-" | "e+") {
             std::sync::Arc::make_mut(&mut particle.0).chemical_potential =
@@ -656,11 +657,12 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
         orientation: None,
         channel_id: None,
     };
-    // Named zero-valued parameters retain sectors for later runtime updates.
-    // Literal ZERO has no occupation step or surface.
+    // Restriction-fixed zeros behave like literal ZERO. Adjustable zero-valued
+    // parameters retain sectors for later runtime updates.
     for (model, particle, fermi_sectors) in [
         (&model, "G+", false),
-        (&model, "e-", true),
+        (&model, "e-", false),
+        (&adjustable_model, "e-", true),
         (&literal_zero_model, "e-", false),
     ] {
         let graphs = Graph::from_string(
