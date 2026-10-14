@@ -36,7 +36,19 @@ impl UVOrchestrator {
                 "4D parametric UV integrands are not supported yet; this mode is planned for a future implementation"
             ));
         }
-        validate_local_counterterm_schemes(graph, &cut_structure, &settings.uv)?;
+        let has_massive_on_shell_component =
+            validate_local_counterterm_schemes(graph, &cut_structure, &settings.uv)?;
+        let fixed_on_shell_spatial_velocity = if has_massive_on_shell_component
+            && settings.uv.on_shell_velocity()?[1..]
+                .iter()
+                .any(|value| !value.is_zero())
+        {
+            Some(std::array::from_fn(|index| {
+                settings.uv.on_shell_subtraction_velocity[index + 1].clone()
+            }))
+        } else {
+            None
+        };
 
         settings.validate_medium_uv_compatibility()?;
 
@@ -69,7 +81,11 @@ impl UVOrchestrator {
         let marker = UvMarker::new(&settings.uv);
         result
             .into_iter()
-            .map(|integrands| integrands.map_expressions(|atom| Ok(marker.finish(atom))))
+            .map(|mut integrands| {
+                integrands.fixed_on_shell_spatial_velocity =
+                    fixed_on_shell_spatial_velocity.clone();
+                integrands.map_expressions(|atom| Ok(marker.finish(atom)))
+            })
             .collect()
     }
 
@@ -97,18 +113,22 @@ impl UVOrchestrator {
     }
 }
 
+/// Validate the classified woods and report whether any massive OS component
+/// contributes a fixed subtraction reference to the generated graph.
 pub(crate) fn validate_local_counterterm_schemes(
     graph: &Graph,
     cuts: &CutStructure,
     settings: &UVgenerationSettings,
-) -> Result<()> {
+) -> Result<bool> {
     if !settings.subtract_uv {
-        return Ok(());
+        return Ok(false);
     }
+    let _ = settings.on_shell_velocity()?;
     let direct_three_d = matches!(settings.final_integrand, FinalIntegrandDimension::ThreeD)
         && !settings.local_uv_cts_from_expanded_4d_integrands;
 
     let mut uncut = graph.full_filter();
+    let mut has_massive_on_shell_component = false;
     uncut.subtract_with(&graph.initial_state_cut.left);
     for (cut_index, cut) in cuts.cuts.iter().enumerate() {
         let subgraph = uncut.subtract(&cut.union);
@@ -133,6 +153,12 @@ pub(crate) fn validate_local_counterterm_schemes(
             spinney.n_components() == 1
                 && spinney.renormalization_scheme == crate::uv::ApproximationType::OS
         });
+        // The subtraction point is set by the boundary fermion mass. A
+        // massive internal bubble cannot give a massless OS parent a frame:
+        // its two points both vanish and the projectors sum to the identity.
+        has_massive_on_shell_component |= os_components
+            .clone()
+            .any(|component| graph.has_massive_boundary_external(component.filter(), &graph.model));
         let pole_components = spinneys.iter().filter(|spinney| {
             spinney.n_components() == 1
                 && spinney.renormalization_scheme == crate::uv::ApproximationType::PolePart
@@ -331,7 +357,7 @@ pub(crate) fn validate_local_counterterm_schemes(
         }
     }
 
-    Ok(())
+    Ok(has_massive_on_shell_component)
 }
 
 fn legacy_parametric_integrands(
@@ -905,6 +931,158 @@ mod tests {
         settings.renormalization_prescription.overrides.clear();
         validate_local_counterterm_schemes(&graph, &cuts, &settings)
             .expect("non-OS woods must retain their existing disjoint support");
+    }
+
+    #[test]
+    fn fixed_frame_metadata_requires_a_generated_massive_os_component() -> Result<()> {
+        test_initialise()?;
+        let (graph, _, _) = crate::uv::approx::local_4d::on_shell_tests::fixture(false)?;
+        let mut settings = UVgenerationSettings {
+            on_shell_subtraction_velocity: ["5/4", "1/4", "1/2", "1/2"].map(str::to_owned),
+            ..Default::default()
+        };
+        assert!(!validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings
+        )?);
+        settings
+            .renormalization_prescription
+            .massive_power_divergent = ApproximationType::OS;
+        assert!(validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings
+        )?);
+        settings.subtract_uv = false;
+        assert!(!validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings
+        )?);
+        settings.subtract_uv = true;
+        settings
+            .renormalization_prescription
+            .massless_power_divergent = ApproximationType::OS;
+        let (massless, _, _) = crate::uv::approx::local_4d::on_shell_tests::fixture(true)?;
+        assert!(!validate_local_counterterm_schemes(
+            &massless,
+            &CutStructure::empty(&massless),
+            &settings
+        )?);
+        Ok(())
+    }
+
+    #[test]
+    fn fixed_frame_metadata_requires_massive_boundary_even_with_massive_internal_bubble()
+    -> Result<()> {
+        use crate::{
+            model::{InputParamCard, ModelGammaLoopExt},
+            uv::uv_graph::UVE,
+        };
+
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+                .to_owned(),
+            "json",
+        )?;
+        model.simplify(&mut parameters)?;
+        assert!(model.particle("d")?.is_massless(&model));
+        let source = include_str!(
+            "../../../../tests/resources/graphs/local_soft_gluon_in_top_self_energy.dot"
+        );
+        for (particle, expected_frame) in [("d", false), ("t", true)] {
+            // Keep the closed top loop massive. Only the external quark and
+            // the quark segment of its parent self-energy change flavor.
+            let mut source = source.to_owned();
+            for edge in [0, 1, 6] {
+                let original = format!("[id={edge} particle=t]");
+                assert_eq!(source.matches(&original).count(), 1);
+                source = source.replace(&original, &format!("[id={edge} particle={particle}]"));
+            }
+            let mut graphs = Graph::import_dot(&source, &model)?;
+            assert_eq!(graphs.len(), 1);
+            let graph = graphs.remove(0);
+            for edge in [3, 4] {
+                assert!(
+                    !graph[EdgeIndex(edge)].mass_atom(&graph.model).is_zero(),
+                    "the internal top bubble remains massive"
+                );
+            }
+            for edge in [0, 1, 6] {
+                assert_eq!(
+                    !graph[EdgeIndex(edge)].mass_atom(&graph.model).is_zero(),
+                    expected_frame,
+                    "only the parent's quark mass determines its fixed point"
+                );
+            }
+            let baseline = UVgenerationSettings::default();
+            let components = graph.classified_spinneys(
+                &graph.full_filter(),
+                &graph.model,
+                &baseline,
+                &graph.loop_momentum_basis,
+            )?;
+            let overrides = components
+                .iter()
+                .filter(|component| component.n_components() == 1 && component.dod > 0)
+                .map(|component| {
+                    CTRenormalizationRule::new(
+                        graph.ct_identifier(component.filter(), &graph.model),
+                        if component.dod == 1 {
+                            ApproximationType::OS
+                        } else {
+                            ApproximationType::IR
+                        },
+                    )
+                })
+                .collect();
+            let mut settings = UVgenerationSettings {
+                on_shell_subtraction_velocity: ["5/4", "1/4", "1/2", "1/2"].map(str::to_owned),
+                generate_integrated: true,
+                final_integrand: FinalIntegrandDimension::ThreeD,
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    overrides,
+                    ..Default::default()
+                },
+                ..baseline
+            };
+            let selected = graph.classified_spinneys(
+                &graph.full_filter(),
+                &graph.model,
+                &settings,
+                &graph.loop_momentum_basis,
+            )?;
+            let parent = selected
+                .iter()
+                .find(|component| component.renormalization_scheme == ApproximationType::OS)
+                .expect("the external quark self-energy is assigned OS");
+            let child = selected
+                .iter()
+                .find(|component| component.renormalization_scheme == ApproximationType::IR)
+                .expect("the massive quark-loop gluon self-energy is assigned IR");
+            assert!(parent.filter().includes(child.filter()));
+            assert_ne!(parent.filter(), child.filter());
+            assert_eq!(
+                graph.has_massive_boundary_external(parent.filter(), &graph.model),
+                expected_frame
+            );
+            for projected in [false, true] {
+                settings.local_uv_cts_from_expanded_4d_integrands = projected;
+                assert_eq!(
+                    validate_local_counterterm_schemes(
+                        &graph,
+                        &CutStructure::empty(&graph),
+                        &settings,
+                    )?,
+                    expected_frame,
+                    "particle={particle}, projected={projected}: internal masses do not define the OS frame"
+                );
+            }
+        }
+        Ok(())
     }
 
     #[test]

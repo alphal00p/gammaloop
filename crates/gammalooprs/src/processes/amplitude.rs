@@ -930,6 +930,7 @@ impl AmplitudeGraph {
                 threshold_topology: None,
                 all_mighty_integrand: Atom::Zero,
                 all_mighty_numerators: Vec::new(),
+                fixed_on_shell_spatial_velocity: None,
                 cff_expression: None,
 
                 lmbs: None,
@@ -1536,6 +1537,8 @@ impl AmplitudeGraph {
         }
         self.derived_data.all_mighty_integrand = integrand.clone();
         self.derived_data.all_mighty_numerators = expr.integrands.numerators().to_vec();
+        self.derived_data.fixed_on_shell_spatial_velocity =
+            expr.fixed_on_shell_spatial_velocity.clone();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "amplitude_graph_build_integrands_done",
             graph = %self.graph.name,
@@ -2514,6 +2517,7 @@ pub struct AmplitudeDerivedData {
     pub threshold_topology: Option<(Graph, TiVec<LmbIndex, LoopMomentumBasis>)>,
     pub all_mighty_integrand: Atom,
     pub all_mighty_numerators: Vec<Arc<NumeratorDefinition>>,
+    pub(crate) fixed_on_shell_spatial_velocity: Option<[String; 3]>,
     /// Compatibility storage used by the current homogeneous amplitude runtime.
     pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
     /// Canonical variant-indexed symbolic storage. Duplicate geometric thresholds remain distinct.

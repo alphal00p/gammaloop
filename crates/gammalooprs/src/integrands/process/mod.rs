@@ -3569,7 +3569,60 @@ pub trait ProcessIntegrandImpl {
 pub(crate) fn validate_process_runtime_settings(
     settings: &RuntimeSettings,
     explicit_orientation_sum_only: bool,
+    fixed_on_shell_spatial_velocities: &[&[String; 3]],
 ) -> Result<()> {
+    use crate::settings::runtime::RotationSetting;
+    use symbolica::atom::Atom;
+    for rotation in &settings.stability.rotation_axis {
+        rotation.validate()?;
+    }
+    for velocity in fixed_on_shell_spatial_velocities {
+        let velocity = velocity
+            .iter()
+            .map(|component| {
+                Atom::parse(component, "gammalooprs::uv", Default::default())
+                    .map_err(|error| eyre!(error))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        // Axis alignment is an exact statement about the generated reference,
+        // not a floating-point angular tolerance. Settings f64 values are
+        // converted to their exact binary rationals for this certificate.
+        let aligned_with_coordinate_axis = |axis: usize| {
+            velocity
+                .iter()
+                .enumerate()
+                .all(|(index, value)| index == axis || value.is_zero())
+        };
+        for (index, rotation) in settings.stability.rotation_axis.iter().enumerate() {
+            let preserves_reference = match rotation {
+                RotationSetting::None {} => true,
+                RotationSetting::Pi2X {} => aligned_with_coordinate_axis(0),
+                RotationSetting::Pi2Y {} => aligned_with_coordinate_axis(1),
+                RotationSetting::Pi2Z {} => aligned_with_coordinate_axis(2),
+                RotationSetting::EulerAngles { alpha, beta, gamma } => [*alpha, *beta, *gamma]
+                    .into_iter()
+                    .enumerate()
+                    .all(|(axis, angle)| angle == 0.0 || aligned_with_coordinate_axis(axis)),
+                RotationSetting::AxisAngle { axis, cos_theta } => {
+                    let axis = axis.map(|component| {
+                        let exact = rug::Rational::from_f64(component)
+                            .expect("validated finite rotation axis");
+                        Atom::num(symbolica::domains::rational::Rational::from(exact))
+                    });
+                    *cos_theta == 1.0
+                        || (0..3).all(|i| {
+                            let j = (i + 1) % 3;
+                            (&axis[i] * &velocity[j] - &axis[j] * &velocity[i]).is_zero()
+                        })
+                }
+            };
+            if !preserves_reference {
+                return Err(eyre!(
+                    "runtime.stability.rotation_axis[{index}] changes the generated fixed on-shell subtraction velocity {velocity:?}; use an axis_angle rotation about its spatial direction, or regenerate with a compatible fixed point"
+                ));
+            }
+        }
+    }
     if let Some(parameterization) = settings.sampling.get_parameterization_settings() {
         let alpha = parameterization.sampling_channels.alpha;
         if !alpha.is_finite() || alpha < 0.0 {
@@ -8038,7 +8091,8 @@ pub(crate) mod tests {
                     level.ecm_relative_tolerance_for_im = invalid;
                 }
                 for explicit in [false, true] {
-                    let error = validate_process_runtime_settings(&settings, explicit).unwrap_err();
+                    let error =
+                        validate_process_runtime_settings(&settings, explicit, &[]).unwrap_err();
                     assert!(
                         error
                             .to_string()
@@ -8052,7 +8106,7 @@ pub(crate) mod tests {
         for invalid in [0.0, -1.0, f64::NAN, f64::INFINITY] {
             settings.kinematics.e_cm = invalid;
             assert!(
-                validate_process_runtime_settings(&settings, false)
+                validate_process_runtime_settings(&settings, false, &[])
                     .unwrap_err()
                     .to_string()
                     .contains("kinematics.e_cm")
@@ -8062,7 +8116,7 @@ pub(crate) mod tests {
         // The physical dimension is admitted at its target boundary; generic
         // warmup also serves reference functions with their known dimensions.
         assert!(settings.stability.integrated_energy_dimension.is_none());
-        validate_process_runtime_settings(&settings, false).unwrap();
+        validate_process_runtime_settings(&settings, false, &[]).unwrap();
     }
 
     #[test]
@@ -8550,34 +8604,95 @@ pub(crate) mod tests {
     fn explicit_orientation_sum_rejects_runtime_filters_and_ltd() {
         let mut settings = RuntimeSettings::default();
         settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
-        let error = validate_process_runtime_settings(&settings, true).unwrap_err();
+        let error = validate_process_runtime_settings(&settings, true, &[]).unwrap_err();
         assert!(error.to_string().contains("orientation_pat` must be unset"));
 
-        validate_process_runtime_settings(&settings, false).unwrap();
+        validate_process_runtime_settings(&settings, false, &[]).unwrap();
 
         settings.general.orientation_pat = OrientationPattern::default();
         settings.general.use_ltd = true;
-        let error = validate_process_runtime_settings(&settings, false).unwrap_err();
+        let error = validate_process_runtime_settings(&settings, false, &[]).unwrap_err();
         assert!(error.to_string().contains("deferred proper-LTD support"));
+    }
+
+    #[test]
+    fn fixed_on_shell_frame_requires_exactly_preserving_rotation_probes() {
+        use crate::settings::runtime::RotationSetting;
+        crate::initialisation::test_initialise().unwrap();
+        let mut settings = RuntimeSettings::default();
+        let nonaxial = ["1/4", "1/2", "1/2"].map(str::to_owned);
+        for axis in [[1.0, 2.0, 2.0], [-1.0, -2.0, -2.0]] {
+            settings.stability.rotation_axis = vec![RotationSetting::AxisAngle {
+                axis,
+                cos_theta: 0.0,
+            }];
+            validate_process_runtime_settings(&settings, false, &[&nonaxial]).unwrap();
+        }
+        for rotation in [
+            RotationSetting::Pi2X {},
+            RotationSetting::Pi2Y {},
+            RotationSetting::Pi2Z {},
+            RotationSetting::EulerAngles {
+                alpha: 0.1,
+                beta: 0.2,
+                gamma: 0.3,
+            },
+            RotationSetting::AxisAngle {
+                axis: [1.0, 2.0, 2.0000000000000004],
+                cos_theta: 0.0,
+            },
+        ] {
+            settings.stability.rotation_axis = vec![rotation];
+            validate_process_runtime_settings(&settings, false, &[]).unwrap();
+            let error =
+                validate_process_runtime_settings(&settings, false, &[&nonaxial]).unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("fixed on-shell subtraction velocity")
+            );
+        }
+        let axial = ["0", "0", "3/4"].map(str::to_owned);
+        settings.stability.rotation_axis = vec![
+            RotationSetting::Pi2Z {},
+            RotationSetting::EulerAngles {
+                alpha: 0.0,
+                beta: 0.0,
+                gamma: 0.3,
+            },
+        ];
+        validate_process_runtime_settings(&settings, false, &[&axial]).unwrap();
+        assert!(validate_process_runtime_settings(&settings, false, &[&axial, &nonaxial]).is_err());
+        settings.stability.rotation_axis = vec![
+            RotationSetting::None {},
+            RotationSetting::AxisAngle {
+                axis: [1.0, 0.0, 0.0],
+                cos_theta: 1.0,
+            },
+        ];
+        validate_process_runtime_settings(&settings, false, &[&axial, &nonaxial]).unwrap();
     }
 
     #[test]
     fn numerator_sampling_scale_requires_nonzero_runtime_value() {
         let mut settings = RuntimeSettings::default();
-        validate_process_runtime_settings(&settings, false).unwrap();
+        validate_process_runtime_settings(&settings, false, &[]).unwrap();
 
         for scale in [0.0, -0.0] {
             settings.general.numerator_sampling_scale = scale;
             for explicit_orientation_sum_only in [false, true] {
-                let error =
-                    validate_process_runtime_settings(&settings, explicit_orientation_sum_only)
-                        .unwrap_err();
+                let error = validate_process_runtime_settings(
+                    &settings,
+                    explicit_orientation_sum_only,
+                    &[],
+                )
+                .unwrap_err();
                 assert!(error.to_string().contains("sampling scale M"));
             }
         }
 
         settings.general.numerator_sampling_scale = -2.0;
-        validate_process_runtime_settings(&settings, false).unwrap();
+        validate_process_runtime_settings(&settings, false, &[]).unwrap();
     }
 
     #[test]

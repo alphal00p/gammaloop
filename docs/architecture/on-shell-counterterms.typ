@@ -17,11 +17,22 @@ and figures 10–11 motivate the nested tests. The calculations below give an
 independent one-loop oracle in the repository conventions.
 
 The comparison requirements below are maintained test contracts. Historical
-pass records and measurements describe the original OS stack before its
-rebase onto FeynKit. They do not certify the rebased implementation. Current
-validation records identify the tested revision, selection and run; exact
-reconstruction, local limits and integrated renormalization remain separate
-claims.
+pass records and measurements are identified as results of the original OS
+stack ending at `ce58d97de847`, before its rebase onto FeynKit. They do not
+certify the rebased implementation. Current validation records must identify
+the tested revision, test selection and run; exact reconstruction, local limits
+and integrated renormalization remain separate claims.
+
+The rebased boosted implementation at `5dc4d91fa9ea` passed 34 focused cases
+in nextest run `1ccd928f-3bdf-4c13-a511-c9d377138076`. These cover the independent
+one-loop operator and CFF certificates, local UV coefficients and complete
+rainbow soft limits, and the integrated pole condition for all nine pairs of
+subtraction and external velocities. The three-route comparisons additionally
+cover a proper child with a nonaxial point and unrelated live external momenta;
+these pointwise comparisons supplement the exact certificates. The slowest
+case, the nonaxial complete rainbow, took 69.7 seconds under the ordinary
+240-second limit. This record does not certify the physical inclusive-rate or
+large performance and scaling workloads on the rebased stack.
 
 == Ordered component operation
 
@@ -32,6 +43,52 @@ its incoming spinor slot to its outgoing slot. Define
 $ p_("OS") = (m,0,0,0), quad P_sigma = (1 + sigma gamma^0)/2, $
 $ O[Sigma] = sum_(sigma=plus.minus 1) P_sigma Sigma(sigma p_("OS")), $
 $ T_("OS")[Sigma] = U_1[Sigma] + O[Sigma] - U_1[O[Sigma]]. $
+
+The rest frame is the default of a fixed-frame prescription. The generation
+setting `uv.on_shell_subtraction_velocity` accepts four exact rational strings
+in the order $(v^0,v^1,v^2,v^3)$, with $v^0>0$ and $v^2=1$. For example,
+`["5/4", "3/4", "0", "0"]` selects an axial boost and
+`["5/4", "1/4", "1/2", "1/2"]` a non-axial boost. The point and projector
+are changed together:
+
+$ p_*=m v, quad P_sigma(v)=(1+sigma slash(v))/2, quad
+  O_v[Sigma]=sum_(sigma=plus.minus 1)P_sigma(v)Sigma(sigma m v), $
+$ T_v=U_1+O_v-U_1 O_v. $
+
+Here $slash(v)=v^0 gamma^0-sum_(i=1)^3 v^i gamma^i$. Its four fixed
+components are embedded in the symbolic $d$-dimensional Lorentz algebra;
+the spinor slots remain four-dimensional. The velocity is fixed
+generation data, not a function of a live external or loop momentum. Every
+component retains its own point owner and physical mass even when components
+share the velocity. The default strings are `["1", "0", "0", "0"]`.
+Nonconstant, nonrational, past-directed and nonunit input is rejected. This
+exact-input restriction avoids normalizing an approximately on-shell vector.
+
+Rotational stability probes must also respect this fixed frame. Rotating the
+live momenta while holding a nonzero $bold(v)$ at a different orientation
+changes the local integrand; agreement is restored by jointly rotating the
+reference or by using rotations that preserve it. The current representation
+keeps the reference fixed. Generated graph payloads retain its exact spatial
+components, and runtime validation accepts only supported probes that preserve
+every retained reference. For the non-axial example, use
+`rotation_axis = [{ type = "axis_angle", axis = [1.0, 2.0, 2.0], cos_theta = 0.0 }]`
+in the runtime stability settings. This is a nontrivial quarter-turn about
+$bold(v)$; the axis is normalized at the active precision. Its parallelism
+with the generated reference is certified exactly, including the binary64
+values supplied in the rotation settings. Identity and aligned coordinate-axis
+rotations are also supported. Euler rotations are admitted when each nonzero
+elementary rotation preserves the reference. The rest-frame default has no
+spatial restriction. Precision escalation and accuracy thresholds are unchanged.
+
+The reference metadata belongs to generated graph terms, so graph selection,
+cloning and loading preserve the same constraint. Only an OS component with a
+massive boundary fermion creates a fixed reference. A massive internal bubble
+inside a massless external-quark self-energy does not create this constraint: its
+subtraction point is still zero and its two projectors sum to the identity.
+Combined state manifest version 22 records this layout on top of the fully
+indexed version-21 interfaces. Both the older indexed-only version 21 and the
+earlier partial-interface OS version 21 require regeneration; no positional
+compatibility decoder is provided.
 
 $U_1$ is the existing ordinary degree-one UV operation, including its auxiliary
 vacuum mass prescription. First complete both on-shell branches, including the
@@ -60,11 +117,11 @@ operation; a generic two-point scalar graph is insufficient.
 
 == Scaling and ownership
 
-The rest-frame point is the expression $m(1,0,0,0)$, never an unrelated frozen
-four-vector. In a subsequent UV Taylor jet, physical masses and external
+The fixed point is the expression $m v$, never an unrelated frozen four-vector;
+the default has $v=(1,0,0,0)$. In a subsequent UV Taylor jet, physical masses and external
 momenta have weight one, so $m mapsto t m$ implies
 $p_("OS") mapsto t p_("OS")$. The completed $O$ branches consequently contribute
-their first-order mass and energy-shift coefficients to $U_1 O$. In the
+their first-order mass and fixed-momentum shift coefficients to $U_1 O$. In the
 implementation's inverse-hard convention this is expressed through its existing
 hard-loop rescaling and physical-mass bookkeeping. The vacuum mass keeps its
 existing hard weight; it must not be identified with the physical mass.
@@ -78,9 +135,9 @@ reconstruction identities retain the independent bookkeeping symbols. This
 identification never sets the auxiliary mass equal to the physical fermion mass.
 
 A surrounding soft operation scales its own boundary momenta, leaving the
-physical mass and an already constructed child rest-frame point fixed. A
+physical mass and an already constructed child fixed point unchanged. A
 surrounding OS operation evaluates only its own boundary momentum; inner
-rest-frame points remain related to their own physical masses. Distinct
+points remain related to their own physical masses. Distinct
 components using the same mass symbol retain distinct owners.
 
 Completed child loops are fixed generators in a compatible sub-LMB. An outer
@@ -151,6 +208,17 @@ The tests compare the source QCD numerator as a finite open-spinor tensor,
 retain identical denominator products separately and check that attaching the
 projector to the opposite spinor port changes the answer.
 
+For a fixed velocity $v$, the same independent differentiation replaces
+$k^0$ by $k dot.op v$ and the ordered $gamma^0$ by $slash(v)$:
+
+$ V'_v=frac(2(N_0(k dot.op p)-m slash(v)N_0(k dot.op v)),D^3). $
+
+The on-shell branch denominators become
+$(k^2-m^2)((k-sigma m v)^2)$. Their spatial shifts belong to the same
+component-owned point as their energy shift. CFF reconstruction must retain
+both shifts; restoring an OS crown coordinate to a zero spatial vector is
+valid only for the default rest velocity.
+
 For the UV check, compare the exact source and completed subtraction under
 $k mapsto Lambda k$. $O-U_1 O$ has no terms at the retained divergent orders,
 so $T_("OS")$ has the same UV jet as $U_1$. Check this statement before energy
@@ -213,8 +281,8 @@ $ [k^mu k^nu D^(-3)] = g^(mu nu)/d [k^2 D^(-3)], quad
 $ [V] = (2-d)/2 I_2(M)(slash(p)-m). $
 
 Keep $d$ symbolic through both gamma algebra and tensor reduction. The external
-spinor trace normalization remains four. The identity $gamma^0 gamma^0=1$
-then gives the scalar mass term. Setting $d=4$ before multiplying the pole loses
+spinor trace normalization remains four. The identity $slash(v)^2=1$
+gives the scalar mass term for every fixed unit velocity. Setting $d=4$ before multiplying the pole loses
 a finite rational contribution.
 
 For comparison with conventional self-energy coefficients, remove the common
@@ -280,12 +348,12 @@ The extended analytic tests request exactly three or four terms, compare the
 full bare-fermion normalization in both tensor-integration modes at two
 auxiliary scales, and select AlphaLoop and MATAD separately with symbolic
 $zeta(3)$. The one- and two-enclosing-pole products include negative controls
-that discard the required positive-epsilon child term. Both backends pass
+that discard the required positive-epsilon child term. Both backends must agree
 through $epsilon^2$. MATAD's symbolic mode retains $Gamma(1)$ and
 polygamma constants; the comparison boundary uses the exact identities
 $Gamma(1)=1$, $psi(1)=-gamma_("E")$, $psi^((1))(1)=pi^2/6$ and
-$psi^((2))(1)=-2zeta(3)$, without numerical substitution. All three extended
-reference tests pass after this exact change of constant basis.
+$psi^((2))(1)=-2zeta(3)$, without numerical substitution. The extended reference
+tests require exact agreement after this change of constant basis.
 
 Define the propagator inverse as $slash(p)-m-Sigma(p)$ and the bare parameter
 as $m_0=Z_m m$. Then the conventional one-loop constants are
@@ -307,6 +375,81 @@ addback are integrated and combined. It need not cancel pointwise in an
 individual local term or CFF orientation. The physical scale $m$ remains in
 the OS mass relation.
 
+== Fixed boosts and the rainbow soft condition
+
+The one-loop integrated condition is independent of the chosen fixed velocity.
+In the fixture's quark-loop routing, the Feynman-parameter moments are
+$J_0=1/(1-2epsilon)$ and
+$J_1=1/((1-2epsilon)(2-2epsilon))$. They multiply the constant numerator and
+the difference between its value at $k=p$ and $k=0$, respectively. Applying
+these moments directly to the production on-shell branches must give the
+same scalar mass correction for every $v$. After the signed field pole is
+included, $Sigma_R(p)P_+(p/m)=0$ for every future on-shell $p$, even when
+$p != m v$. The whole matrix need not vanish: a term proportional to
+$slash(p)-m$ is consistent with MS-bar field renormalization.
+
+The integrated reference checks all nine combinations of rest, axial and
+non-axial subtraction and external velocities. The local projected-shell,
+UV and massless-specialization checks use each of the three subtraction
+velocities. The production vacuum reference also repeats the two analytic
+backends, two integration modes, two auxiliary masses and both retained
+positive-epsilon depths at each velocity. These checks are independent
+of the three-route comparison; agreement at sampled momenta does not replace
+the analytic pole condition.
+
+Local soft cancellation is a stronger, different statement. In the two-loop
+rainbow fixture, write the outer gluon momentum as $k=r-p=rho K$ and leave
+the child loop $ell$ symbolic. Two adjacent quark propagators carry $r$.
+For a generic ray with $K^2 != 0$ and $p dot.op K != 0$, their product
+with the gluon denominator starts at $rho^4 K^2 (2p dot.op K)^2$.
+Its leading numerator contains
+
+$ gamma_mu (slash(p)+m) R_("child")(p;ell)
+  (slash(p)+m) gamma^mu. $
+
+Here $R_("child")$ includes its local subtraction and its actual finite
+analytic coefficient with the frozen localization kernel. The complete
+forest also contains the overall parent subtraction and the parent operation
+on the completed child. The overall analytic addback has a regular
+localization kernel on this stratum; it cannot supply a negative Laurent
+power. A matched fixed point imposes the local projected child condition.
+A different fixed point imposes the integrated mass condition but does not
+generically annihilate this numerator at each $ell$.
+
+The exact tests compare the complete $rho^(-4)$ coefficient against this
+independently constructed cograph insertion. The matched cases retain a
+nonzero $rho^(-3)$ coefficient as a control. They cover rest, axial and non-axial
+external velocities with rest and matching subtraction points. These are
+four-dimensional Laurent certificates. They do not by themselves assert
+absolute integrability at intersecting soft strata or establish the result
+after CFF energy integration. The boosted one-loop reconstruction and route
+checks certify that component's representation boundary; boosted two-loop
+CFF soft behavior requires its own limit check.
+
+The complete forest tests require the following exact coefficients at $m=12$ with
+$p=(12,0,0,0)$, $(15,9,0,0)$ and $(15,3,6,6)$, retaining symbolic $K$
+and $ell$ away from the other denominator zeros:
+
+#table(columns: (1.5fr, 1fr, 1fr), inset: 5pt,
+  table.header([External point / subtraction], [$rho^(-4)$], [$rho^(-3)$]),
+  [Rest / rest], [Exactly zero], [Nonzero],
+  [Axial boost / rest], [Nonzero], [Not needed for the leading limit],
+  [Axial boost / matched], [Exactly zero], [Nonzero],
+  [Non-axial boost / rest], [Nonzero], [Not needed for the leading limit],
+  [Non-axial boost / matched], [Exactly zero], [Nonzero],
+)
+
+These tests include the actual finite child correction, its parent operation,
+frozen localization ownership and the regular overall analytic addback.
+Direct finite-component certificates preserve the same assertions without
+expanding the graph-level diagnostic numerator. The fixed-frame public
+generation test requires agreement across all three routes and preservation
+of the stability constraint after state loading.
+
+The original OS run recorded 7.1, 17.5 and 59.9 seconds for the rest, axial and
+non-axial cases in `tests/artifacts/on_shell_boosted_validation.json`. These
+are historical timings; the rebased stack requires its own ordinary-lane run.
+
 == Exact CFF reconstruction and residue oracle
 
 Retain the raw completed four-dimensional sectors with their source occurrence
@@ -320,8 +463,10 @@ assignment plan. The following are independent exact certificates:
   full causal prescriptions and component domains. The physical occurrence
   witness still determines incidence and provenance.
 
-The two poles of the OS branch involve $k^0+sigma m$. They are fixed affine
-energy shifts, while the fermion remains a physical-mass propagator. A matching
+An OS branch carries the fixed four-vector shift $sigma m v$: its energy
+shift is $sigma m v^0$, and its spatial shift is $sigma m bold(v)$, with the
+routing sign retained. At rest this reduces to the $k^0+sigma m$ shift in the
+residue example below. The fermion remains a physical-mass propagator. A matching
 spatial momentum alone does not certify a denominator. Neither certificate
 may be replaced by evaluation at sample coordinates.
 
@@ -337,16 +482,16 @@ The exact inverse-reconstruction guard remains mandatory.
 The nested and disjoint implementation therefore uses a per-component source
 assignment with distinct neutral coordinates for the live crown and the fixed
 point. Other components' points must remain affine spectators until their own
-contour step. Exact reconstruction and CFF projection now pass for all three
-physical nested fixtures and the disjoint fixture below. Those checks certify
-the source assignment and projection boundary. Independent complete-family
-Taylor identities now also pass. The separate small-graph limit checks cover
-all four hard subspaces below and the relevant constant/linear IR soft jets;
-the OS/OS, OS-inside-IR, IR-inside-OS and disjoint radial CFF controls also
-pass in the domain below. Counting points per component
+contour step. Exact reconstruction and CFF projection must be certified for
+all three physical nested fixtures and the disjoint fixture below. These
+checks establish the source assignment and projection boundary. Independent
+complete-family Taylor identities establish operator composition. Separate
+small-graph limit checks cover all four hard subspaces below and the relevant
+constant/linear IR soft jets; the OS/OS, OS-inside-IR, IR-inside-OS and disjoint
+radial CFF controls test the stated domains. Counting points per component
 alone does not solve the live-crown collision.
 
-As a separate contour oracle, let $omega=abs(bold(k))$,
+As a separate rest-frame contour oracle, let $omega=abs(bold(k))$,
 $E=sqrt(bold(k)^2+m^2)$, and
 $N_sigma(z)=(2-d)(gamma^0(z+sigma m)-bold(gamma) dot.op bold(k))+d m$.
 Closing the real energy contour below gives
@@ -362,6 +507,87 @@ pointwise samples; exact symbolic pole cancellation is a separate check. The
 local signed counterterm introduces its one forest minus sign after this
 linear energy integration. Compare complete orientation sums first, then
 orientation-local values when the representation exposes compatible labels.
+
+The boosted Dirac oracle instead uses the fixture's quark routing. Define
+$omega_sigma=abs(bold(k)-sigma m bold(v))$; the lower-half-plane poles are
+$k^0=E$ and $k^0=sigma m v^0+omega_sigma$. Apply the ordered $P_sigma(v)$
+to each residue and use the second derivative at the cubed vacuum pole for
+$V'_v$. Exact control points use $m=8$, $M=20$, $E=17$ and vacuum energy
+$25$. At rest, $bold(k)=(9,plus.minus 12,0)$ gives $omega_sigma=15$.
+For the axial boost, $bold(k)=plus.minus(15,0,0)$; for the non-axial boost,
+$bold(k)=plus.minus(5,10,10)$. The two branch energies are $(9,21)$ or
+$(21,9)$, respectively. The six matrix-valued residue comparisons are required
+in addition to the general exact numerator and denominator certificates.
+
+== Algebra and operation regression boundaries
+
+The OS stack builds on the copied FeynKit branch rebased onto main. Generic
+algebra fixes and their independent regressions are separate changes below
+the OS operations. Run
+`direnv exec .. nix develop -c just test-fixed-frame-algebra`
+from a workspace containing those changes. The gate covers Spenso, Idenso, GammaLoop's analytic
+bridge and Vakint without requiring the OS component operation. It retains
+the ordinary four-minute per-test limit.
+
+#table(columns: (1fr, 2.7fr), inset: 5pt,
+  table.header([Algebra boundary], [Exact regression]),
+  [Fixed basis metric and Clifford algebra],
+  [All sixteen basis products have signature $(+, -, -, -)$ in symbolic $d$.
+  Each physical spatial slash anticommutes with $gamma^0$, squares to $-1$,
+  and changes sign under temporal conjugation. General vectors, unsupported
+  components and formal spin dimensions retain their guards.],
+  [Ordered chain interfaces],
+  [Dummy-label changes preserve ordered temporal joins. General chain
+  transposition uses its explicit native operation; temporal-matrix symmetry
+  does not authorize transposition of arbitrary gamma words.],
+  [Native vacuum tensor ports],
+  [Actual gamma and fixed-vector leaves retain connected Lorentz ports through
+  angular projection. Restoring their native interface precedes symbolic-$d$
+  algebra; dimensional unification precedes allocation of fresh dummy indices.],
+  [Dimensional numerator],
+  [Open and closed chains retain the contributions from $(d-4)$ and $(d-4)^2$
+  multiplying single and double poles. Both integration policies preserve
+  the enclosing operation's required positive epsilon orders.],
+  [Compact coefficients],
+  [Weighted dots, powered scalar spectators and native tensor coefficients
+  retain their factorization in both tensor-reduction modes. Shallow exact
+  numeric-content normalization includes implicit unit coefficients. A bounded
+  collection in literal scalar factors preserves their complete bodies and
+  rejects hidden or unsupported dependence.],
+  [Residual contractions],
+  [Unsupported internal Lorentz contractions remain errors per analytic
+  branch. Scalar dimensional substitution leaves Lorentz-slot metadata intact;
+  free tensor interfaces survive exact zero and equality checks.],
+)
+
+OS-specific tests sit above that algebra boundary. They check the production
+projector on its outgoing component port against independent Weyl matrices,
+including a noncommuting matrix unit; both projector signs, idempotence,
+orthogonality and completeness; physical-mass scaling of every fixed-point
+component; point lifting and restoration with an untouched live cograph;
+and the composed local operator, integrated pole condition and complete
+rainbow soft coefficients. These operation tests cannot be replaced by a
+standalone Clifford identity.
+
+The analytic bridge uses the native typed algebra and contraction owners.
+It does not restore the superseded GammaLoop scalar-product alias machinery
+or append a separate legacy gamma-chain pass after projection. Finite
+coefficient certificates use the same exact literal-factor collection owner;
+only complete scalar sums with a certified scalar interface may become
+literal keys. Diagnostic expressions preserve graph numerator factors,
+function bodies, inverse scopes and fractional-power branches. Numerical
+agreement and coefficient sampling do not supply an exact zero certificate.
+
+The finite route-comparison oracle retains the completed integrand's numerator
+catalog. For compiled comparisons, one native tensor probe closes the graph's
+free interface before shared-family preparation. Its independent component
+parameters select each output at evaluation time, with the native dual-slot
+order and metric signs. Only this small probe is materialized; graph numerator
+bodies retain their factorization. Exact native component identities and an
+independent numeric tensor contraction check this extraction separately from
+the three physics routes. Compiling an evaluator and contracting a tensor at a
+fixed point have different costs, so their construction and evaluation times
+are recorded separately.
 
 == Validation graphs and support boundaries
 
@@ -391,9 +617,8 @@ orientation-local values when the representation exposes compatible labels.
 #figure(show-fixture("../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"),
   caption: [Existing nested validation topology from
   `local_nested_soft_top_self_energy.dot`. Internal edge 2 and child edge 3
-  provide the compatible homogeneous loop basis. This is the topology needed
-  for the figure-11 OS-inside-OS extension; its pre-existing soft tests do not
-  establish OS support.])
+  provide the compatible homogeneous loop basis. The OS-inside-OS forest
+  tests and the fixed-boost rainbow soft tests use this figure-11 topology.])
 
 #figure(show-fixture("../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"),
   caption: [Figure-10 topology from
@@ -420,134 +645,124 @@ orientation-local values when the representation exposes compatible labels.
   $p=Q_2$, $k=Q_3$, $l=Q_4$ are homogeneous. The proper component's OS point
   belongs to edge 2; its spectator cograph on edges 2, 8, 9 stays live.])
 
-The larger example first tests the complete four-family proper two-loop
-component at fixed, formal $p$: independent bounded $U_1$, $O$, $U_1 O$
-certificates, the owned mass points on edges 2 and 3, and the four hard
-subspaces of $k,l$. Exact cograph attachment then carries these component
-identities into the three-loop graph without distributing its numerator.
-This proper-component check passes (5.78 seconds). Separate tests assemble
-$(1-T_G)(1-T_Gamma)(1-T_gamma)X$ as eight signed families. They certify each
-outer $U_1$, $O$, $U_1 O$ branch after its inner prefix, then compose the
-identities by linearity; this eight-family certificate passes (73.89 seconds).
-The separate hard matrix contains the fourteen nontrivial
-partitions of the carriers $p,k,l$ and a fixed-momentum block: seven ordinary
-hard subsets and seven correlated assignments, including fixed $k-p$ and
-$l-k$. Each independent hard block contributes four measure powers. Bare
-nonzero controls accompany the superficially divergent strata. All fourteen
-strata pass: the ordinary subsets take 580.22 seconds and the correlated
-assignments 26.43 seconds. Their exact records are retained in
-`tests/artifacts/os_three_loop_repeated_pairs_validation.json`. A separate
-open-spinor logarithmic coefficient certificate passes in 241.53 seconds
-(`tests/artifacts/os_logarithmic_coefficient_validation.json`). These large
-checks belong to the full main-push selection, preserving the ordinary
-four-minute bound. The open-spinor oracle uses repeated-pair gamma reduction
-and exact finite tensor contraction; production gamma canonicalization is
-unchanged. It preserves the graph numerator's factorization, including in
-diagnostic copies. These local UV certificates are independent of the
-eight-family operator identity and of integrated renormalization conditions.
-The example uses OS for every fermion self-energy. A three-loop IR parent
-with a two-loop OS child would also contain forests that skip the middle component; the existing one-loop
-insertion Ward certificate does not justify those mixed forests, whose
-public guard remains in force.
+The larger example tests the complete four-family proper two-loop component
+at fixed formal $p$: independent bounded $U_1$, $O$, $U_1 O$ certificates,
+the owned mass points on edges 2 and 3, and the four hard subspaces of $k,l$.
+Exact cograph attachment carries those identities into the three-loop graph
+without distributing its numerator. Separate tests assemble
+$(1-T_G)(1-T_Gamma)(1-T_gamma)X$ as eight signed families, certify each outer
+operator branch after its complete inner prefix, and compose the identities
+by linearity.
 
-The first milestone is validated on the one-loop graph: the local ordered OS
-operator, its vacuum-only analytic correction, exact CFF reconstruction,
-independent contour checks and the integrated mass/field references above.
-The local identities are checked in both fermion-loop and gluon-loop input
-bases. The dimensional analytic checks retain the positive epsilon coefficients
-through quadratic order and exercise both integration modes at two auxiliary
-scales with both analytic backends.
-The physical Dirac
-CFF check uses exact rational control points in addition to the general source
-reconstruction certificates. Production generation and evaluation checks also
-pass for local and integrated OS configurations.
+The exact hard matrix contains fourteen nontrivial partitions of the carriers
+$p,k,l$ and a fixed-momentum block: seven ordinary hard subsets and seven
+correlated assignments, including fixed $k-p$ and $l-k$. Each independent hard
+block contributes four measure powers. Bare nonzero controls accompany the
+superficially divergent strata. A separate open-spinor logarithmic coefficient
+certificate uses repeated-pair gamma reduction and exact finite contraction,
+without changing production gamma canonicalization or expanding diagnostic
+numerators. These large tests belong to the full main-push selection. The
+operator identity, local UV limits and integrated renormalization conditions
+remain independent validation obligations.
 
-The nested and disjoint projection checks, the certified nested analytic
-payload checks and the disjoint owned-product/bridge checks now pass. The
-figure-10 topology also passes production generation and evaluation. Independent
-complete-family Taylor comparisons now pass for all three nested fixtures.
-Their small-graph UV matrix covers child-only, parent-only, simultaneous and
-correlated hard momenta; the relevant constant/linear IR soft jets also pass.
-Small exact child scalar-residue controls also pass at the rest-frame OS
-points and at moving physical on-shell points. The complete OS-inside-OS
-CFF radial matrix passes for the physical child-gluon, rest-frame child-gluon,
-outer-gluon and simultaneous-gluon rays (299.55 seconds). The OS-inside-IR
-matrix also passes its physical and rest-frame child-gluon rays (722.76
-seconds). The retained record is `tests/artifacts/os_full_radial_validation.json`.
-The IR-inside-OS radial check also passes on the faster explicit-direct route
-(57.74 seconds, `tests/artifacts/os_proper_guard_validation.json`). Configuration
-acceptance does not establish those claims. The public guard
-currently admits OS/OS nesting, an OS parent with an IR child, and disjoint OS
-components. An IR parent with an OS child additionally requires the actual
-minimal-QCD rules and propagators to pass
-`Graph::has_qcd_self_energy_insertion_ward_identity`. Other mixed prescriptions
-remain unsupported. Both direct 3D modes support a complete isolated one-loop
-OS component: the massive fixture agrees at exact control points, the massless
-specialization agrees with $H_1$, and the integrated-backend matrix passes.
-Physical proper one-loop children, completed two-loop parents in the full
-graph domain, their finite analytic prefixes and the two-component disjoint
-product pass comparisons in both direct orientation modes. The complete
-OS/OS and IR-inside-OS sums and the figure-10 families also agree with projected
-4D at the control points. Public direct support additionally admits a proper
-two-loop OS component with exactly one classified connected proper descendant,
-which must be a degree-one, one-loop OS component. The bare source, complete
-child and finite-prefix comparisons pass in that domain with a live cograph.
-Other proper multiloop histories remain guarded. The complete public
-three-loop generation and orientation-summed route comparison passes in
-1,773.62 seconds with the validated orientation grouping change. Its retained
-record is `tests/artifacts/os_three_loop_grouped_routes_validation.json`.
-The exhaustive numerical UV matrix also passes, separately from the exact
-operator and reconstruction certificates.
+The first milestone consists of the one-loop local ordered OS operation, its
+vacuum-only analytic correction, exact CFF reconstruction, independent contour
+checks and integrated mass/field references. Local identities use both
+fermion-loop and gluon-loop input bases. Analytic checks retain epsilon terms
+through quadratic order, use both integration modes, two auxiliary scales and
+two analytic backends. The physical Dirac CFF test adds exact rational residue
+controls after the general numerator and denominator certificates. Production
+generation and evaluation tests exercise local and integrated configurations.
+
+For the three nested fixtures, the independent complete-family jets and
+projection certificates are followed by child-only, parent-only, simultaneous
+and correlated hard limits. The relevant constant/linear IR soft jets have
+separate checks. Child scalar-residue controls distinguish rest-frame OS
+points from moving physical on-shell points. Complete radial CFF tests cover
+physical child-gluon, rest-frame child-gluon, outer-gluon and simultaneous-gluon
+rays for OS inside OS; both child-gluon rays for OS inside IR; and the outer
+gluon for IR inside OS. Configuration acceptance alone proves none of these
+claims.
+
+The public guard admits OS/OS nesting, an OS parent with an IR child, and
+disjoint OS components. An IR parent with an OS child additionally requires
+`Graph::has_qcd_self_energy_insertion_ward_identity` to certify the actual
+native minimal-QCD vertex and propagator tensors, topology, color flow and
+equal masses. An autogenerated source label is insufficient. The negative
+fixture changes a rule through the immutable model and must be rejected.
+Other mixed prescriptions remain unsupported.
+
+Both direct 3D modes implement the isolated operation and share the exact
+source certificate infrastructure for proper components. Their tests compare
+physical proper one-loop children, completed two-loop parents in the full
+graph domain, finite analytic prefixes and a two-component disjoint product
+with the projected route. Public direct dispatch also admits a proper two-loop
+OS component with exactly one classified connected proper descendant, which
+must be a degree-one one-loop OS component. Bare, completed-child and
+finite-prefix tests retain the live cograph in that domain. Other proper
+multiloop histories remain guarded.
 
 #table(columns: (1.25fr, 1.15fr, 2fr), inset: 5pt,
-  table.header([Component or forest], [Prescription], [Validation and guard]),
+  table.header([Component or forest], [Prescription], [Required certificates and guard]),
   [One-loop massive quark self-energy], [OS mass; MS-bar field],
-  [Validated through local 4D, analytic correction and projected CFF.],
+  [Local operator, vacuum scheme correction, exact projected CFF and
+  independent local and integrated references.],
   [Massless quark specialization], [OS at $m=0$],
-  [Validated exact agreement with degree-one soft refinement.],
+  [Exact agreement with degree-one soft refinement.],
   [Quark child inside gluon parent], [OS child; IR parent],
-  [Ward certificate, nested analytic input, complete-family Taylor identities,
-  exact CFF projection, all four hard subspaces, the external soft jet and
-  production generation/evaluation pass. Complete CFF physical/rest-frame
-  child-gluon radial controls also pass; arbitrary numerators excluded.],
+  [Actual-rule Ward certificate, nested analytic input, complete-family jets,
+  exact CFF projection, four hard subspaces, external soft jet and complete
+  physical/rest-frame child-gluon controls; arbitrary numerators excluded.],
   [Quark child inside quark parent], [OS child and parent],
-  [Independent complete-family Taylor identities, exact nested CFF projection
-  and all four hard subspaces pass. The complete four-stratum radial CFF soft
-  matrix also passes in the stated below-threshold domain.],
+  [Complete-family jets, exact nested CFF, four hard subspaces and the complete
+  four-stratum radial soft matrix in the stated below-threshold domain.],
   [Gluon child inside quark parent], [IR child; OS parent],
-  [Independent complete-family Taylor identities, exact nested CFF projection
-  and all four hard subspaces pass. The gluon-child constant/linear soft jet
-  and the complete radial CFF soft control pass.],
+  [Complete-family jets, exact nested CFF, four hard subspaces, gluon-child
+  constant/linear soft jet and complete radial CFF soft control.],
   [Disjoint quark self-energies], [OS on each component],
-  [Independent component identities, owned product, live bridge, exact CFF
-  projection and left/right/both/correlated UV limits pass. Full CFF left,
-  right and joint radial soft checks also pass.],
+  [Independent component identities, owned product, live bridge, exact CFF,
+  left/right/both/correlated hard limits and left/right/joint soft controls.],
   [Proper two-loop quark component in a three-loop graph], [OS at both inner levels],
-  [Exact component, mass-point, cograph and four-stratum UV certificates
-  pass. Bare, completed-child and finite-prefix component-domain checks agree
-  across all three routes (72.70, 316.35 and 374.70 seconds). The complete
-  eight-family certificate and all fourteen ordinary/correlated hard strata
-  pass. Public direct dispatch admits exactly one primitive OS descendant.
-  Full public generation and orientation-summed agreement pass across all
-  three routes. The exhaustive numerical UV matrix also passes for all
-  26 LMBs and 182 nonempty hard-coordinate subsets.],
+  [Component/mass-point/cograph certificates, all eight forest families and
+  fourteen ordinary/correlated hard strata. Direct dispatch admits exactly
+  one primitive OS descendant. Public route comparisons precede the full
+  numerical matrix of 26 LMBs and 182 nonempty hard-coordinate subsets.],
   [Ordinary UV or pole parent above OS], [MUV or PolePart],
-  [Public dispatch guarded: a general mixed integrated policy has not been established.],
+  [Guarded: a general mixed integrated policy has not been established.],
   [Massive scalar/vector or analytic chiral subgraph], [OS],
   [Unsupported fermionic projector or dimensional numerator prescription.],
   [Direct 3D, primitive and small forests], [Supported OS/IR combinations above],
-  [Both modes pass primitive, proper one-loop child, complete two-loop parent,
-  finite-prefix and two-component disjoint-product comparisons. A proper
-  two-loop OS component with exactly one primitive OS descendant is admitted;
-  other proper multiloop histories, disjoint products containing a multiloop
-  component, and unions of three or more OS components remain guarded.],
+  [Primitive, proper-child, complete-parent, finite-prefix and two-component
+  comparisons in both modes. Other proper multiloop histories, disjoint
+  products containing a multiloop component, and unions of at least three
+  OS components remain guarded.],
 )
 
-Write $H_Gamma=U_2+S_1-U_2 S_1$ for the soft-refined gluon operation.
-For a quark child $gamma$ in a gluon parent $Gamma$, test each of
-$X$, $-T_gamma X$, $-H_Gamma X$, and $+H_Gamma T_gamma X$ before their sum.
-For a quark child inside a quark parent, replace $H_Gamma$ by $T_("OS"),Gamma$.
-The soft-refined gluon-inside-quark case has the opposite operator order.
+The larger graph uses OS for every fermion self-energy. A three-loop IR parent
+with a two-loop OS child also has forests that skip the middle component;
+the one-loop insertion Ward argument does not establish that mixed policy,
+so its public guard remains in force.
+
+=== Original OS validation records
+
+The following timings belong to the original OS stack, not the FeynKit rebase.
+They preserve the earlier run evidence while the maintained tests above define
+the current obligations:
+
+- `tests/artifacts/os_three_loop_repeated_pairs_validation.json`: proper
+  two-loop component 5.78 seconds; eight-family identity 73.89 seconds;
+  seven ordinary hard strata 580.22 seconds and seven correlated strata
+  26.43 seconds.
+- `tests/artifacts/os_logarithmic_coefficient_validation.json`: exact
+  open-spinor logarithmic coefficient 241.53 seconds.
+- `tests/artifacts/os_full_radial_validation.json`: complete OS/OS radial
+  matrix 299.55 seconds and OS-inside-IR child-gluon matrix 722.76 seconds.
+- `tests/artifacts/os_proper_guard_validation.json`: IR-inside-OS radial
+  control 57.74 seconds. The proper two-loop bare, completed-child and
+  finite-prefix route comparisons recorded 72.70, 316.35 and 374.70 seconds.
+- `tests/artifacts/os_three_loop_grouped_routes_validation.json`: full
+  three-loop generation and summed route comparison 1,773.62 seconds.
+
 Disjoint components commute only on their owned factors; their signed completed
 counterterms and integrated prefixes use the established disconnected replay.
 No global OS substitution is permitted on the shared direct-CFF root.
@@ -616,20 +831,21 @@ self-energy-insertion graph. Its inner bare self-energy has momentum-dependent
 form factors, and transversality may require other diagrams. The existing IR
 policy for the bare parent family therefore retains the generic full
 $-H_Gamma[X_("bare")]$ analytic input, without the Ward omission. The topology,
-canonical numerator, color flow and equal masses are prerequisites for the
-specialized nested policy. Tests now validate the rule/propagator certificate,
-the independent all-$d$ bubble and mass-insertion identities, the signed nested
-analytic input and the positive-epsilon finite child prefix. Complete-family
-Taylor identities, the four hard-subspace checks and the relevant external
-soft jet now pass. The complete CFF physical/rest-frame child-gluon radial
-controls also pass. Local forest identities alone do not establish the
-integrated policy.
+actual native vertex and propagator tensors, color flow and equal masses are
+prerequisites for the specialized nested policy. Admission compares those
+tensors exactly through the typed algebra owner; autogenerated metadata alone
+cannot establish the Ward identity. The independent all-$d$ bubble and
+mass-insertion identities, signed nested analytic input and positive-epsilon
+finite child prefix require their own tests. Complete-family Taylor identities,
+four hard-subspace checks, the relevant external soft jet and complete CFF
+physical/rest-frame child-gluon controls establish separate claims. Local
+forest identities alone do not establish the integrated policy.
 
 The logarithmic box component on edges 2, 3, 5, 6 of the figure-10 fixture has
 a cograph on edge 4 independent of the outer external momentum. Its child-only
 and IR-parent-composed forest families cancel because the parent soft constant
 coefficient reproduces that complete insertion. The independent fixture test
-now certifies this cancellation, including equality of the parent's $U$ and
+requires this cancellation, including equality of the parent's $U$ and
 $U S$ branches, before reducing the full forest to the four displayed OS/IR families;
 the correlated hard region $k=p+r$ with $p$ hard and $r$ fixed keeps the
 child gluon momentum finite and is covered independently in the UV checks. The
@@ -646,9 +862,9 @@ the OS-point scalar coefficients satisfy
 $rho^2 R[1] -> 1/(4m)$ and $rho^2 R[k^0] -> sigma/4$.
 Moving physical controls at $m=12$, $p=(15,9,0,0)$ also retain nonzero exact
 limits on parallel and transverse rays. These certify the child scalar
-kernels. The complete OS/OS CFF sum separately passes the four radial strata
-below after all parent residues. The OS-inside-IR sum passes its two
-child-gluon strata; the IR-inside-OS outer-gluon check also passes.
+kernels. The complete OS/OS CFF sum separately tests the four radial strata
+below after all parent residues. OS-inside-IR tests its two child-gluon
+strata; IR-inside-OS tests the outer-gluon ray.
 The scalar checks alone do not claim full IR finiteness.
 
 For the nested quark forest, the complete inner remainder has a stronger
@@ -669,9 +885,10 @@ is bounded by $rho^(-2)$ on this single-soft ray, with the other loop fixed
 away from its singularities.
 
 The numerical rays use $q=(5,0,0,0)$ and $m=12$, below the bare graph's massive
-threshold, and keep the nonsoft loop generic. This argument does not assert a
-pointwise boosted OS condition: the local operator is defined at rest. The
-moving physical child-gluon limit belongs to the complete CFF orientation and
+threshold, and keep the nonsoft loop generic. These radial controls use the default rest-frame
+subtraction and do not assert a pointwise condition at a different boosted
+point. The matching fixed-boost four-dimensional test is described separately
+above. The moving physical child-gluon limit belongs to the complete CFF orientation and
 forest sum; its boundedness must not be inferred from one isolated residue.
 
 Mixed-prescription guards can be relaxed only for those cases actually derived
@@ -679,28 +896,36 @@ and tested. Required coverage includes all relevant hard subspaces and the
 corresponding gluon soft limits, rather than only uniform scaling of every loop.
 Exact small forest terms precede the large graph tests.
 
-The direct representations implement the same isolated-component operation
-and agree with the projected-four-dimensional route after summing orientations.
-The small proper-child, completed-prefix and full mixed-forest checks have
+The direct representations implement the same isolated-component operation;
+their complete orientation sums must agree with the projected-four-dimensional
+route. Small proper-child, completed-prefix and full mixed-forest checks retain
 separate ownership and equivalence certificates. The proper two-loop component
-with one primitive OS child also passes these three-route certificates in the
-larger graph. Route measurements choose the supported representation for the
-large scaling matrix; small equivalence checks remain for the other routes.
+with one primitive OS child requires the same three-route certificates in the
+larger graph. After equivalence is established, measurements choose the fastest
+supported route for the large scaling matrix; small equivalence checks remain
+for the other routes.
 
 The completed scalar evaluator groups conditional summands by their exact
 orientation condition at each additive node. It preserves products, powers
 and lazy branch boundaries; each changed pass removes at least one conditional,
-so the fixed-point iteration terminates. Four focused tests validate exact
-symbolic selector truth tables, same-key sums, factorization and idempotence.
-The three selector regressions and the primitive per-host comparison across
-all three routes also pass. These checks certify the grouping transformation
-independently of the completed large public generation and route comparison.
+so the fixed-point iteration terminates. Focused tests require exact symbolic
+selector truth tables, same-key sums, factorization and idempotence. The
+primitive comparison checks both direct constructions per production host,
+then all three routes after summing hosts. These checks establish the grouping
+transformation independently of large public generation and route comparisons.
 
-== Performance measurements and route selection
+== Original OS baseline measurements and route selection
+
+All numerical results, timings, memory figures and route choices in this
+section are historical observations from the original OS stack ending at
+`ce58d97de847`; the binary and artifact identities below identify its individual
+runs. They are retained as a baseline, not as validation or performance data
+for the rebased FeynKit stack. New measurements must identify the new revision
+and repeat the same boundaries and protocols before updating a route choice.
 
 The isolated `ci-optim` measurements from 2026-10-13 use one fresh process per
 fixture and route, binary SHA-256 prefix `c46b91da6603`, with orientation branch
-grouping and generation profiling enabled. All six cases pass. The primitive
+grouping and generation profiling enabled. All six cases passed. The primitive
 fixture includes local and integrated OS terms; the figure-10 fixture measures
 its local forest. The host is shared, so process isolation does not imply an
 idle machine. The complete record, profile hashes and raw reports are retained
@@ -779,7 +1004,7 @@ uncertainty, and these diagnostics do not replace the existing paired
 performance gate. The retained earlier run is a separate baseline; changes
 between these single observations do not isolate the grouping change's cost.
 
-The three other local-only forest matrices also pass with binary
+The three other local-only forest matrices also passed with binary
 `c46b91da6603`: OS inside OS in 41.96 seconds, IR gluon inside OS in
 43.77 seconds, and the disjoint OS pair in 18.16 seconds. Their pass record is
 `tests/artifacts/os_remaining_forests_grouped_validation.json`. They use the
@@ -825,18 +1050,18 @@ are `os_quark_nested_route_matrix`, `os_soft_gluon_route_matrix`, and
 `os_disjoint_route_matrix`. None of these size measurements expands stored
 numerator functions.
 
-Explicit direct remains the clear evaluation choice for IR inside OS;
-projected 4D is the clear evaluator choice for the disjoint pair. For
+These measurements favored explicit direct for IR inside OS and projected
+4D for the disjoint pair. For
 OS inside OS, the evaluator means are close: projected 4D is 0.5–1.4 percent
 lower, within the measured variation. Its generation takes 3.49 seconds
 versus 7.28 for explicit direct, and its total sample means are lower.
-Projected 4D therefore remains the provisional choice for that extensive
+Projected 4D was therefore the provisional choice for that extensive
 matrix. These choices retain small equivalence checks for the other routes
 and make no isolated-memory claim from the shared-process matrices.
 
-The full three-loop local forest also passes public generation and
+The full three-loop local forest also passed public generation and
 orientation-summed pointwise agreement across all three routes with binary
-`c46b91da6603`. Its complete test takes 1,773.62 seconds. The profile and
+`c46b91da6603`. Its complete test took 1,773.62 seconds. The profile and
 route summaries are retained in
 `tests/artifacts/os_three_loop_route_matrix/summary.json`. Construction times
 below are seconds; the evaluator column gives the range of the two point means
@@ -873,7 +1098,7 @@ It supplies no completed baseline timing or whole-run speedup ratio. The new
 grouping allows the full route comparison to complete, while the roughly
 350 ms orientation-local evaluator remains a substantial cost.
 
-The exhaustive numerical UV matrix passes on projected 4D: 26 physical LMBs
+The exhaustive numerical UV matrix passed on projected 4D: 26 physical LMBs
 times seven nonempty hard subsets give 182 tested limits. Each uses 25 scales
 from $10^8$ to $10^12$, for 4,550 samples plus a separate matched bare control.
 The successful record is `tests/artifacts/os_three_loop_uv_scaling_validation.json`.
@@ -891,7 +1116,7 @@ costs. The first passing run takes 211.58 seconds with an unrestricted worker
 pool on the 384-CPU host. One observation records 41.0 GiB of resident memory
 (42,993,496 KiB); it is a sampled lower bound on the maximum, not a measured
 peak. The maintained test scopes the profiler to one worker without changing
-any limit, scale or precision retry. This bounded-resource run passes in
+any limit, scale or precision retry. This bounded-resource run passed in
 542.56 seconds with binary `63a324ef017d`; both the subtracted and matched
 bare profiles cover all 182 limits. The 30 GB watchdog completes successfully
 in 543.50 seconds and records a sampled process-tree maximum of 3,632,726,016
@@ -922,13 +1147,13 @@ $E_("cm")=400$, pole mass $m=173$, $mu_r=173$, $alpha_s=0.118$ and
 $alpha_("EW")^(-1)=132.507$. The LO control gives
 $1.40582 plus.minus 0.02767$ from 10,000 samples.
 
-All three routes pass the integrated reference and auxiliary-scale checks at
+All three routes passed the integrated reference and auxiliary-scale checks at
 $(M,L)=(173,173),(346,173),(173,346)$. Each case uses 320,000 samples with
 independent seeds 1337–1345, relative-spherical coordinates, map-density channel
 weights, and explicit sums over graphs, orientations and sampling channels.
 The Vegas continuous-dimension learning rate is 0.25; batches start at 20,000
 samples and increase by 20,000, with 20,000 samples required before a grid
-update. Ten workers evaluate each case. The complete acceptance takes 486.70
+update. Ten workers evaluate each case. The complete acceptance took 486.70
 seconds and belongs to the full main-push lane, outside the ordinary
 four-minute test selection.
 
@@ -953,7 +1178,7 @@ successful binary identity are retained under
 Successful-test cleanup removes the per-case integration checkpoints, so these
 results make no retained per-sample outlier diagnostic claim.
 
-The routes also agree in arbitrary precision at momentum-space controls for
+Those runs also agreed in arbitrary precision at momentum-space controls for
 each master graph and at normalized-coordinate probes chosen from the large
 weights. The latter separately compare actual mapped momenta, Jacobians and
 channel partitions, and require the two graph-group contributions to sum to

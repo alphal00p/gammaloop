@@ -19,7 +19,7 @@ use idenso::{
     shorthands::UndoShorthands,
     tensor::{AlgebraSettings, SymbolicNetExt, SymbolicNetParse},
 };
-use linnet::half_edge::involution::Hedge;
+use linnet::half_edge::involution::{Flow, Hedge};
 use spenso::{
     network::{
         ExecutionResult, Sequential, SmallestDegree,
@@ -163,11 +163,21 @@ fn rational_coefficients(
     Ok(coefficients)
 }
 
-pub(super) fn assert_rational_zero(
+/// Both policies execute the same exact finite-component certificate. Small
+/// boosted soft coefficients retain compact matrix products when symbolic
+/// gamma-chain collection would expand their fixed-vector sums.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum SpinReduction {
+    SymbolicFirst,
+    FiniteComponents,
+}
+
+pub(crate) fn assert_rational_zero(
     label: &str,
     graph: &Graph,
     current: &OwnedForestNode,
     atom: &Atom,
+    spin_reduction: SpinReduction,
 ) -> Result<()> {
     let mut numerators = NumeratorJetCache::default();
     for (class, (denominators, numerator)) in rational_coefficients(graph, current, atom)?
@@ -190,7 +200,7 @@ pub(super) fn assert_rational_zero(
             GammaSimplifySettings::canonical()
         };
         let reduced = source.simplify_algebra(&AlgebraSettings {
-            gamma: Some(gamma_settings),
+            gamma: matches!(spin_reduction, SpinReduction::SymbolicFirst).then_some(gamma_settings),
             color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
             epsilon: true,
             ..Default::default()
@@ -228,6 +238,34 @@ fn gamma_zero_at_port(graph: &Graph, numerator: &Atom, hedge: usize) -> Atom {
     idenso::gamma0!(&dummy, &port) * numerator.replace(port).with(dummy)
 }
 
+/// Contract a fixed velocity with an ordered spinor port. Concrete Lorentz
+/// indices on a gamma remain opaque to the tensor library, so use its delta
+/// basis; the Minkowski contraction supplies the spatial minus signs.
+pub(crate) fn gamma_velocity_at_port(
+    graph: &Graph,
+    numerator: &Atom,
+    hedge: usize,
+    velocity: &[Atom; 4],
+) -> Atom {
+    let port = graph.underlying[Hedge(hedge)]
+        .edge_spin_slots()
+        .next()
+        .expect("the fixture's external quark has one spinor slot")
+        .to_atom();
+    let dummy = idenso::bis!(4, Atom::from(Aind::new_dummy()));
+    let lorentz = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+    let (row, column) = if graph.flow(Hedge(hedge)) == Flow::Source {
+        (&port, &dummy)
+    } else {
+        (&dummy, &port)
+    };
+    let slash = &velocity[0] * idenso::gamma0!(row.as_view(), column.as_view())
+        + Atom::add_many(
+            (1..4).map(|mu| &velocity[mu] * function!(GS.delta_vec, GS.cind(mu), &lorentz)),
+        ) * idenso::gamma!(row.as_view(), column.as_view(), &lorentz);
+    slash * numerator.replace(port).with(dummy)
+}
+
 fn dot(left: &Atom, right: &Atom) -> Atom {
     function!(SPENSO_TAG.dot, left, right)
 }
@@ -240,6 +278,7 @@ fn one_loop_reference(
     graph: &Graph,
     current: &OwnedForestNode,
     root: &OwnedForestNode,
+    velocity: &[Atom; 4],
 ) -> Result<(Atom, Atom, Atom)> {
     assert_eq!(
         current.lmb().loop_edges.iter().copied().collect::<Vec<_>>(),
@@ -249,7 +288,13 @@ fn one_loop_reference(
     let vector_slot = Minkowski {}.new_rep(4).to_symbolic([]);
     let k = function!(GS.emr_mom, 2, &vector_slot);
     let p = function!(GS.emr_mom, 0, &vector_slot);
-    let k_zero = GS.emr_mom(EdgeIndex(2), GS.cind(0));
+    let k_dot_velocity: Atom = (0..4)
+        .map(|mu| {
+            Atom::num(if mu == 0 { 1 } else { -1 })
+                * &velocity[mu]
+                * GS.emr_mom(EdgeIndex(2), GS.cind(mu))
+        })
+        .sum();
     let k_squared = dot(&k, &k);
     let numerator = graph
         .numerator(current.subgraph(), root.subgraph())?
@@ -260,7 +305,7 @@ fn one_loop_reference(
         .expect("the source quark numerator is a single factor");
     let numerator = physical_expression(graph, current, &numerator);
     let massless_numerator = numerator.replace(mass.to_pattern()).with(Atom::Zero);
-    let left_gamma_numerator = gamma_zero_at_port(graph, &massless_numerator, 1);
+    let left_gamma_numerator = gamma_velocity_at_port(graph, &massless_numerator, 1, velocity);
     let denominator = |edge, polynomial: Atom, mass_squared: Atom| {
         GS.den(edge, function!(GS.emr_mom, 2), mass_squared, polynomial)
     };
@@ -271,17 +316,18 @@ fn one_loop_reference(
         Atom::var(GS.m_uv_vacuum).pow(2),
     );
     let on_shell = [1, -1].into_iter().fold(Atom::Zero, |sum, sigma| {
-        let projected = (&numerator + Atom::num(sigma) * gamma_zero_at_port(graph, &numerator, 1))
+        let projected = (&numerator
+            + Atom::num(sigma) * gamma_velocity_at_port(graph, &numerator, 1, velocity))
             / Atom::num(2);
         let gluon = denominator(
             3,
-            &k_squared - Atom::num(2 * sigma) * &mass * &k_zero + mass.pow(2),
+            &k_squared - Atom::num(2 * sigma) * &mass * &k_dot_velocity + mass.pow(2),
             Atom::Zero,
         );
         sum + projected / (&quark * gluon)
     });
     let remainder = Atom::num(2)
-        * (&massless_numerator * dot(&k, &p) - &mass * left_gamma_numerator * &k_zero)
+        * (&massless_numerator * dot(&k, &p) - &mass * left_gamma_numerator * &k_dot_velocity)
         / vacuum.pow(3);
     Ok((on_shell, remainder, numerator))
 }
@@ -293,7 +339,13 @@ fn on_shell_zero_operand_needs_no_inferred_spinor_port() -> Result<()> {
         let (graph, current, _) = fixture(massless)?;
         let zero = SymbolicTensor::infer_indexed(Atom::Zero)?;
         assert_eq!(
-            graph.on_shell_branches(&graph.model, &zero, current.subgraph(), current.lmb())?,
+            graph.on_shell_branches(
+                &graph.model,
+                &zero,
+                current.subgraph(),
+                current.lmb(),
+                &UVgenerationSettings::default().on_shell_velocity()?
+            )?,
             [zero.clone(), zero]
         );
         let source = graph
@@ -306,6 +358,7 @@ fn on_shell_zero_operand_needs_no_inferred_spinor_port() -> Result<()> {
             &ranked_zero,
             current.subgraph(),
             current.lmb(),
+            &UVgenerationSettings::default().on_shell_velocity()?,
         )? {
             assert_eq!(branch, ranked_zero);
         }
@@ -315,7 +368,8 @@ fn on_shell_zero_operand_needs_no_inferred_spinor_port() -> Result<()> {
                     &graph.model,
                     &SymbolicTensor::infer_indexed(Atom::one())?,
                     current.subgraph(),
-                    current.lmb()
+                    current.lmb(),
+                    &UVgenerationSettings::default().on_shell_velocity()?,
                 )
                 .is_err()
         );
@@ -356,7 +410,12 @@ fn exact_os_coefficients_use_fundamental_color_dimension_identities() -> Result<
 fn symbolic_spin_reduction_preserves_os_phase_order_and_scalar_factors() -> Result<()> {
     test_initialise()?;
     let (graph, current, root) = fixture(false)?;
-    let (_, _, numerator) = one_loop_reference(&graph, &current, &root)?;
+    let (_, _, numerator) = one_loop_reference(
+        &graph,
+        &current,
+        &root,
+        &UVgenerationSettings::default().on_shell_velocity()?,
+    )?;
     let spectator = parse_lit!((spin_a + spin_b) * (spin_c + spin_d) ^ 11);
     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
     let mut tensors = NumeratorJetCache::default();
@@ -400,6 +459,7 @@ fn symbolic_spin_reduction_preserves_os_phase_order_and_scalar_factors() -> Resu
                     &graph,
                     &current,
                     &(&spectator * scalar_product.pow(power) * (&original - &reduced)),
+                    SpinReduction::SymbolicFirst,
                 )?;
             }
         }
@@ -434,12 +494,18 @@ fn production_os_matches_equation_4_24_with_ordered_projectors_and_one_forest_si
     let ctx = UVCtx::new(&graph, &graph.model, &settings);
     let seed = Full4dCts::root();
     let actual = uv_limit(&seed, &ctx, &current, &root, &current, &root)?;
-    let (on_shell, remainder, numerator) = one_loop_reference(&graph, &current, &root)?;
+    let (on_shell, remainder, numerator) = one_loop_reference(
+        &graph,
+        &current,
+        &root,
+        &UVgenerationSettings::default().on_shell_velocity()?,
+    )?;
     assert_rational_zero(
         "production -T_OS equals the independent compact expression",
         &graph,
         &current,
         &(NumeratorInterface::export(actual.atom()).0 + &on_shell + &remainder),
+        SpinReduction::SymbolicFirst,
     )?;
     let scheme = actual
         .active_sectors()
@@ -452,6 +518,7 @@ fn production_os_matches_equation_4_24_with_ordered_projectors_and_one_forest_si
         &graph,
         &current,
         &(scheme + remainder),
+        SpinReduction::SymbolicFirst,
     )?;
 
     // A nonzero exact commutator is a negative control: attaching gamma0 to
@@ -468,44 +535,120 @@ fn production_os_matches_equation_4_24_with_ordered_projectors_and_one_forest_si
 }
 
 #[test]
+fn fixed_boosted_os_matches_compact_operator_and_local_shell_projection() -> Result<()> {
+    test_initialise()?;
+    let (graph, current, root) = fixture(false)?;
+    for components in [
+        ["1", "0", "0", "0"],
+        ["5/4", "3/4", "0", "0"],
+        ["5/4", "1/4", "1/2", "1/2"],
+    ] {
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            on_shell_subtraction_velocity: components.map(str::to_owned),
+            ..Default::default()
+        };
+        let velocity = settings.on_shell_velocity()?;
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let actual = uv_limit(&Full4dCts::root(), &ctx, &current, &root, &current, &root)?;
+        let (on_shell, remainder, _) = one_loop_reference(&graph, &current, &root, &velocity)?;
+        assert_rational_zero(
+            "fixed-velocity production operator equals independently differentiated compact form",
+            &graph,
+            &current,
+            &(NumeratorInterface::export(actual.atom()).0 + &on_shell + &remainder),
+            SpinReduction::SymbolicFirst,
+        )?;
+        let scheme = actual
+            .active_sectors()
+            .iter()
+            .fold(Atom::Zero, |sum, sector| {
+                sum + NumeratorInterface::export(sector.integration_atom()).0
+            });
+        assert_rational_zero(
+            "fixed-velocity analytic payload is the signed vacuum remainder",
+            &graph,
+            &current,
+            &(scheme + &remainder),
+            SpinReduction::SymbolicFirst,
+        )?;
+
+        let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
+        let complete = physical_expression(
+            &graph,
+            &current,
+            &NumeratorInterface::export(
+                &grow_factor(&ctx, &current, &root)?.try_add(actual.atom())?,
+            )
+            .0,
+        );
+        for sigma in [1, -1] {
+            // Bind the live incoming momentum independently of the production
+            // OS-point constructor and preserve all loop components.
+            let evaluated = complete.replace_map(|view, _, out| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                    && momentum.get_nargs() == 2
+                    && momentum.get(0) == Atom::num(0).as_view()
+                {
+                    **out = Atom::num(sigma)
+                        * &mass
+                        * Atom::add_many((0..4).map(|mu| {
+                            &velocity[mu] * function!(GS.delta_vec, GS.cind(mu), momentum.get(1))
+                        }));
+                }
+            });
+            let projected = (&evaluated
+                + Atom::num(sigma) * gamma_velocity_at_port(&graph, &evaluated, 1, &velocity))
+                / Atom::num(2);
+            assert_rational_zero(
+                "matching boosted projector annihilates the complete local one-loop remainder",
+                &graph,
+                &current,
+                &projected,
+                SpinReduction::SymbolicFirst,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn production_os_massless_specialization_equals_soft_refined_degree_one() -> Result<()> {
     test_initialise()?;
     let (graph, mut current, root) = fixture(true)?;
     assert!(graph[EdgeIndex(2)].mass_atom(&graph.model).is_zero());
-    let settings = UVgenerationSettings {
-        generate_integrated: false,
-        ..Default::default()
-    };
-    let ctx = UVCtx::new(&graph, &graph.model, &settings);
-    let seed = Full4dCts::root();
-    let on_shell = uv_limit(&seed, &ctx, &current, &root, &current, &root)?;
-    current.spinney.renormalization_scheme = ApproximationType::IR;
-    let soft = uv_limit(&seed, &ctx, &current, &root, &current, &root)?;
-    assert_rational_zero(
-        "OS at zero physical mass is H1",
-        &graph,
-        &current,
-        &(NumeratorInterface::export(&on_shell.atom().try_sub(soft.atom())?).0),
-    )
+    for velocity in [
+        ["1", "0", "0", "0"],
+        ["5/4", "3/4", "0", "0"],
+        ["5/4", "1/4", "1/2", "1/2"],
+    ] {
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            on_shell_subtraction_velocity: velocity.map(str::to_owned),
+            ..Default::default()
+        };
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let seed = Full4dCts::root();
+        current.spinney.renormalization_scheme = ApproximationType::OS;
+        let on_shell = uv_limit(&seed, &ctx, &current, &root, &current, &root)?;
+        current.spinney.renormalization_scheme = ApproximationType::IR;
+        let soft = uv_limit(&seed, &ctx, &current, &root, &current, &root)?;
+        assert_rational_zero(
+            "OS at zero physical mass is H1 for every fixed velocity",
+            &graph,
+            &current,
+            &NumeratorInterface::export(&on_shell.atom().try_sub(soft.atom())?).0,
+            SpinReduction::SymbolicFirst,
+        )?;
+    }
+    Ok(())
 }
 
 #[test]
 fn production_os_removes_all_one_loop_ultraviolet_tensor_coefficients() -> Result<()> {
     test_initialise()?;
     let (graph, current, root) = fixture(false)?;
-    let settings = UVgenerationSettings {
-        generate_integrated: false,
-        ..Default::default()
-    };
-    let ctx = UVCtx::new(&graph, &graph.model, &settings);
-    let seed = Full4dCts::root();
-    let bare = grow(&seed, &ctx, &current, &root)?;
-    let subtraction = uv_limit(&seed, &ctx, &current, &root, &current, &root)?;
-    let coefficients = rational_coefficients(
-        &graph,
-        &current,
-        &(NumeratorInterface::export(&bare.try_add(subtraction.atom())?).0),
-    )?;
     let ports = [0, 1].map(|hedge| {
         graph.underlying[Hedge(hedge)]
             .edge_spin_slots()
@@ -514,42 +657,64 @@ fn production_os_removes_all_one_loop_ultraviolet_tensor_coefficients() -> Resul
             .to_atom()
     });
     let scale = Atom::var(GS.rescale);
-    let mut nonzero_remainder = false;
-    for row in 0..4 {
-        for column in 0..4 {
-            let mut jet = Atom::Zero;
-            for (denominators, numerator) in &coefficients {
-                let component = numerator
-                    .replace(ports[0].to_pattern())
-                    .with(GS.cind(row))
-                    .replace(ports[1].to_pattern())
-                    .with(GS.cind(column));
-                let scalar = scalar_component(
-                    &(component * NumeratorInterface::export(&graph.global_prefactor.num).0),
-                )? / denominators
-                    .iter()
-                    .fold(Atom::one(), |product, factor| product * factor);
-                let scaled = scalar
-                    .replace(GS.emr_mom(EdgeIndex(2), W_.x___))
-                    .with(GS.emr_mom(EdgeIndex(2), W_.x___) / &scale)
-                    / scale.pow(4);
-                jet +=
-                    scaled.series_preserving_factors(GS.rescale, Atom::Zero.as_view(), 1, &[])?;
+    for velocity in [
+        ["1", "0", "0", "0"],
+        ["5/4", "3/4", "0", "0"],
+        ["5/4", "1/4", "1/2", "1/2"],
+    ] {
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            on_shell_subtraction_velocity: velocity.map(str::to_owned),
+            ..Default::default()
+        };
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let seed = Full4dCts::root();
+        let bare = grow(&seed, &ctx, &current, &root)?;
+        let subtraction = uv_limit(&seed, &ctx, &current, &root, &current, &root)?;
+        let coefficients = rational_coefficients(
+            &graph,
+            &current,
+            &NumeratorInterface::export(&bare.try_add(subtraction.atom())?).0,
+        )?;
+        let mut nonzero_remainder = false;
+        for row in 0..4 {
+            for column in 0..4 {
+                let mut jet = Atom::Zero;
+                for (denominators, numerator) in &coefficients {
+                    let component = numerator
+                        * function!(GS.delta_vec, GS.cind(row), &ports[0])
+                        * function!(GS.delta_vec, GS.cind(column), &ports[1]);
+                    let scalar = scalar_component(
+                        &(component * NumeratorInterface::export(&graph.global_prefactor.num).0),
+                    )? / denominators
+                        .iter()
+                        .fold(Atom::one(), |product, factor| product * factor);
+                    let scaled = scalar
+                        .replace(GS.emr_mom(EdgeIndex(2), W_.x___))
+                        .with(GS.emr_mom(EdgeIndex(2), W_.x___) / &scale)
+                        / scale.pow(4);
+                    jet += scaled.series_preserving_factors(
+                        GS.rescale,
+                        Atom::Zero.as_view(),
+                        1,
+                        &[],
+                    )?;
+                }
+                let series = jet.series(GS.rescale, Atom::Zero, 1)?;
+                for power in [-1, 0] {
+                    assert!(
+                        series.coefficient(power.into()).unwrap().expand().is_zero(),
+                        "unsubtracted inverse-hard coefficient {power} in spinor component ({row},{column}), velocity={velocity:?}"
+                    );
+                }
+                nonzero_remainder |= !series.coefficient(1.into()).unwrap().expand().is_zero();
             }
-            let series = jet.series(GS.rescale, Atom::Zero, 1)?;
-            for power in [-1, 0] {
-                assert!(
-                    series.coefficient(power.into()).unwrap().expand().is_zero(),
-                    "unsubtracted inverse-hard coefficient {power} in spinor component ({row},{column})"
-                );
-            }
-            nonzero_remainder |= !series.coefficient(1.into()).unwrap().expand().is_zero();
         }
+        assert!(
+            nonzero_remainder,
+            "the UV check must not pass on an identically zero self-energy"
+        );
     }
-    assert!(
-        nonzero_remainder,
-        "the UV check must not pass on an identically zero self-energy"
-    );
     Ok(())
 }
 
@@ -587,7 +752,11 @@ fn production_os_matches_equation_4_24_in_the_gluon_loop_basis() -> Result<()> {
                 && usize::try_from(momentum.get(0))
                     .is_ok_and(|edge| current.lmb().ext_edges.contains(&EdgeIndex(edge)))
             {
-                let point = function!(GS.os_mom, 0, &energy);
+                let point = GS.on_shell_momentum(
+                    EdgeIndex(0),
+                    &energy,
+                    &UVgenerationSettings::default().on_shell_velocity().unwrap(),
+                );
                 let indices = momentum
                     .iter()
                     .skip(1)
@@ -660,6 +829,7 @@ fn production_os_matches_equation_4_24_in_the_gluon_loop_basis() -> Result<()> {
         &graph,
         &current,
         &(NumeratorInterface::export(actual.atom()).0 + on_shell + compact),
+        SpinReduction::SymbolicFirst,
     )
 }
 
@@ -674,175 +844,208 @@ fn production_os_dirac_cff_matches_independent_energy_residues() -> Result<()> {
     };
 
     test_initialise()?;
-    let (mut graph, current, root) = fixture(false)?;
-    let settings = UVgenerationSettings {
-        generate_integrated: false,
-        ..Default::default()
-    };
-    let local = uv_limit(
-        &Full4dCts::root(),
-        &UVCtx::new(&graph, &graph.model, &settings),
-        &current,
-        &root,
-        &current,
-        &root,
-    )?;
-    let (_, _, numerator) = one_loop_reference(&graph, &current, &root)?;
-    let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
-    let cutset = CutSet::empty(graph.n_hedges());
-    let pattern = OrientationPattern::default();
-    let production = Default::default();
-    let options = graph.denominator_only_cff_3d_expression_options();
-    let localizer = Localizer::new(
-        &cutset,
-        OrientationProjection::exact(&production, &options, &pattern, false),
-    );
-    let mut context = Local4dProjectionContext::default();
-    let mut actual = Atom::Zero;
-    for sector in local.projection_sectors()? {
-        // These production calls require independent exact numerator and
-        // denominator reconstruction certificates before generating CFF.
-        let canonical = sector.canonical_projection(&graph)?;
-        let projected = localizer
-            .project_factorized_taylor_sector(&mut graph, &canonical, &mut context)?
-            .resolved()?;
-        for (_, expression) in projected.iter() {
-            actual += expression;
-        }
-    }
-    assert!(!actual.contains_symbol(GS.os_mom));
-    assert!(!actual.contains_symbol(symbol!("gammalooprs::uv::numerator_family")));
-
-    let z_symbol = symbol!("os_dirac_residue_reference::z");
-    let z = Atom::var(z_symbol);
-    let at_energy = |value: &Atom, energy: &Atom| {
-        value.replace_map(|view, _, output| {
-            if let AtomView::Fun(momentum) = view
-                && momentum.get_symbol() == GS.emr_mom
-                && momentum.get_nargs() == 2
-                && momentum.get(0) == Atom::num(2).as_view()
-            {
-                **output = function!(GS.emr_vec, 2, momentum.get(1))
-                    + energy * GS.energy_delta(momentum.get(1));
-            }
-        })
-    };
-    // Independent poles in the quark-k routing: k0=E_m, sigma*m+E_0.
-    // The fixed values below form two distinct exact rational kinematic
-    // samples. Reconstruction above remains a general symbolic certificate;
-    // these residue comparisons are additional contour checks, not its proof.
-    let fermion_energy = Atom::num(17);
-    let gluon_energy = Atom::num(15);
-    let vacuum_energy = Atom::num(25);
-    let mut residue = Atom::Zero;
-    for sigma in [1, -1] {
-        let shift = Atom::num(sigma) * &mass;
-        let quark_value = at_energy(&numerator, &fermion_energy);
-        let gluon_value = at_energy(&numerator, &(&shift + &gluon_energy));
-        let project = |value: Atom| {
-            (&value + Atom::num(sigma) * gamma_zero_at_port(&graph, &value, 1)) / Atom::num(2)
+    for (velocity_components, samples) in [
+        (
+            ["1", "0", "0", "0"],
+            [([9, 12, 0], [15, 15]), ([9, -12, 0], [15, 15])],
+        ),
+        (
+            ["5/4", "3/4", "0", "0"],
+            [([15, 0, 0], [9, 21]), ([-15, 0, 0], [21, 9])],
+        ),
+        (
+            ["5/4", "1/4", "1/2", "1/2"],
+            [([5, 10, 10], [9, 21]), ([-5, -10, -10], [21, 9])],
+        ),
+    ] {
+        let (mut graph, current, root) = fixture(false)?;
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            on_shell_subtraction_velocity: velocity_components.map(str::to_owned),
+            ..Default::default()
         };
-        residue += project(quark_value)
-            / (Atom::num(2)
-                * &fermion_energy
-                * ((&fermion_energy - &shift).pow(2) - gluon_energy.pow(2)))
-            + project(gluon_value)
-                / (Atom::num(2)
-                    * &gluon_energy
-                    * ((&shift + &gluon_energy).pow(2) - fermion_energy.pow(2)));
-    }
-    let n_zero = at_energy(&numerator.replace(mass.to_pattern()).with(Atom::Zero), &z);
-    let k_dot_p = (1..=3).fold(
-        &z * GS.emr_mom(EdgeIndex(0), GS.cind(0)),
-        |sum, component| {
-            sum - GS.emr_mom(EdgeIndex(2), GS.cind(component))
-                * GS.emr_mom(EdgeIndex(0), GS.cind(component))
-        },
-    );
-    let vacuum_numerator =
-        Atom::num(2) * (&n_zero * k_dot_p - &mass * gamma_zero_at_port(&graph, &n_zero, 1) * &z);
-    let at_vacuum_pole = |value: Atom| value.replace(z_symbol).with(vacuum_energy.clone());
-    let twice_energy = Atom::num(2) * &vacuum_energy;
-    // Res A(z)/(z²-E²)^3 = 1/2 d²[A(z)/(z+E)^3] at z=E.
-    residue += at_vacuum_pole(vacuum_numerator.derivative(z_symbol).derivative(z_symbol))
-        / (Atom::num(2) * twice_energy.pow(3))
-        - Atom::num(3) * at_vacuum_pole(vacuum_numerator.derivative(z_symbol))
-            / twice_energy.pow(4)
-        + Atom::num(6) * at_vacuum_pole(vacuum_numerator) / twice_energy.pow(5);
-    // Clockwise contour and the single local forest sign cancel. The
-    // remaining physical loop measure is i/(2*pi)^3.
-    assert!(
-        !residue.contains_symbol(Symbol::DERIVATIVE),
-        "all residue derivatives are explicit"
-    );
-    let expected = Atom::i() * residue / (Atom::num(8) * Atom::var(GS.pi).pow(3));
-    for spatial in [[9, 12, 0], [9, -12, 0]] {
-        let specialize = |value: &Atom| {
-            let mut value = GS
-                .erase_uv_momentum_provenance(value)
-                .replace(GS.dim)
-                .with(Atom::num(4))
-                .replace(crate::utils::ose_atom_from_index(EdgeIndex(2)))
-                .with(fermion_energy.clone())
-                .replace(mass.to_pattern())
-                .with(Atom::num(8))
-                .replace(GS.m_uv_vacuum)
-                .with(Atom::num(20))
-                .replace(GS.m_uv_expansion)
-                .with(Atom::num(20));
-            // Every abstract vector component is materialized only by the
-            // finite tensor contraction below. Bind spatial entries through
-            // a represented delta basis, preserving the graph factors.
-            value = value.replace_map(|view, _, output| {
+        let velocity = settings.on_shell_velocity()?;
+        let local = uv_limit(
+            &Full4dCts::root(),
+            &UVCtx::new(&graph, &graph.model, &settings),
+            &current,
+            &root,
+            &current,
+            &root,
+        )?;
+        let (_, _, numerator) = one_loop_reference(&graph, &current, &root, &velocity)?;
+        let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let production = Default::default();
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, false),
+        );
+        let mut context = Local4dProjectionContext::default();
+        let mut actual = Atom::Zero;
+        for sector in local.projection_sectors()? {
+            // These production calls require independent exact numerator and
+            // denominator reconstruction certificates before generating CFF.
+            let canonical = sector.canonical_projection(&graph)?;
+            let projected = localizer
+                .project_factorized_taylor_sector(&mut graph, &canonical, &mut context)?
+                .resolved()?;
+            for (_, expression) in projected.iter() {
+                actual += expression;
+            }
+        }
+        assert!(!actual.contains_symbol(GS.os_mom));
+        assert!(!actual.contains_symbol(symbol!("gammalooprs::uv::numerator_family")));
+
+        let z_symbol = symbol!("os_dirac_residue_reference::z");
+        let z = Atom::var(z_symbol);
+        let at_energy = |value: &Atom, energy: &Atom| {
+            value.replace_map(|view, _, output| {
                 if let AtomView::Fun(momentum) = view
-                    && (momentum.get_symbol() == GS.emr_mom || momentum.get_symbol() == GS.emr_vec)
+                    && momentum.get_symbol() == GS.emr_mom
                     && momentum.get_nargs() == 2
                     && momentum.get(0) == Atom::num(2).as_view()
                 {
-                    let index = momentum.get(1);
-                    if let AtomView::Fun(concrete) = index
-                        && concrete.get_symbol()
-                            == spenso::structure::abstract_index::AIND_SYMBOLS.cind
-                        && concrete.get_nargs() == 1
-                        && let Ok(component @ 1..=3) = usize::try_from(concrete.get(0))
-                    {
-                        **output = Atom::num(spatial[component - 1]);
-                    } else if momentum.get_symbol() == GS.emr_vec {
-                        **output = (1..=3).fold(Atom::Zero, |sum, component| {
-                            sum + Atom::num(spatial[component - 1])
-                                * function!(GS.delta_vec, GS.cind(component), index)
-                        });
-                    }
+                    **output = function!(GS.emr_vec, 2, momentum.get(1))
+                        + energy * GS.energy_delta(momentum.get(1));
                 }
-            });
-            value
+            })
         };
-        let actual = specialize(&actual);
-        let expected = specialize(&expected);
-        debug_tags!(#uv, #local, #on_shell, #inspect;
-            stage = "os_oracle_residue_interfaces",
-            spatial = ?spatial,
-            file.actual = %actual.to_canonical_string(),
-            file.expected = %expected.to_canonical_string(),
-            "Independent factorized residue expressions before finite tensor contraction"
+        // Independent positive-energy poles in the quark-k routing are
+        // k0=E_m and sigma*m*v0+|k-sigma*m*v|. These exact rational samples
+        // have distinct poles and rational square roots in every branch.
+        // They supplement the symbolic reconstruction certificates above.
+        let fermion_energy = Atom::num(17);
+        let vacuum_energy = Atom::num(25);
+        let n_zero = at_energy(&numerator.replace(mass.to_pattern()).with(Atom::Zero), &z);
+        let k_dot_p = (1..=3).fold(
+            &z * GS.emr_mom(EdgeIndex(0), GS.cind(0)),
+            |sum, component| {
+                sum - GS.emr_mom(EdgeIndex(2), GS.cind(component))
+                    * GS.emr_mom(EdgeIndex(0), GS.cind(component))
+            },
         );
-        let difference = actual - expected;
-        let certificate =
-            NumeratorJetCache::default().canonicalize(&difference.undo_dots::<Aind>()?)?;
-        let is_zero = certificate.is_zero;
-        if !is_zero {
-            debug_tags!(#uv, #local, #four_d, #cff, #trace;
-                stage = "os_dirac_residue_oracle_failure",
-                spatial = ?spatial,
-                file.difference = %difference,
-                file.contracted_tensor = %certificate.key,
-                "Nonzero factorized OS residue-oracle difference"
+        let k_dot_velocity = (1..=3).fold(&z * &velocity[0], |sum, component| {
+            sum - GS.emr_mom(EdgeIndex(2), GS.cind(component)) * &velocity[component]
+        });
+        let vacuum_numerator = Atom::num(2)
+            * (&n_zero * k_dot_p
+                - &mass * gamma_velocity_at_port(&graph, &n_zero, 1, &velocity) * k_dot_velocity);
+        let at_vacuum_pole = |value: Atom| value.replace(z_symbol).with(vacuum_energy.clone());
+        let twice_energy = Atom::num(2) * &vacuum_energy;
+        // Res A(z)/(z²-E²)^3 = 1/2 d²[A(z)/(z+E)^3] at z=E.
+        let vacuum_residue =
+            at_vacuum_pole(vacuum_numerator.derivative(z_symbol).derivative(z_symbol))
+                / (Atom::num(2) * twice_energy.pow(3))
+                - Atom::num(3) * at_vacuum_pole(vacuum_numerator.derivative(z_symbol))
+                    / twice_energy.pow(4)
+                + Atom::num(6) * at_vacuum_pole(vacuum_numerator) / twice_energy.pow(5);
+        for (spatial, gluon_energies) in samples {
+            assert_eq!(spatial.iter().map(|value| value * value).sum::<i32>(), 225);
+            let mut residue = vacuum_residue.clone();
+            for (sigma, gluon_energy) in [1, -1].into_iter().zip(gluon_energies.map(Atom::num)) {
+                let gluon_spatial_squared = spatial
+                    .iter()
+                    .enumerate()
+                    .map(|(index, value)| {
+                        (Atom::num(*value) - Atom::num(8 * sigma) * &velocity[index + 1]).pow(2)
+                    })
+                    .sum::<Atom>();
+                assert_eq!(gluon_energy.pow(2), gluon_spatial_squared);
+                let shift = Atom::num(sigma) * &mass * &velocity[0];
+                let quark_value = at_energy(&numerator, &fermion_energy);
+                let gluon_value = at_energy(&numerator, &(&shift + &gluon_energy));
+                let project = |value: Atom| {
+                    (&value
+                        + Atom::num(sigma) * gamma_velocity_at_port(&graph, &value, 1, &velocity))
+                        / Atom::num(2)
+                };
+                residue += project(quark_value)
+                    / (Atom::num(2)
+                        * &fermion_energy
+                        * ((&fermion_energy - &shift).pow(2) - gluon_energy.pow(2)))
+                    + project(gluon_value)
+                        / (Atom::num(2)
+                            * &gluon_energy
+                            * ((&shift + &gluon_energy).pow(2) - fermion_energy.pow(2)));
+            }
+            // Clockwise contour and the single local forest sign cancel. The
+            // remaining physical loop measure is i/(2*pi)^3.
+            assert!(
+                !residue.contains_symbol(Symbol::DERIVATIVE),
+                "all boosted residue derivatives are explicit"
+            );
+            let expected = Atom::i() * residue / (Atom::num(8) * Atom::var(GS.pi).pow(3));
+            let specialize = |value: &Atom| {
+                let mut value = GS
+                    .erase_uv_momentum_provenance(value)
+                    .replace(GS.dim)
+                    .with(Atom::num(4))
+                    .replace(crate::utils::ose_atom_from_index(EdgeIndex(2)))
+                    .with(fermion_energy.clone())
+                    .replace(mass.to_pattern())
+                    .with(Atom::num(8))
+                    .replace(GS.m_uv_vacuum)
+                    .with(Atom::num(20))
+                    .replace(GS.m_uv_expansion)
+                    .with(Atom::num(20));
+                // Every abstract vector component is materialized only by the
+                // finite tensor contraction below. Bind spatial entries through
+                // a represented delta basis, preserving the graph factors.
+                value = value.replace_map(|view, _, output| {
+                    if let AtomView::Fun(momentum) = view
+                        && (momentum.get_symbol() == GS.emr_mom
+                            || momentum.get_symbol() == GS.emr_vec)
+                        && momentum.get_nargs() == 2
+                        && momentum.get(0) == Atom::num(2).as_view()
+                    {
+                        let index = momentum.get(1);
+                        if let AtomView::Fun(concrete) = index
+                            && concrete.get_symbol()
+                                == spenso::structure::abstract_index::AIND_SYMBOLS.cind
+                            && concrete.get_nargs() == 1
+                            && let Ok(component @ 1..=3) = usize::try_from(concrete.get(0))
+                        {
+                            **output = Atom::num(spatial[component - 1]);
+                        } else if momentum.get_symbol() == GS.emr_vec {
+                            **output = (1..=3).fold(Atom::Zero, |sum, component| {
+                                sum + Atom::num(spatial[component - 1])
+                                    * function!(GS.delta_vec, GS.cind(component), index)
+                            });
+                        }
+                    }
+                });
+                value
+            };
+            let actual = specialize(&actual);
+            let expected = specialize(&expected);
+            debug_tags!(#uv, #local, #on_shell, #inspect;
+                stage = "os_oracle_residue_interfaces",
+                velocity = ?velocity_components, spatial = ?spatial,
+                file.actual = %actual.to_canonical_string(),
+                file.expected = %expected.to_canonical_string(),
+                "Independent factorized residue expressions before finite tensor contraction"
+            );
+            let difference = actual - expected;
+            let certificate =
+                NumeratorJetCache::default().canonicalize(&difference.undo_dots::<Aind>()?)?;
+            let is_zero = certificate.is_zero;
+            if !is_zero {
+                debug_tags!(#uv, #local, #four_d, #cff, #trace;
+                    stage = "os_dirac_residue_oracle_failure",
+                    velocity = ?velocity_components, spatial = ?spatial,
+                    file.difference = %difference,
+                    file.contracted_tensor = %certificate.key,
+                    "Nonzero factorized OS residue-oracle difference"
+                );
+            }
+            assert!(
+                is_zero,
+                "physical Dirac CFF differs from independent residues at velocity {velocity_components:?}, spatial momentum {spatial:?}"
             );
         }
-        assert!(
-            is_zero,
-            "physical Dirac CFF differs from the independent residues at spatial momentum {spatial:?}"
-        );
     }
     Ok(())
 }

@@ -1458,6 +1458,36 @@
             "beta",
             "gamma"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "axis": {
+              "description": "Nonzero rotation axis; normalization uses the active numeric precision.",
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 3,
+              "minItems": 3
+            },
+            "cos_theta": {
+              "description": "Cosine of an angle in [0, pi]. Reverse the axis for the inverse rotation.\nZero selects an exact quarter turn without an approximate pi constant.",
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "axis_angle"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "axis",
+            "cos_theta"
+          ]
         }
       ]
     },

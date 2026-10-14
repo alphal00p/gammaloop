@@ -650,6 +650,15 @@
           "description": "Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.\nRequires an explicit sum over all generated orientations.",
           "type": "boolean"
         },
+        "on_shell_subtraction_velocity": {
+          "description": "Fixed future-directed unit four-velocity of the OS subtraction point,\nwith metric (+---). Exact rational components keep p_OS = mass * velocity\nsymbolic under enclosing Taylor operators; this never follows a loop momentum.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        },
         "orchestrator": {
           "description": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",
           "$ref": "#/$defs/UVOrchestrator"

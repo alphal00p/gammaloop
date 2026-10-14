@@ -3456,134 +3456,425 @@ mod tests {
         use crate::graph::parse::NumeratorInterface;
         test_initialise()?;
         let (graph, current, root) = fixture(false)?;
-        let settings = UVgenerationSettings {
-            generate_integrated: true,
-            add_marker: false,
-            ..Default::default()
-        };
-        let ctx = UVCtx::new(&graph, &graph.model, &settings);
-        let local = uv_limit(
-            &Full4dCts::from_factorized_local(&Local4dCts::root()),
-            &ctx,
-            &current,
-            &root,
-            &current,
-            &root,
-        )?;
-        let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
+        for velocity in [
+            ["1", "0", "0", "0"],
+            ["5/4", "3/4", "0", "0"],
+            ["5/4", "1/4", "1/2", "1/2"],
+        ] {
+            let settings = UVgenerationSettings {
+                on_shell_subtraction_velocity: velocity.map(str::to_owned),
+                generate_integrated: true,
+                add_marker: false,
+                ..Default::default()
+            };
+            let ctx = UVCtx::new(&graph, &graph.model, &settings);
+            let local = uv_limit(
+                &Full4dCts::from_factorized_local(&Local4dCts::root()),
+                &ctx,
+                &current,
+                &root,
+                &current,
+                &root,
+            )?;
+            let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
 
-        // Determine only the graph's Feynman-rule phase, coupling, color, and
-        // open-spin normalization from its bare numerator N=C[(2-d)k/+dm].
-        // No Taylor result enters the oracle. The integrated field matrix is
-        // C(p/-m), independently of which internal line carries the loop k.
-        let numerator = graph
+            // Determine only the graph's Feynman-rule phase, coupling, color, and
+            // open-spin normalization from its bare numerator N=C[(2-d)k/+dm].
+            // No Taylor result enters the oracle. The integrated field matrix is
+            // C(p/-m), independently of which internal line carries the loop k.
+            let numerator = graph
+                .numerator(current.subgraph(), root.subgraph())?
+                .to_d_dim(GS.dim)?
+                .color_simplify()?
+                .get_single_atom()
+                .expect("the primitive quark source has a single numerator");
+            let massless = numerator.replace(mass.to_pattern()).with(Atom::Zero);
+            let external_slash = massless
+                .replace(function!(GS.emr_mom, 2, W_.x___))
+                .with(function!(GS.emr_mom, 0, W_.x___).to_pattern());
+            let field_matrix = simplify(
+                &(external_slash / (Atom::num(2) - Atom::var(GS.dim))
+                    - (&numerator - &massless) / Atom::var(GS.dim)),
+            )?;
+            let field_matrix = field_matrix.replace(GS.dim).with(4);
+            assert!(!field_matrix.is_zero());
+            assert!(field_matrix.contains_symbol(GS.emr_mom));
+
+            let pi = Atom::var(symbolica::atom::Symbol::PI);
+            let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
+            let epsilon = Atom::var(GS.dim_epsilon);
+            let zeta_three = Atom::var(vakint_symbol!("z3"));
+            for (backend, evaluation_order) in [
+                (
+                    "AlphaLoop",
+                    vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
+                        vakint::AlphaLoopOptions {
+                            susbstitute_masters: false,
+                        },
+                    )]),
+                ),
+                (
+                    "MATAD",
+                    vakint::EvaluationOrder::matad_only(Some(vakint::MATADOptions {
+                        susbstitute_masters: false,
+                        direct_numerical_substition: false,
+                        ..Default::default()
+                    })),
+                ),
+            ] {
+                for project_onto_tensor_integrals in [true, false] {
+                    for enclosing_poles in [1, 2] {
+                        let vakint_settings = vakint::VakintSettings {
+                            // Whole-forest depth: three terms for one enclosing pole,
+                            // four for two. The one-loop run must preserve that request.
+                            number_of_terms_in_epsilon_expansion: enclosing_poles as i64 + 2,
+                            project_onto_tensor_integrals,
+                            evaluation_order: evaluation_order.clone(),
+                            ..settings.vakint.true_settings()
+                        };
+                        let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
+                            .run(&local, &ctx, &current, &root, &current, &root)?;
+                        let pole = NumeratorInterface::export(&integrated.physical_pole()?).0;
+                        assert!(
+                            !pole.contains_symbol(GS.m_uv_vacuum)
+                                && !pole.contains_symbol(GS.m_uv_expansion),
+                            "the integrated field pole must be auxiliary-scale independent before choosing a scale"
+                        );
+                        let pole = pole.replace(GS.dim).with(4);
+                        let expected_pole = &normalization * &field_matrix * epsilon.pow(-1);
+                        let mut comparisons =
+                            vec![("signed field pole".to_owned(), pole - expected_pole, 0)];
+                        for vacuum_mass in [1, 2] {
+                            // For real positive scales, L = log(mu²)-log(M²) is also
+                            // -log(M²/mu²). Use the ratio form without assuming a generic
+                            // complex-log product identity inside the symbolic engine.
+                            let logarithm = -function!(
+                                symbolica::atom::Symbol::LOG,
+                                Atom::num(vacuum_mass).pow(2) / Atom::var(GS.mu_r_sq)
+                            );
+                            let finite = NumeratorInterface::export(
+                                &integrated.physical_finite_counterterm()?,
+                            )
+                            .0
+                            .replace(GS.m_uv_vacuum)
+                            .with(Atom::num(vacuum_mass))
+                            .replace(GS.dim)
+                            .with(4);
+                            let expected_finite = &normalization
+                                * &field_matrix
+                                * (Atom::one() - &logarithm
+                                    + &epsilon
+                                        * (&logarithm
+                                            - logarithm.pow(2) / Atom::num(2)
+                                            - pi.pow(2) / Atom::num(12))
+                                    + epsilon.pow(2)
+                                        * (-logarithm.pow(3) / Atom::num(6)
+                                            + logarithm.pow(2) / Atom::num(2)
+                                            + (Atom::one() - &logarithm) * pi.pow(2)
+                                                / Atom::num(12)
+                                            + &zeta_three / Atom::num(3)));
+                            comparisons.push((
+                                format!("finite scheme correction at M={vacuum_mass}"),
+                                finite - expected_finite,
+                                enclosing_poles,
+                            ));
+                        }
+                        for (label, difference, depth) in comparisons {
+                            let difference =
+                                series(&simplify(&exact_one_loop_constants(&difference))?, depth)?
+                                    .to_atom();
+                            assert!(
+                                difference
+                                    .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)?
+                                    .numerator
+                                    .is_zero(),
+                                "{backend}, velocity={velocity:?}, project={project_onto_tensor_integrals}, enclosing poles={enclosing_poles}: {label} differs from the independent one-loop fermion reference: {difference}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn boosted_on_shell_production_branches_obey_the_integrated_pole_condition() -> Result<()> {
+        use crate::{
+            numerator::symbolica_ext::NumeratorAtomExt,
+            uv::{
+                UVgenerationSettings,
+                approx::local_4d::{
+                    FourDTerm, Full4dCts,
+                    on_shell_tests::{
+                        SpinReduction, assert_rational_zero, fixture, gamma_velocity_at_port,
+                    },
+                    uv_limit,
+                },
+                overlap_numerators::NumeratorJetCache,
+            },
+        };
+        use idenso::{color::ColorSimplifier, shorthands::UndoShorthands};
+        use linnet::half_edge::involution::Hedge;
+        use spenso::structure::slot::IsAbstractSlot;
+
+        test_initialise()?;
+        let (graph, current, root) = fixture(false)?;
+        use crate::graph::parse::NumeratorInterface;
+        let numerator_source = graph
             .numerator(current.subgraph(), root.subgraph())?
             .to_d_dim(GS.dim)?
             .color_simplify()?
-            .get_single_atom()
-            .expect("the primitive quark source has a single numerator");
-        let massless = numerator.replace(mass.to_pattern()).with(Atom::Zero);
-        let external_slash = massless
-            .replace(function!(GS.emr_mom, 2, W_.x___))
-            .with(function!(GS.emr_mom, 0, W_.x___).to_pattern());
-        let field_matrix = simplify(
-            &(external_slash / (Atom::num(2) - Atom::var(GS.dim))
-                - (&numerator - &massless) / Atom::var(GS.dim)),
+            .state
+            .expr;
+        let bare = numerator_source.with_checked_expression(
+            numerator_source.expression()
+                * graph.denominator(current.subgraph(), &graph.model, |_| -1),
         )?;
-        let field_matrix = field_matrix.replace(GS.dim).with(4);
-        assert!(!field_matrix.is_zero());
-        assert!(field_matrix.contains_symbol(GS.emr_mom));
-
-        let pi = Atom::var(symbolica::atom::Symbol::PI);
-        let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
+        let numerator = NumeratorInterface::export(&numerator_source).0;
+        let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
         let epsilon = Atom::var(GS.dim_epsilon);
-        let zeta_three = Atom::var(vakint_symbol!("z3"));
-        for (backend, evaluation_order) in [
-            (
-                "AlphaLoop",
-                vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
-                    vakint::AlphaLoopOptions {
-                        susbstitute_masters: false,
-                    },
-                )]),
-            ),
-            (
-                "MATAD",
-                vakint::EvaluationOrder::matad_only(Some(vakint::MATADOptions {
-                    susbstitute_masters: false,
-                    direct_numerical_substition: false,
-                    ..Default::default()
-                })),
-            ),
+        let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let normalization =
+            Atom::i() / (Atom::num(16) * Atom::var(symbolica::atom::Symbol::PI).pow(2));
+        // This common scalar master is exp(gamma_E*epsilon) Gamma(epsilon)
+        // (mu^2/m^2)^epsilon. Keep it independent: the pole condition below is
+        // an exact meromorphic identity, not a cancellation at one scale.
+        let physical_master = Atom::var(symbol!("boosted_os_reference::physical_master"));
+        // With the massive quark routed as k, Feynman combination and a shift
+        // give Delta=x^2 m^2 and <k>=(1-x)p. These two independent moments are
+        // int_0^1 dx x^(-2epsilon) and int_0^1 dx (1-x)x^(-2epsilon).
+        let j0 = Atom::one() / (Atom::one() - Atom::num(2) * &epsilon);
+        let j1 = &j0 / (Atom::num(2) - Atom::num(2) * &epsilon);
+        let evaluate_vector = |atom: &Atom, edge: usize, value: &Atom| {
+            GS.resolve_os_momenta(&GS.erase_uv_momentum_provenance(atom).replace_map(
+                |view, _, output| {
+                    if let AtomView::Fun(momentum) = view
+                        && momentum.get_symbol() == GS.emr_mom
+                        && momentum.get_nargs() > 0
+                        && usize::try_from(momentum.get(0)).ok() == Some(edge)
+                    {
+                        let indices = momentum
+                            .iter()
+                            .skip(1)
+                            .map(|index| index.to_owned())
+                            .collect::<Vec<_>>();
+                        **output = GS.indexed_momentum(value, &indices);
+                    }
+                },
+            ))
+        };
+        let regulate = |atom: &Atom| -> Result<Atom> {
+            Ok(Integrated::dimensionally_regularized(&simplify(atom)?).map_mink_dim(4))
+        };
+        let assert_integrated_zero = |label: &str, atom: &Atom| -> Result<()> {
+            let reduced = simplify(atom)?;
+            let certificate =
+                NumeratorJetCache::default().canonicalize(&reduced.undo_dots::<Aind>()?)?;
+            assert!(
+                certificate.is_zero,
+                "{label}: nonzero finite spinor tensor certificate {}",
+                certificate.key,
+            );
+            Ok(())
+        };
+        let numerator = regulate(&numerator)?;
+        let at_zero = evaluate_vector(&numerator, 2, &Atom::Zero);
+        let mass_matrix = &at_zero / &dimension;
+        let expected_mass = &mass_matrix * (Atom::num(3) - Atom::num(2) * &epsilon) * &j0;
+        let loop_vector = function!(GS.emr_mom, 2);
+
+        // A nonzero trace of one exact physical specialization proves that the
+        // complete matrix is not identically zero. At mu=m, the physical master
+        // is 1/epsilon + O(epsilon): its zero-order coefficient vanishes.
+        // J0=1+2*epsilon+... and (2-d)*J1=-J0 therefore give
+        // Fin[R/normalization] = -2*C*(p-slash-m). Its spin trace, with the
+        // fixture's normalized color closure, is twice the trace of C*m.
+        let ports = [0, 1].map(|hedge| {
+            graph.underlying[Hedge(hedge)]
+                .edge_spin_slots()
+                .next()
+                .expect("the primitive fermion has one spinor port per boundary edge")
+                .to_atom()
+        });
+        let trace_projection = function!(ETS.metric, &ports[0], &ports[1])
+            * NumeratorInterface::export(&graph.global_prefactor.num).0;
+        let strong_coupling = Atom::from(crate::model::UFOSymbol::from("G"));
+        let vertex_coupling = Atom::from(crate::model::UFOSymbol::from("GC_11"));
+        let coupling_at_unit_g = graph
+            .model
+            .coupling("GC_11")?
+            .expression
+            .replace(strong_coupling.to_pattern())
+            .with(1);
+        assert_eq!(
+            coupling_at_unit_g,
+            Atom::i(),
+            "the model's quark-gluon coupling is i*g_s at the exact point g_s=1"
+        );
+        let specialize_witness = |atom: &Atom| {
+            atom.to_cof_dimension_invariants()
+                .replace(mass.to_pattern())
+                .with(1)
+                .replace(vertex_coupling.to_pattern())
+                .with(coupling_at_unit_g.clone())
+        };
+        let mass_trace = specialize_witness(&(&trace_projection * &mass_matrix))
+            .replace(GS.dim_epsilon)
+            .with(0);
+        let mut witness_tensors = NumeratorJetCache::default();
+        let mass_trace = witness_tensors.canonicalize(&mass_trace.undo_dots::<Aind>()?)?;
+        assert_eq!(
+            mass_trace.key,
+            Atom::one(),
+            "the reference trace is an exact scalar"
+        );
+        assert!(
+            matches!(mass_trace.scalar_prefactor.as_view(), AtomView::Num(_))
+                && !mass_trace.scalar_prefactor.is_zero(),
+            "the independent bare mass matrix must give a nonzero exact number at m=g_s=1"
+        );
+        let expected_finite_trace = Atom::num(2) * &mass_trace.scalar_prefactor;
+
+        for velocity in [
+            ["1", "0", "0", "0"],
+            ["5/4", "3/4", "0", "0"],
+            ["5/4", "1/4", "1/2", "1/2"],
         ] {
-            for project_onto_tensor_integrals in [true, false] {
-                for enclosing_poles in [1, 2] {
-                    let vakint_settings = vakint::VakintSettings {
-                        // Whole-forest depth: three terms for one enclosing pole,
-                        // four for two. The one-loop run must preserve that request.
-                        number_of_terms_in_epsilon_expansion: enclosing_poles as i64 + 2,
-                        project_onto_tensor_integrals,
-                        evaluation_order: evaluation_order.clone(),
-                        ..settings.vakint.true_settings()
-                    };
-                    let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
-                        .run(&local, &ctx, &current, &root, &current, &root)?;
-                    let pole = NumeratorInterface::export(&integrated.physical_pole()?).0;
-                    assert!(
-                        !pole.contains_symbol(GS.m_uv_vacuum)
-                            && !pole.contains_symbol(GS.m_uv_expansion),
-                        "the integrated field pole must be auxiliary-scale independent before choosing a scale"
+            let settings = UVgenerationSettings {
+                on_shell_subtraction_velocity: velocity.map(str::to_owned),
+                generate_integrated: true,
+                add_marker: false,
+                ..Default::default()
+            };
+            let velocity = settings.on_shell_velocity()?;
+            let branches = graph.on_shell_branches(
+                &graph.model,
+                &bare,
+                current.subgraph(),
+                current.lmb(),
+                &velocity,
+            )?;
+            let mut on_shell_moment = Atom::Zero;
+            for (sigma, branch) in [1, -1].into_iter().zip(branches) {
+                // Certify the factorized source and full denominator data
+                // before replacing the two physical propagators by moments.
+                let sector = FourDSector::new(
+                    branch.clone(),
+                    vec![(
+                        current.subgraph().clone(),
+                        current.subgraph().clone(),
+                        current.lmb().clone(),
+                    )],
+                    Vec::new(),
+                );
+                let _certificate = sector.canonical_projection(&graph)?;
+                let point =
+                    GS.on_shell_momentum(EdgeIndex(0), &(Atom::num(sigma) * &mass), &velocity);
+                for term in FourDTerm::from_view(branch.expression().as_view())? {
+                    assert_eq!(term.denominators.len(), 2);
+                    assert_eq!(
+                        term.denominators
+                            .iter()
+                            .map(|denominator| denominator.source_edge)
+                            .collect::<std::collections::BTreeSet<_>>(),
+                        std::collections::BTreeSet::from([EdgeIndex(2), EdgeIndex(3)]),
                     );
-                    let pole = pole.replace(GS.dim).with(4);
-                    let expected_pole = &normalization * &field_matrix * epsilon.pow(-1);
-                    let mut comparisons =
-                        vec![("signed field pole".to_owned(), pole - expected_pole, 0)];
-                    for vacuum_mass in [1, 2] {
-                        // For real positive scales, L = log(mu²)-log(M²) is also
-                        // -log(M²/mu²). Use the ratio form without assuming a generic
-                        // complex-log product identity inside the symbolic engine.
-                        let logarithm = -function!(
-                            symbolica::atom::Symbol::LOG,
-                            Atom::num(vacuum_mass).pow(2) / Atom::var(GS.mu_r_sq)
-                        );
-                        let finite =
-                            NumeratorInterface::export(&integrated.physical_finite_counterterm()?)
-                                .0
-                                .replace(GS.m_uv_vacuum)
-                                .with(Atom::num(vacuum_mass))
-                                .replace(GS.dim)
-                                .with(4);
-                        let expected_finite = &normalization
-                            * &field_matrix
-                            * (Atom::one() - &logarithm
-                                + &epsilon
-                                    * (&logarithm
-                                        - logarithm.pow(2) / Atom::num(2)
-                                        - pi.pow(2) / Atom::num(12))
-                                + epsilon.pow(2)
-                                    * (-logarithm.pow(3) / Atom::num(6)
-                                        + logarithm.pow(2) / Atom::num(2)
-                                        + (Atom::one() - &logarithm) * pi.pow(2) / Atom::num(12)
-                                        + &zeta_three / Atom::num(3)));
-                        comparisons.push((
-                            format!("finite scheme correction at M={vacuum_mass}"),
-                            finite - expected_finite,
-                            enclosing_poles,
-                        ));
+                    for denominator in &term.denominators {
+                        let (momentum, mass_squared) = if denominator.source_edge == EdgeIndex(2) {
+                            (loop_vector.clone(), mass.pow(2))
+                        } else {
+                            (&loop_vector - &point, Atom::Zero)
+                        };
+                        assert_eq!(denominator.mass_squared, mass_squared);
+                        let expected = (0..4).fold(-mass_squared, |sum, mu| {
+                            sum + Atom::num(if mu == 0 { 1 } else { -1 })
+                                * GS.indexed_momentum(&momentum, &[GS.cind(mu)]).pow(2)
+                        });
+                        // This is only a quadratic denominator polynomial;
+                        // expand its fixed components, never the numerator.
+                        let expected = GS.resolve_os_momenta(&expected).expand();
+                        assert_rational_zero(
+                            "Feynman-parameter source denominator",
+                            &graph,
+                            &current,
+                            &(GS.erase_uv_momentum_provenance(&denominator.full_expr) - expected),
+                            SpinReduction::SymbolicFirst,
+                        )?;
                     }
-                    for (label, difference, depth) in comparisons {
-                        let difference =
-                            series(&simplify(&exact_one_loop_constants(&difference))?, depth)?
-                                .to_atom();
-                        assert!(
-                            difference
-                                .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)?
-                                .numerator
-                                .is_zero(),
-                            "{backend}, project={project_onto_tensor_integrals}, enclosing poles={enclosing_poles}: {label} differs from the independent one-loop fermion reference: {difference}"
-                        );
-                    }
+                    let numerator = regulate(&NumeratorInterface::export(&term.numerator).0)?;
+                    let zero = evaluate_vector(&numerator, 2, &Atom::Zero);
+                    let endpoint = evaluate_vector(&numerator, 2, &point);
+                    on_shell_moment += &zero * &j0 + (endpoint - zero) * &j1;
                 }
+            }
+            assert_integrated_zero(
+                "integrated production O is the boost-independent mass counterterm",
+                &(&on_shell_moment - &expected_mass),
+            )?;
+
+            let ctx = UVCtx::new(&graph, &graph.model, &settings);
+            let local = uv_limit(
+                &Full4dCts::from_factorized_local(&Local4dCts::root()),
+                &ctx,
+                &current,
+                &root,
+                &current,
+                &root,
+            )?;
+            let vakint_settings = settings.vakint.true_settings();
+            let signed_field_pole = Integrated::new(crate::utils::vakint()?, &vakint_settings)
+                .run(&local, &ctx, &current, &root, &current, &root)?
+                .physical_pole()?;
+            let signed_field_pole = NumeratorInterface::export(&signed_field_pole).0;
+            for external_velocity in [
+                ["1", "0", "0", "0"],
+                ["5/4", "3/4", "0", "0"],
+                ["5/4", "1/4", "1/2", "1/2"],
+            ] {
+                let external_velocity = UVgenerationSettings {
+                    on_shell_subtraction_velocity: external_velocity.map(str::to_owned),
+                    ..Default::default()
+                }
+                .on_shell_velocity()?;
+                let point = GS.on_shell_momentum(EdgeIndex(0), &mass, &external_velocity);
+                let bare_moment =
+                    &at_zero * &j0 + (evaluate_vector(&numerator, 2, &point) - &at_zero) * &j1;
+                // The local forest has -O-V, and the analytic addback is
+                // +Fin(V). Its remaining field contribution is -Pole(V),
+                // exactly the signed pole returned by the production policy.
+                let pole =
+                    evaluate_vector(&evaluate_vector(&signed_field_pole, 0, &point), 1, &point);
+                let renormalized =
+                    &normalization * &physical_master * (bare_moment - &on_shell_moment)
+                        + regulate(&pole)?;
+                let right_projected = (&renormalized
+                    + gamma_velocity_at_port(&graph, &renormalized, 0, &external_velocity))
+                    / Atom::num(2);
+                assert_integrated_zero(
+                    "integrated boosted on-shell spinor condition",
+                    &right_projected,
+                )?;
+                // Only the required epsilon^0 coefficient is extracted.
+                // O(epsilon) terms of the physical master cannot contribute to
+                // this finite coefficient, since the moment matrix is regular.
+                let at_reference_scale = renormalized
+                    .replace(physical_master.to_pattern())
+                    .with(epsilon.pow(-1))
+                    / &normalization;
+                let finite_matrix = truncate(&series(&at_reference_scale, 0)?, true);
+                let finite_trace = specialize_witness(&(&trace_projection * finite_matrix));
+                let finite_trace =
+                    witness_tensors.canonicalize(&finite_trace.undo_dots::<Aind>()?)?;
+                assert_eq!(
+                    finite_trace.key,
+                    Atom::one(),
+                    "the physical finite trace must reduce to an exact scalar"
+                );
+                assert_eq!(
+                    finite_trace.scalar_prefactor, expected_finite_trace,
+                    "a nonzero finite trace proves the complete MS-bar-field matrix survives"
+                );
             }
         }
         Ok(())

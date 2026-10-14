@@ -470,8 +470,25 @@ also handles the one-scale sunsets with one or two massless lines; other coupled
 mass patterns remain subject to backend support. The resulting Laurent series
 keeps positive powers of ε for nested products with parent poles. Its signed finite addback completes
 recursive IR children and is localized once in the common nominal frame used by
-both final 3D routes. OS and the unsupported mixed-scheme woods remain deferred.
-In particular, a positive-degree MUV parent over an IR child still requires the
+both final 3D routes.
+
+For a massive quark self-energy, the OS operation adds both ordered projected
+branches at a fixed component-owned point $p_*=m v$ and subtracts their
+ordinary degree-one UV expansion. The forest minus applies once after that
+complete operation. The analytic scheme correction integrates only the signed
+vacuum remainder; the local physical branch retains the OS mass shift. Fields
+and couplings remain MS-bar. Parent operations act on complete child results,
+including owned finite coefficients, with localization kernels frozen.
+Projected CFF reconstructs fixed energy and spatial shifts with exact numerator
+and denominator certificates. The direct routes use the same certified
+physical source and retain their own post-residue operation and component
+replay. The actual-rule Ward certificate admits the stated two-loop IR gluon
+parent with an OS child; it does not authorize unproved mixed histories. The
+supported domains and independent validation requirements are maintained in
+#link("on-shell-counterterms.typ")[the OS design note] and
+#link("uv-renormalization.typ")[UV renormalization architecture].
+
+A positive-degree MUV parent over an IR child still requires the
 reduced-cograph subtraction of an explicit finite effective-vertex counterterm.
 The integrated child addback alone does not supply that local subtraction, so
 this mixed assignment remains rejected with integrated generation enabled.
@@ -794,7 +811,13 @@ Integrated finite UV terms retain their exact source-local EMR maps. Production 
 
 Final assembly uses one `Integrands` map of cut-indexed factorized expressions. UV markers and tensor replacements act on those expressions before the ordinary evaluator preprocessing; there is no parallel deferred-body state. Direct-3D sequential forest construction composes the same local and integrated replay operations used by disconnected forests. Integrated localization registers its source surfaces before either Taylor branch reads the graph, and its normalized localizing factor remains inert under subsequent Taylor operations. Evaluator preparation skips residue-selector parametrization when the selector symbol is absent, and skips orientation collection when neither theta nor IF occurs. Expressions with conditionals retain the existing guarded-branch rewrites so inactive residue-local inverses are never evaluated.
 
-The shared CFF core also returns its connected-loop global sign as typed metadata. GammaLoop consumes that bridge exactly once for root, reduced, and exact production CFF sources, cancelling the shared-core-local uniform convention before the physical Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the same convention, with additional Vakint normalization `1`. The NLO acceptance layer independently generates orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D with local and integrated UV and threshold counterterms. It compares complete GL0/GL2 values at a common native- Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum 3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction, graphwise UV-mass and localization-scale independence, cancellation of total renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms, and the physical and projected EMR energy bounds. TT acceptance uses the fully-MSbar scheme, without on-shell counterterms.
+The shared CFF core also returns its connected-loop global sign as typed metadata. GammaLoop consumes that bridge exactly once for root, reduced, and exact production CFF sources, cancelling the shared-core-local uniform convention before the physical Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the same convention, with additional Vakint normalization `1`. The NLO acceptance layer independently generates orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D with local and integrated UV and threshold counterterms. It compares complete GL0/GL2 values at a common native- Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum 3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction, graphwise UV-mass and localization-scale independence, cancellation of total renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms, and the physical and projected EMR energy bounds. TT acceptance retains the published fully-MSbar control and adds a separate
+pole-mass test with OS quark self-energies and MS-bar vertex corrections. The
+OS test includes virtual ttbar and real ttbar-g cuts, requires agreement with
+an independent inclusive vector-current reference, and varies the UV mass
+and localization scale at the summed/integrated boundary. The full statistical
+scale scan belongs to the main-push suite; small exact algebra and pointwise
+route controls remain separate.
 
 Direct-photon benchmarks use the off-shell spin projector `-g^(mu nu)` and no picobarn conversion. The inclusive lepton-process targets instead use the Eq. (7.1) normalization `2(4 pi alpha)/(3 Ecm^3)` and the conversion to picobarns; individual lepton-process graph components are not assigned the unconverted published photon targets. Acceptances require positive real LO and the signed real NLO correction, checking the imaginary component separately. Diagram contributions can have either real sign. Current validation results and measured timings belong in the accompanying test evidence and PR.
 
@@ -813,6 +836,7 @@ Generic metric normalization retains its ordered vector, redundant-metric, vecto
 Evaluator construction normalizes its factorized input once, then parses each existing top-level summand into an independent Spenso network. This bounds network preparation to the current summand. Products, powers and nested sums retain their grouping. Parsing and contraction use `ParamTensor<ShadowedStructure<Aind>>` throughout, with symbolic `Atom` components. The HEP tensor library supplies `ParamTensor<ExplicitKey<Aind>>` entries, including exact metric and identity components. Numerical evaluation remains a later evaluator step.
 
 Shared numerator families are lowered before this outer contraction. Preparation first groups complete contractions of family calls with their surrounding tensor factors, including trace and chain contexts. Closed additive scopes are prepared from the inside out and remain factors in surrounding products. The existing tensor collector exposes residue sums over opaque family calls while preserving inline numerator sums, scalar coefficients, independent closed products and conditional guards. Only a closed tensor interface becomes a shared joint body. Each call occurrence receives fresh scalar formals and private contraction indices; exposed ports retain their identity. Existing chains and traces own their implicit endpoint markers: chainification keeps those scopes opaque, and joint preparation rejects substitutions that would introduce nested binders. A structural template reuses this body across physical argument rows. Parameter-dependent tensor ports and formals captured by existing aliases retain their original family boundary. Only referenced bodies are then contracted, once per definition in an evaluator stack, and any remaining open tensor indices are represented by temporary tensor calls. The outer contraction closes those indices and selects the corresponding scalar component functions. Only generated functions reachable from the final roots and scalar aliases are registered; outer projectors can discard otherwise populated components. Component and scalar-alias signatures retain only their required formal arguments, including transitive alias dependencies; physical family signatures still describe the complete energy map. Known sparse zero components vanish, while unknown families and invalid index dimensions remain errors. All evaluator modes receive the resulting function-map definitions. The pinned Symbolica translator inlines these scalar functions when generating instructions, so a compact input does not by itself guarantee fewer runtime operations. Closed shared bodies avoid enumerating their open tensor components; generation and runtime effects still require measurement.
+
 
 Before parsing a summand's complete contraction, evaluator preparation may materialize an existing additive tensor factor of its root product. It inspects the parsed factor's actual scalar and tensor entries and admits only Gaussian integers (integer real and imaginary parts), with a nonempty self-dual exposed boundary. Exact Gaussian-integer components retain symbolic arithmetic at arbitrary integer size. Floating coefficients decline this preparation and retain their original contraction order. Conservative Cartesian-capacity and component-size estimates reuse the 16 MiB eager tensor-sum budget. Explicit lazy tensor sums skip this preparation. Qualifying factors use the same execution and contraction strategies as the complete network, retaining their symbolic components and index ownership. Existing network multiplication joins them to the grouped residual before scalar aliasing and sum-boundary closure. When no factor qualifies, preparation parses the original summand directly. Taylor and other raw symbolic callers do not use this finite component preparation.
 
@@ -1039,6 +1063,17 @@ Common-point physical terms are summed before taking each norm. The public
 componentwise absolute result remains the primary probe's value. Cross sections
 retain checks of the selected integration components, and Gaussian-reference
 values and moments retain independent checks.
+
+A generated massive OS contribution with a fixed boosted subtraction point
+retains its exact spatial reference with the graph term. Warm-up validates
+stability rotations against every retained reference, including after graph
+selection and state loading. A probe that rotates live momenta away from a
+fixed reference compares different local integrands and is rejected. The
+`axis_angle` setting supplies nontrivial rotations about that reference,
+using an exactly parallel axis and a cosine in $[-1,1]$. A cosine of zero
+selects a quarter-turn. Axis normalization and momentum rotation use the
+active numeric precision; the usual accuracy checks and precision escalation
+remain in force. Rest-frame OS contributions impose no spatial constraint.
 
 === 3.1 Differential event-processing runtime
 <31-differential-event-processing-runtime>
@@ -1435,18 +1470,26 @@ serialized. This changes the positional runtime payload from the former Atom
 fields. Earlier full GammaLoop states must be regenerated; canonical FeynKit model and
 source-recipe artifacts retain their raw-expression contract. Diagram
 DOT/JSON stores expression strings with optional logical-port metadata when
-the expression cannot recover it. Full state version 21 encodes explicit slots
-for runtime numerators, including global numerator/projector interfaces, and
-rejects unresolved ports. Standalone evaluator archives contain lowered scalar programs and
+the expression cannot recover it. Version 20 added global numerator/projector
+interfaces, and upstream version 21 stores explicit indexed slots and rejects
+unresolved runtime ports. Combined full state version 22 additionally retains
+generated fixed OS frame metadata and its velocity/rotation settings. Both
+older version-21 layouts must be regenerated. Standalone evaluator archives contain lowered scalar programs and
 neither runtime graphs nor retained tensor definitions, so this change leaves
 their amplitude version 12 and cross-section version 15 unchanged.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 21` currently).
-- Version 21 stores explicit indexed slots rather than partial-index wire tags.
-  Earlier full states must be regenerated; source recipes are not relabeled
-  binary archives. The logical layout and ranked-zero axes remain retained.
+- State format is versioned with `state_manifest.toml` (`version = 22` currently).
+- Version 22 combines explicit indexed interfaces with the exact fixed OS spatial
+  frame in generated amplitude and cross-section payloads, velocity settings and
+  rotation variants. Loading and graph selection retain the same reference.
+- Upstream version 21 stores explicit slots without PartialIndex wire tags;
+  the earlier OS branch also used version 21 for a different partial-interface
+  fixed-frame layout. Neither positional format is compatible with version 22.
+  Regenerate earlier full states; do not relabel source recipes as binary archives.
+  No positional decoder fallback or standalone evaluator archive version change
+  is introduced. Logical layout and ranked-zero axes remain retained.
 - Version 20 also retains the tensor interfaces of global numerator prefactors
   and projectors. Their positional runtime payload cannot be read as the former
   Atom fields; earlier full states must be regenerated.

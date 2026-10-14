@@ -52,6 +52,8 @@ pub struct CutForests {
 pub struct ParametricIntegrands {
     pub integrands: Integrands,
     pub cuts: CutSet,
+    /// A generated massive OS component fixes this exact spatial reference.
+    pub(crate) fixed_on_shell_spatial_velocity: Option<[String; 3]>,
 }
 
 impl ParametricIntegrands {
@@ -59,6 +61,7 @@ impl ParametricIntegrands {
         Self {
             integrands: integrands.into_integrands(),
             cuts,
+            fixed_on_shell_spatial_velocity: None,
         }
     }
 
@@ -66,6 +69,7 @@ impl ParametricIntegrands {
         Self {
             integrands: self.integrands.map(|atom| map(atom.clone())),
             cuts: self.cuts,
+            fixed_on_shell_spatial_velocity: self.fixed_on_shell_spatial_velocity,
         }
     }
 
@@ -83,6 +87,7 @@ impl ParametricIntegrands {
                     Ok(tensor.with_checked_expression(map(tensor.expression())?)?)
                 })?,
             cuts: self.cuts,
+            fixed_on_shell_spatial_velocity: self.fixed_on_shell_spatial_velocity,
         })
     }
 
@@ -90,6 +95,7 @@ impl ParametricIntegrands {
         Self {
             integrands: self.integrands.zero_like(),
             cuts: self.cuts.clone(),
+            fixed_on_shell_spatial_velocity: self.fixed_on_shell_spatial_velocity.clone(),
         }
     }
 }
@@ -527,11 +533,20 @@ mod tests {
         });
         let cut = CutCFFIndex::new_all_none();
         let original = ParametricIntegrands {
+            fixed_on_shell_spatial_velocity: Some(["1/4", "1/2", "1/2"].map(str::to_owned)),
             integrands: Integrands::from_iter([(cut, &coordinate * function!(family, &scope, 2))])
                 .with_numerators([Arc::clone(&definition)])?,
             cuts: CutSet::empty(3),
         };
         let multiplied = original.clone().map(|atom| Atom::num(3) * atom);
+        assert_eq!(
+            multiplied.fixed_on_shell_spatial_velocity,
+            original.fixed_on_shell_spatial_velocity
+        );
+        assert_eq!(
+            original.zero_like().fixed_on_shell_spatial_velocity,
+            original.fixed_on_shell_spatial_velocity
+        );
         assert!(Arc::ptr_eq(
             &multiplied.integrands.numerators()[0],
             &definition
@@ -554,6 +569,10 @@ mod tests {
         assert_eq!(visited, 2, "visit the root and shared body once each");
         assert_eq!(substituted.cuts, CutSet::empty(3));
         assert_eq!(
+            substituted.fixed_on_shell_spatial_velocity,
+            Some(["1/4", "1/2", "1/2"].map(str::to_owned))
+        );
+        assert_eq!(
             substituted.integrands.resolved()?,
             Integrands::from_iter([(
                 cut,
@@ -566,6 +585,7 @@ mod tests {
     #[test]
     fn zero_like_preserves_shape_and_cuts() {
         let integrands = ParametricIntegrands {
+            fixed_on_shell_spatial_velocity: None,
             integrands: Integrands::from_iter([
                 (CutCFFIndex::new_all_none(), Atom::var(symbol!("x"))),
                 (

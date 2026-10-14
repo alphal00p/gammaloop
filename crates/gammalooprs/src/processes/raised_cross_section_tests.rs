@@ -891,6 +891,30 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                 assert_eq!(before_occurrences[component_id], expected);
             }
 
+            // A nonempty wire sentinel exercises both cross-section reference
+            // records without adding an OS operation to this scalar fixture.
+            // Install it only after the physical checks above, and remove it
+            // after the roundtrip before the unchanged physical checks below.
+            let fixed_reference = ["1/4", "1/2", "1/2"].map(str::to_owned);
+            let mut retained_cut_references = 0;
+            for graph in &mut cross_section.supergraphs {
+                for cut in &mut graph.derived_data.cut_paramatric_integrand {
+                    assert!(cut.fixed_on_shell_spatial_velocity.is_none());
+                    cut.fixed_on_shell_spatial_velocity = Some(fixed_reference.clone());
+                    retained_cut_references += 1;
+                }
+            }
+            assert!(retained_cut_references > 0);
+            let ProcessIntegrand::CrossSection(runtime) = cross_section.integrand.as_mut().unwrap()
+            else {
+                unreachable!("the generated scalar fixture is a cross section")
+            };
+            assert!(!runtime.data.graph_terms.is_empty());
+            for term in &mut runtime.data.graph_terms {
+                assert!(term.fixed_on_shell_spatial_velocity.is_none());
+                term.fixed_on_shell_spatial_velocity = Some(fixed_reference.clone());
+            }
+
             let save_root = TemporaryDirectory::new("raised-cross-section");
             cross_section.save(&save_root.0, true).unwrap();
             let mut state_bytes = Vec::new();
@@ -902,6 +926,18 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             };
             let mut loaded =
                 CrossSection::load(save_root.0.join("raised_cross_section"), context).unwrap();
+            let mut restored_cut_references = 0;
+            for graph in &mut loaded.supergraphs {
+                for cut in &mut graph.derived_data.cut_paramatric_integrand {
+                    assert_eq!(
+                        cut.fixed_on_shell_spatial_velocity.as_ref(),
+                        Some(&fixed_reference)
+                    );
+                    cut.fixed_on_shell_spatial_velocity = None;
+                    restored_cut_references += 1;
+                }
+            }
+            assert_eq!(restored_cut_references, retained_cut_references);
             let loaded_integrand = loaded.integrand.as_mut().unwrap();
             let ProcessIntegrand::CrossSection(loaded_cross_section) = &*loaded_integrand else {
                 unreachable!("the saved synthetic topology is a cross section")
@@ -912,6 +948,30 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     .unwrap(),
                 &metadata,
             );
+            assert!(loaded_cross_section.data.graph_terms.iter().all(|term| {
+                term.fixed_on_shell_spatial_velocity.as_ref() == Some(&fixed_reference)
+            }));
+            // Cloning/loading must not turn a generated frame into a runtime
+            // choice. Only this disposable clone uses an incompatible rotation.
+            let mut incompatible_probe = loaded_integrand.clone();
+            incompatible_probe
+                .get_mut_settings()
+                .stability
+                .rotation_axis = vec![crate::settings::runtime::RotationSetting::Pi2X {}];
+            let error = incompatible_probe
+                .warm_up(&model)
+                .expect_err("the loaded cross-section reference must survive cloning");
+            assert!(
+                error
+                    .to_string()
+                    .contains("fixed on-shell subtraction velocity")
+            );
+            let ProcessIntegrand::CrossSection(runtime) = &mut *loaded_integrand else {
+                unreachable!("the loaded scalar fixture is a cross section")
+            };
+            for term in &mut runtime.data.graph_terms {
+                term.fixed_on_shell_spatial_velocity = None;
+            }
             loaded_integrand.warm_up(&model).unwrap();
             let after_load = loaded_integrand
                 .evaluate_samples_raw(

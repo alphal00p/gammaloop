@@ -51,7 +51,11 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-17: The architecture records state version 19 for retained tensor payloads, checked symbol-remapped loading, and unchanged standalone scalar evaluator versions.
 # Reviewed 2026-10-17: Full state version 20 retains global numerator/projector interfaces in addition to version19 runtime tensors; standalone evaluator formats remain unchanged.
 # Reviewed 2026-10-18: Full state 21 stores explicit indexed tensor slots and rejects unresolved runtime ports; architecture-current records regeneration of earlier full states and unchanged standalone formats.
-digest = "5113940a12e8bac5ec042c59db01bd0ecfb05ef0"
+# Historical OS state21 added fixed-frame metadata to the old partial
+# interfaces; it is incompatible with the upstream Indexed state21 layout.
+# Static Indexed OS replay review: combined state22 and named interfaces
+# preserve existing rejection/ownership policies; runtime qualification pending.
+digest = "065e190b31d0b7b5198a4b554a374733eac00685"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -103,7 +107,11 @@ anchor = "pub fn warm_up(&mut self, model"
 # Reviewed 2026-10-15: The current architecture covers Fermi-surface evaluation and
 # weighted precise profiles alongside canonical FeynKit models.
 # Reviewed 2026-10-16: Authored warm-up fixtures declare a physical loop basis and only real endpoint rule slots. Production warm-up ownership is unchanged.
-digest = "c795c1a404f9a6118501d7b5ee2d5e580e44886c"
+# Reviewed 2026-10-15: Generated OS spatial references survive selection and
+# reload; warm-up admits only rotations that preserve every fixed reference.
+# Reviewed 2026-10-18: both runtime warm-up paths validate every persisted
+# generated OS reference; runtime rotations cannot redefine that frame.
+digest = "56fd8a9fa8a74d8f4389f805d81d217d1294f8b6"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -378,7 +386,13 @@ anchor = "impl UVOrchestrator {"
 # prescription guards, source-rule Ward certificate and direct history bounds.
 # Static Indexed OS replay review: native carrier publication and existing OS
 # source/rule/history guards are combined; fresh compilation/runtime is pending.
-digest = "610cde2c2e3650f8a46a0262169d2b22cbf0640b"
+# Reviewed 2026-10-18: fixed-frame metadata is retained only for a generated
+# massive-boundary OS component; existing prescription/history guards remain.
+# Fixture review 2026-10-18: restrict light quarks through the canonical model
+# owner before checking a massless parent with a still-massive top bubble.
+# Static Indexed OS replay review: native carriers and fixed-frame ownership
+# are preserved together; runtime qualification remains pending.
+digest = "a489fcb4c020675241dd4b41e16e5c1ad71f9efb"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"
