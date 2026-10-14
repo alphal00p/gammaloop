@@ -2496,27 +2496,38 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             })
             .collect();
 
-        // A restricted mass is structural zero only when its internal expression
-        // fixes it to zero. External parameters remain tunable even at value 0.
+        // Only exact internal expressions establish structural zeros. Propagate
+        // them to a fixed point so derived chemical potentials also disappear
+        // when their external roots were fixed to zero by a restriction card.
+        // Numerical values never establish this: external roots remain tunable.
+        let mut zero_parameters = [UFOSymbol::zero()].into_iter().collect::<HashSet<_>>();
+        loop {
+            let previous_len = zero_parameters.len();
+            let replacements = zero_parameters
+                .iter()
+                .map(|name| Replacement::new(Atom::from(*name).to_pattern(), Atom::Zero))
+                .collect::<Vec<_>>();
+            zero_parameters.extend(
+                model
+                    .parameters
+                    .values()
+                    .filter(|parameter| {
+                        parameter.nature == ParameterNature::Internal
+                            && parameter.expression.as_ref().is_some_and(|expression| {
+                                expression.replace_multiple(&replacements).is_zero()
+                            })
+                    })
+                    .map(|parameter| parameter.name),
+            );
+            if zero_parameters.len() == previous_len {
+                break;
+            }
+        }
         let zero_mass_parameters = serializable_model
             .particles
             .iter()
             .map(|particle| UFOSymbol::from(&particle.mass))
-            .filter(|mass| {
-                mass.is_zero()
-                    || model
-                        .parameters
-                        .get(&ParameterName(*mass))
-                        .is_some_and(|parameter| {
-                            parameter.nature == ParameterNature::Internal
-                                && parameter.expression.as_ref().is_some_and(|expression| {
-                                    expression
-                                        .replace(UFOSymbol::zero().0)
-                                        .with(Atom::Zero)
-                                        .is_zero()
-                                })
-                        })
-            })
+            .filter(|mass| zero_parameters.contains(mass))
             .collect::<HashSet<_>>();
         let zero_mass_replacements = zero_mass_parameters
             .iter()
@@ -2532,6 +2543,12 @@ n_couplings = format!("{}", self.couplings.len()).green(),
                 let mut particle = Particle::from_serializable_particle(serializable_particle);
                 if zero_mass_parameters.contains(&particle.mass.0) {
                     particle.mass = ParameterName(UFOSymbol::zero());
+                }
+                if particle
+                    .chemical_potential
+                    .is_some_and(|mu| zero_parameters.contains(&mu.0))
+                {
+                    particle.chemical_potential = Some(ParameterName(UFOSymbol::zero()));
                 }
                 let particle = Arc::new(particle);
                 model
@@ -2992,6 +3009,13 @@ mod tests {
             assert_eq!(full.get_parameter(name).nature, ParameterNature::Internal);
             assert!(!card.contains_key(&UFOSymbol::from(name)));
         }
+        // This card also fixes every chemical-potential root to zero, including
+        // the derived particle and antiparticle assignments.
+        for particle in &full.particles {
+            if let Some(mu) = particle.chemical_potential {
+                assert_eq!(mu.0, UFOSymbol::zero(), "{}", particle.name);
+            }
+        }
 
         // Repeated restriction and serialization must preserve the structural result.
         full.simplify(&mut card)?;
@@ -3034,15 +3058,39 @@ mod tests {
         let full = load_generic_model("sm");
         for expression in ["0", "0.0", "UFO::ZERO"] {
             let mut serialized = full.to_serializable();
-            let mass = serialized
+            for name in ["MS", "muQ", "muLe"] {
+                let parameter = serialized
+                    .parameters
+                    .iter_mut()
+                    .find(|parameter| parameter.name == name)
+                    .unwrap();
+                parameter.nature = ParameterNature::Internal;
+                parameter.expression = Some(expression.into());
+                parameter.value = None;
+            }
+            // An extra dependency level requires transitive zero propagation.
+            serialized
                 .parameters
                 .iter_mut()
-                .find(|parameter| parameter.name == "MS")
-                .unwrap();
-            mass.nature = ParameterNature::Internal;
-            mass.expression = Some(expression.into());
-            mass.value = None;
+                .find(|parameter| parameter.name == "mue")
+                .unwrap()
+                .expression = Some("UFO::muve-UFO::muQ".into());
             let imported = Model::from_str(serde_json::to_string(&serialized)?, "json")?;
+            for name in ["e-", "e+", "ve", "ve~"] {
+                assert_eq!(
+                    imported.get_particle(name).chemical_potential,
+                    Some(ParameterName(UFOSymbol::zero())),
+                    "{name}: {expression}"
+                );
+            }
+            // These internal zero-valued potentials still depend on free roots.
+            for name in ["mu-", "mu+", "u", "u~"] {
+                assert_eq!(
+                    imported.get_particle(name).chemical_potential,
+                    full.get_particle(name).chemical_potential,
+                    "{name}: {expression}"
+                );
+            }
             for (name, control) in [("s", "ve"), ("s~", "ve~")] {
                 assert!(imported.get_particle(name).is_massless(), "{expression}");
                 let propagator = imported.get_propagator_for_particle(name);
@@ -3066,6 +3114,7 @@ mod tests {
         let mut card = model.default_param_card();
         for value in [0.0, 0.095, 0.0] {
             card.insert(UFOSymbol::from("MS"), Complex::new(F(value), F(0.0)));
+            card.insert(UFOSymbol::from("muLe"), Complex::new(F(value), F(0.0)));
             model.apply_param_card(&card)?;
             let reloaded =
                 Model::from_str(serde_json::to_string(&model.to_serializable())?, "json")?;
@@ -3075,6 +3124,16 @@ mod tests {
                     assert!(!model.unresolved_particles["QCD"].contains(&model.get_particle(name)));
                 }
                 assert_eq!(model.get_parameter("MS").nature, ParameterNature::External);
+                for (name, mu, sign) in [("e-", "mue", 1.0), ("e+", "minus_mue", -1.0)] {
+                    assert_eq!(
+                        model.get_particle(name).chemical_potential,
+                        Some(ParameterName(UFOSymbol::from(mu)))
+                    );
+                    assert_eq!(
+                        model.get_parameter(mu).value,
+                        Some(Complex::new_re(F(sign * value)))
+                    );
+                }
                 assert_eq!(
                     model.get_propagator_for_particle("s").numerator,
                     original.numerator

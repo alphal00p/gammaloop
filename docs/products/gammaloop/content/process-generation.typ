@@ -16,6 +16,8 @@ A mass fixed to exact zero is replaced by symbolic `ZERO` in particles and propa
 Diagram generation, unresolved-particle selection, and graph grouping then treat it as
 massless, just as if the model had declared `ZERO` from the start. Nonzero masses, however
 small, remain symbolic.
+Chemical potentials whose internal expressions become exact zero, including through other
+restriction-fixed parameters, likewise become symbolic `ZERO` and generate no Fermi sectors.
 
 Importing the full model or using `--simplify-model=false` retains adjustable external mass
 parameters. Runtime changes to their numerical values preserve the symbolic mass assignment

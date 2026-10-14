@@ -119,8 +119,8 @@ impl PossibleParticle {
         }
     }
 
-    /// Literal ZERO is absent; named parameters remain present even when their
-    /// current value is zero, since runtime parameter updates can change it.
+    /// Literal ZERO, including constants canonicalized at model construction,
+    /// is absent. Adjustable named parameters remain present even at value zero.
     pub(crate) fn chemical_potential_atom(&self) -> Option<Atom> {
         self.particle()
             .and_then(|particle| particle.chemical_potential)
