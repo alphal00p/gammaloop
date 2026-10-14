@@ -24,7 +24,7 @@
       # Archive filtersets reject test() predicates, so apply this only when running.
       runFilter =
         if hasUfoWheel then null
-        else "not (test(=commands::import::model::tests::ufo_and_json_restrictions_preserve_chemical_potentials) or test(=commands::import::model::tests::fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states))";
+        else "not (test(=commands::import::model::tests::ufo_and_json_restrictions_preserve_model_content) or test(=commands::import::model::tests::fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states))";
       packages = [
         "gammaloop-api"
         "gammaloop-tracing-filter"
