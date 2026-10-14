@@ -27,6 +27,9 @@ impl Fixture {
             .prepare_cache(1, &source, &options, &AtomicBool::new(false), |_| Ok(()))
             .unwrap();
         assert_eq!(report.status, CachePreparationStatus::Complete);
+        assert_eq!(report.completed_roots, 1);
+        assert_eq!(report.newly_stored_roots, 1);
+        assert_eq!(report.newly_stored_intermediates, 2);
         let archive = scratch.path().join("cache.tar.gz");
         let mut fixture = Self {
             scratch,
@@ -109,7 +112,9 @@ fn import_verifies_native_snapshot_and_does_not_attach_or_copy_preparation_check
         report.archive_bytes,
         fs::metadata(&fixture.archive).unwrap().len()
     );
-    assert_eq!(report.copied.preserved_record_references, 1);
+    // I4 preparation retains its completed I2/I3 descendants as well; import
+    // must preserve those shortcuts, not merely the explicitly selected root.
+    assert_eq!(report.copied.preserved_record_references, 3);
     assert_eq!(report.copied.transfer_buffer_bytes, BUFFER_BYTES);
     assert!(!fixture.output().join("preparation.rrcheckpoint").exists());
     assert!(!fixture.engine.cache_statistics(1).unwrap().attached);
@@ -133,13 +138,14 @@ fn import_verifies_native_snapshot_and_does_not_attach_or_copy_preparation_check
     .unwrap();
     let mut imported = bundle.open_reader(program.binding()).unwrap();
     let mut original = source.open_reader(program.binding()).unwrap();
-    let key = rustred::persistence::application_cache::ApplicationCacheKey::guarded_root(
-        &IntegralKey::try_new([4]).unwrap(),
-    );
-    assert_eq!(
-        imported.lookup(&key, program.context()).unwrap(),
-        original.lookup(&key, program.context()).unwrap()
-    );
+    for power in [2, 3, 4] {
+        let key = rustred::persistence::application_cache::ApplicationCacheKey::guarded_root(
+            &IntegralKey::try_new([power]).unwrap(),
+        );
+        let expected = original.lookup(&key, program.context()).unwrap();
+        assert!(expected.is_some(), "prepared root/descendant is absent");
+        assert_eq!(imported.lookup(&key, program.context()).unwrap(), expected);
+    }
     fixture.assert_no_staging();
 }
 
@@ -415,7 +421,7 @@ fn explicit_loopback_http_download_matches_local_import_and_refuses_large_respon
             assert!(result.is_err());
             assert!(!output.exists());
         } else {
-            assert_eq!(result.unwrap().copied.preserved_record_references, 1);
+            assert_eq!(result.unwrap().copied.preserved_record_references, 3);
         }
         fixture.assert_no_staging();
     }

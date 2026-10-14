@@ -162,7 +162,7 @@ claim. They are not the moving D<=10 campaign publication.
 Local package directory on the shared machine:
 
 ```text
-/common/dev/rustred/TMP/five-loop-vakint-20261013/application-gen54-first
+/shared/codex-2/rustred/TMP/five-loop-vakint-20261013/application-gen54-first
 ```
 
 Size: 281,312,247 bytes. SHA256 of `application.json`:
@@ -181,7 +181,7 @@ From the RustRed checkout, export the master-key inventory without generating
 rules or reducing any integral:
 
 ```bash
-export RUSTRED_APPLICATION=/common/dev/rustred/TMP/five-loop-vakint-20261013/application-gen54-first
+export RUSTRED_APPLICATION=/shared/codex-2/rustred/TMP/five-loop-vakint-20261013/application-gen54-first
 mkdir -p TMP/master-evaluations
 cargo run --release --locked -p rustred-app --features capacity-dispatch \
   --example saved_application -- terminals "$RUSTRED_APPLICATION" \
@@ -212,7 +212,7 @@ propagators. Always bind a value to its actual family plus powers.
 For the exact 939-to-905 substitution rows, the source publication is locally:
 
 ```text
-/common/dev/rustred/campaigns/five-loop-rank-ladder-THE-ONE/master-reduction/scopes/f7ee869008fccc6ed6cf2f4e3342c78d2b8607f59ac4d523dcae504595c1b0f8
+/shared/codex-2/rustred/campaigns/five-loop-rank-ladder-THE-ONE/master-reduction/scopes/f7ee869008fccc6ed6cf2f4e3342c78d2b8607f59ac4d523dcae504595c1b0f8
 ```
 
 Read it with RustRed's `load_master_reduction`, its `collection()` and
