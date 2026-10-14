@@ -36,6 +36,12 @@ string-template-plus = "0.4.3"
 thiserror = { workspace = true }
 version-compare = "0.2.1"
 
+[target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies]
+rustix = { version = "1.1.4", features = ["fs"] }
+tar = "0.4.46"
+tempfile = "3.27.0"
+ureq = { version = "2.12.1", default-features = false, features = ["native-tls"] }
+
 [dependencies.phf]
 version = "0.13.1"
 features = ["macros"]

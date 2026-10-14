@@ -1100,6 +1100,77 @@ impl VakintWrapper {
         cache::json_report(py, &report.to_document().to_string())
     }
 
+    /// Import a trusted SHA-256 checked USTAR gzip archive into a new native
+    /// snapshot directory. This does not attach the cache to evaluation.
+    #[cfg(all(unix, not(target_arch = "wasm32")))]
+    #[pyo3(signature = (n_loops, archive_path, output_path, *, sha256, max_archive_bytes=None, max_extracted_bytes=None, max_entries=None, max_temporary_bytes=None, disk_bytes=None))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn import_cache(
+        &self,
+        py: Python<'_>,
+        n_loops: usize,
+        archive_path: String,
+        output_path: String,
+        sha256: &str,
+        max_archive_bytes: Option<u64>,
+        max_extracted_bytes: Option<u64>,
+        max_entries: Option<usize>,
+        max_temporary_bytes: Option<u64>,
+        disk_bytes: Option<u64>,
+    ) -> PyResult<Py<PyDict>> {
+        cache::check_loops(n_loops)?;
+        let options = cache::transfer_options(
+            sha256,
+            max_archive_bytes,
+            max_extracted_bytes,
+            max_entries,
+            max_temporary_bytes,
+            disk_bytes,
+            None,
+        )?;
+        let engine = self.vakint.clone();
+        let report = py
+            .detach(move || engine.import_cache(n_loops, archive_path, output_path, &options))
+            .map_err(vakint_to_python_error)?;
+        cache::transfer_report(py, report)
+    }
+
+    /// Explicit HTTP(S) download with a required trusted checksum. Supply the
+    /// final URL: redirects are refused. Load the published snapshot separately.
+    #[cfg(all(unix, not(target_arch = "wasm32")))]
+    #[pyo3(signature = (n_loops, url, output_path, *, sha256, max_archive_bytes=None, max_extracted_bytes=None, max_entries=None, max_temporary_bytes=None, disk_bytes=None, timeout_seconds=None))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn download_cache(
+        &self,
+        py: Python<'_>,
+        n_loops: usize,
+        url: String,
+        output_path: String,
+        sha256: &str,
+        max_archive_bytes: Option<u64>,
+        max_extracted_bytes: Option<u64>,
+        max_entries: Option<usize>,
+        max_temporary_bytes: Option<u64>,
+        disk_bytes: Option<u64>,
+        timeout_seconds: Option<f64>,
+    ) -> PyResult<Py<PyDict>> {
+        cache::check_loops(n_loops)?;
+        let options = cache::transfer_options(
+            sha256,
+            max_archive_bytes,
+            max_extracted_bytes,
+            max_entries,
+            max_temporary_bytes,
+            disk_bytes,
+            timeout_seconds,
+        )?;
+        let engine = self.vakint.clone();
+        let report = py
+            .detach(move || engine.download_cache(n_loops, &url, output_path, &options))
+            .map_err(vakint_to_python_error)?;
+        cache::transfer_report(py, report)
+    }
+
     /// Clear only the attached native RAM cache; preserve its read-only files
     /// and cumulative counters. No program is loaded for an empty attachment.
     pub fn clear_cache(&self, py: Python<'_>, n_loops: usize) -> PyResult<()> {

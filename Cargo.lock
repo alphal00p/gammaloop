@@ -5736,7 +5736,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=d44e3beea9de1370a9cdd6fff08cbfbb486c1c4e#d44e3beea9de1370a9cdd6fff08cbfbb486c1c4e"
+source = "git+https://github.com/alphal00p/rustred?rev=301beec66e6a2fcdc12ffe2c665181206615550c#301beec66e6a2fcdc12ffe2c665181206615550c"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5749,7 +5749,7 @@ dependencies = [
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=d44e3beea9de1370a9cdd6fff08cbfbb486c1c4e#d44e3beea9de1370a9cdd6fff08cbfbb486c1c4e"
+source = "git+https://github.com/alphal00p/rustred?rev=301beec66e6a2fcdc12ffe2c665181206615550c#301beec66e6a2fcdc12ffe2c665181206615550c"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5765,7 +5765,7 @@ dependencies = [
 [[package]]
 name = "rustred-order"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=d44e3beea9de1370a9cdd6fff08cbfbb486c1c4e#d44e3beea9de1370a9cdd6fff08cbfbb486c1c4e"
+source = "git+https://github.com/alphal00p/rustred?rev=301beec66e6a2fcdc12ffe2c665181206615550c#301beec66e6a2fcdc12ffe2c665181206615550c"
 
 [[package]]
 name = "rustversion"
@@ -8186,6 +8186,7 @@ dependencies = [
  "pyo3-stub-gen-derive",
  "regex",
  "rug",
+ "rustix 1.1.4",
  "rustred",
  "rustred-app",
  "serde_json",
@@ -8194,8 +8195,11 @@ dependencies = [
  "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "string-template-plus",
  "symbolica",
+ "tar",
+ "tempfile",
  "test-log",
  "thiserror 2.0.18",
+ "ureq",
  "version-compare",
 ]
 

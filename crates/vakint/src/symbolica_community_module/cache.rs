@@ -115,6 +115,82 @@ pub(super) fn json_report(py: Python<'_>, document: &str) -> PyResult<Py<PyDict>
         .unbind())
 }
 
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn transfer_options(
+    sha256: &str,
+    archive_bytes: Option<u64>,
+    extracted_bytes: Option<u64>,
+    entries: Option<usize>,
+    temporary_bytes: Option<u64>,
+    disk_bytes: Option<u64>,
+    timeout_seconds: Option<f64>,
+) -> PyResult<crate::RustRedCacheTransferOptions> {
+    if sha256.len() != 64 || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "sha256 must be exactly 64 hexadecimal digits from a trusted source",
+        ));
+    }
+    let mut digest = [0u8; 32];
+    for (index, value) in digest.iter_mut().enumerate() {
+        *value = u8::from_str_radix(&sha256[index * 2..index * 2 + 2], 16)
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    }
+    let mut options = crate::RustRedCacheTransferOptions::new(digest);
+    if let Some(value) = archive_bytes {
+        options.max_archive_bytes = value;
+    }
+    if let Some(value) = extracted_bytes {
+        options.max_extracted_bytes = value;
+    }
+    if let Some(value) = entries {
+        options.max_entries = value;
+    }
+    if let Some(value) = temporary_bytes {
+        options.max_temporary_bytes = value;
+    }
+    if let Some(value) = disk_bytes {
+        options.storage.max_disk_bytes = value;
+    }
+    if let Some(value) = timeout_seconds {
+        options.timeout = Duration::try_from_secs_f64(value).map_err(|_| {
+            pyo3::exceptions::PyValueError::new_err("timeout_seconds must be finite and positive")
+        })?;
+    }
+    Ok(options)
+}
+
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+pub(super) fn transfer_report(
+    py: Python<'_>,
+    report: crate::RustRedCacheTransferReport,
+) -> PyResult<Py<PyDict>> {
+    let result = PyDict::new(py);
+    result.set_item("output", report.output.to_string_lossy())?;
+    result.set_item(
+        "sha256",
+        report
+            .sha256
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>(),
+    )?;
+    result.set_item("archive_bytes", report.archive_bytes)?;
+    result.set_item("extracted_bytes", report.extracted_bytes)?;
+    result.set_item("entries", report.entries)?;
+    result.set_item("namespaces", report.copied.namespaces)?;
+    result.set_item("copied_bases", report.copied.copied_bases)?;
+    result.set_item("copied_chunks", report.copied.copied_chunks)?;
+    result.set_item(
+        "preserved_record_references",
+        report.copied.preserved_record_references,
+    )?;
+    result.set_item("compressed_bytes", report.copied.compressed_bytes)?;
+    result.set_item("index_bytes", report.copied.index_bytes)?;
+    result.set_item("transfer_buffer_bytes", report.copied.transfer_buffer_bytes)?;
+    Ok(result.unbind())
+}
+
 struct PythonProgress {
     progress: Option<Py<PyAny>>,
     cancel: Option<Py<PyAny>>,
@@ -274,6 +350,7 @@ fn disk_stats(
         ("largest_chunk_read", value.largest_chunk_read),
         ("largest_decoded_chunk", value.largest_decoded_chunk),
         ("runs_probed", value.runs_probed),
+        ("key_index_skips", value.key_index_skips),
         ("lookup_limit_refusals", value.lookup_limit_refusals),
         ("hits", value.hits),
         ("misses", value.misses),

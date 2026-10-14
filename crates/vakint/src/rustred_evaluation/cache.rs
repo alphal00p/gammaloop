@@ -21,6 +21,12 @@ use rustred_app::{
 mod save;
 pub use save::{RustRedCacheSaveMode, RustRedCacheSaveOptions, RustRedCacheSaveReport};
 
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+#[path = "cache_transfer.rs"]
+mod transfer;
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+pub use transfer::{RustRedCacheTransferOptions, RustRedCacheTransferReport};
+
 use super::{
     RustRedEvaluationError,
     artifact::{ArtifactFamily, shipped_family_for_loop_count},

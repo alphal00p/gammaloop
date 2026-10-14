@@ -5,10 +5,12 @@ packs/reports for auditing. These bounded one-loop controls compute no new
 master values. This script is not proof of four-loop runtime completion.
 """
 
+import hashlib
 import os
 import shutil
 import signal
 import sys
+import tarfile
 import tempfile
 import threading
 import unittest
@@ -58,6 +60,36 @@ class NativeCacheSmoke(unittest.TestCase):
 
     def same(self, left, right):
         self.assertEqual((left - right).expand().together(), E("0"))
+
+    @unittest.skipUnless(
+        sys.platform in ("linux", "darwin"), "native cache transfer platform"
+    )
+    def test_checksum_import_is_explicit_and_preserves_native_records(self):
+        obj = engine()
+        prepared = self.scratch / "prepared-transfer"
+        self.assertEqual(self.prepare(obj, prepared)["status"], "complete")
+        archive = self.scratch / "cache.tar.gz"
+        with tarfile.open(archive, "w:gz", format=tarfile.USTAR_FORMAT) as bundle:
+            bundle.add(prepared, arcname="cache")
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        imported = self.scratch / "imported"
+        report = obj.import_cache(1, str(archive), str(imported), sha256=digest)
+        self.assertEqual(report["sha256"], digest)
+        self.assertEqual(report["preserved_record_references"], 5)
+        self.assertFalse(obj.cache_statistics(1)["attached"])
+        self.assertFalse((imported / "preparation.rrcheckpoint").exists())
+        obj.load_cache(1, str(imported))
+        self.same(
+            obj.evaluate_integral(integral(4)), engine().evaluate_integral(integral(4))
+        )
+        self.assertEqual(obj.cache_statistics(1)["native"]["backing_hits"], 1)
+        for checksum in ["not-a-sha256", "0" * 64]:
+            failed = self.scratch / "failed-import"
+            with self.assertRaises(ValueError):
+                obj.import_cache(1, str(archive), str(failed), sha256=checksum)
+            self.assertFalse(failed.exists())
+        with self.assertRaises(ValueError):
+            obj.import_cache(1, str(archive), str(imported), sha256=digest)
 
     def test_native_hit_full_snapshot_and_reentrant_progress(self):
         obj = engine()

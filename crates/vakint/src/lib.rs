@@ -32,6 +32,8 @@ pub use rustred_evaluation::cache::{
     RustRedCacheRoot, RustRedCacheSaveMode, RustRedCacheSaveOptions, RustRedCacheSaveReport,
     RustRedCacheStatistics, RustRedCacheWorkload,
 };
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+pub use rustred_evaluation::cache::{RustRedCacheTransferOptions, RustRedCacheTransferReport};
 pub use rustred_evaluation::five_loop::RustRedSymbolicEvaluation;
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions};
 
