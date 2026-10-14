@@ -3442,6 +3442,97 @@ mod sampling_tests {
     use linnet::half_edge::involution::EdgeIndex;
 
     #[test]
+    fn vacuum_amplitude_default_cube_sampling_handles_empty_externals() -> Result<()> {
+        use crate::integrands::process::{
+            MomentumSpaceEvaluationInput, gammaloop_sample::parameterize,
+        };
+
+        test_initialise()?;
+        let model = load_generic_model("scalars");
+        let graphs = Graph::from_string(
+            r#"digraph vacuum_cube {
+                node [num=1]; edge [num=1 particle=scalar_1];
+                A -> B [id=0 lmb_id=0 mass=2];
+                B -> A [id=1 mass=3];
+            }"#,
+            &model,
+        )?;
+        let mut amplitude = Amplitude::from_graph_list("vacuum_cube", graphs)?;
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+override_lmb_heuristics = true
+[generation.uv]
+subtract_uv = false
+generate_integrated = false
+[generation.threshold_subtraction]
+enable_thresholds = false
+[generation.evaluator]
+compile = false
+summed = false
+summed_function_map = false
+iterative_orientation_optimization = false
+"#,
+        )?;
+        let settings: RuntimeSettings = toml::from_str(
+            r#"
+[general]
+evaluator_method = "SingleParametric"
+[kinematics]
+e_cm = 1.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = []
+helicities = []
+[stability]
+rotation_axis = []
+escalate_if_exact_zero = false
+"#,
+        )?;
+        assert!(matches!(settings.sampling, SamplingSettings::Default(_)));
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .stack_size(256 * 1024 * 1024)
+            .build()?;
+        amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+        amplitude.build_integrand(&model, "vacuum_cube", &global, (&settings).into(), &pool)?;
+        let runtime = amplitude.integrand.as_mut().unwrap();
+        runtime.warm_up(&model)?;
+        let ProcessIntegrand::Amplitude(generated) = &mut *runtime else {
+            unreachable!()
+        };
+        let cube = Sample::Continuous(F(1.0), vec![F(0.31), F(0.27), F(0.61)]);
+        // Cube sampling reinterprets the selected LMB; fixed-momentum evaluation
+        // bypasses that step. A vacuum graph must not index an external basis.
+        let draw = parameterize::<f64, _>(&cube, generated, &mut EvaluationMetaData::new_empty())?;
+        let sample = draw.get_default_sample();
+        assert!(sample.external_moms().is_empty());
+        let input = MomentumSpaceEvaluationInput {
+            loop_momenta: sample.loop_moms().iter().cloned().collect(),
+            integrator_weight: F(1.0),
+            graph_id: Some(0),
+            group_id: None,
+            orientation: None,
+            channel_id: None,
+        };
+        let result = runtime
+            .evaluate_sample_precise(&cube, &model, F(1.0), false, Complex::new_zero())?
+            .try_into_f64()?;
+        let expected = runtime
+            .evaluate_momentum_configuration(&model, &input, false)?
+            .integrand_result
+            * sample.jacobian();
+        let actual = result.integrand_result * result.parameterization_jacobian.unwrap();
+        assert!(actual.re.0.is_finite() && actual.im.0.is_finite());
+        assert!(expected.im.0.abs() > 1e-12);
+        assert!((actual.re.0 - expected.re.0).abs() < 1e-12);
+        assert!((actual.im.0 / expected.im.0 - 1.0).abs() < 1e-12);
+        assert!(sample.jacobian().0 > 0.0);
+        Ok(())
+    }
+
+    #[test]
     fn generated_triangle_joint_binds_without_prerequisites() -> Result<()> {
         use crate::integrands::process::GaussianReferenceFunction;
         test_initialise()?;
