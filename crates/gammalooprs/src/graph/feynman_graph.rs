@@ -39,7 +39,8 @@ use crate::{
 };
 
 use super::{
-    Edge, Graph, HedgeData, LoopMomentumBasis, Vertex, get_cff_inverse_energy_product_impl,
+    Edge, Graph, HedgeData, LoopMomentumBasis, Vertex, edge::PossibleParticle,
+    get_cff_inverse_energy_product_impl,
 };
 
 pub trait FeynmanGraph {
@@ -216,27 +217,56 @@ impl Graph {
                 continue;
             }
             let chemical_potential = edge.data.chemical_potential_atom();
-            let mu = match &chemical_potential {
-                Some(atom) => parameters
-                    .pairs
-                    .model_parameters
-                    .params
-                    .iter()
-                    .zip(parameters.model_values())
-                    .find_map(|(parameter, value)| (parameter == atom).then_some(*value))
-                    .ok_or_else(|| {
-                        eyre::eyre!(
-                            "Thermal graph '{}' has no value for chemical potential {atom} on edge {edge_id}",
-                            self.name
-                        )
-                    })?,
-                None => Complex::new_re(F(0.0)),
+            let mu_value = |potential: Option<&Atom>| -> eyre::Result<Complex<F<f64>>> {
+                let mu = match potential {
+                    Some(atom) => parameters
+                        .pairs
+                        .model_parameters
+                        .params
+                        .iter()
+                        .zip(parameters.model_values())
+                        .find_map(|(parameter, value)| (parameter == atom).then_some(*value))
+                        .ok_or_else(|| {
+                            eyre::eyre!(
+                                "Thermal graph '{}' has no value for chemical potential {atom} on edge {edge_id}",
+                                self.name
+                            )
+                        })?,
+                    None => Complex::new_re(F(0.0)),
+                };
+                if !mu.im.is_zero() || !mu.re.0.is_finite() {
+                    return Err(eyre::eyre!(
+                        "Thermal graph '{}' requires a finite real chemical potential on edge {edge_id}; got {mu}",
+                        self.name
+                    ));
+                }
+                Ok(mu)
             };
-            if !mu.im.is_zero() || !mu.re.0.is_finite() {
-                return Err(eyre::eyre!(
-                    "Thermal graph '{}' requires a finite real chemical potential on edge {edge_id}; got {mu}",
-                    self.name
-                ));
+            let mu = mu_value(chemical_potential.as_ref())?;
+            // Reversing an edge conjugates its label and flips its orientation.
+            // The occupation's E - sigma * mu must describe the same state.
+            if let Some(particle) = edge.data.particle() {
+                if particle.is_self_antiparticle() {
+                    if !mu.re.is_zero() {
+                        return Err(eyre::eyre!(
+                            "Thermal graph '{}' requires zero chemical potential for self-conjugate particle '{}' on edge {edge_id}; got {mu}",
+                            self.name,
+                            particle.name
+                        ));
+                    }
+                } else {
+                    let antiparticle =
+                        PossibleParticle::from(model.try_get_particle(&particle.antiname)?);
+                    let anti_mu = mu_value(antiparticle.chemical_potential_atom().as_ref())?;
+                    if anti_mu.re != -mu.re {
+                        return Err(eyre::eyre!(
+                            "Thermal graph '{}' requires opposite chemical potentials for particle '{}' and antiparticle '{}' on edge {edge_id}; got {mu} and {anti_mu}",
+                            self.name,
+                            particle.name,
+                            particle.antiname
+                        ));
+                    }
+                }
             }
             // Finite-temperature occupations and zero-temperature fermion steps,
             // including any Fermi surface they localize, need a real shell energy.
@@ -1207,6 +1237,7 @@ mod tests {
         .into_graph(&model)?;
         // Dense fermions and massless zero-mu bosons are both supported.
         model.get_parameter_mut("mud")?.value = Some(Complex::new_re(F(3.0)));
+        model.get_parameter_mut("minus_mud")?.value = Some(Complex::new_re(F(-3.0)));
         for mode in [
             MediumMode::Vacuum,
             MediumMode::ThermodynamicEquilibrium,
@@ -1223,6 +1254,7 @@ mod tests {
             }
             for mu in [0.0, 1.0, -1.0, 2.0, -2.0, 3.0, f64::NAN, f64::INFINITY] {
                 model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(mu)));
+                model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-mu)));
                 graph.param_builder.update_model_values(&model)?;
                 let result = graph.validate_medium_parameters(&model, 1.0);
                 assert_eq!(result.is_ok(), mode == MediumMode::Vacuum || mu.abs() < 2.0);
@@ -1231,6 +1263,7 @@ mod tests {
                 }
             }
             model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(0.0)));
+            model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(0.0)));
         }
         Ok(())
     }
@@ -1260,12 +1293,147 @@ mod tests {
         ] {
             model.get_parameter_mut("MT")?.value = Some(mass);
             model.get_parameter_mut("muG")?.value = Some(mu);
+            model.get_parameter_mut("minus_muG")?.value = Some(-mu);
             graph.param_builder.update_model_values(&model)?;
             assert_eq!(
                 graph.validate_medium_parameters(&model, 1.0).is_ok(),
                 valid,
                 "mass override MT+1 with MT={mass}, mu={mu}"
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_chemical_potentials_validate_conjugation_at_runtime() -> eyre::Result<()> {
+        test_initialise()?;
+        let serialized = serde_json::to_value(load_generic_model("sm").to_serializable())?;
+        for anti_parameter in [Some("muB"), Some("muQ"), None, Some("ZERO")] {
+            let mut input = serialized.clone();
+            for particle in input["particles"].as_array_mut().unwrap() {
+                match particle["name"].as_str().unwrap() {
+                    "G+" => particle["chemical_potential"] = serde_json::json!("muQ"),
+                    "G-" => particle["chemical_potential"] = serde_json::json!(anti_parameter),
+                    _ => {}
+                }
+            }
+            // Import remains independent of the medium. Distinct external parameters
+            // are valid when their current values are opposite, without a symbolic tie.
+            let mut model = Model::from_str(serde_json::to_string(&input)?, "json")?;
+            let mut graphs = ["G+", "G-"]
+                .map(|particle| {
+                    format!(
+                        r#"digraph conjugate_mu {{
+                            node [num=1]; edge [num=1];
+                            A -> A [particle="{particle}" mass=4];
+                        }}"#
+                    )
+                    .into_graph(&model)
+                })
+                .into_iter()
+                .collect::<eyre::Result<Vec<Graph>>>()?;
+            for (mu, other) in [
+                (0.0, 0.0),
+                (1.0, -1.0),
+                (-1.0, 1.0),
+                (1.0, 1.0),
+                (1.0, 0.0),
+                (0.0, 1.0),
+            ] {
+                let mut card = model.default_param_card();
+                card.insert("muQ".into(), Complex::new_re(F(mu)));
+                card.insert("muB".into(), Complex::new_re(F(other)));
+                model.apply_param_card(&card)?;
+                let anti_mu = match anti_parameter {
+                    Some("muB") => other,
+                    Some("muQ") => mu,
+                    _ => 0.0,
+                };
+                for graph in &mut graphs {
+                    for mode in [
+                        MediumMode::Vacuum,
+                        MediumMode::ThermodynamicEquilibrium,
+                        MediumMode::ZeroTemperatureEquilibrium,
+                    ] {
+                        graph.set_medium_mode(mode)?;
+                        graph.param_builder.update_model_values(&model)?;
+                        let result = graph.validate_medium_parameters(&model, 1.0);
+                        assert_eq!(
+                            result.is_ok(),
+                            mode == MediumMode::Vacuum || anti_mu == -mu,
+                            "{mode:?}, mu={mu}, anti_mu={anti_mu}, anti_parameter={anti_parameter:?}"
+                        );
+                        if let Err(error) = result {
+                            assert!(
+                                error.to_string().contains("opposite chemical potentials"),
+                                "{error}"
+                            );
+                        }
+                    }
+                }
+            }
+            if anti_parameter == Some("muB") {
+                // The unused antiparticle label must still have a finite real value.
+                model.get_parameter_mut("muB")?.value = Some(Complex::new(F(0.0), F(0.5)));
+                graphs[0].param_builder.update_model_values(&model)?;
+                let error = graphs[0]
+                    .validate_medium_parameters(&model, 1.0)
+                    .unwrap_err();
+                assert!(
+                    error.to_string().contains("finite real chemical potential"),
+                    "{error}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_self_conjugate_particles_require_zero_chemical_potential() -> eyre::Result<()> {
+        test_initialise()?;
+        let serialized = serde_json::to_value(load_generic_model("sm").to_serializable())?;
+        for parameter in [None, Some("ZERO"), Some("muQ")] {
+            let mut input = serialized.clone();
+            let particle = input["particles"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|particle| particle["name"] == "H")
+                .unwrap();
+            particle["chemical_potential"] = serde_json::json!(parameter);
+            let mut model = Model::from_str(serde_json::to_string(&input)?, "json")?;
+            let mut graph: Graph = r#"digraph self_conjugate_mu {
+                node [num=1]; edge [num=1];
+                A -> A [particle="H" mass=4];
+            }"#
+            .into_graph(&model)?;
+            for mu in [0.0, 1.0, -1.0] {
+                let mut card = model.default_param_card();
+                card.insert("muQ".into(), Complex::new_re(F(mu)));
+                model.apply_param_card(&card)?;
+                for mode in [
+                    MediumMode::Vacuum,
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    graph.set_medium_mode(mode)?;
+                    graph.param_builder.update_model_values(&model)?;
+                    let result = graph.validate_medium_parameters(&model, 1.0);
+                    assert_eq!(
+                        result.is_ok(),
+                        mode == MediumMode::Vacuum || parameter != Some("muQ") || mu == 0.0,
+                        "{mode:?}, mu={mu}, parameter={parameter:?}"
+                    );
+                    if let Err(error) = result {
+                        assert!(
+                            error
+                                .to_string()
+                                .contains("zero chemical potential for self-conjugate"),
+                            "{error}"
+                        );
+                    }
+                }
+            }
         }
         Ok(())
     }
