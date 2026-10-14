@@ -100,6 +100,7 @@ impl CitationUsage {
         }
         let mut citations = vec![Citation {
             id: "10.5281/zenodo.18248388".into(),
+            url: "https://doi.org/10.5281/zenodo.18248388".into(),
             reference: "Lucien Huber. Spenso (2026).".into(),
             bibtex: r#"@software{spenso,
   author = {Lucien Huber},
@@ -117,6 +118,7 @@ impl CitationUsage {
         if !idenso_reasons.is_empty() {
             citations.push(Citation {
                 id: "10.5281/zenodo.18248409".into(),
+                url: "https://doi.org/10.5281/zenodo.18248409".into(),
                 reference: "Lucien Huber, Ben Ruijl. Idenso (2026).".into(),
                 bibtex: r#"@software{idenso,
   author = {Lucien Huber and Ben Ruijl},
@@ -134,6 +136,7 @@ impl CitationUsage {
             citations.extend([
                 Citation {
                     id: "arXiv:2601.19982".into(),
+                    url: "https://arxiv.org/abs/2601.19982".into(),
                     reference: "J. Davies, T. Kaneko, C. Marinissen, T. Ueda, J. A. M. Vermaseren. FORM Version 5.0 (2026).".into(),
                     bibtex: r#"@article{form_5,
   author = {J. Davies and T. Kaneko and C. Marinissen and T. Ueda and J. A. M. Vermaseren},
@@ -150,6 +153,7 @@ impl CitationUsage {
                 },
                 Citation {
                     id: "arXiv:1707.06453".into(),
+                    url: "https://arxiv.org/abs/1707.06453".into(),
                     reference: "B. Ruijl, T. Ueda, J. A. M. Vermaseren. FORM version 4.2 (2017).".into(),
                     bibtex: r#"@article{form_4_2,
   author = {Ben Ruijl and Takahiro Ueda and Jos Vermaseren},
@@ -169,6 +173,7 @@ impl CitationUsage {
         if used & Usage::Color as u16 != 0 {
             citations.push(Citation {
                 id: "arXiv:hep-ph/9802376".into(),
+                url: "https://doi.org/10.1142/S0217751X99000038".into(),
                 reference: "T. van Ritbergen, A. N. Schellekens, J. A. M. Vermaseren. Group theory factors for Feynman diagrams (1999).".into(),
                 bibtex: r#"@article{vanRitbergen:1998pn,
   author = {T. van Ritbergen and A. N. Schellekens and J. A. M. Vermaseren},
