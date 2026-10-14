@@ -8,10 +8,113 @@ epsilon expansions, or a claim of additional reduction coverage.
 
 == Current integration status
 
+The current dependency is RustRed
+`78cbc5c1c6e98d057a20390534cae25184e7ab99`. Preparation now captures newly
+computed admitted intermediate reductions as well as selected roots. Each
+intermediate carries its own exact nonzero conditions, derived from bounded
+request-local dependency provenance; it is not assigned the entire parent
+guard list and is never exported from an unguarded coefficient memo.
+Ordinary evaluation remains read-only against attached packs.
+
+Fresh native one-, two- and three-loop default primers completed all 5, 77 and
+2,320 selected roots with the existing eight-chunk lookup allowance. Preparation
+runner times were 0.00457, 0.00709 and 1.55330 seconds; including native program
+setup, the corresponding measurements were 0.04844, 0.04599 and 2.28218 seconds.
+These are shared-host functional timings, not matched speedup claims. The first
+two primers already contain every captured descendant. An exact metadata census
+of native verified committed snapshots confirms 5, 77 and 2,352 distinct keys,
+respectively: the three-loop pack adds 32 keys outside its 2,320-root primer.
+No coefficient import or custom binary parser is used for this census.
+
+The enriched four-parent 38-root gate completed in 94.203 seconds of preparation,
+101.495 seconds of native-process wall time, with a 3.472 GB sampled process-tree
+peak. It stored 134,821 record references in 34,303,404 charged bytes. The exact
+committed-key census confirms 134,821 distinct family-qualified keys, including
+134,783 outside the selected 38-root workload. Six selected
+roots reused captured intermediate data. Two requests exhausted their optional
+provenance-metadata allowance and continued normally; this is not a claim that
+every internal node was captured. All 38 selected records and eight non-selected
+records per parent passed fresh native exact coefficient and guard-set comparisons.
+The subsequent full enriched four-loop primer also completed all 164,352
+selected roots. Its runner took 552.794 seconds (9 min 13 s), with 564.834
+seconds including native setup and a sampled process-tree peak of 5.987 GB.
+The pack uses 90,790,870 charged bytes. An exact committed-key census confirms
+286,527 distinct family-qualified keys: the selected 164,352 plus 122,175
+additional intermediate keys. One optional provenance-metadata exhaustion was
+reported, without a selected-root or checkpoint failure. Per-parent run counts
+are 1,887 / 778 / 922 / 2,493 for H / FG / BMW / X, within the unchanged 4,096
+limit. This is the requested finite warmup, not additional integral coverage.
+
+Fresh native verification of the full pack passed 38 selected records and 32
+non-primer samples, including exact coefficient and guard-set agreement. A
+same-engine comparison then loaded the old full root-only pack and the enriched
+full pack in separate fresh processes for each held-out input:
+
+#table(columns: 4,
+  [Parent], [Root-only full pack], [Enriched full pack], [Native rules, old → new],
+  [H], [3.29911 s], [3.04448 s], [18,538 → 1,850],
+  [FG], [0.22993 s], [0.05056 s], [1,313 → 15],
+  [BMW], [1.36707 s], [0.70897 s], [9,536 → 251],
+  [X], [17.76424 s], [12.39088 s], [68,124 → 6,297],
+)
+
+These are first applications after loading, excluding package load. Every
+input remains absent as an entry and has positive intermediate backing hits;
+exact ordinary-reference and RAM-repeat parity pass. These are single matched
+samples on a shared host, with concurrent exact-record checks on another core
+and independent review of bindings and correctness receipts, not statistical
+speedup guarantees. The older 3 h 22 min preparation was not
+rerun on this engine, so its ratio to 9 min 13 s is not a controlled speedup.
+
+Four fresh-process public held-out calls used the enriched 38-root pack, followed
+by a same-process RAM repeat and an ordinary reference. All outputs agreed exactly.
+Each first call had zero entry hits and positive descendant hits: these genuinely
+unseen roots used intermediate shortcuts.
+
+#table(columns: 4,
+  [Parent], [Loaded first call], [RAM repeat], [Ordinary reference],
+  [H], [3.88129 s], [0.05320 s], [3.78110 s],
+  [FG], [0.28171 s], [0.02093 s], [0.30175 s],
+  [BMW], [2.32338 s], [0.02020 s], [2.22645 s],
+  [X], [25.25758 s], [0.09448 s], [21.00561 s],
+)
+
+The ordinary reference follows cached execution in the same process, so shared
+initialization is already warm; these are not paired cold-process speedups.
+Application uses unchanged defaults: 1 GiB aggregate retained coefficients,
+256 MiB per four-loop namespace. Preparation instead uses decimal 16 GB
+aggregate, 4 GB per namespace. X incurred 12,521 application evictions and
+2.489 GB of decoded chunk traffic. Fewer native rules therefore do not imply a
+faster first call. Enlarging the preparation batch from 64 to 256 reduced this
+gate's preparation to 84.848 seconds and its pack to 26,089,874 bytes, but made
+every first held-out call slower (H 5.59869, FG 0.40846, BMW 3.41372, X 32.49444
+seconds). The default remains 64; no application allowance was raised.
+
+New packs write index schema 03 with compact per-chunk key fingerprints. A
+definite negative avoids reading an unrelated chunk; a possible match still
+undergoes full native exact-key and payload validation. This fixes a measured
+three-loop refusal caused by ten overlapping runs against the unchanged
+eight-chunk lookup grant. Native record and bundle schemas stay 02, and older
+schema-02 indexes remain readable. Old root-only preparation checkpoints are
+not resumable as intermediate-complete work: regenerate into a fresh directory.
+Their generated caches remain usable for ordinary evaluation.
+
+The focused Rust cache/application and native public gates are complete at this
+revision. A freshly rebuilt private coherent Symbolica 3.0.1 host also passes
+all eleven Python cache smoke tests and 32 additional public API checks,
+including lazy loading and exact evaluation of the complete enriched four-loop
+pack. The host uses the explicitly pinned historical Community baseline; this
+is not a Community-main/PyPI release or a full-workspace CI claim. Earlier Python
+receipts below retain their older pinned dependency. No numerical masters or
+IBP rules are generated by these preparation or validation steps.
+
+== Earlier root-only four-loop preparation and reader gates
+
 As of October 14, the complete default four-loop primer has prepared and durably
 stored all 164,352 requested roots. Its native completion report records
 12,171.30 seconds (3 h 22 min 51 s) and 72,253,397 physical/charged bytes
-(72.253 MB). No warmup rerun or new IBP generation was needed. These are native
+(72.253 MB). This is the earlier selected-root-only pack, retained as a baseline.
+No new IBP generation was needed. These are native
 completion measurements; the missing final supervisor receipt does not support
 a full-run peak-RSS claim.
 
@@ -26,7 +129,7 @@ allowance.
 
 Measured elapsed-time effects are mixed: fewer rule applications improved the
 sampled FG/BMW calls, while H/X became slower because repeated chunk reads and
-decompression outweighed the saved reduction work. The current dependency,
+decompression outweighed the saved reduction work. That reader milestone,
 RustRed `301beec66e6a2fcdc12ffe2c665181206615550c`, retains bounded exact chunk-key
 metadata to avoid repeated known-absent reads. Native matched checks preserve
 all terms and guards while reducing H chunk reads from 12,924 to 3,293 and X
@@ -95,6 +198,16 @@ public hosting URL is implied. Use the corresponding independently supplied
 checksum for each file, and load the importer’s output directory directly,
 without appending another `cache/` component.
 
+Those named archives are the earlier root-only delivery. The new enriched
+delivery uses `vakint-native-cache-1l-intermediates-index03.tar.gz` through
+`vakint-native-cache-4l-intermediates-index03.tar.gz`. The four-loop archive is
+89,680,390 bytes, SHA-256
+`f0b718fe01e6801eb9d3500959fc0087d46a50ec64fd65eced90af18e4942ea2`.
+It contains the complete finite preparation with 286,527 distinct keys, including
+122,175 outside the selected primer. These are local, untracked data assets,
+not a hosted release. The separately delivered manifest supplies every archive's
+checksum, source-pack identity and exact-key census; do not infer a download URL.
+
 To package an existing native bundle whose directory is named `cache`, choose
 a new output archive path and use standard USTAR plus deterministic gzip:
 
@@ -114,8 +227,9 @@ Transport does not attach a cache, evaluate an integral, regenerate rules or
 compute numerical masters. Normal evaluation never downloads. A byte-verified
 archive is not an independent mathematical certificate: native generated-cache
 provenance remains the trust boundary, and exact shipped program/terminal
-bindings must match before publication. Existing schema-02 bundles remain
-unchanged inside the transport archive.
+bindings must match before publication. Transport accepts the native index
+versions understood by the pinned RustRed dependency; it does not change record
+payloads. The named historical archives above contain schema-02 indexes.
 
 The Rust methods take `RustRedCacheTransferOptions::new([u8; 32])`. Defaults allow
 16 billion archive bytes, 16 billion extracted file bytes, 100,000 entries and
@@ -199,8 +313,8 @@ uses the unchanged native 1 GiB aggregate default. Passing this finite sample
 did not by itself certify candidate closure or completion of the
 164,352-request primer. The later complete preparation is recorded above.
 
-The current RustRed dependency uses mandatory gzip chunks and cache-pack/bundle
-schema 02. The earlier `59e45868` gate below used schema 01: its development
+That RustRed dependency used mandatory gzip chunks and cache-pack/bundle
+schema 02; current index evolution is described above. The earlier `59e45868` gate below used schema 01: its development
 packs must be prepared again. Native artifact and record schemas are unchanged.
 No stable on-disk migration contract is promised here, and an incompatible pack
 is refused rather than guessed at.
@@ -302,7 +416,8 @@ cancellation, storage-budget stop, native resource refusal and failure are
 distinct. A partial report does not certify a completed workload.
 
 `options.storage.batch_records` is a preparation layout target, defaulting to
-64 staged roots across namespaces. Python exposes the same optional
+64 staged completed records across namespaces, including captured intermediates.
+Python exposes the same optional
 `batch_records` keyword. Positive values no larger than the independent native
 chunk record limit are accepted; zero or an oversized target is rejected before
 filesystem creation. Earlier byte/term or checkpoint limits may still flush a
@@ -310,10 +425,11 @@ smaller batch. This target changes neither the selected roots nor their native
 admission, exact reduction, guards, or RAM/work allowances.
 
 The reader's default hard limit remains 4096 records per chunk. Existing larger
-chunks are therefore still loadable and resumable when the preparation target
-is reduced to 64. Changing that target does not change a workload's identity,
+chunks are therefore still loadable when the preparation target is reduced to 64.
+Preparation resume additionally requires the current intermediate-capture profile.
+Changing that target does not change a workload's identity,
 rewrite completed chunks, or imply that an already loaded pack is repartitioned.
-The on-disk schema is unchanged. This separates a read-through cost choice from
+The batch-size choice does not change the on-disk schema. This separates a read-through cost choice from
 the decoder's safety ceiling; it is not a new cache algorithm. The layout
 implementation was tested at RustRed `d44e3beea9de1370a9cdd6fff08cbfbb486c1c4e`.
 Its 53 native application tests passed, including exact record/ordered-guard/work
@@ -407,9 +523,9 @@ HepKit extension build, never a separately loaded second Symbolica kernel.
 workload; #link("tests/python/native_cache_smoke.py")[the host smoke tests]
 cover callbacks, interrupts, GIL release, snapshots and partial native overrides.
 
-=== October 14 final transfer/runtime gate
+=== Earlier October 14 transfer/runtime gate
 
-The final source selects actual Git RustRed
+That completed gate selected actual Git RustRed
 `301beec66e6a2fcdc12ffe2c665181206615550c` consistently across the core,
 application and FeynKit bridge. The private Community host contains one shared
 Symbolica 3.0.1 kernel. Its wheel SHA-256 is
@@ -542,15 +658,40 @@ programs and candidate four-loop programs can reuse completed guarded records
 for matching descendants while reducing an unseen starting root. This lookup
 belongs to RustRed’s native traversal, with source/applicability checks and all
 imported guards preserved. Entry-only rank limits do not clip native descendants.
-Only completed guarded starting-root records are exported; fresh internal
-coefficient-only memo entries are not automatically persisted. LRU/LFU governs
+Preparation also streams newly computed admitted intermediate identities through
+the same bounded writer. Their guards come from exact per-node provenance, not
+coefficient-only memo entries. Native entry admission still limits which
+intermediates can populate the external guarded-root namespace; it does not clip
+the actual reduction. The existing directory-memory allowance bounds optional
+provenance metadata per request. Exhaustion disables further capture for that
+request, not its valid reduction; reports count these events. Oversized optional
+records and inconclusive optional lookup grants are reported separately. Selected
+roots become complete only when their own records are durable or validated from
+an existing committed snapshot. A failed parent can therefore leave useful
+durable descendants without falsely advancing selected-root completion.
+
+`newly_stored_intermediates` records capture provenance at publication time. Some
+of those keys may later be selected themselves, so it is not a count of keys
+outside the complete primer. Ordinary `save_cache` exports resident completed
+records or the explicitly requested immutable snapshot; it does not construct
+missing provenance for arbitrary transient coefficient-only memo entries.
+LRU/LFU governs
 the outer completed-record cache. The transient candidate inner DAG still has
 no LRU/LFU eviction of its own intermediate nodes.
+
+Selected-root and captured-write progress counters are live and durable. During
+an active preparation, the detailed native statistics, charged-disk census and
+reader-directory bytes in progress callbacks are currently setup/final snapshots,
+not per-callback live measurements. Quotas remain enforced by the writer, and
+the final report refreshes these values. Use independent process/RSS and native
+directory inspection for live resource headroom; a stale progress census must
+not be interpreted as actual current disk use.
 
 The current local opt-in request cap is one million, allowing the native
 four-parent relative-two-dot/rank-one plan of 164,352 requests. An explicit
 100,000 cap still refuses that plan before execution; no workload is silently
-clipped. The complete selected workload has finished and its pack is preserved.
+clipped. Both the earlier root-only workload and the new enriched full four-loop
+workload have completed, with separately retained packs and measurements.
 The first-38 and four unseen-input exact checks establish their stated finite
 validation scope; neither preparation completion nor those witnesses certify
 all possible reduction paths or an unrestricted integral domain.
