@@ -84,6 +84,12 @@ from the external parameters `muB`, `muQ`, `muLe`, `muLmu`, and `muLtau` (LHA bl
 explicit particle metadata, not the `mu` prefix: `muH` belongs to the Higgs potential. The other
 bundled models declare no chemical potentials.
 
+For medium evaluation, a particle and its antiparticle must have equal and opposite
+chemical-potential values; a self-conjugate particle must have zero chemical potential.
+Warm-up checks these relations at the current model values, including after parameter updates
+or state reloads. Independent external parameters are allowed when their values satisfy the
+relations.
+
 With the default `--simplify-model=true`, a restriction card turns every parameter it sets to
 zero into a constant. `sm-default` therefore fixes all five chemical potentials at zero. Import
 `sm-thermal` instead, which sets `muB = 3` and keeps it adjustable, or `sm-full` when other

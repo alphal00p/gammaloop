@@ -338,6 +338,10 @@ where finite-temperature distributions or zero-temperature occupation steps are 
 including after loading or updating a model. The stable finite-temperature occupation
 formula uses absolute values of real arguments and does not analytically continue
 complex shell energies.
+Medium warm-up also checks particle/antiparticle chemical potentials for exact opposite
+values and requires zero for self-conjugate particles. It uses current parameter values,
+treating missing or literal-zero assignments as zero; independent external inputs are
+allowed when consistent. Vacuum evaluation does not consume or validate these assignments.
 Vacuum builders register no thermal distribution functions.
 
 `integrands::process::fermi_surface::FermiSurfaceProduct` localizes zero-temperature

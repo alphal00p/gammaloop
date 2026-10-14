@@ -770,6 +770,7 @@ fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
     let mut model = load_generic_model("sm");
     model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
     model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(1.0)));
+    model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-1.0)));
     let mut amplitude = thermal_amplitude(
         &model,
         "thermal_boson",
@@ -834,11 +835,13 @@ fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
     for (mass, mu) in [(2.0, 2.0), (2.0, -2.0), (2.0, 3.0), (0.5, 1.0)] {
         model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(mass)));
         model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(mu)));
+        model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-mu)));
         let error = restored.warm_up(&model).unwrap_err();
         assert!(error.to_string().contains("|mu| < m"), "{error}");
     }
     model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
     model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(1.0)));
+    model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-1.0)));
     restored.warm_up(&model)?;
     assert_eq!(
         restored
