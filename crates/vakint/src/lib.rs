@@ -18,7 +18,7 @@ use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
-use feynkit_tensor::TensorReducer;
+use feynkit_tensor::{RepeatedIndexCompatibility, TensorReducer};
 use graph::Graph;
 #[allow(unused)]
 use log::{debug, info, warn};
@@ -2889,7 +2889,12 @@ impl VakintTerm {
                 .finish();
         });
         let indexed_numerator = Vakint::convert_from_dot_notation(native_scalar_dots.as_view());
-        let reducer = TensorReducer::new(dimension).with_integrated_head(S.k);
+        // Preserve Vakint's historical spelling of paired scalar powers.
+        let reducer = TensorReducer::new(dimension)
+            .with_integrated_head(S.k)
+            .with_repeated_index_compatibility(
+                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
+            );
         let mut next_bridge_dummy = Self::next_dot_dummy_index(indexed_numerator.as_view());
         let lorentz = TensorCollectFilter::Reps([Minkowski {}.into()]);
         // The frontend still carries Vakint's raw-index k/p/g leaves here.

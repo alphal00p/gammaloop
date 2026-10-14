@@ -1824,13 +1824,13 @@ dependencies = [
 [[package]]
 name = "feynkit-amplitude"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
- "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
  "thiserror 2.0.18",
 ]
@@ -1853,13 +1853,13 @@ dependencies = [
 [[package]]
 name = "feynkit-cff"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "bincode 2.0.1",
- "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "serde",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
  "thiserror 2.0.18",
  "three-dimensional-reps",
@@ -1888,19 +1888,19 @@ dependencies = [
 [[package]]
 name = "feynkit-generator"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
  "feynkit-amplitude",
- "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "rayon",
  "serde",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spenso-hep-lib 0.1.7 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spenso-hep-lib 0.1.7 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
  "thiserror 2.0.18",
 ]
@@ -1921,19 +1921,19 @@ dependencies = [
 [[package]]
 name = "feynkit-graph"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
- "feynkit-kinematics 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "feynkit-kinematics 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "itertools 0.14.0",
- "linnest 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "linnest 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "nu-ansi-term",
  "serde",
  "serde_json",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
- "symbolica-utils 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "symbolica-utils 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "thiserror 2.0.18",
 ]
 
@@ -1951,12 +1951,12 @@ dependencies = [
 [[package]]
 name = "feynkit-kinematics"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "numerica",
  "serde",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
  "thiserror 2.0.18",
 ]
@@ -1978,7 +1978,7 @@ dependencies = [
 [[package]]
 name = "feynkit-model"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
@@ -2014,23 +2014,23 @@ dependencies = [
 [[package]]
 name = "feynkit-py"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "feynkit-amplitude",
- "feynkit-cff 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-generator 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-kinematics 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-tensor 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "linnest 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "feynkit-cff 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-generator 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-kinematics 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-tensor 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "linnest 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
  "serde_json",
- "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spynso3 0.1.2 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spynso3 0.1.2 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
  "typst-renderer",
 ]
@@ -2050,12 +2050,12 @@ dependencies = [
 [[package]]
 name = "feynkit-tensor"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
- "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
  "thiserror 2.0.18",
 ]
@@ -3153,7 +3153,7 @@ dependencies = [
 [[package]]
 name = "idenso"
 version = "0.3.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "ahash 0.8.12",
  "base64 0.22.1",
@@ -3161,12 +3161,12 @@ dependencies = [
  "delegate 0.13.5",
  "eyre",
  "itertools 0.14.0",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "nu-ansi-term",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
- "symbolica-utils 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "symbolica-utils 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -3613,7 +3613,7 @@ dependencies = [
 [[package]]
 name = "kurvst"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "ciborium",
  "kurbo",
@@ -3713,7 +3713,7 @@ dependencies = [
 [[package]]
 name = "linnest"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "cgmath",
  "ciborium",
@@ -3722,8 +3722,8 @@ dependencies = [
  "getrandom 0.2.17",
  "indexmap",
  "kurbo",
- "kurvst 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "kurvst 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "rand 0.8.6",
  "rkyv",
  "roxmltree 0.21.1",
@@ -3771,7 +3771,7 @@ dependencies = [
 [[package]]
 name = "linnet"
 version = "0.17.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "ahash 0.8.12",
  "bincode 2.0.1",
@@ -3792,7 +3792,7 @@ dependencies = [
  "serde",
  "serde_repr",
  "symbolica",
- "symbolica-utils 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "symbolica-utils 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "thiserror 2.0.18",
  "twofloat",
 ]
@@ -6317,7 +6317,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.6.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -6339,7 +6339,7 @@ dependencies = [
  "gat-lending-iterator",
  "indexmap",
  "itertools 0.14.0",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "log",
  "nu-ansi-term",
  "num",
@@ -6352,10 +6352,10 @@ dependencies = [
  "ref-ops",
  "serde",
  "serde_json",
- "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
  "symbolica-typst-plugin",
- "symbolica-utils 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "symbolica-utils 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "tabled",
  "thiserror 2.0.18",
  "tracing",
@@ -6379,12 +6379,12 @@ dependencies = [
 [[package]]
 name = "spenso-hep-lib"
 version = "0.1.7"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "ahash 0.8.12",
- "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
  "xpct",
 ]
@@ -6401,7 +6401,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.3.2"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6432,23 +6432,23 @@ dependencies = [
 [[package]]
 name = "spynso3"
 version = "0.1.2"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "ahash 0.8.12",
  "ciborium",
  "eyre",
- "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "itertools 0.14.0",
- "linnest 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "linnest 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
  "serde_json",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spenso-hep-lib 0.1.7 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spenso-hep-lib 0.1.7 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "symbolica",
  "symbolica-typst-plugin",
  "tabled",
@@ -6686,7 +6686,7 @@ dependencies = [
 [[package]]
 name = "symbolica-utils"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
@@ -7035,12 +7035,12 @@ dependencies = [
 [[package]]
 name = "three-dimensional-reps"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
  "itertools 0.14.0",
- "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "linnet 0.17.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "serde",
  "symbolica",
  "thiserror 2.0.18",
@@ -7639,7 +7639,7 @@ dependencies = [
 [[package]]
 name = "typst-library"
 version = "0.15.1"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "arrayvec",
  "az",
@@ -7783,7 +7783,7 @@ dependencies = [
 [[package]]
 name = "typst-renderer"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "comemo",
  "tempfile",
@@ -7798,7 +7798,7 @@ dependencies = [
 [[package]]
 name = "typst-svg"
 version = "0.15.1"
-source = "git+https://github.com/alphal00p/gammaloop?branch=feynkit#eb744c65dbc81d6bb6aaf38977752db073165317"
+source = "git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733#024f96d67b984195e281e7b8e90a3f752df94733"
 dependencies = [
  "base64 0.22.1",
  "comemo",
@@ -8171,14 +8171,14 @@ dependencies = [
  "arrayvec",
  "colored 3.1.1",
  "eyre",
- "feynkit-generator 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-kinematics 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-py 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "feynkit-tensor 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "feynkit-generator 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-kinematics 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-py 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "feynkit-tensor 0.1.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "flate2",
- "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "log",
  "phf 0.13.1",
  "pyo3",
@@ -8191,8 +8191,8 @@ dependencies = [
  "rustred-app",
  "serde_json",
  "sha2",
- "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
- "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
+ "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
+ "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?rev=024f96d67b984195e281e7b8e90a3f752df94733)",
  "string-template-plus",
  "symbolica",
  "tar",

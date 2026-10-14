@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use feynkit_tensor::TensorReducer;
+use feynkit_tensor::{RepeatedIndexCompatibility, TensorReducer};
 use rustred::algebra::Coefficient;
 use rustred::reduction::terminal_normalization::{
     VacuumTensorProjection, VacuumTensorProjectionInput,
@@ -45,7 +45,10 @@ pub(super) fn project(
     let mut nonzero_conditions = BTreeSet::new();
     let mut offset = 0;
     for component in &input.component_loop_momenta {
-        let mut reducer = TensorReducer::new(input.dimension.clone());
+        let mut reducer = TensorReducer::new(input.dimension.clone())
+            .with_repeated_index_compatibility(
+                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
+            );
         for axis in offset..offset + component.len() {
             reducer = reducer.with_integrated_vector(S.k.call((axis + 1, representation.clone())));
         }
