@@ -524,7 +524,9 @@ fn opaque_projector_dummies_are_unique_and_noncolliding() {
 
     let output = feynkit.tensor_reduce(input.as_view()).unwrap();
     let mut labels = Vec::new();
-    collect_dot_dummy_labels(output.as_view(), &mut labels);
+    // The native collector may preserve a shared scalar factor outside a sum.
+    // Inspect each additive term while retaining the paired-dummy invariant.
+    collect_dot_dummy_labels(output.expand().as_view(), &mut labels);
     labels.sort_unstable();
     assert_eq!(labels, vec![7, 7, 8, 8, 9, 9]);
     let canonical = output.to_canonical_string();
@@ -632,7 +634,10 @@ fn feynkit_expanded_mode_restores_vakint_vectors_and_metrics() {
     let output = feynkit.tensor_reduce(input.as_view()).unwrap();
     let canonical = output.to_canonical_string();
     assert!(
-        !canonical.contains("spenso::"),
+        output
+            .get_all_symbols(true)
+            .iter()
+            .all(|symbol| symbol.get_namespace() != "spenso"),
         "Spenso bridge syntax leaked into Vakint output: {canonical}"
     );
     assert!(
