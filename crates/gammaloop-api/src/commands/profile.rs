@@ -116,7 +116,7 @@ pub struct UltraVioletProfile {
     #[arg(long = "per-orientation")]
     pub per_orientation: bool,
 
-    /// Accept zero tails or sustained decay when no reliable power-law fit exists
+    /// Accept zero tails or sustained accelerating decay when no reliable power-law fit exists
     #[arg(long = "allow-vanishing-missing-fits")]
     pub allow_vanishing_missing_fits: bool,
 

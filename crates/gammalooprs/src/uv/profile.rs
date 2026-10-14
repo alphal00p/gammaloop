@@ -843,9 +843,13 @@ mod tests {
                     "≤ -27.000000",
                 ),
                 (
-                    InspectFitStatus {
-                        decay_slope: Some(-3.0),
-                    },
+                    status([
+                        Some(-3.0),
+                        Some(-6.0),
+                        Some(-12.0),
+                        Some(-24.0),
+                        Some(-48.0),
+                    ]),
                     Some("decaying tail"),
                     "≤ -3.000000",
                 ),
@@ -915,9 +919,13 @@ mod tests {
         let mut power_law = analysis.clone();
         let subset = &mut power_law.graphs[0].lmbs[0].subsets[0].analysis;
         subset.inspect_level = Some(fit(-3.0, -3));
-        subset.inspect_fit_status = InspectFitStatus {
-            decay_slope: Some(-3.0),
-        };
+        subset.inspect_fit_status = status([
+            Some(-3.0),
+            Some(-6.0),
+            Some(-12.0),
+            Some(-24.0),
+            Some(-48.0),
+        ]);
         subset.per_orientation_inspect = None;
         let subset = &mut power_law.graphs[0].lmbs[0].subsets[0];
         subset.per_orientation_inspect_entries = subset.analysis.per_orientation_inspect_entries();
@@ -1302,7 +1310,7 @@ mod tests {
     }
 
     #[test]
-    fn uv_profile_accepts_superpolynomially_decaying_rays_as_vanishing() {
+    fn uv_profile_accepts_accelerating_and_zero_tails_without_a_power_law_fit() {
         let default_scales = logspace(3.0, 6.0, 20, 10.0);
         let test_scales = logspace(8.0, 12.0, 33, 10.0);
         // Arb evaluations of the vacuum-subtracted thermal sunrise, both scaled loops on one
@@ -1382,7 +1390,7 @@ mod tests {
     }
 
     #[test]
-    fn uv_profile_vanishing_requires_superpolynomial_decay() {
+    fn uv_profile_requires_accelerating_decay_or_a_zero_tail() {
         let scales = logspace(3.0, 6.0, 20, 10.0);
         let log_scales = scales.iter().map(|scale| scale.log10()).collect_vec();
         let power_law = |power: f64| {
@@ -1391,11 +1399,13 @@ mod tests {
                 .map(|log_scale| Some(power * log_scale - 5.0))
                 .collect_vec()
         };
-        let alternating = |values: Vec<Option<f64>>| {
+        let alternating = |values: Vec<Option<f64>>, amplitude: f64| {
             values
                 .into_iter()
                 .enumerate()
-                .map(|(i, value)| value.map(|value| value + if i % 2 == 0 { 0.3 } else { -0.3 }))
+                .map(|(i, value)| {
+                    value.map(|value| value + if i % 2 == 0 { amplitude } else { -amplitude })
+                })
                 .collect_vec()
         };
         // A tail dominated at high scales by `floor + power * log10(λ)`.
@@ -1429,16 +1439,40 @@ mod tests {
             assert_eq!(uv_ray_verdict(&log_magnitudes, &scales, false), failure);
         }
 
+        // Meeting max_dod cannot excuse an unstable ordinary power law. Neither slight
+        // curvature nor one steep final step establishes sustained accelerating decay.
+        let noisy_power_law = alternating(power_law(-3.0), 1.0);
+        let tiny_curvature = noisy_power_law
+            .iter()
+            .zip(&log_scales)
+            .map(|(value, log_scale)| value.map(|value| value - 0.001 * log_scale.powi(2)))
+            .collect_vec();
+        let mut final_drop = noisy_power_law.clone();
+        *final_drop.last_mut().unwrap() = final_drop.last().unwrap().map(|value| value - 100.0);
+        for log_magnitudes in [noisy_power_law, tiny_curvature, final_drop] {
+            let samples = inspect_samples(log_magnitudes.iter().copied());
+            let fit = analyse_inspect_results(&samples, &scales, false).unwrap();
+            assert!(fit.result.slope <= UV_PROFILE_MAX_DOD);
+            assert!(!fit.result.is_asymptotic());
+            assert!(status(&log_magnitudes).decay_slope.is_none());
+            for allow in [false, true] {
+                assert_eq!(
+                    uv_ray_verdict(&log_magnitudes, &scales, allow),
+                    Some("unstable_fit")
+                );
+            }
+        }
+
         let mut misplaced_zero = exponential_tail(&scales, 1.0);
         misplaced_zero[15] = None;
         for log_magnitudes in [
             // Noise around a flat or divergent trend.
-            alternating(power_law(0.0)),
-            alternating(power_law(-0.5)),
+            alternating(power_law(0.0), 0.3),
+            alternating(power_law(-0.5), 0.3),
             // Decay which turns into a divergence or a noise floor at high scales.
             tail_into(1.0, -20_000.0),
             tail_into(-0.5, -20_000.0),
-            alternating(tail_into(0.0, -20_000.0)),
+            alternating(tail_into(0.0, -20_000.0), 0.3),
             // A zero inside the asymptotic window is no underflow unless only zeros follow it.
             misplaced_zero,
         ] {
@@ -3716,12 +3750,12 @@ impl InspectResult {
     }
 }
 
-/// Evidence that a sampled ray vanishes instead of following a power law.
+/// Sampled evidence of an accelerating decay or a zero tail, without an asymptotic power-law fit.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 struct InspectFitStatus {
-    /// Smallest initial slope of a concave log-log majorant which bounds a high-scale window of
-    /// the samples to its end; `-∞` for a window ending at zero with at most one nonzero sample.
-    /// `None` if no window has such a majorant or any sample is invalid.
+    /// Smallest initial slope of a high-scale log-log majorant whose decay accelerates or ends
+    /// at zero; `-∞` for a window ending at zero with at most one nonzero sample.
+    /// `None` if no window supplies that evidence or any sample is invalid.
     #[serde(
         default,
         serialize_with = "InspectFitStatus::serialize_decay_slope",
@@ -3790,6 +3824,9 @@ impl InspectFitStatus {
     /// must be the final sampled step: a tail which flattens or rises leaves it. With at least two
     /// nonzero samples, exact zeros may only trail them and then replace that requirement.
     /// A sparse window with at most one nonzero sample instead requires an exact zero endpoint.
+    /// Nonzero windows must also show two successive doublings of their decay rate at separated
+    /// checkpoints. This dimensionless heuristic rejects noisy power laws and isolated final drops;
+    /// it does not prove asymptotic behavior beyond the sampled range.
     fn window_decay_slope(window: &[(f64, Option<f64>)]) -> Option<f64> {
         let nonzero = window
             .iter()
@@ -3819,15 +3856,28 @@ impl InspectFitStatus {
         {
             return None;
         }
-        nonzero[1..]
-            .iter()
-            .map(|point| slope(nonzero[0], *point))
-            .max_by(f64::total_cmp)
+        let initial_slope = |start| {
+            nonzero[start + 1..]
+                .iter()
+                .map(|point| slope(nonzero[start], *point))
+                .max_by(f64::total_cmp)
+        };
+        let initial = initial_slope(0)?;
+        if trailing_zeros == 0 {
+            if nonzero.len() < 4 {
+                return None;
+            }
+            let middle = initial_slope((nonzero.len() - 1) / 3)?;
+            let late = initial_slope(2 * (nonzero.len() - 1) / 3)?;
+            if !(initial < 0.0 && middle <= 2.0 * initial && late <= 2.0 * middle) {
+                return None;
+            }
+        }
+        Some(initial)
     }
 
-    /// Whether the samples vanish where no asymptotic power law describes them: a high-scale
-    /// window decays faster than `max_dod` along a concave log-log majorant, which also bounds
-    /// its asymptotic slope.
+    /// Accept sampled zero tails or accelerating decay only when no asymptotic power law describes
+    /// them and the initial decay bound meets `max_dod`. A shallow bound alone is insufficient.
     fn vanishes_without_power_law(self, analysis: Option<&InspectAnalysis>, max_dod: f64) -> bool {
         !analysis.is_some_and(|analysis| analysis.result.is_asymptotic())
             && self.decay_slope.is_some_and(|slope| slope <= max_dod)
