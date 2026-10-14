@@ -736,6 +736,10 @@ impl AmplitudeGraphTerm {
         let param_builder = runtime_graph.param_builder.clone();
         Ok((
             AmplitudeGraphTerm {
+                fixed_on_shell_spatial_velocity: graph
+                    .derived_data
+                    .fixed_on_shell_spatial_velocity
+                    .clone(),
                 orientation_filter: SubSet::full(orientations.len()),
                 orientations: orientations.clone(),
                 production_orientation_keys,

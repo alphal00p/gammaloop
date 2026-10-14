@@ -20,7 +20,13 @@ fn complete_os_parent_keeps_raised_quark_numerator_occurrences() -> Result<()> {
         graph[EdgeIndex(2)].mass_atom(&graph.model),
         graph[EdgeIndex(5)].mass_atom(&graph.model)
     );
-    let prepared = DirectOnShellPreparation::new(&graph, &parent, &child, parent.lmb())?;
+    let prepared = DirectOnShellPreparation::new(
+        &graph,
+        &parent,
+        &child,
+        parent.lmb(),
+        UVgenerationSettings::default().on_shell_velocity()?,
+    )?;
     let owners = |atom: &Atom, tagged: bool| {
         let mut owners = BTreeSet::new();
         let _ = atom.replace_map(|view, _, _| {

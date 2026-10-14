@@ -536,8 +536,25 @@ also handles the one-scale sunsets with one or two massless lines; other coupled
 mass patterns remain subject to backend support. The resulting Laurent series
 keeps positive powers of ε for nested products with parent poles. Its signed finite addback completes
 recursive IR children and is localized once in the common nominal frame used by
-both final 3D routes. OS and the unsupported mixed-scheme woods remain deferred.
-In particular, a positive-degree MUV parent over an IR child still requires the
+both final 3D routes.
+
+For a massive quark self-energy, the OS operation adds both ordered projected
+branches at a fixed component-owned point $p_*=m v$ and subtracts their
+ordinary degree-one UV expansion. The forest minus applies once after that
+complete operation. The analytic scheme correction integrates only the signed
+vacuum remainder; the local physical branch retains the OS mass shift. Fields
+and couplings remain MS-bar. Parent operations act on complete child results,
+including owned finite coefficients, with localization kernels frozen.
+Projected CFF reconstructs fixed energy and spatial shifts with exact numerator
+and denominator certificates. The direct routes use the same certified
+physical source and retain their own post-residue operation and component
+replay. The actual-rule Ward certificate admits the stated two-loop IR gluon
+parent with an OS child; it does not authorize unproved mixed histories. The
+supported domains and independent validation requirements are maintained in
+#link("on-shell-counterterms.typ")[the OS design note] and
+#link("uv-renormalization.typ")[UV renormalization architecture].
+
+A positive-degree MUV parent over an IR child still requires the
 reduced-cograph subtraction of an explicit finite effective-vertex counterterm.
 The integrated child addback alone does not supply that local subtraction, so
 this mixed assignment remains rejected with integrated generation enabled.
@@ -933,6 +950,7 @@ Evaluator construction normalizes its factorized input once, then parses each ex
 
 Shared numerator families are lowered before this outer contraction. Preparation first groups complete contractions of family calls with their surrounding tensor factors, including trace and chain contexts. Closed additive scopes are prepared from the inside out and remain factors in surrounding products. The existing tensor collector exposes residue sums over opaque family calls while preserving inline numerator sums, scalar coefficients, independent closed products and conditional guards. Only a closed tensor interface becomes a shared joint body. Each call occurrence receives fresh scalar formals and private contraction indices; exposed ports retain their identity. Existing chains and traces own their implicit endpoint markers: chainification keeps those scopes opaque, and joint preparation rejects substitutions that would introduce nested binders. A structural template reuses this body across physical argument rows. Parameter-dependent tensor ports and formals captured by existing aliases retain their original family boundary. Only referenced bodies are then contracted, once per definition in an evaluator stack, and any remaining open tensor indices are represented by temporary tensor calls. The outer contraction closes those indices and selects the corresponding scalar component functions. Only generated functions reachable from the final roots and scalar aliases are registered; outer projectors can discard otherwise populated components. Component and scalar-alias signatures retain only their required formal arguments, including transitive alias dependencies; physical family signatures still describe the complete energy map. Known sparse zero components vanish, while unknown families and invalid index dimensions remain errors. All evaluator modes receive the resulting function-map definitions. The pinned Symbolica translator inlines these scalar functions when generating instructions, so a compact input does not by itself guarantee fewer runtime operations. Closed shared bodies avoid enumerating their open tensor components; generation and runtime effects still require measurement.
 
+
 Before parsing a summand's complete contraction, evaluator preparation may materialize an existing additive tensor factor of its root product. It inspects the parsed factor's actual scalar and tensor entries and admits only Gaussian integers (integer real and imaginary parts), with a nonempty self-dual exposed boundary. Exact Gaussian-integer components retain symbolic arithmetic at arbitrary integer size. Floating coefficients decline this preparation and retain their original contraction order. Conservative Cartesian-capacity and component-size estimates reuse the 16 MiB eager tensor-sum budget. Explicit lazy tensor sums skip this preparation. Qualifying factors use the same execution and contraction strategies as the complete network, retaining their symbolic components and index ownership. Existing network multiplication joins them to the grouped residual before scalar aliasing and sum-boundary closure. When no factor qualifies, preparation parses the original summand directly. Taylor and other raw symbolic callers do not use this finite component preparation.
 
 Each network aliases large scalar references and contracts its tensor products, then carries the root and definitions in Symbolica's existing `AliasedAtom`. Selectors stay visible outside these scalar definitions. Distinct network, summand, output and concrete-orientation scopes prevent handle collisions; fresh symbols also avoid registered alternate names. Handle lookup avoids hashing subtrees larger than any key; renaming still visits their children. Explicit alias resolution retains its exact fixed point for nested or newly exposed handles, avoiding unrelated hashes and copies of alias-free results. Within a network, bulk Atom addition accepts every leaf whose existing scalar conversion succeeds, including rank-zero tensors and lazy sums with scales. The conversion preserves alias handles and rejects open tensors before the store changes. Owned scalar results move into the existing bulk or streaming sum, avoiding repeated pairwise addition of large closed-tensor results. Scalar roots and their definitions are combined before global evaluator optimization; open tensors, including open zero tensors, remain invalid scalar outputs. Optional evaluator variants borrow these scalars before the final parametric evaluator takes ownership. Root substitutions also apply to alias bodies. Concrete residue-map selection precedes physical orientation signs and prunes unused definitions, keeping inactive singular branches out of evaluation. After tensor contraction, scalar sums with the same complete residue-map condition share one lazy guard. Their bodies remain inside that guard so numeric construction can share calculations without evaluating an inactive contribution. For SingleParametric runtime residue dispatch, the default compiler skips common-pair elimination, whose static sharing can hoist arithmetic across mutually exclusive branches and repeat it for every selected orientation. Explicit common-pair settings are honored, including when multiple scalar programs are merged; ordinary DAG sharing remains enabled. The actual Symbolica evaluator registers the retained definitions in its function map. When source storage is enabled, stored roots and complete function-map entries together form the source representation, including for archive reloads. Selector-free inputs and empty function-map replacement lists retain that ownership without copying the expression. Once symbolic programs are built, unstored source expressions are released before dual and numeric programs are constructed. Profiling separates expression preparation, Symbolica construction and numeric-program conversion. At this finite component boundary, a ready tensor whose exposed indices all contract with a pending tensor sum is attached to each immediate sum branch first. One expression traversal selects all eligible disjoint outermost sums, including siblings within a product. Small product wrappers copy only the closing leaf references and their exact slot order, flow and internal traces. Native arms and sum shells stay in place; stable half-edge identifiers bind the consumed inputs while residual seams remain untouched. The wrappers are appended together, followed by one deletion and operator merge per wave. This reduces the sum's open tensor rank before large component expressions are constructed, without repeated extraction of a whole sum or its arms. The tensor store is shared by reference and scalar spectators stay outside; sums are not multiplied through other sums, powers or opaque functions. Repeating the transformation decreases an existing sum's exposed rank. Eligibility requires self-dual exposed sum slots, so shared edge descriptors retain their exact endpoint meaning; internal dual contractions and spectator incidence are preserved. It changes the contraction graph, leaving the input Atom, raw Taylor algebra and selected energy assignments untouched. Symbolic networks used to reconstruct numerator Atoms do not invoke this preparation.
@@ -1202,6 +1220,17 @@ Common-point physical terms are summed before taking each norm. The public
 componentwise absolute result remains the primary probe's value. Cross sections
 retain checks of the selected integration components, and Gaussian-reference
 values and moments retain independent checks.
+
+A generated massive OS contribution with a fixed boosted subtraction point
+retains its exact spatial reference with the graph term. Warm-up validates
+stability rotations against every retained reference, including after graph
+selection and state loading. A probe that rotates live momenta away from a
+fixed reference compares different local integrands and is rejected. The
+`axis_angle` setting supplies nontrivial rotations about that reference,
+using an exactly parallel axis and a cosine in $[-1,1]$. A cosine of zero
+selects a quarter-turn. Axis normalization and momentum rotation use the
+active numeric precision; the usual accuracy checks and precision escalation
+remain in force. Rest-frame OS contributions impose no spatial constraint.
 
 === 3.1 Differential event-processing runtime
 <31-differential-event-processing-runtime>

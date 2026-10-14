@@ -1470,6 +1470,11 @@ impl CrossSectionGraphTerm {
         Ok((
             Self {
                 integrand,
+                fixed_on_shell_spatial_velocity: graph
+                    .derived_data
+                    .cut_paramatric_integrand
+                    .iter()
+                    .find_map(|cut| cut.fixed_on_shell_spatial_velocity.clone()),
                 graph: graph.graph.clone(),
                 cut_esurface: graph.cut_esurface.clone(),
                 cuts: graph.cuts.clone(),

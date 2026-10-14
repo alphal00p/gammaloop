@@ -628,8 +628,15 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
         cos_theta: &F<T>,
         axis: &ThreeMomentum<F<T>>,
     ) -> ThreeMomentum<F<T>> {
-        // ensure unit vector
-        let axis = axis * &axis.norm().inv();
+        // Normalize after rescaling, so finite very small or large axes do
+        // not underflow or overflow before their direction is extracted.
+        let scale = axis.px.norm().max(axis.py.norm()).max(axis.pz.norm());
+        let axis = ThreeMomentum {
+            px: &axis.px / &scale,
+            py: &axis.py / &scale,
+            pz: &axis.pz / &scale,
+        };
+        let axis = &axis * &axis.norm().inv();
         let sin_theta = if cos_theta >= &cos_theta.one() {
             cos_theta.zero()
         } else {
@@ -2696,6 +2703,7 @@ pub enum RotationMethod {
     Pi2Y,
     Pi2Z,
     Identity,
+    AxisAngle { axis: [f64; 3], cos_theta: f64 },
 }
 
 impl Display for RotationMethod {
@@ -2708,6 +2716,9 @@ impl Display for RotationMethod {
             RotationMethod::Pi2Y => write!(f, "Pi/2 rotation around y-axis"),
             RotationMethod::Pi2Z => write!(f, "Pi/2 rotation around z-axis"),
             RotationMethod::Identity => write!(f, "Identity rotation"),
+            RotationMethod::AxisAngle { axis, cos_theta } => {
+                write!(f, "Axis-angle rotation around {axis:?}, cosine {cos_theta}")
+            }
         }
     }
 }
@@ -2730,6 +2741,7 @@ pub struct Rotation {
 impl Rotation {
     pub(crate) fn is_identity(&self) -> bool {
         matches!(self.method, RotationMethod::Identity)
+            || matches!(self.method, RotationMethod::AxisAngle { cos_theta, .. } if cos_theta == 1.0)
     }
 
     pub(crate) fn inverse_rotate_three<T: FloatLike>(
@@ -2753,6 +2765,12 @@ impl Rotation {
                 py: -momentum.px.clone(),
                 pz: momentum.pz.clone(),
             },
+            RotationMethod::AxisAngle { axis, cos_theta } => {
+                let axis = ThreeMomentum::from(
+                    axis.map(|component| F(T::from_f64_exact_binary(-component))),
+                );
+                momentum.axis_angle_rotation(&F(T::from_f64_exact_binary(cos_theta)), &axis)
+            }
             RotationMethod::EulerAngles(alpha, beta, gamma) => {
                 // Rotation settings are persisted as f64, so reconstructing them at the
                 // active numeric precision is an explicit f64 boundary.
@@ -2811,6 +2829,9 @@ impl Rotation {
             RotationMethod::Pi2Y => RotationSetting::Pi2Y {},
             RotationMethod::Pi2Z => RotationSetting::Pi2Z {},
             RotationMethod::Identity => RotationSetting::None {},
+            RotationMethod::AxisAngle { axis, cos_theta } => {
+                RotationSetting::AxisAngle { axis, cos_theta }
+            }
         }
     }
     pub(crate) fn new(method: RotationMethod) -> Self {
@@ -2972,6 +2993,22 @@ impl RotationMethod {
                     .unwrap();
                 omega.into()
             }
+            RotationMethod::AxisAngle { axis, cos_theta } => {
+                let scale = axis.iter().map(|value| value.abs()).fold(0.0_f64, f64::max);
+                let scaled = axis.map(|value| value / scale);
+                let norm = scaled.iter().map(|value| value * value).sum::<f64>().sqrt();
+                let [x, y, z] = scaled.map(|value| value / norm * cos_theta.acos());
+                DenseTensor::from_storage_data(
+                    layout
+                        .reorder_to_storage(vec![
+                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -z, y, 0.0, z, 0.0, -x, 0.0, -y, x, 0.0,
+                        ])
+                        .unwrap(),
+                    structure.into_canonical(),
+                )
+                .unwrap()
+                .into()
+            }
             RotationMethod::EulerAngles(alpha, beta, gamma) => DenseTensor::from_storage_data(
                 layout
                     .reorder_to_storage(vec![
@@ -3058,6 +3095,28 @@ impl RotationMethod {
                 )
                 .unwrap();
                 rot.into()
+            }
+            RotationMethod::AxisAngle { axis, cos_theta } => {
+                let axis = ThreeMomentum::from(axis.map(F));
+                let mut data = vec![0.0; 16];
+                data[0] = 1.0;
+                for input in 0..3 {
+                    let basis = ThreeMomentum::from(std::array::from_fn(|index| {
+                        F(if index == input { 1.0 } else { 0.0 })
+                    }));
+                    let rotated = basis.axis_angle_rotation(&F(*cos_theta), &axis);
+                    for (output, value) in rotated.into_iter().enumerate() {
+                        // Logical slots are input then output. The input's
+                        // Minkowski contraction supplies the spatial minus.
+                        data[(input + 1) * 4 + output + 1] = -value.0;
+                    }
+                }
+                DenseTensor::from_storage_data(
+                    layout.reorder_to_storage(data).unwrap(),
+                    structure.into_canonical(),
+                )
+                .unwrap()
+                .into()
             }
             RotationMethod::EulerAngles(alpha, beta, gamma) => DenseTensor::from_storage_data(
                 layout
@@ -3188,6 +3247,44 @@ impl RotationMethod {
                 rot.set(&storage_indices(&[3, 3]), sqrt2_halfcc).unwrap();
                 rot.into()
             }
+            RotationMethod::AxisAngle { axis, cos_theta } => {
+                let scale = axis.iter().map(|value| value.abs()).fold(0.0_f64, f64::max);
+                let scaled = axis.map(|value| value / scale);
+                let norm = scaled.iter().map(|value| value * value).sum::<f64>().sqrt();
+                let [x, y, z] = scaled.map(|value| value / norm);
+                let cosine_half = ((1.0 + cos_theta) / 2.0).sqrt();
+                let sine_half = ((1.0 - cos_theta) / 2.0).sqrt();
+                // Active SU(2) rotation exp(-i theta n.sigma/2), transposed
+                // into the tensor's logical (input, output) slot order.
+                let diagonal = Complex::new(cosine_half, -z * sine_half);
+                let lower = Complex::new(y * sine_half, -x * sine_half);
+                let upper = Complex::new(-y * sine_half, -x * sine_half);
+                DenseTensor::from_storage_data(
+                    layout
+                        .reorder_to_storage(vec![
+                            diagonal,
+                            lower,
+                            zeroc,
+                            zeroc,
+                            upper,
+                            diagonal.conj(),
+                            zeroc,
+                            zeroc,
+                            zeroc,
+                            zeroc,
+                            diagonal,
+                            lower,
+                            zeroc,
+                            zeroc,
+                            upper,
+                            diagonal.conj(),
+                        ])
+                        .unwrap(),
+                    structure.into_canonical(),
+                )
+                .unwrap()
+                .into()
+            }
             RotationMethod::EulerAngles(alpha, beta, gamma) => {
                 let norm = alpha.square() + beta.square() + gamma.square();
 
@@ -3256,6 +3353,14 @@ impl<T: FloatLike> Rotatable for ThreeMomentum<F<T>> {
             RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x(self),
             RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y(self),
             RotationMethod::Pi2Z => ThreeMomentum::perform_pi2_rotation_z(self),
+            RotationMethod::AxisAngle { axis, cos_theta } => {
+                // Exact binary promotion agrees with the persisted-axis frame
+                // certificate; normalization is performed at native precision.
+                let axis = ThreeMomentum::from(
+                    axis.map(|component| F(T::from_f64_exact_binary(component))),
+                );
+                self.axis_angle_rotation(&F(T::from_f64_exact_binary(cos_theta)), &axis)
+            }
             RotationMethod::EulerAngles(alpha, beta, gamma) => {
                 let mut result = self.clone();
                 result.rotate_mut(&F::from_f64(alpha), &F::from_f64(beta), &F::from_f64(gamma));
@@ -3272,6 +3377,27 @@ impl<T: FloatLike> Rotatable for ThreeMomentum<HyperDual<F<T>>> {
             RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x(self),
             RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y(self),
             RotationMethod::Pi2Z => ThreeMomentum::perform_pi2_rotation_z(self),
+            RotationMethod::AxisAngle { axis, cos_theta } => {
+                let axis = ThreeMomentum::from(
+                    axis.map(|component| F(T::from_f64_exact_binary(component))),
+                );
+                let cosine = F(T::from_f64_exact_binary(cos_theta));
+                let mut result = self.clone();
+                // A fixed rotation is linear, so every HyperDual coefficient
+                // follows the same existing native Rodrigues operation.
+                for coefficient in 0..self.px.values.len() {
+                    let vector = ThreeMomentum {
+                        px: self.px.values[coefficient].clone(),
+                        py: self.py.values[coefficient].clone(),
+                        pz: self.pz.values[coefficient].clone(),
+                    }
+                    .axis_angle_rotation(&cosine, &axis);
+                    result.px.values[coefficient] = vector.px;
+                    result.py.values[coefficient] = vector.py;
+                    result.pz.values[coefficient] = vector.pz;
+                }
+                result
+            }
             RotationMethod::EulerAngles(alpha, beta, gamma) => {
                 let mut result = self.clone();
                 result.rotate_mut(
@@ -3939,6 +4065,164 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             .approx_eq_res(&e_m_bar_target, &F(0.0001))
             .wrap_err("e-bar((2,0,0,-2)) does not match target: (0,1/sqrt(2),-i/sqrt(2),0)")
             .unwrap();
+    }
+
+    #[test]
+    fn axis_angle_quarter_turn_matches_matrix_inverse_and_lorentz_tensor() {
+        let original = FourMomentum::from_args(F(11.0), F(3.0), F(-5.0), F(7.0));
+        let expected =
+            FourMomentum::from_args(F(11.0), F(79.0 / 9.0), F(11.0 / 9.0), F(-19.0 / 9.0));
+        for scale in [1.0, 1.0e-300, 1.0e300] {
+            let axis = [scale, 2.0 * scale, 2.0 * scale];
+            let rotation = Rotation::new(RotationMethod::AxisAngle {
+                axis,
+                cos_theta: 0.0,
+            });
+            let actual = original.rotate(&rotation);
+            actual.approx_eq_res(&expected, &F(1.0e-13)).unwrap();
+            rotation
+                .inverse_rotate_four(&actual)
+                .approx_eq_res(&original, &F(1.0e-13))
+                .unwrap();
+            let polarization =
+                Polarization::lorentz(<[F<f64>; 4]>::from(original).map(Complex::new_re));
+            actual
+                .approx_eq_res(&polarization.rotate(&rotation), &F(1.0e-13))
+                .unwrap();
+            assert_eq!(
+                rotation.setting(),
+                RotationSetting::AxisAngle {
+                    axis,
+                    cos_theta: 0.0
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn axis_angle_rotation_preserves_its_axis_at_native_precision_and_rotates_hyperdual_coefficients()
+     {
+        use crate::utils::{ArbPrec, hyperdual_utils::simple_n_deriv_shape};
+        let one = <F<ArbPrec> as Default>::default().one();
+        let tolerance = one.from_i64(2).powi(-900);
+        let rotation = Rotation::new(RotationMethod::AxisAngle {
+            axis: [1.0, 2.0, 2.0],
+            cos_theta: 0.0,
+        });
+        let axis = ThreeMomentum::from([one.clone(), one.from_i64(2), one.from_i64(2)]);
+        let rotated = axis.rotate(&rotation);
+        for (actual, expected) in rotated.into_iter().zip(&axis) {
+            assert!((actual - expected).norm() < tolerance);
+        }
+        let point = ThreeMomentum::from([
+            &one / one.from_i64(7),
+            -&one / one.from_i64(5),
+            &one / one.from_i64(11),
+        ]);
+        let inverse = rotation.inverse_rotate_three(&point.rotate(&rotation));
+        for (actual, expected) in inverse.into_iter().zip(&point) {
+            assert!((actual - expected).norm() < tolerance);
+        }
+        let shape = simple_n_deriv_shape(2);
+        let jet = ThreeMomentum {
+            px: HyperDual::from_values(
+                shape.clone(),
+                [3, 1, 0].map(|value| one.from_i64(value)).to_vec(),
+            ),
+            py: HyperDual::from_values(
+                shape.clone(),
+                [-5, 0, 1].map(|value| one.from_i64(value)).to_vec(),
+            ),
+            pz: HyperDual::from_values(shape, [7, 0, 0].map(|value| one.from_i64(value)).to_vec()),
+        };
+        let rotated = jet.rotate(&rotation);
+        for (component, expected) in [rotated.px, rotated.py, rotated.pz].into_iter().zip([
+            [79, 1, -4],
+            [11, 8, 4],
+            [-19, -4, 7],
+        ]) {
+            for (actual, numerator) in component.values.into_iter().zip(expected) {
+                assert!((actual - one.from_i64(numerator) / one.from_i64(9)).norm() < tolerance);
+            }
+        }
+    }
+
+    #[test]
+    fn axis_angle_spinor_tensor_intertwines_the_native_spatial_rotation() {
+        let zero = Complex::new(0.0, 0.0);
+        let one = Complex::new(1.0, 0.0);
+        let imaginary = Complex::new(0.0, 1.0);
+        let pauli = [
+            [[zero, one], [one, zero]],
+            [[zero, -imaginary], [imaginary, zero]],
+            [[one, zero], [zero, -one]],
+        ];
+        for (axis, cos_theta) in [
+            ([1.0, 2.0, 2.0], 0.0),
+            ([1.0, 2.0, 2.0], 0.6),
+            ([0.0, 0.0, 1.0], 0.0),
+            ([1.0, 0.0, 0.0], -1.0),
+        ] {
+            let mut rotation = Rotation::new(RotationMethod::AxisAngle { axis, cos_theta });
+            let columns: [[Complex<f64>; 4]; 4] = std::array::from_fn(|column| {
+                let mut input = std::array::from_fn::<_, 4, _>(|index| {
+                    Complex::new_re(F(if index == column { 1.0 } else { 0.0 }))
+                })
+                .to_vec();
+                // Rotation::new explicitly registers i after the four spinor inputs.
+                input.push(Complex::new(F(0.0), F(1.0)));
+                let output = rotation
+                    .bispinor_rotation
+                    .evaluate(&input)
+                    .try_into_dense()
+                    .unwrap();
+                std::array::from_fn(|row| {
+                    Complex::new(output.data[row].re.0, output.data[row].im.0)
+                })
+            });
+            let spinor: [[Complex<f64>; 4]; 4] =
+                std::array::from_fn(|row| std::array::from_fn(|column| columns[column][row]));
+            for row in 0..4 {
+                for column in 0..4 {
+                    let unitary = (0..4)
+                        .map(|inner| spinor[inner][row].conj() * spinor[inner][column])
+                        .fold(zero, |sum, term| sum + term);
+                    let difference = unitary - if row == column { one } else { zero };
+                    assert!(difference.re.hypot(difference.im) < 1.0e-13);
+                    if row < 2 && column < 2 {
+                        assert_eq!(spinor[row][column], spinor[row + 2][column + 2]);
+                        assert_eq!(spinor[row][column + 2], zero);
+                        assert_eq!(spinor[row + 2][column], zero);
+                    }
+                }
+            }
+            for (direction, sigma) in pauli.iter().enumerate() {
+                let basis = ThreeMomentum::from(std::array::from_fn(|index| {
+                    F(if index == direction { 1.0 } else { 0.0 })
+                }));
+                let rotated: [F<f64>; 3] = basis.rotate(&rotation).into();
+                for row in 0..2 {
+                    for column in 0..2 {
+                        let mut transformed = zero;
+                        for left in 0..2 {
+                            for right in 0..2 {
+                                transformed += spinor[row][left]
+                                    * sigma[left][right]
+                                    * spinor[column][right].conj();
+                            }
+                        }
+                        let expected = (0..3)
+                            .map(|component| pauli[component][row][column] * rotated[component].0)
+                            .fold(zero, |sum, term| sum + term);
+                        let difference = transformed - expected;
+                        assert!(
+                            difference.re.hypot(difference.im) < 1.0e-13,
+                            "axis={axis:?}, cosine={cos_theta}, Pauli direction={direction}, row={row}, column={column}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]

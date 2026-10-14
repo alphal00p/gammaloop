@@ -8622,6 +8622,64 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn fixed_on_shell_frame_requires_exactly_preserving_rotation_probes() {
+        use crate::settings::runtime::RotationSetting;
+        crate::initialisation::test_initialise().unwrap();
+        let mut settings = RuntimeSettings::default();
+        let nonaxial = ["1/4", "1/2", "1/2"].map(str::to_owned);
+        for axis in [[1.0, 2.0, 2.0], [-1.0, -2.0, -2.0]] {
+            settings.stability.rotation_axis = vec![RotationSetting::AxisAngle {
+                axis,
+                cos_theta: 0.0,
+            }];
+            validate_process_runtime_settings(&settings, false, &[&nonaxial]).unwrap();
+        }
+        for rotation in [
+            RotationSetting::Pi2X {},
+            RotationSetting::Pi2Y {},
+            RotationSetting::Pi2Z {},
+            RotationSetting::EulerAngles {
+                alpha: 0.1,
+                beta: 0.2,
+                gamma: 0.3,
+            },
+            RotationSetting::AxisAngle {
+                axis: [1.0, 2.0, 2.0000000000000004],
+                cos_theta: 0.0,
+            },
+        ] {
+            settings.stability.rotation_axis = vec![rotation];
+            validate_process_runtime_settings(&settings, false, &[]).unwrap();
+            let error =
+                validate_process_runtime_settings(&settings, false, &[&nonaxial]).unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("fixed on-shell subtraction velocity")
+            );
+        }
+        let axial = ["0", "0", "3/4"].map(str::to_owned);
+        settings.stability.rotation_axis = vec![
+            RotationSetting::Pi2Z {},
+            RotationSetting::EulerAngles {
+                alpha: 0.0,
+                beta: 0.0,
+                gamma: 0.3,
+            },
+        ];
+        validate_process_runtime_settings(&settings, false, &[&axial]).unwrap();
+        assert!(validate_process_runtime_settings(&settings, false, &[&axial, &nonaxial]).is_err());
+        settings.stability.rotation_axis = vec![
+            RotationSetting::None {},
+            RotationSetting::AxisAngle {
+                axis: [1.0, 0.0, 0.0],
+                cos_theta: 1.0,
+            },
+        ];
+        validate_process_runtime_settings(&settings, false, &[&axial, &nonaxial]).unwrap();
+    }
+
+    #[test]
     fn numerator_sampling_scale_requires_nonzero_runtime_value() {
         let mut settings = RuntimeSettings::default();
         validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff]).unwrap();
