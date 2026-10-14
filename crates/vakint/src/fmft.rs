@@ -108,17 +108,6 @@ impl FMFT {
             }
             res
         }));
-        if let Some(m) = r
-            .pattern_match(&vk_parse!("GammaArgs(x_,y_)").unwrap().into(), None, None)
-            .next()
-        {
-            return Err(VakintError::FMFTError(format!(
-                "FMFT result contains a Gamma function whose numerical evaluation is not implemented in vakint: Gamma({}+{}*{})",
-                m.get(&S.x_).unwrap(),
-                m.get(&S.y_).unwrap(),
-                self.settings.epsilon_symbol
-            )));
-        }
         Ok(Vakint::normalize_gamma_functions(r.as_view()))
     }
 

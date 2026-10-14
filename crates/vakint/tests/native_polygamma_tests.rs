@@ -22,6 +22,8 @@ fn gamma_expansions(input: &Atom, settings: &VakintSettings) -> Vec<Atom> {
         matad.substitute_masters_directly(input.as_view()).unwrap(),
         matad.expand_matad_masters(input.as_view()).unwrap(),
         fmft.expand_masters(input.as_view()).unwrap(),
+        fmft.substitute_masters(fmft.substitute_gam_functions(input.as_view()).as_view())
+            .unwrap(),
     ]
 }
 
@@ -52,7 +54,7 @@ fn assert_relative_digits(actual: &Complex<Float>, expected: &Complex<Float>, di
 }
 
 #[test]
-fn gamma_expansions_use_native_constants_and_keep_unknown_orders() {
+fn gamma_expansions_use_native_constants_without_an_artificial_tail() {
     Vakint::initialize_vakint_symbols();
     let settings = VakintSettings::default();
     let input = vakint_parse!("Gam(1,1)").unwrap();
@@ -72,7 +74,7 @@ fn gamma_expansions_use_native_constants_and_keep_unknown_orders() {
                 .any(|symbol| symbol.get_namespace() == "vakint"
                     && ["PolyGamma", "EulerGamma", "Gamma"].contains(&symbol.get_stripped_name()))
         );
-        assert!(expanded.contains(vakint_parse!("Oep(6,I_Gamma)").unwrap().as_view()));
+        assert!(!expanded.contains_symbol(vakint_symbol!("Oep")));
         let series = expanded
             .series(
                 vakint_symbol!("ep"),
@@ -89,6 +91,106 @@ fn gamma_expansions_use_native_constants_and_keep_unknown_orders() {
             );
         }
         assert!(series.coefficient(series.absolute_order()).is_none());
+    }
+}
+
+#[test]
+fn native_gamma_series_include_orders_needed_by_surrounding_poles() {
+    let settings = VakintSettings::default();
+    for expanded in gamma_expansions(&vakint_parse!("Gam(1,1)/ep^6").unwrap(), &settings) {
+        let series = expanded
+            .series(
+                vakint_symbol!("ep"),
+                Atom::Zero.as_view(),
+                Rational::from(0),
+            )
+            .unwrap();
+        let finite = series.coefficient(Rational::from(0)).unwrap();
+        let expected = vakint_parse!("61*𝜋^6/120960+symbolica::zeta(3)^2/18").unwrap();
+        assert!((finite - expected).expand().is_zero());
+        assert!(!series.to_atom().contains_symbol(vakint_symbol!("Oep")));
+        assert!(series.coefficient(series.absolute_order()).is_none());
+    }
+    for expanded in gamma_expansions(&vakint_parse!("Gamma(-3+2*ep)").unwrap(), &settings) {
+        let series = expanded
+            .series(
+                vakint_symbol!("ep"),
+                Atom::Zero.as_view(),
+                Rational::from(0),
+            )
+            .unwrap();
+        assert_eq!(
+            series.coefficient(Rational::from(-1)).unwrap(),
+            Atom::num((-1, 12))
+        );
+    }
+    for expanded in gamma_expansions(&vakint_parse!("Gam(a,b)").unwrap(), &settings) {
+        let series = expanded
+            .series(
+                vakint_symbol!("ep"),
+                Atom::Zero.as_view(),
+                Rational::from(1),
+            )
+            .unwrap();
+        let expected = vakint_parse!(
+            "b*symbolica::gamma(a)*(symbolica::euler_gamma+symbolica::polygamma(0,a))"
+        )
+        .unwrap();
+        assert!(
+            (series.coefficient(Rational::from(1)).unwrap() - expected)
+                .expand()
+                .is_zero()
+        );
+    }
+}
+
+#[test]
+fn genuine_matad_and_fmft_master_tails_survive_gamma_normalization() {
+    let settings = VakintSettings::default();
+    let matad = MATAD::with_settings(settings.clone());
+    let fmft = FMFT::with_settings(settings);
+    let matad_master = vakint_parse!("miD6").unwrap();
+    let fmft_master = vakint_parse!("PR7").unwrap();
+    for (expanded, order, tail) in [
+        (
+            matad.expand_matad_masters(matad_master.as_view()).unwrap(),
+            3,
+            "Oep(3,D6)",
+        ),
+        (
+            matad
+                .substitute_masters_directly(matad_master.as_view())
+                .unwrap(),
+            3,
+            "Oep(3,D6)",
+        ),
+        (
+            fmft.expand_masters(fmft_master.as_view()).unwrap(),
+            2,
+            "Oep(2,I_PR7)",
+        ),
+    ] {
+        let known = expanded
+            .series(
+                vakint_symbol!("ep"),
+                Atom::Zero.as_view(),
+                Rational::from(order - 1),
+            )
+            .unwrap();
+        assert!(!known.to_atom().contains_symbol(vakint_symbol!("Oep")));
+        let boundary = expanded
+            .series(
+                vakint_symbol!("ep"),
+                Atom::Zero.as_view(),
+                Rational::from(order),
+            )
+            .unwrap();
+        assert!(
+            boundary
+                .coefficient(Rational::from(order))
+                .unwrap()
+                .contains(vakint_parse!(tail).unwrap().as_view())
+        );
     }
 }
 

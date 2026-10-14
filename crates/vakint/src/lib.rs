@@ -451,16 +451,6 @@ fn propagators_condition() -> WildcardRestriction {
     }))
 }
 
-fn gt_condition(value: i64) -> WildcardRestriction {
-    WildcardRestriction::Filter(Box::new(move |m| {
-        if let Match::Single(AtomView::Num(a)) = m {
-            a.get_coeff_view() > InlineNum::new(value, 1).as_num_view().get_coeff_view()
-        } else {
-            false
-        }
-    }))
-}
-
 fn ge_condition(value: i64) -> WildcardRestriction {
     WildcardRestriction::Filter(Box::new(move |m| {
         if let Match::Single(AtomView::Num(a)) = m {
@@ -4275,9 +4265,9 @@ impl NumericalEvaluationResult {
 }
 
 impl Vakint {
-    /// Unify the constants left by FORM's gamma expansions with the native CAS.
-    /// In particular, polygamma(0, 1) normalizes to native -euler_gamma, so the
-    /// FORM spelling must become that same exact constant before cancellation.
+    /// Normalize FORM's Gamma and EulerGamma spellings before the complete
+    /// expression is expanded. Native Laurent series then compute every order
+    /// needed by surrounding poles, without introducing an artificial Gamma tail.
     pub(crate) fn normalize_gamma_functions(expression: AtomView) -> Atom {
         expression
             .replace(vk_parse!("Gamma(x_)").unwrap().to_pattern())
