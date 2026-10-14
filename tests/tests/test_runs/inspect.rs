@@ -2160,7 +2160,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
         Some("scalar_sunrise.toml".into()),
         get_tests_workspace_path().join("scalar_sunrise"),
         Some("scalar_sunrise".to_string()),
-        false,
+        true,
     )?;
 
     // Audit the generated roots and numerator definitions before evaluating:

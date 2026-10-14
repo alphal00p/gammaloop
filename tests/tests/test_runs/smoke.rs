@@ -127,7 +127,7 @@ fn test_epem_dd_dt() -> Result<()> {
         Some("test_epem_dd_dt.toml".into()),
         get_tests_workspace_path().join("test_epem_dd_dt"),
         None,
-        false,
+        true,
     )?;
 
     let (_, a) = Inspect {
