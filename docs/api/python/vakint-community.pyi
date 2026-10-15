@@ -543,4 +543,3 @@ class VakintNumericalResult:
         max_pull : Optional[float]
            The maximum pull for comparison. Default is 3.0.
         """
-

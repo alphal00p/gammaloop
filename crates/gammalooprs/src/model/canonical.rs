@@ -245,7 +245,14 @@ impl<T: AsRef<str>> From<T> for UFOSymbol {
         if name.as_ref() == "ZERO" {
             Self::zero()
         } else {
-            Self(symbol!(&format!("UFO::{}", name.as_ref())))
+            let qualified_name = format!("UFO::{}", name.as_ref());
+            if symbolica::get_symbol!(&qualified_name).is_none() {
+                // Use the canonical printer so later model labels can still
+                // update it, including symbols restored before model loading.
+                Model::register_parameter_symbol(name.as_ref(), Some(name.as_ref()), None)
+                    .expect("valid UFO symbol name");
+            }
+            Self(symbol!(&qualified_name))
         }
     }
 }

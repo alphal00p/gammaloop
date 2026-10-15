@@ -42,7 +42,13 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-15: State version 18 combines canonical FeynKit ownership and
 # thermal/Fermi payloads; the current architecture records regeneration of older
 # states.
-digest = "db36f2c7e1e51d40b43421317cc190adfeef640a"
+# Reviewed 2026-10-15: State tests now supply finalized numerator metadata and
+# explicit physical cuts. The architecture records restored TOML process-history
+# persistence; the manifest boundary and version18 rejection policy are unchanged.
+# Reviewed 2026-10-15: The persisted-UV fixture now uses its declared scalar model and native
+# graph importer. Canonical printer replay and current version18 boundaries retain
+# the documented save/load behavior; exact physical and reference acceptance pass.
+digest = "e49ddcc839c22bfa13d2fe4047cda1a5a144f517"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -194,7 +200,10 @@ anchor = "pub struct Model {"
 # zeros.
 # Reviewed 2026-10-15: The zero fixed point now uses idiomatic filter/map without changing the
 # structural proof or adjustable-parameter semantics.
-digest = "9d9dd1b0c2e32b53e5c87ffd01f89c2d7aa324b8"
+# Reviewed 2026-10-15: Absent chemical-potential metadata is omitted. A canonical ZERO supplies
+# fixed mass/medium identities while unrelated parameter expressions remain intact;
+# models without ZERO retain the exact proof on their internal parameters.
+digest = "9d8d8d1add70b93af14af25c719f4a0631eb2f36"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"

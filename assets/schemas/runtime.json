@@ -8,7 +8,7 @@
       "$ref": "#/$defs/GeneralSettings"
     },
     "h_function": {
-      "description": "Damping profile shared by Local Unitarity threshold terms.",
+      "description": "Damping profile shared by Local Unitarity threshold terms; it also localizes\nzero-temperature Fermi-surface distributions.",
       "$ref": "#/$defs/HFunctionSettings"
     },
     "integrator": {

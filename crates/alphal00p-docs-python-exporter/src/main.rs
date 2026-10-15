@@ -8,10 +8,9 @@ use std::{env, error::Error, fs, path::PathBuf};
     feature = "vakint",
     feature = "linnet"
 ))]
-use pyo3::types::{
-    PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _, PyStringMethods as _,
-    PyTypeMethods as _,
-};
+use pyo3::types::{PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _};
+#[cfg(feature = "linnet")]
+use pyo3::types::{PyStringMethods as _, PyTypeMethods as _};
 #[cfg(any(
     feature = "feynkit",
     feature = "gammaloop",
@@ -374,7 +373,6 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
     };
     let (module_name, stub_info) = gathered?;
     #[cfg(any(
-        feature = "gammaloop",
         feature = "linnet",
         feature = "spenso",
         feature = "feynkit",
@@ -385,7 +383,6 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
 }
 
 #[cfg(any(
-    feature = "gammaloop",
     feature = "linnet",
     feature = "spenso",
     feature = "feynkit",
@@ -397,6 +394,7 @@ fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_g
 
     // Numerica leaves these two classes unscoped in its stub inventory.
     // They belong to Symbolica, even when another product gathers first.
+    // GammaLoop's standalone f64 API does not enable these Python classes.
     let float_types = [
         TypeId::of::<PythonFloat>(),
         TypeId::of::<PythonComplexFloat>(),
