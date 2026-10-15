@@ -63,6 +63,17 @@ index encoding. Admission and normalization errors
 propagate to the comparison caller. No Dirac or epsilon identity is enabled by
 this normalization, and coefficient factorization is retained.
 
+Exact finite-component certificates keep the tensor's external interface while
+contracting its finite entries. Scalar normalization extracts numeric content
+from integer powers before protecting their bodies. Functions, fractional
+powers, and guarded inverse factors remain opaque. A single bounded collection
+in repeated literal scalar factors can then cancel exact coefficient rows;
+complete scalar sums are admitted only after checking their native scalar
+interface. Unrelated product factors stay outside those rows. The certificate
+accepts only a smaller exact reconstruction, retains the original expression
+when collection is unsupported, and takes no numerical samples. It does not
+form common denominators or distribute a graph numerator.
+
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
 The renormalization prescription belongs to the `Spinney`. A compute
