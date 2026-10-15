@@ -548,7 +548,12 @@ fn ltd_diagnostic_rejects_medium_before_creating_artifacts() -> Result<()> {
         }
         cli.cli_settings.global.generation.medium.vacuum_subtraction = false;
         let output = root.join(format!("{mode:?}.json"));
-        cli.run_command(&format!("3drep build -p box -i scalar -g 0 --representation cff --json-out {} --no-save-json --no-pretty", output.display()))?;
+        let workspace = root.join(format!("cff-{mode:?}"));
+        cli.run_command(&format!(
+            "3drep build -p box -i scalar -g 0 --representation cff --workspace-path {} --json-out {} --no-pretty",
+            workspace.display(),
+            output.display()
+        ))?;
         let artifact: JsonValue = serde_json::from_str(&fs::read_to_string(&output)?)?;
         assert_eq!(artifact["family"], "cff");
         assert_eq!(artifact["medium_mode"], serde_json::to_value(mode)?);
