@@ -3,6 +3,7 @@ import json
 import math
 import os
 import shlex
+import shutil
 import signal
 import sys
 import tempfile
@@ -21,6 +22,24 @@ class ProducerTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.directory = Path(self.temporary.name)
+        self.hyperfine_read = patch(
+            "gammabench.hyperfine.read_measurement",
+            return_value={"process_wall_ns": 10_000_000_000, "returncode": 0},
+        )
+        self.hyperfine_read.start()
+        self.addCleanup(self.hyperfine_read.stop)
+        self.hyperfine_resolve = patch(
+            "gammabench.hyperfine.resolve",
+            return_value={
+                "path": sys.executable,
+                "sha256": producer.hashlib.sha256(
+                    Path(sys.executable).read_bytes()
+                ).hexdigest(),
+                "version": "2.0.0",
+            },
+        )
+        self.hyperfine_resolve.start()
+        self.addCleanup(self.hyperfine_resolve.stop)
         self.repository = Path(__file__).resolve().parents[2]
         self.suite = producer.tomllib.loads(
             (self.repository / "benchmarks/performance/suite.toml").read_text()
@@ -283,6 +302,8 @@ class ProducerTests(unittest.TestCase):
         calls = []
 
         def run(command, repository, log, deadline, **kwargs):
+            if "--export-json" in command:
+                command = shlex.split(command[-1])
             calls.append(command)
             if "--clean-state" in command:
                 producer.write_json(
@@ -420,46 +441,30 @@ class ProducerTests(unittest.TestCase):
                     )
                 self.assertEqual(run.call_count, 1)
 
-    def test_confirmation_cannot_reset_the_shared_case_deadline(self):
+    def test_prepared_case_hands_pins_and_original_budget_to_gammabench(self):
         args = SimpleNamespace(
             baseline_commit="a" * 40,
             candidate_commit="b" * 40,
-            baseline_binary=Path("before"),
-            candidate_binary=Path("after"),
+            baseline_binary=Path(sys.executable),
+            candidate_binary=Path(sys.executable),
             input_root=self.repository,
             work_dir=self.directory / "private",
             output_dir=self.directory / "public",
         )
-        now = [100.0]
-        calls = []
-
-        def measure(binary, repository, directory, fixture, deadline):
-            calls.append((binary, deadline))
-            if len(calls) == 10:
-                now[0] = deadline + 0.01
-            slower = binary == args.candidate_binary
-            return (
-                {
-                    "generation_seconds": 13.0 if slower else 10.0,
-                    "warm_runtime_seconds_per_sample.SingleParametric": 1e-5,
-                },
-                {"SingleParametric": [1.0, 0.5] * 4},
-                {},
-            )
-
-        with (
-            patch.object(producer.time, "monotonic", side_effect=lambda: now[0]),
-            patch.object(producer, "measure", side_effect=measure),
-        ):
+        with patch("gammabench.gate.run", return_value=2) as gate:
             self.assertEqual(producer.run_case(args, self.suite, "gl15"), 2)
-        self.assertEqual(len(calls), 10)
-        self.assertEqual({deadline for _, deadline in calls}, {340.0})
-        self.assertNotIn(
-            "confirmation",
-            json.loads((args.output_dir / "measurements.json").read_text()),
+        prepared = json.loads(gate.call_args.args[0].read_text())
+        policy = json.loads(gate.call_args.kwargs["policy_path"].read_text())
+        self.assertEqual(policy["budget_seconds"], 240)
+        self.assertEqual(policy["pairs"], 5)
+        self.assertEqual(policy["thresholds"]["generation_seconds"], [0.20, 0.5])
+        self.assertEqual(prepared["gate"]["baseline"]["commit"], "a" * 40)
+        self.assertEqual(prepared["gate"]["candidate"]["commit"], "b" * 40)
+        self.assertEqual(prepared["tasks"][0]["inputs"], prepared["tasks"][1]["inputs"])
+        self.assertEqual(
+            prepared["tasks"][0]["process_measurements"]["generation"]["metric"],
+            "generation_seconds",
         )
-        report = json.loads((args.output_dir / "report.json").read_text())
-        self.assertEqual(report["invalid_input"], 1)
 
     def test_summed_scalar_corpus_has_nine_coordinates_without_discrete_selectors(self):
         scalar = producer.Fixture.from_suite(
@@ -610,6 +615,89 @@ class ProducerTests(unittest.TestCase):
                 self.assertNotEqual(
                     fixture.hashes["fixture_sha256"], changed.hashes["fixture_sha256"]
                 )
+
+    @unittest.skipUnless(shutil.which("hyperfine"), "requires pinned Hyperfine")
+    def test_all_twelve_cases_run_through_real_hyperfine_and_seal(self):
+        from gammabench.snapshot import load, verify
+
+        self.hyperfine_read.stop()
+        self.hyperfine_resolve.stop()
+        binary = self.directory / "synthetic-cli"
+        binary.write_text(
+            "#!"
+            + sys.executable
+            + "\n"
+            + r"""
+import json, shlex, sys, tomllib
+from pathlib import Path
+args = sys.argv[1:]
+fixture = json.loads((Path.cwd().parent / 'fixture.json').read_text())
+state = Path(args[args.index('-s') + 1])
+print('PRIVATE-SYNTHETIC-CLI-OUTPUT')
+if '--clean-state' in args:
+    state.mkdir()
+    stats = {'evaluator_count': 1, **{name: {'secs': 0, 'nanos': 1} for name in
+             ('total_time', 'evaluator_spenso_time', 'evaluator_symbolica_time', 'evaluator_compile_time')}}
+    (state / 'generation_summary.json').write_text(json.dumps({'peak_ram_bytes': 128 * 1024**2,
+        'reports': [{'graph_name': fixture['corpus']['graph_name'], 'stats': stats}]}))
+    if 'evaluator_build_seconds' in fixture['config']['required_metrics']:
+        logs = state / 'logs'
+        logs.mkdir()
+        events = [{'stage': 'evaluator_stack_new_start', 'orientation_count': 3,
+                   'iterative_orientation_optimization': True, 'summed': True, 'summed_function_map': True}]
+        events += [{'stage': 'evaluator_stack_new_' + method + '_done', 'orientation_count': 3, 'elapsed_ms': 1}
+                   for method in ('iterative', 'single_parametric', 'summed', 'summed_function_map')]
+        events += [{'stage': 'evaluator_stack_new_done', 'orientation_count': 3}]
+        (logs / 'gammalog-test.jsonl').write_text(''.join(json.dumps(event) + '\n' for event in events))
+else:
+    card = tomllib.loads(Path(args[-1]).read_text())
+    index = 0
+    for command in card['commands']:
+        tokens = shlex.split(command)
+        if tokens[0] != 'bench': continue
+        corpus, config = fixture['corpus'], fixture['config']
+        value = {'process_id': corpus['process_id'], 'integrand_name': corpus['integrand'],
+                 'point': corpus['points'][index % len(corpus['points'])], 'discrete_dim': corpus['discrete_dim'],
+                 'target_seconds': config['bench_duration_seconds'], 'warmup_samples': 10, 'warmup_seconds': 0.001,
+                 'minimal_integrand': False, 'momentum_space': False, 'n_batches': config['bench_batches'],
+                 'total_samples': 100, 'displayed_result': {'re': 1.0, 'im': 0.5},
+                 'batches': [{'total': 0.001}] * config['bench_batches'],
+                 'summary': [{'category': 'Total', 'mean_seconds_per_sample': 0.001}]}
+        Path(tokens[tokens.index('--json-output') + 1]).write_text(json.dumps(value))
+        index += 1
+"""
+        )
+        binary.chmod(0o755)
+        arguments = [
+            "run_performance.py",
+            "--input-root",
+            str(self.repository),
+            "--baseline-binary",
+            str(binary),
+            "--candidate-binary",
+            str(binary),
+            "--baseline-commit",
+            "a" * 40,
+            "--candidate-commit",
+            "b" * 40,
+            "--work-dir",
+            str(self.directory / "private"),
+            "--output-dir",
+            str(self.directory / "public"),
+        ]
+        with patch.object(sys, "argv", arguments):
+            self.assertEqual(producer.main(), 0)
+        for case in producer.Fixture.cases(self.suite):
+            snapshot = self.directory / "public" / case / "discovery"
+            verify(snapshot)
+            self.assertEqual(len(load(snapshot)["records"]), 10)
+            self.assertEqual(
+                len(list((snapshot / "records").glob("*-generation.json"))), 10
+            )
+            self.assertNotIn(
+                "PRIVATE-SYNTHETIC-CLI-OUTPUT",
+                "".join(p.read_text() for p in snapshot.rglob("*.json")),
+            )
 
     def test_suite_finishes_all_cases_and_propagates_any_failure(self):
         names = list(producer.Fixture.cases(self.suite))
