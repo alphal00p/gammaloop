@@ -386,6 +386,16 @@ end_anchor = "\n#[cfg(test)]"
 # coefficient stays literal; no alternate key order or polynomial expansion.
 digest = "d19eeebaed6eded8accfbeb3c55cdb6c269a3229"
 
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs"
+symbol = "gammalooprs::uv::approx::Localizer integrated tensor coefficient ownership"
+anchor = "impl Localizer<'_> {"
+# Reviewed 2026-10-15: Finite coefficients use the existing shared numerator
+# owner and residue-key momentum map. Scalar CFF weights and frozen kernels
+# remain separate; later cograph factors retain independent shared definitions.
+# The exact localizer test covers scalar affine maps and open tensor products.
+digest = "acd127260f7aaf2a2b376306800e184e8d99d90b"
+
 [[section.note]]
 id = "spenso-parsing-flow"
 title = "Spenso parsing flow"

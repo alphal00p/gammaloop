@@ -204,6 +204,8 @@ Vacuum masses carry hard weight within the component on which a Taylor operation
 
 A localized integrated contribution keeps its finite coefficient in the active expression. Its mass dependence scales when the current Taylor subgraph contains the coefficient's integrated owner, and stays fixed when the owner is disjoint. A later enclosing Taylor operation can therefore scale a coefficient that an earlier disjoint operation left fixed. Only the separate normalized localization kernel remains frozen outside all later Taylor operations.
 
+The finite coefficient is stored as a shared numerator definition, using the existing residue-key owner to apply its component momentum map exactly once. Scalar CFF branch weights and the frozen kernel remain separate. A later cograph numerator is another shared factor; it does not absorb or remap the integrated tensor vertex. This permits open spinor coefficients to be added to local counterterms without asking scalar branch assembly to combine incompatible tensor interfaces. The localization regression checks both the scalar affine substitution and the exact product of separate finite and cograph matrices.
+
 The direct route retains this distinction with a transient one-argument `mUV(owner)` application of the existing vacuum-mass symbol. Each connected integrated coefficient is tagged before coefficients are multiplied. The owner uses the existing subgraph encoding: Taylor expansion scales the entire mass application for a contained owner, leaves a disjoint owner unchanged, and rejects partial overlaps. `DirectSector::combine` restores physical `mUV` on output copies; stored sectors retain their owners for further forest steps. This introduces no helper, type or symbol. Four-dimensional disconnected composition already applies the Taylor operations to their own components, so its runtime and `IntegratedCts` are unchanged.
 
 Consumed loop measures are recorded separately. Writing `s = uvIntegratedLoopScale`, `IntegratedCts` projects a coefficient `C` whose integration consumed `r` loops as `C(mUV) * s^(4*r)`. The enclosing four-dimensional Taylor operation transforms `s -> s*t`, supplying `t^(4*r)` to compensate consumed loop measures without cancelling the coefficient's mass rescaling. Integration and physical projection set `s = 1`. The active denominator rewrite introduces the unscaled vacuum mass for the enclosing propagator basis.
@@ -221,8 +223,9 @@ component counterterms.
 
 === Integrated terms
 <integrated-terms>
-Integrated counterterms are scalars and factorize over connected
-components. The stored disconnected value provides the product of
+Integrated coefficients have no remaining loop dependence from their
+integrated components, but can retain open tensor indices. They factorize
+over disjoint connected components. The stored disconnected value provides the product of
 component pole projections and the product of component
 finite-counterterm projections.
 
