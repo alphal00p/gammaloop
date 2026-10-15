@@ -705,7 +705,7 @@ fn scalar_bubble_root_integrand_reference(
         cutstructure,
         &amplitude_graph.graph,
         &model,
-        &reference_settings.uv,
+        &reference_settings,
     )
     .unwrap();
     let mut forests = woods.unfold(&amplitude_graph.graph);

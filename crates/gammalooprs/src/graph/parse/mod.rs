@@ -845,7 +845,7 @@ impl Graph {
             model,
             &g.loop_momentum_basis,
             initial_data.additional_params,
-        );
+        )?;
 
         debug!(
             "Updated param builder with LMB: {}\n{}",

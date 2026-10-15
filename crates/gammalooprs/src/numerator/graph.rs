@@ -381,7 +381,14 @@ mod test {
     #[test]
     fn user_numerator_tree_fixtures_match_ufo_tree_algebra() {
         test_initialise().unwrap();
-        let model = crate::utils::load_generic_model("sm");
+        let mut model = crate::utils::load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+                .to_owned(),
+            "json",
+        )
+        .unwrap();
+        model.simplify(&mut parameters).unwrap();
         let mut expected = None;
         for source in [
             include_str!("../../../../tests/resources/graphs/qqx_aaa_tree_unprocessed.dot"),
