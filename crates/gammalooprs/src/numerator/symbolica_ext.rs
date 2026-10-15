@@ -11,7 +11,7 @@ use spenso::{
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomType, AtomView, Symbol},
-    coefficient::CoefficientView,
+    coefficient::{Coefficient, CoefficientView},
     domains::atom::AtomField,
     function,
     poly::{polynomial::MultivariatePolynomial, series::SeriesDepth},
@@ -472,6 +472,45 @@ impl NumeratorAtomExt for AtomView<'_> {
         ]
         .into_iter()
         .any(|head| atom.contains_symbol(head));
+        // Extract only direct numeric content. In particular, implicit unit
+        // coefficients participate in the GCD, and term bodies stay literal.
+        // Ordering by those bodies makes opposite sums choose the same owner.
+        let numeric_content = |value: AtomView<'_>| {
+            let AtomView::Add(sum) = value else {
+                return value.to_owned();
+            };
+            let mut terms = Vec::with_capacity(sum.get_nargs());
+            for term in sum.iter() {
+                let number = match term {
+                    AtomView::Num(number) => number.get_coeff_view().to_owned(),
+                    AtomView::Mul(product) => match product.get_coefficient() {
+                        Some(AtomView::Num(number)) => number.get_coeff_view().to_owned(),
+                        _ => Coefficient::one(),
+                    },
+                    _ => Coefficient::one(),
+                };
+                if !matches!(number, Coefficient::Complex(_)) {
+                    return value.to_owned();
+                }
+                terms.push((term / Atom::num(&number).as_view(), number));
+            }
+            terms.sort_by(|left, right| left.0.cmp(&right.0));
+            let mut content = terms[0].1.clone();
+            for (_, number) in &terms[1..] {
+                content = content.gcd(number);
+            }
+            let first = Atom::num(&terms[0].1) / Atom::num(&content);
+            if let AtomView::Num(first) = first.as_view()
+                && first.get_coeff_view().to_owned().is_negative()
+            {
+                content = -content;
+            }
+            if content.is_one() {
+                return value.to_owned();
+            }
+            let content = Atom::num(content);
+            &content * Atom::add_many(sum.iter().map(|term| term / content.as_view()))
+        };
         // Collect only complete factors after Taylor and residue mapping.
         // Opaque powers keep distinct inverse denominators, their owners,
         // and numerator powers intact; functions keep their arguments intact.
@@ -513,16 +552,55 @@ impl NumeratorAtomExt for AtomView<'_> {
                 // nested in functions or powers. Numerator families and tensor
                 // sums must still form independent contraction networks even
                 // when their scalar denominators can share a factor.
-                **out = if branch_local {
-                    occurrence += 1;
-                    function!(opaque, view, occurrence)
+                // Normalize a scalar integer power before it becomes opaque:
+                // (-2*A)^2 and 4*A^2 have the same complete power owner. Only
+                // its literal numeric prefactor leaves that owner. Inverses
+                // remain opaque to subsequent common-factor collection.
+                let normalized = if let AtomView::Pow(power) = view
+                    && !branch_local
+                    && !view.is_tensorial(StrictTensorFilter::ContainsReps)
+                    && let Ok(exponent) = i64::try_from(power.get_exp())
+                {
+                    numeric_content(power.get_base()).pow(exponent)
                 } else {
-                    function!(opaque, view)
+                    view.to_owned()
                 };
+                let number = match normalized.as_view() {
+                    AtomView::Mul(product) => product
+                        .get_coefficient()
+                        .map(|number| number.to_owned())
+                        .unwrap_or_else(Atom::one),
+                    _ => Atom::one(),
+                };
+                let body = &normalized / &number;
+                **out = number
+                    * if branch_local {
+                        occurrence += 1;
+                        function!(opaque, body, occurrence)
+                    } else {
+                        function!(opaque, body)
+                    };
             }
         });
+        // Original functions and powers are opaque before numeric distribution.
+        // This pass can cancel k - (k-p), but cannot enter a denominator or a
+        // fractional-power body. The same boundary restores canonical signs
+        // after Horner collection introduces new scalar sums.
+        let normalize = |value: Atom| {
+            if guarded {
+                return value;
+            }
+            value
+                .expand_num()
+                .replace_map_bottom_up(|view, context, out| {
+                    if context.function_level == 0 && matches!(view, AtomView::Add(_)) {
+                        **out = numeric_content(view);
+                    }
+                })
+        };
+        protected = normalize(protected);
         loop {
-            let collected = protected.collect_horner::<Symbol>(None).collect_factors();
+            let collected = normalize(protected.collect_horner::<Symbol>(None).collect_factors());
             // Strictly decreasing size bounds the iteration and prevents two
             // equivalent factor orders from alternating indefinitely.
             if collected == protected
@@ -702,6 +780,57 @@ mod tests {
     use crate::{initialisation::test_initialise, numerator::aind::Aind, utils::GS};
 
     use super::NumeratorAtomExt;
+
+    #[test]
+    fn compact_factors_normalize_numeric_content_before_integer_power_ownership() {
+        test_initialise().unwrap();
+        let base = parse_lit!(p0 * k0 - p1 * k1 - p2 * k2 - p3 * k3);
+        let spectator = parse_lit!((a + b) ^ 11 * (c + d));
+        for coefficient in [Atom::one(), Atom::i() * Atom::num((4, 3))] {
+            let difference = &coefficient
+                * (-Atom::num(2) * base.pow(2)
+                    + Atom::num((1, 2)) * (-Atom::num(2) * &base).expand_num().pow(2));
+            assert!(
+                (&spectator * difference)
+                    .collect_compact_factors()
+                    .is_zero()
+            );
+        }
+        let opposite = (-&base).expand_num();
+        assert!(
+            (base.pow(2) * opposite + base.pow(3))
+                .collect_compact_factors()
+                .is_zero()
+        );
+        let retained = (&spectator * base.pow(3)).collect_compact_factors();
+        assert!(retained.contains(&parse_lit!((a + b) ^ 11)));
+        assert!(retained.contains(&parse_lit!(c + d)));
+    }
+
+    #[test]
+    fn compact_factors_keep_signed_integer_and_fractional_power_domains_distinct() {
+        test_initialise().unwrap();
+        let base = parse_lit!(a - b);
+        let opposite = parse_lit!(-a + b);
+        for exponent in [-2, -1, 2, 3, 11] {
+            let left = base.pow(exponent);
+            let right = Atom::num(if exponent % 2 == 0 { 1 } else { -1 }) * opposite.pow(exponent);
+            let normalized = left.collect_compact_factors();
+            assert_eq!(
+                normalized,
+                right.collect_compact_factors(),
+                "power {exponent}"
+            );
+            assert_eq!(normalized.collect_compact_factors(), normalized);
+        }
+        let fractional = parse_lit!((-a + b) ^ (1 / 2));
+        assert_eq!(fractional.collect_compact_factors(), fractional);
+        let separate_denominators = parse_lit!(x / (a + b) + y / (c + d));
+        assert_eq!(
+            separate_denominators.collect_compact_factors(),
+            separate_denominators
+        );
+    }
 
     #[test]
     fn compact_factors_share_scalar_inverses_only_without_guards() {
