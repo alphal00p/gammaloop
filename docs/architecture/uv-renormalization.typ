@@ -307,7 +307,11 @@ The second rule applies in both selected-limit modes. In exhaustive `all` mode i
 <result-and-failure-summaries>
 The command first prints one detailed fitted-slope table per selected graph. The final `UV limit tests` line reports the passed and total counts. If any limit fails, it is followed by one colored rounded table containing only the failures, with columns for graph, selected cut edges, LMB, fixed and scaled loop edges, orientation, and failure reason. This final table is intended to make failures actionable without searching all successful rows. `--per-orientation` is available only for the orientation-parametric, localized direct-local3D representation; it includes orientation-local fits and failures in addition to the summed fit. Selector-free explicit-sum direct local3D and projected local4D are summed representations and reject this option rather than claiming per-production-orientation finiteness.
 
-Each finite-precision ray is first fitted over its complete scale range. A missing or non-linear double-precision fit triggers a complete Arb reevaluation of that ray. The reported power is then fitted on the longest high-scale suffix with at least half of the samples (and at least five) whose $R^2$ is at least `0.99`; this permits a short pre-asymptotic transient without discarding isolated points. A fit which still has no such asymptotic suffix is reported as `unstable_fit`, even when its raw slope happens to lie below the UV threshold. At least five scale points are consequently required. The minimum and maximum scale exponents must also be finite and strictly increasing, so the fitted suffix is always the large-scale end of the ray.
+Each finite-precision ray is first fitted over its complete scale range. A missing or non-linear fit, or an invalid sample, triggers a complete Arb reevaluation of that ray. A sample that remains invalid prevents a fit and is reported as `missing_fit`; it cannot certify a zero tail. The profiler retains only the final weighted magnitude after evaluator-owned orientation summation and any selected-cut projection, and takes its logarithm before narrowing to the regression's `f64` inputs. The reported power is then fitted on the longest high-scale suffix with at least half of the samples (and at least five) whose $R^2$ is at least `0.99`; this permits a short pre-asymptotic transient without discarding isolated points. A fit which still has no such asymptotic suffix is reported as `unstable_fit`, even when its raw slope happens to lie below the UV threshold. At least five scale points are consequently required. The minimum and maximum scale exponents must also be finite and strictly increasing, so the fitted suffix is always the large-scale end of the ray.
+
+Some rays vanish instead of following a power law. LU rays outside every compatible cut evaluate to exact zeros. The UV tails of vacuum-subtracted thermal integrands are suppressed by their occupations: their Arb samples fall faster than any power, then underflow to exact zeros. Cross sections, and amplitudes profiled with `--allow-vanishing-missing-fits`, accept a ray without an asymptotic power-law fit when it vanishes on a high-scale suffix at least as long as the fit window. A suffix with at most one nonzero sample must end in an exact zero; an isolated nonzero sample earlier in that suffix is allowed, but a nonzero endpoint is not evidence of vanishing. Otherwise, the nonzero samples must decay along their least concave majorant in the $(log lambda, log |f|)$ plane, with any exact zeros confined to the trailing samples. That majorant must fall faster than the threshold power from its first sample, and its last segment must be the final sampled step unless only exact zeros follow. For a nonzero tail, the initial envelope bounds at the start and at two later, evenly spaced sample indices must each become at least twice as negative. This conservative finite-window heuristic requires sustained acceleration; merely meeting the DOD threshold or having one steep final step is insufficient. It is evidence for thermal exponential suppression, not a proof of asymptotic behavior. The first bound describes decay over the sampled window, while the majorant bridges isolated dips. Such a dip occurs, for example, where Arb resolves an exact cancellation of a leading occupation at one scale and exposes the smaller remainder. A tail which flattens, rises or fluctuates above the threshold-power line is still reported as `unstable_fit`, and an asymptotic power-law fit always takes precedence.
+
+For accepted tails, tables label the sparse terminal-zero evidence as `zero tail`. A finite envelope bound is labelled `decaying tail`, with `≤` and the measured bound in the slope column. Both leave the fitted DOD and $R^2$ blank rather than interpreting non-power-law evidence as a fitted power of negative infinity. With the exemption disabled, tables retain the failure and any available fit, noting the tail evidence without accepting it. The serialized `decay_slope` retains its finite bound or `"-inf"` marker for terminal-zero evidence.
 
 == Current Boundaries
 <current-boundaries>
@@ -321,12 +325,17 @@ Each finite-precision ray is first fitted over its complete scale range. A missi
   disconnected UV wood until their combined integrated policy is implemented.
   Components that cannot occur together in a wood do not trigger this rejection.
 - Local `OS` dispatch remains deferred, and requesting integrated OS is rejected
-  before forest computation. `VaccuumLimit` is unsupported; `Unsubtracted` is
-  expected to be filtered out before these operations. These checks are skipped
-  when UV subtraction itself is disabled.
+  before forest computation. `Unsubtracted` is expected to be filtered out
+  before these operations. These checks are skipped when UV subtraction itself
+  is disabled.
 - Parametric integrand generation currently supports final 3D output
   only. `FourD` is used by integrated renormalization internally but is
   rejected by the parametric orchestrator.
+- The parametric orchestrator receives the full generation settings so
+  wood construction can see the medium. It rejects
+  `local_uv_cts_from_expanded_4d_integrands` for medium modes and vacuum
+  subtraction; their thermal-weight ownership is documented in
+  #link("architecture-current.typ#3-2-cff-production-and-numerator-energy-ownership")[the current architecture].
 - The legacy DAG executor constructs union-shaped nodes but does not
   execute multi-parent unions. Disconnected generation therefore
   requires the hedge-poset backend.

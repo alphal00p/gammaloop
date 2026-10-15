@@ -252,6 +252,7 @@ pub(crate) struct OrientationProjection<'a> {
     energy_degree_bound_reports: Option<&'a Mutex<Vec<CffEnergyDegreeBoundReport>>>,
     pub(crate) orientation_pattern: &'a OrientationPattern,
     pub(crate) explicit_orientation_sum_only: bool,
+    pub(crate) vacuum_subtraction: bool,
 }
 
 impl<'a> OrientationProjection<'a> {
@@ -264,6 +265,7 @@ impl<'a> OrientationProjection<'a> {
             energy_degree_bound_reports: None,
             orientation_pattern,
             explicit_orientation_sum_only: false,
+            vacuum_subtraction: false,
         }
     }
 
@@ -283,6 +285,7 @@ impl<'a> OrientationProjection<'a> {
             energy_degree_bound_reports: None,
             orientation_pattern,
             explicit_orientation_sum_only,
+            vacuum_subtraction: false,
         }
     }
 
@@ -301,7 +304,13 @@ impl<'a> OrientationProjection<'a> {
             energy_degree_bound_reports: None,
             orientation_pattern,
             explicit_orientation_sum_only,
+            vacuum_subtraction: false,
         }
+    }
+
+    pub(crate) fn with_vacuum_subtraction(mut self, enabled: bool) -> Self {
+        self.vacuum_subtraction = enabled;
+        self
     }
 
     pub(crate) fn with_energy_degree_bound_reports(
@@ -327,9 +336,9 @@ impl<'a> OrientationProjection<'a> {
         }
     }
 
-    pub(crate) fn cff_options(self) -> Result<Generate3DExpressionOptions> {
+    pub(crate) fn cff_options(self) -> Result<&'a Generate3DExpressionOptions> {
         match self.source {
-            OrientationProjectionSource::Exact { options, .. } => Ok(options.clone()),
+            OrientationProjectionSource::Exact { options, .. } => Ok(options),
             OrientationProjectionSource::FourDOnly => Err(eyre!(
                 "four-dimensional-only renormalization has no 3D projection options"
             )),

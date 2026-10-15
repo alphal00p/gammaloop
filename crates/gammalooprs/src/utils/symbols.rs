@@ -224,6 +224,7 @@ pub struct GammaloopSymbols {
     pub sign: Symbol,
     pub theta: Symbol,
     pub broadcasting_sqrt: Symbol,
+    pub heaviside: Symbol,
     ///for selecting orientations at generation
     pub selected: Symbol,
 
@@ -273,6 +274,9 @@ pub struct GammaloopSymbols {
     pub radius_star_right: Symbol,
     pub uv_damp_plus_right: Symbol,
     pub uv_damp_minus_right: Symbol,
+    pub thermal_distribution: Symbol,
+    pub thermal_weight_wrapper: Symbol,
+    pub inverse_temperature: Symbol,
 }
 
 impl GammaloopSymbols {
@@ -961,6 +965,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             **out = Atom::num(1) / (Atom::num(2) * a);
         }
     ),
+    heaviside: symbol!("heaviside"),
     expansion: symbol!("expansion"),
     rescale_star: symbol!("t⃰"),
     hfunction_lu_cut: symbol!("h_lu_cut"),
@@ -1272,6 +1277,9 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     radius_star_right: symbol!("r⃰_right"),
     uv_damp_plus_right: symbol!("damp_plus_right"),
     uv_damp_minus_right: symbol!("damp_minus_right"),
+    thermal_distribution: three_dimensional_reps::symbols::thermal_distribution_symbol(),
+    thermal_weight_wrapper: *three_dimensional_reps::symbols::THERMAL_WEIGHT_WRAPPER,
+    inverse_temperature: symbol!("β"),
 };
 }
 
@@ -1376,6 +1384,11 @@ impl GammaloopSymbols {
                 }
             }
         })
+    }
+
+    pub(crate) fn heaviside<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        let a = arg.into();
+        function!(self.heaviside, a.as_view())
     }
 
     pub(crate) fn emr_mom<'a>(&self, e: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {

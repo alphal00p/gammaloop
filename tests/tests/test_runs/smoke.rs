@@ -127,7 +127,7 @@ fn test_epem_dd_dt() -> Result<()> {
         Some("test_epem_dd_dt.toml".into()),
         get_tests_workspace_path().join("test_epem_dd_dt"),
         None,
-        false,
+        true,
     )?;
 
     let (_, a) = Inspect {
@@ -150,9 +150,8 @@ fn test_epem_dd_dt() -> Result<()> {
     assert_complex_approx_eq(
         a,
         Complex::new(-1.7675722573627832e-4, -6.290575596256553e-5),
-        "electron-pair double-triangle virtual and real-cut sum",
+        "electron-positron down-quark cross-section inspect reference",
     );
-    assert_snapshot!(format!("{a:.8e}"),@"(-1.76757226e-4+-6.29057560e-5i)");
 
     let integrate_command = Integrate {
         workspace_path: Some(

@@ -8,6 +8,32 @@ directory. Start the command-line interface through the repository wrapper (`./g
 the Cargo-built executable, then generate processes, integrands, and integration jobs within
 that state.
 
+== Model import and restrictions
+
+JSON and UFO models use the same restriction semantics. With the default
+`--simplify-model=true`, applying a restriction freezes zero-valued parameters as constants.
+A mass fixed to exact zero is replaced by symbolic `ZERO` in particles and propagators.
+Diagram generation, unresolved-particle selection, and graph grouping then treat it as
+massless, just as if the model had declared `ZERO` from the start. Nonzero masses, however
+small, remain symbolic.
+Chemical potentials whose internal expressions become exact zero, including through other
+restriction-fixed parameters, likewise become symbolic `ZERO` and generate no Fermi sectors.
+
+Importing the full model or using `--simplify-model=false` retains adjustable external mass
+parameters. Runtime changes to their numerical values preserve the symbolic mass assignment
+used for generation, including when the new value is zero.
+
+The full bundled Standard Model includes masses and Higgs/Goldstone Yukawa interactions for
+all quark flavors. Its light-quark benchmark inputs are `MU = ymu = 0.0022`,
+`MD = ymd = 0.0047`, and `MS = yms = 0.095`, in GeV. As for the heavier flavors, the
+propagator masses and Yukawa input masses are independently adjustable; the dimensionless
+couplings satisfy `yq = sqrt(2) * ymq / vev`. These are model defaults, not running-mass evolution.
+The ordinary restriction cards fix all six light-quark inputs to zero. The exception,
+`thermal_s_mass`, retains nonzero `MS` and `yms` so both remain adjustable.
+
+Default jet clustering selects colored particles with zero resolved mass. When using finite
+quark masses in the full model, set `clustered_pdgs` explicitly to include those quarks in jets.
+
 == Choose a generation mode
 
 The interactive command tree separates cross sections, amplitudes, and operations on processes
@@ -25,6 +51,8 @@ generate help xs
 ordinary amplitudes. Their final-state lists therefore have different meanings even when the
 printed particle syntax is identical. Use the #link("guides/dot-input/")[GammaLoop DOT input guide] when preparing or reviewing imported graph files. Use `generate help <mode>` inside the stateful CLI to see
 the flags supported by your installed version.
+Amplitudes can also be generated in an equilibrium medium; see
+#link("guides/thermal-and-dense-media/")[thermal and dense media].
 
 == Process specification grammar
 

@@ -13,9 +13,9 @@ use crate::cff::expression::{OrientationData, OrientationID};
 use crate::cff::orientations::GraphOrientation;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
-use crate::integrands::evaluation::EvaluationResult;
+use crate::integrands::evaluation::{GenericEvaluationResult, PreciseEvaluationResult};
 use crate::integrands::process::{
-    OrientationProfileMode, ProcessIntegrand, evaluate_profile_momentum_point,
+    OrientationProfileMode, ProcessIntegrand, evaluate_profile_momentum_point_precise,
     orientation_labels_for_graph,
 };
 use crate::model::Model;
@@ -23,7 +23,7 @@ use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph, CrossSection, CutId};
 use crate::settings::RuntimeSettings;
-use crate::utils::F;
+use crate::utils::{ArbPrec, F, FloatLike};
 use crate::uv::UltravioletGraph;
 use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
@@ -237,6 +237,7 @@ pub struct ProfileSettings {
     pub seed: u64,
     pub use_f128: bool,
     pub analyse_analytically: bool,
+    pub allow_vanishing_missing_fits: bool,
     pub orientation_mode: OrientationProfileMode,
     pub fixed_uv_ray: Option<UVProfileFixedRay>,
     pub graph_id: Option<usize>,
@@ -254,6 +255,7 @@ impl Default for ProfileSettings {
             seed: 42,
             analyse_analytically: false,
             use_f128: false,
+            allow_vanishing_missing_fits: false,
             orientation_mode: OrientationProfileMode::Summed,
             fixed_uv_ray: None,
             graph_id: None,
@@ -355,6 +357,10 @@ impl UVProfileFixedRay {
 }
 
 #[cfg(test)]
+#[path = "profile_tests.rs"]
+mod precision_tests;
+
+#[cfg(test)]
 mod tests {
     use std::sync::OnceLock;
 
@@ -369,12 +375,13 @@ mod tests {
     use crate::graph::parse::from_dot::IntoGraph;
     use crate::graph::{FeynmanGraph, Graph, LMBext, LmbIndex, LoopMomentumBasis};
     use crate::initialisation::test_initialise;
-    use crate::integrands::evaluation::EvaluationResult;
+    use crate::integrands::evaluation::{EvaluationMetaData, GenericEvaluationResult};
     use crate::momentum::ThreeMomentum;
     use crate::momentum::sample::{
         BareMomentumSample, ExternalThreeMomenta, LoopIndex, LoopMomenta, MomentumSample,
     };
-    use crate::observables::events::{AdditionalWeightKey, Event};
+    use crate::observables::events::{AdditionalWeightKey, GenericEvent, GenericEventGroupList};
+    use crate::processes::CutId;
     use crate::utils::{ArbPrec, F, load_generic_model};
     use crate::uv::UltravioletGraph;
     use spenso::algebra::complex::Complex;
@@ -383,12 +390,44 @@ mod tests {
 
     use super::{
         Analysis, FitResult, InspectAnalysis, InspectFitStatus, InspectResult,
-        OrientationInspectAnalysis, UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED,
+        OrientationInspectAnalysis, UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED, UV_PROFILE_MAX_DOD,
         UV_PROFILE_RETRY_MIN_R_SQUARED, UVLimitSelection, UVProfile, UVProfileAnalysis,
         UVProfileFailure, UVProfileFixedRay, UVProfileGraphAnalysis, UVProfileLmbAnalysis,
-        UVProfilePassFail, UVProfileSubsetAnalysis, UVSamplingResult,
-        analytic_integrand_for_orientation, inspect_results_need_arbprec_retry, log_log_slope,
+        UVProfilePassFail, UVProfileSubsetAnalysis, UVSamplingResult, analyse_inspect_results,
+        analytic_integrand_for_orientation, inspect_cells, inspect_failure_reason,
+        inspect_results_need_arbprec_retry, log_log_slope, logspace,
     };
+
+    /// Real inspect samples with magnitudes `10^y` in Arb; `None` is an exact zero.
+    fn inspect_samples(
+        log_magnitudes: impl IntoIterator<Item = Option<f64>>,
+    ) -> Vec<InspectResult> {
+        let ten = F::<ArbPrec>::default().from_usize(10);
+        log_magnitudes
+            .into_iter()
+            .map(|log_magnitude| InspectResult {
+                magnitude: Some(log_magnitude.map_or_else(
+                    || ten.zero(),
+                    |log_magnitude| ten.powf(&F::from_f64(log_magnitude)),
+                )),
+            })
+            .collect()
+    }
+
+    /// Final verdict of one sampled ray.
+    fn uv_ray_verdict(
+        log_magnitudes: &[Option<f64>],
+        scales: &[f64],
+        allow_vanishing_missing_fits: bool,
+    ) -> Option<&'static str> {
+        let samples = inspect_samples(log_magnitudes.iter().copied());
+        inspect_failure_reason(
+            analyse_inspect_results(&samples, scales, false).as_ref(),
+            InspectFitStatus::from_results(&samples, scales),
+            UV_PROFILE_MAX_DOD,
+            allow_vanishing_missing_fits,
+        )
+    }
 
     static THETA_GRAPH: OnceLock<(Graph, TiVec<LmbIndex, LoopMomentumBasis>)> = OnceLock::new();
 
@@ -752,12 +791,13 @@ mod tests {
             vec![(None, Some("dod_exceeds_threshold")), (Some("+-"), None)]
         );
 
+        let scales = (1..=5).map(|power| 10.0_f64.powi(power)).collect_vec();
+        let status = |log_magnitudes: [Option<f64>; 5]| {
+            InspectFitStatus::from_results(&inspect_samples(log_magnitudes), &scales)
+        };
         let mut vanishing = subset.clone();
         vanishing.inspect_level = None;
-        vanishing.inspect_fit_status = InspectFitStatus {
-            finite_samples: 5,
-            positive_finite_samples: 0,
-        };
+        vanishing.inspect_fit_status = status([None; 5]);
         assert!(
             vanishing
                 .inspect_verdicts(-0.9, true)
@@ -768,22 +808,170 @@ mod tests {
             Some((None, Some("missing_fit")))
         );
         for invalid in [f64::NAN, f64::INFINITY] {
-            let samples = [0.0, invalid, invalid, invalid, invalid].map(|value| {
-                let mut result = EvaluationResult::zero();
-                result.integrand_result = Complex::new_re(F(value));
-                InspectResult {
-                    result,
-                    prefactor: 1.0,
-                }
+            let samples = [0.0, invalid, invalid, invalid, invalid].map(|value| InspectResult {
+                magnitude: Some(F::<ArbPrec>::from_f64(value)),
             });
             let mut invalid_analysis = analysis.clone();
             let subset = &mut invalid_analysis.graphs[0].lmbs[0].subsets[0].analysis;
             subset.inspect_level = None;
             subset.per_orientation_inspect = None;
-            subset.inspect_fit_status = InspectFitStatus::from_results(&samples);
+            subset.inspect_fit_status = InspectFitStatus::from_results(&samples, &scales);
+            let subset = &mut invalid_analysis.graphs[0].lmbs[0].subsets[0];
+            subset.per_orientation_inspect_entries =
+                subset.analysis.per_orientation_inspect_entries();
             let report = invalid_analysis.pass_fail(-0.9);
             assert_eq!(report.failed, 1);
             assert_eq!(report.failures[0].reason, "missing_fit");
+        }
+
+        // Both tables must distinguish finite decay bounds from zero tails and from
+        // missing or unstable fits that fail the policy, including an empty sample set.
+        let mut unstable = fit(-3.0e8, -300_000_000);
+        unstable.result.r_squared = 0.9;
+        for (fitted, failure) in [(None, "missing_fit"), (Some(unstable), "unstable_fit")] {
+            for (status, tail, slope_cell) in [
+                (InspectFitStatus::default(), None, "-"),
+                (status([None; 5]), Some("zero tail"), "-"),
+                (
+                    status([Some(-3.0), None, None, None, None]),
+                    Some("zero tail"),
+                    "-",
+                ),
+                (
+                    status([Some(-3.0), Some(-30.0), None, None, None]),
+                    Some("decaying tail"),
+                    "≤ -27.000000",
+                ),
+                (
+                    status([
+                        Some(-3.0),
+                        Some(-6.0),
+                        Some(-12.0),
+                        Some(-24.0),
+                        Some(-48.0),
+                    ]),
+                    Some("decaying tail"),
+                    "≤ -3.000000",
+                ),
+                // Two nonzero samples which do not decay are no vanishing tail.
+                (
+                    status([Some(-3.0), Some(-3.0), None, None, None]),
+                    None,
+                    "-",
+                ),
+                (
+                    status([Some(-3.0), None, None, None, Some(-30.0)]),
+                    None,
+                    "-",
+                ),
+            ] {
+                for allow in [false, true] {
+                    let mut displayed = analysis.clone();
+                    displayed.allow_vanishing_missing_fits = allow;
+                    let subset = &mut displayed.graphs[0].lmbs[0].subsets[0].analysis;
+                    subset.inspect_level = fitted.clone();
+                    subset.inspect_fit_status = status;
+                    let orientation = &mut subset.per_orientation_inspect.as_mut().unwrap()[0];
+                    orientation.analysis = fitted.clone();
+                    orientation.inspect_fit_status = status;
+                    let subset = &mut displayed.graphs[0].lmbs[0].subsets[0];
+                    subset.per_orientation_inspect_entries =
+                        subset.analysis.per_orientation_inspect_entries();
+                    let accepted = allow && tail.is_some();
+                    assert_eq!(
+                        displayed.pass_fail(-0.9).failed,
+                        if accepted { 0 } else { 2 }
+                    );
+                    let cells = inspect_cells(fitted.as_ref(), status, -0.9, allow);
+                    if accepted {
+                        assert!(cells[0].contains(slope_cell));
+                        assert_eq!(&cells[1..3], &["-", "-"]);
+                    }
+                    if let Some(tail) = tail {
+                        let label = if accepted {
+                            tail.to_string()
+                        } else {
+                            format!("{failure} ({tail})")
+                        };
+                        assert!(cells[3].contains(&label));
+                    }
+                    let tables = displayed.tables_per_graph(-0.9).into_iter().chain(
+                        displayed
+                            .per_orientation_tables_per_graph(-0.9)
+                            .into_iter()
+                            .flatten(),
+                    );
+                    for table in tables {
+                        let rendered = table.to_string();
+                        assert!(!rendered.contains("-∞"));
+                        assert_eq!(rendered.contains(failure), !accepted);
+                        assert_eq!(rendered.contains("zero tail"), tail == Some("zero tail"));
+                        assert_eq!(
+                            rendered.contains("decaying tail"),
+                            tail == Some("decaying tail")
+                        );
+                    }
+                }
+            }
+        }
+
+        // An asymptotic power law takes precedence over a decaying envelope.
+        let mut power_law = analysis.clone();
+        let subset = &mut power_law.graphs[0].lmbs[0].subsets[0].analysis;
+        subset.inspect_level = Some(fit(-3.0, -3));
+        subset.inspect_fit_status = status([
+            Some(-3.0),
+            Some(-6.0),
+            Some(-12.0),
+            Some(-24.0),
+            Some(-48.0),
+        ]);
+        subset.per_orientation_inspect = None;
+        let subset = &mut power_law.graphs[0].lmbs[0].subsets[0];
+        subset.per_orientation_inspect_entries = subset.analysis.per_orientation_inspect_entries();
+        assert_eq!(power_law.pass_fail(-0.9).failed, 0);
+        let rendered = power_law.tables_per_graph(-0.9)[0].to_string();
+        assert!(rendered.contains("-3.000000"));
+        assert!(!rendered.contains("-∞"));
+        assert!(!rendered.contains("zero tail"));
+        assert!(!rendered.contains("decaying tail"));
+
+        // Rounded DOD -1 is not sufficient: the unrounded slope and fit quality
+        // determine the verdict, and precision-retry provenance remains visible.
+        for (slope, r_squared, failure) in [
+            (-0.8, 1.0, Some("dod_exceeds_threshold")),
+            (-1.0, 1.0, None),
+            (-1.0, 0.98, Some("unstable_fit")),
+            (-1.0, f64::INFINITY, Some("unstable_fit")),
+        ] {
+            let mut displayed = analysis.clone();
+            let subset = &mut displayed.graphs[0].lmbs[0].subsets[0].analysis;
+            let mut fitted = fit(slope, -1);
+            fitted.result.r_squared = r_squared;
+            fitted.used_arb_prec_retry = true;
+            subset.inspect_level = Some(fitted.clone());
+            subset.per_orientation_inspect.as_mut().unwrap()[0].analysis = Some(fitted);
+            let subset = &mut displayed.graphs[0].lmbs[0].subsets[0];
+            subset.per_orientation_inspect_entries =
+                subset.analysis.per_orientation_inspect_entries();
+            let report = displayed.pass_fail(-0.9);
+            assert_eq!(report.failed, if failure.is_some() { 2 } else { 0 });
+            let tables = displayed.tables_per_graph(-0.9).into_iter().chain(
+                displayed
+                    .per_orientation_tables_per_graph(-0.9)
+                    .into_iter()
+                    .flatten(),
+            );
+            for table in tables {
+                let rendered = table.to_string();
+                assert!(rendered.contains("arb retry"));
+                if let Some(reason) = failure {
+                    assert!(rendered.contains(reason));
+                } else {
+                    assert!(!rendered.contains("unstable_fit"));
+                    assert!(!rendered.contains("dod_exceeds_threshold"));
+                }
+            }
         }
     }
 
@@ -818,10 +1006,8 @@ mod tests {
 
     #[test]
     fn uv_profile_json_round_trip_preserves_pass_fail_policy_and_fit_status() {
-        let fit_status = InspectFitStatus {
-            finite_samples: 25,
-            positive_finite_samples: 0,
-        };
+        let scales = logspace(0.0, 1.0, 25, 10.0);
+        let fit_status = InspectFitStatus::from_results(&inspect_samples([None; 25]), &scales);
         let analysis = Analysis {
             inspect_level: None,
             inspect_fit_status: fit_status,
@@ -835,7 +1021,7 @@ mod tests {
         let per_orientation_inspect_entries = analysis.per_orientation_inspect_entries();
         let profile = UVProfileAnalysis {
             stopped_early: false,
-            scales: vec![1.0, 10.0],
+            scales,
             graphs: vec![UVProfileGraphAnalysis {
                 graph_index: 0,
                 graph_name: "GL0".to_string(),
@@ -867,6 +1053,47 @@ mod tests {
         assert_eq!(after.total, before.total);
         assert_eq!(after.failed, before.failed);
         assert!(decoded.allow_vanishing_missing_fits);
+        // Saved profiles render residues from the serialized entries.
+        let table = decoded.per_orientation_tables_per_graph(-0.9)[0]
+            .as_ref()
+            .expect("a reloaded profile retains its orientation table")
+            .to_string();
+        assert!(table.contains("orientation_0") && table.contains("zero tail"));
+        assert!(!table.contains("-∞"));
+
+        for (decay_slope, expected) in [
+            (Some(f64::NEG_INFINITY), serde_json::json!("-inf")),
+            (Some(-3.0), serde_json::json!(-3.0)),
+            (None, serde_json::Value::Null),
+        ] {
+            let status = InspectFitStatus { decay_slope };
+            let encoded = serde_json::to_value(status).unwrap();
+            assert_eq!(encoded["decay_slope"], expected);
+            let decoded: InspectFitStatus = serde_json::from_value(encoded).unwrap();
+            assert_eq!(decoded.decay_slope, decay_slope);
+        }
+        assert!(
+            serde_json::from_str::<InspectFitStatus>("{}")
+                .unwrap()
+                .decay_slope
+                .is_none()
+        );
+        for invalid in ["inf", "NaN", "-Infinity", "-3.0", "unknown"] {
+            assert!(
+                serde_json::from_value::<InspectFitStatus>(serde_json::json!({
+                    "decay_slope": invalid,
+                }))
+                .is_err()
+            );
+        }
+        for invalid in [f64::INFINITY, f64::NAN] {
+            assert!(
+                serde_json::to_string(&InspectFitStatus {
+                    decay_slope: Some(invalid),
+                })
+                .is_err()
+            );
+        }
     }
 
     #[test]
@@ -902,13 +1129,8 @@ mod tests {
             let scales: Vec<_> = (1..=5).map(|power| 10.0_f64.powi(power)).collect();
             let samples: Vec<_> = scales
                 .iter()
-                .map(|scale| {
-                    let mut result = EvaluationResult::zero();
-                    result.integrand_result = Complex::new_re(F(normalization / scale));
-                    InspectResult {
-                        result,
-                        prefactor: 1.0,
-                    }
+                .map(|scale| InspectResult {
+                    magnitude: Some(F::<ArbPrec>::from_f64(normalization / scale)),
                 })
                 .collect();
             let fit = log_log_slope(&samples, &scales).unwrap();
@@ -922,16 +1144,13 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, scale)| {
-                let mut result = EvaluationResult::zero();
                 let magnitude = if i == 7 {
                     scale.recip() * 1.0e10
                 } else {
                     scale.recip()
                 };
-                result.integrand_result = Complex::new_re(F(magnitude));
                 InspectResult {
-                    result,
-                    prefactor: 1.0,
+                    magnitude: Some(F::<ArbPrec>::from_f64(magnitude)),
                 }
             })
             .collect_vec();
@@ -951,13 +1170,11 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, scale)| {
-                let mut result = EvaluationResult::zero();
                 let log_noise = if i % 2 == 0 { 0.2 } else { -0.2 };
-                result.integrand_result =
-                    Complex::new_re(F(scale.recip() * 10.0_f64.powf(log_noise)));
                 InspectResult {
-                    result,
-                    prefactor: 1.0,
+                    magnitude: Some(F::<ArbPrec>::from_f64(
+                        scale.recip() * 10.0_f64.powf(log_noise),
+                    )),
                 }
             })
             .collect_vec();
@@ -993,13 +1210,8 @@ mod tests {
         ];
         let arb_transient = arb_log_magnitudes
             .into_iter()
-            .map(|log_magnitude| {
-                let mut result = EvaluationResult::zero();
-                result.integrand_result = Complex::new_re(F(10.0_f64.powf(log_magnitude)));
-                InspectResult {
-                    result,
-                    prefactor: 1.0,
-                }
+            .map(|log_magnitude| InspectResult {
+                magnitude: Some(F::<ArbPrec>::from_f64(10.0_f64.powf(log_magnitude))),
             })
             .collect_vec();
         let fit = log_log_slope(&arb_transient, &scales).unwrap();
@@ -1009,23 +1221,348 @@ mod tests {
     }
 
     #[test]
+    fn uv_fit_preserves_native_range_through_weighting_and_logarithms() {
+        let one = F::<ArbPrec>::default().one();
+        let ten = one.from_usize(10);
+        // Cover a raw underflow promoted into f64's normal range, magnitudes
+        // outside f64 even after weighting, and a weight exceeding f64's range.
+        for (normalization_power, first_scale_power, slope) in [
+            (-280, 8, -1),
+            (-400, 8, -1),
+            (400, 8, -1),
+            (-280, 60, -1),
+            (-400, 8, 3),
+        ] {
+            let scales = (first_scale_power..first_scale_power + 5)
+                .map(|power| 10.0_f64.powi(power))
+                .collect_vec();
+            for select_cut in [false, true] {
+                let samples = scales
+                    .iter()
+                    .map(|scale| {
+                        let scale = F(*scale).to_arb_exact().unwrap();
+                        let raw = ten.powi(normalization_power) * scale.powi(slope - 6);
+                        let weight = scale.powi(6);
+                        let weighted = &raw * &weight;
+                        let mut events = GenericEventGroupList::default();
+                        // Cut projection must retain raw values until the measure is
+                        // applied, exactly once, as for the unprojected total.
+                        for (cut_id, value) in [(0, raw.clone()), (1, ten.powi(500))] {
+                            let mut event = GenericEvent::default();
+                            event.cut_info.cut_id = cut_id;
+                            event.weight = Complex::new_im(value);
+                            events.push_singleton(event);
+                        }
+                        let result = GenericEvaluationResult {
+                            reference_moments: None,
+                            integrand_result: Complex::new_im(raw),
+                            absolute_integrand_result: None,
+                            parameterization_jacobian: None,
+                            integrator_weight: one.clone(),
+                            event_groups: events,
+                            evaluation_metadata: EvaluationMetaData::new_empty(),
+                        };
+                        let selected = [CutId(0)];
+                        let sample = InspectResult::from_evaluation(
+                            result,
+                            &weight,
+                            select_cut.then_some(selected.as_slice()),
+                        );
+                        assert_eq!(sample.magnitude, Some(weighted));
+                        sample
+                    })
+                    .collect_vec();
+                let fit = log_log_slope(&samples, &scales).unwrap();
+                assert!((fit.slope - f64::from(slope)).abs() < 1.0e-10);
+                assert!(fit.r_squared > 0.999);
+                assert_eq!(fit.points.len(), scales.len());
+                // No magnitude may be mistaken for an exact zero.
+                assert!(
+                    InspectFitStatus::from_results(&samples, &scales)
+                        .decay_slope
+                        .is_none_or(f64::is_finite)
+                );
+                assert_eq!(
+                    inspect_results_need_arbprec_retry(&samples, &scales),
+                    slope > 0
+                );
+                let json = serde_json::to_value(&fit).unwrap();
+                for (encoded, point) in json["points"].as_array().unwrap().iter().zip(&fit.points) {
+                    let decoded: ArbPrec = encoded.as_str().unwrap().parse().unwrap();
+                    assert_eq!(F(decoded), *point);
+                }
+            }
+        }
+    }
+
+    // Arb's default exponent range ends at 2^(1 - 2^30).
+    const ARB_LOG10_MIN: f64 = -1_073_741_823.0 * std::f64::consts::LOG10_2;
+
+    /// `log10(λ^2 exp(-cλ))` along a ray, with exact zeros where Arb underflows.
+    fn exponential_tail(scales: &[f64], c: f64) -> Vec<Option<f64>> {
+        scales
+            .iter()
+            .map(|scale| {
+                let log_magnitude = 2.0 * scale.log10() - c * scale / std::f64::consts::LN_10;
+                (log_magnitude > ARB_LOG10_MIN).then_some(log_magnitude)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn uv_profile_accepts_accelerating_and_zero_tails_without_a_power_law_fit() {
+        let default_scales = logspace(3.0, 6.0, 20, 10.0);
+        let test_scales = logspace(8.0, 12.0, 33, 10.0);
+        // Arb evaluations of the vacuum-subtracted thermal sunrise, both scaled loops on one
+        // orientation. Its leading occupation cancels; Arb leaves a remainder about 2^-1000
+        // below it, except at the dips where the cancellation is exact and the smaller, true
+        // occupation shows. The high-scale ray then underflows.
+        let thermal_sunrise_default = [
+            -899.227516,
+            -1170.753779,
+            -1556.011907,
+            -2109.854372,
+            -3872.079841,
+            -4053.166454,
+            -8022.751403,
+            -11545.281750,
+            -11489.702032,
+            -16399.893364,
+            -23464.327260,
+            -33626.231335,
+            -48243.088624,
+            -69269.163662,
+            -99515.050667,
+            -143021.156329,
+            -205603.701363,
+            -295625.753875,
+            -425117.913175,
+            -907059.249793,
+        ]
+        .map(Some);
+        let thermal_sunrise_test = [
+            -90707996.511144,
+            -81492191.133152,
+            -108671490.984227,
+            -144915669.453068,
+            -286843931.683495,
+            -257700336.248771,
+        ]
+        .into_iter()
+        .map(Some)
+        .pad_using(test_scales.len(), |_| None)
+        .collect_vec();
+
+        for (log_magnitudes, scales, zeros) in [
+            (exponential_tail(&default_scales, 1.0), &default_scales, 0),
+            (exponential_tail(&default_scales, 0.01), &default_scales, 0),
+            // Underflow beyond the minimal asymptotic window, and inside it.
+            (exponential_tail(&test_scales, 1.0), &test_scales, 26),
+            (exponential_tail(&test_scales, 0.03), &test_scales, 13),
+            (thermal_sunrise_default.to_vec(), &default_scales, 0),
+            (thermal_sunrise_test.clone(), &test_scales, 27),
+        ] {
+            assert_eq!(
+                log_magnitudes
+                    .iter()
+                    .filter(|value| value.is_none())
+                    .count(),
+                zeros
+            );
+            let samples = inspect_samples(log_magnitudes.iter().copied());
+            let fit = analyse_inspect_results(&samples, scales, true).unwrap();
+            assert!(!fit.result.is_asymptotic());
+            assert!(inspect_results_need_arbprec_retry(&samples, scales));
+            assert_eq!(
+                uv_ray_verdict(&log_magnitudes, scales, false),
+                Some("unstable_fit")
+            );
+            assert_eq!(uv_ray_verdict(&log_magnitudes, scales, true), None);
+        }
+
+        // Exact zeros still settle a rising last step of the noisy ray. Without them, that step
+        // could begin a tail which flattens or diverges, so the ray stays unresolved.
+        let truncated = &thermal_sunrise_test[..6];
+        assert_eq!(
+            uv_ray_verdict(truncated, &test_scales[..6], true),
+            Some("unstable_fit")
+        );
+    }
+
+    #[test]
+    fn uv_profile_requires_accelerating_decay_or_a_zero_tail() {
+        let scales = logspace(3.0, 6.0, 20, 10.0);
+        let log_scales = scales.iter().map(|scale| scale.log10()).collect_vec();
+        let power_law = |power: f64| {
+            log_scales
+                .iter()
+                .map(|log_scale| Some(power * log_scale - 5.0))
+                .collect_vec()
+        };
+        let alternating = |values: Vec<Option<f64>>, amplitude: f64| {
+            values
+                .into_iter()
+                .enumerate()
+                .map(|(i, value)| {
+                    value.map(|value| value + if i % 2 == 0 { amplitude } else { -amplitude })
+                })
+                .collect_vec()
+        };
+        // A tail dominated at high scales by `floor + power * log10(λ)`.
+        let tail_into = |power: f64, floor: f64| {
+            exponential_tail(&scales, 1.0)
+                .into_iter()
+                .zip(&log_scales)
+                .map(|(tail, log_scale)| {
+                    let (tail, power_law) = (tail.unwrap(), floor + power * log_scale);
+                    let leading = tail.max(power_law);
+                    Some(leading + (1.0 + 10.0_f64.powf(-(tail - power_law).abs())).log10())
+                })
+                .collect_vec()
+        };
+        let status = |log_magnitudes: &[Option<f64>]| {
+            InspectFitStatus::from_results(
+                &inspect_samples(log_magnitudes.iter().copied()),
+                &scales,
+            )
+        };
+
+        // Power laws are fitted, never accepted as vanishing samples.
+        for (power, failure) in [
+            (1.0, Some("dod_exceeds_threshold")),
+            (-0.5, Some("dod_exceeds_threshold")),
+            (0.0, Some("unstable_fit")),
+            (-3.0, None),
+        ] {
+            let log_magnitudes = power_law(power);
+            assert_eq!(uv_ray_verdict(&log_magnitudes, &scales, true), failure);
+            assert_eq!(uv_ray_verdict(&log_magnitudes, &scales, false), failure);
+        }
+
+        // Meeting max_dod cannot excuse an unstable ordinary power law. Neither slight
+        // curvature nor one steep final step establishes sustained accelerating decay.
+        let noisy_power_law = alternating(power_law(-3.0), 1.0);
+        let tiny_curvature = noisy_power_law
+            .iter()
+            .zip(&log_scales)
+            .map(|(value, log_scale)| value.map(|value| value - 0.001 * log_scale.powi(2)))
+            .collect_vec();
+        let mut final_drop = noisy_power_law.clone();
+        *final_drop.last_mut().unwrap() = final_drop.last().unwrap().map(|value| value - 100.0);
+        for log_magnitudes in [noisy_power_law, tiny_curvature, final_drop] {
+            let samples = inspect_samples(log_magnitudes.iter().copied());
+            let fit = analyse_inspect_results(&samples, &scales, false).unwrap();
+            assert!(fit.result.slope <= UV_PROFILE_MAX_DOD);
+            assert!(!fit.result.is_asymptotic());
+            assert!(status(&log_magnitudes).decay_slope.is_none());
+            for allow in [false, true] {
+                assert_eq!(
+                    uv_ray_verdict(&log_magnitudes, &scales, allow),
+                    Some("unstable_fit")
+                );
+            }
+        }
+
+        let mut misplaced_zero = exponential_tail(&scales, 1.0);
+        misplaced_zero[15] = None;
+        for log_magnitudes in [
+            // Noise around a flat or divergent trend.
+            alternating(power_law(0.0), 0.3),
+            alternating(power_law(-0.5), 0.3),
+            // Decay which turns into a divergence or a noise floor at high scales.
+            tail_into(1.0, -20_000.0),
+            tail_into(-0.5, -20_000.0),
+            alternating(tail_into(0.0, -20_000.0), 0.3),
+            // A zero inside the asymptotic window is no underflow unless only zeros follow it.
+            misplaced_zero,
+        ] {
+            assert!(!status(&log_magnitudes).vanishes_without_power_law(None, UV_PROFILE_MAX_DOD));
+            assert!(uv_ray_verdict(&log_magnitudes, &scales, true).is_some());
+        }
+
+        // A sparse suffix must reach zero at the endpoint. A late nonzero sample
+        // can revive a rising ray even when every earlier sample in its suffix is zero.
+        for sample_count in [5, 15] {
+            let scales = logspace(3.0, 6.0, sample_count, 10.0);
+            for final_magnitude in [-100.0, -10.0, 10.0] {
+                let mut log_magnitudes = vec![None; sample_count];
+                log_magnitudes[sample_count - 1] = Some(final_magnitude);
+                let samples = inspect_samples(log_magnitudes.iter().copied());
+                assert!(
+                    InspectFitStatus::from_results(&samples, &scales)
+                        .decay_slope
+                        .is_none()
+                );
+                for allow in [false, true] {
+                    assert_eq!(
+                        uv_ray_verdict(&log_magnitudes, &scales, allow),
+                        Some("missing_fit")
+                    );
+                }
+
+                for (value, scale) in log_magnitudes
+                    .iter_mut()
+                    .zip(&scales)
+                    .take(sample_count / 2)
+                {
+                    *value = Some(0.5 * scale.log10());
+                }
+                let samples = inspect_samples(log_magnitudes.iter().copied());
+                assert!(
+                    InspectFitStatus::from_results(&samples, &scales)
+                        .decay_slope
+                        .is_none()
+                );
+                for allow in [false, true] {
+                    assert_eq!(
+                        uv_ray_verdict(&log_magnitudes, &scales, allow),
+                        Some("unstable_fit")
+                    );
+                }
+            }
+
+            // Inactive rays and an isolated middle sample followed by zeros retain
+            // the zero-tail exemption, without manufacturing a power-law fit.
+            for middle_magnitude in [None, Some(-100.0), Some(10.0)] {
+                let mut log_magnitudes = vec![None; sample_count];
+                log_magnitudes[sample_count / 2] = middle_magnitude;
+                let samples = inspect_samples(log_magnitudes.iter().copied());
+                assert_eq!(
+                    InspectFitStatus::from_results(&samples, &scales).decay_slope,
+                    Some(f64::NEG_INFINITY)
+                );
+                assert_eq!(uv_ray_verdict(&log_magnitudes, &scales, true), None);
+                assert_eq!(
+                    uv_ray_verdict(&log_magnitudes, &scales, false),
+                    Some("missing_fit")
+                );
+            }
+        }
+    }
+
+    #[test]
     fn uv_fit_json_excludes_raw_lu_evaluation_results() {
         let scales = [1.0e3, 1.0e4, 1.0e5, 1.0e6, 1.0e7];
         let inspect = scales
             .iter()
             .map(|scale| {
-                let mut result = EvaluationResult::zero();
-                result.integrand_result = Complex::new_re(F(1.0 / scale));
-                let mut event = Event::default();
+                let one = F::<ArbPrec>::default().one();
+                let mut result = GenericEvaluationResult {
+                    reference_moments: None,
+                    integrand_result: Complex::new_re(F::<ArbPrec>::from_f64(1.0 / scale)),
+                    absolute_integrand_result: None,
+                    parameterization_jacobian: None,
+                    integrator_weight: one.clone(),
+                    event_groups: GenericEventGroupList::default(),
+                    evaluation_metadata: EvaluationMetaData::new_empty(),
+                };
+                let mut event = GenericEvent::default();
                 event.additional_weights.weights.insert(
                     AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
-                    Complex::new_re(F(1.0)),
+                    Complex::new_re(one),
                 );
                 result.event_groups.push_singleton(event);
-                InspectResult {
-                    result,
-                    prefactor: 1.0,
-                }
+                InspectResult::from_evaluation(result, &F::<ArbPrec>::default().one(), None)
             })
             .collect_vec();
 
@@ -1336,7 +1873,7 @@ impl UVProfileable for Amplitude {
             stopped_early: runner.stopped.load(Ordering::Relaxed),
             per_graph,
             scales,
-            allow_vanishing_missing_fits: false,
+            allow_vanishing_missing_fits: profile_settings.allow_vanishing_missing_fits,
         })
         // results.push((inspect_res, analytic_res));
     }
@@ -1915,7 +2452,8 @@ struct UVProfileOrientationSubsetRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct FitResult {
     slope: f64,
-    points: Vec<f64>,
+    // Magnitudes remain precise in output too; only logarithms cross the fit boundary.
+    points: Vec<F<ArbPrec>>,
     scales: Vec<f64>,
     fit_start: usize,
     intercept: f64,
@@ -1923,6 +2461,13 @@ struct FitResult {
     full_range_slope: f64,
     full_range_intercept: f64,
     full_range_r_squared: f64,
+}
+
+impl FitResult {
+    /// Whether the reported slope comes from a linear high-scale suffix.
+    fn is_asymptotic(&self) -> bool {
+        self.r_squared.is_finite() && self.r_squared >= UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED
+    }
 }
 
 impl UVProfileAnalysis {
@@ -1935,30 +2480,12 @@ impl UVProfileAnalysis {
                     .iter()
                     .flat_map(|lmb| {
                         lmb.subsets.iter().map(|subset| {
-                            let (slope, r_squared, estimated_dod) =
-                                match &subset.analysis.inspect_level {
-                                    Some(analysis) => {
-                                        let r2_text = format!("{:.3}", analysis.result.r_squared);
-                                        let r2_text = if analysis.result.r_squared >= 0.99 {
-                                            r2_text.green()
-                                        } else {
-                                            r2_text.red()
-                                        }
-                                        .to_string();
-
-                                        let dod = analysis.estimated_dod;
-                                        let dod_text = dod.to_string();
-                                        let dod_text = if (dod as f64) <= max_dod {
-                                            dod_text.green()
-                                        } else {
-                                            dod_text.red()
-                                        }
-                                        .to_string();
-
-                                        (format!("{:.6}", analysis.result.slope), r2_text, dod_text)
-                                    }
-                                    None => ("-".to_string(), "-".to_string(), "-".to_string()),
-                                };
+                            let [slope, r_squared, estimated_dod, inspect] = inspect_cells(
+                                subset.analysis.inspect_level.as_ref(),
+                                subset.analysis.inspect_fit_status,
+                                max_dod,
+                                self.allow_vanishing_missing_fits,
+                            );
 
                             UVProfileSubsetRow {
                                 fixed: format!(
@@ -1977,9 +2504,7 @@ impl UVProfileAnalysis {
                                 } else {
                                     subset.initial_dod.to_string().green().to_string()
                                 },
-                                inspect: inspect_retry_label(
-                                    subset.analysis.inspect_level.as_ref(),
-                                ),
+                                inspect,
                             }
                         })
                     })
@@ -2086,34 +2611,12 @@ impl UVProfileAnalysis {
                                 .iter()
                                 .flatten()
                                 .map(|entry| {
-                                    let (slope, r_squared, estimated_dod) = match &entry.analysis {
-                                        Some(analysis) => {
-                                            let r2_text =
-                                                format!("{:.3}", analysis.result.r_squared);
-                                            let r2_text = if analysis.result.r_squared >= 0.99 {
-                                                r2_text.green()
-                                            } else {
-                                                r2_text.red()
-                                            }
-                                            .to_string();
-
-                                            let dod = analysis.estimated_dod;
-                                            let dod_text = dod.to_string();
-                                            let dod_text = if (dod as f64) <= max_dod {
-                                                dod_text.green()
-                                            } else {
-                                                dod_text.red()
-                                            }
-                                            .to_string();
-
-                                            (
-                                                format!("{:.6}", analysis.result.slope),
-                                                r2_text,
-                                                dod_text,
-                                            )
-                                        }
-                                        None => ("-".to_string(), "-".to_string(), "-".to_string()),
-                                    };
+                                    let [slope, r_squared, estimated_dod, inspect] = inspect_cells(
+                                        entry.analysis.as_ref(),
+                                        entry.inspect_fit_status,
+                                        max_dod,
+                                        self.allow_vanishing_missing_fits,
+                                    );
 
                                     UVProfileOrientationSubsetRow {
                                         fixed: format!(
@@ -2133,7 +2636,7 @@ impl UVProfileAnalysis {
                                         } else {
                                             subset.initial_dod.to_string().green().to_string()
                                         },
-                                        inspect: inspect_retry_label(entry.analysis.as_ref()),
+                                        inspect,
                                     }
                                 })
                                 .collect::<Vec<_>>()
@@ -2222,19 +2725,62 @@ fn inspect_failure_reason(
     max_dod: f64,
     allow_vanishing_missing_fits: bool,
 ) -> Option<&'static str> {
+    if allow_vanishing_missing_fits && fit_status.vanishes_without_power_law(analysis, max_dod) {
+        return None;
+    }
     match analysis {
-        None if allow_vanishing_missing_fits && fit_status.missing_fit_is_vanishing() => None,
         None => Some("missing_fit"),
-        Some(analysis)
-            if !analysis.result.r_squared.is_finite()
-                || analysis.result.r_squared < UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED =>
-        {
-            Some("unstable_fit")
-        }
+        Some(analysis) if !analysis.result.is_asymptotic() => Some("unstable_fit"),
         Some(analysis) if analysis.result.slope > max_dod || analysis.result.slope.is_nan() => {
             Some("dod_exceeds_threshold")
         }
-        _ => None,
+        Some(_) => None,
+    }
+}
+
+/// Slope, r², DOD and status cells of one sampled ray.
+fn inspect_cells(
+    analysis: Option<&InspectAnalysis>,
+    fit_status: InspectFitStatus,
+    max_dod: f64,
+    allow_vanishing_missing_fits: bool,
+) -> [String; 4] {
+    let failure =
+        inspect_failure_reason(analysis, fit_status, max_dod, allow_vanishing_missing_fits);
+    let decay_slope = fit_status
+        .decay_slope
+        .filter(|_| fit_status.vanishes_without_power_law(analysis, max_dod));
+    let status = inspect_label(analysis, failure, decay_slope);
+    if let Some(bound) = decay_slope.filter(|_| failure.is_none()) {
+        let slope = if bound.is_finite() {
+            format!("≤ {bound:.6}").green().to_string()
+        } else {
+            "-".to_string()
+        };
+        return [slope, "-".to_string(), "-".to_string(), status];
+    }
+    match analysis {
+        Some(analysis) => {
+            let r2_text = format!("{:.3}", analysis.result.r_squared);
+            let r2_text = if analysis.result.is_asymptotic() {
+                r2_text.green()
+            } else {
+                r2_text.red()
+            };
+            let dod_text = analysis.estimated_dod.to_string();
+            let dod_text = if failure.is_none() {
+                dod_text.green()
+            } else {
+                dod_text.red()
+            };
+            [
+                format!("{:.6}", analysis.result.slope),
+                r2_text.to_string(),
+                dod_text.to_string(),
+                status,
+            ]
+        }
+        None => ["-".to_string(), "-".to_string(), "-".to_string(), status],
     }
 }
 
@@ -2644,7 +3190,11 @@ impl<'a> UVProfileRunner<'a> {
             if self.profile_settings.fail_fast
                 && res
                     .analyse(self.scales)
-                    .inspect_verdicts(UV_PROFILE_MAX_DOD, compatible_cuts.is_some())
+                    .inspect_verdicts(
+                        UV_PROFILE_MAX_DOD,
+                        compatible_cuts.is_some()
+                            || self.profile_settings.allow_vanishing_missing_fits,
+                    )
                     .any(|(_, reason)| reason.is_some())
             {
                 // Retain the completed limit (including all requested
@@ -2852,7 +3402,7 @@ impl<'a> UVProfileRunner<'a> {
         self.scales
             .iter()
             .map(|s| {
-                let prefactor = s.powi(3 * n_included);
+                let prefactor = F(*s).to_arb_exact()?.powi(3 * n_included);
                 let mut scaled_sample = input.sample.clone();
                 for l in input.subset.included_iter() {
                     scaled_sample[l] = scaled_sample[l].map_ref(&|a| a * F(*s));
@@ -2860,17 +3410,48 @@ impl<'a> UVProfileRunner<'a> {
                 // Keep the profile ray in candidate coordinates. The evaluator
                 // casts it to the requested precision before routing it to the
                 // selected graph's canonical LMB.
-                let inspect_res_eval = evaluate_momentum_space_point(
-                    integrand,
-                    self.model,
-                    scaled_sample.raw,
-                    input,
-                    use_arb_prec,
-                )?;
-
-                Ok(InspectResult {
-                    result: inspect_res_eval,
-                    prefactor,
+                let result = match integrand {
+                    ProcessIntegrand::Amplitude(amplitude) => {
+                        evaluate_profile_momentum_point_precise(
+                            amplitude,
+                            self.model,
+                            input.graph_id,
+                            input.orientation,
+                            scaled_sample.raw,
+                            Some(input.lmb),
+                            use_arb_prec,
+                            &prefactor,
+                        )
+                    }
+                    ProcessIntegrand::CrossSection(cross_section) => {
+                        evaluate_profile_momentum_point_precise(
+                            cross_section,
+                            self.model,
+                            input.graph_id,
+                            input.orientation,
+                            scaled_sample.raw,
+                            Some(input.lmb),
+                            use_arb_prec,
+                            &prefactor,
+                        )
+                    }
+                }?;
+                Ok(match result {
+                    PreciseEvaluationResult::Double(result) => InspectResult::from_evaluation(
+                        result,
+                        &prefactor,
+                        input.compatible_event_cut_ids,
+                    ),
+                    PreciseEvaluationResult::Quad(result) => InspectResult::from_evaluation(
+                        result,
+                        &prefactor,
+                        input.compatible_event_cut_ids,
+                    ),
+                    PreciseEvaluationResult::Arb(result) => InspectResult::from_evaluation(
+                        result,
+                        &prefactor,
+                        input.compatible_event_cut_ids,
+                    ),
                 })
             })
             .collect()
@@ -2889,7 +3470,7 @@ impl SubSetResult {
     pub fn analyse(&self, scales: &[f64]) -> Analysis {
         Analysis {
             inspect_level: self.analyse_inspect(scales),
-            inspect_fit_status: InspectFitStatus::from_results(&self.inspect.summed),
+            inspect_fit_status: InspectFitStatus::from_results(&self.inspect.summed, scales),
             per_orientation_inspect: (!self.inspect.per_orientation.is_empty()).then(|| {
                 self.inspect
                     .per_orientation
@@ -2901,7 +3482,10 @@ impl SubSetResult {
                             scales,
                             orientation.used_arb_prec_retry,
                         ),
-                        inspect_fit_status: InspectFitStatus::from_results(&orientation.inspect),
+                        inspect_fit_status: InspectFitStatus::from_results(
+                            &orientation.inspect,
+                            scales,
+                        ),
                     })
                     .collect()
             }),
@@ -2980,8 +3564,7 @@ fn inspect_results_need_arbprec_retry(inspect: &[InspectResult], scales: &[f64])
         Some(analysis) => {
             analysis.result.slope.is_nan()
                 || analysis.result.slope > UV_PROFILE_MAX_DOD
-                || !analysis.result.r_squared.is_finite()
-                || analysis.result.r_squared < UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED
+                || !analysis.result.is_asymptotic()
                 || analysis.result.full_range_slope.is_nan()
                 || analysis.result.full_range_slope > UV_PROFILE_MAX_DOD
                 || !analysis.result.full_range_r_squared.is_finite()
@@ -2990,26 +3573,34 @@ fn inspect_results_need_arbprec_retry(inspect: &[InspectResult], scales: &[f64])
     }
 }
 
+/// Shortest high-scale suffix of `len` samples which may represent the asymptotic regime: at
+/// least half of the samples, and at least the minimum ray length whenever the ray provides it.
+fn asymptotic_suffix_len(len: usize) -> usize {
+    len.min(UV_PROFILE_MIN_POINTS.max(len.div_ceil(2)))
+}
+
 fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult> {
     let mut valid_samples = Vec::new();
     let mut points = vec![];
     let mut valid_scales = vec![];
 
     for (x, s) in inspect.iter().zip(scales) {
-        let norm = x.magnitude();
-        if norm <= 0.0 {
-            debug!("{s}:\t{}", x.result.evaluation_metadata);
+        // A failed sample must trigger the Arb retry, and remain a failed ray
+        // if reevaluation cannot recover it. Finite zero samples are distinct.
+        let norm = x.magnitude.as_ref()?;
+        if norm.is_nan() || norm.is_infinite() {
+            return None;
+        }
+        if norm <= &norm.zero() {
+            debug!(scale = s, "zero UV profile sample");
             continue;
         }
-        if !norm.is_finite() {
-            continue;
-        }
-        let y = (norm).log10();
+        let y = norm.log10().into_ff64().0;
         let x = s.log10();
         if !y.is_finite() || !x.is_finite() {
             continue;
         }
-        points.push(norm);
+        points.push(norm.clone());
         valid_scales.push(*s);
         valid_samples.push((x, y));
     }
@@ -3047,11 +3638,8 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
 
     let full_range_fit = fit(&valid_samples)?;
     // UV power counting is asymptotic. Retain the longest high-scale suffix which is already
-    // linear, dropping only a pre-asymptotic prefix. At least five points are kept whenever the
-    // sampling range provides them.
-    let minimum_suffix_len = valid_samples
-        .len()
-        .min(5.max(valid_samples.len().div_ceil(2)));
+    // linear, dropping only a pre-asymptotic prefix.
+    let minimum_suffix_len = asymptotic_suffix_len(valid_samples.len());
     let (fit_start, (slope, intercept, r_squared)) = (0..=valid_samples.len() - minimum_suffix_len)
         .find_map(|start| {
             let candidate = fit(&valid_samples[start..])?;
@@ -3083,96 +3671,216 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
     })
 }
 
-fn inspect_retry_label(analysis: Option<&InspectAnalysis>) -> String {
-    match analysis {
-        Some(analysis) if analysis.used_arb_prec_retry => "arb retry".yellow().to_string(),
-        Some(_) => String::new(),
-        None => "-".to_string(),
+fn inspect_label(
+    analysis: Option<&InspectAnalysis>,
+    failure: Option<&str>,
+    decay_slope: Option<f64>,
+) -> String {
+    let tail = decay_slope.map(|slope| {
+        if slope.is_finite() {
+            "decaying tail"
+        } else {
+            "zero tail"
+        }
+    });
+    let status = match (failure, tail) {
+        (Some(reason), Some(tail)) => format!("{reason} ({tail})").red().to_string(),
+        (Some(reason), None) => reason.red().to_string(),
+        (None, Some(tail)) => tail.to_string(),
+        (None, None) => String::new(),
+    };
+    if analysis.is_some_and(|analysis| analysis.used_arb_prec_retry) {
+        let retry = "arb retry".yellow();
+        if status.is_empty() {
+            retry.to_string()
+        } else {
+            format!("{status}, {retry}")
+        }
+    } else {
+        status
     }
-}
-
-fn evaluate_momentum_space_point(
-    integrand: &mut ProcessIntegrand,
-    model: &Model,
-    loop_momenta: Vec<ThreeMomentum<F<f64>>>,
-    input: SubsetOrientationInput<'_>,
-    use_arb_prec: bool,
-) -> Result<EvaluationResult> {
-    let mut result = match integrand {
-        ProcessIntegrand::Amplitude(amplitude) => evaluate_profile_momentum_point(
-            amplitude,
-            model,
-            input.graph_id,
-            input.orientation,
-            loop_momenta,
-            Some(input.lmb),
-            use_arb_prec,
-        ),
-        ProcessIntegrand::CrossSection(cross_section) => evaluate_profile_momentum_point(
-            cross_section,
-            model,
-            input.graph_id,
-            input.orientation,
-            loop_momenta,
-            Some(input.lmb),
-            use_arb_prec,
-        ),
-    }?;
-
-    if let Some(compatible_event_cut_ids) = input.compatible_event_cut_ids {
-        result.integrand_result = result
-            .event_groups
-            .iter()
-            .flat_map(|event_group| event_group.iter())
-            .filter(|event| compatible_event_cut_ids.contains(&CutId(event.cut_info.cut_id)))
-            .fold(Complex::new_re(F(0.0)), |sum, event| sum + event.weight);
-    }
-
-    Ok(result)
 }
 
 #[derive(Debug, Clone)]
 pub struct InspectResult {
-    pub(crate) result: EvaluationResult,
-    pub(crate) prefactor: f64,
+    /// Fully weighted magnitude; None is an invalid sample, not a zero tail.
+    magnitude: Option<F<ArbPrec>>,
 }
 
 impl InspectResult {
-    fn magnitude(&self) -> f64 {
-        self.result
-            .integrand_result
-            .re
-            .0
-            .hypot(self.result.integrand_result.im.0)
-            * self.prefactor
+    fn from_evaluation<T: FloatLike>(
+        result: GenericEvaluationResult<T>,
+        prefactor: &F<ArbPrec>,
+        compatible_event_cut_ids: Option<&[CutId]>,
+    ) -> Self {
+        // The evaluator already sums orientations in its native precision. Only
+        // cut projection and the profile measure remain before taking a magnitude.
+        let magnitude = (|| {
+            if result.evaluation_metadata.is_nan {
+                return None;
+            }
+            let value = if let Some(cuts) = compatible_event_cut_ids {
+                result
+                    .event_groups
+                    .iter()
+                    .flat_map(|group| group.iter())
+                    .filter(|event| cuts.contains(&CutId(event.cut_info.cut_id)))
+                    .try_fold(Complex::new_re(prefactor.zero()), |sum, event| {
+                        Some(
+                            sum + Complex::new(
+                                event.weight.re.to_arb_exact().ok()?,
+                                event.weight.im.to_arb_exact().ok()?,
+                            ),
+                        )
+                    })?
+            } else {
+                Complex::new(
+                    result.integrand_result.re.to_arb_exact().ok()?,
+                    result.integrand_result.im.to_arb_exact().ok()?,
+                ) * result.integrator_weight.to_arb_exact().ok()?
+            };
+            let weighted = value * prefactor;
+            let magnitude = weighted.re.hypot(&weighted.im);
+            (!magnitude.is_nan() && !magnitude.is_infinite()).then_some(magnitude)
+        })();
+        // Nonfinite values and native values which cannot be embedded exactly
+        // request reevaluation in Arb. Never round before a cut cancellation or
+        // abort the entire report for an invalid profile sample.
+        Self { magnitude }
     }
 }
 
+/// Sampled evidence of an accelerating decay or a zero tail, without an asymptotic power-law fit.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 struct InspectFitStatus {
-    finite_samples: usize,
-    positive_finite_samples: usize,
+    /// Smallest initial slope of a high-scale log-log majorant whose decay accelerates or ends
+    /// at zero; `-∞` for a window ending at zero with at most one nonzero sample.
+    /// `None` if no window supplies that evidence or any sample is invalid.
+    #[serde(
+        default,
+        serialize_with = "InspectFitStatus::serialize_decay_slope",
+        deserialize_with = "InspectFitStatus::deserialize_decay_slope"
+    )]
+    decay_slope: Option<f64>,
 }
 
 impl InspectFitStatus {
-    fn from_results(inspect: &[InspectResult]) -> Self {
-        let mut status = Self::default();
-        for result in inspect {
-            let norm = result.magnitude();
-            if !norm.is_finite() {
+    // JSON has no infinity literal; keep exact-zero evidence distinct from missing data.
+    fn serialize_decay_slope<S: serde::Serializer>(
+        slope: &Option<f64>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match slope {
+            None => serializer.serialize_none(),
+            Some(slope) if slope.is_finite() => serializer.serialize_some(slope),
+            Some(slope) if *slope == f64::NEG_INFINITY => serializer.serialize_some("-inf"),
+            Some(_) => Err(serde::ser::Error::custom("expected a finite slope or -inf")),
+        }
+    }
+
+    fn deserialize_decay_slope<'de, D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<f64>, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Slope {
+            Number(f64),
+            Marker(String),
+        }
+
+        match Option::<Slope>::deserialize(deserializer)? {
+            None => Ok(None),
+            Some(Slope::Number(slope)) if slope.is_finite() => Ok(Some(slope)),
+            Some(Slope::Marker(marker)) if marker == "-inf" => Ok(Some(f64::NEG_INFINITY)),
+            Some(_) => Err(serde::de::Error::custom("expected a finite slope or -inf")),
+        }
+    }
+
+    fn from_results(inspect: &[InspectResult], scales: &[f64]) -> Self {
+        let mut samples = Vec::with_capacity(inspect.len());
+        for (result, scale) in inspect.iter().zip(scales) {
+            let Some(norm) = result.magnitude.as_ref() else {
+                return Self::default();
+            };
+            if norm.is_nan() || norm.is_infinite() {
                 // An invalid sample cannot certify an inactive, vanishing LU ray.
                 return Self::default();
             }
-            status.finite_samples += 1;
-            if norm > 0.0 {
-                status.positive_finite_samples += 1;
-            }
+            let log_magnitude = (norm > &norm.zero()).then(|| norm.log10().into_ff64().0);
+            samples.push((scale.log10(), log_magnitude));
         }
-        status
+        // As for the power-law fit, a pre-asymptotic prefix of at most half the ray is ignored.
+        let window_len = asymptotic_suffix_len(samples.len());
+        Self {
+            decay_slope: (0..=samples.len() - window_len)
+                .filter_map(|start| Self::window_decay_slope(&samples[start..]))
+                .min_by(f64::total_cmp),
+        }
     }
 
-    fn missing_fit_is_vanishing(self) -> bool {
-        self.finite_samples > self.positive_finite_samples && self.positive_finite_samples < 2
+    /// Initial, hence shallowest, slope of the least concave majorant of the window's nonzero
+    /// `(log λ, log |f|)` samples, provided the samples follow it to their end. The majorant
+    /// bridges isolated dips, such as an exact cancellation resolved by Arb, but its final segment
+    /// must be the final sampled step: a tail which flattens or rises leaves it. With at least two
+    /// nonzero samples, exact zeros may only trail them and then replace that requirement.
+    /// A sparse window with at most one nonzero sample instead requires an exact zero endpoint.
+    /// Nonzero windows must also show two successive doublings of their decay rate at separated
+    /// checkpoints. This dimensionless heuristic rejects noisy power laws and isolated final drops;
+    /// it does not prove asymptotic behavior beyond the sampled range.
+    fn window_decay_slope(window: &[(f64, Option<f64>)]) -> Option<f64> {
+        let nonzero = window
+            .iter()
+            .filter_map(|&(log_scale, log_magnitude)| Some((log_scale, log_magnitude?)))
+            .collect_vec();
+        let [earlier @ .., penultimate, last] = nonzero.as_slice() else {
+            // A sparse, inactive ray must end at zero; a late revival is unresolved.
+            return window
+                .last()
+                .is_some_and(|(_, log_magnitude)| log_magnitude.is_none())
+                .then_some(f64::NEG_INFINITY);
+        };
+        let trailing_zeros = window
+            .iter()
+            .rev()
+            .take_while(|(_, log_magnitude)| log_magnitude.is_none())
+            .count();
+        if nonzero.len() + trailing_zeros < window.len() {
+            return None;
+        }
+        let slope = |(x0, y0): (f64, f64), (x1, y1): (f64, f64)| (y1 - y0) / (x1 - x0);
+        let final_slope = slope(*penultimate, *last);
+        if trailing_zeros == 0
+            && !earlier
+                .iter()
+                .all(|point| final_slope <= slope(*point, *penultimate))
+        {
+            return None;
+        }
+        let initial_slope = |start| {
+            nonzero[start + 1..]
+                .iter()
+                .map(|point| slope(nonzero[start], *point))
+                .max_by(f64::total_cmp)
+        };
+        let initial = initial_slope(0)?;
+        if trailing_zeros == 0 {
+            if nonzero.len() < 4 {
+                return None;
+            }
+            let middle = initial_slope((nonzero.len() - 1) / 3)?;
+            let late = initial_slope(2 * (nonzero.len() - 1) / 3)?;
+            if !(initial < 0.0 && middle <= 2.0 * initial && late <= 2.0 * middle) {
+                return None;
+            }
+        }
+        Some(initial)
+    }
+
+    /// Accept sampled zero tails or accelerating decay only when no asymptotic power law describes
+    /// them and the initial decay bound meets `max_dod`. A shallow bound alone is insufficient.
+    fn vanishes_without_power_law(self, analysis: Option<&InspectAnalysis>, max_dod: f64) -> bool {
+        !analysis.is_some_and(|analysis| analysis.result.is_asymptotic())
+            && self.decay_slope.is_some_and(|slope| slope <= max_dod)
     }
 }
 

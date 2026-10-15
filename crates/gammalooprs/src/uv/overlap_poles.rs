@@ -74,7 +74,7 @@ impl PhysicalOverlapInput {
             &generation.orientation_pattern,
             true,
         );
-        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &generation.uv)?.unfold();
+        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &generation)?.unfold();
         let [(compatible, cutset)] = forests.cuts.as_slice() else {
             return Err(eyre!("the overlap fixture must have one empty cut"));
         };

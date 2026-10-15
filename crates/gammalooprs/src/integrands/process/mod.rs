@@ -46,6 +46,7 @@ use typed_index_collections::TiVec;
 pub mod amplitude;
 pub mod cache_debugging;
 pub mod cross_section;
+pub(crate) mod fermi_surface;
 pub mod gammaloop_sample;
 pub mod ir;
 pub mod sampling;
@@ -1097,6 +1098,7 @@ impl ProcessIntegrand {
                         use_arb_prec,
                         max_eval,
                         integral_estimate,
+                        None,
                     )
                 };
             }
@@ -1389,36 +1391,7 @@ pub(crate) fn orientation_labels_for_graph<I: ProcessIntegrandImpl>(
         .collect())
 }
 
-pub(crate) fn evaluate_profile_momentum_point<I: ProcessIntegrandImpl>(
-    integrand: &mut I,
-    model: &Model,
-    graph_id: usize,
-    orientation: Option<usize>,
-    loop_momenta: Vec<ThreeMomentum<F<f64>>>,
-    candidate_lmb: Option<&LoopMomentumBasis>,
-    use_arb_prec: bool,
-) -> Result<EvaluationResult> {
-    let input = MomentumSpaceEvaluationInput {
-        loop_momenta,
-        integrator_weight: F(1.0),
-        graph_id: Some(graph_id),
-        group_id: None,
-        orientation,
-        channel_id: None,
-    };
-    evaluate_from_source(
-        integrand,
-        model,
-        EvaluationSource::Momentum {
-            input: &input,
-            candidate_lmb,
-        },
-        F(1.0),
-        use_arb_prec,
-        Complex::new_re(F(100.0 * integrand.get_settings().kinematics.e_cm)),
-    )
-}
-
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn evaluate_profile_momentum_point_precise<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
@@ -1427,6 +1400,7 @@ pub(crate) fn evaluate_profile_momentum_point_precise<I: ProcessIntegrandImpl>(
     loop_momenta: Vec<ThreeMomentum<F<f64>>>,
     candidate_lmb: Option<&LoopMomentumBasis>,
     use_arb_prec: bool,
+    weight: &F<ArbPrec>,
 ) -> Result<PreciseEvaluationResult> {
     let input = MomentumSpaceEvaluationInput {
         loop_momenta,
@@ -1436,7 +1410,7 @@ pub(crate) fn evaluate_profile_momentum_point_precise<I: ProcessIntegrandImpl>(
         orientation,
         channel_id: None,
     };
-    evaluate_from_source_precise(
+    evaluate_from_source_precise_with_estimate(
         integrand,
         EvaluationTarget::Physical(model),
         EvaluationSource::Momentum {
@@ -1446,6 +1420,8 @@ pub(crate) fn evaluate_profile_momentum_point_precise<I: ProcessIntegrandImpl>(
         F(1.0),
         use_arb_prec,
         Complex::new_re(F(100.0 * integrand.get_settings().kinematics.e_cm)),
+        None,
+        Some(weight),
     )
 }
 
@@ -2393,7 +2369,11 @@ pub struct LmbMultiChannelingSetup {
 impl LmbMultiChannelingSetup {
     /// Refresh master-owned mass evaluators independently of member parameter slots.
     /// Keep complex values until the selected score decides whether it supports them.
-    pub(crate) fn warm_up_masses(&mut self, settings: &RuntimeSettings, model: &Model) {
+    pub(crate) fn warm_up_masses(
+        &mut self,
+        settings: &RuntimeSettings,
+        model: &Model,
+    ) -> Result<()> {
         self.master_edge_masses.invalidate();
         let parameters = &mut self.graph.param_builder;
         parameters.m_uv_value(Complex::new_re(F(settings.general.m_uv)));
@@ -2404,12 +2384,13 @@ impl LmbMultiChannelingSetup {
         parameters.numerator_sampling_scale_value(Complex::new_re(F(settings
             .general
             .numerator_sampling_scale)));
-        parameters.update_model_values(model);
+        parameters.update_model_values(model)?;
         self.master_edge_masses
             .set(self.graph.new_edgevec(|edge, _, _| {
                 edge.mass_value(model, &self.graph.param_builder)
                     .unwrap_or_else(|| Complex::new_re(F(0.0)))
             }));
+        Ok(())
     }
 
     /// Borrow the bridge compiled in the current successful warmup epoch, or
@@ -3013,14 +2994,18 @@ impl LmbMultiChannelingSetup {
             .iter()
             .map(|&edge_index| {
                 let signature_of_edge_channel_lmb = &channel_lmb.edge_signatures[edge_index];
-
-                signature_of_edge_channel_lmb
+                let loop_part = signature_of_edge_channel_lmb
                     .internal
-                    .apply_typed(&momentum_sample.loop_moms)
-                    + signature_of_edge_channel_lmb
-                        .external
-                        .apply(&momentum_sample.external_moms.raw)
-                        .spatial
+                    .apply_typed(&momentum_sample.loop_moms);
+                if momentum_sample.external_moms.is_empty() {
+                    loop_part
+                } else {
+                    loop_part
+                        + signature_of_edge_channel_lmb
+                            .external
+                            .apply(&momentum_sample.external_moms.raw)
+                            .spatial
+                }
             })
             .collect();
 
@@ -4152,6 +4137,7 @@ struct StabilityEvaluationContext<'a, 'm> {
     stability_level: &'a StabilityLevelSetting,
     max_eval: &'a Complex<F<f64>>,
     wgt: F<f64>,
+    remaining_weight: Option<&'a F<ArbPrec>>,
     check_on_norm: bool,
     is_final_level: bool,
     evaluation_metadata: &'m mut EvaluationMetaData,
@@ -4311,7 +4297,12 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         // alter the Gaussian value's existing independent stability check.
         max_eval.im = max_eval.im.zero();
     }
-    let wgt = F::<T>::from_ff64(context.wgt);
+    let mut wgt = F::<T>::from_ff64(context.wgt);
+    if let Some(remaining_weight) = context.remaining_weight {
+        // A profiler applies its measure after native evaluation. Include it
+        // in every stability bound before accepting an underflowed component.
+        wgt *= F::<T>::from_arb(&remaining_weight.0)?;
+    }
 
     let (average_result, mut estimated_relative_accuracy, mut is_stable, _instability_reason) =
         if context.check_on_norm {
@@ -4320,7 +4311,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
                 &results,
                 context.stability_level,
                 max_eval,
-                wgt,
+                wgt.clone(),
                 context.is_final_level,
                 context.escalate_if_exact_zero,
                 context.check_real,
@@ -4334,7 +4325,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
                 &results,
                 context.stability_level,
                 max_eval,
-                wgt,
+                wgt.clone(),
                 context.is_final_level,
                 context.escalate_if_exact_zero,
                 context.check_real,
@@ -4391,7 +4382,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             &absolute_results,
             &absolute_level,
             Complex::new_re(average_result.re.zero()),
-            F::<T>::from_ff64(context.wgt),
+            wgt.clone(),
             context.is_final_level,
             context.escalate_if_exact_zero,
             absolute_check_real,
@@ -4451,7 +4442,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             &moments,
             &moment_level,
             Complex::new_re(average_result.re.zero()),
-            F::<T>::from_ff64(context.wgt),
+            wgt.clone(),
             context.is_final_level,
             context.escalate_if_exact_zero,
             context.integral_estimate,
@@ -5359,9 +5350,11 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
         use_arb_prec,
         max_eval,
         None,
+        None,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     target: EvaluationTarget<'_>,
@@ -5370,6 +5363,7 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
     use_arb_prec: bool,
     max_eval: Complex<F<f64>>,
     integral_estimate: Option<(f64, f64)>,
+    remaining_weight: Option<&F<ArbPrec>>,
 ) -> Result<PreciseEvaluationResult> {
     let stability = &integrand.get_settings().stability;
     if matches!(target, EvaluationTarget::Physical(_))
@@ -5478,6 +5472,7 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
             stability_level: &stability_level,
             max_eval: &max_eval,
             wgt,
+            remaining_weight,
             check_on_norm: integrand.get_settings().stability.check_on_norm,
             is_final_level,
             evaluation_metadata: &mut evaluation_metadata,
@@ -6131,6 +6126,7 @@ pub(crate) mod tests {
                             stability_level: &level,
                             max_eval: &maximum,
                             wgt: F(1.0),
+                            remaining_weight: None,
                             check_on_norm: false,
                             is_final_level: true,
                             evaluation_metadata: &mut metadata,
@@ -9175,7 +9171,9 @@ pub(crate) mod tests {
             setup.graph.underlying[edge].mass = crate::graph::edge::EdgeMass::Value(
                 spenso::algebra::complex::Complex::new_re(F(mass)),
             );
-            setup.warm_up_masses(&RuntimeSettings::default(), &model);
+            setup
+                .warm_up_masses(&RuntimeSettings::default(), &model)
+                .unwrap();
             assert_eq!(setup.master_edge_masses.as_ref().unwrap()[edge].re, F(mass));
             assert_ne!(graph.get_real_mass_vector::<f64>(&model)[edge], F(mass));
             let catalogue = setup

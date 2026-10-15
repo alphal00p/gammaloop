@@ -205,6 +205,248 @@ residue maps. In-memory diagnostics and disk exports use that same boundary.
 <cff-production-and-numerator-energy-ownership>
 GammaLoop owns production graph/source construction, UV orchestration, exact source mapping, and evaluator preparation. The `three-dimensional-reps` crate owns the shared CFF algebra. The `3Drep` command and feature-gated eager evaluator are diagnostic tools, not production contracts: GammaLoop may prepare their inputs, factors, and expressions differently.
 
+Finite-temperature and zero-temperature equilibrium share `MediumMode`, the
+structural CFF recursion, and bounded polynomial numerator reduction in
+`three-dimensional-reps`. Numerator reduction includes denominator-cancelling
+contact terms; each surviving denominator sector generates its own
+`CFFVariant::thermal_weight`. These weights retain cyclic orientations, thermal
+contraction numerators, and distribution derivatives separately from rational
+coefficients, keeping physical distributions outside Laurent interpolation.
+Distribution derivatives are ordinary energy derivatives at fixed temperature,
+chemical potential, and orientation. An m-edge cyclic chain has a common pole when
+all of its edges share the full momentum signature (loop and external) up to sign and the same
+symbolic mass key. Reducing it contributes `(-1)^(m-1)/(m-1)!` to the CFF coefficient and a
+distribution derivative of order `m-1` on the chain's lowest edge ID. Equal routing
+with distinct mass keys is not a common pole and stays a divided difference.
+Amplitude warm-up calls `Graph::validate_denominator_hsurfaces` to reject
+selected-orientation denominator H-surfaces that vanish identically at the current masses
+and external momenta, including distinct mass parameters with values equal up to sign.
+These comparisons use exact equality; the check does not cover UV-counterterm expressions
+or cross sections.
+Ordinary thermal contractions require a connected virtual complement. Sources
+and sinks take priority; a mixed vertex needs at least three virtual boundary
+edges, or one incoming and one outgoing virtual edge with external attachments
+on both sides. External multiplicity alone cannot make a vertex eligible.
+Vacuum and thermal recursion prune tadpoles before selecting a vertex and
+retain the same contour prescription. Free tadpoles average the two closures:
+each vacuum orientation has weight one half, while each thermal pole has weight
+`1/2 + n_B(E - sigma*mu)` for bosons or `1/2 - n_F(E - sigma*mu)` for fermions.
+A contact instead inherits its parent's contour. If that contour selects pole
+`s0`, its vacuum weight is `(1 + sigma*s0)/2`; the thermal weight adds
+`n_B(E - sigma*mu)` or subtracts `n_F(E - sigma*mu)` from that same vacuum weight.
+The energy orientation `sigma` remains separate, preserving both the numerator
+evaluation at `sigma E` and the particle/antiparticle chemical potential. The contour
+offset is `s = sigma*s0` for a contact and `s = 0` for a free tadpole. Ordinary
+thermal contraction numerators retain their signed distribution differences.
+Detachable chains with unequal poles use
+divided-difference contractions, leaving coincident-pole child cycles to the
+derivative reduction. An orientation with no admissible contraction or chain
+reduction fails generation explicitly.
+These weights survive serialization, variant fusion, source-edge remapping, and
+products of disconnected components. Initial-state cuts remain external energy
+aliases and never acquire thermal distribution factors. GammaLoop's graph and
+parameter layer expands the symbolic weights using particle statistics,
+chemical potentials, and inverse temperature; the shared generator does not
+own the physics model.
+
+Each distribution factor is the tagged call `N(e, r, t, s, sigma)`. Here `e` is
+the edge ID and `r` the derivative order with respect to the positive on-shell
+energy `E` of `e`. The flag `t` is 1 at finite temperature and 0 in the
+zero-temperature limit. The contour offset `s` is +1 or -1 for a directed weight
+and 0 for their symmetric average. The physical energy orientation
+`sigma = sign(e)` selects the chemical potential `sigma*mu` and stays symbolic
+until orientation selection. With `x = beta*(E - sigma*mu)/2`, order zero is
+`(s + tanh(x))/2 = (1 + s)/2 - n_F(E - sigma*mu)` for fermions and
+`(s + coth(x))/2 = (1 + s)/2 + n_B(E - sigma*mu)` for bosons. The evaluated body
+keeps the occupation separate from the vacuum weight `(1 + s)/2` and factors
+`exp(-(x + |x|))` out of it, so its exponents are nonpositive and an
+exponentially small occupation is not lost once `tanh(x)` rounds to one; `coth`
+keeps `n_B` accurate in the soft limit. The function map registers every body once
+per contour offset, with `s` as a tag, so the vacuum weight folds symbolically and
+an `s = -1` body is the bare occupation. As a runtime argument, `s` would let
+evaluator optimization add the constant to an exponentially small occupation
+first. Orders one and two are written in closed form with `sech` and `csch`;
+higher orders are differentiated symbolically from order two. The
+zero-temperature order zero is
+`(1 + s)/2 - theta(sigma*mu - E)`, whose positive orders are the distributions
+localized below. The registered step is zero for a negative real argument and one
+for a positive argument up to rounding; at argument zero it is undefined (NaN).
+Pointwise evaluation exactly on a Fermi boundary therefore enters the numerical
+failure path, while localized distribution terms remain separate from that point value.
+Without a chemical potential it is the vacuum weight `(1 + s)/2`,
+whose derivatives vanish. Vacuum subtraction removes the value `V(W)` that a
+completed weight `W` takes when every factor is replaced by this vacuum weight.
+It does so symbolically: an order-zero factor differs from its vacuum weight by
+its occupation, `N(s) - (1 + s)/2 = N(-1)`, and products follow the product rule
+`D(a b) = D(a) V(b) + a D(b)`. Every term of `W - V(W)` thus keeps an occupation
+or a derivative, so the vacuum constant never cancels in floating point against
+occupations that round away, and the result stays linear in the number of
+factors. Weights with `V(W) = 0` are left unchanged. At zero density, the
+zero-temperature tadpole weights reduce to the corresponding vacuum
+prescription; occupied fermionic states retain their finite-density
+contribution at zero temperature.
+
+The bounded and known-factor numerator builders share occurrence sampling and
+polynomial reduction across all medium modes. Every resulting scalar sector,
+including a contact, a terminal residue basis, or the zero-edge unit, goes
+through `LowerSectorCffBuilder`. Each connected denominator graph retains its
+original incidence throughout generation, including shared vertices and
+external attachments. Products are formed only for genuinely disconnected
+denominator graphs. Surface shifts use the complete affine flow across the
+virtual boundary, including coordinates shared by cut aliases and ordinary
+external legs. Contact sectors use the surviving denominator rank to
+solve their active energies and lift the result into the parent's coordinate
+namespace; this coordinate reduction does not split or reconstruct the graph.
+That boundary converts into the immutable source convention using the surviving
+denominator rank in every medium. The same scalar CFF constructor handles
+standalone and contact sectors. Ordered inherited contour rows, structural cuts,
+and embedded residue-basis context determine terminal pole preferences without
+splitting or projecting the graph. Occurrence interpolation preserves the
+scalar sector's pole weights and introduces no additional terminal multiplicity.
+Variant lifting remaps thermal weights, energy IDs, surface IDs, and sign provenance before
+attaching numerator factors; it applies no further medium-dependent normalization.
+Surviving pole orientations remain independent of numerator interpolation maps,
+so zero or uniform-scale samples never set the chemical-potential sign. Residue
+map identities and labels distinguish both the pole directions and the samples.
+
+Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
+vacuum limit while the surrounding observable retains its medium dependence;
+CFF conversion wraps each completed medium coefficient as `thermal_weight(W)`;
+optional vacuum subtraction replaces it with `thermal_weight(W - V(W))` before
+local UV operations. The wrapper survives UV subtraction and final assembly,
+then the evaluator function map resolves it as the identity. Only
+`thermal_weight(0)` normalizes immediately, so vanishing branches are pruned.
+With vacuum subtraction enabled, the spinney covering all loop edges is excluded
+before both 4D and 3D counterterm computation, including when bridges remain in the
+graph; there are no separate vacuum-subtraction forest branches.
+Vacuum mode emits a plain unit without a thermal wrapper. Generation validation
+rejects combining vacuum mode with vacuum subtraction and rejects
+`local_uv_cts_from_expanded_4d_integrands` for either medium mode.
+The diagnostic `3Drep build` command forwards the
+configured medium and records it alongside the serialized expression. Its
+model-free standalone eager evaluator rejects thermal expressions because it
+does not accept distribution inputs; production evaluation remains owned by
+GammaLoop.
+
+Process generation configures the graph's parameter builder with its selected medium and
+registers only that mode's distribution functions. Finite-temperature energy derivatives
+are built incrementally. Zero-temperature registration contains only order zero; positive-order
+factors are removed or localized before ordinary evaluator construction, as described below.
+The builder persists the mode so runtime warmup can validate the current
+temperature, chemical potentials, bosonic mass domain, and finite real fermion masses
+where finite-temperature distributions or zero-temperature occupation steps are used,
+including after loading or updating a model. The stable finite-temperature occupation
+formula uses absolute values of real arguments and does not analytically continue
+complex shell energies.
+Medium warm-up also checks particle/antiparticle chemical potentials for exact opposite
+values and requires zero for self-conjugate particles. It uses current parameter values,
+treating missing or literal-zero assignments as zero; independent external inputs are
+allowed when consistent. Vacuum evaluation does not consume or validate these assignments.
+Vacuum builders register no thermal distribution functions.
+
+`integrands::process::fermi_surface::FermiSurfaceProduct` localizes zero-temperature
+distribution derivatives. Production amplitude evaluation separates these
+distributions from the completed UV-subtracted expression before compiling
+numerical evaluators. Each positive-order
+thermal factor belongs to an independent cyclic chain: a derivative of order
+`r` represents `delta^(r-1)(E - sigma*mu)`, while the CFF coefficient retains its
+existing cyclic-chain sign and factorial. The constructor checks the selected
+edge routing and chooses a loop basis containing one momentum per factor.
+Repeated or dependent constraints within a product are malformed expressions;
+fixed external shifts do not make dependent loop directions independent.
+
+For each selected momentum, the localizer inserts a caller-supplied profile
+normalized over positive scale `t` and uses `q = t*k`, retaining the original
+spatial integration dimension. Independent energy-offset jets give the analytic
+root `t(u) = sqrt((sigma*mu + u)^2 - m^2)/|k|`. The differentiated weight includes
+the complete `h(t)*t^3/g'(t)` measure and the smooth coefficient callback.
+HyperDual Taylor coefficients are converted to ordinary mixed derivatives with
+the distribution-action signs and factorials. Only the squared mass enters the
+shell. Empty shells, including a zero oriented chemical potential for a massless
+fermion, contribute zero; degenerate onsets `sigma*mu = |m| > 0`, invalid radial
+coordinates and nonfinite results are errors.
+The onset check runs on selected sectors during sample evaluation, after the
+empty-product check, using native shell parameters at that evaluation's precision.
+Binary64 warm-up cannot decide this for every later precision: a near-onset mass
+expression may round to equality in binary64 while retaining a regular shell in
+Quad or Arb. Ordinary order-zero steps do not enter this localization check.
+Masses and chemical potentials are held fixed during differentiation.
+
+The callback receives momenta in the adapted basis, with all unconstrained
+coordinates held fixed. It must preserve the jets through every momentum-dependent
+factor. A future conditional Cutkosky localization can return its complete
+root- and Jacobian-dependent weight through this callback before the Fermi
+derivatives are extracted. Deltas and steps must not be differentiated
+numerically inside it; such boundary and intersection terms have to be expanded
+symbolically and validated as Fermi products first. Thermal cross sections
+and threshold subtraction remain rejected by the existing settings validation.
+
+Production sector extraction collects the tagged thermal functions while
+retaining factorized smooth coefficients and shared numerator definitions.
+It runs after vacuum subtraction and both local and integrated UV contributions
+have been assembled. Parametric orientation branches select the complete residue
+key before fixing orientation signs; explicit orientation sums are extracted
+once. Each parametric sector compiles only its originating orientation, with
+local evaluator index zero mapped to that orientation's production residue-map ID.
+Runtime sampling and filtering still select sectors by the graph's orientation ID;
+all evaluator methods then evaluate the sector's complete one-entry catalogue.
+This avoids selecting and evaluating inactive catalogue entries for every sector.
+Distinct signed chemical-potential supports stay separate, and the
+ordinary bulk retains its existing evaluator path. Only fermions with a chemical
+potential have Fermi surfaces. The shared edge accessor treats a missing chemical potential
+and literal `ZERO` identically; named parameters remain symbolic even at runtime value zero.
+Warm-up restricts bosons to `|mu| < m` or `m = mu = 0`; their zero-temperature occupation
+is then constant on `E > 0`, so extraction removes their positive orders and
+ignores their steps. Expanded keys with a repeated distribution are rejected.
+Residual fermion steps must be independent of the localized loop directions;
+unsupported moving step boundaries are rejected instead of differentiated pointwise.
+Basis completion first retains additional independent fermion routes with chemical
+potentials before choosing arbitrary remaining graph chords. Fermions without an
+occupation step cannot displace these preferred routes. This keeps an untouched occupation
+step independent when the input basis mixes its momentum with a localized one,
+as in a dotted sunset with a boson and an undotted fermion as its input LMB.
+
+Each sector evaluates its masses and signed chemical potentials in the current
+numerical precision using the shared parameter builder. Warm-up applies the
+LU-h sampling checks to the configured positive-scale profile: a positive finite
+`sigma`, a supported power, and no `exponential_ct`. The profile normalization
+is evaluated in the active precision from its closed form, `e^2 K_nu(2)` for the
+polynomial profiles, so precision retries inherit no binary64 constants. The runtime maps the
+sample to its adapted loop basis, uses that profile,
+then routes momentum jets back to the graph basis for the smooth coefficient
+evaluator. Numerical representability failures enter the existing precision
+retry path. Model refresh, evaluator backends and saved process state include
+the sectors. Standalone evaluator archives cannot encode this runtime momentum
+localization and reject processes containing Fermi sectors; saved process state
+retains the complete calculation.
+
+The tests cover analytic shell integrals, independent products, profile
+independence, the relation to raised-cut residue algebra, pointwise production
+orientation sums, model refresh and persistence. Symbolic reconstruction checks
+verify that vacuum subtraction and both UV contributions retain their Fermi
+sectors. A generated one-loop double pole is checked against an independent
+contour derivative, including its phase and spatial normalization, at fixed
+momenta inside and outside a massive Fermi sphere. A factorized two-loop graph
+checks numerical composition with local and integrated UV terms against that
+analytic cycle factor times a separately generated scalar tadpole.
+
+The cold-dense inspection card includes the bare tennis ball and fixes its
+positive-scale profile explicitly. Its ordinary Fermi delta gives a pointwise
+value of the form `B(k) + A(k)*h(t*)`; inspection checks that dependence across
+profile widths. These local values are representation dependent and are not
+integrated reference values. A one-loop convergence test integrates a massive
+fermion triple pole, including both the delta and its derivative. With unit
+local numerators its vacuum-subtracted integral is
+`i*mu/(32*pi^2*m^2*sqrt(mu^2-m^2))`. Production Monte Carlo runs with fixed sample
+budgets check this analytic target, decreasing uncertainty and independence
+of the normalized localization profile. Numerical convergence against
+multi-loop literature values remains separate work.
+
+A genuine two-loop dotted-sunset convergence test covers a raised fermion
+whose momentum is not aligned with either input loop momentum. Its independent
+reference calculation is documented in comments in
+`tests/resources/run_cards/fermi_surface_2l_integration.toml`.
+
 The shared `LinearEnergyExpr` stores exact `Rational` coefficients for indexed internal/external energies, the uniform scale and the constant term; `CFFVariant::prefactor` is also `Rational`. Arithmetic and cut handling retain that type until symbolic output converts it with `Atom::num`. Native rational serde/bincode support owns coefficient persistence; old Atom coefficient encodings are not a compatibility contract.
 
 CFF capacities belong to independently sampled denominator occurrences. Physical sources use their EMR/source-edge identities; completed UV sources additionally accept typed canonical denominator classes, which are distinct from `EdgeIndex`. LMB coordinates certify routing and fixed affine carriers. They do not authorize redistributing a physical source's energy powers or combining contours.
@@ -263,7 +505,7 @@ Integrated finite UV terms retain their exact source-local EMR maps. Production 
 
 Final assembly uses one `Integrands` map of cut-indexed factorized expressions. UV markers and tensor replacements act on those expressions before the ordinary evaluator preprocessing; there is no parallel deferred-body state. Direct-3D sequential forest construction composes the same local and integrated replay operations used by disconnected forests. Integrated localization registers its source surfaces before either Taylor branch reads the graph, and its normalized localizing factor remains inert under subsequent Taylor operations. Evaluator preparation skips residue-selector parametrization when the selector symbol is absent, and skips orientation collection when neither theta nor IF occurs. Expressions with conditionals retain the existing guarded-branch rewrites so inactive residue-local inverses are never evaluated.
 
-The shared CFF core also returns its connected-loop and pure duplicate-denominator global sign as typed metadata. GammaLoop consumes that bridge exactly once for root, reduced, and exact production CFF sources, cancelling the shared-core-local uniform convention before the physical Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the same convention, with additional Vakint normalization `1`. The NLO acceptance layer independently generates orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D with local and integrated UV and threshold counterterms. It compares complete GL0/GL2 values at a common native- Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum 3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction, graphwise UV-mass and localization-scale independence, cancellation of total renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms, and the physical and projected EMR energy bounds. TT acceptance uses the fully-MSbar scheme, without on-shell counterterms.
+The shared CFF core also returns its connected-loop global sign as typed metadata. GammaLoop consumes that bridge exactly once for root, reduced, and exact production CFF sources, cancelling the shared-core-local uniform convention before the physical Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the same convention, with additional Vakint normalization `1`. The NLO acceptance layer independently generates orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D with local and integrated UV and threshold counterterms. It compares complete GL0/GL2 values at a common native- Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum 3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction, graphwise UV-mass and localization-scale independence, cancellation of total renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms, and the physical and projected EMR energy bounds. TT acceptance uses the fully-MSbar scheme, without on-shell counterterms.
 
 Direct-photon benchmarks use the off-shell spin projector `-g^(mu nu)` and no picobarn conversion. The inclusive lepton-process targets instead use the Eq. (7.1) normalization `2(4 pi alpha)/(3 Ecm^3)` and the conversion to picobarns; individual lepton-process graph components are not assigned the unconverted published photon targets. Acceptances require positive real LO and the signed real NLO correction, checking the imaginary component separately. Diagram contributions can have either real sign. Current validation results and measured timings belong in the accompanying test evidence and PR.
 
@@ -491,7 +733,9 @@ Every evaluator receives the auxiliary numerator sampling scale `M` as an input,
 
 Binary64 reporting may round exponentially suppressed, fully weighted components
 to zero. Numerical factors are combined before this rounding so a compensating
-factor cannot hide a meaningful contribution. For an averaged stability result,
+factor cannot hide a meaningful contribution. UV profiling applies its scaling
+measure after native evaluation, so stability bounds include that measure as part
+of the full weight. For an averaged stability result,
 the mean absolute fully weighted probe value can establish underflow below the
 smallest normal binary64 value. This bound stays separate for each component and
 observable; an imaginary scale cannot excuse a meaningful real discrepancy.
@@ -895,7 +1139,20 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 12` currently).
+- State format is versioned with `state_manifest.toml` (`version = 15` currently).
+- Version 15 stores one-entry coefficient catalogues for orientation-specific Fermi
+  sectors, evaluated with local index zero. Older full-catalogue sectors use different
+  index semantics and must be regenerated even though the encoded field layout is unchanged.
+- Version 14 stores one numerator-bound-independent source-frame sign for each
+  generated CFF and rational component. The duplicate core/denominator sign fields
+  were removed from the positional binary layout; earlier saved states must be regenerated.
+- Version 13 stores the selected medium in graph parameter builders and the denominator
+  H-surfaces and zero-temperature Fermi-surface evaluators of amplitude graph terms.
+  Frozen SymJIT, C++, and assembly modes for amplitude and cross-section integrands
+  store `CompilationOptionsSnapshot`, including
+  `jit_direct_translation`: SymJIT replaces its bare optimization level, while the
+  C++ and assembly snapshots gain the new field. Earlier states use a different
+  positional layout and must be regenerated.
 - Version 12 names the square-root primitive `OnShellEnergy` and the CFF surface
   sum `Esurface`. Older states used `Esurface` for the square root and must be
   regenerated: importing those atoms with the new callbacks would change their

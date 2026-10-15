@@ -37,6 +37,7 @@ use crate::{
         surface::HybridSurfaceID,
     },
     debug_tags, define_index,
+    feyngen::GenerationType,
     graph::{
         GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
         ThresholdPinchStatus,
@@ -932,6 +933,7 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        global_settings.validate_for_process(GenerationType::CrossSection)?;
         let integrand_name = self.name.clone();
         generation_progress::begin_phase(
             GenerationProgressPhase::GraphPreprocessing,
@@ -1501,7 +1503,7 @@ impl CrossSectionGraph {
             model,
             &self.graph.loop_momentum_basis,
             &self.graph.param_builder.pairs.additional_params.params,
-        );
+        )?;
         Ok(())
     }
 
@@ -1627,7 +1629,7 @@ impl CrossSectionGraph {
     }
 
     fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<GraphGenerationStats> {
-        settings.validate_explicit_orientation_sum_options()?;
+        self.graph.set_medium_mode(settings.medium.mode)?;
         self.graph.ensure_energy_convergent_cycles(
             &self
                 .graph
@@ -1944,8 +1946,9 @@ impl CrossSectionGraph {
                 &settings.orientation_pattern,
                 settings.explicit_orientation_sum_only,
             )
+            .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
             .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
-            &settings.uv,
+            settings,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_parametric_orchestration_done",
@@ -3979,8 +3982,9 @@ impl CrossSectionGraph {
                     &settings.orientation_pattern,
                     settings.explicit_orientation_sum_only,
                 )
+                .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
                 .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
-                &settings.uv,
+                settings,
             )?
             .into_iter();
 
@@ -4616,6 +4620,7 @@ mod tests {
         dot,
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
+        model::InputParamCard,
         processes::cross_section::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
         settings::global::{GenerationSettings, OrientationPattern},
         utils::{GS, load_generic_model},
@@ -5173,6 +5178,15 @@ mod tests {
     #[test]
     fn cross_section_lmb_cut_edge_exclusion_prefers_massive_then_fermion_then_id() {
         test_initialise().unwrap();
+        let mut model = load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+                .to_owned(),
+            "json",
+        )
+        .unwrap();
+        model.simplify(&mut parameters).unwrap();
+        // Keep the light fermion massless to distinguish mass priority from spin priority.
         let graph = dot!(
             digraph cut_edge_priority {
                 edge [num=1]
@@ -5182,7 +5196,8 @@ mod tests {
                 A -> B [id=2 particle="t" mass=1]
                 A -> B [id=3 particle="a"]
                 A -> B [id=4 mass=0]
-            }
+            },
+            &model
         )
         .unwrap();
 

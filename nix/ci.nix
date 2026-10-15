@@ -3,13 +3,28 @@
   workspacePackages ? workspaceGraph.packages,
   system ? "x86_64-linux",
 }: let
+  # Symbolica 3.0.0 has no aarch64-linux wheel. Exercise UFO imports on the
+  # platforms with a published wheel; the remaining model tests run everywhere.
+  ufoWheelTags = {
+    x86_64-linux = "manylinux_2_17_x86_64";
+    aarch64-darwin = "macosx_11_0_arm64";
+  };
+  hasUfoWheel = builtins.hasAttr system ufoWheelTags;
   # Compile the integration crate once; groups select disjoint test binaries.
   testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
+  testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo-import"] else [];
   # Isolated CFF tests must retain their numerical evaluation oracles.
   testFeatures."three-dimensional-reps" = ["eval"];
   groups = [
     {
       name = "core";
+      runtimeUfoLoader = hasUfoWheel;
+      # Shared Python stub generation also enables ufo-import. Preserve the
+      # wheel guard for actual imports while retaining loader-version validation.
+      # Archive filtersets reject test() predicates, so apply this only when running.
+      runFilter =
+        if hasUfoWheel then null
+        else "not (test(=commands::import::model::tests::ufo_and_json_restrictions_preserve_model_content) or test(=commands::import::model::tests::fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states))";
       packages = [
         "gammaloop-api"
         "gammaloop-tracing-filter"
@@ -234,7 +249,7 @@
             else []
           )
           ++ (
-            if builtins.elem "gammaloop-api" group.packages
+            if group.runtimeUfoLoader or false
             then ["packages.${system}.gammaloop-ufo-python-runtime"]
             else []
           );
@@ -286,8 +301,8 @@
         nextestBinaryChecks
         ++ [
           "packages.${system}.gammaloop-python-module"
-          "packages.${system}.gammaloop-ufo-python-runtime"
-        ];
+        ]
+        ++ (if hasUfoWheel then ["packages.${system}.gammaloop-ufo-python-runtime"] else []);
     }
   ];
   missingWorkspaceCratePackageEdges =
@@ -413,6 +428,7 @@ in {
   inherit
     groups
     testFeatures
+    ufoWheelTags
     workspaceDependencyClosureFor
     workspaceTestComponentRepresentativeFor
     workspaceTestComponentMembers

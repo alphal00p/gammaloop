@@ -442,3 +442,56 @@ GC_108 = Coupling(name = 'GC_108',
                   value = '(ee*complex(0,1)*complexconjugate(CKM3x3))/(sw*cmath.sqrt(2))',
                   order = {'QED':1})
 
+GC_109 = Coupling(
+    name='GC_109', value='-((complex(0,1)*yu)/cmath.sqrt(2))', order={'QED': 1}
+)
+
+GC_110 = Coupling(name='GC_110', value='yu/cmath.sqrt(2)', order={'QED': 1})
+
+GC_111 = Coupling(
+    name='GC_111', value='-((complex(0,1)*yd)/cmath.sqrt(2))', order={'QED': 1}
+)
+
+GC_112 = Coupling(name='GC_112', value='-yd/cmath.sqrt(2)', order={'QED': 1})
+
+GC_113 = Coupling(
+    name='GC_113', value='-((complex(0,1)*ys)/cmath.sqrt(2))', order={'QED': 1}
+)
+
+GC_114 = Coupling(name='GC_114', value='-ys/cmath.sqrt(2)', order={'QED': 1})
+
+GC_115 = Coupling(name='GC_115', value='yd*complexconjugate(CKM1x1)', order={'QED': 1})
+
+GC_116 = Coupling(name='GC_116', value='-yu*complexconjugate(CKM1x1)', order={'QED': 1})
+
+GC_117 = Coupling(name='GC_117', value='yu*CKM1x1', order={'QED': 1})
+
+GC_118 = Coupling(name='GC_118', value='-yd*CKM1x1', order={'QED': 1})
+
+GC_119 = Coupling(name='GC_119', value='ys*complexconjugate(CKM1x2)', order={'QED': 1})
+
+GC_120 = Coupling(name='GC_120', value='-yu*complexconjugate(CKM1x2)', order={'QED': 1})
+
+GC_121 = Coupling(name='GC_121', value='yu*CKM1x2', order={'QED': 1})
+
+GC_122 = Coupling(name='GC_122', value='-ys*CKM1x2', order={'QED': 1})
+
+GC_123 = Coupling(name='GC_123', value='-yu*complexconjugate(CKM1x3)', order={'QED': 1})
+
+GC_124 = Coupling(name='GC_124', value='yu*CKM1x3', order={'QED': 1})
+
+GC_125 = Coupling(name='GC_125', value='yd*complexconjugate(CKM2x1)', order={'QED': 1})
+
+GC_126 = Coupling(name='GC_126', value='-yd*CKM2x1', order={'QED': 1})
+
+GC_127 = Coupling(name='GC_127', value='ys*complexconjugate(CKM2x2)', order={'QED': 1})
+
+GC_128 = Coupling(name='GC_128', value='-ys*CKM2x2', order={'QED': 1})
+
+GC_129 = Coupling(name='GC_129', value='yd*complexconjugate(CKM3x1)', order={'QED': 1})
+
+GC_130 = Coupling(name='GC_130', value='-yd*CKM3x1', order={'QED': 1})
+
+GC_131 = Coupling(name='GC_131', value='ys*complexconjugate(CKM3x2)', order={'QED': 1})
+
+GC_132 = Coupling(name='GC_132', value='-ys*CKM3x2', order={'QED': 1})

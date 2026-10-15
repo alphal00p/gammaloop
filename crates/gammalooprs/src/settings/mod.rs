@@ -75,7 +75,8 @@ pub struct RuntimeSettings {
     /// Local and integrated threshold/ultraviolet subtraction controls.
     #[serde(rename = "subtraction", skip_serializing_if = "IsDefault::is_default")]
     pub subtraction: SubtractionSettings,
-    /// Damping profile shared by Local Unitarity threshold terms.
+    /// Damping profile shared by Local Unitarity threshold terms; it also localizes
+    /// zero-temperature Fermi-surface distributions.
     #[serde(rename = "h_function", skip_serializing_if = "IsDefault::is_default")]
     pub lu_h_function: HFunctionSettings,
 }
@@ -369,9 +370,43 @@ mod tests {
     }
 
     #[test]
-    fn compile_test_serialize_deserialize() {
+    fn compile_jit_direct_translation_defaults_and_overrides() {
         use crate::settings::global::GammaloopCompileOptions;
+
+        let defaults_guard = ShowDefaultsGuard::new(false);
+        let defaults: GammaloopCompileOptions = toml::from_str("").unwrap();
+        assert!(defaults.jit_direct_translation);
+        assert_eq!(defaults, GammaloopCompileOptions::default());
+        assert!(
+            !toml::to_string(&defaults)
+                .unwrap()
+                .contains("jit_direct_translation")
+        );
+
+        let settings: GammaloopCompileOptions =
+            toml::from_str("jit_direct_translation = false").unwrap();
+        assert!(!settings.jit_direct_translation);
+        let serialized = toml::to_string(&settings).unwrap();
+        assert!(serialized.contains("jit_direct_translation = false"));
+        assert_eq!(
+            toml::from_str::<GammaloopCompileOptions>(&serialized).unwrap(),
+            settings
+        );
+
+        drop(defaults_guard);
+        let _defaults_guard = ShowDefaultsGuard::new(true);
+        assert!(
+            toml::to_string(&defaults)
+                .unwrap()
+                .contains("jit_direct_translation = true")
+        );
+    }
+
+    #[test]
+    fn compile_test_serialize_deserialize() {
+        use crate::settings::global::{CompilationOptionsSnapshot, GammaloopCompileOptions};
         generic_test_settings::<GammaloopCompileOptions>();
+        generic_test_settings::<CompilationOptionsSnapshot>();
     }
 
     #[test]
@@ -379,8 +414,8 @@ mod tests {
         use crate::{
             processes::EvaluatorSettings,
             settings::global::{
-                CompilationMode, CompilationOptimizationLevel, FrozenCompilationMode,
-                GammaloopCompileOptions,
+                CompilationMode, CompilationOptimizationLevel, CompilationOptionsSnapshot,
+                FrozenCompilationMode, GammaloopCompileOptions,
             },
         };
 
@@ -392,30 +427,41 @@ mod tests {
                 compile: true,
                 ..Default::default()
             }),
-            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O2)
+            FrozenCompilationMode::Symjit(CompilationOptionsSnapshot {
+                optimization_level: CompilationOptimizationLevel::O2,
+                jit_direct_translation: true,
+                ..Default::default()
+            })
         );
     }
 
     #[test]
-    fn compile_settings_forward_symjit_optimization_level() {
+    fn compile_settings_forward_symjit_options() {
         use crate::{
             processes::EvaluatorSettings,
             settings::global::{
-                CompilationOptimizationLevel, FrozenCompilationMode, GammaloopCompileOptions,
+                CompilationOptimizationLevel, CompilationOptionsSnapshot, FrozenCompilationMode,
+                GammaloopCompileOptions,
             },
         };
 
         let options = GammaloopCompileOptions {
             optimization_level: CompilationOptimizationLevel::O1,
+            jit_direct_translation: false,
             ..Default::default()
         };
+        assert!(!options.options_snapshot().jit_direct_translation);
 
         assert_eq!(
             options.frozen_mode(&EvaluatorSettings {
                 compile: true,
                 ..Default::default()
             }),
-            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O1)
+            FrozenCompilationMode::Symjit(CompilationOptionsSnapshot {
+                optimization_level: CompilationOptimizationLevel::O1,
+                jit_direct_translation: false,
+                ..Default::default()
+            })
         );
     }
 
@@ -456,6 +502,7 @@ mod tests {
         let options = GammaloopCompileOptions {
             compilation_mode: CompilationMode::Cpp,
             optimization_level: CompilationOptimizationLevel::O1,
+            jit_direct_translation: true,
             fast_math: false,
             unsafe_math: false,
             compiler: "clang++".to_string(),

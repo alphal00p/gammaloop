@@ -25,6 +25,7 @@ use crate::{
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
+    settings::global::MediumSettings,
     utils::{GS, W_, symbolica_ext::DOD},
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
@@ -207,6 +208,27 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             }
         }
         Ok(classified)
+    }
+
+    fn remove_full_observable_spinney<E, V, H>(
+        &self,
+        spinneys: &mut Vec<Spinney>,
+        medium: &MediumSettings,
+    ) where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        if !medium.vacuum_subtraction {
+            return;
+        }
+
+        // Completed thermal weights already carry (1 - V). An operation covering
+        // all loops leaves no medium dependence, even when tree edges survive.
+        // Omit it before either 4D or 3D computation; spinneys contain no bridges.
+        let graph = self.as_ref();
+        let full_observable =
+            InternalSubGraph::cleaned_filter_pessimist(graph.non_bridges(), graph);
+        spinneys
+            .retain(|spinney| spinney.subgraph.is_empty() || spinney.subgraph != full_observable);
     }
 
     fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
@@ -554,4 +576,6 @@ pub trait UVE {
     fn mass_atom(&self) -> Atom;
     fn particle_pdg_code(&self) -> Option<isize>;
     fn is_massive(&self) -> bool;
+    fn is_fermion(&self) -> bool;
+    fn chemical_potential_atom(&self) -> Option<Atom>;
 }

@@ -1,7 +1,8 @@
 # Physical threshold-subtracted GL15 fixture shared with test_runs/utils.rs.
 # Both revisions receive this exact card and save their own generated state.
+# The builtin SM lets each revision read its own model format.
 commands = [
-  "import model ./assets/models/json/sm/sm-default.json",
+  "import model sm-default",
   "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
   "set global kv global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=true",
   "remove processes",

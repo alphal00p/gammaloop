@@ -3,10 +3,267 @@ use super::*;
 use std::fs;
 
 use gammaloop_api::commands::Commands;
+use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::settings::runtime::{
     RotationSetting, StabilityLevelSetting, StabilityRecordingSettings,
 };
 use gammalooprs::uv::profile::UVLimitSelection;
+
+// Targets include the loop-dependent CFF normalization phase i^L.
+fn assert_inspect(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    process_id: usize,
+    graph_id: usize,
+    point: &[f64],
+    target: Complex<f64>,
+    context: &str,
+) -> Result<()> {
+    for use_arb_prec in [false, true] {
+        let value = momentum_space_value(cli, process_id, graph_id, point, use_arb_prec)?;
+        if use_arb_prec {
+            assert_complex_approx_eq(value, target, format!("{context}, arb=true"));
+        } else {
+            // Some four-loop orientation bodies lose digits in Double, while Quad
+            // agrees with Arb. Check Double's declared accuracy without relaxing
+            // the existing Arb reference checks.
+            let accuracy = StabilityLevelSetting::default_double();
+            let tolerance = accuracy
+                .required_precision_for_re
+                .min(accuracy.required_precision_for_im);
+            let scale = target.re.hypot(target.im);
+            assert!(
+                complex_distance(value, target) <= tolerance * scale,
+                "{context}, arb=false: actual={value}, expected={target}, tolerance={tolerance}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
+    let mut failures = Vec::new();
+    for (medium_mode, sampling_mode) in
+        itertools::iproduct!(["vacuum", "thermodynamic_equilibrium"], ["none", "all"],)
+    {
+        let test_root = get_tests_workspace_path().join(format!(
+            "inverse_propagators_cancel_denominators_{medium_mode}_{sampling_mode}"
+        ));
+        let mut cli = get_test_cli(
+            None,
+            &test_root,
+            Some(format!("inverse_propagators_{medium_mode}_{sampling_mode}")),
+            true,
+        )?;
+        run_commands(
+            &mut cli,
+            &[
+                "import model ./assets/models/json/scalars/scalars.json",
+                "set model mass_scalar_1=0.5",
+                &format!(
+                    "set global kv global.generation.medium.mode={medium_mode} global.generation.uniform_numerator_sampling_scale={sampling_mode} global.generation.medium.vacuum_subtraction=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false global.generation.uv.subtract_uv=false"
+                ),
+            ],
+        )?;
+
+        for (case, process_name, fixture, point, external_momenta, external_helicities) in [
+            (
+                "bubble_1",
+                "bubble_inverse_propagator_1",
+                "bubble_inverse_prop_1_cancellation",
+                vec![1.1, 0.7, -0.4],
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    "dependent"
+                ]"#,
+                "[0, 0]",
+            ),
+            (
+                "box",
+                "box_inverse_propagator",
+                "box_inverse_prop_cancellation",
+                vec![1.1, 0.7, -0.4],
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    [3.0, 0.0, 0.0, -3.0],
+                    [3.0, 0.0, 3.0, 0.0],
+                    "dependent"
+                ]"#,
+                "[0, 0, 0, 0]",
+            ),
+            (
+                "hexagon_cubed",
+                "hexagon_cubed_inverse_propagator",
+                "hexagon_cubed_inverse_prop_cancellation",
+                vec![1.1, 0.7, -0.4],
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    [1.5, 0.0, -1.5, 0.0],
+                    "dependent"
+                ]"#,
+                "[0, 0, 0]",
+            ),
+            (
+                "pentagon_two_distinct",
+                "pentagon_two_distinct_inverse_propagators",
+                "pentagon_two_distinct_inverse_prop_cancellation",
+                vec![1.1, 0.7, -0.4],
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    [3.0, 0.0, 0.0, -3.0],
+                    [1.5, 0.0, 1.5, 0.0],
+                    [1.5, 0.0, 1.5, 0.0],
+                    "dependent"
+                ]"#,
+                "[0, 0, 0, 0, 0]",
+            ),
+            (
+                "double_box_two_distinct",
+                "double_box_two_distinct_inverse_propagators",
+                "double_box_inverse_prop_cancellation",
+                vec![1.1, 0.7, -0.4, -0.6, 0.8, 0.5],
+                r#"[
+                    [3.0, 0.0, 0.0, 3.0],
+                    [3.0, 0.0, 0.0, -3.0],
+                    [1.5, 0.0, 1.5, 0.0],
+                    "dependent"
+                ]"#,
+                "[0, 0, 0, 0]",
+            ),
+        ] {
+            // Exercise active sampling on the small bubble. Higher degrees and
+            // BeyondQuadratic are covered by the shared 3D tests.
+            if sampling_mode != "none" && case != "bubble_1" {
+                continue;
+            }
+            let runtime = format!(
+                r#"set default-runtime string '
+                [general]
+                integral_unit = "none"
+                disable_flux_factor = true
+                inverse_temperature = 1.0
+
+                [kinematics.externals]
+                type = "constant"
+
+                [kinematics.externals.data]
+                momenta = {external_momenta}
+                helicities = {external_helicities}
+
+                [sampling]
+                graphs = "summed"
+                orientations = "summed"
+                lmb_multichanneling = false
+                lmb_channels = "summed"
+
+                [subtraction]
+                disable_threshold_subtraction = true
+            '"#
+            );
+            run_commands(
+                &mut cli,
+                &[
+                    &format!(
+                        "import graphs ./tests/resources/graphs/{fixture}.dot -p {process_name} -i cancellation"
+                    ),
+                    &runtime,
+                    &format!("generate existing -p {process_name} -i cancellation"),
+                ],
+            )?;
+
+            let process = ProcessRef::Unqualified(process_name.to_string());
+            let integrand_name = "cancellation".to_string();
+            let (process_id, integrand_name) = cli
+                .state
+                .find_integrand_ref(Some(&process), Some(&integrand_name))?;
+            let ProcessIntegrand::Amplitude(integrand) = cli
+                .state
+                .process_list
+                .get_integrand(process_id, &integrand_name)?
+                .require_generated()?
+            else {
+                panic!("the {case} fixture must generate an amplitude integrand")
+            };
+            assert_eq!(integrand.data.graph_group_structure.len(), 1);
+            let group = integrand
+                .data
+                .graph_group_structure
+                .iter()
+                .next()
+                .expect("the cancellation graph group must exist");
+            assert_eq!(
+                group.into_iter().count(),
+                2,
+                "the {case} diagrams must be evaluated in the same graph group in {medium_mode} mode"
+            );
+
+            // None ignores M, so repeating its scale does not add coverage.
+            let sampling_scales: &[f64] = if sampling_mode == "none" {
+                &[0.75]
+            } else {
+                &[0.75, 2.25]
+            };
+            for (&sampling_scale, use_arb_prec) in
+                itertools::iproduct!(sampling_scales, [false, true])
+            {
+                cli.run_command(&format!(
+                    "set process -p {process_name} -i cancellation kv general.numerator_sampling_scale={sampling_scale}"
+                ))?;
+                let precision = if use_arb_prec { "arb" } else { "f64" };
+                let tolerance = if use_arb_prec { 1.0e-295 } else { 1.0e-12 };
+                let (_, target) = Inspect {
+                    process: Some(process.clone()),
+                    integrand_name: Some(integrand_name.clone()),
+                    point: point.clone(),
+                    momentum_space: true,
+                    graph_id: Some(0),
+                    use_arb_prec,
+                    ..Default::default()
+                }
+                .run(&mut cli)?;
+                let (_, result) = Inspect {
+                    process: Some(process.clone()),
+                    integrand_name: Some(integrand_name.clone()),
+                    point: point.clone(),
+                    momentum_space: true,
+                    graph_id: Some(1),
+                    use_arb_prec,
+                    ..Default::default()
+                }
+                .run(&mut cli)?;
+                let (_, combined_result) = Inspect {
+                    process: Some(process.clone()),
+                    integrand_name: Some(integrand_name.clone()),
+                    point: point.clone(),
+                    momentum_space: true,
+                    use_arb_prec,
+                    ..Default::default()
+                }
+                .run(&mut cli)?;
+                let scale = target.re.hypot(target.im).max(result.re.hypot(result.im));
+                if scale <= 1.0e-16 {
+                    failures.push(format!(
+                        "the {case} {medium_mode} {sampling_mode} M={sampling_scale} {precision} cancellation oracle is trivial"
+                    ));
+                    continue;
+                }
+                if combined_result.re.hypot(combined_result.im) > tolerance * scale {
+                    failures.push(format!(
+                    "the {case} {medium_mode} {sampling_mode} M={sampling_scale} {precision} grouped diagrams did not cancel: combined_result={combined_result:e}, scale={scale:e}, tolerance={tolerance:e}, target={target:e}, result={result:e}"
+                ));
+                }
+            }
+        }
+
+        clean_test(test_root);
+    }
+    assert!(
+        failures.is_empty(),
+        "inverse-propagator cancellation failures:\n{}",
+        failures.join("\n")
+    );
+    Ok(())
+}
 
 #[test]
 fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Result<()> {
@@ -1318,6 +1575,498 @@ fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
 }
 
 #[test]
+fn thermal_chemical_potential_agrees_across_evaluators() -> Result<()> {
+    for (direct_translation, explicit_orientation_sum_only) in
+        itertools::iproduct!([false, true], [false, true])
+    {
+        let name = format!(
+            "thermal_evaluators_direct_{direct_translation}_explicit_{explicit_orientation_sum_only}"
+        );
+        let mut cli = get_test_cli(
+            None,
+            get_tests_workspace_path().join(&name),
+            Some(name),
+            true,
+        )?;
+        run_commands(
+            &mut cli,
+            &[
+                "import model sm-thermal.json",
+                "import graphs ./tests/resources/graphs/sunrise_qcd_vacuum.dot -p thermal_sunrise",
+                "set model aS=1.0",
+                "set model muB=3.0",
+                &format!(
+                    "set global kv global.generation.medium.mode=thermodynamic_equilibrium global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.evaluator.direct_translation={direct_translation} global.generation.evaluator.iterative_orientation_optimization=true global.generation.evaluator.summed=true global.generation.evaluator.summed_function_map=true global.generation.evaluator.compile=false global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.uv.softct=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true"
+                ),
+                r#"set default-runtime kv general.inverse_temperature=1.0 general.enable_cache=false sampling.orientations="summed" subtraction.disable_threshold_subtraction=true"#,
+                "generate",
+            ],
+        )?;
+        let methods: &[&str] = if explicit_orientation_sum_only {
+            &["SingleParametric"]
+        } else {
+            &[
+                "Iterative",
+                "Summed",
+                "SummedFunctionMap",
+                "SingleParametric",
+            ]
+        };
+        for method in methods {
+            // Keep orientation slots pristine: SingleParametric fills them at runtime.
+            let mut method_cli = cli.clone();
+            method_cli.run_command(&format!(
+                "set process -p thermal_sunrise kv general.evaluator_method=\"{method}\""
+            ))?;
+            for (mu, expected) in [
+                (3.0, 2.337_015_373_956_359e-3),
+                (0.0, 2.888_597_299_939_403e-3),
+            ] {
+                method_cli.run_command(&format!("set model muB={mu}"))?;
+                for use_arb_prec in [false, true] {
+                    let (_, value) = Inspect {
+                        process: Some(ProcessRef::Id(0)),
+                        graph_id: Some(0),
+                        integrand_name: Some("default".to_string()),
+                        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+                        momentum_space: true,
+                        use_arb_prec,
+                        ..Default::default()
+                    }
+                    .run(&mut method_cli)?;
+                    assert_complex_approx_eq(
+                        value,
+                        Complex::new(0.0, expected),
+                        format!(
+                            "thermal sunrise {method}, muB={mu}, direct={direct_translation}, explicit={explicit_orientation_sum_only}, arb={use_arb_prec}"
+                        ),
+                    );
+                }
+            }
+        }
+        clean_test(&cli.cli_settings.state.folder);
+    }
+    Ok(())
+}
+
+/// Momentum-space value of the selected graph, with the evaluated precision
+/// checked to be the requested one.
+fn momentum_space_value(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    process_id: usize,
+    graph_id: usize,
+    point: &[f64],
+    use_arb_prec: bool,
+) -> Result<Complex<f64>> {
+    let graph_name = cli
+        .state
+        .process_list
+        .get_integrand_mut(process_id, "default")?
+        .graph_name_by_id(graph_id)
+        .expect("requested graph must exist")
+        .to_string();
+    let points = ndarray::Array2::from_shape_vec((1, point.len()), point.to_vec())?;
+    let discrete_dims = ndarray::Array2::<usize>::from_shape_vec((1, 0), vec![])?;
+    let evaluation = evaluate_sample(
+        &mut cli.state,
+        &EvaluateSamples {
+            process_id: Some(process_id),
+            integrand_name: Some("default".to_string()),
+            use_arb_prec,
+            minimal_output: false,
+            return_generated_events: Some(false),
+            momentum_space: true,
+            points: points.view(),
+            integrator_weights: None,
+            discrete_dims: Some(discrete_dims.view()),
+            graph_names: Some(vec![Some(graph_name)]),
+            orientations: None,
+        },
+    )?
+    .sample
+    .evaluation;
+    let precisions = evaluation
+        .evaluation_metadata
+        .as_ref()
+        .unwrap()
+        .stability_results
+        .iter()
+        .map(|level| level.precision)
+        .collect_vec();
+    let expected = if use_arb_prec {
+        gammalooprs::settings::runtime::Precision::Arb
+    } else {
+        gammalooprs::settings::runtime::Precision::Double
+    };
+    assert_eq!(
+        precisions,
+        [expected],
+        "process={process_id}, graph={graph_id}, point={point:?}"
+    );
+    Ok(evaluation.integrand_result.map(|value| value.0))
+}
+
+/// Raw f64 evaluations of the vacuum-subtracted thermal quark sunrise keep the
+/// exponentially small UV tail at finite temperature, where the old hyperbolic
+/// bodies and numerical vacuum cancellation returned zeros or wrong signs. At zero
+/// temperature and density every occupation is an exact zero, so no rounding
+/// residue of the vacuum weight may survive anywhere.
+#[test]
+fn thermal_sunrise_f64_keeps_uv_tails_and_exact_zeros() -> Result<()> {
+    let direction = [0.3, -0.5, 0.8, -0.6, 0.2, 0.75];
+    for (mode, mu_b) in [
+        ("thermodynamic_equilibrium", 3.0),
+        ("zero_temperature_equilibrium", 0.0),
+    ] {
+        let name = format!("thermal_sunrise_f64_{mode}");
+        let mut cli = get_test_cli(
+            None,
+            get_tests_workspace_path().join(&name),
+            Some(name),
+            true,
+        )?;
+        run_commands(
+            &mut cli,
+            &[
+                "import model sm-thermal.json",
+                "import graphs ./tests/resources/graphs/sunrise_qcd_vacuum.dot -p thermal_sunrise",
+                "set model aS=1.0",
+                &format!("set model muB={mu_b}"),
+                &format!(
+                    "set global kv global.generation.medium.mode={mode} global.generation.medium.vacuum_subtraction=true global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=false global.generation.uv.softct=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true global.generation.evaluator.compile=true global.generation.compile.compilation_mode=\"assembly\" global.generation.compile.optimization_level=\"O0\" global.generation.compile.fast_math=false global.generation.compile.unsafe_math=false"
+                ),
+                r#"set default-runtime kv general.inverse_temperature=1.0 general.enable_cache=false sampling.orientations="summed" subtraction.disable_threshold_subtraction=true stability.rotation_axis=[] stability.escalate_if_exact_zero=false"#,
+                "generate",
+            ],
+        )?;
+        let mut points = [1.0, 10.0, 20.0, 40.0, 80.0, 160.0, 320.0]
+            .map(|scale| direction.map(|component| scale * component))
+            .to_vec();
+        points.extend([
+            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            [1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        ]);
+        for point in points {
+            let double = momentum_space_value(&mut cli, 0, 0, &point, false)?;
+            let arb = momentum_space_value(&mut cli, 0, 0, &point, true)?;
+            if mode == "zero_temperature_equilibrium" {
+                assert_eq!(double, Complex::new(0.0, 0.0), "f64 at {point:?}");
+                assert_eq!(arb, Complex::new(0.0, 0.0), "Arb at {point:?}");
+                continue;
+            }
+            assert!(arb.im != 0.0, "Arb at {point:?}");
+            for (actual, reference) in [(double.re, arb.re), (double.im, arb.im)] {
+                assert!(
+                    (actual - reference).abs() <= 1e-12 * arb.im.abs(),
+                    "f64 {double:?} != Arb {arb:?} at {point:?}"
+                );
+            }
+        }
+        clean_test(&cli.cli_settings.state.folder);
+    }
+    Ok(())
+}
+
+#[test]
+fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("thermal_vacuum_2l_3l_inspect.toml".into()),
+        get_tests_workspace_path().join("thermal_vacuum_2l_3l_inspect"),
+        None,
+        true,
+    )?;
+
+    cli.run_command("set model muB=0.0")?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        Complex::new(0.0, 2.888_597_299_939_403e-3),
+        "thermal sunrise inspect benchmark at point 0 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        Complex::new(0.0, 2.906_724_274_545_281e-4),
+        "thermal sunrise inspect benchmark at point 1 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(0.0, 1.750_719_959_696_99e-5),
+        "thermal mercedes inspect benchmark at point 0 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(0.0, 6.126_647_366_322_035e-7),
+        "thermal mercedes inspect benchmark at point 1 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        2,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(0.0, -2.403_408_249_730_896e-5),
+        "thermal tennis ball inspect benchmark at point 0 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        2,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(0.0, -5.482_474_260_313_583e-7),
+        "thermal tennis ball inspect benchmark at point 1 at muB=0.0",
+    )?;
+
+    cli.run_command("set model muB=3.0")?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        Complex::new(0.0, 2.337_015_373_956_359e-3),
+        "thermal sunrise inspect benchmark at point 0 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        Complex::new(0.0, 2.573_385_490_044_703e-4),
+        "thermal sunrise inspect benchmark at point 1 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(0.0, 6.558_647_319_025_115e-6),
+        "thermal mercedes inspect benchmark at point 0 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(0.0, 3.520_118_714_871_738e-7),
+        "thermal mercedes inspect benchmark at point 1 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        2,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(0.0, -9.425_414_745_613_589e-6),
+        "thermal tennis ball inspect benchmark at point 0 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        2,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(0.0, -3.494_310_883_292_893e-7),
+        "thermal tennis ball inspect benchmark at point 1 at muB=3.0",
+    )?;
+
+    Ok(())
+}
+
+#[test]
+fn thermal_vacuum_4l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("thermal_vacuum_4l_inspect.toml".into()),
+        get_tests_workspace_path().join("thermal_vacuum_4l_inspect"),
+        None,
+        true,
+    )?;
+
+    cli.run_command("set model muB=0.0")?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+        Complex::new(0.0, -2.838_254_343_652_266e-8),
+        "thermal bugblatter 1 inspect benchmark at point 0 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+        Complex::new(0.0, -1.179_354_762_459_854e-9),
+        "thermal bugblatter 1 inspect benchmark at point 1 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        1,
+        &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+        Complex::new(0.0, 2.085_535_988_771_055e-10),
+        "thermal bugblatter 2 inspect benchmark at point 0 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        1,
+        &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+        Complex::new(0.0, 1.124_548_090_968_172e-11),
+        "thermal bugblatter 2 inspect benchmark at point 1 at muB=0.0",
+    )?;
+
+    cli.run_command("set model muB=3.0")?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+        Complex::new(0.0, -3.470_645_264_375_66e-10),
+        "thermal bugblatter 1 inspect benchmark at point 0 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+        Complex::new(0.0, -5.666_712_273_246_035e-10),
+        "thermal bugblatter 1 inspect benchmark at point 1 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        1,
+        &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+        Complex::new(0.0, 3.469_482_008_367_54e-10),
+        "thermal bugblatter 2 inspect benchmark at point 0 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        1,
+        &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+        Complex::new(0.0, 1.637_733_030_600_185e-11),
+        "thermal bugblatter 2 inspect benchmark at point 1 at muB=3.0",
+    )?;
+
+    Ok(())
+}
+
+#[test]
+fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("cold_dense_vacuum_2l_3l_inspect.toml".into()),
+        get_tests_workspace_path().join("cold_dense_vacuum_2l_3l_inspect"),
+        None,
+        true,
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        Complex::new(0.0, 4.310_928_789_772_213e-4),
+        "cold dense sunrise inspect benchmark at point 0 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        Complex::new(0.0, 1.850_837_097_150_558e-4),
+        "cold dense sunrise inspect benchmark at point 1 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(0.0, -9.891_479_783_716_468e-6),
+        "cold dense mercedes inspect benchmark at point 0 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(0.0, 2.452_375_990_392_057e-7),
+        "cold dense mercedes inspect benchmark at point 1 at muB=3.0",
+    )?;
+
+    // The repeated massless quark momentum is k0 (edges 0 and 5).
+    // Its double pole produces an ordinary delta at |k0| = mu_u = muB/3 = 1.
+    // With UV subtraction disabled this is the only Fermi surface, so at a
+    // fixed point the localized result is B(k) + A(k) h(1/|k0|). Check this
+    // profile dependence without assigning a profile-independent local target.
+    for point in [
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        [1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+    ] {
+        let t = 1.0 / point[..3].iter().map(|x| x * x).sum::<f64>().sqrt();
+        for use_arb_prec in [false, true] {
+            let mut probes = Vec::new();
+            for sigma in [0.7, 1.0, 1.4] {
+                cli.run_command(&format!("set process -p 2 kv h_function.sigma={sigma}"))?;
+                let value = momentum_space_value(&mut cli, 2, 0, &point, use_arb_prec)?;
+                // Normalized power-zero poly-exponential, pinned in the run card.
+                let h = 2.0 / (std::f64::consts::PI.sqrt() * sigma)
+                    * (2.0 - (t / sigma).powi(2) - (sigma / t).powi(2)).exp();
+                assert!(value.re.is_finite() && value.im.is_finite());
+                probes.push((h, value));
+            }
+            let [(h0, value0), (h1, value1), (h2, value2)] = probes.as_slice() else {
+                unreachable!()
+            };
+            assert!(
+                (value1.im - value0.im).abs() > 1e-8 * value0.im.abs().max(value1.im.abs()),
+                "tennis-ball Fermi contribution must respond to h(t), arb={use_arb_prec}: {probes:?}"
+            );
+            let expected = *value0 + (*value1 - *value0) * ((h2 - h0) / (h1 - h0));
+            assert_complex_approx_eq(
+                *value2,
+                expected,
+                format!(
+                    "cold dense tennis ball profile dependence at {point:?}, arb={use_arb_prec}"
+                ),
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn test_qqx_aaa_ir_tree_unprocessed_inspect() -> Result<()> {
     let mut cli = get_test_cli(
         Some("generate_qqx_aaa_tree_unprocessed.toml".into()),
@@ -1411,7 +2160,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
         Some("scalar_sunrise.toml".into()),
         get_tests_workspace_path().join("scalar_sunrise"),
         Some("scalar_sunrise".to_string()),
-        false,
+        true,
     )?;
 
     // Audit the generated roots and numerator definitions before evaluating:

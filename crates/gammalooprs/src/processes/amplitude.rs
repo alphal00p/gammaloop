@@ -30,6 +30,7 @@ use crate::{
         CutCFFIndex,
         esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
     },
+    feyngen::GenerationType,
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
         cuts::{CutSet, ResidueSelector},
@@ -89,7 +90,7 @@ use crate::{
     graph::{FeynmanGraph, Graph},
     integrands::process::ProcessIntegrand,
     model::Model,
-    settings::global::GenerationSettings,
+    settings::global::{GenerationSettings, MediumMode},
 };
 
 use crate::graph::parse::complete_group_parsing;
@@ -387,6 +388,7 @@ impl Amplitude {
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        settings.validate_for_process(GenerationType::Amplitude)?;
         // preprocess each graph individually
         // Threshold directives of every member use the master's edge IDs and topology.
         // The supplied graph group is responsible for aligning their physical meaning.
@@ -1004,7 +1006,7 @@ impl AmplitudeGraph {
 
     #[instrument(skip_all, err)]
     pub(crate) fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<()> {
-        settings.validate_explicit_orientation_sum_options()?;
+        self.graph.set_medium_mode(settings.medium.mode)?;
         self.graph.ensure_energy_convergent_cycles(
             &self
                 .graph
@@ -1211,6 +1213,13 @@ impl AmplitudeGraph {
         component: &S,
         config: AnalyticalEvaluationConfig<'_>,
     ) -> Result<Atom> {
+        if self.graph.param_builder.medium_mode != MediumMode::Vacuum {
+            return Err(eyre!(
+                "Analytical evaluation with Vakint does not support thermal modes (graph '{}', mode {:?}); use inspect or integrate for medium-dependent results",
+                self.graph.name,
+                self.graph.param_builder.medium_mode
+            ));
+        }
         let mut true_settings = config.true_settings.clone();
         let pysec_dec_enabled_in_vakint = true_settings.evaluation_order.0.iter().find_map(|o| {
             if let EvaluationMethod::PySecDec(opts) = o {
@@ -1223,7 +1232,7 @@ impl AmplitudeGraph {
         let complex_params_vakint =
             if config.evaluate_numerically || pysec_dec_enabled_in_vakint.is_some() {
                 let mut param_builder = self.graph.param_builder.clone(); //ParamBuilder::<f64>::new(&self.graph, model);
-                param_builder.update_model_values(config.model);
+                param_builder.update_model_values(config.model)?;
                 param_builder.m_uv_value(Complex::new_re(F(config.run_time_settings.general.m_uv)));
                 param_builder.renormalization_localization_scale_value(Complex::new_re(F(config
                     .run_time_settings
@@ -1233,6 +1242,10 @@ impl AmplitudeGraph {
                     .run_time_settings
                     .general
                     .mu_r_sq())));
+                param_builder.inverse_temperature_value(Complex::new_re(F(config
+                    .run_time_settings
+                    .general
+                    .inverse_temperature)));
 
                 // println!("\nParamBuilder parameters:\n{}", param_builder);
 
@@ -1436,8 +1449,9 @@ impl AmplitudeGraph {
                 &cff_options,
                 &settings.orientation_pattern,
                 settings.explicit_orientation_sum_only,
-            ),
-            &settings.uv,
+            )
+            .with_vacuum_subtraction(settings.medium.vacuum_subtraction),
+            settings,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "amplitude_graph_parametric_orchestration_done",
@@ -2201,8 +2215,9 @@ impl AmplitudeGraph {
                 &cff_options,
                 &settings.orientation_pattern,
                 settings.explicit_orientation_sum_only,
-            ),
-            &settings.uv,
+            )
+            .with_vacuum_subtraction(settings.medium.vacuum_subtraction),
+            settings,
         )?;
 
         let mut variants =
@@ -4983,10 +4998,13 @@ pub mod test {
             let cut_structure = CutStructure::empty(&graph);
             assert_eq!(cut_structure.cuts.len(), 1);
             let expected_cut = cut_structure.cuts[0].clone();
-            let settings = UVgenerationSettings {
-                generate_integrated: false,
-                softct: false,
-                orchestrator,
+            let settings = GenerationSettings {
+                uv: UVgenerationSettings {
+                    generate_integrated: false,
+                    softct: false,
+                    orchestrator,
+                    ..Default::default()
+                },
                 ..Default::default()
             };
             let generated = orchestrator

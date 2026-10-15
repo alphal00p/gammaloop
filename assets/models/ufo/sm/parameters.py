@@ -72,6 +72,36 @@ etaWS = Parameter(name='etaWS',
                   lhablock='Wolfenstein',
                   lhacode=[4])
 
+ymu = Parameter(
+    name='ymu',
+    nature='external',
+    type='real',
+    value=0.0022,
+    texname='\\text{ymu}',
+    lhablock='YUKAWA',
+    lhacode=[2],
+)
+
+ymd = Parameter(
+    name='ymd',
+    nature='external',
+    type='real',
+    value=0.0047,
+    texname='\\text{ymd}',
+    lhablock='YUKAWA',
+    lhacode=[1],
+)
+
+yms = Parameter(
+    name='yms',
+    nature='external',
+    type='real',
+    value=0.095,
+    texname='\\text{yms}',
+    lhablock='YUKAWA',
+    lhacode=[3],
+)
+
 ymc = Parameter(name='ymc',
                 nature='external',
                 type='real',
@@ -127,6 +157,34 @@ MZ = Parameter(name='MZ',
                texname='\\text{MZ}',
                lhablock='MASS',
                lhacode=[23])
+
+MU = Parameter(
+    name='MU',
+    nature='external',
+    type='real',
+    value=0.0022,
+    texname='\\text{MU}',
+    lhablock='MASS',
+    lhacode=[2],
+)
+
+MD = Parameter(
+    name='MD',
+    nature='external',
+    type='real',
+    value=0.0047,
+    texname='\\text{MD}',
+    lhablock='MASS',
+    lhacode=[1],
+)
+
+MS = Parameter(name='MS',
+               nature='external',
+               type='real',
+               value=0.095,
+               texname='\\text{MS}',
+               lhablock='MASS',
+               lhacode=[3])
 
 MC = Parameter(name='MC',
                nature='external',
@@ -223,6 +281,46 @@ WTau = Parameter(name='WTau',
                  texname='\\text{WTau}',
                  lhablock='DECAY',
                  lhacode=[15])
+
+muB = Parameter(name='muB',
+                nature='external',
+                type='real',
+                value=0.0,
+                texname='\\text{muB}',
+                lhablock='CHEMICALPOTENTIAL',
+                lhacode=[1])
+
+muQ = Parameter(name='muQ',
+                nature='external',
+                type='real',
+                value=0.0,
+                texname='\\text{muQ}',
+                lhablock='CHEMICALPOTENTIAL',
+                lhacode=[2])
+
+muLe = Parameter(name='muLe',
+                 nature='external',
+                 type='real',
+                 value=0.0,
+                 texname='\\text{muLe}',
+                 lhablock='CHEMICALPOTENTIAL',
+                 lhacode=[3])
+
+muLmu = Parameter(name='muLmu',
+                  nature='external',
+                  type='real',
+                  value=0.0,
+                  texname='\\text{muLmu}',
+                  lhablock='CHEMICALPOTENTIAL',
+                  lhacode=[4])
+
+muLtau = Parameter(name='muLtau',
+                   nature='external',
+                   type='real',
+                   value=0.0,
+                   texname='\\text{muLtau}',
+                   lhablock='CHEMICALPOTENTIAL',
+                   lhacode=[5])
 
 CKM1x1 = Parameter(name='CKM1x1',
                    nature='internal',
@@ -343,6 +441,30 @@ lam = Parameter(name='lam',
                 type='real',
                 value='MH**2/(2.*vev**2)',
                 texname='\\text{lam}')
+
+yu = Parameter(
+    name='yu',
+    nature='internal',
+    type='real',
+    value='(ymu*cmath.sqrt(2))/vev',
+    texname='\\text{yu}',
+)
+
+yd = Parameter(
+    name='yd',
+    nature='internal',
+    type='real',
+    value='(ymd*cmath.sqrt(2))/vev',
+    texname='\\text{yd}',
+)
+
+ys = Parameter(
+    name='ys',
+    nature='internal',
+    type='real',
+    value='(yms*cmath.sqrt(2))/vev',
+    texname='\\text{ys}',
+)
 
 yb = Parameter(name='yb',
                nature='internal',
@@ -493,3 +615,195 @@ I4x33 = Parameter(name='I4x33',
                   type='complex',
                   value='CKM3x3*yb',
                   texname='\\text{I4x33}')
+
+muW = Parameter(name='muW',
+                nature='internal',
+                type='real',
+                value='muQ',
+                texname='\\text{muW}')
+
+mughWp = Parameter(name='mughWp',
+                   nature='internal',
+                   type='real',
+                   value='muQ',
+                   texname='\\text{mughWp}')
+
+mughWm = Parameter(name='mughWm',
+                   nature='internal',
+                   type='real',
+                   value='-1*muQ',
+                   texname='\\text{mughWm}')
+
+muve = Parameter(name='muve',
+                 nature='internal',
+                 type='real',
+                 value='muLe',
+                 texname='\\text{muve}')
+
+muvm = Parameter(name='muvm',
+                 nature='internal',
+                 type='real',
+                 value='muLmu',
+                 texname='\\text{muvm}')
+
+muvt = Parameter(name='muvt',
+                 nature='internal',
+                 type='real',
+                 value='muLtau',
+                 texname='\\text{muvt}')
+
+muu = Parameter(name='muu',
+                nature='internal',
+                type='real',
+                value='muB/3+2*muQ/3',
+                texname='\\text{muu}')
+
+muc = Parameter(name='muc',
+                nature='internal',
+                type='real',
+                value='muB/3+2*muQ/3',
+                texname='\\text{muc}')
+
+mut = Parameter(name='mut',
+                nature='internal',
+                type='real',
+                value='muB/3+2*muQ/3',
+                texname='\\text{mut}')
+
+mud = Parameter(name='mud',
+                nature='internal',
+                type='real',
+                value='muB/3-muQ/3',
+                texname='\\text{mud}')
+
+mus = Parameter(name='mus',
+                nature='internal',
+                type='real',
+                value='muB/3-muQ/3',
+                texname='\\text{mus}')
+
+mub = Parameter(name='mub',
+                nature='internal',
+                type='real',
+                value='muB/3-muQ/3',
+                texname='\\text{mub}')
+
+muG = Parameter(name='muG',
+                nature='internal',
+                type='real',
+                value='muQ',
+                texname='\\text{muG}')
+
+mue = Parameter(name='mue',
+                nature='internal',
+                type='real',
+                value='-1*muQ+muLe',
+                texname='\\text{mue}')
+
+mumu = Parameter(name='mumu',
+                 nature='internal',
+                 type='real',
+                 value='-1*muQ+muLmu',
+                 texname='\\text{mumu}')
+
+muta = Parameter(name='muta',
+                 nature='internal',
+                 type='real',
+                 value='-1*muQ+muLtau',
+                 texname='\\text{muta}')
+
+minus_muW = Parameter(name='minus_muW',
+                nature='internal',
+                type='real',
+                value='-1*muQ',
+                texname='\\text{minus_muW}')
+
+minus_mughWp = Parameter(name='minus_mughWp',
+                   nature='internal',
+                   type='real',
+                   value='-1*muQ',
+                   texname='\\text{minus_mughWp}')
+
+minus_mughWm = Parameter(name='minus_mughWm',
+                   nature='internal',
+                   type='real',
+                   value='muQ',
+                   texname='\\text{minus_mughWm}')
+
+minus_muve = Parameter(name='minus_muve',
+                 nature='internal',
+                 type='real',
+                 value='-1*muLe',
+                 texname='\\text{minus_muve}')
+
+minus_muvm = Parameter(name='minus_muvm',
+                 nature='internal',
+                 type='real',
+                 value='-1*muLmu',
+                 texname='\\text{minus_muvm}')
+
+minus_muvt = Parameter(name='minus_muvt',
+                 nature='internal',
+                 type='real',
+                 value='-1*muLtau',
+                 texname='\\text{minus_muvt}')
+
+minus_muu = Parameter(name='minus_muu',
+                nature='internal',
+                type='real',
+                value='-1*muB/3-2*muQ/3',
+                texname='\\text{minus_muu}')
+
+minus_muc = Parameter(name='minus_muc',
+                nature='internal',
+                type='real',
+                value='-1*muB/3-2*muQ/3',
+                texname='\\text{minus_muc}')
+
+minus_mut = Parameter(name='minus_mut',
+                nature='internal',
+                type='real',
+                value='-1*muB/3-2*muQ/3',
+                texname='\\text{minus_mut}')
+
+minus_mud = Parameter(name='minus_mud',
+                nature='internal',
+                type='real',
+                value='-1*muB/3+muQ/3',
+                texname='\\text{minus_mud}')
+
+minus_mus = Parameter(name='minus_mus',
+                nature='internal',
+                type='real',
+                value='-1*muB/3+muQ/3',
+                texname='\\text{minus_mus}')
+
+minus_mub = Parameter(name='minus_mub',
+                nature='internal',
+                type='real',
+                value='-1*muB/3+muQ/3',
+                texname='\\text{minus_mub}')
+
+minus_muG = Parameter(name='minus_muG',
+                nature='internal',
+                type='real',
+                value='-1*muQ',
+                texname='\\text{minus_muG}')
+
+minus_mue = Parameter(name='minus_mue',
+                nature='internal',
+                type='real',
+                value='muQ-muLe',
+                texname='\\text{minus_mue}')
+
+minus_mumu = Parameter(name='minus_mumu',
+                 nature='internal',
+                 type='real',
+                 value='muQ-muLmu',
+                 texname='\\text{minus_mumu}')
+
+minus_muta = Parameter(name='minus_muta',
+                 nature='internal',
+                 type='real',
+                 value='muQ-muLtau',
+                 texname='\\text{minus_muta}')

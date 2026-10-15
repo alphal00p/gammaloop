@@ -1,6 +1,6 @@
 # Runtime selection and resource policy for local tests, NixCI and main.
 # Package/archive/shard callers select a profile; they must not repeat these lists.
-nextest-version = "0.9.115"
+nextest-version = "0.9.137"
 
 # Existing quarantine, pending a dedicated assertion/reference audit. These are
 # not established unsupported physics cases and are not counted as passed.
@@ -137,7 +137,12 @@ filter = "test(integration)"
 test-group = "integration"
 
 [[profile.default.overrides]]
-filter = "test(/(^|::)epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/(^|::)epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/(^|::)gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/(^|::)gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(=test_integrated_uv_cts::scalar_bubble_integrated) or test(=sunrise_scalar_1_uv) or test(=dotted_sunrise_uv)"
+# This thermal acceptance does not match the generic integration-name filter.
+filter = "test(=cool_qm_eos::cool_qm_eos_nlo_matches_example_target)"
+test-group = "integration"
+
+[[profile.default.overrides]]
+filter = "test(/(^|::)epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/(^|::)epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/(^|::)gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/(^|::)gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(=test_integrated_uv_cts::scalar_bubble_integrated) or test(=sunrise_scalar_1_uv) or test(=dotted_sunrise_uv) or test(=thermal_sunrise_uv)"
 test-group = "integration"
 threads-required = 10
 

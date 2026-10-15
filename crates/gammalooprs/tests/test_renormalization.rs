@@ -2,7 +2,7 @@ use gammalooprs::{
     dot,
     graph::{Graph, parse::IntoGraph},
     initialisation::test_initialise,
-    model::Model,
+    model::{InputParamCard, Model},
     numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
     processes::{Amplitude, AmplitudeGraph},
     utils::{GS, load_generic_model},
@@ -318,6 +318,14 @@ fn scalar_pole_part() {
 #[test]
 fn finite_part_quark_lo() {
     test_initialise().unwrap();
+    let mut model = load_generic_model("sm");
+    let mut restriction = InputParamCard::from_str(
+        include_str!("../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+            .to_owned(),
+        "json",
+    )
+    .unwrap();
+    model.simplify(&mut restriction).unwrap();
     let g: Vec<Graph> = dot!(digraph d1 {
           overall_factor= "+1"
           projector = "spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))/4/3*(Q(0,spenso::mink(4,1))*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(2)),spenso::mink(4,1)))"
@@ -332,15 +340,13 @@ fn finite_part_quark_lo() {
 
           v1 -> v2 [particle= "d"];
           v2 -> v1 [particle= "g"];
-        }
+        }, &model
     )
     .unwrap();
 
     let mut results = Vec::new();
     for project_integrated_uv_cts_onto_tensor_integrals in [true, false] {
         let mut amp = Amplitude::from_graph_list("bub", g.clone()).unwrap();
-
-        let model = load_generic_model("sm");
 
         // The external color projector closes this fixed-flavor open quark line:
         // Tr(T^a T^a)/N_c = (N_c^2-1)*T_F/N_c = C_F. Restore that basis before

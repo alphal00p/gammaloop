@@ -34,12 +34,19 @@ use crate::{
         parse::{IntoGraph, complete_group_parsing},
     },
     initialisation::test_initialise,
+    model::InputParamCard,
     momentum::sample::LoopIndex,
     numerator::{Numerator, UnInit, aind::Aind},
     processes::DotExportSettings,
-    utils::GS,
+    utils::{GS, load_generic_model},
     uv::uv_graph::UVE,
 };
+
+// Preserve the parser fixtures' massless light-quark propagators and full CKM sector.
+const LIGHT_QUARKS_MASSLESS_RESTRICTION: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../assets/models/json/sm/restrict_light_quarks_massless.json"
+));
 
 #[test]
 fn test_load() {
@@ -1193,6 +1200,10 @@ fn edge_mass_attribute_drives_evaluated_edge_mass() {
 #[test]
 fn propagators() {
     test_initialise().unwrap();
+    let mut model = load_generic_model("sm");
+    let mut restriction =
+        InputParamCard::from_str(LIGHT_QUARKS_MASSLESS_RESTRICTION.into(), "json").unwrap();
+    model.simplify(&mut restriction).unwrap();
     let gs: Vec<Graph> = dot!(
         digraph g1{
             node [num=1]
@@ -1207,7 +1218,7 @@ fn propagators() {
         digraph g3{
             node [num=1]
             a -> b [particle="Z"];
-        }
+        }, &model
 
     )
     .unwrap();
@@ -1270,6 +1281,10 @@ impl Graph {
 #[test]
 fn xs_parsing() {
     test_initialise().unwrap();
+    let mut model = load_generic_model("sm");
+    let mut restriction =
+        InputParamCard::from_str(LIGHT_QUARKS_MASSLESS_RESTRICTION.into(), "json").unwrap();
+    model.simplify(&mut restriction).unwrap();
     let g: Graph = dot!(
         digraph{
           ext0	 [style=invis is_cut=0];
@@ -1285,7 +1300,7 @@ fn xs_parsing() {
             3->5	 [particle="a"];
             5	-> ext0	 [dir=back particle="e+"];
             5	-> ext1	 [particle="e-"];
-        }
+        }, &model
     )
     .unwrap();
     g.assert_fixture_hedge_routing(&[
@@ -1435,7 +1450,7 @@ fn xs_parsing() {
               6:22-> ext12 [id=12 dir=back is_cut=0 particle="e+"];
               ext13 [style=invis];
               6:23-> ext13 [id=13 is_cut=1 particle="e-"];
-            }
+            }, &model
         )
         .unwrap();
 
@@ -1462,7 +1477,7 @@ fn xs_parsing() {
             6:3     -> exte0        [id=12 particle="e+"];
 
             6:2     -> exte1        [id=13 particle="e-"];
-    })
+    }, &model)
     .unwrap();
 
     println!("{}", g.global_prefactor.projector);
@@ -1471,6 +1486,13 @@ fn xs_parsing() {
 #[test]
 fn xs_glueing() {
     test_initialise().unwrap();
+    let mut model = load_generic_model("sm");
+    let mut restriction =
+        InputParamCard::from_str(LIGHT_QUARKS_MASSLESS_RESTRICTION.into(), "json").unwrap();
+    // This fixture retains its massive strange propagator while u and d stay massless.
+    restriction.remove(&"MS".into());
+    restriction.remove(&"yms".into());
+    model.simplify(&mut restriction).unwrap();
     let g: Graph = dot!(
         digraph{
           num = "1";
@@ -1490,7 +1512,7 @@ fn xs_glueing() {
           1:6	-> 3:7	 [id=5  particle="s"];
           0:8	-> 1:9	 [id=6  particle="W-"];
           2:10	-> 3:11	 [id=7  particle="W+"];
-        }
+        }, &model
     )
     .unwrap();
     g.assert_fixture_hedge_routing(&[
@@ -1530,7 +1552,7 @@ fn xs_glueing() {
           "0":8	-> "1":9	 [id=2 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e2" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(8)),spenso::mink(4,hedge(9)))" num_autogen="true" particle="W-"];
           "2":10	-> "3":11	 [id=3 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*P(0,a___)+K(0,a___)" name="e3" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))" num_autogen="true" particle="W+"];
           "0":4	-> "2":5	 [id=4  dod="-1" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e4" name_autogen="true" num="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(4,1)))*𝑖" num_autogen="true" particle="u"];
-          "1":6	-> "3":7	 [id=5  dod="-1" dod_autogen="true" lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" name_autogen="true" num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,edge(5,1)))*𝑖" num_autogen="true" particle="s"];
+          "1":6	-> "3":7	 [id=5  dod="-1" dod_autogen="true" lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" name_autogen="true" num="(Q(5,spenso::mink(4,edge(5,1)))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,edge(5,1)))+UFO::MS*spenso::g(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(7))))*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))*𝑖" num_autogen="true" particle="s"];
         }
         "#);
 
@@ -1540,7 +1562,7 @@ fn xs_glueing() {
             b->a [particle= d];
             b->a [particle= "W+"];
             a[int_id=V_90]
-        }
+        }, &model
     )
     .unwrap();
     g.assert_fixture_hedge_routing(&[
@@ -1577,6 +1599,10 @@ fn xs_glueing() {
 #[test]
 fn vertex_normalization() {
     test_initialise().unwrap();
+    let mut model = load_generic_model("sm");
+    let mut restriction =
+        InputParamCard::from_str(LIGHT_QUARKS_MASSLESS_RESTRICTION.into(), "json").unwrap();
+    model.simplify(&mut restriction).unwrap();
     let g: Graph = dot!(
             digraph GL1{
                 num = "1";
@@ -1595,7 +1621,7 @@ fn vertex_normalization() {
                 0:6 -> 3:7 [id=4 particle="G+"];
                 1:8 -> 2:9 [id=5 particle="d~"];
                 1:10 -> 3:11 [id=6 particle="G-"];
-            }
+            }, &model
         ).unwrap();
     g.assert_fixture_hedge_routing(&[
         (0, Some(1)),
@@ -1642,6 +1668,10 @@ fn vertex_normalization() {
 #[test]
 fn validate_verterx() {
     test_initialise().unwrap();
+    let mut model = load_generic_model("sm");
+    let mut restriction =
+        InputParamCard::from_str(LIGHT_QUARKS_MASSLESS_RESTRICTION.into(), "json").unwrap();
+    model.simplify(&mut restriction).unwrap();
     let g: Graph = dot!(digraph GL1{
       //  0[dod=0 int_id=V_82 num="UFO::GC_16*spenso::g(spenso::dind(spenso::cof(3,hedge(2))),spenso::dind(spenso::cof(3,hedge(4))))*spenso::projp(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(4)))"];
       // 1[dod=0 int_id=V_117 num="UFO::GC_22*spenso::g(spenso::dind(spenso::cof(3,hedge(8))),spenso::cof(3,hedge(3)))*spenso::projm(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(3)))"];
@@ -1654,7 +1684,7 @@ fn validate_verterx() {
       0:4   -> 2:5   [id=3  particle="d~"];
       0:6   -> 3:7   [id=4  particle="G-"];
       1:10  -> 3:11  [id=5 particle="G+"];
-    })
+    }, &model)
     .unwrap();
 
     g.assert_fixture_hedge_routing(&[
@@ -1702,6 +1732,10 @@ fn validate_verterx() {
 #[test]
 fn test_ufo() {
     test_initialise().unwrap();
+    let mut model = load_generic_model("sm");
+    let mut restriction =
+        InputParamCard::from_str(LIGHT_QUARKS_MASSLESS_RESTRICTION.into(), "json").unwrap();
+    model.simplify(&mut restriction).unwrap();
     let g: Graph = dot!(
             digraph GL0{
                 num = "1";
@@ -1719,7 +1753,7 @@ fn test_ufo() {
             0:6-> 3:7 [id=4   particle="d~"];
             1:8-> 2:9 [id=5   particle="d"];
             2:10-> 3:11 [id=6   particle="d"];
-            }
+            }, &model
         ).unwrap();
 
     g.assert_fixture_hedge_routing(&[

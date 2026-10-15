@@ -186,10 +186,12 @@
       "width": "ZERO",
       "texname": "\\phi_0",
       "antitexname": "\\phi_0",
-      "charge": 0.0,
+      "charge": 0,
+      "chemical_potential": null,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": 0
+      "y_charge": 0,
+      "y_charge_right": null
     },
     {
       "pdg_code": 1001,
@@ -201,10 +203,12 @@
       "width": "width_scalar_1",
       "texname": "\\phi_1",
       "antitexname": "\\phi_1",
-      "charge": 0.0,
+      "charge": 0,
+      "chemical_potential": null,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": 0
+      "y_charge": 0,
+      "y_charge_right": null
     },
     {
       "pdg_code": 1002,
@@ -216,10 +220,12 @@
       "width": "width_scalar_2",
       "texname": "\\phi_2",
       "antitexname": "\\phi_2",
-      "charge": 0.0,
+      "charge": 0,
+      "chemical_potential": null,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": 0
+      "y_charge": 0,
+      "y_charge_right": null
     }
   ],
   "propagators": [

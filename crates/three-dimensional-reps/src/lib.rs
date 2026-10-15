@@ -11,6 +11,7 @@ pub mod graph_io;
 mod graph_signatures;
 pub mod surface;
 pub mod symbols;
+pub mod thermal;
 pub mod tree;
 pub mod utils;
 pub mod validator;
@@ -35,6 +36,9 @@ pub use graph_signatures::MomentumSignature;
 pub use surface::{
     EsurfaceCollection, EsurfaceID, HsurfaceCollection, HsurfaceID, HybridSurface, HybridSurfaceID,
     LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind, SurfaceAtom, SurfaceCache,
+};
+pub use thermal::{
+    MediumMode, ThermalDistributionCall, ThermalDistributionFactor, ThermalNumerator, ThermalWeight,
 };
 pub use utils::StringSerializedAtom;
 pub use validator::{GraphValidation, validate_parsed_graph};

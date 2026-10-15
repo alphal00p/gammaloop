@@ -14,6 +14,9 @@ Block SMINPUTS
 ## INFORMATION FOR MASS
 ###################################
 Block MASS 
+    1 0.000000e+00 # MD
+    2 0.000000e+00 # MU
+    3 0.000000e+00 # MS 
     4 0.000000e+00 # MC 
     5 4.700000e+00 # MB 
     6 1.730000e+02 # MT 
@@ -33,6 +36,16 @@ DECAY  24 2.047600e+00 # WW
 DECAY  25 6.38233934e-03 # WH
 
 ###################################
+## INFORMATION FOR CHEMICALPOTENTIAL
+###################################
+Block CHEMICALPOTENTIAL
+    1 0.000000e+00 # muB
+    2 0.000000e+00 # muQ
+    3 0.000000e+00 # muLe
+    4 0.000000e+00 # muLmu
+    5 0.000000e+00 # muLtau
+
+###################################
 ## INFORMATION FOR WOLFENSTEIN
 ###################################
 Block Wolfenstein 
@@ -45,6 +58,9 @@ Block Wolfenstein
 ## INFORMATION FOR YUKAWA
 ###################################
 Block YUKAWA 
+    1 0.000000e+00 # ymd
+    2 0.000000e+00 # ymu
+    3 0.000000e+00 # yms
     4 0.000000e+00 # ymc 
     5 4.700000e+00 # ymb
     6 1.730000e+02 # ymt

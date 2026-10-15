@@ -193,9 +193,99 @@ impl Evaluate {
 #[cfg(test)]
 mod tests {
     use super::Evaluate;
-    use crate::{state::State, CLISettings};
-    use gammalooprs::settings::RuntimeSettings;
+    use crate::{
+        commands::{
+            generate::Generate,
+            import::{model::ImportModel, Import},
+        },
+        state::State,
+        CLISettings,
+    };
+    use gammalooprs::{
+        initialisation::test_initialise,
+        settings::{global::MediumMode, RuntimeSettings},
+    };
     use std::path::PathBuf;
+
+    #[test]
+    fn evaluate_rejects_generated_thermal_graphs_after_defaults_change() -> color_eyre::Result<()> {
+        test_initialise()?;
+        let temp = tempfile::tempdir()?;
+        for mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let mut state = State::new_test();
+            let mut cli_settings = CLISettings::default();
+            cli_settings.state.folder = temp.path().join("state");
+            let generation = &mut cli_settings.global.generation;
+            generation.medium.mode = mode;
+            generation.evaluator.compile = false;
+            generation.evaluator.summed = false;
+            generation.evaluator.iterative_orientation_optimization = false;
+            generation.uv.subtract_uv = false;
+            generation.uv.generate_integrated = false;
+            generation.threshold_subtraction.enable_thresholds = false;
+            generation
+                .tropical_subgraph_table
+                .disable_tropical_generation = true;
+            ImportModel {
+                path: "scalars-default.json".into(),
+                simplify_model: true,
+            }
+            .run(&mut state)?;
+            Import::Graphs {
+                source: None,
+                inline_dot: Some(
+                    r#"digraph thermal_tadpole {
+                        node [num=1];
+                        a -> a [particle="scalar_1" num=1 id=0 lmb_id=0];
+                    }"#
+                    .to_string(),
+                ),
+                process_spec: None,
+                process: None,
+                integrand_name: Some("tadpole".to_string()),
+                overwrite: false,
+                append: false,
+            }
+            .run(&mut state, &cli_settings)?;
+            let runtime = RuntimeSettings::default();
+            Generate {
+                keep_sources: false,
+                mode: None,
+            }
+            .run(
+                &mut state,
+                temp.path(),
+                false,
+                &cli_settings.global,
+                &runtime,
+            )?;
+
+            // Evaluation must use the generated graph's mode, even if subsequent
+            // commands select vacuum defaults for future generation.
+            cli_settings.global.generation.medium.mode = MediumMode::Vacuum;
+            let result_path = temp.path().join("result.toml");
+            for numerical in [false, true] {
+                let err = Evaluate {
+                    process: None,
+                    graphs_group_name: Some("tadpole".to_string()),
+                    result_path: Some(result_path.clone()),
+                    numerical,
+                    number_of_terms_in_epsilon_expansion: None,
+                }
+                .run(&mut state, &cli_settings, &runtime)
+                .unwrap_err();
+                assert!(
+                    err.to_string().contains("does not support thermal modes"),
+                    "{mode:?}, numerical={numerical}: {err:?}"
+                );
+                assert!(!result_path.exists());
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn evaluate_rejects_result_path_inside_read_only_state() {

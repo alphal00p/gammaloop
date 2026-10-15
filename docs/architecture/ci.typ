@@ -74,13 +74,17 @@ selected component crates and all forwarded selectors, since a selector can
 activate an optional dependency on a selected root. Expanded feature vectors still define
 cache contexts and workspace checks.
 
-Core API tests import UFO models using Python packages pinned in `uv.lock`.
-These dependencies enter the runtime environment through `PYTHONPATH`; they do
-not change the shared compiler interpreter or compiled test archives. The locked
-Symbolica Python wheels support Linux on x86-64 and macOS on ARM. Requesting this
-runtime on Linux ARM reports the missing upstream wheel.
+On platforms with a locked Symbolica wheel, core API tests import UFO models
+using Python packages pinned in `uv.lock`. These dependencies enter the runtime
+environment through `PYTHONPATH`; they do not change the shared compiler
+interpreter or compiled test archives. The wheel tags in `nix/ci.nix` define the
+supported platforms: Linux on x86-64 and macOS on ARM. On Linux ARM, the core
+group omits this runtime and excludes the two UFO-import tests through a Nextest
+run-time filter, while loader-version validation still runs. Archive filtersets
+cannot select individual tests. Explicitly requesting
+`gammaloop-ufo-python-runtime` on Linux ARM reports the missing upstream wheel.
 
-The four NLO acceptance cases share one executable. Their assertions, workloads
+The NLO acceptance cases share one executable. Their assertions, workloads
 and runtime worker reservations are unchanged.
 
 == Fast tests and the full main suite
@@ -150,9 +154,11 @@ worker, outside cached Nix check derivations. Build each revision once; every
 measurement generates a fresh state and uses that revision's own serialized
 format. The baseline and candidate commits, fixture, point corpus and settings
 are recorded by their hashes. Both revisions receive identical settings and
-run with one worker. Model and restriction files are imported from the shared
-candidate repository and included in the workload hash; a builtin model name
-would instead select each binary's own embedded model.
+run with one worker. Scalar model and restriction files are imported from the
+shared candidate repository and included in the workload hash. The SM cases
+use the builtin `sm-default` name instead, so each binary loads its own
+embedded model and a change to the SM JSON format cannot stop the baseline
+from parsing it. Every result must still agree between revisions.
 
 The Actions workflow authenticates NixCI downloads with the repository's
 `NIXCI_NETRC` secret, containing only the `cache.nix-ci.com` machine entry.
@@ -167,8 +173,8 @@ comparisons: the existing physical workload and nine scalar route cases, plus
 two cases that build and benchmark every evaluator method. Scalar route cases
 share their point corpus and settings. The runner renders `scalar.toml` with
 each workload's graph and route settings; the other cases use fixed cards.
-The exact rendered card and declared inputs, including scalar DOT graphs and
-shared model and restriction files, are hashed before measurement. Both
+The exact rendered card and declared inputs, including DOT graphs and shared
+scalar model and restriction files, are hashed before measurement. Both
 revisions receive those same bytes.
 
 #table(

@@ -5772,9 +5772,9 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.26.0"
+version = "2.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3e0ed8cf2dd16f83f5393de7e34de02516bbcb2d7d0e85bb2a5615c665c947b"
+checksum = "f06329022a5123536f7fd50eb01b3e885dfafe3983f90a0d7b17408f4d0469ea"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -6117,6 +6117,8 @@ dependencies = [
  "itertools 0.14.0",
  "linnet",
  "nu-ansi-term",
+ "pyo3",
+ "schemars",
  "serde",
  "serde_json",
  "symbolica",

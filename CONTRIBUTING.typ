@@ -229,7 +229,7 @@ maintained in
   before changing what a failing test asserts.
 - During development, run checks relevant to the change. Before final review,
   prepare and upload the selected CI artifacts; NixCI runs the full suite.
-- Install `cargo-nextest` 0.9.115 or newer. The repository configuration
+- Install `cargo-nextest` 0.9.137 or newer. The repository configuration
   enforces this minimum; update an existing installation with
   `cargo nextest self update`.
 - Rust integration tests live in `tests/` with shared fixtures in

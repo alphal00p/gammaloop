@@ -87,7 +87,7 @@ class Particle(UFOBaseClass):
                  antitexname, charge , line=None, propagating=True, goldstoneboson=False, **options):
 
         args= (pdg_code, name, antiname, spin, color, mass, width, texname,
-                 antitexname, float(charge))
+                 antitexname, charge)
 
         UFOBaseClass.__init__(self, *args,  **options)
 
@@ -142,8 +142,15 @@ class Particle(UFOBaseClass):
             raise Exception('%s has no anti particle.' % self.name) 
         outdic = {}
         for k,v in self.__dict__.items():
-            if k not in self.require_args_all:                
-                outdic[k] = -v
+            if k not in self.require_args_all:
+                outdic[k] = None if v is None else -v
+        # Charge conjugation exchanges fermion chiralities. A missing chirality
+        # is unspecified, not a zero hypercharge (Q = T3 + Y/2).
+        if self.spin == 2 and (hasattr(self, 'Y') or hasattr(self, 'YRight')):
+            left_y = getattr(self, 'Y', None)
+            right_y = getattr(self, 'YRight', None)
+            outdic['Y'] = None if right_y is None else -right_y
+            outdic['YRight'] = None if left_y is None else -left_y
         if self.color in [1,8]:
             newcolor = self.color
         else:
@@ -175,6 +182,16 @@ class Parameter(UFOBaseClass):
             raise Exception('Need LHA information for external parameter "%s".' % name)
         self.lhablock = lhablock
         self.lhacode = lhacode
+
+    def __neg__(self):
+        negated_name = self.name[6:] if self.name.startswith('minus_') else 'minus_%s' % self.name
+        negated_parameter = next(
+            (parameter for parameter in all_parameters if parameter.name == negated_name),
+            None
+        )
+        if negated_parameter is None:
+            raise Exception('Missing negated parameter "%s" for "%s".' % (negated_name, self.name))
+        return negated_parameter
 
 all_vertices = []
 

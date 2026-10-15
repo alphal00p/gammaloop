@@ -208,7 +208,9 @@
       "symbolica-utils": [
         "native"
       ],
-      "three-dimensional-reps": [],
+      "three-dimensional-reps": [
+        "json_schema"
+      ],
       "vakint": []
     },
     "idenso": {
@@ -863,7 +865,9 @@
       "symbolica-utils": [
         "native"
       ],
-      "three-dimensional-reps": [],
+      "three-dimensional-reps": [
+        "json_schema"
+      ],
       "vakint": []
     },
     "idenso": {

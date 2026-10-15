@@ -184,8 +184,7 @@
         "PolePart",
         "OS",
         "IR",
-        "Unsubtracted",
-        "VaccuumLimit"
+        "Unsubtracted"
       ]
     },
     "Bench": {
@@ -297,6 +296,11 @@
         },
         "no_color": {
           "type": "boolean"
+        },
+        "no_numerator": {
+          "description": "Hide the numerator in the CFF structure table.",
+          "type": "boolean",
+          "default": false
         },
         "no_pretty": {
           "type": "boolean"
@@ -1712,7 +1716,12 @@
         "fast_math": {
           "type": "boolean"
         },
+        "jit_direct_translation": {
+          "description": "Skip Symbolica's tree-based analysis by translating instructions directly to SymJIT IR.\nEnabled by default to reduce JIT preparation work; disable to use the tree-based\ntranslator when comparing or diagnosing backend behavior. Also applies when JIT\nis the fallback for external artifacts. Direct translation always uses SymJIT O2,\nregardless of `optimization_level`; disable it to use JIT O0 or O1.",
+          "type": "boolean"
+        },
         "optimization_level": {
+          "description": "Optimization level for the evaluator compiler. Indirect JIT translation caps it\nat O2; direct JIT translation always uses O2, regardless of this setting.",
           "$ref": "#/$defs/CompilationOptimizationLevel"
         },
         "unsafe_math": {
@@ -1748,6 +1757,11 @@
         },
         "integral_unit": {
           "$ref": "#/$defs/IntegralUnit"
+        },
+        "inverse_temperature": {
+          "description": "Inverse temperature used to evaluate thermal distribution functions.",
+          "type": "number",
+          "format": "double"
         },
         "load_compiled_cff": {
           "type": "boolean"
@@ -1868,6 +1882,10 @@
               "type": "string"
             }
           }
+        },
+        "medium": {
+          "description": "Medium for amplitude generation; non-vacuum modes require local 3D UV subtraction\nand disabled threshold subtraction.",
+          "$ref": "#/$defs/MediumSettings"
         },
         "orientation_pattern": {
           "$ref": "#/$defs/OrientationPattern"
@@ -2718,6 +2736,29 @@
           "type": "boolean"
         },
         "susbstitute_masters": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MediumMode": {
+      "description": "The vacuum, or an equilibrium medium whose distribution functions weight CFF terms.\nTemperature and chemical potentials stay symbolic; `ZeroTemperatureEquilibrium`\ntakes the zero-temperature limit of the distributions.",
+      "type": "string",
+      "enum": [
+        "vacuum",
+        "thermodynamic_equilibrium",
+        "zero_temperature_equilibrium"
+      ]
+    },
+    "MediumSettings": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "`vacuum`, `thermodynamic_equilibrium` at `runtime.general.inverse_temperature`, or its\n`zero_temperature_equilibrium` limit; equilibrium modes use the model's chemical potentials.",
+          "$ref": "#/$defs/MediumMode"
+        },
+        "vacuum_subtraction": {
+          "description": "Subtract each medium weight's vacuum limit, keeping only the medium-dependent part;\nrequires a non-vacuum mode.",
           "type": "boolean"
         }
       },
@@ -5653,6 +5694,10 @@
     "UltraVioletProfile": {
       "type": "object",
       "properties": {
+        "allow_vanishing_missing_fits": {
+          "description": "Accept zero tails or sustained accelerating decay when no reliable power-law fit exists",
+          "type": "boolean"
+        },
         "analyse_analytically": {
           "description": "Also derive analytic UV series (amplitudes only)",
           "type": "boolean"
@@ -5764,6 +5809,7 @@
         "use_f128",
         "analyse_analytically",
         "per_orientation",
+        "allow_vanishing_missing_fits",
         "uv_ray_directions",
         "uv_ray_norms"
       ]

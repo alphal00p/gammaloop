@@ -13,7 +13,7 @@ use gammalooprs::{
     graph::Graph,
     integrands::process::ProcessIntegrand,
     processes::{Amplitude, CrossSection, Process, ProcessCollection},
-    settings::global::UniformNumeratorSamplingScale,
+    settings::global::{MediumMode, UniformNumeratorSamplingScale},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -162,6 +162,11 @@ pub struct Build {
     #[arg(long, default_value_t = false)]
     pub no_pretty: bool,
 
+    /// Hide the numerator in the CFF structure table.
+    #[serde(default)]
+    #[arg(long)]
+    pub no_numerator: bool,
+
     /// Disable ANSI colors in the formatted output.
     #[arg(long, default_value_t = false)]
     pub no_color: bool,
@@ -193,6 +198,7 @@ struct ValidateOutput {
 struct BuildOutput {
     backend: &'static str,
     family: &'static str,
+    medium_mode: MediumMode,
     process_id: usize,
     integrand_name: String,
     graph_id: usize,
@@ -353,6 +359,7 @@ impl Build {
             .graph
             .cff_3d_expression_options(numerator_sampling_scale_mode)?;
         options.representation = representation;
+        options.medium_mode = global_cli_settings.global.generation.medium.mode;
         let initial_state_cut_edges = selected
             .graph
             .iter_edges_of(&selected.graph.initial_state_cut)
@@ -373,6 +380,7 @@ impl Build {
         let output = BuildOutput {
             backend: "gammaloop-3Drep",
             family: "cff",
+            medium_mode: options.medium_mode,
             process_id: selected.process_id,
             integrand_name: selected.integrand_name.clone(),
             graph_id: selected.graph_id,
@@ -407,7 +415,8 @@ impl Build {
         }
 
         if !self.no_pretty || self.show_details_for_orientation.is_some() {
-            let numerator = selected.graph.full_numerator_atom().to_canonical_string();
+            let numerator = (!self.no_numerator)
+                .then(|| selected.graph.full_numerator_atom().to_canonical_string());
             println!(
                 "{}",
                 render_expression_summary(
@@ -415,7 +424,7 @@ impl Build {
                     &output.graph,
                     energy_degree_bounds.as_deref(),
                     NumeratorDisplay {
-                        original: Some(&numerator),
+                        original: numerator.as_deref(),
                         simplified: None,
                     },
                     output.numerator_sampling_scale_mode,

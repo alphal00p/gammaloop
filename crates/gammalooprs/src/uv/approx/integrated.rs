@@ -391,7 +391,6 @@ impl Integrated<'_> {
                     scale_power: 4 * n_loops as i64,
                 })
             }
-            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
             ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
             ApproximationType::Unsubtracted => {
                 panic!("should have been kept out of the wood");

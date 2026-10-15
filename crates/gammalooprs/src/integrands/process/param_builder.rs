@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -26,6 +26,7 @@ use symbolica::prelude::{
     ReplaceWith, Replacement, Symbol, parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
+use three_dimensional_reps::{MediumMode, ThermalDistributionCall};
 use tracing::debug;
 use tracing::warn;
 
@@ -105,7 +106,72 @@ pub trait ParamBuilderGraph {
     fn external_spatial_params(&self) -> Vec<Atom>;
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
-    // fn explicit_meduium_numerato(&self,edge)
+    /// Expand the medium numerator weight at the requested temperature limit.
+    /// Derivatives are with respect to positive on-shell energy, holding temperature,
+    /// chemical potential, and orientation fixed; cyclic-chain signs belong to CFF reduction.
+    /// Zero-temperature derivatives with a chemical potential require Fermi-surface
+    /// localization and return an error rather than a pointwise body.
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        orientation_sign: Atom,
+        limit: MediumMode,
+    ) -> Result<Atom>;
+    fn make_thermal_distributions_explicit(
+        &self,
+        atom: &Atom,
+        limit: MediumMode,
+        edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> Result<Atom> {
+        let edges = edges.into_iter().collect::<BTreeSet<_>>();
+        let mut error = None;
+        let explicit = atom.replace_map(|term, _, out| {
+            if error.is_some() {
+                return;
+            }
+
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if function.get_symbol() != GS.thermal_distribution {
+                return;
+            }
+            let call = match ThermalDistributionCall::try_from(term) {
+                Ok(call) => call,
+                Err(parse_error) => {
+                    error = Some(parse_error.into());
+                    return;
+                }
+            };
+            let ThermalDistributionCall {
+                edge,
+                derivative_order,
+                thermal_sign,
+                orientation_sign,
+                ..
+            } = call;
+            if !edges.contains(&edge) {
+                return;
+            }
+            match self.explicit_thermal_distribution_atom(
+                edge,
+                derivative_order,
+                thermal_sign,
+                orientation_sign,
+                limit,
+            ) {
+                Ok(replacement) => **out = replacement,
+                Err(distribution_error) => error = Some(distribution_error),
+            }
+        });
+
+        match error {
+            Some(error) => Err(error),
+            None => Ok(explicit),
+        }
+    }
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
@@ -180,6 +246,7 @@ define_gamma_loop_pairs! {
     uv_damp_minus_right,
     radius_right,
     radius_star_right,
+    inverse_temperature,
     pub additional_params,
 }
 
@@ -235,6 +302,8 @@ impl GammaLoopPairs {
         debug!("Validating radius_star");
         self.radius_star_left.validate();
         self.radius_star_right.validate();
+        debug!("Validating inverse_temperature");
+        self.inverse_temperature.validate();
     }
 
     pub(crate) fn new<
@@ -275,6 +344,7 @@ impl GammaLoopPairs {
             uv_damp_plus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_plus_right),
             uv_damp_minus_left: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_left),
             uv_damp_minus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_right),
+            inverse_temperature: ParamValuePairs::default_from_symbol(GS.inverse_temperature),
             additional_params: additional_params.into_iter().collect(),
             ..Default::default()
         };
@@ -644,6 +714,7 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
 
 #[derive(Clone, bincode_trait_derive::Encode)]
 pub struct ParamBuilder<T: FloatLike = f64> {
+    pub(crate) medium_mode: MediumMode,
     pub values: Vec<Vec<Complex<F<T>>>>,
     pub pairs: GammaLoopPairs,
     pub polarization_cache: ParamCache<T>,
@@ -658,6 +729,7 @@ impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T
     fn decode<D: bincode::de::Decoder<Context = C>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
+        let medium_mode = Decode::decode(decoder)?;
         let values = Decode::decode(decoder)?;
         let pairs = Decode::decode(decoder)?;
         let polarization_cache = Decode::decode(decoder)?;
@@ -672,6 +744,7 @@ impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T
                 .map_err(bincode::error::DecodeError::OtherString)?;
         }
         Ok(Self {
+            medium_mode,
             values,
             pairs,
             polarization_cache,
@@ -1218,6 +1291,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn new_empty() -> Self {
         Self {
+            medium_mode: MediumMode::Vacuum,
             polarization_cache: ParamCache::default(),
 
             fn_map: FunctionMap::default(),
@@ -1237,7 +1311,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         model: &Model,
         lmb: &LoopMomentumBasis,
         additional_params: P,
-    ) -> Self {
+    ) -> Result<Self> {
         let (pairs, len) = GammaLoopPairs::new(model, graph, lmb, additional_params);
 
         let mut new = Self {
@@ -1246,8 +1320,10 @@ impl<T: FloatLike> ParamBuilder<T> {
         };
 
         let arg = symbol!("argument");
-        new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
-            .unwrap();
+        for wrapper in [GS.tree_denom_wrapper, GS.thermal_weight_wrapper] {
+            new.add_function(wrapper, vec![arg], Atom::var(arg))
+                .unwrap();
+        }
         // Compile the energy definition once at the evaluator boundary. The
         // integrand keeps a semantic function with visible momentum dependence.
         let invariant = symbol!("energy_invariant");
@@ -1343,6 +1419,16 @@ impl<T: FloatLike> ParamBuilder<T> {
             symbol!("x").to_atom(),
         )
         .unwrap();
+        // For real x, theta(x) is exactly zero for x < 0 and one up to roundoff
+        // for x > 0. At x = 0 it is undefined (NaN): no arbitrary boundary
+        // value, such as 1/2, is assigned at the Fermi surface.
+        new.add_function(
+            GS.heaviside,
+            vec![symbol!("x")],
+            parse_lit!((abs(x) + x) / (2 * abs(x))),
+        )
+        .unwrap();
+
         // new.fn_map.add_conditional(GS.orientation_if);
         new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
         new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
@@ -1350,9 +1436,9 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.add_constant(CS.tr.into(), Rational::new(1, 2).into());
 
         new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
-        new.update_model_values(model);
+        new.update_model_values(model)?;
         //panic!();
-        new
+        Ok(new)
     }
 
     #[inline]
@@ -1416,8 +1502,17 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
+    pub(crate) fn inverse_temperature_value(&mut self, inverse_temperature: Complex<F<T>>) {
+        debug_assert!(self.pairs.inverse_temperature.value_range.len() == 1);
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.inverse_temperature.value_range.start * multiplicative_offset] =
+                inverse_temperature.clone();
+        }
+    }
+
     /// Refresh model-dependent parameter slots while preserving the builder's graph layout.
-    pub fn update_model_values(&mut self, model: &Model) {
+    pub fn update_model_values(&mut self, model: &Model) -> Result<()> {
         // Importing symbols can change model iteration order. The evaluator
         // still expects the parameter order recorded in this builder.
         let model_values: HashMap<Atom, Complex<F<T>>> = model
@@ -1437,23 +1532,29 @@ impl<T: FloatLike> ParamBuilder<T> {
                 })
             }))
             .collect();
-        for (param, position) in self
+        let required_values = self
             .pairs
             .model_parameters
             .params
             .iter()
+            .map(|param| {
+                model_values.get(param).ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Model parameter {param} has no value in model {}",
+                        model.name
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (value, position) in required_values
+            .into_iter()
             .zip_eq(self.pairs.model_parameters.value_range.clone())
         {
-            let value = model_values.get(param).unwrap_or_else(|| {
-                panic!(
-                    "Model parameter {param} has no value in model {}",
-                    model.name
-                )
-            });
             for (value_index, values) in self.values.iter_mut().enumerate() {
                 values[position * (value_index + 1)] = value.clone();
             }
         }
+        Ok(())
     }
 
     pub(crate) fn add_external_four_mom(
@@ -1823,7 +1924,8 @@ mod tests {
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
-        utils::{ArbPrec, SamplingFloat},
+        utils::{ArbPrec, SamplingFloat, load_generic_model},
+        uv::uv_graph::UVE,
     };
 
     #[test]
@@ -1952,7 +2054,7 @@ mod tests {
                 .get_mut(&CouplingName(coupling))
                 .unwrap()
                 .value = Some(coupling_value);
-            builder.update_model_values(&model);
+            builder.update_model_values(&model).unwrap();
             for (buffer_index, values) in builder.values.iter().enumerate() {
                 let stride = buffer_index + 1;
                 for (position, value) in values.iter().enumerate() {
@@ -2080,6 +2182,473 @@ mod tests {
 
         param_builder.initialize_duals(4);
         assert_eq!(param_builder.values.len(), 4);
+    }
+
+    #[test]
+    fn model_parameter_refresh_fails_without_changing_slots() {
+        test_initialise().unwrap();
+        let mut model = load_generic_model("sm");
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        builder.pairs.model_parameters = ParamValuePairs {
+            params: vec![
+                model.get_parameter("MT").name.into(),
+                model.get_parameter("aS").name.into(),
+            ],
+            value_range: 0..2,
+        };
+        builder.values = vec![
+            vec![Complex::new_re(F(3.0)), Complex::new_re(F(5.0))],
+            vec![
+                Complex::new_re(F(3.0)),
+                Complex::new_re(F(7.0)),
+                Complex::new_re(F(5.0)),
+                Complex::new_re(F(11.0)),
+            ],
+        ];
+        let previous = builder.values.clone();
+        model.get_parameter_mut("MT").unwrap().value = Some(Complex::new_re(F(13.0)));
+        model.get_parameter_mut("aS").unwrap().value = None;
+        let error = builder.update_model_values(&model).unwrap_err().to_string();
+        assert!(error.contains("aS"), "{error}");
+        assert_eq!(builder.values, previous);
+        model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(17.0)));
+        builder.update_model_values(&model).unwrap();
+        assert_eq!(
+            builder.values,
+            vec![
+                vec![Complex::new_re(F(13.0)), Complex::new_re(F(17.0))],
+                vec![
+                    Complex::new_re(F(13.0)),
+                    Complex::new_re(F(7.0)),
+                    Complex::new_re(F(17.0)),
+                    Complex::new_re(F(11.0))
+                ],
+            ]
+        );
+    }
+
+    #[test]
+    fn thermal_function_registration_follows_the_selected_medium() {
+        // A call must also work before GammaLoop's Symbolica initializer has run.
+        let _ = ThermalDistributionCall::atom(0, 0, 1, 1, 1);
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph thermal {
+            node [num=1]; edge [num=1 particle="d"];
+            A -> B; B -> A [particle="g"];
+        })
+        .unwrap();
+        let alias = symbolica::function!(symbol!("thermal_mode_test_alias"), 7);
+        graph
+            .param_builder
+            .add_constant(alias.clone(), Rational::from(5).into());
+        let vacuum_entries = graph.param_builder.reps.clone();
+        assert!(
+            !vacuum_entries
+                .iter()
+                .any(|entry| entry.lhs.contains_symbol(GS.thermal_distribution))
+        );
+        for mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            graph.set_medium_mode(mode).unwrap();
+            let entries = graph.param_builder.reps.clone();
+            let calls = entries
+                .iter()
+                .filter_map(|entry| ThermalDistributionCall::try_from(entry.lhs.as_view()).ok())
+                .collect_vec();
+            assert!(!calls.is_empty());
+            assert!(
+                calls.iter().all(|call| call.temperature_flag
+                    == Atom::num(i64::from(mode.is_finite_temperature())))
+            );
+            let expected_orders = if mode.is_finite_temperature() {
+                vec![0, 1, 2]
+            } else {
+                vec![0]
+            };
+            // Both chemical-potential metadata and its absence use only the
+            // ordinary order-zero function at zero temperature.
+            // Every order is registered once per contour offset.
+            for edge in graph.iter_edge_ids() {
+                assert_eq!(
+                    calls
+                        .iter()
+                        .filter(|call| call.edge == edge)
+                        .map(|call| (call.derivative_order, call.thermal_sign.clone()))
+                        .collect_vec(),
+                    expected_orders
+                        .iter()
+                        .flat_map(|&order| [-1, 0, 1].map(|contour| (order, Atom::num(contour))))
+                        .collect_vec(),
+                );
+            }
+            graph.set_medium_mode(mode).unwrap();
+            assert_eq!(graph.param_builder.reps, entries);
+            assert_eq!(
+                alias
+                    .evaluator(&[] as &[Atom])
+                    .function_map(graph.param_builder.fn_map.clone())
+                    .build()
+                    .unwrap()
+                    .map_coeff(&|coefficient| coefficient.re.to_f64())
+                    .evaluate_single(&[]),
+                5.0,
+            );
+        }
+        graph.set_medium_mode(MediumMode::Vacuum).unwrap();
+        assert_eq!(graph.param_builder.reps, vacuum_entries);
+    }
+
+    #[test]
+    fn thermal_function_map_uses_explicit_orientation_for_all_derivatives() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        for particle in ["d", "G+", "g"] {
+            let mut graph: Graph = format!(
+                r#"digraph thermal_cycle {{
+                    node [num=1]; edge [num=1 particle="{particle}"];
+                    A -> B; B -> C; C -> D; D -> E; E -> A;
+                }}"#
+            )
+            .into_graph(&model)
+            .unwrap();
+            let edge = EdgeIndex(0);
+            // Concrete orientation calls must not depend on a global sign slot.
+            let mut params = vec![GS.ose(edge), GS.inverse_temperature.to_atom()];
+            let mut input = vec![1.0, 2.0];
+            if let Some(mu) = graph[edge].chemical_potential_atom() {
+                params.push(mu);
+                input.push(if graph[edge].is_fermion() { 1.5 } else { 0.4 });
+            }
+            for limit in [
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                graph.set_medium_mode(limit).unwrap();
+                let orders = match limit {
+                    MediumMode::ThermodynamicEquilibrium => 0..=4,
+                    _ => 0..=0,
+                };
+                for order in orders {
+                    for thermal_sign in [-1, 0, 1] {
+                        for orientation_sign in [-1, 1] {
+                            let expressions = [
+                                ThermalDistributionCall::atom(
+                                    0,
+                                    order,
+                                    Atom::num(i64::from(limit.is_finite_temperature())),
+                                    thermal_sign,
+                                    orientation_sign,
+                                ),
+                                graph
+                                    .explicit_thermal_distribution_atom(
+                                        edge,
+                                        order as usize,
+                                        Atom::num(thermal_sign),
+                                        Atom::num(orientation_sign),
+                                        limit,
+                                    )
+                                    .unwrap(),
+                            ];
+                            let [registered, explicit] = expressions.map(|expression| {
+                                expression
+                                    .evaluator(&params)
+                                    .function_map(graph.param_builder.fn_map.clone())
+                                    .build()
+                                    .unwrap()
+                                    .map_coeff(&|coefficient| coefficient.re.to_f64())
+                                    .evaluate_single(&input)
+                            });
+                            assert!(
+                                (registered - explicit).abs() < 1e-13,
+                                "{particle}: {limit:?}, order {order}, thermal sign {thermal_sign}, orientation {orientation_sign}"
+                            );
+                            if order == 0 {
+                                let shifted_energy = input[0]
+                                    - orientation_sign as f64
+                                        * input.get(2).copied().unwrap_or(0.0);
+                                let occupation = if limit.is_finite_temperature() {
+                                    let tanh = (input[1] * shifted_energy / 2.0).tanh();
+                                    if graph[edge].is_fermion() {
+                                        tanh
+                                    } else {
+                                        tanh.recip()
+                                    }
+                                } else {
+                                    shifted_energy.signum()
+                                };
+                                let expected = (thermal_sign as f64 + occupation) / 2.0;
+                                assert!(
+                                    (registered - expected).abs() < 1e-13,
+                                    "{particle}: {limit:?}, thermal sign {thermal_sign}, orientation {orientation_sign}: {registered} != {expected}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_weight_wrapper_survives_partial_vacuum_limits_and_evaluates() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph G {
+            edge [particle="scalar_1"]; node [num=1];
+            v1 -> v2; v1 -> v2;
+        }, "scalars")
+        .unwrap();
+        let weight = symbolica::function!(
+            GS.thermal_weight_wrapper,
+            ThermalDistributionCall::atom(0, 0, 1, 1, GS.sign(EdgeIndex(0)))
+                * ThermalDistributionCall::atom(1, 0, 1, 1, GS.sign(EdgeIndex(1)))
+                - 1
+        );
+        let partial = graph
+            .make_thermal_distributions_explicit(&weight, MediumMode::Vacuum, [EdgeIndex(0)])
+            .unwrap();
+        assert_eq!(
+            partial,
+            symbolica::function!(
+                GS.thermal_weight_wrapper,
+                ThermalDistributionCall::atom(1, 0, 1, 1, GS.sign(EdgeIndex(1))) - 1
+            )
+        );
+        assert!(
+            graph
+                .make_thermal_distributions_explicit(&partial, MediumMode::Vacuum, [EdgeIndex(1)],)
+                .unwrap()
+                .is_zero()
+        );
+
+        let params = [ThermalDistributionCall::atom(
+            1,
+            0,
+            1,
+            1,
+            GS.sign(EdgeIndex(1)),
+        )];
+        let replacements = graph
+            .param_builder
+            .reps
+            .iter()
+            .map(FnMapEntry::replacement)
+            .collect::<Vec<_>>();
+        for explicit_replacements in [false, true] {
+            let expression = if explicit_replacements {
+                partial.replace_multiple(&replacements)
+            } else {
+                partial.clone()
+            };
+            let mut evaluator = expression
+                .evaluator(&params)
+                .function_map(graph.param_builder.fn_map.clone())
+                .build()
+                .unwrap()
+                .map_coeff(&|coefficient| coefficient.re.to_f64());
+            assert_eq!(evaluator.evaluate_single(&[1.25]), 0.25);
+        }
+    }
+
+    /// Production evaluators must stay within rounding of an Arb oracle from the
+    /// bulk to occupations near binary64 underflow. This needs occupations free of
+    /// cancellation, a vacuum constant cancelled symbolically and contour offsets
+    /// folded into each body. At zero temperature, weights outside the Fermi sea
+    /// must vanish exactly.
+    #[test]
+    fn vacuum_subtracted_thermal_weights_keep_uv_tails_and_exact_zeros() {
+        use three_dimensional_reps::{
+            ThermalDistributionFactor,
+            thermal::{ThermalNumerator, ThermalWeight, VACUUM_SUBTRACTION},
+        };
+
+        use symbolica::evaluate::OptimizationSettings;
+
+        use crate::{
+            integrands::process::{GenericEvaluator, GenericEvaluatorFloat},
+            processes::EvaluatorSettings,
+            settings::global::GammaloopCompileOptions,
+            utils::f128,
+        };
+
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph thermal_sunrise {
+            node [num=1]
+            edge [num=1]
+            A -> B [particle="d"]
+            B -> A [particle="d"]
+            A -> B [particle="g"]
+        })
+        .unwrap();
+        // Order the edges as quark, quark, gluon; DOT import assigns the indices.
+        let mut edges = graph.iter_edge_ids().collect_vec();
+        edges.sort_by_key(|&edge| !graph[edge].is_fermion());
+        let edges: [EdgeIndex; 3] = edges.try_into().unwrap();
+        assert!(graph[edges[2]].chemical_potential_atom().is_none());
+        let orientations = [1, -1, 1];
+        let params = edges
+            .map(|edge| GS.ose(edge))
+            .into_iter()
+            .chain([
+                Atom::var(GS.inverse_temperature),
+                graph[edges[0]].chemical_potential_atom().unwrap(),
+            ])
+            .collect_vec();
+        // With beta = 2, edge e has a = E - sigma*mu = scale * shifts[e], so its
+        // occupation is about exp(-2a); the largest one stays a normal binary64.
+        let (beta, mu) = (2.0, 0.5);
+        let shifts = [1.0, 1.05, 1.1];
+        let scales = [0.5, 2.0, 5.0, 10.0, 20.0, 40.0, 80.0, 160.0, 300.0];
+        let inputs = |shifted: [f64; 3]| {
+            let mut input = (0..3)
+                .map(|e| {
+                    let chemical_shift = if e < 2 {
+                        f64::from(orientations[e]) * mu
+                    } else {
+                        0.0
+                    };
+                    shifted[e] + chemical_shift
+                })
+                .collect_vec();
+            input.extend([beta, mu]);
+            input
+        };
+        for medium_mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            graph.set_medium_mode(medium_mode).unwrap();
+            // Both weights have a nonzero vacuum value, so their vacuum-subtracted
+            // forms are exponentially small once every occupation is.
+            let expressions = [
+                ThermalWeight {
+                    medium_mode,
+                    numerators: vec![ThermalNumerator {
+                        positive_energies: edges.to_vec(),
+                        negative_energies: vec![],
+                    }],
+                    distributions: vec![],
+                },
+                ThermalWeight {
+                    medium_mode,
+                    numerators: vec![ThermalNumerator {
+                        positive_energies: vec![edges[0], edges[1]],
+                        negative_energies: vec![],
+                    }],
+                    distributions: vec![ThermalDistributionFactor {
+                        edge_id: edges[2],
+                        sign: 0,
+                        derivative_order: 0,
+                    }],
+                },
+            ]
+            .map(|weight| {
+                edges.into_iter().zip(orientations).fold(
+                    weight.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
+                    |atom, (edge, orientation)| {
+                        atom.replace(GS.sign(edge)).with(Atom::num(orientation))
+                    },
+                )
+            });
+            let build = || {
+                GenericEvaluator::new_from_raw_params(
+                    expressions.clone(),
+                    &params,
+                    &graph.param_builder.fn_map,
+                    vec![],
+                    OptimizationSettings::default(),
+                    None,
+                    &EvaluatorSettings::default(),
+                )
+                .unwrap()
+            };
+            let mut eager = build();
+            let mut symjit = build();
+            symjit
+                .activate_symjit(&GammaloopCompileOptions::default().options_snapshot())
+                .unwrap();
+            let mut precise = build();
+            let evaluate_f64 = |evaluator: &mut GenericEvaluator, input: &[f64]| {
+                let input = input.iter().map(|v| Complex::new_re(F(*v))).collect_vec();
+                f64::get_evaluator(evaluator)(&input)
+                    .into_iter()
+                    .map(|value| value.unwrap_real())
+                    .collect_vec()
+            };
+            let mut points = scales
+                .map(|scale| shifts.map(|shift| scale * shift))
+                .to_vec();
+            // Inside the Fermi sea of edge 0 the occupations are of order one.
+            points.push([-0.3, 0.7, 0.9]);
+            for shifted in points {
+                let input = inputs(shifted);
+                let arb = ArbPrec::get_evaluator(&mut precise)(
+                    &input
+                        .iter()
+                        .map(|v| Complex::new_re(F(ArbPrec::from_f64_exact_binary(*v))))
+                        .collect_vec(),
+                )
+                .into_iter()
+                .map(|value| value.unwrap_real())
+                .collect_vec();
+                let quad = f128::get_evaluator(&mut eager)(
+                    &input
+                        .iter()
+                        .map(|v| Complex::new_re(F(f128::from_f64_exact_binary(*v))))
+                        .collect_vec(),
+                )
+                .into_iter()
+                .map(|value| value.unwrap_real())
+                .collect_vec();
+                let results = [
+                    ("eager f64", evaluate_f64(&mut eager, &input)),
+                    ("symjit f64", evaluate_f64(&mut symjit, &input)),
+                ];
+                for (index, reference) in arb.iter().enumerate() {
+                    let context = format!("{medium_mode:?}, weight {index}, a={shifted:?}");
+                    let outside_fermi_sea = shifted.iter().all(|a| *a > 0.0);
+                    if medium_mode == MediumMode::ZeroTemperatureEquilibrium && outside_fermi_sea {
+                        // Every occupation is an exact zero, so no residue may survive.
+                        assert!(
+                            reference.re.is_zero() && reference.im.is_zero(),
+                            "Arb {context}"
+                        );
+                        assert!(
+                            quad[index].re.is_zero() && quad[index].im.is_zero(),
+                            "Quad {context}"
+                        );
+                        for (backend, result) in &results {
+                            assert_eq!(
+                                result[index],
+                                Complex::new_re(F(0.0)),
+                                "{backend} {context}"
+                            );
+                        }
+                        continue;
+                    }
+                    let reference_re = reference.re.into_ff64().0;
+                    assert!(reference_re != 0.0, "Arb {context}");
+                    let quad_error = ((&quad[index].re.to_arb_exact().unwrap() - &reference.re)
+                        / &reference.re)
+                        .into_ff64()
+                        .0
+                        .abs();
+                    assert!(
+                        quad_error < 1e-28,
+                        "Quad {context}: relative error {quad_error:e}"
+                    );
+                    for (backend, result) in &results {
+                        let error = ((result[index].re.0 - reference_re) / reference_re).abs();
+                        assert!(
+                            error < 1e-13,
+                            "{backend} {context}: relative error {error:e}"
+                        );
+                        assert_eq!(result[index].im.0, 0.0, "{backend} {context}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

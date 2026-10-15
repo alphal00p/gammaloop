@@ -1,5 +1,8 @@
 // Keep the NLO acceptances in one harness to share executable optimization and linking.
 
+#[path = "test_nlo_acceptance/cool_qm_eos.rs"]
+mod cool_qm_eos;
+
 #[path = "test_nlo_acceptance/epem_a_ddx.rs"]
 mod epem_a_ddx;
 

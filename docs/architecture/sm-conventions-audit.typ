@@ -108,7 +108,15 @@ G0 dbar d: -yd/sqrt(2) (PR-PL),
 PL=(I-G5)/2, PR=(I+G5)/2.
 ```
 
-Here `V_ij` is defined from the model's existing W+ flavor coefficient; no CKM naming convention or value is changed. This action check covers all 26 Goldstone--fermion vertices symbolically, including complex CKM and both Yukawa terms where present. Six ordinary Higgs fermion couplings remain unchanged. The affected neutral vertices are V\_77,101,102,103,138,139; the charged ones are V\_82--88,110--112,116--122,145--147.
+Here `V_ij` is defined from the model's existing W+ flavor coefficient; no CKM naming convention or value is changed. The original action check covered all 26 then-present Goldstone--fermion vertices symbolically, including complex CKM and both Yukawa terms where present. The affected neutral vertices were V\_77,101,102,103,138,139; the charged ones were V\_82--88,110--112,116--122,145--147.
+
+The full model now also includes the u/d/s Yukawa interactions: six Higgs and neutral-Goldstone
+vertices, four charged-Goldstone vertices, and the missing opposite-chirality terms in ten
+existing charged vertices. The same action identities apply to all nine quark flavor pairs.
+The propagator masses `MU`, `MD`, `MS` and Yukawa inputs `ymu`, `ymd`, `yms` remain independent,
+following the heavier-flavor convention. Ordinary restrictions zero all six; `thermal_s_mass`
+retains `MS` and `yms` as adjustable inputs. Ward checks use mutually consistent masses and
+Yukawa couplings.
 
 The sum `PL+PR=I` is gamma5-free; the difference `PR-PL=G5` is a genuine pseudoscalar. Writing this basis explicitly lets scalar/vector cancellations occur before dimensional Dirac algebra. It does not authorize discarding an uncanceled axial term or imposing a new d-dimensional gamma5 prescription. #link("../../crates/idenso/src/dirac/simplify.rs")[Idenso's existing simplifier] restricts gamma5 anticommutation and special-factor reductions to their supported dimensions. The tests `gamma5_does_not_move_in_dimension_generic_chain` and `gamma5_square_is_four_dimensional` preserve that boundary. Normal numerator processing, analytical amplitude evaluation and integrated UV preparation use the same gamma simplification owner. Analytically integrated UV subgraphs reject gamma5 or chiral projectors in their raw numerator factors before cancellation; gamma5 algebra in dimensional regularization is out of scope. Ordinary Dirac algebra is completed both before Vakint tensor projection and on the projected tensors before scalar integration and Laurent truncation.
 
@@ -136,7 +144,11 @@ The neutral `f fbar -> ZH/G0H` audit also evaluated all four tree diagrams with 
 
 == Input-parameter reality
 <input-parameter-reality>
-The vendored UFO and canonical JSON agree on the names, nature and type of all 72 SM parameters. All 26 external inputs are declared `real` and have zero imaginary defaults: three SMINPUTS, four Wolfenstein inputs, six YUKAWA inputs, eight MASS inputs and five DECAY inputs. Derived CKM entries retain their complex declarations, allowing their physical phases when the real Wolfenstein inputs are nonzero. No parameter-declaration correction was needed.
+The vendored UFO and canonical JSON agree on the names, nature and type of all 118 SM parameters.
+All 37 external inputs are declared `real` and have zero imaginary defaults: three SMINPUTS,
+four Wolfenstein inputs, nine YUKAWA inputs, eleven MASS inputs, five DECAY inputs and five
+CHEMICALPOTENTIAL inputs. Derived CKM entries retain their complex declarations, allowing their
+physical phases when the real Wolfenstein inputs are nonzero.
 
 The loader preserves these declarations as `ParameterType` at the model input boundary. It does not automatically attach a Symbolica reality attribute to the underlying symbol. The marking prescription uses the model's inverse-process vertices and does not depend on such an attribute to undo a second numerator adjoint. Graph generation preserves the original forward sides by default. The optional CP-based left/right optimization remains available with a warning; the user is responsible for its validity at the selected coupling point.
 
