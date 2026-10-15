@@ -40,6 +40,8 @@ use super::{
     NamedGraphGenerationReport, generation_progress,
 };
 
+const SETTINGS_HISTORY_TOML: &str = "settings_history.toml";
+
 pub struct ResolvedIntegrandRef<'a> {
     pub canonical_name: String,
     pub integrand: Option<&'a ProcessIntegrand>,
@@ -470,6 +472,22 @@ impl Process {
 }
 
 impl Process {
+    fn load_settings_history(path: &Path) -> Result<Option<GlobalSettings>> {
+        let path = path.join(SETTINGS_HISTORY_TOML);
+        let source = match fs::read_to_string(&path) {
+            Ok(source) => source,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("Error reading process settings history {}", path.display())
+                });
+            }
+        };
+        toml::from_str(&source)
+            .map(Some)
+            .with_context(|| format!("Error parsing process settings history {}", path.display()))
+    }
+
     pub(crate) fn load_amplitude(
         path: impl AsRef<Path>,
         context: GammaLoopContextContainer,
@@ -502,7 +520,7 @@ impl Process {
         Ok(Self {
             definition,
             collection,
-            settings_history: None,
+            settings_history: Self::load_settings_history(path.as_ref())?,
         })
     }
 
@@ -533,7 +551,7 @@ impl Process {
         Ok(Self {
             definition,
             collection,
-            settings_history: None,
+            settings_history: Self::load_settings_history(path.as_ref())?,
         })
     }
 
@@ -557,6 +575,13 @@ impl Process {
                 let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
                 fs::write(p.join("def.bin"), binary)?;
 
+                if let Some(settings) = &self.settings_history {
+                    fs::write(
+                        p.join(SETTINGS_HISTORY_TOML),
+                        toml::to_string_pretty(settings)?,
+                    )?;
+                }
+
                 for amp in a.values_mut() {
                     amp.save(&p, override_existing)?;
                 }
@@ -579,6 +604,13 @@ impl Process {
 
                 let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
                 fs::write(p.join("def.bin"), binary)?;
+
+                if let Some(settings) = &self.settings_history {
+                    fs::write(
+                        p.join(SETTINGS_HISTORY_TOML),
+                        toml::to_string_pretty(settings)?,
+                    )?;
+                }
 
                 for cs in cs.values_mut() {
                     cs.save(&p, override_existing)?;
@@ -1248,6 +1280,7 @@ mod tests {
         use crate::{
             graph::{Graph, GroupId},
             initialisation::test_initialise,
+            model::Model,
             processes::{
                 GraphGroupSelectionSpec, Process, ProcessCollection, ProcessDefinition, ProcessList,
             },
@@ -1259,11 +1292,10 @@ mod tests {
         use std::collections::{BTreeMap, BTreeSet};
 
         test_initialise()?;
-        let model = load_generic_model("scalars");
         let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
         let runtime = RuntimeSettings::default();
         let directory = fresh_temp_dir("computed-uv-process-export");
-        for (kind, folder, source) in [
+        for (kind, folder, source, model) in [
             (
                 GenerationType::Amplitude,
                 "amplitudes",
@@ -1271,6 +1303,7 @@ mod tests {
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../tests/resources/graphs/scalar_bubble.dot"
                 )),
+                load_generic_model("scalars"),
             ),
             (
                 GenerationType::CrossSection,
@@ -1279,6 +1312,9 @@ mod tests {
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
                 )),
+                Model::from_json(include_str!(
+                    "../../../../assets/models/json/scalars/scalars_2p_3p.json"
+                ))?,
             ),
         ] {
             for orchestrator in [UVOrchestrator::LegacyDagForest, UVOrchestrator::HedgePoset] {
@@ -1289,7 +1325,7 @@ mod tests {
                 ] {
                     // Keep the fixture's physical graph and all default subtraction
                     // terms; only the three requested CFF/UV routes differ.
-                    let mut graphs = Graph::from_finalized_runtime_string(source, &model)?;
+                    let mut graphs = Graph::import_dot(source, &model)?;
                     let exercise_selection = kind == GenerationType::CrossSection
                         && orchestrator == UVOrchestrator::HedgePoset
                         && mode == "direct_keyed";

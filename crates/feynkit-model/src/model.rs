@@ -81,7 +81,7 @@ pub(crate) struct ParticleDefinition {
     pub color: i64,
     pub mass: String,
     pub width: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chemical_potential: Option<String>,
     pub texname: String,
     pub antitexname: String,
@@ -728,12 +728,17 @@ impl Model {
                 break;
             }
         }
-        for parameter in &mut parameters {
-            if parameter.nature == ParameterNature::Internal
-                && parameter.expression.is_some()
-                && zero_parameters.contains(&parameter.name)
-            {
-                parameter.expression = Some(Atom::Zero);
+        // A declared ZERO supplies the canonical mass/medium identity below.
+        // Keep other parameter expressions intact, including width aliases.
+        // Without that identity, retain the exact zero proof on the parameter.
+        if !indexes.parameters.contains_key("ZERO") {
+            for parameter in &mut parameters {
+                if parameter.nature == ParameterNature::Internal
+                    && parameter.expression.is_some()
+                    && zero_parameters.contains(&parameter.name)
+                {
+                    parameter.expression = Some(Atom::Zero);
+                }
             }
         }
         let zero_mass_replacements = definition

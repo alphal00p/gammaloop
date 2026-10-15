@@ -1209,8 +1209,12 @@ mod tests {
                 "{name} Goldstone metadata"
             );
             assert_eq!(
-                imported.particle_by_id(fresh.particle).unwrap().mass,
-                canonical.particle_by_id(saved.particle).unwrap().mass,
+                imported
+                    .parameter_by_id(imported.particle_by_id(fresh.particle)?.mass)?
+                    .name,
+                canonical
+                    .parameter_by_id(canonical.particle_by_id(saved.particle)?.mass)?
+                    .name,
                 "{name} pole mass"
             );
         }

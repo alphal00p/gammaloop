@@ -3731,8 +3731,13 @@ mod tests {
         let _ = UFOSymbol::from("GC_12");
         state.model = load_generic_model("sm");
         state.model_parameters = state.model.default_param_card();
-        let mut graphs = Graph::import_dot(
-            "digraph model_values { node [num=1]; edge [num=1, mass=0]; A -> A; }",
+        let mut graphs = Graph::from_finalized_runtime_string(
+            r#"digraph model_values {
+                num=1; overall_factor=1; overall_factor_evaluated=1; projector=1;
+                A [num=1];
+                A:0 -> A:1 [particle="a", num=1, mass=0, id=0, lmb_id=0,
+                    lmb_rep="K(0,a___)", source="{ufo_order:0}", sink="{ufo_order:1}"];
+            }"#,
             &state.model,
         )
         .unwrap();
@@ -3836,23 +3841,27 @@ mod tests {
         };
 
         test_initialise()?;
-        for (folder, source) in [
+        for (folder, source, model) in [
             (
                 "amplitudes",
                 include_str!("../../../tests/resources/graphs/scalar_bubble.dot"),
+                load_generic_model("scalars"),
             ),
             (
                 "cross_sections",
                 include_str!(
                     "../../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
                 ),
+                Model::from_json(include_str!(
+                    "../../../assets/models/json/scalars/scalars_2p_3p.json"
+                ))?,
             ),
         ] {
             let temp = tempdir()?;
             let mut state = State::new_test();
-            state.model = load_generic_model("scalars");
+            state.model = model;
             state.model_parameters = state.model.default_param_card();
-            let mut graphs = Graph::from_finalized_runtime_string(source, &state.model)?;
+            let mut graphs = Graph::import_dot(source, &state.model)?;
             graphs.truncate(1);
             let graph_name = graphs[0].name.clone();
             for name in ["first", "second"] {
@@ -5120,7 +5129,7 @@ commands = ["quit -n"]
         .unwrap();
 
         let err = load_state_manifest(temp.path()).unwrap_err();
-        assert!(format!("{err}").contains("Regenerate this state"));
+        assert!(format!("{err}").contains("regenerate the saved state"));
     }
 
     #[test]
@@ -5295,6 +5304,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         cut.import_graphs(
             Graph::import_dot(
                 r#"digraph sampling_cut_bubble {
+                    final_state="scalar_1,scalar_1";
                     num=1; edge [pdg=1001]; node [num=1];
                     ext [style=invis, is_cut=0];
                     ext -> a [id=0];

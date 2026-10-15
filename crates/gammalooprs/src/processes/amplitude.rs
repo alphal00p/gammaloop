@@ -1091,7 +1091,7 @@ impl AmplitudeGraph {
             self.build_multi_channeling_channels(settings.override_lmb_heuristics);
         }
 
-        if let Some(raised_data) = raised_data {
+        if let Some(mut raised_data) = raised_data {
             let max_order = raised_data
                 .raised_groups
                 .iter()
@@ -1101,7 +1101,7 @@ impl AmplitudeGraph {
             if max_order > 1 {
                 self.graph.param_builder.initialize_duals(max_order);
             }
-            self.derived_data.raised_data.pass_two_evaluator = Some(
+            raised_data.pass_two_evaluator = Some(
                 (1..=max_order)
                     .map(|order| {
                         threshold_counterterm_helper(

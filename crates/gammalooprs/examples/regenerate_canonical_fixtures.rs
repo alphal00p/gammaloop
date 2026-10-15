@@ -633,5 +633,20 @@ fn main() -> Result<(), DynError> {
     process_group(mode, &standard_model, &addbar)?;
     process_group(mode, &standard_model, &epemttbar)?;
     process_group(mode, &scalar_model, &scalars)?;
+    // These authored scalar collections preserve their explicit routing and
+    // numerators. Validate their full canonical payload against the same model.
+    for name in [
+        "mass_approach_scalar_self_energy",
+        "dotted_double_triangle",
+        "double_dotted_double_triangle",
+    ] {
+        let path = format!("tests/resources/graphs/{name}.dot");
+        let graphs =
+            gammalooprs::graph::Graph::import_dot(&fs::read_to_string(&path)?, &scalar_model)?;
+        if graphs.is_empty() || graphs.iter().any(|graph| graph.finalized_cuts.is_empty()) {
+            return Err(format!("canonical collection lost physical cuts: {path}").into());
+        }
+        println!("verified {path}");
+    }
     Ok(())
 }

@@ -1335,9 +1335,9 @@ performance-heavy data.
 - Version 9 combined Symbolica 3 evaluator/rational payloads with native sampling and threshold metadata. Version 7 stored exact CFF coefficients as native rationals. Version 6 removed obsolete deferred-integrand fields; version 5 added component-local generated-CFF ownership and prefactor metadata; version 4 added the typed global-prefactor sign.
 - State loading and direct overwrite both require exactly the current manifest version; older states must be regenerated, and states from newer binaries require a newer GammaLoop binary.
 - A missing manifest denotes an unmanifested folder rather than a legacy state and is never loaded as saved state.
-- Process settings history now uses `settings_history.toml`
-  consistently; loader still accepts legacy `settings_history.yaml` for
-  backward compatibility and migration.
+- Process settings history is saved and restored through `settings_history.toml`
+  for both amplitudes and cross sections, retaining the generation settings
+  required by UV exports after reloading a state.
 
 === Integration workspaces
 <integration-workspaces>
