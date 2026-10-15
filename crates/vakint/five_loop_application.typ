@@ -441,3 +441,87 @@ entry admission; existing timers do not separate those inner costs. A live
 profile was requested but the process had already finished, so no finer
 attribution is claimed and no run was restarted. This is an open performance
 issue, separate from correctness and from saved-rule cache effectiveness.
+
+== Finite R2/D10 physical-numerator controls
+
+On 15 October 2026, a separately exported completed publication was tested at
+source campaign generation 8, publication-phase generation 3, scope
+`14b5bd1ebf34d50913b4a6bd49a5180e476fa8126f074b3bcdc854364a2d2029`.
+It records 348 starting queries (294 nonempty, 54 empty), 899 source terminal
+keys and 869 remaining keys. R2/D10 is a summary of its recorded domain union,
+not rectangular coverage of every input satisfying those maxima. This does
+not replace the generation-54 baseline or claim full R6 acceptance.
+
+The external package contains 77 files, 245,885,881 bytes. Native export took
+300.061 seconds; its sampled peak tree RSS was 14.750 GB. The package is not
+committed or embedded. The application tests use the normal external-path
+setting, symbolic masters, and an invalid FORM executable path.
+
+The test-only `r2_acceptance` module uses native FeynKit DOT construction and
+round trips, explicit loop-momentum-edge selection, D-dimensional kinematics,
+the existing all-row/unit-Jacobian mapping service, and RustRed scalar lowering.
+Its fast fixture preflight passed in 0.08 seconds and verifies the complete
+simultaneous denominator and numerator maps, not only a graph isomorphism.
+
+Four separately run ignored tests passed nine finite physical controls:
+
+- Six existing positive-line cancellation controls, with single, dotted,
+  multiple and mixed cancellations, including nonunit masses. Each compares
+  the exact value, guards and family identities with an independently pinched
+  native DOT and with its warm repeated evaluation. The mixed numerator has
+  momentum degree ten but lowers to one R0/D9 key; this is not arbitrary
+  irreducible scalar-rank-five coverage.
+- A nonzero homogeneous difference of squared independent loop momenta,
+  compared with two separately reduced pieces and independent one-loop factors.
+- A nonzero squared cross-factor contraction at scalar degree two, compared
+  with the exact rotational-covariance result. Its ten lowered keys are checked
+  individually against the package's actual admission predicate.
+- A connected six-line banana with the irreducible numerator `k1²-k3²`,
+  compared exactly with two separately admitted numerator pieces and a warm
+  repeated evaluation. This is not a zero-integral shortcut.
+
+The homogeneous and cross-factor controls deliberately have bare denominator
+keys with A11 and A12 outside the saved D10 scope. Their complete numerators
+lower to two and ten admitted keys. The tests verify both the inadmissible bare
+base and the admissible complete input, without broadening the entry union or
+clipping intermediate descendants. Independent reference equality is exact on
+the intersection of retained nonzero conditions; it does not require identical
+conservative provenance guards from different derivations.
+
+#table(
+  columns: 5,
+  [Control], [Load/init], [First application], [Warm repeat], [Whole test],
+  [Homogeneous factor], [75.979 s], [11.042 s], [0.375 s], [110.526 s],
+  [Cross-factor], [76.618 s], [13.108 s], [0.384 s], [92.464 s],
+  [Connected irreducible], [78.342 s], [70.225 s], [0.865 s], [255.064 s],
+)
+
+These are optimized shared-host measurements, excluding compilation. Whole-test
+boundaries include independent reference checks, and the homogeneous/connected
+tests include two extra piece reductions. B/C/D used CPUs 24--27 while the
+cancellation suite used CPUs 20--23. Peak tree RSS was 2.797, 2.794 and 3.044 GB
+for the three table rows. The connected test exercised 12,565 rule applications
+and 208,368 cumulative coefficient-cache hits, retaining 26,148 integrals and
+236,951,956 accounted coefficient bytes. Accounted bytes are not total RSS.
+Its witness memo recorded one hit and three misses.
+
+The six-cancellation test completed in 1597.940 seconds, with 2.817 GB peak RSS.
+Its per-case first/pinched/warm totals were 12.756, 3.546, 1.399, 749.090,
+12.599 and 740.619 seconds after a 75.994-second load. They are not separate
+first/warm timings. A five-second, 49 Hz read-only profile during the first
+mixed-dotted case is included in that total. Its 247 samples identify repeated
+Symbolica polynomial conversion and RustRed weighted lowering inside witness
+admission as active costs. Inclusive percentages overlap and describe that
+window only, not the whole run. The tests establish finite correctness, not a
+whole-suite speedup or elimination of slow first-use numerator processing.
+
+Run the fixture preflight with
+`cargo test --release -p vakint --no-default-features --features feynkit-ingress,rustred-app/capacity-dispatch --lib r2_physical_fixture_native_lowering_and_dot_transport`.
+For the external tests, enable `feynkit-ingress,rustred-app/capacity-dispatch`,
+set `VAKINT_SAVED_APPLICATION` to a completed package admitting the fixture
+keys, and select one of the four `external_r2_` tests with
+`--ignored --nocapture --test-threads=1`. Absence of the package is an error,
+not a silently successful skip. The four tests are deliberately staged
+individually; no complete 348-domain witness census is claimed here. An independent
+source and runtime audit checked every exercised assertion, the executable and
+source bindings, all 77 package hashes, and clean process-group termination.

@@ -16,9 +16,8 @@ use std::error::Error;
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::id::Replacement;
 use symbolica::prelude::Integer;
-use vakint::{
-    Vakint, VakintExpression, diagram_integral::DiagramIntegralOptions, vakint_parse, vakint_symbol,
-};
+// Reused from the public example and from the crate's native unit tests.
+use super::{DiagramIntegralOptions, Vakint, VakintExpression, vakint_parse, vakint_symbol};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const BASE: [i64; 15] = [0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 5];
@@ -118,7 +117,7 @@ fn substitute_mass(family: &NativeFamily, mass: &Atom, value: i64) -> Result<Nat
         family.kinematics(),
     )?)
 }
-fn common_family(
+pub(super) fn common_family(
     loops: &[Atom],
     kinematics: &Kinematics,
     mass_squared: &Atom,
@@ -143,7 +142,7 @@ fn common_family(
         kinematics,
     )?)
 }
-fn unit_core_family() -> Result<IntegralFamily> {
+pub(super) fn unit_core_family() -> Result<IntegralFamily> {
     let c = CoefficientContext::try_new(["d"])?;
     let denominators = data::MOMENTA
         .iter()

@@ -46,6 +46,10 @@ mod witness_cache;
 pub use witness_cache::RustRedWitnessCacheStatistics;
 use witness_cache::{Policy as WitnessPolicy, WitnessCache};
 
+#[cfg(all(test, feature = "feynkit-ingress"))]
+#[path = "five_loop/r2_acceptance.rs"]
+mod r2_acceptance;
+
 #[cfg(test)]
 #[path = "five_loop/admission_census_tests.rs"]
 mod admission_census_tests;
