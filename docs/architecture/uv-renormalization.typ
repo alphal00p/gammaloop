@@ -81,6 +81,15 @@ times. Unsupported collection or the pass limit leaves an unproven residual.
 The certificate takes no numerical samples, forms no common denominators, and
 never distributes a graph numerator.
 
+Compact scalar collection also canonicalizes the precision metadata of an
+exactly zero component in a complex floating coefficient to its nonzero
+partner's precision. The nonzero component's value and precision bytes remain
+unchanged. This permits exact reconstruction of expressions containing the
+same numerical master coefficients without a tolerance or finite-value
+rounding; it does not establish the analytic accuracy of those coefficients.
+Source-frame certificates compare the independently normalized operands;
+subtracting them first can itself recreate differing zero metadata.
+
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
 The renormalization prescription belongs to the `Spinney`. A compute

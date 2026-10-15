@@ -487,11 +487,11 @@ impl FourDSector {
             let projected_neutral = canonical.neutral_numerator(&term.numerator, graph)?;
             // A signed linear momentum can acquire a factored minus sign at
             // this boundary. Normalize each operand independently only when
-            // their structural forms differ. Distribute numeric coefficients
-            // only; products and powers of graph numerators remain factorized.
+            // their structural forms differ. The shared compact owner also
+            // canonicalizes exact-zero float metadata without rounding finite
+            // coefficients or opening numerator products and powers.
             if projected_neutral != neutral
-                && projected_neutral.expand_num().collect_factors()
-                    != neutral.expand_num().collect_factors()
+                && projected_neutral.collect_compact_factors() != neutral.collect_compact_factors()
             {
                 crate::debug_tags!(#generation, #uv, #local, #four_d, #trace;
                     file.source_numerator = %neutral,
@@ -509,8 +509,7 @@ impl FourDSector {
             let projected_neutral = canonical.neutral_numerator(&term.numerator, graph)?;
             let neutral = canonical.neutral_numerator(&term.source_numerator, graph)?;
             if projected_neutral != neutral
-                && projected_neutral.expand_num().collect_factors()
-                    != neutral.expand_num().collect_factors()
+                && projected_neutral.collect_compact_factors() != neutral.collect_compact_factors()
             {
                 return Err(eyre!(
                     "merged canonical UV numerator does not reproduce its source bucket"
@@ -8257,11 +8256,12 @@ mod tests {
     fn canonical_uv_classes_certify_signed_aliases_and_preserve_raw_sectors() -> Result<()> {
         test_initialise()?;
         let graph: Graph = finalized_runtime_dot!(digraph canonical_signed_triangle {
+            projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            c -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let owners = graph.full_filter();
         let hard = |owner| function!(GS.emr_mom, owner);
@@ -8336,80 +8336,94 @@ mod tests {
     fn canonical_uv_signed_multiloop_carriers_preserve_factorized_numerators() -> Result<()> {
         test_initialise()?;
         let graph: Graph = finalized_runtime_dot!(digraph canonical_signed_sunset {
+            projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1 lmb_id=1]
-            a -> b [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
         })?;
-        let hard = -function!(GS.emr_mom, 0) - function!(GS.emr_mom, 1);
-        let component = GS.indexed_momentum(&hard, &[GS.cind(0)]);
-        let opaque =
-            (Atom::var(symbol!("signed_multiloop::a")) + symbol!("signed_multiloop::b")).pow(5);
-        let tagged = |sign| {
-            function!(
-                GS.emr_mom,
-                GS.uv_momentum_provenance_tag(
-                    2,
-                    UvMomentumProvenanceRole::TaylorFixed,
-                    Atom::num(sign) * &hard,
-                ),
-                GS.cind(0)
-            )
-        };
-        let positive = GS.den(2, &hard, 1, component.pow(2) - 1);
-        let negative = GS.den(2, -&hard, 1, (-&component).pow(2) - 1);
-        let atom = tagged(1) * &opaque / positive.pow(2) - tagged(-1) * &opaque / negative.pow(2);
-        let owners = graph.full_filter();
-        let sector = FourDSector::new(
-            atom,
-            vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())],
-            vec![],
-        );
-        let canonical = sector.canonical_projection(&graph)?;
-        let reconstructed =
-            canonical
-                .terms
-                .iter()
-                .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
-                    let denominator = term
-                        .powers
-                        .iter()
-                        .fold(Atom::one(), |product, (id, power)| {
-                            product * canonical.class(*id).full_expr.pow(*power)
-                        });
-                    Ok(sum + canonical.neutral_numerator(&term.numerator, &graph)? / denominator)
-                })?;
-        let expected = Atom::num(2) * &component * opaque / (component.pow(2).expand() - 1).pow(2);
-        assert_eq!(
-            reconstructed.collect_factors(),
-            canonical
-                .neutral_numerator(&expected, &graph)?
-                .collect_factors()
-        );
-        let base = Atom::var(symbol!("signed_multiloop::a")) - symbol!("signed_multiloop::b");
-        let factor =
-            (Atom::var(symbol!("signed_multiloop::c")) + symbol!("signed_multiloop::d")).pow(5);
-        let left = Atom::num(2) * &factor * &base + Atom::num(3) * &factor;
-        let right = -Atom::num(2) * &factor * (-&base).expand_num() + Atom::num(3) * &factor;
-        let normalized = canonical.neutral_numerator(&left, &graph)?;
-        assert_eq!(normalized, canonical.neutral_numerator(&right, &graph)?);
-        assert_eq!(
-            normalized,
-            canonical.neutral_numerator(&normalized, &graph)?
-        );
-        for exponent in [-3_i64, 2, 3, 500_000] {
-            let first = canonical.neutral_numerator(&base.pow(exponent), &graph)?;
-            let opposite = Atom::num(if exponent % 2 == 0 { 1 } else { -1 })
-                * (-&base).expand_num().pow(exponent);
-            assert_eq!(first, canonical.neutral_numerator(&opposite, &graph)?);
-            assert_eq!(first, canonical.neutral_numerator(&first, &graph)?);
+        // Include a finite analytic phase whose literal-zero companion has
+        // different precision. The exact source certificate must retain its
+        // nonzero value while normalizing the harmless zero metadata.
+        let phase = Atom::num(symbolica::domains::float::Complex::new(
+            symbolica::domains::float::Float::new(53),
+            symbolica::domains::float::Float::with_val(128, 5),
+        ));
+        for phase in [Atom::one(), phase] {
+            let hard = -function!(GS.emr_mom, 0) - function!(GS.emr_mom, 1);
+            let component = GS.indexed_momentum(&hard, &[GS.cind(0)]);
+            let opaque =
+                (Atom::var(symbol!("signed_multiloop::a")) + symbol!("signed_multiloop::b")).pow(5)
+                    * phase;
+            let tagged = |sign| {
+                function!(
+                    GS.emr_mom,
+                    GS.uv_momentum_provenance_tag(
+                        2,
+                        UvMomentumProvenanceRole::TaylorFixed,
+                        Atom::num(sign) * &hard,
+                    ),
+                    GS.cind(0)
+                )
+            };
+            let positive = GS.den(2, &hard, 1, component.pow(2) - 1);
+            let negative = GS.den(2, -&hard, 1, (-&component).pow(2) - 1);
+            let atom =
+                tagged(1) * &opaque / positive.pow(2) - tagged(-1) * &opaque / negative.pow(2);
+            let owners = graph.full_filter();
+            let sector = FourDSector::new(
+                atom,
+                vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())],
+                vec![],
+            );
+            let canonical = sector.canonical_projection(&graph)?;
+            let reconstructed =
+                canonical
+                    .terms
+                    .iter()
+                    .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
+                        let denominator =
+                            term.powers
+                                .iter()
+                                .fold(Atom::one(), |product, (id, power)| {
+                                    product * canonical.class(*id).full_expr.pow(*power)
+                                });
+                        Ok(sum
+                            + canonical.neutral_numerator(&term.numerator, &graph)? / denominator)
+                    })?;
+            let expected =
+                Atom::num(2) * &component * opaque / (component.pow(2).expand() - 1).pow(2);
+            assert_eq!(
+                reconstructed.collect_compact_factors(),
+                canonical
+                    .neutral_numerator(&expected, &graph)?
+                    .collect_compact_factors()
+            );
+            let base = Atom::var(symbol!("signed_multiloop::a")) - symbol!("signed_multiloop::b");
+            let factor =
+                (Atom::var(symbol!("signed_multiloop::c")) + symbol!("signed_multiloop::d")).pow(5);
+            let left = Atom::num(2) * &factor * &base + Atom::num(3) * &factor;
+            let right = -Atom::num(2) * &factor * (-&base).expand_num() + Atom::num(3) * &factor;
+            let normalized = canonical.neutral_numerator(&left, &graph)?;
+            assert_eq!(normalized, canonical.neutral_numerator(&right, &graph)?);
+            assert_eq!(
+                normalized,
+                canonical.neutral_numerator(&normalized, &graph)?
+            );
+            for exponent in [-3_i64, 2, 3, 500_000] {
+                let first = canonical.neutral_numerator(&base.pow(exponent), &graph)?;
+                let opposite = Atom::num(if exponent % 2 == 0 { 1 } else { -1 })
+                    * (-&base).expand_num().pow(exponent);
+                assert_eq!(first, canonical.neutral_numerator(&opposite, &graph)?);
+                assert_eq!(first, canonical.neutral_numerator(&first, &graph)?);
+            }
+            let fractional = base.pow(Atom::num(1) / Atom::num(2));
+            assert_eq!(
+                fractional,
+                canonical.neutral_numerator(&fractional, &graph)?
+            );
         }
-        let fractional = base.pow(Atom::num(1) / Atom::num(2));
-        assert_eq!(
-            fractional,
-            canonical.neutral_numerator(&fractional, &graph)?
-        );
         Ok(())
     }
 
@@ -8417,11 +8431,12 @@ mod tests {
     fn canonical_uv_positive_blocks_and_absent_poles_keep_their_roles() -> Result<()> {
         test_initialise()?;
         let graph: Graph = finalized_runtime_dot!(digraph canonical_positive_triangle {
+            projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            c -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let owners = graph.full_filter();
         let den = |owner| {
@@ -8469,11 +8484,12 @@ mod tests {
     fn canonical_positive_denominator_recovers_one_class_from_expanded_coordinates() -> Result<()> {
         test_initialise()?;
         let graph: Graph = finalized_runtime_dot!(digraph canonical_positive_sunset {
+            projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1 lmb_id=1]
-            a -> b [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
         })?;
         let owners = graph.full_filter();
         let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
