@@ -814,10 +814,11 @@ mod tests {
     fn canonical_source_and_template_preparation_share_retention_invariant_budget() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = finalized_runtime_dot!(digraph preparation_retention {
+            projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let mut coefficient = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one();
         for edge in [EdgeIndex(0), EdgeIndex(1)] {
