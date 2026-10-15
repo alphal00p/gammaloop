@@ -192,7 +192,9 @@ anchor = "pub struct Model {"
 # Reviewed 2026-10-15: The current architecture records typed chemical-potential
 # ownership, persistence and structural-zero normalization without freezing adjustable
 # zeros.
-digest = "3727526953c1320fbc2185082203d5e1cdedb2aa"
+# Reviewed 2026-10-15: The zero fixed point now uses idiomatic filter/map without changing the
+# structural proof or adjustable-parameter semantics.
+digest = "9d9dd1b0c2e32b53e5c87ffd01f89c2d7aa324b8"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
@@ -1502,7 +1504,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # preserving the documented narrow documentation source-filter boundary.
 # Reviewed 2026-10-15: The cache note records rendering source ownership and locked UFO
 # runtime wheels; removed nonexistent test paths do not alter test selection.
-digest = "46d4adf2cd7685c97ba19285aa6081ef3c5daeb4"
+# Reviewed 2026-10-15: Renderer data manifests are compilation inputs; their pinned font payloads
+# remain in a separate runtime closure, as recorded in the cache note.
+digest = "e478838cab2e0aae211c48b9470a1673d2d9c823"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1527,7 +1531,9 @@ end_anchor = "\nin\n{\n  inherit"
 # Reviewed 2026-10-15: Documentation keeps its producer/runtime distinction. Four-
 # minute ordinary tests, larger main-push workloads and final-review performance
 # triggers remain owned by ci.typ.
-digest = "59d71a304a2ed326189de22f9b01149e38bf34e2"
+# Reviewed 2026-10-15: Terminal documentation checks receive the pinned font bundle through
+# SYMBOLICA_DATA_DIRECTORY; reusable compiler artifact ownership is unchanged.
+digest = "e27a783909bfe283190cb242f1325a1b94b77d0f"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1578,7 +1584,9 @@ path = "nix/ci.nix"
 symbol = "documentation test group coverage"
 anchor = 'name = "docs";'
 end_anchor = 'name = "integration";'
-digest = "2084c83a58875b3ae7563ef5e4adb7408fec0ccb"
+# Reviewed 2026-10-15: The existing documentation test group receives the native-renderer font
+# bundle at runtime; its package and test selection are unchanged.
+digest = "6f841f176b4d76719aaaaf4f1a0e32c0ff7eb405"
 
 [[section]]
 id = "documentation"

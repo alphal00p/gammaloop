@@ -1195,6 +1195,7 @@ impl FeynmanGraph for Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test_utils::ModelFixtureExt;
     use crate::{
         graph::parse::from_dot::IntoFinalizedRuntimeGraph,
         initialisation::test_initialise,
@@ -1210,14 +1211,14 @@ mod tests {
         test_initialise()?;
         let mut model = load_generic_model("sm");
         let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
-            &(r#"
+            r#"
             digraph thermal_domain {
                 node [num=1]; edge [num=1];
                 A -> A [id=0 particle="G+" mass=2];
                 A -> A [id=1 particle="d" mass=0];
                 A -> A [id=2 particle="a"];
             }
-        "#),
+        "#,
             &model,
         )
         .map(|mut graphs| {
@@ -1225,33 +1226,10 @@ mod tests {
             graphs.remove(0)
         })?;
         // Dense fermions and massless zero-mu bosons are both supported.
-        {
-            let mut values: feynkit_model::ParameterCard = model
-                .parameters()
-                .iter()
-                .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-                .collect();
-            for (name, value) in [
-                ("mud", Complex::new_re(F(3.0))),
-                ("minus_mud", Complex::new_re(F(-3.0))),
-            ] {
-                values.insert(
-                    name.to_owned(),
-                    feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-                );
-            }
-            let couplings: std::collections::BTreeMap<_, _> = model
-                .couplings()
-                .iter()
-                .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-                .collect();
-            model.apply_parameter_card_with(&values, &mut |_| {
-                Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                    internal_parameters: Default::default(),
-                    couplings: couplings.clone(),
-                })
-            })?;
-        }
+        model.set_fixture_values([
+            ("mud", Complex::new_re(F(3.0))),
+            ("minus_mud", Complex::new_re(F(-3.0))),
+        ])?;
         for mode in [
             MediumMode::Vacuum,
             MediumMode::ThermodynamicEquilibrium,
@@ -1267,33 +1245,10 @@ mod tests {
                 }
             }
             for mu in [0.0, 1.0, -1.0, 2.0, -2.0, 3.0, f64::NAN, f64::INFINITY] {
-                {
-                    let mut values: feynkit_model::ParameterCard = model
-                        .parameters()
-                        .iter()
-                        .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-                        .collect();
-                    for (name, value) in [
-                        ("muG", Complex::new_re(F(mu))),
-                        ("minus_muG", Complex::new_re(F(-mu))),
-                    ] {
-                        values.insert(
-                            name.to_owned(),
-                            feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-                        );
-                    }
-                    let couplings: std::collections::BTreeMap<_, _> = model
-                        .couplings()
-                        .iter()
-                        .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-                        .collect();
-                    model.apply_parameter_card_with(&values, &mut |_| {
-                        Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                            internal_parameters: Default::default(),
-                            couplings: couplings.clone(),
-                        })
-                    })?;
-                }
+                model.set_fixture_values([
+                    ("muG", Complex::new_re(F(mu))),
+                    ("minus_muG", Complex::new_re(F(-mu))),
+                ])?;
                 graph.param_builder.update_model_values(&model)?;
                 let result = graph.validate_medium_parameters(&model, 1.0);
                 assert_eq!(result.is_ok(), mode == MediumMode::Vacuum || mu.abs() < 2.0);
@@ -1301,33 +1256,10 @@ mod tests {
                     assert!(error.to_string().contains("thermal_domain"));
                 }
             }
-            {
-                let mut values: feynkit_model::ParameterCard = model
-                    .parameters()
-                    .iter()
-                    .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-                    .collect();
-                for (name, value) in [
-                    ("muG", Complex::new_re(F(0.0))),
-                    ("minus_muG", Complex::new_re(F(0.0))),
-                ] {
-                    values.insert(
-                        name.to_owned(),
-                        feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-                    );
-                }
-                let couplings: std::collections::BTreeMap<_, _> = model
-                    .couplings()
-                    .iter()
-                    .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-                    .collect();
-                model.apply_parameter_card_with(&values, &mut |_| {
-                    Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                        internal_parameters: Default::default(),
-                        couplings: couplings.clone(),
-                    })
-                })?;
-            }
+            model.set_fixture_values([
+                ("muG", Complex::new_re(F(0.0))),
+                ("minus_muG", Complex::new_re(F(0.0))),
+            ])?;
         }
         Ok(())
     }
@@ -1362,30 +1294,7 @@ mod tests {
             (Complex::new(F(2.0), F(1.0)), Complex::new_re(F(0.0)), false),
             (Complex::new_re(F(2.0)), Complex::new(F(0.0), F(1.0)), false),
         ] {
-            {
-                let mut values: feynkit_model::ParameterCard = model
-                    .parameters()
-                    .iter()
-                    .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-                    .collect();
-                for (name, value) in [("MT", mass), ("muG", mu), ("minus_muG", -mu)] {
-                    values.insert(
-                        name.to_owned(),
-                        feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-                    );
-                }
-                let couplings: std::collections::BTreeMap<_, _> = model
-                    .couplings()
-                    .iter()
-                    .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-                    .collect();
-                model.apply_parameter_card_with(&values, &mut |_| {
-                    Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                        internal_parameters: Default::default(),
-                        couplings: couplings.clone(),
-                    })
-                })?;
-            }
+            model.set_fixture_values([("MT", mass), ("muG", mu), ("minus_muG", -mu)])?;
             graph.param_builder.update_model_values(&model)?;
             assert_eq!(
                 graph.validate_medium_parameters(&model, 1.0).is_ok(),
@@ -1473,30 +1382,7 @@ mod tests {
             }
             if anti_parameter == Some("muB") {
                 // The unused antiparticle label must still have a finite real value.
-                {
-                    let mut values: feynkit_model::ParameterCard = model
-                        .parameters()
-                        .iter()
-                        .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-                        .collect();
-                    for (name, value) in [("muB", Complex::new(F(0.0), F(0.5)))] {
-                        values.insert(
-                            name.to_owned(),
-                            feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-                        );
-                    }
-                    let couplings: std::collections::BTreeMap<_, _> = model
-                        .couplings()
-                        .iter()
-                        .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-                        .collect();
-                    model.apply_parameter_card_with(&values, &mut |_| {
-                        Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                            internal_parameters: Default::default(),
-                            couplings: couplings.clone(),
-                        })
-                    })?;
-                }
+                model.set_fixture_values([("muB", Complex::new(F(0.0), F(0.5)))])?;
                 graphs[0].param_builder.update_model_values(&model)?;
                 let error = graphs[0]
                     .validate_medium_parameters(&model, 1.0)
@@ -1526,10 +1412,10 @@ mod tests {
             particle["chemical_potential"] = serde_json::json!(parameter);
             let mut model = Model::from_json(&input.to_string())?;
             let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
-                &(r#"digraph self_conjugate_mu {
+                r#"digraph self_conjugate_mu {
                 node [num=1]; edge [num=1];
                 A -> A [particle="H" mass=4];
-            }"#),
+            }"#,
                 &model,
             )
             .map(|mut graphs| {
@@ -1600,30 +1486,7 @@ mod tests {
         };
         let set_masses = |model: &mut Model, graph: &mut Graph, masses: [f64; 2]| {
             for (name, mass) in ["MT", "MW"].into_iter().zip(masses) {
-                {
-                    let mut values: feynkit_model::ParameterCard = model
-                        .parameters()
-                        .iter()
-                        .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-                        .collect();
-                    for (name, value) in [(name, Complex::new_re(F(mass)))] {
-                        values.insert(
-                            name.to_owned(),
-                            feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-                        );
-                    }
-                    let couplings: std::collections::BTreeMap<_, _> = model
-                        .couplings()
-                        .iter()
-                        .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-                        .collect();
-                    model.apply_parameter_card_with(&values, &mut |_| {
-                        Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                            internal_parameters: Default::default(),
-                            couplings: couplings.clone(),
-                        })
-                    })?;
-                }
+                model.set_fixture_values([(name, Complex::new_re(F(mass)))])?;
             }
             graph.param_builder.update_model_values(model)
         };
@@ -1748,30 +1611,7 @@ mod tests {
                 (Complex::new_re(F(f64::NAN)), false),
                 (Complex::new_re(F(f64::INFINITY)), false),
             ] {
-                {
-                    let mut values: feynkit_model::ParameterCard = model
-                        .parameters()
-                        .iter()
-                        .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-                        .collect();
-                    for (name, value) in [("MT", mass)] {
-                        values.insert(
-                            name.to_owned(),
-                            feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-                        );
-                    }
-                    let couplings: std::collections::BTreeMap<_, _> = model
-                        .couplings()
-                        .iter()
-                        .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-                        .collect();
-                    model.apply_parameter_card_with(&values, &mut |_| {
-                        Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                            internal_parameters: Default::default(),
-                            couplings: couplings.clone(),
-                        })
-                    })?;
-                }
+                model.set_fixture_values([("MT", mass)])?;
                 for mode in [
                     MediumMode::Vacuum,
                     MediumMode::ThermodynamicEquilibrium,

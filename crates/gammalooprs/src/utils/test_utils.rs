@@ -37,6 +37,47 @@ pub(crate) fn dummy_hedge_graph(n_edges: usize) -> HedgeGraph<NoData, NoData, No
     builder.build()
 }
 
+pub(crate) trait ModelFixtureExt {
+    /// Override an evaluated fixture's values while retaining its other values.
+    /// Runtime domain tests intentionally supply independent conjugate values,
+    /// complex masses and nonfinite inputs through the validated model-card API.
+    fn set_fixture_values<'a>(
+        &mut self,
+        values: impl IntoIterator<Item = (&'a str, Complex<F<f64>>)>,
+    ) -> eyre::Result<()>;
+}
+
+impl ModelFixtureExt for crate::model::Model {
+    fn set_fixture_values<'a>(
+        &mut self,
+        values: impl IntoIterator<Item = (&'a str, Complex<F<f64>>)>,
+    ) -> eyre::Result<()> {
+        let mut card: feynkit_model::ParameterCard = self
+            .parameters()
+            .iter()
+            .filter_map(|p| p.value.map(|value| (p.name.clone(), value)))
+            .collect();
+        for (name, value) in values {
+            card.insert(
+                name.to_owned(),
+                feynkit_model::ComplexValue::new(value.re.0, value.im.0),
+            );
+        }
+        let couplings = self
+            .couplings()
+            .iter()
+            .filter_map(|c| c.value.map(|value| (c.name.clone(), value)))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        self.apply_parameter_card_with(&card, &mut |_| {
+            Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
+                internal_parameters: Default::default(),
+                couplings: couplings.clone(),
+            })
+        })?;
+        Ok(())
+    }
+}
+
 impl crate::graph::Graph {
     /// Construct denominator-only fixtures without asking a physical model to
     /// supply interactions. Unit fragments have no rule-leg tensor slots; their
@@ -62,7 +103,7 @@ impl crate::graph::Graph {
             DotHedgeData,
             GlobalData,
             NodeStorageVec<DotVertexData>,
-        > = GraphSet::from_string(input.to_owned()).map_err(|error| eyre::eyre!("{error}"))?;
+        > = GraphSet::from_string(input).map_err(|error| eyre::eyre!("{error}"))?;
         set.set
             .into_iter()
             .zip(set.global_data)

@@ -15,7 +15,7 @@
   inherit (pkgs) lib;
 
   documentation = import ./documentation.nix {
-    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources
+    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources symbolicaRenderData
       ciArgs ciCargoProfile
       dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
       workspacePackageSrcFor workspaceMissingCargoTargetsScript
@@ -626,6 +626,51 @@
 
   workspacePackageExtraFilesetsForSourcePackages = kind: sourcePackages:
     map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages kind sourcePackages);
+
+  # Supply the host-owned assets expected by the native renderers. Keep this
+  # runtime closure separate from compiled producers and notebook resource wheels.
+  symbolicaRenderData = let
+    locked = lib.findFirst (package: package.name == "typst-assets")
+      (throw "Cargo.lock must contain typst-assets")
+      (builtins.fromTOML (builtins.readFile (workspaceRoot + "/Cargo.lock"))).package;
+    fonts = pkgs.fetchurl {
+      url = "https://static.crates.io/crates/typst-assets/typst-assets-${locked.version}.crate";
+      sha256 = locked.checksum;
+    };
+    assets = lib.fileset.toSource {
+      root = workspaceRoot;
+      fileset = lib.fileset.unions
+        (workspacePackageExtraFilesetsForSourcePackages "production" ["typst-renderer" "spynso3"]);
+    };
+  in pkgs.runCommand "gammaloop-render-data" {
+    nativeBuildInputs = [pkgs.python313];
+  } ''
+    tar -xzf ${fonts}
+    python3 - <<'PY'
+    import json, os, shutil
+    from pathlib import Path
+    destination = Path(os.environ["out"])
+    provider = Path("typst-assets-${locked.version}")
+    for consumer in ("typst-renderer", "spynso3"):
+        root = Path("${assets}") / "crates" / consumer
+        for asset in json.loads((root / "data.json").read_text())["assets"]:
+            name, path = Path(asset["name"]), Path(asset["path"])
+            assert not name.is_absolute() and ".." not in name.parts
+            assert not path.is_absolute() and ".." not in path.parts
+            package = asset.get("package")
+            assert package in (None, "typst-assets")
+            source = (provider if package else root) / path
+            output = destination / name
+            output.parent.mkdir(parents=True, exist_ok=True)
+            if output.exists():
+                assert output.read_bytes() == source.read_bytes(), name
+            else:
+                shutil.copyfile(source, output)
+    shutil.copyfile(Path("${assets}") / "crates/typst-renderer/fonts/NOTICE", destination / "NOTICE")
+    for license in provider.glob("LICENSE*"):
+        shutil.copyfile(license, destination / license.name)
+    PY
+  '';
 
   workspacePackageExtraSourceRestoreInDummySrcScriptFor = sourcePackages:
     ''
@@ -2481,6 +2526,7 @@
       // lib.optionalAttrs (name == "doctest") {
         preBuild = licensePreCheck;
         SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+        SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
       })) {
     check = "cargoWithProfile check ${ciArgs.cargoExtraArgs} --all-targets";
     clippy = "cargoWithProfile clippy ${ciArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings";
@@ -2833,7 +2879,7 @@
   }: let
     junitPath = "target/nextest/${profile}/junit.xml";
   in
-    pkgs.runCommand name {
+    pkgs.runCommand name ({
       nativeBuildInputs = [
         ciToolchain
         pkgs.cargo-nextest
@@ -2852,7 +2898,9 @@
       RUST_BACKTRACE = "1";
       RUST_LIB_BACKTRACE = "1";
       SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-    } (''
+    } // lib.optionalAttrs (target.runtimeRenderData or false) {
+      SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
+    }) (''
       if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
         echo "Missing SYMBOLICA_LICENSE environment variable" >&2
         exit 1
@@ -2973,17 +3021,17 @@
       {
         runnerAttr = "nix-ci-check-alphal00p-docs";
         checkAttr = "alphal00p-docs";
-        inputs = [documentation.alphal00pDocsCargoArtifacts];
+        inputs = [documentation.alphal00pDocsCargoArtifacts symbolicaRenderData];
       }
       {
         runnerAttr = "nix-ci-check-gammaloop-doctest";
         checkAttr = "gammaloop-doctest";
-        inputs = [cargoCheckArtifacts cranePackageDependencyArtifacts."gammaloop-api"];
+        inputs = [cargoCheckArtifacts cranePackageDependencyArtifacts."gammaloop-api" symbolicaRenderData];
       }
       {
         runnerAttr = "nix-ci-check-gammaloop-nextest";
         checkAttr = "gammaloop-nextest";
-        inputs = builtins.attrValues nextestBinarySets ++ [gammaloop-python-module]
+        inputs = builtins.attrValues nextestBinarySets ++ [gammaloop-python-module symbolicaRenderData]
           ++ lib.optional (builtins.any nextestUsesUfoSupport checkedNextestPackageGroups) nextestUfoPython;
       }
     ]
@@ -2993,7 +3041,8 @@
       inputs =
         [(nextestBinarySetForTarget target)]
         ++ lib.optional (nextestUsesPythonModule target) gammaloop-python-module
-        ++ lib.optional (nextestUsesUfoSupport target) nextestUfoPython;
+        ++ lib.optional (nextestUsesUfoSupport target) nextestUfoPython
+        ++ lib.optional (target.runtimeRenderData or false) symbolicaRenderData;
     })
     checkedNextestPackageGroups;
 
@@ -3136,6 +3185,7 @@ in {
     clinnet-cli
     gammaloop-python-module
     nextestUfoPython
+    symbolicaRenderData
     nixCiConfiguration
     guppyWorkspaceGraphJson
     linnest-wasm
