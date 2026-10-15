@@ -973,6 +973,11 @@ impl VakintWrapper {
     }
 }
 
+#[inline]
+fn record_usage() {
+    crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Vakint);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1046,9 +1051,4 @@ mod tests {
         })
         .unwrap();
     }
-}
-
-#[inline]
-fn record_usage() {
-    crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Vakint);
 }

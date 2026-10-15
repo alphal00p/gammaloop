@@ -972,7 +972,10 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-10-15: Python backend settings and complex numerical substitutions
 # retain the documented API boundary. Physical PySecDec integration remains manual;
 # pure adapter tests remain automatic.
-digest = "ed9496f4848c867bf0da7d51378705f0f06d312d"
+# No-impact attestation 2026-10-15: Move the unchanged citation-recording helper
+# before the test module to satisfy Clippy in the Community feature configuration.
+# Runtime registration, signatures and evaluation behavior are unchanged.
+digest = "42363386100fcecf85037b215b2f6e187eefdb2d"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -1523,7 +1526,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-15: Compile-time test inputs now include the authoritative SM JSON for the
 # built-in model check and the captured paired-wavefunction numerator fixtures.
 # These remain in test producers, preserving production/runtime source ownership.
-digest = "1bc79899f1e405548da2fe598f2c18fceb2c04d0"
+# Reviewed 2026-10-15: Embedded-input audit covers renderer CSS/JS/HTML and
+# compile-time Python, Atom, JSON and graph fixtures in their owning producers.
+# Native FeynKit rendering no longer keys its producer on obsolete Typst templates.
+digest = "59e5e98838c5ce3681fb263e27644ec19ac7a07e"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

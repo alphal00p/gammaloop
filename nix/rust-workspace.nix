@@ -99,6 +99,14 @@
     (workspaceRoot + "/crates/feynkit-ufo/src/parameter_labels.py")
     (workspaceRoot + "/crates/feynkit-py/src/collection.css")
     (workspaceRoot + "/crates/feynkit-py/src/collection.js")
+    (workspaceRoot + "/crates/feynkit-py/src/notebook.js")
+    (workspaceRoot + "/crates/feynkit-py/src/expression.css")
+    (workspaceRoot + "/crates/feynkit-py/src/expression.js")
+    (workspaceRoot + "/crates/feynkit-py/src/cff/display.css")
+    (workspaceRoot + "/crates/feynkit-py/src/cff/display.html")
+    (workspaceRoot + "/crates/feynkit-py/src/cff/display.js")
+    (workspaceRoot + "/crates/feynkit-py/src/ltd/display.css")
+    (workspaceRoot + "/crates/feynkit-py/src/ltd/display.js")
     (workspaceRoot + "/crates/linnest/src/svg/interactive.css")
     (workspaceRoot + "/crates/linnest/src/svg/interactive.js")
     (workspaceRoot + "/crates/kurvst/typst/kurvst.wasm")
@@ -422,9 +430,14 @@
     "feynkit-py" = [
       "crates/feynkit-py/src/collection.css"
       "crates/feynkit-py/src/collection.js"
-      "assets/embedded/drawing/templates/layout-core.typ"
-      "assets/embedded/drawing/templates/physics-edge-style.typ"
-      "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
+      "crates/feynkit-py/src/notebook.js"
+      "crates/feynkit-py/src/expression.css"
+      "crates/feynkit-py/src/expression.js"
+      "crates/feynkit-py/src/cff/display.css"
+      "crates/feynkit-py/src/cff/display.html"
+      "crates/feynkit-py/src/cff/display.js"
+      "crates/feynkit-py/src/ltd/display.css"
+      "crates/feynkit-py/src/ltd/display.js"
     ];
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
     "alphal00p-docs-examples" = [
@@ -482,6 +495,7 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    idenso = ["crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"];
     "linnet-py" = ["crates/linnet-py/tests/test_svg_interaction.py"];
     linnet = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
     linnest = [
@@ -491,6 +505,7 @@
     "feynkit-amplitude" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-graph" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-generator" = [
       "crates/feynkit-model/tests/fixtures"
       "crates/feynkit-generator/tests/fixtures"
@@ -503,6 +518,7 @@
       "crates/feynkit-model/tests/fixtures"
       "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
       "crates/feynkit-py/tests/fixtures"
+      "crates/feynkit-py/tests/cff_display.py"
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
@@ -512,6 +528,7 @@
     ];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = ["crates/linnet-py/python/symbolica/community/graph/__init__.pyi" "docs/api/python"];
+    vakint = ["crates/vakint/python/symbolica/community/hepkit/vakint/__init__.py"];
     clinnet = [
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
       "assets/embedded/drawing/templates/layout-core.typ"
@@ -529,6 +546,10 @@
     ];
     gammalooprs = [
       "tests/resources/graphs"
+      "tests/resources/algebra"
+      "crates/feynkit-model/tests/fixtures"
+      "crates/gammalooprs/src/graph/parse/finalized_reference.json"
+      "crates/gammalooprs/tests/fixtures/renormalization"
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL256.dot"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot"
@@ -538,6 +559,8 @@
       "tests/tests/snapshots/test_evaluation_api__gl20_multichannel_local_inspect_events.snap"
       "crates/gammalooprs/tests/fixtures/renormalization"
       "tests/resources/graphs/scalar/dod2_bubble.dot"
+      "tests/resources/graphs/gamma_star_ddbar_top_bubble.dot"
+      "tests/resources/graphs/benchmark_epem_a_tth_NNLO_graph.dot"
     ];
   };
 
