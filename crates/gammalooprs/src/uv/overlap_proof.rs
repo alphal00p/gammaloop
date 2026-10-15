@@ -26,9 +26,7 @@ use crate::{
     },
 };
 
-#[path = "overlap_numerators.rs"]
-mod numerators;
-use numerators::NumeratorJetCache;
+use crate::uv::overlap_numerators::NumeratorJetCache;
 
 const LAST_FORBIDDEN_POWER: i64 = -2;
 const MAX_GROUPS: usize = 32768;

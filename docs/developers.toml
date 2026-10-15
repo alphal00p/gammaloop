@@ -353,6 +353,29 @@ end_anchor = "    fn tensor_reduce_form("
 # scalar evaluation order is independent.
 digest = "22a7663f68fb673976a0dcf4d701abed6134db8a"
 
+[[section.note.scope]]
+path = "crates/gammalooprs/src/numerator/symbolica_ext.rs"
+symbol = "gammalooprs::numerator::NumeratorAtomExt scalar factor collection"
+anchor = "impl NumeratorAtomExt for AtomView<'_> {"
+end_anchor = "    fn series_preserving_factors(\n        &self,\n        variable: Symbol,\n        expansion_point: AtomView<'_>,\n        depth: i64,\n        numerator_family_keys: &[Atom],\n    ) -> color_eyre::Result<Atom> {\n        for (index, key) in numerator_family_keys.iter().enumerate() {"
+# Reviewed 2026-10-15: Literal coefficient columns retain original keys and reject
+# hidden/non-Laurent dependence; numeric content normalization respects power and
+# guard boundaries.
+# Numeric-content review: implicit unit coefficients enter the GCD; signs use
+# coefficient-free term order. Numeric distribution runs only behind opaque
+# function/power wrappers, preserving nested inverse and fractional bodies.
+digest = "b90940440654a96a30b19838667e42e72975a108"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/overlap_numerators.rs"
+symbol = "gammalooprs::uv::overlap_numerators::NumeratorJetCache exact finite coefficients"
+anchor = "impl NumeratorJetCache {"
+end_anchor = "\n#[cfg(test)]"
+# Reviewed 2026-10-15: Finite tensor entries retain their external slots and exact
+# domain. One deterministic bounded literal collection preserves spectators and
+# accepts only smaller exact reconstructions.
+digest = "3e934112221d94c6eb83b09cba652936a4ce1cad"
+
 [[section.note]]
 id = "spenso-parsing-flow"
 title = "Spenso parsing flow"

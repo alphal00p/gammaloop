@@ -1,5 +1,5 @@
 //! Offline, finite component contraction of already bound numerator coefficients.
-//! This module is included only by the test-only overlap certificate. Neither
+//! Shared by the overlap and on-shell test certificates. Neither
 //! scalar nor tensor-valued graph numerators are polynomial-expanded here.
 
 use std::{collections::HashMap, ops::Deref};
@@ -191,7 +191,81 @@ impl NumeratorJetCache {
         let mut bytes = slots.as_view().get_byte_size();
         let mut scalar_prefactor = Atom::num(1);
         for (index, value) in tensor.iter_flat() {
+            // Numeric signs and weights belong to the shared compact owner.
+            // In particular, do not run an unprotected numeric expansion here:
+            // it would enter fractional powers and denominator bodies.
             let mut value = value.collect_compact_factors();
+            if !value.is_zero() {
+                // One bounded collection in repeated literal scalar factors
+                // can close a finite component identity without opening those
+                // factors. This is a single deterministic decomposition, not
+                // a search over alternative groupings or polynomial variables.
+                let mut occurrences = HashMap::<AtomView<'_>, usize>::new();
+                value.visitor(&mut |part| {
+                    match part {
+                        AtomView::Fun(_) => {
+                            *occurrences.entry(part).or_default() += 1;
+                            return false;
+                        }
+                        AtomView::Pow(power) => {
+                            if i64::try_from(power.get_exp()).is_ok_and(|power| power > 0)
+                                && matches!(power.get_base(), AtomView::Add(_) | AtomView::Fun(_))
+                            {
+                                *occurrences.entry(power.get_base()).or_default() += 1;
+                            }
+                            return false;
+                        }
+                        AtomView::Add(_) if part != value.as_view() => {
+                            *occurrences.entry(part).or_default() += 1;
+                        }
+                        _ => {}
+                    }
+                    true
+                });
+                let mut factors = occurrences
+                    .into_iter()
+                    .filter_map(|(factor, count)| (count > 1).then_some(factor))
+                    .collect::<Vec<_>>();
+                factors.sort_by(|left, right| {
+                    right
+                        .get_byte_size()
+                        .cmp(&left.get_byte_size())
+                        .then_with(|| left.cmp(right))
+                });
+                let mut keys = Vec::<Atom>::new();
+                for factor in factors {
+                    if keys
+                        .iter()
+                        .all(|key| !factor.contains(key) && !key.contains(factor))
+                    {
+                        keys.push(factor.to_owned());
+                    }
+                    if keys.len() > 128 {
+                        break;
+                    }
+                }
+                if !keys.is_empty() && keys.len() <= 128 {
+                    // Large unrelated graph factors remain outside the row
+                    // representation, including in this exact diagnostic.
+                    let (spectator, selected) = if let AtomView::Mul(product) = value.as_view() {
+                        let (selected, spectator): (Vec<_>, Vec<_>) = product
+                            .iter()
+                            .partition(|factor| keys.iter().any(|key| factor.contains(key)));
+                        (Atom::mul_many(spectator), Atom::mul_many(selected))
+                    } else {
+                        (Atom::one(), value.clone())
+                    };
+                    if let Some(rows) = selected.coefficient_list_exact(&keys) {
+                        let collected = spectator
+                            * Atom::add_many(rows.into_iter().map(|(monomial, coefficient)| {
+                                monomial * coefficient.collect_compact_factors()
+                            }));
+                        if collected.as_view().get_byte_size() < value.as_view().get_byte_size() {
+                            value = collected;
+                        }
+                    }
+                }
+            }
             if value.is_zero() {
                 continue;
             }
@@ -284,6 +358,197 @@ mod tests {
         assert!(constant.key.is_one());
         assert_eq!(constant.scalar_prefactor, Atom::num(4));
         assert!(cache.canonicalize(&Atom::Zero).unwrap().is_zero);
+    }
+
+    #[test]
+    fn finite_numeric_coefficients_cancel_without_distributing_symbolic_factors() {
+        test_initialise().unwrap();
+        let mut cache = NumeratorJetCache::default();
+        let p = parse_lit!(p);
+        let k = parse_lit!(k);
+        // Existing scalar names and tagged Casimirs remain literal coefficients
+        // throughout finite component normalization.
+        let reserved = Atom::var(symbol!("gammalooprs::uv::scalar_component_0"));
+        for casimir in [Atom::one(), idenso::color_cas!(2, idenso::cof!(3))] {
+            let shared = parse_lit!((a + b) * (c + d)) * casimir * &reserved;
+            let difference = -(&shared * (-Atom::num(2) * &k)
+                + &shared * (-Atom::num(2) * (&p - &k)))
+                + &shared * (-Atom::num(2) * &p);
+            assert!(cache.canonicalize(&difference).unwrap().is_zero);
+            let retained = cache.canonicalize(&shared).unwrap();
+            assert!(!retained.is_zero);
+            assert!(
+                retained
+                    .key
+                    .replace(shared.to_pattern())
+                    .match_iter()
+                    .next()
+                    .is_some()
+            );
+        }
+    }
+
+    #[test]
+    fn opposite_finite_component_factors_cancel_without_expanding_spectators() {
+        test_initialise().unwrap();
+        let mut cache = NumeratorJetCache::default();
+        // Reduced (00) entry of the actual massive-quark bubble's U-US
+        // comparison. y and w stand for the imaginary spatial components.
+        let difference = parse_lit!(
+            (-k0 + k3) * (2 * p0 - 2 * p3)
+                + (-2 * p0 + 2 * p3) * (-k0 + k3)
+                + (2 * x + 2 * y) * (x - y)
+                + (-z + w) * (x + y)
+                + (-z - w) * (x - y)
+                + (-x + y) * (z + w)
+                + (-x + y) * (2 * x + 2 * y)
+                + (-x - y) * (z - w)
+                + (-2 * x + 2 * y) * (x + y)
+                + (-2 * x + 2 * y) * (-z - w)
+                + (-2 * x + 2 * y) * (-x - y)
+                + (-2 * x - 2 * y) * (-z + w)
+        );
+        let spectator =
+            parse_lit!((a + b) * (c + d) * (a - b) ^ 11) * idenso::color_cas!(2, idenso::cof!(3));
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &difference))
+                .unwrap()
+                .is_zero
+        );
+        let retained = cache.canonicalize(&spectator).unwrap();
+        assert!(!retained.is_zero);
+        assert_eq!(
+            cache.canonicalize(&(&difference + &spectator)).unwrap(),
+            retained
+        );
+        assert!(
+            retained.key.contains(&parse_lit!((a - b) ^ 11))
+                || retained.key.contains(&parse_lit!((-a + b) ^ 11))
+        );
+        assert!(retained.key.contains(&parse_lit!(a + b)));
+        assert!(retained.key.contains(&parse_lit!(c + d)));
+    }
+
+    #[test]
+    fn nested_parent_scalar_entry_cancels_by_bounded_factor_regrouping() {
+        test_initialise().unwrap();
+        // Reduced first scalar entry of the two-loop OS parent's vacuum
+        // denominator class. All four binomial products remain factorized.
+        let difference = parse_lit!(
+            2 * (p1 - p2) * (2 * (p1 + p2) * (k0 + k3) - 2 * (k1 + k2) * (p0 + p3))
+                + 2 * (p1 + p2) * (2 * (k1 - k2) * (p0 + p3) - 2 * (p1 - p2) * (k0 + k3))
+                + 4 * (p0 + p3) * ((-k0 + k3) * (p0 + p3) + (p1 - p2) * (k1 + k2))
+                - 4 * (p0 + p3) * ((-k0 + k3) * (p0 + p3) + (p1 + p2) * (k1 - k2))
+        );
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        let spectator = parse_lit!((a + b) ^ 11) * idenso::color_cas!(2, idenso::cof!(3));
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &difference))
+                .unwrap()
+                .is_zero
+        );
+        let retained = parse_lit!((p1 - p2) * (a + b) ^ 11);
+        assert!(
+            !cache
+                .canonicalize(&(&difference + &retained))
+                .unwrap()
+                .is_zero
+        );
+        let normalized = cache.canonicalize(&retained).unwrap().key;
+        assert!(normalized.contains(&parse_lit!((a + b) ^ 11)));
+        assert!(
+            normalized.contains(&parse_lit!(p1 - p2)) || normalized.contains(&parse_lit!(-p1 + p2))
+        );
+    }
+
+    #[test]
+    fn opaque_common_factors_cancel_without_opening_their_bodies() {
+        test_initialise().unwrap();
+        let [a, b, c, d, e, f] = ["a", "b", "c", "d", "e", "f"].map(|name| {
+            function!(
+                symbol!(&format!("overlap_factor_test::{name}")),
+                parse_lit!((x + y) ^ 11)
+            )
+        });
+        let difference =
+            &a * (&b * &c - &d * &e) + &b * (&f * &e - &a * &c) + &e * (&a * &d - &b * &f);
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        assert!(!cache.canonicalize(&(difference + &a)).unwrap().is_zero);
+        assert!(cache.canonicalize(&a).unwrap().key.contains(&a));
+    }
+
+    #[test]
+    fn repeated_scalar_products_keep_their_integer_power_relation() {
+        test_initialise().unwrap();
+        let contraction = parse_lit!(p0 * k0 - p1 * k1 - p2 * k2 - p3 * k3);
+        let opposite = (-&contraction).expand_num();
+        let spectator = parse_lit!((a + b) * (c + d) ^ 11);
+        let difference = contraction.pow(2) * opposite + contraction.pow(3);
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        assert!(
+            cache
+                .canonicalize(&(&spectator * difference))
+                .unwrap()
+                .is_zero
+        );
+        let retained = cache
+            .canonicalize(&(&spectator * contraction.pow(3)))
+            .unwrap();
+        assert!(!retained.is_zero);
+        let retained = retained.key;
+        assert!(retained.contains(&parse_lit!((c + d) ^ 11)));
+        assert!(
+            retained.contains(contraction.pow(3))
+                || retained.contains((-&contraction).expand_num().pow(3))
+        );
+    }
+
+    #[test]
+    fn signed_integer_power_leaves_share_an_owner_without_expanding() {
+        test_initialise().unwrap();
+        let mut cache = NumeratorJetCache::default();
+        let base = parse_lit!(a - b);
+        let opposite = parse_lit!(-a + b);
+        for exponent in [-2, -1, 2, 3, 11] {
+            let left = base.pow(exponent);
+            let right = Atom::num(if exponent % 2 == 0 { 1 } else { -1 }) * opposite.pow(exponent);
+            assert_eq!(
+                cache.canonicalize(&left).unwrap(),
+                cache.canonicalize(&right).unwrap(),
+            );
+            assert!(cache.canonicalize(&(left - right)).unwrap().is_zero);
+        }
+        let fractional = parse_lit!((a - b) ^ (1 / 2));
+        assert!(
+            cache
+                .canonicalize(&fractional)
+                .unwrap()
+                .key
+                .contains(&fractional)
+        );
+    }
+
+    #[test]
+    fn finite_component_certificates_preserve_opaque_numeric_sum_payloads() {
+        test_initialise().unwrap();
+        let body = parse_lit!(c + 2 * (a + b));
+        let fractional = body.pow(parse_lit!(1 / 2));
+        let inverse = body.pow(-1);
+        let function = function!(symbol!("finite_component_opaque_payload"), &body);
+        let mut cache = NumeratorJetCache::default();
+        for value in [fractional, inverse, function] {
+            let before = value.clone();
+            let certificate = cache.canonicalize(&value).unwrap();
+            assert!(!certificate.is_zero);
+            assert!(certificate.key.contains(&value));
+            assert_eq!(value, before);
+        }
     }
 
     #[test]
