@@ -36,7 +36,8 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 
 pub trait NumeratorAtomExt {
     /// Collect a bounded Laurent polynomial in literal, independent keys using
-    /// exact zero tests. Key-independent subtrees remain opaque coefficients.
+    /// exact zero tests. Complete scalar sums are admitted as indivisible keys;
+    /// their bodies and key-independent subtrees remain opaque coefficients.
     /// Return None for unsupported dependence or an exceeded algebra budget.
     fn coefficient_list_exact(&self, keys: &[Atom]) -> Option<Vec<(Atom, Atom)>>;
 
@@ -298,7 +299,34 @@ impl NumeratorAtomExt for AtomView<'_> {
         if self.get_byte_size() > 1024 * 1024
             || keys.len() > 128
             || keys.iter().enumerate().any(|(index, key)| {
-                !matches!(key.as_view(), AtomView::Var(_) | AtomView::Fun(_))
+                let admitted = match key.as_view() {
+                    AtomView::Var(_) | AtomView::Fun(_) => true,
+                    AtomView::Add(_) => {
+                        // A literal sum can be a scalar coefficient owner, but
+                        // cannot hide free tensor ports or a lazy branch guard.
+                        // Inspect its native interface without simplifying or
+                        // rewriting the key used by the arithmetic below.
+                        let guarded = [
+                            Symbol::IF,
+                            OrientationID::symbol(),
+                            GS.theta,
+                            GS.orientation_delta,
+                        ]
+                        .into_iter()
+                        .any(|head| key.contains_symbol(head));
+                        !guarded
+                            && idenso::CookSettings::indices()
+                                .with_mode(idenso::CookMode::ReversibleEncoding)
+                                .try_cook(key.as_view())
+                                .ok()
+                                .and_then(|cooked| {
+                                    idenso::tensor::SymbolicTensor::infer(cooked).ok()
+                                })
+                                .is_some_and(|tensor| tensor.is_scalar())
+                    }
+                    _ => false,
+                };
+                !admitted
                     || keys[..index]
                         .iter()
                         .any(|other| key.contains(other) || other.contains(key))
@@ -320,12 +348,12 @@ impl NumeratorAtomExt for AtomView<'_> {
             statistical_zero_test: false,
             ..AtomField::new()
         };
-        let variables = keys
-            .iter()
-            .cloned()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, _>>()
-            .ok()?;
+        // These columns are internal arithmetic handles, not symbolic aliases.
+        // A composite key is not a native polynomial indeterminate; reconstruct
+        // every output monomial from the original immutable keys below.
+        let variables = (0..keys.len())
+            .map(symbolica::poly::PolyVariable::Temporary)
+            .collect::<Vec<_>>();
         let template = Polynomial::new(&field, None, Arc::new(variables));
         let polynomial = collect(*self, keys, &template)?;
         Some(
@@ -780,6 +808,138 @@ mod tests {
     use crate::{initialisation::test_initialise, numerator::aind::Aind, utils::GS};
 
     use super::NumeratorAtomExt;
+
+    #[test]
+    fn exact_scalar_sum_keys_regroup_nested_coefficients_without_opening_binomials() {
+        test_initialise().unwrap();
+        let [a, b, c, d, e, f, g] = [
+            parse_lit!(p1 - p2),
+            parse_lit!(p1 + p2),
+            parse_lit!(k0 + k3),
+            parse_lit!(k1 + k2),
+            parse_lit!(p0 + p3),
+            parse_lit!(k1 - k2),
+            parse_lit!(-k0 + k3),
+        ];
+        let source: Atom = 4 * &a * (&b * &c - &d * &e)
+            + 4 * &b * (&f * &e - &a * &c)
+            + 4 * &e * (&g * &e + &a * &d)
+            - 4 * &e * (&g * &e + &b * &f);
+        assert!(
+            !source.is_zero(),
+            "the input retains its nested factorization"
+        );
+        let spectator = parse_lit!((x + y) ^ 11) * idenso::color_cas!(2, idenso::cof!(3));
+        for value in [source.clone(), &spectator * &source] {
+            let before = value.clone();
+            assert!(
+                value
+                    .coefficient_list_exact(std::slice::from_ref(&e))
+                    .unwrap()
+                    .is_empty()
+            );
+            assert_eq!(value, before);
+        }
+        // A nearby nonzero expression must retain the complete binomial and
+        // spectator. No polynomial identity of their bodies is requested.
+        let retained = &source + &spectator * &a * &e;
+        assert_eq!(
+            retained
+                .coefficient_list_exact(std::slice::from_ref(&e))
+                .unwrap(),
+            vec![(e, spectator * a)]
+        );
+    }
+
+    #[test]
+    fn exact_scalar_sum_keys_preserve_signed_powers_and_closed_dummy_scopes() {
+        test_initialise().unwrap();
+        let slot = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+        let key = Atom::one() + GS.emr_mom(EdgeIndex(1), &slot) * GS.emr_mom(EdgeIndex(2), &slot);
+        let spectator = parse_lit!((x + y) ^ 11)
+            * function!(
+                symbol!("literal_scalar_factor::opaque"),
+                parse_lit!((z + w) ^ 9)
+            );
+        let source: Atom = &spectator * (key.pow(-2) + 3 * key.pow(3));
+        let before = source.clone();
+        let rows = source
+            .coefficient_list_exact(std::slice::from_ref(&key))
+            .unwrap();
+        let coefficients = rows
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(coefficients.len(), 2);
+        assert_eq!(coefficients.get(&key.pow(-2)), Some(&spectator));
+        assert_eq!(coefficients.get(&key.pow(3)), Some(&(3 * &spectator)));
+        let reconstructed = Atom::add_many(
+            rows.iter()
+                .map(|(factor, coefficient)| factor * coefficient),
+        );
+        assert!(
+            (&reconstructed - &source)
+                .coefficient_list_exact(std::slice::from_ref(&key))
+                .unwrap()
+                .is_empty(),
+            "the literal-key rows exactly reconstruct the original coefficient"
+        );
+        assert_eq!(source, before);
+        for exponent in [-2, -1, 2, 3, 11] {
+            let value = key.pow(exponent);
+            assert_eq!(
+                value
+                    .coefficient_list_exact(std::slice::from_ref(&key))
+                    .unwrap(),
+                vec![(value, Atom::one())]
+            );
+        }
+    }
+
+    #[test]
+    fn exact_scalar_sum_keys_reject_open_ports_guards_and_non_laurent_dependence() {
+        test_initialise().unwrap();
+        let slot = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+        let open = GS.emr_mom(EdgeIndex(1), &slot) + GS.emr_mom(EdgeIndex(2), &slot);
+        assert!(
+            open.coefficient_list_exact(std::slice::from_ref(&open))
+                .is_none()
+        );
+        let key = parse_lit!(literal_scalar_factor::a + literal_scalar_factor::b);
+        let extra = parse_lit!(literal_scalar_factor::c);
+        for source in [
+            (&key * &extra + 1).pow(-1),
+            (&key * &extra + 1).pow(2),
+            key.pow(Atom::num((1, 2))),
+            key.pow(Atom::num((-1, 2))),
+            function!(symbol!("literal_scalar_factor::hidden"), &key),
+        ] {
+            assert!(
+                source
+                    .coefficient_list_exact(std::slice::from_ref(&key))
+                    .is_none(),
+                "unsupported selected dependence must remain unproven: {source}"
+            );
+        }
+        for guard in [
+            crate::cff::expression::OrientationID(3).atom(),
+            function!(GS.theta, &extra),
+            function!(GS.orientation_delta, &extra, 1),
+            function!(symbolica::atom::Symbol::IF, &extra, 1, 0),
+        ] {
+            let guarded = &key + guard;
+            assert!(
+                guarded
+                    .coefficient_list_exact(std::slice::from_ref(&guarded))
+                    .is_none()
+            );
+        }
+        assert!(
+            key.coefficient_list_exact(&[key.clone(), parse_lit!(literal_scalar_factor::a)])
+                .is_none(),
+            "overlapping keys cannot become independent polynomial columns"
+        );
+    }
 
     #[test]
     fn compact_factors_normalize_numeric_content_before_integer_power_ownership() {
