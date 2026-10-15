@@ -1499,7 +1499,10 @@ SVG renderer. The graph API remains in `linnet-py`, and both packages retain
 separate Cargo dependency boundaries. Typst authoring assets live under
 `vendor/typst-packages`; their consumers own those source inputs.
 Asset manifests accompany their owning packages in dependency and production
-builds. The `gammaloop-render-data` runtime package copies fonts from the
+builds. FeynKit's native notebook widgets also own their embedded CSS, JavaScript
+and HTML inputs. Test producers explicitly stage their embedded Python, Atom,
+JSON and graph fixtures without adding those inputs to production packages.
+The `gammaloop-render-data` runtime package copies fonts from the
 Cargo-locked Typst asset release and the checked-in MathML font. Renderers retain
 their compiled hash checks. Only rendering test groups, doctests and documentation
 receive this resource closure; it remains separate from compiled producers.
