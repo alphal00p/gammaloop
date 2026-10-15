@@ -1221,9 +1221,9 @@ fn nested_banana_retains_quotient_carriers_after_an_integrated_prefix() -> Resul
             ext [style=invis]
             ext -> a:0 [id=5 sink="{ufo_order:0}"]
             b:1 -> ext [id=4 source="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            a -> b [id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            a -> b [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
             a -> b [id=0 source="{ufo_order:4}" sink="{ufo_order:4}"]
         }, "scalars")?;
     let subgraph = |edges: &[usize]| {
