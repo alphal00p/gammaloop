@@ -16,6 +16,7 @@ use crate::{
         CanonicalLayout, Canonicalized, HasName, IndexlessNamedStructure, Reindexed,
         TensorDataLayout,
         abstract_index::AIND_SYMBOLS,
+        concrete_index::DualConciousIndex,
         named::IdentityName,
         representation::{LibraryRep, RepName, initialize},
         slot::{AbsInd, SlotMatch, SlotMatcher, SlotView},
@@ -429,11 +430,17 @@ pub static ETS, ETS_INNER: ExplicitTensorSymbols = || ExplicitTensorSymbols {
             if let AtomView::Fun(cind) = iter.next().unwrap()
                 && cind.get_symbol() == AIND_SYMBOLS.cind
             {
-                if cind.as_view() != matchid {
-                    **out = Atom::Zero;
-                } else {
-                    **out = Atom::num(1);
-                }
+                // The requested coordinate is variance-independent. A dual
+                // tensor shadows its actual component as cind(d(i)); the slot
+                // still owns the variance and the contraction owns metric signs.
+                let dual_component_matches = matches!(matchid, AtomView::Fun(marker)
+                    if marker.get_symbol() == AIND_SYMBOLS.cind
+                        && marker.get_nargs() == 1
+                        && cind.get_nargs() == 1
+                        && usize::try_from(marker.get(0)).is_ok_and(|component| {
+                            cind.get(0) == Atom::from(DualConciousIndex::Down(component)).as_view()
+                        }));
+                **out = Atom::num(i32::from(cind.as_view() == matchid || dual_component_matches));
             }
         }
     }),
