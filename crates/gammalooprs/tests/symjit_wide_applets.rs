@@ -3,7 +3,7 @@ use symjit::{Application, Complex, Composer, Config, Defuns, Slot, Storage, Tran
 #[test]
 fn retained_applets_use_call_arity_when_nested_and_reloaded()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    for arity in [127, 128, 255, 256, 257, 513, 1023, 1024] {
+    for arity in [127, 128, 255, 256, 257, 513, 1023, 1024, 1025, 2047, 2048] {
         for direct in [false, true] {
             for complex in [false, true] {
                 for optimization in [0, 3] {
@@ -11,6 +11,8 @@ fn retained_applets_use_call_arity_when_nested_and_reloaded()
                     config.set_complex(complex);
                     config.set_direct(direct);
                     config.set_opt_level(optimization);
+                    // SymJIT 2.27 defaults to 64 call slots; reserve the tested arity.
+                    config.set_num_args(arity as u32);
                     let mut small = Translator::new(config.clone());
                     small.set_num_params(2);
                     small.append_mul(
@@ -102,36 +104,51 @@ fn retained_applets_use_call_arity_when_nested_and_reloaded()
 }
 
 #[test]
-fn retained_applets_reject_calls_beyond_the_upstream_argument_limit() {
-    // Stock SymJIT supports 1024 retained-call arguments, including hoisted
-    // constants. Check both frontends reject a larger signature explicitly.
+fn retained_applet_argument_reservation_is_clamped() {
     for direct in [false, true] {
-        let failure = std::panic::catch_unwind(|| {
+        for (requested, expected) in [(0, 64), (64, 64), (1025, 1025), (2048, 2048), (2049, 2048)] {
             let mut config = Config::default();
             config.set_direct(direct);
-            let mut inner = Translator::new(config.clone());
-            inner.set_num_params(1025);
-            let arguments = (0..1025).map(Slot::Param).collect::<Vec<_>>();
-            inner.append_add(&Slot::Out(0), &arguments, 1025).unwrap();
-            let mut definitions = Defuns::new();
-            definitions.add_applet("too_wide", inner.compile().unwrap().seal().unwrap());
-            config.set_defuns(definitions);
-            let mut outer = Translator::new(config);
-            outer.set_num_params(1025);
-            outer
-                .append_fun(&Slot::Out(0), "too_wide", &arguments, false)
-                .unwrap();
-            outer.compile().unwrap();
-        })
-        .expect_err("upstream must reject a retained call above its 1024-argument limit");
-        let message = failure
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| failure.downcast_ref::<&str>().copied())
-            .unwrap_or("");
+            assert_eq!(config.num_args(), 64);
+            config.set_num_args(requested);
+            assert_eq!(
+                config.num_args(),
+                expected,
+                "direct={direct} requested={requested}"
+            );
+        }
+    }
+}
+
+#[test]
+fn indirect_retained_applets_reject_calls_beyond_reserved_capacity()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Stock 2.27's direct translator silently accepts out-of-reservation calls;
+    // never execute such a program. GammaLoop checks this boundary before JIT.
+    for (arity, reservation) in [(65, 64), (1025, 1024), (2049, 2049)] {
+        let mut config = Config::default();
+        config.set_direct(false);
+        config.set_num_args(reservation);
+        let capacity = config.num_args();
+        let mut inner = Translator::new(config.clone());
+        inner.set_num_params(arity);
+        inner.append_assign(&Slot::Out(0), &Slot::Param(arity - 1))?;
+        let mut definitions = Defuns::new();
+        definitions.add_applet("too_wide", inner.compile()?.seal()?);
+        config.set_defuns(definitions);
+        let mut outer = Translator::new(config);
+        outer.set_num_params(arity);
+        let arguments = (0..arity).map(Slot::Param).collect::<Vec<_>>();
+        let failure = outer
+            .append_fun(&Slot::Out(0), "too_wide", &arguments, false)
+            .and_then(|()| outer.compile().map(|_| ()))
+            .expect_err("indirect translation must reject a call above its reserved capacity");
         assert!(
-            message.contains("n <= SLICE_CAP"),
-            "unexpected rejection: {message}"
+            failure.to_string().contains(&format!(
+                "function call with {arity} args, but only {capacity} are available"
+            )),
+            "unexpected rejection: {failure}"
         );
     }
+    Ok(())
 }

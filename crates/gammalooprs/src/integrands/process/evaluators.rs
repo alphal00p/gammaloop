@@ -3170,18 +3170,18 @@ impl GenericEvaluator {
         // and cse=false only affect indirect translation: its function-result cache
         // crosses inactive branches, and optimization can drop stores that later
         // calls still read. Symbolica already shares expressions in this program.
-        let evaluator = self
+        let program = self
             .f64_eager
             .clone()
-            .map_coeff(&|c| SymComplex::new(c.re.0, c.im.0))
-            .jit_compile(
-                JITCompilationSettings::new()
-                    .direct_translation(options.jit_direct_translation)
-                    .optimization_level(usize::from(options.optimization_level).min(2) as u8)
-                    .with_option("compact", "false")
-                    .with_option("cse", "false"),
-            )
-            .map_err(|err| eyre!(err))?;
+            .map_coeff(&|c| SymComplex::new(c.re.0, c.im.0));
+        let evaluator = super::standalone::compile_symjit(
+            &program,
+            JITCompilationSettings::new()
+                .direct_translation(options.jit_direct_translation)
+                .optimization_level(usize::from(options.optimization_level).min(2) as u8)
+                .with_option("compact", "false")
+                .with_option("cse", "false"),
+        )?;
         self.loaded_f64_compiled.invalidate();
         self.symjit_f64.set(SymjitComplexEvaluatorGL(evaluator));
         self.active_f64_backend.set(ActiveF64Backend::Symjit);
@@ -11862,6 +11862,42 @@ mod tests {
 
         test_initialise().unwrap();
         let parameter = Atom::var(symbol!("jit_direct_translation_parameter"));
+        let leaf = symbol!("jit_capacity_leaf");
+        let outer = symbol!("jit_capacity_outer");
+        let formals = (0..64)
+            .map(|i| Atom::var(symbol!(format!("jit_capacity_argument_{i}"))))
+            .collect::<Vec<_>>();
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        for entry in [
+            FnMapEntry {
+                lhs: leaf.call_args(&formals),
+                rhs: Atom::add_many(
+                    formals
+                        .iter()
+                        .enumerate()
+                        .map(|(i, argument)| argument.pow(2) * (i + 2)),
+                ),
+                tags: vec![],
+                args: formals
+                    .iter()
+                    .cloned()
+                    .map(Indeterminate::try_from)
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap(),
+                inlining: InliningPolicy::Never,
+                is_alias: false,
+            },
+            FnMapEntry {
+                lhs: outer.call(&parameter),
+                rhs: leaf.call_args((0..64).map(|i| &parameter + i)) + &parameter,
+                tags: vec![],
+                args: vec![Indeterminate::try_from(parameter.clone()).unwrap()],
+                inlining: InliningPolicy::Never,
+                is_alias: false,
+            },
+        ] {
+            builder.add_function_entry(entry).unwrap();
+        }
         for jit_direct_translation in [true, false] {
             let settings = EvaluatorSettings {
                 compile: true,
@@ -11873,15 +11909,29 @@ mod tests {
             }
             .frozen_mode(&settings);
             let evaluator = GenericEvaluator::new_from_raw_params(
-                [&parameter * &parameter + Atom::num(3)],
+                [outer.call(&parameter)],
                 std::slice::from_ref(&parameter),
-                &FunctionMap::default(),
-                vec![],
+                &builder.fn_map,
+                builder.reps.clone(),
                 settings.optimization_settings(),
                 None,
                 &settings,
             )
             .unwrap();
+            // Original signatures have at most64 formals. Hoisted numeric
+            // constants widen the nested leaf call beyond that default budget.
+            let exported = evaluator.f64_eager.export_instructions();
+            let nested_arity = exported
+                .sub_evaluators
+                .iter()
+                .flat_map(|callee| &callee.instructions.instructions)
+                .filter_map(|instruction| match instruction {
+                    symbolica::evaluate::Instruction::Fun(_, function, _) => Some(function.2.len()),
+                    _ => None,
+                })
+                .max()
+                .unwrap_or(0);
+            assert!(nested_arity > 64);
             let encoded =
                 bincode::encode_to_vec((&evaluator, &compilation), bincode::config::standard())
                     .unwrap();
@@ -11917,7 +11967,64 @@ mod tests {
             let actual = <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut decoded)(&[
                 Complex::new(F(2.0), F(1.0)),
             ]);
-            assert_eq!(actual, Complex::new(F(6.0), F(4.0)));
+            let expected = (0..64).fold(Complex::new(F(2.0), F(1.0)), |sum, i| {
+                let real = (i + 2) as f64;
+                sum + Complex::new(F(real * real - 1.0), F(2.0 * real)) * F((i + 2) as f64)
+            });
+            assert_eq!(actual, expected);
+            let capacity = compiled[2]["options"]["num_args"]
+                .as_str()
+                .unwrap()
+                .parse::<usize>()
+                .unwrap();
+            assert!(capacity >= nested_arity && capacity <= 2048);
+        }
+    }
+
+    #[test]
+    fn symjit_rejects_retained_calls_above_supported_capacity() {
+        test_initialise().unwrap();
+        let head = symbol!("jit_capacity_unsupported");
+        let parameters = (0..2049)
+            .map(|i| Atom::var(symbol!(format!("jit_capacity_unsupported_{i}"))))
+            .collect::<Vec<_>>();
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        builder
+            .add_function_entry(FnMapEntry {
+                lhs: head.call_args(&parameters),
+                rhs: Atom::add_many(&parameters),
+                tags: vec![],
+                args: parameters
+                    .iter()
+                    .cloned()
+                    .map(Indeterminate::try_from)
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap(),
+                inlining: InliningPolicy::Never,
+                is_alias: false,
+            })
+            .unwrap();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            [head.call_args(&parameters)],
+            &parameters,
+            &builder.fn_map,
+            builder.reps.clone(),
+            settings.optimization_settings(),
+            None,
+            &settings,
+        )
+        .unwrap();
+        for jit_direct_translation in [false, true] {
+            let error = evaluator
+                .activate_symjit(&CompilationOptionsSnapshot {
+                    jit_direct_translation,
+                    ..Default::default()
+                })
+                .unwrap_err();
+            assert!(error.to_string().contains("requires 2049"), "{error}");
+            assert!(error.to_string().contains("2048 call arguments"), "{error}");
+            assert_eq!(evaluator.active_f64_backend(), ActiveF64Backend::Eager);
         }
     }
 

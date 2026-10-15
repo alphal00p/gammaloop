@@ -823,6 +823,14 @@ instructions to SymJIT IR and uses O2. The indirect path caps the configured
 level at O2 and disables its extra common-expression cache; compaction remains
 disabled for complex temporary layouts. Both paths use the same saved numeric
 program, including retained functions and auxiliary coefficient programs.
+SymJIT reserves 64 retained-call arguments by default and accepts explicit
+reservations up to 2048. GammaLoop determines the required arity from the
+complete exported call graph, reserves it for every program and rejects calls
+above that limit before compilation. This is necessary because Symbolica
+3.0.1 does not infer that reservation, and stock SymJIT 2.27's direct translator
+silently accepts calls exceeding it, dropping argument writes. The indirect
+translator reports an error instead. The native and standalone capacity checks
+avoid that upstream defect; they do not repair it.
 Boundary, nested-call, real/complex, direct/indirect and save/load regressions
 live in `gammalooprs/tests/symjit_wide_applets.rs` and the evaluator tests.
 No local SymJIT patch or vendored copy is needed.

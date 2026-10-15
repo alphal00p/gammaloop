@@ -2000,7 +2000,7 @@ mod tests {
         builder.pairs.model_parameters = model.generate_params().into_iter().collect();
         let size = builder.pairs.model_parameters.params.len();
         builder.values = vec![vec![Complex::new_re(F(0.0)); size]];
-        builder.update_model_values(&model);
+        builder.update_model_values(&model).unwrap();
         let expected = builder.values[0].iter().rev().cloned().collect::<Vec<_>>();
         assert_ne!(builder.values[0], expected);
 
@@ -2010,7 +2010,7 @@ mod tests {
         for values in builder.values.iter_mut().skip(1) {
             values.fill(Complex::new_re(F(-7.0)));
         }
-        builder.update_model_values(&model);
+        builder.update_model_values(&model).unwrap();
         for (index, values) in builder.values.iter().enumerate() {
             for (components, expected) in values.chunks(index + 1).zip(&expected) {
                 assert_eq!(&components[0], expected);

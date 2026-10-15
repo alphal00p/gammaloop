@@ -544,19 +544,14 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                     .map_err(|error| eyre!(error))?;
                 Ok(Self::Compiled(compiled))
             }
-            StandaloneBackend::Symjit => Ok(Self::Symjit(Box::new(
-                evaluator
-                    // Match the runtime's conservative optimization settings; these
-                    // retain the policy introduced for older SymJIT versions.
-                    .jit_compile(
-                        JITCompilationSettings::new()
-                            .direct_translation(true)
-                            .optimization_level(2)
-                            .with_option("compact", "false")
-                            .with_option("cse", "false"),
-                    )
-                    .map_err(|error| eyre!(error))?,
-            ))),
+            StandaloneBackend::Symjit => Ok(Self::Symjit(Box::new(standalone::compile_symjit(
+                evaluator,
+                JITCompilationSettings::new()
+                    .direct_translation(true)
+                    .optimization_level(2)
+                    .with_option("compact", "false")
+                    .with_option("cse", "false"),
+            )?))),
         }
     }
 
@@ -2695,6 +2690,79 @@ mod tests {
             }
         }
         fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_symjit_reserves_retained_call_capacity_after_roundtrip() -> Result<()> {
+        for arity in [65, 2049] {
+            let formals = (0..arity)
+                .map(|i| format!("standalone_wide::q{i}"))
+                .collect::<Vec<_>>();
+            let function = "standalone_wide::function";
+            let entries: Vec<SerializedFnMapEntry<String>> = vec![(
+                format!("{function}({})", formals.join(",")),
+                formals
+                    .iter()
+                    .map(|q| format!("{q}^2"))
+                    .collect::<Vec<_>>()
+                    .join("+"),
+                vec![],
+                formals,
+                InliningPolicy::Never,
+                false,
+            )];
+            let json = serde_json::to_vec(&entries)?;
+            let parsed: Vec<SerializedFnMapEntry<String>> = serde_json::from_slice(&json)?;
+            let bytes = bincode::encode_to_vec(&parsed, bincode::config::standard())?;
+            let (restored, consumed): (Vec<SerializedFnMapEntry<String>>, _) =
+                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+            assert_eq!(consumed, bytes.len());
+            assert_eq!(restored, entries);
+            let parsed = parse_fn_map_entries(&restored, &StateMap::default())?;
+            let (_, fn_map) = apply_fn_map_entries(parsed)?;
+            let parameter = parse_lit!(standalone_wide::x);
+            let root = symbol!(function).call_args((0..arity).map(|i| &parameter + i));
+            let mut evaluator = root
+                .evaluator(std::slice::from_ref(&parameter))
+                .function_map(fn_map)
+                .build()
+                .map_err(|error| eyre!(error))?
+                .map_coeff(&|c| Complex::new(c.re.to_f64(), c.im.to_f64()));
+            let result = StandaloneRuntimeEvaluator::build(
+                &mut evaluator,
+                StandaloneBackend::Symjit,
+                Path::new("."),
+                "wide_call_capacity",
+            );
+            if arity > 2048 {
+                let error = match result {
+                    Err(error) => error,
+                    Ok(_) => panic!("oversized call must be rejected before invoking SymJIT"),
+                };
+                assert!(error.to_string().contains("2048 call arguments"), "{error}");
+                continue;
+            }
+            let StandaloneRuntimeEvaluator::Symjit(compiled) = result? else {
+                unreachable!()
+            };
+            // Symbolica 3.0.1's serde decoder incorrectly requires symjit::Element
+            // for its own Complex type. Its supported bincode decoder has the
+            // correct bound; JSON function-map metadata was round-tripped above.
+            let saved = bincode::encode_to_vec(&compiled, bincode::config::standard())?;
+            let (mut restored, consumed): (JITCompiledEvaluator<Complex<f64>>, _) =
+                bincode::decode_from_slice(&saved, bincode::config::standard())?;
+            assert_eq!(consumed, saved.len());
+            let input = [Complex::new(2.0, 1.0)];
+            let mut output = [Complex::new(0.0, 0.0)];
+            restored.evaluate(&input, &mut output);
+            let expected = (0..arity).fold(Complex::new(0.0, 0.0), |sum, i| {
+                let a = (i + 2) as f64;
+                sum + Complex::new(a * a - 1.0, 2.0 * a)
+            });
+            assert_eq!(output[0], expected);
+            assert_eq!(evaluator.evaluate_single(&input), expected);
+        }
         Ok(())
     }
 

@@ -1,7 +1,47 @@
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Result, eyre};
 use serde::{Deserialize, Serialize};
-use symbolica::prelude::Rational;
+use symbolica::{
+    evaluate::{ExpressionEvaluator, Instruction, JITCompilationSettings, JITCompiledEvaluator},
+    prelude::{Complex, Rational},
+};
+
+/// Compile the existing complex program without exceeding SymJIT's call scratch space.
+/// Symbolica 3.0.1 does not reserve slots for retained-call arguments; SymJIT 2.27
+/// defaults to 64 and silently clamps reservations to 2048. Its direct translator
+/// also accepts oversized calls without validating their stores. Until upstream
+/// fixes both boundaries, size the reservation from the complete instruction DAG
+/// and reject unsupported calls before either translator runs. Hoisted constants
+/// are actual call arguments and must be counted, unlike root input parameters.
+pub(crate) fn compile_symjit(
+    evaluator: &ExpressionEvaluator<Complex<f64>>,
+    settings: JITCompilationSettings,
+) -> Result<JITCompiledEvaluator<Complex<f64>>> {
+    let instructions = evaluator.export_instructions();
+    let mut pending = vec![&instructions];
+    let mut visited = std::collections::HashSet::new();
+    let mut capacity = 64;
+    while let Some(program) = pending.pop() {
+        for instruction in &program.instructions {
+            if let Instruction::Fun(_, function, _) = instruction {
+                capacity = capacity.max(function.2.len());
+            }
+        }
+        for callee in &program.sub_evaluators {
+            if visited.insert(std::sync::Arc::as_ptr(&callee.instructions)) {
+                pending.push(callee.instructions.as_ref());
+            }
+        }
+    }
+    if capacity > 2048 {
+        return Err(eyre!(
+            "SymJIT 2.27 supports at most 2048 call arguments, but this evaluator requires {capacity} including hoisted constants; refusing unsafe JIT compilation"
+        ));
+    }
+    evaluator
+        .jit_compile(settings.with_option("num_args", capacity.to_string()))
+        .map_err(|error| eyre!(error))
+}
 
 /// Physical inputs precede any program-specific row or auxiliary ports. Their
 /// archived constants are parameter-major jets in the same shape for every layout.
