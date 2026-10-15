@@ -488,7 +488,7 @@ impl NumeratorAtomExt for AtomView<'_> {
         // Energy powers retain their owner through enclosing Taylor operations.
         // Replacing E(owner, P)^2 by P here would discard the mass-rearrangement
         // boundary needed by an outer U operation.
-        let atom = self;
+        let mut atom = self.to_owned();
         // This call is one collection scope. A residue can still contain inner
         // selectors: only share scalar inverses when the entire scope is free
         // of guards, so a finite inactive branch cannot become 0 * infinity.
@@ -539,116 +539,180 @@ impl NumeratorAtomExt for AtomView<'_> {
             let content = Atom::num(content);
             &content * Atom::add_many(sum.iter().map(|term| term / content.as_view()))
         };
-        // Collect only complete factors after Taylor and residue mapping.
-        // Opaque powers keep distinct inverse denominators, their owners,
-        // and numerator powers intact; functions keep their arguments intact.
-        // Wrap original functions too so an input using the temporary head
-        // is restored verbatim by the single outer unwrapping pass.
-        let opaque = symbol!("gammalooprs::uv::opaque_factor");
-        let mut occurrence = 0usize;
-        let mut protected = atom.replace_map(|view, context, out| {
-            // Sharing a summed vector across contractions can distribute a
-            // vanishing contracted factor across separately evaluated terms.
-            // Keep these tensor sums local to their original occurrences.
-            let tensor_sum = matches!(view, AtomView::Add(_))
-                && context.parent_type == Some(AtomType::Mul)
-                && view.is_tensorial(StrictTensorFilter::ContainsReps);
-            if tensor_sum || matches!(view, AtomView::Pow(_) | AtomView::Fun(_)) {
-                let mut branch_local = tensor_sum;
-                let protect_inverse =
-                    guarded || view.is_tensorial(StrictTensorFilter::ContainsReps);
-                view.visitor(&mut |part| {
-                    branch_local |= match part {
-                        AtomView::Pow(power) => {
-                            protect_inverse
-                                && !i64::try_from(power.get_base_exp().1)
-                                    .is_ok_and(|exponent| exponent >= 0)
-                        }
-                        AtomView::Fun(fun) => [
-                            OrientationID::symbol(),
-                            GS.theta,
-                            GS.orientation_delta,
-                            Symbol::IF,
-                            symbol!("gammalooprs::uv::numerator_family"),
-                        ]
-                        .contains(&fun.get_symbol()),
-                        _ => false,
-                    };
-                    !branch_local
-                });
-                // Guarded inverses remain occurrence-local, including inverses
-                // nested in functions or powers. Numerator families and tensor
-                // sums must still form independent contraction networks even
-                // when their scalar denominators can share a factor.
-                // Normalize a scalar integer power before it becomes opaque:
-                // (-2*A)^2 and 4*A^2 have the same complete power owner. Only
-                // its literal numeric prefactor leaves that owner. Inverses
-                // remain opaque to subsequent common-factor collection.
-                let normalized = if let AtomView::Pow(power) = view
-                    && !branch_local
-                    && !view.is_tensorial(StrictTensorFilter::ContainsReps)
-                    && let Ok(exponent) = i64::try_from(power.get_exp())
-                {
-                    numeric_content(power.get_base()).pow(exponent)
-                } else {
-                    view.to_owned()
-                };
-                let number = match normalized.as_view() {
-                    AtomView::Mul(product) => product
-                        .get_coefficient()
-                        .map(|number| number.to_owned())
-                        .unwrap_or_else(Atom::one),
-                    _ => Atom::one(),
-                };
-                let body = &normalized / &number;
-                **out = number
-                    * if branch_local {
-                        occurrence += 1;
-                        function!(opaque, body, occurrence)
-                    } else {
-                        function!(opaque, body)
-                    };
-            }
-        });
-        // Original functions and powers are opaque before numeric distribution.
-        // This pass can cancel k - (k-p), but cannot enter a denominator or a
-        // fractional-power body. The same boundary restores canonical signs
-        // after Horner collection introduces new scalar sums.
-        let normalize = |value: Atom| {
-            if guarded {
-                return value;
-            }
-            value
-                .expand_num()
-                .replace_map_bottom_up(|view, context, out| {
-                    if context.function_level == 0 && matches!(view, AtomView::Add(_)) {
-                        **out = numeric_content(view);
-                    }
-                })
+        let split_number = |value: &Atom| {
+            let number = match value.as_view() {
+                AtomView::Mul(product) => product
+                    .get_coefficient()
+                    .map(|number| number.to_owned())
+                    .unwrap_or_else(Atom::one),
+                _ => Atom::one(),
+            };
+            let body = value / &number;
+            (number, body)
         };
-        protected = normalize(protected);
         loop {
-            let collected = normalize(protected.collect_horner::<Symbol>(None).collect_factors());
-            // Strictly decreasing size bounds the iteration and prevents two
-            // equivalent factor orders from alternating indefinitely.
-            if collected == protected
-                || collected.as_view().get_byte_size() >= protected.as_view().get_byte_size()
-            {
-                break;
+            // Collect only complete factors after Taylor and residue mapping.
+            // Opaque powers keep distinct inverse denominators, their owners,
+            // and numerator powers intact; functions keep their arguments intact.
+            // Wrap original functions too so an input using the temporary head
+            // is restored verbatim by the single outer unwrapping pass.
+            let opaque = symbol!("gammalooprs::uv::opaque_factor");
+            // A positive scalar power and its linear base share one factor owner.
+            // The complete summed base stays opaque, so no polynomial expansion of
+            // a graph numerator is needed to use A*A^n = A^(n+1).
+            let mut powered_sums = Vec::new();
+            let share_positive_powers =
+                !guarded && !atom.contains_symbol(symbol!("gammalooprs::uv::numerator_family"));
+            if share_positive_powers {
+                atom.visitor(&mut |part| match part {
+                    AtomView::Fun(_) => false,
+                    AtomView::Pow(power) => {
+                        if i64::try_from(power.get_exp()).is_ok_and(|exponent| exponent > 0)
+                            && !part.is_tensorial(StrictTensorFilter::ContainsReps)
+                        {
+                            let (_, base) = split_number(&numeric_content(power.get_base()));
+                            if matches!(base.as_view(), AtomView::Add(_))
+                                && !powered_sums.contains(&base)
+                            {
+                                powered_sums.push(base);
+                            }
+                        }
+                        false
+                    }
+                    _ => true,
+                });
             }
-            protected = collected;
+            let mut occurrence = 0usize;
+            let mut protected = atom.replace_map(|view, context, out| {
+                // Sharing a summed vector across contractions can distribute a
+                // vanishing contracted factor across separately evaluated terms.
+                // Keep these tensor sums local to their original occurrences.
+                let tensor_sum = matches!(view, AtomView::Add(_))
+                    && context.parent_type == Some(AtomType::Mul)
+                    && view.is_tensorial(StrictTensorFilter::ContainsReps);
+                if share_positive_powers
+                    && !tensor_sum
+                    && !view.is_tensorial(StrictTensorFilter::ContainsReps)
+                {
+                    if let AtomView::Pow(power) = view
+                        && i64::try_from(power.get_exp()).is_ok_and(|exponent| exponent > 0)
+                    {
+                        let (number, base) = split_number(&numeric_content(power.get_base()));
+                        if powered_sums.contains(&base) {
+                            **out = (number * function!(opaque, base)).pow(power.get_exp());
+                            return;
+                        }
+                        // Traversal still wraps function bases. Atomic scalar
+                        // powers retain their native relationship to linear terms.
+                        if matches!(power.get_base(), AtomView::Var(_) | AtomView::Fun(_)) {
+                            return;
+                        }
+                    } else if matches!(view, AtomView::Add(_)) {
+                        let (number, base) = split_number(&numeric_content(view));
+                        if powered_sums.contains(&base) {
+                            **out = number * function!(opaque, base);
+                            return;
+                        }
+                    }
+                }
+                if tensor_sum || matches!(view, AtomView::Pow(_) | AtomView::Fun(_)) {
+                    let mut branch_local = tensor_sum;
+                    let protect_inverse =
+                        guarded || view.is_tensorial(StrictTensorFilter::ContainsReps);
+                    view.visitor(&mut |part| {
+                        branch_local |= match part {
+                            AtomView::Pow(power) => {
+                                protect_inverse
+                                    && !i64::try_from(power.get_base_exp().1)
+                                        .is_ok_and(|exponent| exponent >= 0)
+                            }
+                            AtomView::Fun(fun) => [
+                                OrientationID::symbol(),
+                                GS.theta,
+                                GS.orientation_delta,
+                                Symbol::IF,
+                                symbol!("gammalooprs::uv::numerator_family"),
+                            ]
+                            .contains(&fun.get_symbol()),
+                            _ => false,
+                        };
+                        !branch_local
+                    });
+                    // Guarded inverses remain occurrence-local, including inverses
+                    // nested in functions or powers. Numerator families and tensor
+                    // sums must still form independent contraction networks even
+                    // when their scalar denominators can share a factor.
+                    // Normalize a scalar integer power before it becomes opaque:
+                    // (-2*A)^2 and 4*A^2 have the same complete power owner. Only
+                    // its literal numeric prefactor leaves that owner. Inverses
+                    // remain opaque to subsequent common-factor collection.
+                    let normalized = if let AtomView::Pow(power) = view
+                        && !branch_local
+                        && !view.is_tensorial(StrictTensorFilter::ContainsReps)
+                        && let Ok(exponent) = i64::try_from(power.get_exp())
+                    {
+                        numeric_content(power.get_base()).pow(exponent)
+                    } else {
+                        view.to_owned()
+                    };
+                    let (number, body) = split_number(&normalized);
+                    **out = number
+                        * if branch_local {
+                            occurrence += 1;
+                            function!(opaque, body, occurrence)
+                        } else {
+                            function!(opaque, body)
+                        };
+                }
+            });
+            // Original functions and powers are opaque before numeric distribution.
+            // This pass can cancel k - (k-p), but cannot enter a denominator or a
+            // fractional-power body. The same boundary restores canonical signs
+            // after Horner collection introduces new scalar sums.
+            let normalize = |value: Atom| {
+                if guarded {
+                    return value;
+                }
+                value
+                    .expand_num()
+                    .replace_map_bottom_up(|view, context, out| {
+                        if context.function_level == 0 && matches!(view, AtomView::Add(_)) {
+                            **out = numeric_content(view);
+                        }
+                    })
+            };
+            protected = normalize(protected);
+            loop {
+                let collected =
+                    normalize(protected.collect_horner::<Symbol>(None).collect_factors());
+                // Strictly decreasing size bounds the iteration and prevents two
+                // equivalent factor orders from alternating indefinitely.
+                if collected == protected
+                    || collected.as_view().get_byte_size() >= protected.as_view().get_byte_size()
+                {
+                    break;
+                }
+                protected = collected;
+            }
+            let result = protected.replace_map(|view, _, out| {
+                if let AtomView::Fun(fun) = view
+                    && fun.get_symbol() == opaque
+                {
+                    out.set_from_view(
+                        &fun.iter()
+                            .next()
+                            .expect("opaque factor has an expression argument"),
+                    );
+                }
+            });
+            // Restoring a factored base can expose a new linear cancellation.
+            // Re-enter the same protected scope only after a strict size decrease;
+            // no alternative variable orders or grouping searches are attempted.
+            if result.as_view().get_byte_size() >= atom.as_view().get_byte_size() {
+                return result;
+            }
+            atom = result;
         }
-        protected.replace_map(|view, _, out| {
-            if let AtomView::Fun(fun) = view
-                && fun.get_symbol() == opaque
-            {
-                out.set_from_view(
-                    &fun.iter()
-                        .next()
-                        .expect("opaque factor has an expression argument"),
-                );
-            }
-        })
     }
 
     fn series_preserving_factors(
@@ -989,6 +1053,23 @@ mod tests {
         assert_eq!(
             separate_denominators.collect_compact_factors(),
             separate_denominators
+        );
+    }
+
+    #[test]
+    fn compact_factors_preserve_atomic_mass_power_relations() {
+        test_initialise().unwrap();
+        let difference =
+            parse_lit!(m * (v - m ^ 2) - m * (m ^ 2 - k2) - m * (v - m ^ 2 + k2) + m ^ 3);
+        let spectator = parse_lit!((a + b) ^ 11 * opaque(c + 2 * (d + e)) / (x + y));
+        assert!(
+            (&spectator * &difference)
+                .collect_compact_factors()
+                .is_zero()
+        );
+        assert_eq!(
+            (&spectator * (&difference + 1)).collect_compact_factors(),
+            spectator
         );
     }
 

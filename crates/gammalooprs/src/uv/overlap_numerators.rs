@@ -535,6 +535,29 @@ mod tests {
     }
 
     #[test]
+    fn finite_component_positive_dot_powers_keep_linear_base_relations() {
+        test_initialise().unwrap();
+        let e = parse_lit!(p0 * k0);
+        let f = parse_lit!(p1 * k1 + p2 * k2 + p3 * k3);
+        let c = parse_lit!(p0 * k0 - p1 * k1 - p2 * k2 - p3 * k3);
+        let difference: Atom = -2 * e.pow(2) + 3 * &c * &e + 2 * &f * &e - &c * &f - c.pow(2);
+        let spectator = parse_lit!((a + b) ^ 11 * opaque(c + 2 * (d + e)) / (x + y));
+        let mut cache = NumeratorJetCache::default();
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &difference))
+                .unwrap()
+                .is_zero
+        );
+        assert_eq!(
+            cache
+                .canonicalize(&(&spectator * (&difference + 1)))
+                .unwrap(),
+            cache.canonicalize(&spectator).unwrap()
+        );
+    }
+
+    #[test]
     fn finite_component_certificates_preserve_opaque_numeric_sum_payloads() {
         test_initialise().unwrap();
         let body = parse_lit!(c + 2 * (a + b));
