@@ -18044,6 +18044,12 @@
     "kind": "Developers · developer current guide heading"
   },
   {
+    "title": "Sealed results and premerge previews",
+    "summary": "CI maintenance and measurements",
+    "href": "developers/architecture/ci/#sealed-results-and-premerge-previews",
+    "kind": "Developers · developer current guide heading"
+  },
+  {
     "title": "Final-review readiness",
     "summary": "CI maintenance and measurements",
     "href": "developers/architecture/ci/#final-review-readiness",

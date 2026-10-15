@@ -4,8 +4,8 @@
   "title": "Linnet",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "8c92672b21772f91d479cb1f6c24b25b24a462de",
-  "git_timestamp": 1792069877,
+  "git_commit": "8931c5ab5b71a2d517b9069cb0e9ae68ebd1c13e",
+  "git_timestamp": 1792078391,
   "route": "/products/linnet/latest/",
   "components": [
     {
