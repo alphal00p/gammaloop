@@ -11,8 +11,10 @@ use crate::integrands::evaluation::{
     StabilityStatus, StatisticsCounter,
 };
 use crate::model::Model;
-use crate::momentum::sample::{BareMomentumSample, LoopIndex, LoopMomenta, MomentumSample};
-use crate::momentum::{Rotation, ThreeMomentum};
+use crate::momentum::sample::{
+    BareMomentumSample, ExternalFourMomenta, LoopIndex, LoopMomenta, MomentumSample,
+};
+use crate::momentum::{FourMomentum, Rotation, ThreeMomentum};
 use crate::observables::{
     AdditionalWeightKey, EventProcessingRuntime, GenericEvent, HistogramProcessInfo,
     ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
@@ -49,6 +51,8 @@ pub mod cross_section;
 pub mod gammaloop_sample;
 pub mod ir;
 pub mod sampling;
+#[cfg(test)]
+mod simple_sampling_tests;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
     settings::RuntimeSettings,
@@ -2386,6 +2390,9 @@ pub struct LmbMultiChannelingSetup {
     /// One fixed source precision and strictest accuracy budget for the whole
     /// integrand epoch. RuntimeCache contributes no bytes to saved states.
     pub(crate) sampling_source: RuntimeCache<(SamplingPrecision, f64)>,
+    /// The ordinary binary64 lane rounds the same Arb-improved external
+    /// authority as every rescue, without converting it on each draw.
+    pub(crate) sampling_externals_f64: RuntimeCache<ExternalFourMomenta<F<f64>>>,
     pub(crate) sampling_catalogue: RuntimeCache<SamplingChannelCatalogue>,
     pub(crate) sampling_programs: RuntimeCache<Vec<SamplingChannelPrograms>>,
 }
@@ -2436,6 +2443,7 @@ impl LmbMultiChannelingSetup {
         self.sampling_bridge_fixed256.invalidate();
         self.sampling_bridge_arb.invalidate();
         self.sampling_source.invalidate();
+        self.sampling_externals_f64.invalidate();
         self.sampling_catalogue.invalidate();
         self.sampling_programs.invalidate();
     }
@@ -3098,10 +3106,33 @@ pub trait ProcessIntegrandImpl {
         let settings = self.get_settings();
         let budget = GammaLoopSample::<ArbPrec>::source_accuracy_budget(settings)?;
         let floor = F::<f128>::default().epsilon().sqrt().into_ff64().0;
-        let parameterization = settings
-            .sampling
-            .get_parameterization_settings()
-            .ok_or_else(|| eyre!("sampling source policy requires a channel parameterization"))?;
+        let parameterization = settings.sampling.get_parameterization_settings();
+        let Some(parameterization) = parameterization else {
+            return Ok((SamplingPrecision::Arb, budget));
+        };
+        let ordinary = match &settings.sampling {
+            SamplingSettings::Default(_) => true,
+            SamplingSettings::DiscreteGraphs(discrete)
+                if matches!(
+                    discrete.sampling_type,
+                    DiscreteGraphSamplingType::Default(_)
+                ) =>
+            {
+                true
+            }
+            _ => {
+                self.graph_count() > 0
+                    && parameterization.sampling_channels.weight
+                        != SamplingChannelWeight::SingularityProxy
+                    && (0..self.graph_count()).all(|id| {
+                        self.get_graph(id)
+                            .sampling_setup()
+                            .sampling_catalogue
+                            .as_ref()
+                            .is_some_and(SamplingChannelCatalogue::supports_binary64_source)
+                    })
+            }
+        };
         let quad_eligible = budget >= floor
             && self.graph_count() > 0
             && parameterization.sampling_channels.weight != SamplingChannelWeight::SingularityProxy
@@ -3161,7 +3192,20 @@ pub trait ProcessIntegrandImpl {
             .all(|value| F::<f128>::from_arb(&value.0).is_ok());
         let fixed256_floor = F::<SamplingFloat>::default().epsilon().sqrt().into_ff64().0;
         Ok((
-            if quad_eligible && quad_representable {
+            // Ordinary full-domain maps have no root or conditional proposal
+            // decisions. This epoch admission floor leaves headroom for their
+            // binary64 arithmetic; selected density checks still enforce the
+            // actual source budget, and a failed draw is never remapped.
+            if ordinary
+                && budget >= 128.0 * f64::EPSILON
+                && inputs
+                    .iter()
+                    .all(|value| F::<f64>::from_arb(&value.0).is_ok())
+            {
+                SamplingPrecision::Double
+            } else if !settings.sampling.uses_sampling_channels() {
+                SamplingPrecision::Arb
+            } else if quad_eligible && quad_representable {
                 SamplingPrecision::Quad
             } else if budget >= fixed256_floor
                 && inputs
@@ -3186,37 +3230,37 @@ pub trait ProcessIntegrandImpl {
         for graph in self.get_terms_mut() {
             graph.sampling_setup_mut().invalidate_sampling();
         }
-        if !self.get_settings().sampling.uses_sampling_channels() {
-            return Ok(());
-        }
-        let parameterization = self
-            .get_settings()
-            .sampling
-            .get_parameterization_settings()
-            .expect("sampling channels require a parameterization");
-        let prepared = (0..self.graph_count())
-            .map(|id| {
-                let graph = self.get_graph(id);
-                let setup = graph.sampling_setup();
-                let resolved = resolve_sampling_channel_selection(
-                    &setup.graph.name,
-                    &parameterization.sampling_channels,
-                )?;
-                // Inspect already resolved blocks without requiring a successful
-                // binding at another precision; the original source will retain
-                // one fixed canonical map for every physical rescue lane.
-                let catalogue = setup.sampling_channel_catalogue(&resolved, &parameterization)?;
-                let programs = catalogue.compile_programs(
-                    3 * graph.get_graph().get_loop_number(),
-                    &self.get_settings().lu_h_function,
-                )?;
-                Ok((catalogue, programs))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        for (graph, (catalogue, programs)) in self.get_terms_mut().zip(prepared) {
-            let setup = graph.sampling_setup_mut();
-            setup.sampling_catalogue.set(catalogue);
-            setup.sampling_programs.set(programs);
+        if self.get_settings().sampling.uses_sampling_channels() {
+            let parameterization = self
+                .get_settings()
+                .sampling
+                .get_parameterization_settings()
+                .expect("sampling channels require a parameterization");
+            let prepared = (0..self.graph_count())
+                .map(|id| {
+                    let graph = self.get_graph(id);
+                    let setup = graph.sampling_setup();
+                    let resolved = resolve_sampling_channel_selection(
+                        &setup.graph.name,
+                        &parameterization.sampling_channels,
+                    )?;
+                    // Inspect already resolved blocks without requiring a successful
+                    // binding at another precision; the original source will retain
+                    // one fixed canonical map for every physical rescue lane.
+                    let catalogue =
+                        setup.sampling_channel_catalogue(&resolved, &parameterization)?;
+                    let programs = catalogue.compile_programs(
+                        3 * graph.get_graph().get_loop_number(),
+                        &self.get_settings().lu_h_function,
+                    )?;
+                    Ok((catalogue, programs))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            for (graph, (catalogue, programs)) in self.get_terms_mut().zip(prepared) {
+                let setup = graph.sampling_setup_mut();
+                setup.sampling_catalogue.set(catalogue);
+                setup.sampling_programs.set(programs);
+            }
         }
         let result = (|| {
             let (precision, budget) = self.sampling_source_policy()?;
@@ -3224,13 +3268,34 @@ pub trait ProcessIntegrandImpl {
                 SamplingPrecision::Quad => self.prepare_sampling_precision::<f128>(),
                 SamplingPrecision::Fixed256 => self.prepare_sampling_precision::<SamplingFloat>(),
                 SamplingPrecision::Arb => self.prepare_sampling_precision::<ArbPrec>(),
-                SamplingPrecision::Double => unreachable!("Double is never a canonical source"),
+                SamplingPrecision::Double => self.prepare_sampling_precision::<f64>(),
             }?;
+            let ordinary_externals = if precision == SamplingPrecision::Double {
+                Some(
+                    self.get_settings()
+                        .kinematics
+                        .externals
+                        .get_dependent_externals::<ArbPrec>(
+                            self.get_dependent_momenta_constructor(),
+                        )?
+                        .iter()
+                        .map(|momentum| momentum.map_ref(&|value| value.into_ff64()))
+                        .collect::<ExternalFourMomenta<F<f64>>>(),
+                )
+            } else {
+                None
+            };
             for graph in self.get_terms_mut() {
                 graph
                     .sampling_setup_mut()
                     .sampling_source
                     .set((precision, budget));
+                if let Some(externals) = &ordinary_externals {
+                    graph
+                        .sampling_setup_mut()
+                        .sampling_externals_f64
+                        .set(externals.clone());
+                }
             }
             crate::debug_tags!(#sampling;
                 stage = "sampling_source_warmup", precision = %precision, accuracy_budget = budget,
@@ -3274,6 +3339,39 @@ pub trait ProcessIntegrandImpl {
         result
     }
 
+    /// Materialize the physical external authority independently of the draw.
+    /// The common Double lane uses its epoch cache; rescue lanes round the
+    /// original Arb-improved kinematics directly.
+    fn ordinary_sampling_externals<T: FloatLike>(&self) -> Result<ExternalFourMomenta<F<T>>> {
+        if T::sampling_precision() == SamplingPrecision::Double
+            && self.graph_count() > 0
+            && let Some(externals) = self
+                .get_graph(0)
+                .sampling_setup()
+                .sampling_externals_f64
+                .as_ref()
+        {
+            return Ok(externals
+                .iter()
+                .map(|momentum| momentum.map_ref(&|value| F(T::from_f64_exact_binary(value.0))))
+                .collect());
+        }
+        self.get_settings()
+            .kinematics
+            .externals
+            .get_dependent_externals::<ArbPrec>(self.get_dependent_momenta_constructor())?
+            .iter()
+            .map(|momentum| {
+                Ok(FourMomentum::from([
+                    F::<T>::from_arb(&momentum.temporal.value.0)?,
+                    F::<T>::from_arb(&momentum.spatial.px.0)?,
+                    F::<T>::from_arb(&momentum.spatial.py.0)?,
+                    F::<T>::from_arb(&momentum.spatial.pz.0)?,
+                ]))
+            })
+            .collect()
+    }
+
     /// Bind a configured or explicitly requested precision once per warmup epoch,
     /// retaining typed numerical failures as well as successes. Programs and
     /// canonical IDs are reused; geometry comes from the same native
@@ -3300,11 +3398,23 @@ pub trait ProcessIntegrandImpl {
             .sampling
             .get_parameterization_settings()
             .expect("sampling channels require a parameterization");
-        let externals = self
-            .get_settings()
-            .kinematics
-            .externals
-            .get_dependent_externals::<T>(self.get_dependent_momenta_constructor())?;
+        let (source_precision, source_budget) = self
+            .get_graph(0)
+            .sampling_setup()
+            .sampling_source
+            .as_ref()
+            .copied()
+            .map_or_else(|| self.sampling_source_policy(), Ok)?;
+        let externals = if source_precision == SamplingPrecision::Double
+            && T::sampling_precision() == SamplingPrecision::Double
+        {
+            self.ordinary_sampling_externals::<T>()?
+        } else {
+            self.get_settings()
+                .kinematics
+                .externals
+                .get_dependent_externals::<T>(self.get_dependent_momenta_constructor())?
+        };
         let external_momenta = externals
             .iter()
             .map(|momentum| {
@@ -3318,13 +3428,6 @@ pub trait ProcessIntegrandImpl {
             .collect_vec();
         // The materialized draw, map consistency and physical host adoption
         // share one accuracy budget; native physical retries need no map binding.
-        let (source_precision, source_budget) = self
-            .get_graph(0)
-            .sampling_setup()
-            .sampling_source
-            .as_ref()
-            .copied()
-            .map_or_else(|| self.sampling_source_policy(), Ok)?;
         let density_tolerance = if source_precision == T::sampling_precision() {
             source_budget
         } else {
@@ -3710,6 +3813,11 @@ fn get_global_dimension_if_exists<I: ProcessIntegrandImpl>(integrand: &I) -> Opt
 }
 
 pub trait GraphTerm {
+    /// Whether active cuts require an original-source overlap authority.
+    fn needs_physical_overlaps(&self) -> bool {
+        false
+    }
+
     /// Prepare physical center decisions at the original Arb point. Geometry
     /// is channel-independent for the same selector-accepted cut set; explicit
     /// channel selectors retain their source metadata. Amplitudes own their
@@ -3823,6 +3931,7 @@ pub struct SamplingLawProbe<'a> {
     channel_id: SamplingChannelId,
     radial_coordinate: usize,
     retry_lower_half: bool,
+    retry_quad: bool,
     sign_coordinate: Option<usize>,
     alternating_graph_sign: bool,
     calls: [std::sync::atomic::AtomicUsize; 3],
@@ -3879,7 +3988,8 @@ impl SamplingLawProbe<'_> {
         {
             let half = sample.one() / sample.one().from_usize(2);
             result.integrand_result.re = if self.retry_lower_half
-                && precision == SamplingPrecision::Double
+                && (precision == SamplingPrecision::Double
+                    || (self.retry_quad && precision == SamplingPrecision::Quad))
                 && F(reference.coordinates[self.radial_coordinate].clone()) < half
             {
                 sample.zero() / sample.zero()
@@ -4852,12 +4962,20 @@ enum EvaluationSource<'a> {
         sample: &'a GammaLoopSample<ArbPrec>,
         original: &'a EvaluationSource<'a>,
     },
+    /// Ordinary full-domain maps retain the exact binary64 draw. Arb authority
+    /// is constructed only when physical threshold geometry requires it.
+    PreparedSimple {
+        sample: &'a GammaLoopSample<f64>,
+        canonical: Option<&'a GammaLoopSample<ArbPrec>>,
+        original: &'a EvaluationSource<'a>,
+    },
 }
 
 impl<'a> EvaluationSource<'a> {
     fn canonical_sample(&self) -> Option<&'a GammaLoopSample<ArbPrec>> {
         match self {
             Self::Prepared { sample, .. } => Some(sample),
+            Self::PreparedSimple { canonical, .. } => *canonical,
             _ => None,
         }
     }
@@ -4867,7 +4985,71 @@ impl<'a> EvaluationSource<'a> {
             Self::XSpace(_) => true,
             Self::Momentum { .. } => false,
             Self::Prepared { original, .. } => original.is_x_space(),
+            Self::PreparedSimple { original, .. } => original.is_x_space(),
         }
+    }
+
+    fn uses_binary64_source<I: ProcessIntegrandImpl>(&self, integrand: &I) -> bool {
+        match self {
+            Self::PreparedSimple { .. } => true,
+            Self::Prepared { .. } => false,
+            Self::Momentum {
+                candidate_lmb: Some(_),
+                ..
+            } => false,
+            Self::Momentum { input, .. }
+                if integrand.get_settings().sampling.uses_sampling_channels()
+                    && input.channel_id.is_none() =>
+            {
+                false
+            }
+            _ => {
+                integrand.graph_count() > 0
+                    && integrand
+                        .get_graph(0)
+                        .sampling_setup()
+                        .sampling_source
+                        .as_ref()
+                        .is_some_and(|(precision, _)| *precision == SamplingPrecision::Double)
+            }
+        }
+    }
+
+    /// Complete the ordinary map once; all retries promote these represented
+    /// values instead of reevaluating the map or partition in a new precision.
+    fn prepare_simple_draw<I: ProcessIntegrandImpl>(
+        &self,
+        integrand: &mut I,
+        metadata: &mut EvaluationMetaData,
+    ) -> Result<GammaLoopSample<f64>> {
+        let started = Instant::now();
+        let history = std::mem::take(&mut metadata.radial_root_diagnostics);
+        metadata.sampling_proposal_policies.begin_collection();
+        let result = match self {
+            Self::XSpace(sample) => parameterize::<f64, I>(sample, integrand, metadata),
+            Self::Momentum {
+                input,
+                candidate_lmb,
+            } => build_direct_gamma_sample::<f64, I>(integrand, input, *candidate_lmb, metadata),
+            Self::PreparedSimple { sample, .. } => Ok((*sample).clone()),
+            Self::Prepared { .. } => {
+                Err(eyre!("canonical source is not an ordinary binary64 draw"))
+            }
+        };
+        metadata.radial_root_diagnostics = history;
+        metadata.sampling_proposal_policies.seal();
+        let elapsed = started.elapsed();
+        metadata.canonical_sampling_preparation_time += elapsed;
+        metadata.parameterization_time += elapsed;
+        result.wrap_err("ordinary sampling preparation failed at the fixed source precision")
+    }
+
+    fn materialize_simple<T: FloatLike, I: ProcessIntegrandImpl>(
+        sample: &GammaLoopSample<f64>,
+        integrand: &I,
+    ) -> Result<GammaLoopSample<T>> {
+        let externals = integrand.ordinary_sampling_externals::<T>()?;
+        sample.materialize_binary64(&externals)
     }
 
     /// Prepare every participating row once at the fixed proposal precision.
@@ -4878,7 +5060,7 @@ impl<'a> EvaluationSource<'a> {
         integrand: &mut I,
         metadata: &mut EvaluationMetaData,
     ) -> Result<Option<GammaLoopSample<ArbPrec>>> {
-        if matches!(self, Self::Prepared { .. }) {
+        if matches!(self, Self::Prepared { .. } | Self::PreparedSimple { .. }) {
             return Ok(None);
         }
         let started = Instant::now();
@@ -4895,10 +5077,31 @@ impl<'a> EvaluationSource<'a> {
                     .as_ref()
                     .ok_or_else(|| eyre!("fixed sampling source is not initialized; call warm_up"))?
                     .0
+            } else if self.uses_binary64_source(integrand) {
+                SamplingPrecision::Double
             } else {
                 SamplingPrecision::Arb
             };
             match (self, precision) {
+                (Self::XSpace(sample), SamplingPrecision::Double) => {
+                    parameterize::<f64, I>(sample, integrand, metadata)?.into_canonical(
+                        &integrand.get_settings().kinematics.externals,
+                        integrand.get_dependent_momenta_constructor(),
+                    )
+                }
+                (
+                    Self::Momentum {
+                        input,
+                        candidate_lmb,
+                    },
+                    SamplingPrecision::Double,
+                ) => {
+                    build_direct_gamma_sample::<f64, I>(integrand, input, *candidate_lmb, metadata)?
+                        .into_canonical(
+                            &integrand.get_settings().kinematics.externals,
+                            integrand.get_dependent_momenta_constructor(),
+                        )
+                }
                 (Self::XSpace(sample), SamplingPrecision::Quad) => {
                     parameterize::<f128, I>(sample, integrand, metadata)?.into_canonical(
                         &integrand.get_settings().kinematics.externals,
@@ -4969,7 +5172,7 @@ impl<'a> EvaluationSource<'a> {
                         metadata,
                     )
                 }
-                _ => unreachable!("prepared sources and Double source policies are excluded"),
+                _ => unreachable!("prepared sources are excluded"),
             }
         })();
         // Canonical roots and foreign inverses never consume native physical
@@ -4991,20 +5194,38 @@ impl<'a> EvaluationSource<'a> {
     ) -> Result<GammaLoopSample<T>> {
         // Raw callers outside the stability driver still use the same fixed
         // proposal preparation; the production driver retains its output once.
-        let prepared = if !matches!(self, Self::Prepared { .. }) {
+        let prepared_simple =
+            if !matches!(self, Self::Prepared { .. } | Self::PreparedSimple { .. })
+                && self.uses_binary64_source(integrand)
+            {
+                Some(self.prepare_simple_draw(integrand, metadata)?)
+            } else {
+                None
+            };
+        let prepared = if !matches!(self, Self::Prepared { .. } | Self::PreparedSimple { .. })
+            && prepared_simple.is_none()
+        {
             self.prepare_draw(integrand, metadata)?
         } else {
             None
         };
         let started = Instant::now();
         let result = (|| {
-            let mut sample = prepared
-                .as_ref()
-                .or(self.canonical_sample())
-                .expect("every original source has a canonical row")
-                .materialize::<T>(GammaLoopSample::<T>::relative_accuracy_budget(
-                    integrand.get_settings(),
-                ))?;
+            let simple = prepared_simple.as_ref().or(match self {
+                Self::PreparedSimple { sample, .. } => Some(*sample),
+                _ => None,
+            });
+            let mut sample = if let Some(simple) = simple {
+                Self::materialize_simple::<T, I>(simple, integrand)?
+            } else {
+                prepared
+                    .as_ref()
+                    .or(self.canonical_sample())
+                    .expect("every original source has a retained draw")
+                    .materialize::<T>(GammaLoopSample::<T>::relative_accuracy_budget(
+                        integrand.get_settings(),
+                    ))?
+            };
             // Distinct graph/channel rows may share one evaluator cache. Give
             // every completed point its own identity, including base identities
             // used by rotation-aware caches; retries start with a fresh range.
@@ -5034,6 +5255,17 @@ impl<'a> EvaluationSource<'a> {
     ) -> Result<F<f64>> {
         if let Self::Momentum { input, .. } = self {
             return Ok(sum_loop_norms(input.loop_momenta.iter()));
+        }
+        if let Self::PreparedSimple { sample, .. } = self {
+            let started = Instant::now();
+            let norm = sample
+                .groups
+                .iter()
+                .flat_map(|(_, rows)| rows)
+                .map(|row| sum_loop_norms(row.sample.loop_moms().iter()))
+                .fold(F(0.0), |largest, norm| largest.max(norm));
+            metadata.parameterization_time += started.elapsed();
+            return Ok(norm);
         }
         // Inspect only canonical momenta: a norm prepass must not reject an
         // otherwise usable Arb draw because its Jacobian is outside f64 range.
@@ -5074,7 +5306,9 @@ impl<'a> EvaluationSource<'a> {
 }
 
 fn sum_loop_norms<'a>(loop_momenta: impl Iterator<Item = &'a ThreeMomentum<F<f64>>>) -> F<f64> {
-    loop_momenta.fold(F(0.0), |acc, momentum| acc + momentum.norm())
+    loop_momenta.fold(F(0.0), |acc, momentum| {
+        acc + F(momentum.px.0.hypot(momentum.py.0).hypot(momentum.pz.0))
+    })
 }
 
 fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
@@ -5404,14 +5638,48 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
         ));
     }
     let prepared = (|| {
-        let mut anchor = source.prepare_draw(integrand, &mut evaluation_metadata)?;
+        let simple = if source.uses_binary64_source(integrand)
+            && !matches!(source, EvaluationSource::PreparedSimple { .. })
+        {
+            Some(source.prepare_simple_draw(integrand, &mut evaluation_metadata)?)
+        } else {
+            None
+        };
+        let mut anchor = if let Some(simple) = &simple {
+            let needs_geometry = matches!(target, EvaluationTarget::Physical(_))
+                && !integrand
+                    .get_settings()
+                    .subtraction
+                    .disable_threshold_subtraction
+                && simple
+                    .groups
+                    .iter()
+                    .flat_map(|(_, rows)| rows)
+                    .any(|row| integrand.get_graph(row.graph_id).needs_physical_overlaps());
+            #[cfg(test)]
+            let needs_geometry =
+                needs_geometry || matches!(target, EvaluationTarget::SamplingLaw(_));
+            if needs_geometry {
+                let started = Instant::now();
+                let result = simple.clone().into_canonical(
+                    &integrand.get_settings().kinematics.externals,
+                    integrand.get_dependent_momenta_constructor(),
+                );
+                evaluation_metadata.parameterization_time += started.elapsed();
+                Some(result?)
+            } else {
+                None
+            }
+        } else {
+            source.prepare_draw(integrand, &mut evaluation_metadata)?
+        };
         if let (Some(sample), EvaluationTarget::Physical(model)) = (&mut anchor, target) {
             sample.prepare_physical_overlaps(integrand, model, &mut evaluation_metadata)?;
         }
-        Ok::<_, eyre::Report>(anchor)
+        Ok::<_, eyre::Report>((simple, anchor))
     })();
-    let (anchor, preparation_error) = match prepared {
-        Ok(anchor) => (anchor, None),
+    let (simple, anchor, preparation_error) = match prepared {
+        Ok((simple, anchor)) => (simple, anchor, None),
         Err(error)
             if matches!(target, EvaluationTarget::Physical(_))
                 && matches!(
@@ -5425,17 +5693,25 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
             // The canonical proposal/center authority must not be changed in a
             // native retry. An unresolved preparation prevents every physical
             // lane; preserve its diagnostic without evaluating partial bodies.
-            (None, Some(format!("{error:#}")))
+            (None, None, Some(format!("{error:#}")))
         }
         Err(error) => return Err(error),
     };
     let original_source = source;
-    let source = match &anchor {
-        Some(sample) => EvaluationSource::Prepared {
-            sample,
+    let source = if let Some(simple) = &simple {
+        EvaluationSource::PreparedSimple {
+            sample: simple,
+            canonical: anchor.as_ref(),
             original: &original_source,
-        },
-        None => original_source,
+        }
+    } else {
+        match &anchor {
+            Some(sample) => EvaluationSource::Prepared {
+                sample,
+                original: &original_source,
+            },
+            None => original_source,
+        }
     };
     let (stability_iterator, loop_momenta_escalation) = if preparation_error.is_some() {
         (
@@ -6199,6 +6475,7 @@ pub(crate) mod tests {
                 channel_id: SamplingChannelId(0),
                 radial_coordinate: 0,
                 retry_lower_half: true,
+                retry_quad: false,
                 sign_coordinate: None,
                 alternating_graph_sign: false,
                 calls: std::array::from_fn(|_| AtomicUsize::new(0)),
@@ -6262,6 +6539,7 @@ pub(crate) mod tests {
                 channel_id: SamplingChannelId(0),
                 radial_coordinate: 0,
                 retry_lower_half: false,
+                retry_quad: false,
                 sign_coordinate: Some(0),
                 alternating_graph_sign: false,
                 calls: std::array::from_fn(|_| AtomicUsize::new(0)),
@@ -7118,6 +7396,7 @@ pub(crate) mod tests {
             channel_id: joint_id,
             radial_coordinate: 3,
             retry_lower_half: true,
+            retry_quad: false,
             sign_coordinate: None,
             alternating_graph_sign: false,
             calls: std::array::from_fn(|_| AtomicUsize::new(0)),
@@ -8747,6 +9026,7 @@ pub(crate) mod tests {
             sampling_bridge_fixed256: Default::default(),
             sampling_bridge_arb: Default::default(),
             sampling_source: Default::default(),
+            sampling_externals_f64: Default::default(),
             sampling_catalogue: Default::default(),
             sampling_programs: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(2), LmbIndex::from(0)].into(),
@@ -9031,6 +9311,7 @@ pub(crate) mod tests {
             sampling_bridge_fixed256: Default::default(),
             sampling_bridge_arb: Default::default(),
             sampling_source: Default::default(),
+            sampling_externals_f64: Default::default(),
             sampling_catalogue: Default::default(),
             sampling_programs: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0), LmbIndex::from(1)].into(),
@@ -9247,6 +9528,7 @@ pub(crate) mod tests {
             sampling_bridge_fixed256: Default::default(),
             sampling_bridge_arb: Default::default(),
             sampling_source: Default::default(),
+            sampling_externals_f64: Default::default(),
             sampling_catalogue: Default::default(),
             sampling_programs: Default::default(),
             lmb_basis_ids: vec![LmbIndex::from(0)].into(),

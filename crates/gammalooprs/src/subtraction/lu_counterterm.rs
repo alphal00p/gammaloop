@@ -1537,6 +1537,17 @@ impl LUCounterTerm {
         self.active_cut_groups[cut_group_id]
     }
 
+    /// Only cuts owning active thresholds supply kinematics to shared solve groups.
+    pub(crate) fn needs_overlap_geometry(&self, cut_group_id: CutGroupId) -> bool {
+        self.cut_group_is_active(cut_group_id)
+            && (self.active_left_thresholds[cut_group_id]
+                .iter()
+                .any(|active| *active)
+                || self.active_right_thresholds[cut_group_id]
+                    .iter()
+                    .any(|active| *active))
+    }
+
     pub(crate) fn compile(
         &mut self,
         path: impl AsRef<Path>,
@@ -1658,7 +1669,9 @@ impl LUCounterTerm {
         if let Some(canonical) = canonical
             && (canonical.len() != self.thresholds.len()
                 || canonical.iter_enumerated().any(|(cut, overlap)| {
-                    overlap.is_some() != cut_samples.iter().any(|(id, _)| *id == cut)
+                    overlap.is_some()
+                        != (self.needs_overlap_geometry(cut)
+                            && cut_samples.iter().any(|(id, _)| *id == cut))
                 }))
         {
             return Err(SamplingEvaluationError::UncertainGeometry {
@@ -1673,6 +1686,9 @@ impl LUCounterTerm {
         let e_cm = F::from_f64(settings.kinematics.e_cm);
         let existence_threshold = F::from_f64(settings.subtraction.esurface_existence_threshold);
         for &(cut_group_id, cut_sample) in cut_samples {
+            if !self.needs_overlap_geometry(cut_group_id) {
+                continue;
+            }
             let variants = self
                 .variant_subspaces
                 .as_ref()
@@ -1881,6 +1897,9 @@ impl LUCounterTerm {
         }
         let mut result = ti_vec![None; self.thresholds.len()];
         for &(cut_group_id, _) in cut_samples {
+            if !self.needs_overlap_geometry(cut_group_id) {
+                continue;
+            }
             let mut local = LUSharedOverlaps {
                 left: OverlapStructure::new_empty(),
                 right: OverlapStructure::new_empty(),
@@ -1939,8 +1958,8 @@ impl LUCounterTerm {
                     }
                 }
             }
-            // Some(empty) retains an accepted physical cut with no existing
-            // thresholds; None denotes a cut excluded before overlap preparation.
+            // Some(empty) retains an accepted dependency cut whose active thresholds
+            // do not exist here. None denotes an excluded cut or no geometry dependency.
             result[cut_group_id] = Some(local);
         }
         Ok(result)

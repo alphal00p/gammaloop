@@ -860,3 +860,255 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
         });
     assert!((component_sum - recorded.total).norm_squared().0.sqrt() < 1e-12 * scale);
 }
+
+#[test]
+fn overlap_dependencies_skip_dormant_cuts_and_preserve_complete_foreign_groups() {
+    test_initialise().unwrap();
+    let graph: Graph = dot!(digraph overlap_dependencies {
+        ext [style=invis]
+        edge [num=1 mass=0]
+        node [num=1]
+        ext->a:0 [id=0]
+        a->b [id=1]
+        b->a [id=2]
+        a->b [id=3]
+        ext->b:1 [id=4]
+    })
+    .unwrap();
+    let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
+    let selected = lmbs[LmbIndex::from(0)].loop_edges[LoopIndex(0)];
+    let support = graph
+        .iter_loop_edges()
+        .map(|(_, edge, _)| edge)
+        .find(|edge| !graph.loop_momentum_basis.loop_edges.contains(edge))
+        .unwrap();
+    let external = lmbs[LmbIndex::from(0)].ext_edges[ExternalIndex(0)];
+    let subspace = SubspaceData::new_from_parent_basis_edges(
+        &[selected],
+        &graph.full_filter(),
+        LmbIndex::from(0),
+        &graph,
+        &lmbs,
+    )
+    .unwrap();
+    let surface = Esurface {
+        energies: vec![selected],
+        external_shift: vec![(external, -1)],
+        vertex_set: VertexSet::dummy(),
+    };
+    let thresholds = ti_vec![
+        (ti_vec![surface.clone()], TiVec::new()),
+        (
+            ti_vec![Esurface {
+                energies: vec![support],
+                ..surface.clone()
+            }],
+            TiVec::new()
+        ),
+        (ti_vec![surface], TiVec::new()),
+        (TiVec::new(), TiVec::new()),
+    ];
+    let counterterm = LUCounterTerm {
+        evaluators: thresholds
+            .iter()
+            .map(|(left, right)| LUCounterTermEvaluators {
+                left_thresholds_evaluator: left.iter().map(|_| BTreeMap::new()).collect(),
+                right_thresholds_evaluator: TiVec::new(),
+                iterated_evaluator: IteratedCtCollection::new(vec![], left.len(), right.len()),
+                threshold_helpers: LUThresholdHelperEvaluators {
+                    left_thresholds: left.iter().map(|_| BTreeMap::new()).collect(),
+                    right_thresholds: TiVec::new(),
+                    iterated: IteratedCtCollection::new(vec![], left.len(), right.len()),
+                },
+                threshold_multipliers: None,
+                residue_from_e_surface_evaluators: vec![],
+            })
+            .collect(),
+        subspaces: ti_vec![(subspace.clone(), subspace); 4],
+        thresholds,
+        variant_subspaces: None,
+        metadata_registry: None,
+        active_cut_groups: ti_vec![true; 4],
+        active_left_thresholds: ti_vec![ti_vec![true], ti_vec![true], ti_vec![false], TiVec::new()],
+        active_right_thresholds: ti_vec![TiVec::new(); 4],
+        active_iterated_thresholds: (0..4)
+            .map(|cut| IteratedCtCollection::new(vec![], usize::from(cut != 3), 0))
+            .collect(),
+        rstar_dependence_calculator: TiVec::new(),
+    };
+    for (cut, required) in [(0, true), (1, true), (2, false), (3, false)] {
+        assert_eq!(
+            counterterm.needs_overlap_geometry(CutGroupId(cut)),
+            required
+        );
+    }
+    let mut inactive = counterterm.clone();
+    inactive.active_cut_groups[CutGroupId(0)] = false;
+    assert!(!inactive.needs_overlap_geometry(CutGroupId(0)));
+
+    let sample = |fixed: f64, energy: f64| MomentumSample {
+        sample: BareMomentumSample {
+            loop_moms: [3.0, fixed]
+                .into_iter()
+                .map(|px| ThreeMomentum::new(F(px), F(0.0), F(0.0)))
+                .collect(),
+            dual_loop_moms: None,
+            loop_mom_cache_id: 0,
+            loop_mom_base_cache_id: 0,
+            external_moms: [energy, -energy]
+                .into_iter()
+                .map(|energy| FourMomentum::from_args(F(energy), F(0.0), F(0.0), F(0.0)))
+                .collect(),
+            external_mom_cache_id: 0,
+            external_mom_base_cache_id: 0,
+            jacobian: F(1.0),
+            orientation: None,
+            parameterization_branch: None,
+        },
+    };
+    // Only the two dependent cuts may inspect kinematics. The other physical
+    // cuts either have dormant generated thresholds or no thresholds at all.
+    let samples = [
+        sample(0.0, 4.0),
+        sample(1.0, 4.0),
+        sample(f64::NAN, f64::NAN),
+        sample(f64::NAN, f64::NAN),
+    ];
+    let canonical_samples = samples
+        .iter()
+        .map(|sample| sample.higher_precision().higher_precision())
+        .collect_vec();
+    let canonical_cut_samples = canonical_samples
+        .iter()
+        .enumerate()
+        .map(|(cut, point)| (CutGroupId(cut), point))
+        .collect_vec();
+    let native_cut_samples = samples
+        .iter()
+        .enumerate()
+        .map(|(cut, point)| (CutGroupId(cut), point))
+        .collect_vec();
+    let masses = graph.underlying.new_edgevec(|_, _, _| F(0.0));
+    let canonical_masses = graph
+        .underlying
+        .new_edgevec(|_, _, _| F::<ArbPrec>::from_f64(0.0));
+    let reversed_edges = ti_vec![vec![]; 4];
+    let settings = RuntimeSettings::default();
+    let rotation = Rotation::new(RotationMethod::Identity);
+    let canonical = counterterm
+        .prepare_shared_overlaps(
+            &canonical_cut_samples,
+            &graph,
+            &canonical_masses,
+            &reversed_edges,
+            &lmbs,
+            &settings,
+            &rotation,
+            None,
+        )
+        .unwrap();
+    assert!(canonical[CutGroupId(0)].is_some());
+    assert!(canonical[CutGroupId(1)].is_some());
+    assert!(canonical[CutGroupId(2)].is_none());
+    assert!(canonical[CutGroupId(3)].is_none());
+    let retained = counterterm
+        .prepare_shared_overlaps(
+            &native_cut_samples,
+            &graph,
+            &masses,
+            &reversed_edges,
+            &lmbs,
+            &settings,
+            &rotation,
+            Some(&canonical),
+        )
+        .unwrap();
+    let left = retained[CutGroupId(0)].as_ref().unwrap();
+    let foreign = retained[CutGroupId(1)].as_ref().unwrap();
+    let group = &left.left_groups[0].0;
+    assert!(Arc::ptr_eq(group, &foreign.left_groups[0].0));
+    assert_eq!(group.records.len(), 2);
+    assert_eq!(group.thresholds.len(), 2);
+    assert_eq!(group.kinematics.len(), 2);
+    for (cut, record) in group.records.iter().enumerate() {
+        assert_eq!(record.cut_group_id, CutGroupId(cut));
+        assert_eq!(group.kinematics[cut].loop_moms(), samples[cut].loop_moms());
+    }
+    assert_ne!(
+        group.kinematics[0].loop_moms(),
+        group.kinematics[1].loop_moms()
+    );
+    assert!(retained[CutGroupId(2)].is_none());
+    assert!(retained[CutGroupId(3)].is_none());
+
+    // Selector decisions for skipped cuts do not participate in geometry
+    // membership, but dropping either dependent cut must remain an error.
+    counterterm
+        .prepare_shared_overlaps(
+            &native_cut_samples[..2],
+            &graph,
+            &masses,
+            &reversed_edges,
+            &lmbs,
+            &settings,
+            &rotation,
+            Some(&canonical),
+        )
+        .unwrap();
+    let error = counterterm
+        .prepare_shared_overlaps(
+            &native_cut_samples[..1],
+            &graph,
+            &masses,
+            &reversed_edges,
+            &lmbs,
+            &settings,
+            &rotation,
+            Some(&canonical),
+        )
+        .expect_err("a selector mismatch on a dependent cut must remain an error");
+    assert!(
+        error
+            .to_string()
+            .contains("physical selector/cut membership differs")
+    );
+
+    // An accepted dependent cut with no currently existing threshold retains
+    // Some(empty), so exclusion cannot silently pass membership validation.
+    let empty_sample = sample(1.0, -4.0).higher_precision().higher_precision();
+    let canonical = counterterm
+        .prepare_shared_overlaps(
+            &[
+                (CutGroupId(0), &canonical_samples[0]),
+                (CutGroupId(1), &empty_sample),
+            ],
+            &graph,
+            &canonical_masses,
+            &reversed_edges,
+            &lmbs,
+            &settings,
+            &rotation,
+            None,
+        )
+        .unwrap();
+    let empty = canonical[CutGroupId(1)].as_ref().unwrap();
+    assert!(empty.left.existing_esurfaces.is_empty());
+    assert!(empty.left_groups.is_empty());
+    let error = counterterm
+        .prepare_shared_overlaps(
+            &native_cut_samples[..1],
+            &graph,
+            &masses,
+            &reversed_edges,
+            &lmbs,
+            &settings,
+            &rotation,
+            Some(&canonical),
+        )
+        .expect_err("an accepted dependent cut remains required even with empty geometry");
+    assert!(
+        error
+            .to_string()
+            .contains("physical selector/cut membership differs")
+    );
+}

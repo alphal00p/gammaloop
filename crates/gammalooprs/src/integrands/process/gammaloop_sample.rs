@@ -1,7 +1,7 @@
 use crate::graph::GroupId;
 use crate::integrands::evaluation::EvaluationMetaData;
 use crate::integrands::process::{GraphTerm, SamplingMomentumSampleContext};
-use crate::momentum::sample::MomentumSample;
+use crate::momentum::sample::{BareMomentumSample, ExternalFourMomenta, MomentumSample};
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::processes::CutGroupId;
 use crate::subtraction::lu_counterterm::LUSharedOverlaps;
@@ -363,6 +363,97 @@ impl<T: FloatLike> GammaLoopSample<T> {
     }
 }
 
+impl GammaLoopSample<f64> {
+    /// Promote one retained ordinary draw exactly; physical retries neither
+    /// replay its map nor recombine its already weighted Jacobian. Externals
+    /// come from the original Arb-improved authority in the requested lane.
+    pub(crate) fn materialize_binary64<T: FloatLike>(
+        &self,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+    ) -> Result<GammaLoopSample<T>> {
+        use super::sampling::maps::SamplingEvaluationError;
+        let exact = |value: f64| F(T::from_f64_exact_binary(value));
+        let groups = self
+            .groups
+            .iter()
+            .map(|(group_id, rows)| {
+                let rows = rows
+                    .iter()
+                    .map(|row| {
+                        let source = &row.sample.sample;
+                        if source.dual_loop_moms.is_some() || !row.prepared_lu_hosts.is_empty() {
+                            return Err(eyre!(
+                                "ordinary binary64 materialization requires scalar source momenta without LU hosts"
+                            ));
+                        }
+                        if source.loop_moms.iter().any(|momentum| {
+                            [momentum.px.0, momentum.py.0, momentum.pz.0]
+                                .iter()
+                                .any(|value| !value.is_finite())
+                        }) {
+                            return Err(SamplingEvaluationError::Unrepresentable {
+                                operation: "ordinary binary64 draw materialization",
+                                detail: format!("graph {} has nonfinite loop momenta", row.graph_id),
+                            }
+                            .into());
+                        }
+                        if !source.jacobian.0.is_finite() || source.jacobian.0 <= 0.0 {
+                            return Err(SamplingEvaluationError::Unrepresentable {
+                                operation: "canonical row factor",
+                                detail: format!(
+                                    "graph {} channel {:?}: factor must be finite and positive",
+                                    row.graph_id, row.channel_id
+                                ),
+                            }
+                            .into());
+                        }
+                        if !row.integrand_prefactor.0.is_finite() {
+                            return Err(SamplingEvaluationError::Unrepresentable {
+                                operation: "canonical row factor",
+                                detail: format!("graph {} has a nonfinite prefactor", row.graph_id),
+                            }
+                            .into());
+                        }
+                        Ok(DiscreteGraphSample {
+                            graph_id: row.graph_id,
+                            channel_id: row.channel_id,
+                            prepared_lu_hosts: vec![],
+                            physical_overlaps: row.physical_overlaps.clone(),
+                            integrand_prefactor: exact(row.integrand_prefactor.0),
+                            sample: MomentumSample {
+                                sample: BareMomentumSample {
+                                    loop_moms: source
+                                        .loop_moms
+                                        .iter()
+                                        .map(|momentum| {
+                                            ThreeMomentum::new(
+                                                exact(momentum.px.0),
+                                                exact(momentum.py.0),
+                                                exact(momentum.pz.0),
+                                            )
+                                        })
+                                        .collect(),
+                                    dual_loop_moms: None,
+                                    loop_mom_cache_id: source.loop_mom_cache_id,
+                                    loop_mom_base_cache_id: source.loop_mom_base_cache_id,
+                                    external_moms: external_momenta.clone(),
+                                    external_mom_cache_id: source.external_mom_cache_id,
+                                    external_mom_base_cache_id: source.external_mom_base_cache_id,
+                                    jacobian: exact(source.jacobian.0),
+                                    orientation: source.orientation,
+                                    parameterization_branch: source.parameterization_branch,
+                                },
+                            },
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Ok((*group_id, rows))
+            })
+            .collect::<Result<_>>()?;
+        Ok(GammaLoopSample { groups })
+    }
+}
+
 impl GammaLoopSample<ArbPrec> {
     pub(crate) fn prepare_physical_overlaps<I: ProcessIntegrandImpl>(
         &mut self,
@@ -370,16 +461,28 @@ impl GammaLoopSample<ArbPrec> {
         model: &crate::model::Model,
         metadata: &mut EvaluationMetaData,
     ) -> Result<()> {
-        let settings = integrand.get_settings().clone();
-        if settings.subtraction.disable_threshold_subtraction {
+        if integrand
+            .get_settings()
+            .subtraction
+            .disable_threshold_subtraction
+            || !self
+                .groups
+                .iter()
+                .flat_map(|(_, rows)| rows)
+                .any(|row| integrand.get_graph(row.graph_id).needs_physical_overlaps())
+        {
             return Ok(());
         }
+        let settings = integrand.get_settings().clone();
         let rotation = Rotation::new(crate::momentum::RotationMethod::Identity);
         let mut runtime = integrand.take_event_processing_runtime();
         let history = std::mem::take(&mut metadata.radial_root_diagnostics);
         let started = std::time::Instant::now();
         let result = (|| {
             for row in self.groups.iter_mut().flat_map(|(_, rows)| rows) {
+                if !integrand.get_graph(row.graph_id).needs_physical_overlaps() {
+                    continue;
+                }
                 row.physical_overlaps = integrand
                     .get_graph_mut(row.graph_id)
                     .prepare_physical_overlaps(
@@ -394,8 +497,8 @@ impl GammaLoopSample<ArbPrec> {
                             // its user-requested metadata; geometry never uses it.
                             sampling_channel: row.channel_id,
                             graph_id: row.graph_id,
-                            prepared_lu_hosts: &[],
-                            canonical_sample: None,
+                            prepared_lu_hosts: &row.prepared_lu_hosts,
+                            canonical_sample: Some(row),
                             sampling_accuracy_budget: Self::relative_accuracy_budget(&settings),
                         },
                     )?
@@ -507,7 +610,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
         },
     )?;
     let default = |parameterization: &ParameterizationSettings| {
-        default_parametrize(
+        let mut sample = default_parametrize(
             &xs,
             dependent_momenta_constructor,
             parameterization,
@@ -515,11 +618,23 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
             orientation_id,
             loop_mom_cache_id,
             external_mom_cache_id,
-        )
+        );
+        if T::sampling_precision() == crate::utils::SamplingPrecision::Double
+            && integrand.graph_count() > 0
+            && integrand
+                .get_graph(0)
+                .sampling_setup()
+                .sampling_source
+                .as_ref()
+                .is_some_and(|(precision, _)| *precision == crate::utils::SamplingPrecision::Double)
+        {
+            sample.sample.external_moms = integrand.ordinary_sampling_externals::<T>()?;
+        }
+        Ok::<_, eyre::Report>(sample)
     };
     match &settings.sampling {
         SamplingSettings::Default(parameterization) => {
-            GammaLoopSample::from_default(integrand, default(parameterization), true, None)
+            GammaLoopSample::from_default(integrand, default(parameterization)?, true, None)
         }
         SamplingSettings::DiscreteGraphs(discrete)
             if matches!(
@@ -529,7 +644,7 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
         {
             GammaLoopSample::from_default(
                 integrand,
-                default(&settings.sampling.get_parameterization_settings().unwrap()),
+                default(&settings.sampling.get_parameterization_settings().unwrap())?,
                 true,
                 group_id,
             )
@@ -885,6 +1000,165 @@ mod tests {
         ))));
         let one = F::<SamplingFloat>::default().one();
         check(&one + one.from_i64(2).powi(-180) + one.from_i64(2).powi(-240));
+    }
+
+    #[test]
+    fn ordinary_binary64_rows_promote_exactly_and_preserve_the_external_authority() {
+        use crate::{
+            graph::GroupId,
+            momentum::{FourMomentum, ThreeMomentum},
+            utils::{ArbPrec, FloatLike, QuadFloat},
+        };
+        use std::sync::Arc;
+
+        let mut sample = MomentumSample::new(
+            vec![
+                ThreeMomentum::new(F(0.1), F(-0.0), F(f64::from_bits(1))),
+                ThreeMomentum::new(F(f64::MAX), F(-f64::MAX), F(f64::MIN_POSITIVE)),
+            ]
+            .into(),
+            17,
+            &Externals::default(),
+            23,
+            F(0.3),
+            DependentMomentaConstructor::CrossSection,
+            Some(7),
+        )
+        .unwrap();
+        sample.sample.loop_mom_base_cache_id = 11;
+        sample.sample.external_mom_base_cache_id = 19;
+        sample.sample.parameterization_branch = Some(2);
+        let overlaps = Arc::new(typed_index_collections::ti_vec![None]);
+        let rows = [0.1, -0.0, f64::from_bits(1)]
+            .into_iter()
+            .enumerate()
+            .map(|(index, prefactor)| DiscreteGraphSample {
+                graph_id: index,
+                channel_id: Some(SamplingChannelId(index + 4)),
+                sample: sample.clone(),
+                integrand_prefactor: F(prefactor),
+                prepared_lu_hosts: vec![],
+                physical_overlaps: Some(Arc::clone(&overlaps)),
+            })
+            .collect();
+        let draw = GammaLoopSample {
+            groups: vec![(Some(GroupId(4)), rows), (None, vec![])],
+        };
+        let before = format!("{draw:?}");
+
+        fn check<T: FloatLike>(draw: &GammaLoopSample<f64>) {
+            let one = F::<ArbPrec>::default().one();
+            let precise = &one + one.from_i64(2).powi(-80);
+            let externals = vec![FourMomentum::from_args(
+                F::<T>::from_arb(&precise.0).unwrap(),
+                F(T::from_f64_exact_binary(-0.0)),
+                F(T::from_f64_exact_binary(0.1)),
+                F(T::from_f64_exact_binary(f64::from_bits(1))),
+            )]
+            .into();
+            let native = draw.materialize_binary64::<T>(&externals).unwrap();
+            assert_eq!(native.groups.len(), draw.groups.len());
+            for ((source_group, source_rows), (group, rows)) in
+                draw.groups.iter().zip(&native.groups)
+            {
+                assert_eq!(group, source_group);
+                assert_eq!(rows.len(), source_rows.len());
+                for (source, row) in source_rows.iter().zip(rows) {
+                    assert_eq!(row.graph_id, source.graph_id);
+                    assert_eq!(row.channel_id, source.channel_id);
+                    assert_eq!(row.sample.sample.loop_mom_cache_id, 17);
+                    assert_eq!(row.sample.sample.loop_mom_base_cache_id, 11);
+                    assert_eq!(row.sample.sample.external_mom_cache_id, 23);
+                    assert_eq!(row.sample.sample.external_mom_base_cache_id, 19);
+                    assert_eq!(row.sample.sample.orientation, Some(7));
+                    assert_eq!(row.sample.sample.parameterization_branch, Some(2));
+                    assert_eq!(row.sample.external_moms(), &externals);
+                    assert!(row.sample.sample.dual_loop_moms.is_none());
+                    assert!(row.prepared_lu_hosts.is_empty());
+                    assert!(Arc::ptr_eq(
+                        row.physical_overlaps.as_ref().unwrap(),
+                        source.physical_overlaps.as_ref().unwrap(),
+                    ));
+                    let assert_exact = |actual: &F<T>, expected: F<f64>| {
+                        let actual = actual.to_arb_exact().unwrap();
+                        let expected = expected.to_arb_exact().unwrap();
+                        assert_eq!(actual, expected);
+                        // DoubleFloat uses its existing zero convention;
+                        // Double and Arb retain the binary64 zero sign.
+                        if T::sampling_precision() != crate::utils::SamplingPrecision::Quad
+                            || expected != expected.zero()
+                        {
+                            assert_eq!(
+                                actual.into_ff64().0.is_sign_negative(),
+                                expected.into_ff64().0.is_sign_negative(),
+                            );
+                        }
+                    };
+                    assert_exact(&row.sample.jacobian(), source.sample.jacobian());
+                    assert_exact(&row.integrand_prefactor, source.integrand_prefactor);
+                    for (original, promoted) in source
+                        .sample
+                        .loop_moms()
+                        .iter()
+                        .zip(row.sample.loop_moms().iter())
+                    {
+                        assert_exact(&promoted.px, original.px);
+                        assert_exact(&promoted.py, original.py);
+                        assert_exact(&promoted.pz, original.pz);
+                    }
+                }
+            }
+        }
+        check::<f64>(&draw);
+        check::<QuadFloat>(&draw);
+        check::<ArbPrec>(&draw);
+        assert_eq!(format!("{draw:?}"), before);
+    }
+
+    #[test]
+    fn ordinary_binary64_rows_reject_non_scalar_and_invalid_source_values() {
+        use crate::momentum::ThreeMomentum;
+
+        let sample = MomentumSample::new(
+            vec![ThreeMomentum::new(F(0.1), F(0.0), F(1.0))].into(),
+            7,
+            &Externals::default(),
+            9,
+            F(1.0),
+            DependentMomentaConstructor::CrossSection,
+            None,
+        )
+        .unwrap();
+        let externals = sample.external_moms().clone();
+        let draw = GammaLoopSample {
+            groups: vec![(
+                None,
+                vec![DiscreteGraphSample {
+                    graph_id: 0,
+                    channel_id: None,
+                    sample,
+                    integrand_prefactor: F(1.0),
+                    prepared_lu_hosts: vec![],
+                    physical_overlaps: None,
+                }],
+            )],
+        };
+        let mut invalid = draw.clone();
+        invalid.groups[0].1[0].sample.sample.dual_loop_moms = Some(vec![].into());
+        assert!(invalid.materialize_binary64::<f64>(&externals).is_err());
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut invalid = draw.clone();
+            invalid.groups[0].1[0].sample.sample.loop_moms.0[0].py = F(value);
+            assert!(invalid.materialize_binary64::<f64>(&externals).is_err());
+            let mut invalid = draw.clone();
+            invalid.groups[0].1[0].integrand_prefactor = F(value);
+            assert!(invalid.materialize_binary64::<f64>(&externals).is_err());
+        }
+        for value in [0.0, -0.0, -1.0, f64::NAN, f64::INFINITY] {
+            let mut invalid = draw.clone();
+            invalid.groups[0].1[0].sample.sample.jacobian = F(value);
+            assert!(invalid.materialize_binary64::<f64>(&externals).is_err());
+        }
     }
 
     #[test]
