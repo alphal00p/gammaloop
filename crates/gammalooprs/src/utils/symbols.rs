@@ -1,17 +1,20 @@
-use std::{cell::RefCell, collections::HashMap, sync::LazyLock};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    sync::LazyLock,
+};
 
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    shadowing::symbolica_utils::SpensoPrintSettings,
+    spenso_print_scripted_indexed,
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
         representation::{Minkowski, RepName},
     },
-    utils::{to_subscript, to_superscript},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
@@ -21,6 +24,7 @@ use symbolica::{
     printer::{PrintState, PrintUserData},
     symbol,
 };
+use symbolica_notation::{IndexDisplay, Notation};
 use symbolica_utils::{PrintSettingsExt, TypstMode};
 
 use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis};
@@ -2065,10 +2069,7 @@ mod tests {
                 GS.vbar.call_args([Atom::num(2), Atom::num(12)]),
                 "overline(v)_2^(12)",
             ),
-            (
-                GS.ose.call_args([Atom::num(3), Atom::num(13)]),
-                r#"E^("os")_3(13)"#,
-            ),
+            (GS.ose.call_args([Atom::num(3)]), r#"E^("os")_(3)"#),
             (
                 GS.emr_vec(EdgeIndex(4), Minkowski {}.new_rep(4).to_symbolic([])),
                 "arrow(q)_4",

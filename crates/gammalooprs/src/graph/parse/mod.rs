@@ -311,6 +311,231 @@ fn display_graph_source_path(path: &Path) -> PathBuf {
 }
 
 impl Graph {
+    /// Import canonical FeynKit diagrams, explicit runtime artifacts, or compact
+    /// model DOT. Dispatch follows the declared format and payload structure;
+    /// an invalid artifact is never retried under another interpretation.
+    pub fn import_dot(input: &str, model: &Model) -> Result<Vec<Self>> {
+        let set: GraphSet<
+            DotEdgeData,
+            DotVertexData,
+            DotHedgeData,
+            linnet::parser::GlobalData,
+            NodeStorageVec<DotVertexData>,
+        > = GraphSet::from_string(input).map_err(|error| eyre!("DOT parsing error: {error}"))?;
+        set.set
+            .into_iter()
+            .zip(set.global_data)
+            .map(|(graph, global_data)| {
+                let parsed = DotGraph { graph, global_data };
+                let attributes = &parsed.global_data.statements;
+                if attributes.contains_key("model_fingerprint") {
+                    let metadata = ParseData::try_from(parsed.global_data.clone())?;
+                    let diagram = FeynmanDiagram::from_dot(
+                        std::sync::Arc::new(model.clone()),
+                        &parsed.debug_dot(),
+                    )?;
+                    let mut graph =
+                        Self::from_feynkit(&diagram, metadata.group_id, metadata.is_group_master)?;
+                    graph.apply_import_metadata(
+                        metadata,
+                        parsed
+                            .iter_edges()
+                            .map(|(_, edge, data)| (edge, data.data.statements.clone())),
+                        model,
+                    )?;
+                    for (node, _, vertex) in parsed.iter_nodes() {
+                        if let Some(dod) = vertex.statements.get("dod") {
+                            graph.underlying[node].dod = Autogen::explicit(dod.strip_parse()?);
+                        }
+                    }
+                    if parsed.iter_nodes().any(|(_, _, vertex)| vertex.statements.contains_key("num_interface"))
+                        || parsed.iter_edges().any(|(_, _, edge)| edge.data.statements.contains_key("num_interface"))
+                    {
+                        graph.validate_full_numerator_tensor_network()?;
+                    }
+                    return Ok(graph);
+                }
+                let explicit_runtime = attributes.contains_key("gammaloop_runtime")
+                    || attributes.contains_key("canonical_cuts_required")
+                    || (attributes.contains_key("projector")
+                        && parsed
+                            .iter_nodes()
+                            .all(|(_, _, node)| node.statements.contains_key("num"))
+                        && parsed
+                            .iter_edges()
+                            .all(|(_, _, edge)| edge.data.statements.contains_key("num"))
+                        && parsed.iter_hedges().all(|(_, hedge)| {
+                            hedge
+                                .statement
+                                .as_ref()
+                                .is_some_and(|value| value.contains("ufo_order"))
+                        }));
+                if explicit_runtime {
+                    Self::from_parsed(ParseGraph::from_parsed(parsed, model)?, model)
+                } else {
+                    if parsed.iter_nodes().any(|(_, _, vertex)| vertex.statements.contains_key("num_interface"))
+                        || parsed.iter_edges().any(|(_, _, edge)| edge.data.statements.contains_key("num_interface"))
+                    {
+                        return Err(eyre!("num_interface requires a finalized runtime or canonical FeynKit artifact"));
+                    }
+                    Self::from_compact_model_dot(parsed, model)
+                }
+            })
+            .collect()
+    }
+
+    /// Instantiate the missing model rules in the canonical source frame, then
+    /// transport GammaLoop metadata through finalization's recorded map.
+    /// Compact GammaLoop expressions use zero-based local half-edge indices;
+    /// the native UFO frame uses one-based local indices. Annotated canonical
+    /// diagrams and finalized runtime literals bypass this source conversion.
+    pub fn from_compact_model_dot(mut parsed: DotGraph, model: &Model) -> Result<Self> {
+        use feynkit_generator::FeynmanDiagramRulesExt;
+        let n_edges = parsed.graph.n_edges();
+        let name = parsed.global_data.name.clone();
+        let normalize = |value: &mut String| -> Result<()> {
+            // Parse in the established GammaLoop namespace before handing the
+            // canonical expression to FeynKit. Only represented half-edge
+            // indices change chart; momentum and other owner tags stay literal.
+            let atom: Atom = value.strip_parse()?;
+            Self::validate_spatial_momentum_expressions(&[&atom], n_edges, &name)?;
+            let atom = Aind::native_hedge_slots(&atom)?;
+            *value = atom.to_canonical_string();
+            Ok(())
+        };
+        for key in ["num", "projector", "overall_factor"] {
+            if let Some(value) = parsed.global_data.statements.get_mut(key) {
+                normalize(value)?;
+            }
+        }
+        parsed.graph = parsed.graph.map_data_ref_result(
+            |_, _, vertex| {
+                let mut vertex = vertex.clone();
+                if let Some(value) = vertex.statements.get_mut("num") {
+                    normalize(value)?;
+                }
+                Ok(vertex)
+            },
+            |_, _, _, edge| {
+                let mut edge = edge.map(Clone::clone);
+                if let Some(value) = edge.data.statements.get_mut("num") {
+                    normalize(value)?;
+                }
+                Ok(edge)
+            },
+            |(_, hedge)| Ok(hedge.clone()),
+        )?;
+        let mut metadata = ParseData::try_from(parsed.global_data.clone())?;
+        let vertex_overrides = parsed
+            .iter_nodes()
+            .filter_map(|(node, _, data)| data.statements.contains_key("num").then_some(node.0))
+            .collect::<Vec<_>>();
+        let edge_metadata = parsed
+            .iter_edges()
+            .map(|(_, edge, data)| (edge.0, data.data.statements.clone()))
+            .collect::<Vec<_>>();
+        let (diagram, source_map) =
+            FeynmanDiagram::from_compact_dot(std::sync::Arc::new(model.clone()), parsed)?;
+        // These expressions were already transported by the canonical
+        // finalizer; preserve their actual tensor indices and momentum signs.
+        let vertices = vertex_overrides
+            .into_iter()
+            .map(|source| {
+                let target =
+                    source_map.vertices()[source].expect("physical source vertex survives");
+                (
+                    target,
+                    diagram
+                        .vertex(target)
+                        .expect("mapped vertex")
+                        .numerator
+                        .clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let edges = edge_metadata
+            .iter()
+            .filter(|(_, attributes)| attributes.contains_key("num"))
+            .map(|(source, _)| {
+                let target = source_map.edges()[*source];
+                (
+                    target,
+                    diagram.underlying()[EdgeIndex(target.0)].numerator.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut completed = diagram
+            .apply_feynman_rules()?
+            .with_numerator_fragments(vertices, edges)?;
+        if metadata.projectors.is_none() {
+            completed = completed
+                .clone()
+                .with_projector(completed.external_state_projector()?);
+        }
+        if let Some(thresholds) = &mut metadata.threshold_counterterms {
+            thresholds.remap_edges(
+                &source_map
+                    .edges()
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect::<Vec<_>>(),
+            )?;
+        }
+        let mut result =
+            Self::from_feynkit(&completed, metadata.group_id, metadata.is_group_master)?;
+        result.apply_import_metadata(
+            metadata,
+            edge_metadata
+                .into_iter()
+                .map(|(source, attributes)| (EdgeIndex(source_map.edges()[source].0), attributes)),
+            model,
+        )?;
+        result.threshold_counterterms.validate_for_graph(&result)?;
+        Ok(result)
+    }
+
+    fn apply_import_metadata(
+        &mut self,
+        metadata: ParseData,
+        edge_metadata: impl IntoIterator<Item = (EdgeIndex, BTreeMap<String, String>)>,
+        model: &Model,
+    ) -> Result<()> {
+        self.group_id = metadata.group_id;
+        self.is_group_master = metadata.is_group_master;
+        self.threshold_counterterms =
+            Autogen::from_option_or_generate(metadata.threshold_counterterms, Default::default);
+        let mut overridden_masses = Vec::new();
+        for (target, attributes) in edge_metadata {
+            let edge = &mut self.underlying[target];
+            if let Some(name) = attributes.get("name") {
+                edge.name = Autogen::explicit(name.clone());
+            }
+            if let Some(dod) = attributes.get("dod") {
+                edge.dod = Autogen::explicit(dod.strip_parse()?);
+            }
+            if let Some(mass) = attributes.get("mass") {
+                let mass: Atom = mass.strip_parse()?;
+                edge.particle = edge.particle.clone().override_mass(Some(mass.clone()));
+                overridden_masses.push((target, mass));
+            }
+            if let Some(power) = attributes.get("momtrop_edge_power") {
+                edge.extra_data.momtrop_edge_power = Some(power.strip_parse()?);
+            }
+            if let Some(power) = attributes.get("vakint_edge_power") {
+                edge.extra_data.vakint_edge_power = Some(power.trim().parse()?);
+            }
+        }
+        // Energy definitions depend on the completed edge masses. Build them
+        // after applying overrides, then compile the mass evaluators against
+        // that same parameter layout (including graph-local parameters).
+        self.param_builder =
+            ParamBuilder::new(self, model, &self.loop_momentum_basis, metadata.parameters)?;
+        for (target, mass) in overridden_masses {
+            self.underlying[target].mass = EdgeMass::from_atom(mass, model, &self.param_builder)?;
+        }
+        self.threshold_counterterms.validate_for_graph(self)
+    }
+
     pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {
         let mut out = String::new();
         self.dot_serialize_fmt(&mut out, settings).unwrap();
@@ -703,112 +928,137 @@ impl Graph {
     }
 
     fn validate_spatial_momentum_convention(&self) -> Result<()> {
-        let n_edges = self.underlying.n_edges();
+        let factor =
+            feynkit_graph::expressions::evaluate_overall_factor(self.overall_factor.as_view());
+        if factor.is_zero() {
+            return Ok(());
+        }
         let full_num = self
-            .numerator(&self.full_filter(), &self.empty_subgraph())
-            .get_single_atom()
-            .unwrap()
-            * &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * &self.overall_factor;
-        let mut invalid_q3 = None;
-        full_num.visitor(&mut |view| {
-            if invalid_q3.is_none()
-                && let AtomView::Fun(q3) = view
-                && q3.get_symbol() == GS.emr_vec
-            {
-                let arguments = q3.iter().collect::<Vec<_>>();
-                let invalid_reason = match arguments.as_slice() {
-                    [edge, structure] => {
-                        let edge_id = i64::try_from(*edge)
-                            .ok()
-                            .and_then(|edge| usize::try_from(edge).ok());
-                        let is_represented = matches!(structure, AtomView::Fun(rep)
-                            if rep.get_nargs() == 1)
-                            && Representation::<Minkowski>::try_from(*structure)
-                                .ok()
-                                .and_then(|rep| usize::try_from(rep).ok())
-                                == Some(4);
-                        let is_indexed = matches!(structure, AtomView::Fun(rep)
-                            if rep.get_nargs() == 2)
-                            && Slot::<Minkowski, Aind>::try_from(*structure)
-                                .ok()
-                                .and_then(|slot| usize::try_from(slot.rep()).ok())
-                                == Some(4);
+            .numerator(&self.full_filter(), &self.empty_subgraph())?
+            .state
+            .expr
+            .multiply(self.global_prefactor.num.clone())?
+            .multiply(self.global_prefactor.projector.clone())?;
+        if full_num.is_zero() {
+            return Ok(());
+        }
+        // Keep the established tensor carrier while validating the remaining
+        // scalar source factor before its admission. Both passes borrow payloads;
+        // Q3 diagnostics retain priority across all factors without a raw mirror.
+        Self::validate_spatial_momentum_expressions(
+            &[full_num.expression(), &factor],
+            self.underlying.n_edges(),
+            &self.name,
+        )
+    }
 
-                        if edge_id.is_none() {
-                            Some(format!(
-                                "found non-canonical edge argument {}",
-                                edge.log_print(None)
-                            ))
-                        } else if edge_id.is_some_and(|edge| edge >= n_edges) {
-                            Some(format!(
-                                "found edge ID {} outside the valid range 0..{}",
-                                edge.log_print(None),
-                                n_edges,
-                            ))
-                        } else {
-                            (!is_represented && !is_indexed).then(|| {
-                                format!(
-                                    "found non-canonical second argument {}",
-                                    structure.log_print(None)
-                                )
-                            })
+    fn validate_spatial_momentum_expressions(
+        expressions: &[&Atom],
+        n_edges: usize,
+        name: &str,
+    ) -> Result<()> {
+        let mut invalid_q3 = None;
+        for expression in expressions {
+            expression.visitor(&mut |view| {
+                if invalid_q3.is_none()
+                    && let AtomView::Fun(q3) = view
+                    && q3.get_symbol() == GS.emr_vec
+                {
+                    let arguments = q3.iter().collect::<Vec<_>>();
+                    let invalid_reason = match arguments.as_slice() {
+                        [edge, structure] => {
+                            let edge_id = i64::try_from(*edge)
+                                .ok()
+                                .and_then(|edge| usize::try_from(edge).ok());
+                            let is_represented = matches!(structure, AtomView::Fun(rep)
+                                if rep.get_nargs() == 1)
+                                && Representation::<Minkowski>::try_from(*structure)
+                                    .ok()
+                                    .and_then(|rep| usize::try_from(rep).ok())
+                                    == Some(4);
+                            let is_indexed = matches!(structure, AtomView::Fun(rep)
+                                if rep.get_nargs() == 2)
+                                && Slot::<Minkowski, Aind>::try_from(*structure)
+                                    .ok()
+                                    .and_then(|slot| usize::try_from(slot.rep()).ok())
+                                    == Some(4);
+
+                            if edge_id.is_none() {
+                                Some(format!(
+                                    "found non-canonical edge argument {}",
+                                    edge.log_print(None)
+                                ))
+                            } else if edge_id.is_some_and(|edge| edge >= n_edges) {
+                                Some(format!(
+                                    "found edge ID {} outside the valid range 0..{}",
+                                    edge.log_print(None),
+                                    n_edges,
+                                ))
+                            } else {
+                                (!is_represented && !is_indexed).then(|| {
+                                    format!(
+                                        "found non-canonical second argument {}",
+                                        structure.log_print(None)
+                                    )
+                                })
+                            }
                         }
+                        _ => Some(format!("found arity {}", arguments.len())),
+                    };
+                    if let Some(reason) = invalid_reason {
+                        invalid_q3 = Some((reason, view.into_atom()));
                     }
-                    _ => Some(format!("found arity {}", arguments.len())),
-                };
-                if let Some(reason) = invalid_reason {
-                    invalid_q3 = Some((reason, view.into_atom()));
                 }
-            }
-            true
-        });
+                true
+            });
+        }
         if let Some((reason, q3)) = invalid_q3 {
             return Err(eyre!(
                 "Spatial momentum Q3 in graph '{}' must have exactly two arguments, beginning with a non-negative edge ID: Q3(edge,mink(4)) for a represented vector or Q3(edge,mink(4,index)) for an indexed tensor-network image; explicit components are stored as Q(edge,cind(i)); {reason} in {}",
-                self.name,
+                name,
                 q3.log_print(None),
             ));
         }
 
         let mut invalid_q = None;
-        full_num.visitor(&mut |view| {
-            if invalid_q.is_none()
-                && let AtomView::Fun(q) = view
-                && q.get_symbol() == GS.emr_mom
-            {
-                let Some(edge) = q.iter().next() else {
-                    invalid_q = Some(("found no edge argument".to_owned(), view.into_atom()));
-                    return true;
-                };
-                let edge_id = i64::try_from(edge)
-                    .ok()
-                    .and_then(|edge| usize::try_from(edge).ok());
-                let invalid_reason = if edge_id.is_none() {
-                    Some(format!(
-                        "found non-canonical edge argument {}",
-                        edge.log_print(None)
-                    ))
-                } else {
-                    edge_id.filter(|edge| *edge >= n_edges).map(|_| {
-                        format!(
-                            "found edge ID {} outside the valid range 0..{}",
-                            edge.log_print(None),
-                            n_edges,
-                        )
-                    })
-                };
-                if let Some(reason) = invalid_reason {
-                    invalid_q = Some((reason, view.into_atom()));
+        for expression in expressions {
+            expression.visitor(&mut |view| {
+                if invalid_q.is_none()
+                    && let AtomView::Fun(q) = view
+                    && q.get_symbol() == GS.emr_mom
+                {
+                    let Some(edge) = q.iter().next() else {
+                        invalid_q = Some(("found no edge argument".to_owned(), view.into_atom()));
+                        return true;
+                    };
+                    let edge_id = i64::try_from(edge)
+                        .ok()
+                        .and_then(|edge| usize::try_from(edge).ok());
+                    let invalid_reason = if edge_id.is_none() {
+                        Some(format!(
+                            "found non-canonical edge argument {}",
+                            edge.log_print(None)
+                        ))
+                    } else {
+                        edge_id.filter(|edge| *edge >= n_edges).map(|_| {
+                            format!(
+                                "found edge ID {} outside the valid range 0..{}",
+                                edge.log_print(None),
+                                n_edges,
+                            )
+                        })
+                    };
+                    if let Some(reason) = invalid_reason {
+                        invalid_q = Some((reason, view.into_atom()));
+                    }
                 }
-            }
-            true
-        });
+                true
+            });
+        }
         if let Some((reason, q)) = invalid_q {
             return Err(eyre!(
                 "Momentum Q in graph '{}' must begin with a valid non-negative graph-edge ID; {reason} in {}",
-                self.name,
+                name,
                 q.log_print(None),
             ));
         }
@@ -818,37 +1068,33 @@ impl Graph {
 
     pub(crate) fn validate_full_numerator_tensor_network(&self) -> Result<()> {
         self.validate_spatial_momentum_convention()?;
-        let full_num = self
-            .numerator(&self.full_filter(), &self.empty_subgraph())
-            .get_single_atom()
-            .unwrap()
-            * &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * &self.overall_factor;
+        let numerator = self
+            .numerator(&self.full_filter(), &self.empty_subgraph())?
+            .state
+            .expr;
+        let prefactor = self.global_numerator()?;
+        let full_num = numerator.multiply(prefactor)?;
         let color_simplified = full_num
-            .as_view()
-            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());
-        if !full_num.is_zero() && color_simplified.is_zero() {
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+        if !full_num.is_zero() && color_simplified.expression().is_zero() {
             warn!(
                 "Full numerator for graph '{}' becomes zero after color algebra. The graph/projector color structure likely annihilates the amplitude.",
                 self.name
             );
         }
-        let net = full_num
-            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-            .map_err(Report::from)?;
-        let dangling = net.graph.dangling_indices();
+        let dangling = full_num.structure().logical_slots();
         if !dangling.is_empty() {
             return Err(eyre!(
                 "Full numerator still has dangling tensor indices: \n{}",
-                dangling
-                    .iter()
-                    .map(|slot| format!(
-                        "{}:{}",
-                        slot.to_atom().log_print(None),
-                        slot.to_atom().to_plain_string()
-                    ))
-                    .join(",\n")
+                dangling.iter().map(|slot| format!("{slot:?}")).join(",\n")
             ));
         }
 
@@ -858,16 +1104,37 @@ impl Graph {
     fn extract_initial_data(
         parse_graph: &ParseGraph,
         model: &Model,
+        source: NumeratorIndexSource,
     ) -> Result<(InitialGraphData, NumGraph)> {
-        let hedge_order = parse_graph.hedge_order(model)?;
+        let hedge_order = parse_graph.hedge_order()?;
         let global_data = &parse_graph.global_data;
+        Self::validate_spatial_momentum_expressions(
+            &[&global_data.num],
+            parse_graph.graph.n_edges(),
+            &global_data.name,
+        )?;
+        if let Some(projector) = &global_data.projectors {
+            Self::validate_spatial_momentum_expressions(
+                &[projector],
+                parse_graph.graph.n_edges(),
+                &global_data.name,
+            )?;
+        }
 
         let initial_data = InitialGraphData {
             additional_params: global_data.parameters.clone(),
             overall_factor: global_data.overall_factor.clone(),
             global_prefactor: GlobalPrefactor {
-                num: global_data.num.clone(),
-                projector: global_data.projectors.clone().unwrap_or(Atom::one()),
+                num: NumeratorInterface::admit(
+                    global_data.num.clone(),
+                    global_data.num_interface.clone(),
+                )?
+                .try_into_indexed()?,
+                projector: NumeratorInterface::admit(
+                    global_data.projectors.clone().unwrap_or(Atom::one()),
+                    global_data.projector_interface.clone(),
+                )?
+                .try_into_indexed()?,
             },
             add_polarizations: global_data.projectors.is_none(),
             group_id: global_data.group_id,
@@ -879,14 +1146,17 @@ impl Graph {
             ),
         };
 
-        let num_graph = parse_graph.graph.map_data_ref(
-            |_, _, v| v.clone(),
-            |_, _, _, e| e.map(|e| e.clone()),
-            |h, hd| HedgeData {
-                num_indices: NumIndices::parse(parse_graph)(h, hd),
-                ufo_order: Autogen::from_option_or_generate(hd.ufo_order, || hedge_order[h.0]),
+        let mut indices = NumIndices::parse(parse_graph, model, source);
+        let num_graph = parse_graph.graph.map_data_ref_result(
+            |_, _, v| Ok(v.clone()),
+            |_, _, _, e| Ok(e.map(|e| e.clone())),
+            |(h, hd)| {
+                Ok(HedgeData {
+                    num_indices: indices(h, hd)?,
+                    ufo_order: Autogen::explicit(hedge_order[h.0]),
+                })
             },
-        );
+        )?;
 
         Ok((initial_data, num_graph))
     }
@@ -937,161 +1207,42 @@ impl Graph {
         })
     }
 
-    fn generate_numerators(graph: &NumGraph, model: &Model) -> Result<NumeratorData> {
-        let mut color_edge: EdgeVec<_> = vec![Atom::num(1); graph.n_edges()].into();
-        let mut spin_edge: EdgeVec<_> = vec![Atom::i(); graph.n_edges()].into();
-
-        for (p, eid, e) in graph.iter_edges() {
-            if let HedgePair::Paired { source, sink } = p {
-                let prop = e
-                    .data
-                    .particle
-                    .particle()
-                    .map(|p| model.get_propagator_for_particle(&p.name).numerator.clone())
-                    .unwrap_or(Atom::num(1));
-
-                color_edge[eid] = graph[source].color_kronekers(&graph[sink]);
-
-                let spin_slots = [
-                    &graph[source].num_indices.spin_indices.edge_indices,
-                    &graph[sink].num_indices.spin_indices.edge_indices,
-                ];
-
-                let momenta = [(Flow::Source, graph[&source]), (Flow::Sink, graph[&sink])];
-                let spin_nume = UFO.reindex_spin(&spin_slots, &momenta, prop, |i| {
-                    Aind::Edge(usize::from(eid) as u16, i as u16)
-                })?;
-
-                spin_edge[eid] = spin_nume;
-            }
-        }
-
-        let (color_vertex, spin_vertex) = Self::generate_vertex_numerators(graph)?;
-
-        Ok(NumeratorData {
-            color_edge,
-            spin_edge,
-            color_vertex,
-            spin_vertex,
-        })
-    }
-
-    fn setup_global_prefactor_and_params<'a, A: Into<AtomOrView<'a>>, P: IntoIterator<Item = A>>(
-        mut global_prefactor: GlobalPrefactor,
-        add_polarizations: bool,
-        params: P,
-        initial_state_cut: &OrientedCut,
-        graph: &NumGraph,
-        model: &Model,
-    ) -> Result<(GlobalPrefactor, ParamBuilder)> {
-        debug!("Initial state cut: {}", graph.dot(&initial_state_cut.left));
-
-        if add_polarizations {
-            let external_edges = initial_state_cut
-                .left
-                .union(initial_state_cut)
-                .union(&graph.external_filter::<SuBitGraph>());
-            let polarizations = graph.generate_polarizations_of(&external_edges);
-            global_prefactor.projector *= polarizations;
-        }
-
-        let polarizations = global_prefactor.polarizations();
-        let param_builder =
-            ParamBuilder::new(&(&polarizations, graph), model, &graph.lmb(), params)?;
-
-        Ok((global_prefactor, param_builder))
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn generate_vertex_numerators(
-        graph: &NumGraph,
-    ) -> Result<(
-        Vec<Option<ParamTensor<OrderedStructure<Euclidean, Aind>>>>,
-        Vec<Option<ParamTensor<OrderedStructure<Euclidean, Aind>>>>,
-    )> {
-        let mut color_vertex: Vec<Option<ParamTensor<OrderedStructure<Euclidean, Aind>>>> =
-            vec![None; graph.n_nodes()];
-        let mut spin_vertex = color_vertex.clone();
-
-        for (ni, c, v) in graph.iter_nodes() {
-            let mut color_slots = vec![];
-            let mut spin_slots = vec![];
-            let mut order = vec![];
-            let mut momenta = vec![];
-            for h in c {
-                color_slots.push(&graph[h].num_indices.color_indices.vertex_indices);
-                spin_slots.push(&graph[h].num_indices.spin_indices.vertex_indices);
-                order.push(graph[h].ufo_order.value);
-                momenta.push((graph.flow(h), graph[&h]));
-            }
-
-            let perm = Permutation::sort(&order);
-            perm.apply_slice_in_place(&mut color_slots);
-            perm.apply_slice_in_place(&mut spin_slots);
-            perm.apply_slice_in_place(&mut momenta);
-
-            let Some(vertex_rule) = &v.vertex_rule else {
-                continue;
-            };
-
-            let [mut color_structure, couplings, mut spin_structure] =
-                vertex_rule.tensors(ni.aind(1), ni.aind(0));
-
-            spin_structure.map_data_ref_mut_result(|a| {
-                *a =
-                    UFO.reindex_spin(&spin_slots, &momenta, (*a).clone(), |u| ni.aind(u as u16))?;
-
-                Ok(())
-            })?;
-
-            // couplings.map_data_mut(|a| *a = UFO.normalize_complex((*a).clone()));
-
-            color_structure.map_data_ref_mut_result(|a| {
-                *a = UFO.reindex_color(&color_slots, (*a).clone(), |u| ni.aind(u as u16))?;
-                Ok(())
-            })?;
-
-            spin_vertex[ni.0] = Some(spin_structure.contract(&couplings).unwrap());
-            color_vertex[ni.0] = Some(color_structure);
-        }
-
-        Ok((color_vertex, spin_vertex))
-    }
-
     fn build_underlying_graph(
         graph: NumGraph,
-        initial_state_cut: &OrientedCut,
-        numerators: &NumeratorData,
         model: &Model,
         param_builder: &ParamBuilder,
+        name: &str,
+        mut vertex_numerator: impl FnMut(
+            NodeIndex,
+            &ParseVertex,
+        ) -> Result<SymbolicTensor<IndexedStructure>>,
+        mut edge_numerator: impl FnMut(
+            EdgeIndex,
+            &ParseEdge,
+        ) -> Result<SymbolicTensor<IndexedStructure>>,
     ) -> Result<UnderlyingGraph> {
-        let mut loop_edge_filter = graph.full_filter();
-        loop_edge_filter.subtract_with(&graph.bridges_of(&loop_edge_filter));
-        let mut vertex_color_nums = numerators.color_vertex.clone();
-        let mut vertex_spin_nums = numerators.spin_vertex.clone();
+        // Diagnose malformed momentum syntax while these are still source
+        // expressions. Tensor admission is the following, distinct boundary;
+        // its rank error must not obscure the established graph convention.
+        for expression in graph
+            .iter_nodes()
+            .filter_map(|(_, _, vertex)| vertex.num.as_ref())
+            .chain(
+                graph
+                    .iter_edges()
+                    .filter_map(|(_, _, edge)| edge.data.num.as_ref()),
+            )
+        {
+            Self::validate_spatial_momentum_expressions(&[expression], graph.n_edges(), name)?;
+        }
         let intermediate: UnderlyingGraph = graph.map_result(
             |_, i, v| {
-                let num = match v.num {
-                    Some(num) => Autogen::explicit(num),
-                    None => Autogen::generated(
-                        vertex_spin_nums[i.0]
-                            .take()
-                            .unwrap()
-                            .contract(&vertex_color_nums[i.0].take().unwrap())
-                            .unwrap()
-                            .scalar()
-                            .unwrap(),
-                    ),
-                };
-
+                let numerator = vertex_numerator(i, &v)?;
                 let dod = match v.dod {
                     Some(dod) => Autogen::explicit(dod),
-                    None => Autogen::generated(if num.autogenerated {
-                        v.vertex_rule.as_ref().map(|vr| vr.dod).unwrap_or(0)
-                    } else {
-                        num.all_dod()
-                    }),
+                    None => Autogen::generated(numerator.expression().all_dod(GS.emr_mom)?),
                 };
+                let num = Autogen::explicit(numerator);
 
                 Ok(Vertex {
                     name: Autogen::from_option_or_generate(v.name, || i.to_string()),
@@ -1100,41 +1251,29 @@ impl Graph {
                     vertex_rule: v.vertex_rule,
                 })
             },
-            |_, _, p, eid, ed| {
+            |_, _, _, eid, ed| {
                 let e = ed.data;
-                if e.particle.is_fermion() && !e.particle.is_self_antiparticle()&&  e.particle.orientation() != ed.orientation {
+                if e.particle.is_fermion(model)
+                    && !e.particle.is_self_antiparticle(model)
+                    && e.particle.orientation(model) != ed.orientation
+                {
                     return Err(eyre!(
                         "Edge orientation {:?} does not match particle orientation {:?} for edge {},{}",
                         ed.orientation,
-                        e.particle.orientation(),
+                        e.particle.orientation(model),
                         eid,
                         e
                     ));
-                    }
+                }
 
-                let mass = EdgeMass::from_atom(e.mass_atom(), model, param_builder)?;
+                let mass = EdgeMass::from_atom(e.particle.mass_atom(model), model, param_builder)?;
 
-                let num = match e.num {
-                    Some(num) => Autogen::explicit(num),
-                    None => Autogen::generated(if initial_state_cut.left.intersects(&p) {
-                        numerators.color_edge[eid].clone()
-                    } else {
-                        &numerators.color_edge[eid] * &numerators.spin_edge[eid]
-                    }),
-                };
-
+                let numerator = edge_numerator(eid, &e)?;
                 let dod = match e.dod {
                     Some(dod) => Autogen::explicit(dod),
-                    None => Autogen::generated(if num.autogenerated {
-                        if let Some(particle) = e.particle.particle() {
-                            model.get_propagator_for_particle(&particle.name).dod
-                        } else {
-                            -2
-                        }
-                    } else {
-                        num.edge_dod(eid) -2
-                    }),
+                    None => Autogen::generated(numerator.expression().edge_dod(GS.emr_mom, usize::from(eid))? - 2),
                 };
+                let num = Autogen::explicit(numerator);
 
                 Ok(EdgeData::new(
                     Edge {

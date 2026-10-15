@@ -1179,7 +1179,7 @@ impl Forests {
                                 .require(operation)?
                                 .integrated(operation)?;
                             Ok((
-                                integrated.physical_finite_counterterm_atom(),
+                                integrated.physical_finite_counterterm()?,
                                 ForestNode {
                                     spinney: self.source_spinney(component),
                                     topo_order: operation.key.op_count(),
@@ -1519,7 +1519,7 @@ impl Forests {
                     node_key: operation.to_string(),
                     term_index: 0,
                     residue_index: crate::cff::CutCFFIndex::new_all_none(),
-                    numerator: local_4d.atom().clone(),
+                    numerator: local_4d.atom().expression().clone(),
                     forest_provenance: Some(self.node_export_4d_provenance(nidx, local_4d)),
                 })
             })
@@ -1595,8 +1595,8 @@ impl Forests {
                 vec![node]
             };
             let physical = components.into_iter().try_fold(
-                Atom::one(),
-                |product, component| -> Result<Atom> {
+                SymbolicTensor::infer_indexed(Atom::one())?,
+                |product, component| -> Result<_> {
                     let component_key = &self.graph[component];
                     let integrated = self
                         .compute_store
@@ -1604,28 +1604,49 @@ impl Forests {
                         .integrated(component_key)?;
                     let projection = match self.source_spinney(component).renormalization_scheme {
                         ApproximationType::MUV | ApproximationType::IR => {
-                            integrated.physical_finite_counterterm_atom()
+                            integrated.physical_finite_counterterm()?
                         }
-                        ApproximationType::PolePart => integrated.physical_pole_atom(),
+                        ApproximationType::PolePart => integrated.physical_pole()?,
                         scheme => {
                             return Err(eyre!("No terminal counterterm projection for {scheme}"));
                         }
                     };
-                    Ok(product * projection)
+                    Ok(product.multiply(projection)?)
                 },
             )?;
-            let atom = marker.prefix(&graph.full_filter(), forest_node.subgraph(), &physical);
+            let marked = marker.prefix(
+                &graph.full_filter(),
+                forest_node.subgraph(),
+                physical.expression(),
+            );
+            let physical = physical.with_checked_expression(marked)?;
             debug!(
                 key=%key,
-               expr = % atom.expand_num().log_print(None),"Term before simplification"
+               expr = % physical.expression().log_print(None),"Term before simplification"
             );
-            let atom = (&atom
-                * &graph.global_prefactor.projector
-                * &graph.global_prefactor.num
-                * &graph.overall_factor)
-                .simplify_color()
-                .expand_num()
-                .to_dots();
+            let overall = SymbolicTensor::infer_indexed(graph.overall_factor.clone())?;
+            let prefactor = graph
+                .global_prefactor
+                .projector
+                .clone()
+                .multiply(graph.global_prefactor.num.clone())?
+                .multiply(overall)?;
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = physical
+                .multiply(prefactor)?
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .to_dots()?;
+            let atom = cooking.uncook(reduced.expression().as_view());
 
             debug!(
                 key=%key,

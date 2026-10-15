@@ -79,7 +79,9 @@ impl ParametricIntegrands {
             integrands: self
                 .integrands
                 .fallible_map(&mut map)?
-                .map_numerators(map)?,
+                .map_numerators(|tensor| {
+                    Ok(tensor.with_checked_expression(map(tensor.expression())?)?)
+                })?,
             cuts: self.cuts,
         })
     }
@@ -362,32 +364,52 @@ impl Forest {
             let integrated = n.data.integrated(graph)?;
             let physical = match n.data.renormalization_scheme() {
                 ApproximationType::MUV | ApproximationType::IR => {
-                    integrated.physical_finite_counterterm_atom()
+                    integrated.physical_finite_counterterm()?
                 }
-                ApproximationType::PolePart => integrated.physical_pole_atom(),
+                ApproximationType::PolePart => integrated.physical_pole()?,
                 scheme => return Err(eyre!("No terminal counterterm projection for {scheme}")),
             };
-            let atom = marker.prefix(&graph.full_filter(), n.data.subgraph(), &physical);
+            let marked = marker.prefix(
+                &graph.full_filter(),
+                n.data.subgraph(),
+                physical.expression(),
+            );
+            let physical = physical.with_checked_expression(marked)?;
 
             debug_tags!(#generation, #uv, #graph, #term;
                 forest_term = %n.data.simple_display(graph),
-                log.expr = atom,
+                log.expr = physical.expression(),
                 "Term before simplification"
             );
 
-            let atom = &atom
-                * &graph.global_prefactor.projector
-                * &graph.global_prefactor.num
-                * &graph.overall_factor;
+            let overall = SymbolicTensor::infer_indexed(graph.overall_factor.clone())?;
+            let prefactor = graph
+                .global_prefactor
+                .projector
+                .clone()
+                .multiply(graph.global_prefactor.num.clone())?
+                .multiply(overall)?;
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let physical = physical.multiply(prefactor)?;
             debug_tags!(#generation, #uv, #inspect, #dump;
-                log.expression = atom,
+                log.expression = physical.expression(),
                 dod = n.data.spinney.dod,
                 "Dumped pole part color simplification input"
             );
-            let atom = atom.simplify_color().expand_num().to_dots();
-            // .replace(GS.dim)
-            // .max_level(0)
-            // .with(4); //.with(Atom::var(GS.dim_epsilon) * (-2) + 4);
+            let reduced = physical
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .to_dots()?;
+            let atom = cooking.uncook(reduced.expression().as_view());
 
             debug_tags!(#generation, #uv, #graph, #term;
                 forest_term=%
@@ -418,10 +440,12 @@ impl Forest {
                 log.graph = %graph.dot_lmb_of(&n.data.spinney.subgraph,&n.data.spinney.lmb),
                 simple = %n.data.simple_display(graph),"Terms"
             );
-            let terms = n
-                .data
-                .final_integrand(graph)?
-                .map_expressions(|integrand| Ok(integrand.clone().collect_color()))?;
+            let color = TensorCollectFilter::Reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ]);
+            let terms = n.data.final_integrand(graph)?.collect(color)?;
             sum = Some(match sum {
                 Some(sum) => sum.zip_add([terms]).wrap_err_with(|| {
                     format!(
@@ -505,7 +529,8 @@ mod tests {
             inlining: symbolica::evaluate::InliningPolicy::Always,
             is_alias: false,
             lhs: function!(family, &scope, parameter),
-            rhs: Atom::var(parameter) + &coordinate,
+            rhs: crate::numerator::AppliedFeynmanRule::new(Atom::var(parameter) + &coordinate)?
+                .expr,
             args: vec![parameter.into()],
             tags: vec![scope.clone()],
         });

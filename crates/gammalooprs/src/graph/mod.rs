@@ -128,23 +128,30 @@ pub(crate) enum ThresholdPinchStatus {
 }
 
 impl Graph {
-    pub(crate) fn with_global_numerator_only(&self, name: String, numerator: Atom) -> Self {
+    pub(crate) fn with_global_numerator_only(
+        &self,
+        name: String,
+        numerator: SymbolicTensor<IndexedStructure>,
+    ) -> Self {
         let mut graph = self.clone();
         graph.name = name;
         graph.overall_factor = Atom::one();
         graph.global_prefactor.num = numerator;
-        graph.global_prefactor.projector = Atom::one();
         graph.polarizations.clear();
+        let unit = crate::numerator::AppliedFeynmanRule::new(Atom::one())
+            .expect("literal one is a scalar tensor")
+            .expr;
+        graph.global_prefactor.projector = unit.clone();
         graph.underlying = self.underlying.map_data_ref(
             |_, _, vertex| {
                 let mut vertex = vertex.clone();
-                vertex.num = autogen::Autogen::explicit(Atom::one());
+                vertex.num = autogen::Autogen::explicit(unit.clone());
                 vertex
             },
             |_, _, _, edge| {
                 edge.map(|edge| {
                     let mut edge = edge.clone();
-                    edge.num = autogen::Autogen::explicit(Atom::one());
+                    edge.num = autogen::Autogen::explicit(unit.clone());
                     edge
                 })
             },
@@ -166,23 +173,55 @@ impl Graph {
             &self.full_filter(),
             "",
             &|_a| None,
-            &|e| Some(format!("label=\"{}\"", e.num.log_print(None))),
-            &|v| Some(format!("label=\"{}\"", v.num.log_print(None))),
+            &|e| {
+                Some(format!(
+                    "label=\"{}\"",
+                    parse::NumeratorInterface::export(&e.num.value)
+                        .0
+                        .log_print(None)
+                ))
+            },
+            &|v| {
+                Some(format!(
+                    "label=\"{}\"",
+                    parse::NumeratorInterface::export(&v.num.value)
+                        .0
+                        .log_print(None)
+                ))
+            },
         )
     }
 
-    pub(crate) fn global_atom(&self) -> Atom {
-        &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * evaluate_overall_factor(self.overall_factor.as_view())
+    pub(crate) fn global_numerator(&self) -> color_eyre::Result<SymbolicTensor<IndexedStructure>> {
+        let factor =
+            SymbolicTensor::infer_indexed(evaluate_overall_factor(self.overall_factor.as_view()))?;
+        eyre::ensure!(
+            factor.is_scalar(),
+            "the overall graph factor must be scalar"
+        );
+        Ok(self
+            .global_prefactor
+            .num
+            .clone()
+            .multiply(self.global_prefactor.projector.clone())?
+            .multiply(factor)?)
     }
 
     pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
         let reduced = self.full_filter().subtract(&self.initial_state_cut);
-        self.numerator(&reduced, &self.empty_subgraph())
+        let numerator = self
+            .numerator(&reduced, &self.empty_subgraph())
+            .expect("validated graph numerator must have a compatible tensor interface")
+            .state
+            .expr
+            .multiply(
+                self.global_numerator()
+                    .expect("validated global numerator must be a tensor"),
+            )
+            .expect("the complete production numerator must have compatible ports");
+        crate::numerator::AppliedFeynmanRule::from_tensor(numerator)
             .get_single_atom()
             .expect("Graph numerator should be available")
-            * self.global_atom()
     }
 
     pub(crate) fn external_momentum_edge_order(&self) -> Vec<EdgeIndex> {

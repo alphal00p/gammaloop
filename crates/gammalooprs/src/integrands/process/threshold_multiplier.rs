@@ -1521,8 +1521,7 @@ mod tests {
     use super::*;
     use crate::initialisation::test_initialise;
     use crate::{
-        GammaLoopContextContainer, dot,
-        graph::parse::from_dot::IntoGraph,
+        GammaLoopContextContainer,
         integrands::process::{
             cross_section::{
                 export::export_threshold_multiplier_collection,
@@ -1985,17 +1984,18 @@ mod tests {
     #[test]
     fn graph_declared_additional_parameters_enter_the_cut_layout_in_dot_order() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph multiplier_additional_parameters {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph multiplier_additional_parameters {
+ graph [projector=1]
             graph [params="alpha;beta";]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0]
-            v1 -> v2 [id=1]
-            v1 -> v2 [id=2]
-            v2 -> ext [id=3]
-        })
+            ext -> v1 [id=0 sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v2 -> ext [id=3 source="{ufo_order:2}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let layout = ThresholdMultiplierLayout::from_graph_esurfaces(&graph, Vec::new()).unwrap();
         assert_eq!(
@@ -2210,17 +2210,18 @@ mod tests {
     #[test]
     fn workspace_binds_global_effective_and_star_views_in_generation_lmb() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph threshold_multiplier_workspace {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph threshold_multiplier_workspace {
+ graph [projector=1]
             graph [params="graph_weight"]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0]
-            v1 -> v2 [id=1]
-            v1 -> v2 [id=2]
-            v2 -> ext [id=3]
-        })
+            ext -> v1 [id=0 sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v2 -> ext [id=3 source="{ufo_order:2}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let energy_edge = graph.loop_momentum_basis.loop_edges.raw[0];
         let shift_edge = graph.loop_momentum_basis.ext_edges.raw[0];
@@ -2420,17 +2421,19 @@ mod tests {
     #[test]
     fn workspace_reuses_exact_kinematic_contexts_despite_cache_id_aliases() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph threshold_multiplier_context_cache {
+        let graph: Graph =
+            crate::finalized_runtime_dot!(digraph threshold_multiplier_context_cache {
+ graph [projector=1]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0]
-            v1 -> v2 [id=1]
-            v1 -> v2 [id=2]
-            v2 -> ext [id=3]
-        })
-        .unwrap();
+            ext -> v1 [id=0 sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v2 -> ext [id=3 source="{ufo_order:2}"]
+        }, &crate::utils::load_generic_model("sm"))
+            .unwrap();
         let layout = ThresholdMultiplierLayout::new(
             Vec::new(),
             Vec::new(),
@@ -2555,18 +2558,20 @@ mod tests {
     #[test]
     fn workspace_recomputes_complete_merged_views_before_caching() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph threshold_multiplier_merged_cache {
+        let graph: Graph =
+            crate::finalized_runtime_dot!(digraph threshold_multiplier_merged_cache {
+ graph [projector=1]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0]
-            v1 -> v2 [id=1]
-            v1 -> v2 [id=2]
-            v1 -> v2 [id=3]
-            v2 -> ext [id=4]
-        })
-        .unwrap();
+            ext -> v1 [id=0 sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}" lmb_id=1]
+            v1 -> v2 [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
+            v2 -> ext [id=4 source="{ufo_order:3}"]
+        }, &crate::utils::load_generic_model("sm"))
+            .unwrap();
         assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 2);
         let energy_edges = graph
             .loop_momentum_basis

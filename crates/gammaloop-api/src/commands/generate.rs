@@ -1196,6 +1196,8 @@ pub enum ParseError {
     UnknownCoupling { name: String, choices: String },
     #[error("invalid lmb specification: {0}")]
     InvalidLmbSpec(ParseIntError),
+    #[error("invalid external-state projector: {0}")]
+    InvalidProjector(String),
 }
 
 pub fn parse_spec_with_model(

@@ -1252,8 +1252,8 @@ mod tests {
             VertexSet,
             esurface::{Esurface, EsurfaceExistence, EsurfaceID},
         },
-        dot,
-        graph::{LMBext, parse::from_dot::IntoGraph},
+        finalized_runtime_dot,
+        graph::LMBext,
         initialisation::test_initialise,
         momentum::{FourMomentum, Rotatable, Rotation, RotationMethod},
     };

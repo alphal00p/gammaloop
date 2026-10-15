@@ -19,6 +19,8 @@ ahash = "0.8.12"
 arrayvec = "0.7.4"
 colored = { workspace = true }
 eyre = { workspace = true }
+feynkit-tensor = { workspace = true }
+idenso = { workspace = true, default-features = false }
 log = "0.4.29"
 regex = "1.12.2"
 rug = "1.28.0"
@@ -37,7 +39,8 @@ default-features = false
 features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "tracing-log"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+test-log = "0.2.19"
 
 [features]
 python_stubgen = [

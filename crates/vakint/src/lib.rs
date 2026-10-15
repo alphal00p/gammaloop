@@ -1,5 +1,6 @@
 #![allow(mixed_script_confusables)]
 pub mod alphaloop_numerics;
+mod citations;
 pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
@@ -11,16 +12,27 @@ pub mod symbols;
 pub mod topologies;
 pub mod utils;
 
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{Result as StubResult, StubInfo};
+
+use crate::citations::{CitationSource, USED_CITATIONS};
 use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
+use feynkit_tensor::TensorReducer;
 use graph::Graph;
+use idenso::{CookMode, CookSettings};
 #[allow(unused)]
 use log::{debug, info, warn};
 
 use regex::Regex;
 use rug::float::Constant;
+use spenso::{
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    shadowing::{Collectable, TensorCollectFilter},
+    structure::representation::{BaseRepName, Minkowski, initialize as initialize_spenso_reps},
+};
 use std::{
     collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
     env,
@@ -43,16 +55,18 @@ use symbolica::{
     coefficient::{Coefficient, CoefficientView},
     domains::float::{FloatLike, RealLike},
 };
-#[cfg(feature = "python")]
+#[cfg(feature = "symbolica_community_module")]
 pub mod symbolica_community_module;
 
 /// Gather the Python API registered for the Vakint Symbolica community module.
-#[cfg(feature = "python-stubs")]
-pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
-    pyo3_stub_gen::StubInfo::from_project_root(
-        "symbolica".to_owned(),
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-    )
+#[cfg(feature = "python_stubgen")]
+pub fn stub_info() -> StubResult<StubInfo> {
+    // A caller can be another crate's test binary; its manifest directory is not ours.
+    let project_root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/vakint"))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    StubInfo::from_project_root("symbolica".to_owned(), project_root)
 }
 
 use crate::alphaloop_numerics::DIRECT_SUBSTITUTIONS;
@@ -78,6 +92,7 @@ use symbolica::{
     poly::series::Series,
     printer::{AtomPrinter, CanonicalOrderingSettings, PrintOptions},
     state::Workspace,
+    symbol,
     transformer::Transformer,
 };
 use utils::simplify_real;
@@ -1927,14 +1942,10 @@ impl EvaluationMethod {
                 vakint.pysecdec_evaluate(settings, numerator, integral_specs, opts)
             }
         }?;
-        // Projected kernels contain only real scalar integral arguments. The
-        // monolithic numerator may contain complex user coefficients, so its
-        // functions must retain their original branches.
-        Ok(if settings.project_onto_tensor_integrals {
-            simplify_real(result.as_view())
-        } else {
-            result
-        })
+        // Scalar kernels contain only real integral arguments and opaque
+        // coefficient symbols. Complex user functions are restored afterward,
+        // preserving their original branches in both tensor-projection modes.
+        Ok(simplify_real(result.as_view()))
     }
 }
 
@@ -2426,17 +2437,12 @@ impl VakintTerm {
             self.integral = Atom::one();
             return Ok(());
         }
-        let (kernel, aliases, numerator_orders) = if settings.project_onto_tensor_integrals {
-            terms.backend_kernel(settings, slice::from_ref(&self.integral))?
-        } else {
-            let pole_order =
-                projection::ScalarTerms::epsilon_pole_order(numerator.as_view(), settings)?;
-            // One common Laurent pole is restored after backend evaluation;
-            // the complete numerator otherwise enters the backend unchanged.
-            let kernel =
-                numerator * Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(pole_order);
-            (kernel, Vec::new(), pole_order)
-        };
+        // Tensor projection has already completed. Both tensor-reduction
+        // modes now share the scalar coefficient boundary: the analytic
+        // backend sees one kernel, while complete graph coefficients retain
+        // their factorization and epsilon dependence for restoration below.
+        let (kernel, aliases, numerator_orders) =
+            terms.backend_kernel(settings, slice::from_ref(&self.integral))?;
         let epsilon_overflow = || VakintError::InvalidNumerator("epsilon order overflow".into());
         let n_loops = i64::try_from(integral_specs.canonical_topology.get_integral().n_loops)
             .map_err(|_| epsilon_overflow())?;
@@ -2581,14 +2587,7 @@ impl VakintTerm {
                     Replacement::new(alias.to_pattern(), coefficient.to_pattern())
                 })
                 .collect::<Vec<_>>(),
-        ) / normalization_power
-            / Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(
-                if settings.project_onto_tensor_integrals {
-                    0
-                } else {
-                    numerator_orders
-                },
-            );
+        ) / normalization_power;
         self.numerator = projection::ScalarTerms::epsilon_series(
             restored.as_view(),
             settings,
@@ -5858,7 +5857,8 @@ Evaluated (n_loops=1, mu_r=1) :
     pub fn convert_from_dot_notation(atom: AtomView) -> Atom {
         let dummy_pat = function!(S.dot_dummy_ind, S.a_).to_pattern();
 
-        atom.replace(S.dot(S.a_, S.b_).pow(Atom::var(S.c_)))
+        let indexed = atom
+            .replace(S.dot(S.a_, S.b_).pow(Atom::var(S.c_)))
             .with(S.dot_pow(S.a_, S.b_, S.c_))
             .replace(S.dot(S.a_, S.b_))
             .with(S.dot_pow(S.a_, S.b_, 1))
@@ -5866,97 +5866,53 @@ Evaluated (n_loops=1, mu_r=1) :
             .when(S.c_.filter(|a| a < 0))
             .with(S.dot_pow(S.a_, S.b_, -Atom::var(S.c_)).pow(-1))
             .map_terms_single_core(|a| {
-                let mut dummy = 1;
-                for m in a.replace(&dummy_pat).match_iter() {
-                    let Ok(d) = usize::try_from(&m[&S.a_]) else {
-                        continue;
-                    };
-                    if dummy <= d {
-                        dummy = d;
-                    }
-                }
-                dummy += 1;
+                // Numeric source slots and generated dot labels later share
+                // the backend's index chart. Reserve both before introducing
+                // a contraction, including represented native source slots.
+                let mut dummy = VakintTerm::next_dot_dummy_index(a).max(2);
                 let first_new_dummy = dummy;
 
-                let mut a = a.to_owned();
-                loop {
-                    let dummy_wrapped = S.dot_dummy_ind(dummy);
-                    let new = a
-                        .replace(S.dot_pow(S.a_, S.b_, S.c_))
-                        .once()
-                        .with_map(move |m| {
-                            let Match::Single(a) = m.get(S.a_).unwrap() else {
-                                unreachable!()
-                            };
-                            let Match::Single(b) = m.get(S.b_).unwrap() else {
-                                unreachable!()
-                            };
-                            let rest = S
-                                .dot_pow(S.a_, S.b_, Atom::var(S.c_) - 1)
-                                .to_pattern()
-                                .replace_wildcards_with_matches(m);
-
-                            // if let (Ok(a), Ok(b)) =
-                            //     (FunctionBuilder::try_from(m.get(S.a_)), FunctionBuilder::try_from(b))
-                            // {
-                            //     a.add_arg(dummy).finish() * b.add_arg(dummy).finish() * rest
-                            // }
-                            match (a, b) {
-                                (AtomView::Var(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Var(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                _ => S
-                                    .dot_pow(S.a_, S.b_, S.c_)
-                                    .to_pattern()
-                                    .replace_wildcards_with_matches(m),
-                            }
-                        })
-                        .replace(S.dot_pow(S.a_, S.b_, 0))
-                        .with(1);
-
-                    if new == a {
-                        break;
+                // Visit each dot once. Replacing a single occurrence and
+                // rescanning the whole factorized numerator for the next one
+                // made this conversion quadratic in the number of dots.
+                let a = a.replace_map_bottom_up(|view, _, out| {
+                    let AtomView::Fun(dot) = view else { return };
+                    if dot.get_symbol() != S.dot_pow || dot.get_nargs() != 3 {
+                        return;
                     }
-                    a = new;
-                    dummy += 1;
-                }
+                    let arguments = dot.iter().collect::<Vec<_>>();
+                    let [left, right, exponent] = arguments.as_slice() else {
+                        unreachable!()
+                    };
+                    let Ok(copies) = usize::try_from(*exponent) else {
+                        // A non-integral scalar power has no finite indexed
+                        // product. Preserve its original compact notation.
+                        **out = S.dot(*left, *right).pow(*exponent);
+                        return;
+                    };
+                    if ![left, right]
+                        .iter()
+                        .all(|vector| matches!(vector, AtomView::Var(_) | AtomView::Fun(_)))
+                    {
+                        **out = S.dot(*left, *right).pow(*exponent);
+                        return;
+                    }
+                    let mut product = Atom::one();
+                    for _ in 0..copies {
+                        let index = S.dot_dummy_ind(dummy);
+                        dummy += 1;
+                        for vector in [left, right] {
+                            let indexed = match vector {
+                                AtomView::Var(vector) => FunctionBuilder::new(vector.get_symbol()),
+                                AtomView::Fun(vector) => FunctionBuilder::new(vector.get_symbol())
+                                    .add_args(vector.iter()),
+                                _ => unreachable!("vector heads were checked above"),
+                            };
+                            product *= indexed.add_arg(&index).finish();
+                        }
+                    }
+                    **out = product;
+                });
                 // Each copy of a powered scalar sum owns independent dummy
                 // contractions. Keep those copies factorized: expanding the
                 // numerator before conversion would hide index capture.
@@ -5999,7 +5955,11 @@ Evaluated (n_loops=1, mu_r=1) :
                     }
                     **out = product.pow(exponent.signum());
                 })
-            })
+            });
+        // Both tensor reduction and scalar integration can request indexed
+        // output. A native vector already declares its compact representation;
+        // bind the generated index there instead of leaving an extra raw port.
+        VakintTerm::repair_expanded_spenso_vector_slots(indexed.as_view())
     }
 
     pub fn convert_to_dot_notation(
@@ -6738,9 +6698,46 @@ Evaluated (n_loops=1, mu_r=1) :
 
 #[cfg(test)]
 mod tests {
+    use spenso::vector_symbol;
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn native_dot_bridge_decodes_ports_without_opening_scalar_metadata() {
+        initialize_spenso_reps();
+        let dimension = vk_parse!("4-2*ε").unwrap();
+        let representation = function!(Minkowski::selfless_symbol(), &dimension);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let cooked_representation = cooking.try_cook(representation.as_view()).unwrap();
+        assert_ne!(cooked_representation, representation);
+        let metadata = function!(
+            symbol!("vakint::bridge_private_scalar_metadata"; Scalar),
+            &cooked_representation
+        );
+        let original = function!(
+            vector_symbol!("vakint::bridge_scalar_metadata_vector"),
+            &metadata,
+            &representation
+        );
+        let external = function!(
+            *FEYNKIT_EXTERNAL_VECTOR,
+            function!(SPENSO_TAG.pure_scalar, &original),
+            &cooked_representation
+        );
+        let input = function!(
+            SPENSO_TAG.dot,
+            external,
+            function!(S.k, 1, &cooked_representation)
+        );
+        let expected = function!(S.dot, original, function!(S.k, 1));
+        assert_eq!(
+            VakintTerm::spenso_to_vakint_numerator(input.as_view(), &dimension, &BTreeMap::new()),
+            expected
+        );
+    }
 
     #[test]
     fn script_templates_preserve_escapes_literals_and_inserted_expressions() {
@@ -7201,6 +7198,61 @@ mod tests {
     }
 
     #[test]
+    fn tensor_backend_modes_retain_powered_external_coefficients() {
+        let vakint = Vakint::new().unwrap();
+        let spectator =
+            vk_parse!("(coefficient_a+coefficient_b)^11*(coefficient_c+coefficient_d)").unwrap();
+        for tensor_reduction_method in [
+            TensorReductionMethod::FeynKit,
+            TensorReductionMethod::AlphaLoop,
+        ] {
+            for project_onto_tensor_integrals in [false, true] {
+                let settings = VakintSettings {
+                    tensor_reduction_method,
+                    project_onto_tensor_integrals,
+                    use_dot_product_notation: true,
+                    ..VakintSettings::default()
+                };
+                let mut term = VakintTerm {
+                    integral: vk_parse!("topo(I1L(coefficient_mass_squared,3))").unwrap(),
+                    numerator: &spectator * vk_parse!("k(1,31)*k(1,32)").unwrap(),
+                    vectors: vec![("k".into(), 1)],
+                };
+                term.tensor_reduce(&vakint, &settings).unwrap();
+                assert!(
+                    term.numerator
+                        .pattern_match(&spectator.to_pattern(), None, None)
+                        .next()
+                        .is_some(),
+                    "{tensor_reduction_method:?}, projected={project_onto_tensor_integrals}: {}",
+                    term.numerator
+                );
+                // Compare only the rational projector coefficient; FORM may
+                // write 1/(4-2*epsilon) as -1/(-4+2*epsilon). No graph
+                // numerator or powered spectator enters denominator algebra.
+                let tensor_kernel = vk_parse!("g(31,32)*dot(k(1),k(1))").unwrap();
+                let stripped = term.numerator.replace(spectator.to_pattern()).with(1);
+                assert!(
+                    stripped
+                        .pattern_match(&tensor_kernel.to_pattern(), None, None)
+                        .next()
+                        .is_some(),
+                    "the exact rank-two tensor kernel must remain present"
+                );
+                let coefficient = stripped.replace(tensor_kernel.to_pattern()).with(1);
+                let dimension =
+                    Atom::num(4) - Atom::num(2) * Atom::var(vk_symbol!(&settings.epsilon_symbol));
+                assert_eq!(
+                    (coefficient * dimension).cancel(),
+                    Atom::one(),
+                    "{tensor_reduction_method:?}, projected={project_onto_tensor_integrals}: {}",
+                    term.numerator
+                );
+            }
+        }
+    }
+
+    #[test]
     fn scalar_contraction_preserves_spectators_and_independent_components() {
         let _ = S.dot;
         let settings = VakintSettings {
@@ -7289,7 +7341,7 @@ mod tests {
                 )
             })
             .collect();
-        let input = vk_parse!("(p(1,11)+p(2,11))*p(3,11)").unwrap();
+        let input = crate::vakint_parse!("(p(1,11)+p(2,11))*p(3,11)").unwrap();
         let partial = Vakint::partial_numerical_evaluation(
             &settings,
             input.as_view(),

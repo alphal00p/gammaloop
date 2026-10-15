@@ -51,9 +51,10 @@ json5 = { workspace = true }
 ndarray = { workspace = true }
 nu-ansi-term = { workspace = true }
 numpy = { workspace = true, optional = true }
-ratatui = { workspace = true }
+rand = { workspace = true, features = ["small_rng"] }
+ratatui = { workspace = true, features = ["crossterm_0_29"] }
 rayon = { workspace = true }
-reedline = { version = "0.44", optional = true }
+reedline = "0.44"
 regex = { workspace = true }
 rust-embed = { version = "8.11.0", features = ["debug-embed", "include-exclude", "interpolate-folder-path"] }
 schemars = { workspace = true }
@@ -141,7 +142,7 @@ pyo3-extension-module = [
   "gammalooprs/pyo3-extension-module",
   "pyo3/extension-module"
 ]
-abi3 = ["pyo3?/abi3-py37"]
+python_abi = ["pyo3?/abi3", "pyo3?/abi3-py37"]
 python_api = [
   "dep:pyo3-stub-gen-derive",
   "dep:numpy",

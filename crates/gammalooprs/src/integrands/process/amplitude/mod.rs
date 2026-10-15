@@ -3587,7 +3587,7 @@ mod sampling_tests {
             CompiledSamplingMap, ProcessIntegrand, SamplingMapAffine, SamplingSupport,
         },
         processes::Amplitude,
-        utils::load_generic_model,
+        utils::{load_generic_model, test_utils::ModelFixtureExt},
     };
     use linnet::half_edge::involution::EdgeIndex;
 
@@ -3599,7 +3599,7 @@ mod sampling_tests {
 
         test_initialise()?;
         let model = load_generic_model("scalars");
-        let graphs = Graph::from_string(
+        let graphs = Graph::unit_numerator_fixtures(
             r#"digraph vacuum_cube {
                 node [num=1]; edge [num=1 particle=scalar_1];
                 A -> B [id=0 lmb_id=0 mass=2];
@@ -3692,7 +3692,7 @@ escalate_if_exact_zero = false
 
         test_initialise()?;
         let model = load_generic_model("scalars");
-        let graphs = Graph::from_string(
+        let graphs = Graph::import_dot(
             r#"digraph representation_stability {
             node [num=1]; edge [particle=scalar_2];
             e [style=invis];
@@ -4036,7 +4036,7 @@ helicities = [0,0]
         use crate::integrands::process::GaussianReferenceFunction;
         test_initialise()?;
         let model = load_generic_model("scalars");
-        let graphs = Graph::from_string(
+        let graphs = crate::graph::Graph::import_dot(
             r#"digraph joint_triangle {
             node [num=1]; edge [num=1];
             incoming_a [style=invis]; incoming_b [style=invis]; outgoing [style=invis];
@@ -4306,8 +4306,7 @@ parent_lmb = [4]
             });
             term.warm_up(&tropical, &model)?;
             let mut complex_model = model.clone();
-            complex_model.get_parameter_mut("mass_scalar_1")?.value =
-                Some(Complex::new(F(1.0), F(0.1)));
+            complex_model.set_fixture_values([("mass_scalar_1", Complex::new(F(1.0), F(0.1)))])?;
             let error = term.warm_up(&tropical, &complex_model).unwrap_err();
             assert!(
                 error.to_string().contains("tropical sampling")
@@ -4333,7 +4332,7 @@ parent_lmb = [4]
         };
         test_initialise()?;
         let model = load_generic_model("scalars");
-        let graph = Graph::from_string(
+        let graph = crate::graph::Graph::import_dot(
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/massive_kite.dot"
@@ -4513,7 +4512,7 @@ sampling_multichanneling = false
     fn generated_kite_sampling_uses_physical_six_dimensional_surfaces() -> Result<()> {
         test_initialise()?;
         let mut model = load_generic_model("scalars");
-        let graphs = Graph::from_string(
+        let graphs = crate::graph::Graph::import_dot(
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/massive_kite.dot"
@@ -6249,7 +6248,7 @@ parent_lmb = [4,6]
             }
         }
         let externals = [[5.0, 0.0, 0.0, 0.0]; 2];
-        model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(2.0)));
+        model.set_fixture_values([("mass_scalar_1", Complex::new(F(2.0), F(0.0)))])?;
         term.warm_up(&settings, &model)?;
         let bridge =
             term.compile_sampling_bridge(&parameterization, &settings, &externals, None)?;
@@ -6257,7 +6256,7 @@ parent_lmb = [4,6]
             matches!(bridge.channels()[0].map, CompiledSamplingMap::Surface(_)),
             "rewarming after a mass update must invalidate the old physical surface"
         );
-        model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(1.0)));
+        model.set_fixture_values([("mass_scalar_1", Complex::new(F(1.0), F(0.0)))])?;
         term.warm_up(&settings, &model)?;
 
         for (momenta, diagnostic) in [
@@ -6582,8 +6581,7 @@ parent_lmb = [4,6]
             };
             use symbolica::prelude::SingleFloat;
             let mut heavy_model = model.clone();
-            heavy_model.get_parameter_mut("mass_scalar_1")?.value =
-                Some(Complex::new_re(F(1.0e60)));
+            heavy_model.set_fixture_values([("mass_scalar_1", Complex::new(F(1.0e60), F(0.0)))])?;
             runtime_for_rescue.get_mut_settings().stability.levels =
                 vec![StabilityLevelSetting::default_arb()];
             runtime_for_rescue.warm_up(&heavy_model)?;

@@ -1882,7 +1882,7 @@
           "$ref": "#/$defs/EvaluatorMethod"
         },
         "generate_events": {
-          "description": "Return generated events in addition to accumulating integration statistics.",
+          "description": "Request diagnostic events even without configured observables.\nObservable evaluation always retains the complete per-sample contribution.",
           "type": "boolean"
         },
         "integral_unit": {
@@ -2123,7 +2123,6 @@
       "type": "string",
       "enum": [
         "NoGrouping",
-        "OnlyDetectZeroes",
         "GroupIdenticalGraphsUpToSign",
         "GroupIdenticalGraphsUpToScalarRescaling"
       ]
@@ -5466,6 +5465,11 @@
             "null"
           ]
         },
+        "filter_zero_color": {
+          "description": "Remove diagrams whose numerators vanish under color algebra before grouping.",
+          "type": "boolean",
+          "default": false
+        },
         "filter_zero_flow_edges": {
           "description": "Filter edges that carry zero momentum flow in the selected routing.",
           "type": [
@@ -5517,12 +5521,6 @@
           "items": {
             "$ref": "#/$defs/KvPair"
           }
-        },
-        "max_multiplicity_for_fast_cut_filter": {
-          "description": "Fast cut filter switch multiplicity",
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
         },
         "max_n_bridges": {
           "description": "Maximum number of bridges allowed in a generated graph; negative values disable the bound.",
@@ -5752,8 +5750,7 @@
         "tokens",
         "append",
         "clear_existing_processes",
-        "only_diagrams",
-        "max_multiplicity_for_fast_cut_filter"
+        "only_diagrams"
       ]
     },
     "StabilityLevelSetting": {
@@ -6356,9 +6353,28 @@
             "string",
             "null"
           ]
+        },
+        "tensor_reduction_method": {
+          "description": "Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.",
+          "$ref": "#/$defs/VakintTensorReductionMethod"
         }
       },
       "additionalProperties": false
+    },
+    "VakintTensorReductionMethod": {
+      "description": "Numerator tensor-reduction backend used by Vakint.",
+      "oneOf": [
+        {
+          "description": "Historical FORM implementation shipped with AlphaLoop.",
+          "type": "string",
+          "const": "alphaloop"
+        },
+        {
+          "description": "Native, FORM-less FeynKit tensor projector.",
+          "type": "string",
+          "const": "feynkit"
+        }
+      ]
     },
     "Validate": {
       "type": "object",

@@ -228,14 +228,13 @@ rotation_axis = []
     .unwrap();
     history.commands = [
         "import model sm-default".to_owned(),
-        r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
-            --only-diagrams --numerator-grouping only_detect_zeroes
-            --select-graphs GL15 --loop-momentum-bases GL15=8
-            --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
-                * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
-                * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
-            -p gg_hhh -i 1L"#
-            .to_owned(),
+        // Keep the physical GL15 input fixed across generator numbering changes.
+        // The test still constructs, saves and reloads the integrand in fresh processes.
+        format!(
+            "import graphs '{}' --process-spec 'g g > h h h / u d c s b QED==3 [{{1}}]' -p gg_hhh -i 1L",
+            PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+                .join("../../benchmarks/performance/gg-hhh-gl15.dot").display()
+        ),
         "generate".to_owned(),
         "set model MT=173.0".to_owned(),
         "set model WT=0.0".to_owned(),

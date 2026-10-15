@@ -3,11 +3,15 @@ use clap::ValueEnum;
 use gammaloop_tracing_filter::{GammaDisplayFormat, GammaLogFilter};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::{path::PathBuf, sync::OnceLock};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{fmt, prelude::*};
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 /// Amount of prefix and source detail shown by the terminal and logfile sinks.
 #[repr(usize)]
 #[derive(
@@ -36,7 +40,10 @@ pub enum LogFormat {
     None,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, JsonSchema, PartialEq, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct LogStyle {
@@ -106,8 +113,11 @@ impl From<LogStyle> for gammaloop_tracing_filter::LogStyle {
     Decode,
     JsonSchema,
 )]
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Default)]
 pub enum LogLevel {
     /// A level lower than all log levels.
@@ -264,11 +274,13 @@ fn parse_log_filter_or_default(
 }
 
 fn test_log_dir() -> PathBuf {
-    std::env::var(ENV_TEST_LOG_DIR)
+    env::var_os(ENV_TEST_LOG_DIR)
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../..")
+        .unwrap_or_else(|| {
+            env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
                 .join("target/test-logs")
         })
 }

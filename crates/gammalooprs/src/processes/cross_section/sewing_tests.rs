@@ -21,9 +21,9 @@ use symbolica::{
 };
 
 use crate::{
-    graph::Graph,
+    graph::{Graph, parse::NumeratorInterface},
     initialisation::test_initialise,
-    model::{Model, UFOSymbol},
+    model::{Model, ModelGammaLoopExt, UFOSymbol, VertexRuleIdGammaLoopExt},
     numerator::{ParsingNet, aind::Aind},
     utils::{FUN_LIB, GS, load_generic_model},
 };
@@ -85,7 +85,7 @@ fn vertex_matrix(
                 || vertex
                     .vertex_rule
                     .as_ref()
-                    .is_some_and(|rule| rule.name == vertex_name)
+                    .is_some_and(|rule| rule.resolve(model).name == vertex_name)
         })
         .unwrap();
     let mut index_rules = Vec::new();
@@ -117,7 +117,7 @@ fn vertex_matrix(
         }
     }
     let mut expression = model
-        .apply_coupling_replacement_rules(&vertex.num.value)
+        .expand_couplings(&NumeratorInterface::export(&vertex.num.value).0)
         .replace_multiple(&index_rules);
     // Fix the two quark colors to the same component: delta_00=1. This
     // color-singlet metric otherwise remains symbolic in the tensor library.
@@ -129,24 +129,29 @@ fn vertex_matrix(
     }
     // The older quark vertices use one layer of I1x--I4x flavor coefficients;
     // retain the Yukawa and CKM inputs for the independent component probes.
-    for parameter in model.parameters.values().filter(|parameter| {
+    for parameter in model.parameters().iter().filter(|parameter| {
         ["I1x", "I2x", "I3x", "I4x"]
             .iter()
-            .any(|prefix| parameter.name.namespaceless_string().starts_with(*prefix))
+            .any(|prefix| parameter.name.as_str().starts_with(*prefix))
     }) {
         expression = expression
-            .replace(Atom::from(parameter.name).to_pattern())
+            .replace(Atom::from(UFOSymbol::from(parameter.name.as_str())).to_pattern())
             .with(parameter.expression.as_ref().unwrap().to_pattern());
+    }
+    let ckm = model.get_parameter("CKM1x3");
+    if !parameter_values
+        .iter()
+        .any(|(name, _)| *name == ckm.name.as_str())
+    {
+        expression = expression
+            .replace(Atom::from(UFOSymbol::from(ckm.name.as_str())).to_pattern())
+            .with(ckm.expression.as_ref().unwrap().to_pattern());
     }
     for (name, value) in parameter_values {
         expression = expression
             .replace(Atom::from(UFOSymbol::from(*name)).to_pattern())
             .with(value.clone());
     }
-    let ckm = model.get_parameter("CKM1x3");
-    expression = expression
-        .replace(Atom::from(ckm.name).to_pattern())
-        .with(ckm.expression.as_ref().unwrap().to_pattern());
     for (name, value) in [
         ("ytau", tau_yukawa),
         ("ee", Atom::one()),
@@ -212,7 +217,7 @@ fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
 fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graphs = Graph::from_string(
+    let graphs = Graph::import_dot(
         r#"
         digraph direct {
             ext [style=invis];
@@ -221,6 +226,7 @@ fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
             amplitude -> ext [particle="ta+"];
         }
         digraph forward {
+            final_state="vt,ta+";
             ext [style=invis];
             ext -> left [particle="G+", is_cut=0];
             right -> ext [particle="G+", is_cut=0];
@@ -246,7 +252,7 @@ fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
 fn generated_complex_charged_current_preserves_the_ckm_norm() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graphs = Graph::from_string(
+    let graphs = Graph::import_dot(
         r#"
         digraph direct {
             ext [style=invis];
@@ -255,6 +261,7 @@ fn generated_complex_charged_current_preserves_the_ckm_norm() {
             amplitude -> ext [particle="u~"];
         }
         digraph forward {
+            final_state="b,u~";
             ext [style=invis];
             ext -> left [particle="W-", is_cut=0];
             right -> ext [particle="W-", is_cut=0];
@@ -295,8 +302,8 @@ fn generated_sm_quark_higgs_and_neutral_goldstone_vertices_follow_the_action() {
         ("b", "yb", -1),
     ] {
         for scalar in ["H", "G0"] {
-            let graphs = Graph::from_string(
-                format!(
+            let graphs = Graph::import_dot(
+                &format!(
                     r#"
                     digraph decay {{
                         ext [style=invis];
@@ -355,8 +362,8 @@ fn generated_sm_quark_charged_yukawas_satisfy_hermiticity_and_ward_identities() 
             .into_iter()
             .enumerate()
         {
-            let graphs = Graph::from_string(
-                format!(
+            let graphs = Graph::import_dot(
+                &format!(
                     r#"
                     digraph scalar_plus {{
                         ext [style=invis];
@@ -486,7 +493,7 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
     // The approved canonical model carries the action-consistent Lorentz rules;
     // loading it rebuilds the vertex rules and their shared Lorentz references.
     let model = load_generic_model("sm");
-    let graphs = Graph::from_string(
+    let graphs = Graph::import_dot(
         r#"
             digraph goldstone {
                 ext [style=invis];
@@ -567,10 +574,10 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
             vertex
                 .vertex_rule
                 .as_ref()
-                .is_some_and(|rule| rule.name == "V_26")
+                .is_some_and(|rule| rule.resolve(&model).name == "V_26")
         })
         .unwrap();
-    let mut expression = model.apply_coupling_replacement_rules(&vertex.num.value);
+    let mut expression = model.expand_couplings(&NumeratorInterface::export(&vertex.num.value).0);
     let mut antighost_edge = None;
     for hedge in graph.underlying.iter_crown(node) {
         match graph.underlying[hedge].ufo_order.value {
@@ -621,8 +628,8 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
         } else {
             ("Z", "G0", "ta-", "MZ")
         };
-        let graphs = Graph::from_string(
-            format!(
+        let graphs = Graph::import_dot(
+            &format!(
                 r#"
                 digraph vector_exchange {{
                     ext [style=invis];
@@ -733,7 +740,7 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
         let HedgePair::Paired { source, sink } = pair else {
             panic!("the vector exchange must be internal");
         };
-        let mut numerator = edge.data.num.value.clone();
+        let mut numerator = NumeratorInterface::export(&edge.data.num.value).0;
         for (order, hedge) in [source, sink].into_iter().enumerate() {
             for slot in graphs[0].underlying[hedge]
                 .num_indices
@@ -750,7 +757,7 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
         let mass = edge
             .data
             .particle
-            .mass_atom()
+            .mass_atom(&model)
             .replace(Atom::from(UFOSymbol::from(mass_name)).to_pattern())
             .with(Atom::num(3));
         assert_eq!(mass, Atom::num(3));
@@ -761,10 +768,11 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
             .iter_edges()
             .find(|(_, _, edge)| edge.data.name.value == "exchange")
             .unwrap();
-        assert_eq!(scalar_edge.data.num.value, Atom::i());
+        let scalar_numerator = NumeratorInterface::export(&scalar_edge.data.num.value).0;
+        assert_eq!(scalar_numerator, Atom::i());
         assert_eq!(
-            scalar_edge.data.particle.mass_atom(),
-            edge.data.particle.mass_atom()
+            scalar_edge.data.particle.mass_atom(&model),
+            edge.data.particle.mass_atom(&model)
         );
 
         let mut covariant_vector = Atom::Zero;
@@ -792,8 +800,7 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
                         / &denominator;
             }
         }
-        let scalar_exchange =
-            scalar_left * &scalar_edge.data.num.value * scalar_right / denominator;
+        let scalar_exchange = scalar_left * &scalar_numerator * scalar_right / denominator;
         let expected_vector = if charged { (1, 100) } else { (63, 1250) };
         let expected_scalar = if charged { (-1, 72) } else { (-25, 144) };
         let expected_total = if charged { (-7, 1800) } else { (-11089, 90000) };

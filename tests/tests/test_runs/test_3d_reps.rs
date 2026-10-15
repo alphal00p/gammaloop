@@ -512,6 +512,24 @@ fn cff_cli_validate_and_build_use_gammaloop_graph_state() -> Result<()> {
         cli.run_command("3drep build -g 0 --representation unknown")
             .is_err()
     );
+    for seed in [17, 41] {
+        let input = EvaluationInput::deterministic(&parsed, seed, &Default::default(), None)?;
+        let actual = evaluate_expression(
+            &parsed,
+            &ltd.clone().remap_energy_edge_indices(&local_map),
+            "1",
+            &input,
+        )?
+        .value;
+        let expected = evaluate_expression(&parsed, &reference.expression, "1", &input)?.value;
+        let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+        assert!(
+            actual.is_finite()
+                && expected.is_finite()
+                && (actual - expected).abs() <= 1.0e-12 * scale,
+            "the exported LTD source changed the scalar box at seed {seed}: {actual:e} != {expected:e}"
+        );
+    }
 
     clean_test(test_root);
     Ok(())

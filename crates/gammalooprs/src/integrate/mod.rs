@@ -4831,7 +4831,7 @@ mod tests {
                 IntegrationSlot::new(
                     meta,
                     settings.clone(),
-                    Model::default(),
+                    Model::empty("integration-test"),
                     Integrand::TestProbe(TestProbeIntegrand::new(settings, 3)),
                     None,
                 )
@@ -6158,7 +6158,7 @@ mod tests {
                 integrand_name: "default".to_string(),
             },
             settings.clone(),
-            Model::default(),
+            Model::empty("integration-test"),
             Integrand::TestProbe(TestProbeIntegrand::new(settings, 3)),
             None,
         );
@@ -6199,7 +6199,7 @@ mod tests {
                 integrand_name: "default".to_string(),
             },
             settings.clone(),
-            Model::default(),
+            Model::empty("integration-test"),
             Integrand::TestProbe(TestProbeIntegrand::new(settings, 3)),
             None,
         );
