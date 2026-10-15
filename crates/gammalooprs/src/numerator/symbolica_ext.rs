@@ -485,10 +485,37 @@ impl NumeratorAtomExt for AtomView<'_> {
     }
 
     fn collect_compact_factors(&self) -> Atom {
+        // A complex float serializes the precision of its zero component too.
+        // Equal finite coefficients can otherwise become unequal literal keys
+        // inside a function. Canonicalize only that exact zero's metadata;
+        // neither the nonzero component nor its precision is rounded.
+        let mut atom = self.replace_map(|view, _, output| {
+            let AtomView::Num(number) = view else {
+                return;
+            };
+            let CoefficientView::Float(real, imaginary) = number.get_coeff_view() else {
+                return;
+            };
+            let real_zero = real.is_zero();
+            let imaginary_zero = imaginary.is_zero();
+            if real_zero && imaginary_zero {
+                **output = Atom::Zero;
+            } else if real_zero || imaginary_zero {
+                let mut real = real.to_float();
+                let mut imaginary = imaginary.to_float();
+                if real.prec() != imaginary.prec() {
+                    if real_zero {
+                        real = symbolica::domains::float::Float::new(imaginary.prec());
+                    } else {
+                        imaginary = symbolica::domains::float::Float::new(real.prec());
+                    }
+                    **output = Atom::num(symbolica::domains::float::Complex::new(real, imaginary));
+                }
+            }
+        });
         // Energy powers retain their owner through enclosing Taylor operations.
         // Replacing E(owner, P)^2 by P here would discard the mass-rearrangement
         // boundary needed by an outer U operation.
-        let mut atom = self.to_owned();
         // This call is one collection scope. A residue can still contain inner
         // selectors: only share scalar inverses when the entire scope is free
         // of guards, so a finite inactive branch cannot become 0 * infinity.
@@ -872,6 +899,117 @@ mod tests {
     use crate::{initialisation::test_initialise, numerator::aind::Aind, utils::GS};
 
     use super::NumeratorAtomExt;
+
+    #[test]
+    fn compact_factors_canonicalize_only_literal_zero_precision_metadata() {
+        use symbolica::{
+            atom::AtomView,
+            coefficient::CoefficientView,
+            domains::float::{Complex, Float},
+        };
+
+        test_initialise().unwrap();
+        let opaque = symbol!("compact_zero_precision::opaque");
+        let spectator = parse_lit!((x + y) ^ 11 * (z + w) ^ (-3));
+        let tiny = Atom::num((1, 2)).pow(120);
+        for imaginary_nonzero in [false, true] {
+            let nonzero = Float::with_val(128, 5);
+            let expected = if imaginary_nonzero {
+                Atom::num(Complex::new(Float::new(128), nonzero.clone()))
+            } else {
+                Atom::num(Complex::new(nonzero.clone(), Float::new(128)))
+            };
+            for zero_precision in [53, 96, 256] {
+                let coefficient = if imaginary_nonzero {
+                    Atom::num(Complex::new(Float::new(zero_precision), nonzero.clone()))
+                } else {
+                    Atom::num(Complex::new(nonzero.clone(), Float::new(zero_precision)))
+                };
+                assert_ne!(coefficient, expected);
+                assert_eq!(
+                    coefficient.to_canonical_string(),
+                    expected.to_canonical_string()
+                );
+                let normalized = coefficient.collect_compact_factors();
+                assert_eq!(normalized, expected);
+                assert_eq!(normalized.collect_compact_factors(), normalized);
+                let (AtomView::Num(before), AtomView::Num(after)) =
+                    (coefficient.as_view(), normalized.as_view())
+                else {
+                    panic!("literal coefficient")
+                };
+                let (
+                    CoefficientView::Float(before_re, before_im),
+                    CoefficientView::Float(after_re, after_im),
+                ) = (before.get_coeff_view(), after.get_coeff_view())
+                else {
+                    panic!("floating coefficient")
+                };
+                assert_eq!(
+                    if imaginary_nonzero {
+                        before_im.0
+                    } else {
+                        before_re.0
+                    },
+                    if imaginary_nonzero {
+                        after_im.0
+                    } else {
+                        after_re.0
+                    },
+                    "all nonzero value and precision bytes must survive unchanged"
+                );
+                let source =
+                    &spectator * (function!(opaque, &coefficient) - function!(opaque, &expected));
+                assert!(!source.is_zero());
+                assert!(source.collect_compact_factors().is_zero());
+                assert_eq!(
+                    (&spectator * function!(opaque, &coefficient)).collect_compact_factors(),
+                    &spectator * function!(opaque, &expected),
+                    "powers and inverse spectators retain their factorization"
+                );
+            }
+            let direction = if imaginary_nonzero {
+                Atom::i()
+            } else {
+                Atom::one()
+            };
+            let distinct = &expected + &tiny * direction;
+            assert_ne!(distinct, expected, "the finite perturbation is represented");
+            let normalized_distinct = distinct.collect_compact_factors();
+            assert_ne!(normalized_distinct, expected);
+            let (AtomView::Num(before), AtomView::Num(after)) =
+                (distinct.as_view(), normalized_distinct.as_view())
+            else {
+                panic!("literal perturbed coefficient")
+            };
+            let (
+                CoefficientView::Float(before_re, before_im),
+                CoefficientView::Float(after_re, after_im),
+            ) = (before.get_coeff_view(), after.get_coeff_view())
+            else {
+                panic!("floating perturbed coefficient")
+            };
+            assert_eq!(
+                if imaginary_nonzero {
+                    before_im.0
+                } else {
+                    before_re.0
+                },
+                if imaginary_nonzero {
+                    after_im.0
+                } else {
+                    after_re.0
+                },
+                "the small finite perturbation remains bit-exact"
+            );
+            assert!(
+                !(&spectator * (function!(opaque, &distinct) - function!(opaque, &expected)))
+                    .collect_compact_factors()
+                    .is_zero(),
+                "normalization must not erase a nonzero difference"
+            );
+        }
+    }
 
     #[test]
     fn exact_scalar_sum_keys_regroup_nested_coefficients_without_opening_binomials() {

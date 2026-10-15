@@ -367,7 +367,10 @@ end_anchor = "    fn series_preserving_factors(\n        &self,\n        variabl
 # Positive-power review: scalar bases remain complete owners; inverse/fractional
 # powers and tensor/guard/family scopes retain their prior isolation. Repeated
 # normalization requires a strict size decrease, with mass/dot witness tests.
-digest = "4f0413c8664b4f2f2c380771902d4cdb4356e011"
+# Zero-metadata review: only an exactly zero complex-float component takes
+# its nonzero partner precision. Nonzero bytes and factorized spectators remain
+# unchanged; unequal finite coefficients remain distinct in the regression.
+digest = "127cb0e76070591ca371de8ba941ada3e087187e"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/overlap_numerators.rs"
