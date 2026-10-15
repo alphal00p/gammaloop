@@ -25,7 +25,7 @@ fn main() {
     // lists (`[label=A][color=grey]` instead of `[label=A; color=grey]`).
     //
     // Printing all attributes is painful:
-    
+
     println!("Showing all attributes using ast::Graph:");
     for stmt in ast_graph.stmts {
         if let ast::Stmt::NodeStmt(n) = stmt {
@@ -47,13 +47,12 @@ fn main() {
             println!("({}, {})", attr, val);
         }
     }
-    
 
     // Similarly, the grammar allows to chain edges, and to have subgraphs in
     // chains:
-    // (`A -- B -- subgraph { C D }`). 
+    // (`A -- B -- subgraph { C D }`).
     //
-    // This is equivalent to writing explicitly the three following edges: 
+    // This is equivalent to writing explicitly the three following edges:
     // ```
     // A -- B
     // B -- C

@@ -32,6 +32,23 @@ use super::*;
 
 use crate::test_support::{TestReps, test_initialize};
 
+// Main's formal-color references retain their original mathematical
+// dimensions. Admit them through the existing reversible payload interface,
+// then restore the notation after the typed algebra operation.
+fn simplify_formal_color(expression: &Atom, settings: ColorSimplifySettings) -> Atom {
+    let cooking = crate::CookSettings::reversible().with_representation_payloads(true, true);
+    let admitted = cooking.try_cook(expression.as_view()).unwrap();
+    let simplified = SymbolicTensor::infer(admitted)
+        .unwrap()
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
+            color: Some(settings),
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression();
+    cooking.uncook(simplified.as_view())
+}
+
 fn assert_color_zero(expr: Atom) {
     assert!(
         crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
@@ -910,6 +927,82 @@ fn color_trace_projectors_preserve_adjoint_slots_and_algebra() {
             .unwrap()
             .into_expression()
     );
+}
+
+#[test]
+fn cubic_color_trace_contractions_are_traceless() {
+    test_initialize();
+    let _ = spenso::tensor_symbol!("spenso::custom_tensor");
+    let _ = spenso::tensor_symbol!("spenso::custom_matrix");
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 5);
+    let trace = parse!(
+        "trace(cof(Nc), sym(t(coad(Nc ^ 2 - 1, a), spenso::in, spenso::out),\n            t(coad(Nc ^ 2 - 1, b), spenso::in, spenso::out),\n            t(coad(Nc ^ 2 - 1, c), spenso::in, spenso::out)))",
+        default_namespace = "spenso"
+    );
+    let metric = parse_lit!(
+        g(coad(Nc ^ 2 - 1, a), coad(Nc ^ 2 - 1, b)),
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        simplify_formal_color(&(&trace * &metric * &spectator), settings),
+        Atom::Zero
+    );
+    assert_eq!(
+        simplify_formal_color(&(&trace * &spectator), settings),
+        &trace * &spectator
+    );
+    assert_eq!(
+        simplify_formal_color(&(&trace * &metric), settings.without_trace_evaluation()),
+        &trace * &metric
+    );
+    let repeated = trace
+        .replace(parse_lit!(
+            coad(Nc ^ 2 - 1, b),
+            default_namespace = "spenso"
+        ))
+        .with(parse_lit!(
+            coad(Nc ^ 2 - 1, a),
+            default_namespace = "spenso"
+        ));
+    assert_eq!(simplify_formal_color(&repeated, settings), Atom::Zero);
+
+    // The DIS ghost bubble first produces a metric between two distinct
+    // generator slots. Its closed quark trace then leaves precisely this contraction.
+    let network = parse!(
+        "f(coad(8, a), coad(8, i), coad(8, j))\n            * f(coad(8, b), coad(8, i), coad(8, j))\n            * trace(cof(3), cyclic(t(coad(8, a), spenso::in, spenso::out),\n                t(coad(8, c), spenso::in, spenso::out),\n                t(coad(8, b), spenso::in, spenso::out)))",
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        simplify_formal_color(&(network * &spectator), settings),
+        Atom::Zero
+    );
+
+    for unsupported in [
+        parse_lit!(
+            custom_tensor(coad(8, a), coad(8, b), coad(8, c)),
+            default_namespace = "spenso"
+        ),
+        parse!(
+            "trace(cof(3), sym(custom_matrix(spenso::in, spenso::out, coad(8, a)),
+                custom_matrix(spenso::in, spenso::out, coad(8, b)),
+                custom_matrix(spenso::in, spenso::out, coad(8, c))))",
+            default_namespace = "spenso"
+        ),
+        parse!(
+            "trace(cof(3), sym(t(coad(7, a), spenso::in, spenso::out), t(coad(7, b), spenso::in, spenso::out), t(coad(7, c), spenso::in, spenso::out)))",
+            default_namespace = "spenso"
+        ),
+        parse!(
+            "trace(cof(3), sym(t(coad(8, a), spenso::in, spenso::out), t(coad(8, b), spenso::in, spenso::out), t(coad(8, c), spenso::in, spenso::out), t(coad(8, d), spenso::in, spenso::out)))",
+            default_namespace = "spenso"
+        ),
+    ] {
+        let candidate = unsupported
+            * parse_lit!(g(coad(8, a), coad(8, b)), default_namespace = "spenso")
+            * &spectator;
+        assert!(!simplify_formal_color(&candidate, settings).is_zero());
+    }
 }
 
 #[test]

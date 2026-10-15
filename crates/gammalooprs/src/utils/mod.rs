@@ -1136,8 +1136,6 @@ impl<const N: u32> SymFloatLike for VarFloat<N> {
         N
     }
 
-    fn set_precision(&mut self, _precision: u32) {}
-
     fn zero(&self) -> Self {
         Self::new_zero()
     }
@@ -1354,10 +1352,6 @@ impl SymFloatLike for QuadFloat {
 
     fn get_precision(&self) -> u32 {
         self.0.get_precision()
-    }
-
-    fn set_precision(&mut self, precision: u32) {
-        self.0.set_precision(precision);
     }
 
     fn zero(&self) -> Self {
@@ -2592,9 +2586,6 @@ impl<T: FloatLike> SymFloatLike for F<T> {
         self.0.get_precision()
     }
 
-    fn set_precision(&mut self, precision: u32) {
-        self.0.set_precision(precision);
-    }
     fn get_epsilon(&self) -> f64 {
         self.0.get_epsilon()
     }
@@ -5758,7 +5749,7 @@ pub fn load_generic_model(name: &str) -> Model {
 #[cfg(test)]
 pub mod test_utils;
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python_api")]
 impl<'py> pyo3::IntoPyObject<'py> for F<f64> {
     type Target = pyo3::types::PyFloat;
     type Output = pyo3::Bound<'py, Self::Target>;
@@ -5770,7 +5761,7 @@ impl<'py> pyo3::IntoPyObject<'py> for F<f64> {
     }
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python_api")]
 impl<'py> pyo3::IntoPyObject<'py> for &F<f64> {
     type Target = pyo3::types::PyFloat;
     type Output = pyo3::Bound<'py, Self::Target>;
@@ -5782,7 +5773,7 @@ impl<'py> pyo3::IntoPyObject<'py> for &F<f64> {
     }
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python_api")]
 impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for F<f64> {
     type Error = pyo3::PyErr;
 

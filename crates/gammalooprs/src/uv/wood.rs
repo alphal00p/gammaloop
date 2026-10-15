@@ -4,6 +4,8 @@ use crate::{
     model::Model,
     uv::{Spinney, UVgenerationSettings, approx::CutStructure, forest::CutForests},
 };
+use color_eyre::Result;
+use eyre::WrapErr;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
@@ -34,16 +36,22 @@ impl CutWoods {
         graph: &Graph,
         model: &Model,
         settings: &UVgenerationSettings,
-    ) -> Self {
+    ) -> Result<Self> {
         let mut woods = vec![];
         let mut vakint_settings = vec![];
-        for cut in cuts.cuts.iter() {
+        for (cut_index, cut) in cuts.cuts.iter().enumerate() {
             let mut subgraph = graph.full_filter();
             subgraph.subtract_with(&graph.initial_state_cut.left);
             subgraph.subtract_with(&cut.union);
 
-            let spinneys =
-                graph.classified_spinneys(&subgraph, model, settings, &graph.loop_momentum_basis);
+            let spinneys = graph
+                .classified_spinneys(&subgraph, model, settings, &graph.loop_momentum_basis)
+                .wrap_err_with(|| {
+                    format!(
+                        "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
+                        graph.name
+                    )
+                })?;
 
             for spinney in spinneys.iter() {
                 debug_tags!(#uv, #graph, #spinney,#generation;
@@ -66,11 +74,11 @@ impl CutWoods {
             vakint_settings.push(lvk_settings);
             woods.push(wood);
         }
-        CutWoods {
+        Ok(CutWoods {
             cuts,
             woods,
             settings: vakint_settings,
-        }
+        })
     }
 
     pub(crate) fn unfold(self, graph: &Graph) -> CutForests {

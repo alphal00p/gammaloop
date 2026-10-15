@@ -8,7 +8,7 @@ use super::{
     ThresholdMultiplierLayout, ThresholdMultiplierPoint,
 };
 use crate::{
-    graph::{Graph, parse::from_dot::IntoGraph, threshold_counterterms::ThresholdCountertermSpec},
+    graph::{Graph, threshold_counterterms::ThresholdCountertermSpec},
     initialisation::test_initialise,
     integrands::evaluation::EvaluationMetaData,
     processes::EvaluatorSettings,
@@ -139,9 +139,15 @@ fn compare_multipliers<T: FloatLike>(
 #[test]
 fn gl638_compact_function_map_matches_expanded_multipliers() {
     test_initialise().unwrap();
-    let graph: Graph = include_str!("../../../../../../tests/resources/graphs/GL638.dot")
-        .into_graph(&load_generic_model("sm"))
-        .unwrap();
+    let graph: Graph = crate::graph::Graph::import_dot(
+        include_str!("../../../../../../tests/resources/graphs/GL638.dot"),
+        &load_generic_model("sm"),
+    )
+    .map(|mut graphs| {
+        assert_eq!(graphs.len(), 1);
+        graphs.remove(0)
+    })
+    .unwrap();
     let original = ThresholdCountertermSpec::parse_toml(include_str!(
         "../../../../../../tests/resources/graphs/ir_safe_thresholds/GL638_legacy_multipliers.toml"
     ))

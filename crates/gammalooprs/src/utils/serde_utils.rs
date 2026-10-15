@@ -36,18 +36,7 @@ pub enum SerdeFileError {
 
 /// Preserve map entries as an ordered sequence of key-value pairs, including non-string keys.
 pub(crate) mod map_as_pairs {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    pub fn serialize<'a, T, K, V, S>(target: T, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-        T: IntoIterator<Item = (&'a K, &'a V)>,
-        K: Serialize + 'a,
-        V: Serialize + 'a,
-    {
-        let entries: Vec<_> = target.into_iter().collect();
-        entries.serialize(serializer)
-    }
+    use serde::{Deserialize, Deserializer};
 
     pub fn deserialize<'de, T, K, V, D>(deserializer: D) -> Result<T, D::Error>
     where

@@ -15,7 +15,7 @@ Idenso’s shared `SymbolicTensor::contract`, and checks the exact reduced Symbo
 
 == Create a Rust project
 
-Use Rust 1.89 or newer:
+Use Rust 1.96 or newer:
 
 // docs-example: syntax
 ```sh

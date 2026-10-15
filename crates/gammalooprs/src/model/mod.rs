@@ -7,3 +7,6 @@
 mod canonical;
 
 pub use canonical::*;
+
+#[cfg(test)]
+mod polarization_tests;

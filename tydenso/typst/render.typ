@@ -22,6 +22,7 @@
 /// structured `node`, `symbol`, `arguments`, document `attachments`, and
 /// rendering helpers. `power-base` marks calls used as the base of a power,
 /// so renderers that display them as products can preserve grouping.
+/// `followed-by-factor` marks a factor with a following implicit multiplier.
 /// In a whole-call renderer, prefer `visual-arguments` and
 /// `render-visual`; the framework then adds one exact annotation around the
 /// finished visual. Use `(ctx.render)(node)` explicitly when a custom layout
@@ -381,7 +382,7 @@
     ()
   }
 
-  let render-node(node, exact: true, roots: true, power-base: false) = {
+  let render-node(node, exact: true, roots: true, power-base: false, followed-by-factor: false) = {
     if type(node) != dictionary { panic("an Atom render-tree node must be a dictionary") }
     let kind = _kind(node)
 
@@ -423,6 +424,7 @@
     ) = (
       kind: semantic-kind,
       power-base: power-base,
+      followed-by-factor: followed-by-factor,
       node: node,
       symbol: _symbol(node),
       identity: _identity(node),
@@ -593,8 +595,11 @@
         if factors.len() == 0 { return _source-content("1") }
         let minus = factors.len() > 1 and _kind(factors.first()) == "number" and _source(factors.first()) == "-1"
         let visible = if minus { factors.slice(1) } else { factors }
-        let body = visible.map(factor => {
-          let visual = render-node(factor, exact: exact, roots: roots)
+        let body = visible.enumerate().map(((index, factor)) => {
+          let visual = render-node(
+            factor, exact: exact, roots: roots,
+            followed-by-factor: index + 1 < visible.len(),
+          )
           let additive = _kind(factor) == "sum" or (
             _kind(factor) == "number" and _has-additive-terms(visual)
           )

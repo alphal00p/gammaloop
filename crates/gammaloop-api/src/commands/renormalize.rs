@@ -26,7 +26,7 @@ use symbolica::printer::PrintOptions;
 use tracing::info;
 
 #[cfg_attr(
-    feature = "python",
+    feature = "python_api",
     pyo3::pyclass(from_py_object, unsendable, name = "RenormalizeSettings")
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]

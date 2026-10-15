@@ -17,14 +17,14 @@ publish = false
 [dependencies]
 ahash = { version = "0.8", features = ["serde"] }
 bincode = { version = "2", features = ["serde"] }
-bitflags = { version = "2", default-features = false, features = ["serde"] }
+bitflags = { version = "2", default-features = false, features = ["serde", "std"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env", "unicode", "unstable-ext", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "unicode", "unstable-ext", "usage", "wrap_help"] }
 console = { version = "0.16" }
-criterion = { version = "0.5", features = ["html_reports"] }
-crossterm = { version = "0.28", features = ["serde"] }
+crossterm = { version = "0.29", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
+hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
 libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
@@ -45,7 +45,7 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
+time = { version = "0.3", features = ["formatting", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
 toml_writer = { version = "1" }
@@ -58,14 +58,14 @@ zerocopy = { version = "0.8", default-features = false, features = ["derive", "s
 [build-dependencies]
 ahash = { version = "0.8", features = ["serde"] }
 bincode = { version = "2", features = ["serde"] }
-bitflags = { version = "2", default-features = false, features = ["serde"] }
+bitflags = { version = "2", default-features = false, features = ["serde", "std"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env", "unicode", "unstable-ext", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "unicode", "unstable-ext", "usage", "wrap_help"] }
 console = { version = "0.16" }
-criterion = { version = "0.5", features = ["html_reports"] }
-crossterm = { version = "0.28", features = ["serde"] }
+crossterm = { version = "0.29", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
+hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
 libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
@@ -89,7 +89,7 @@ serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
 syn = { version = "2", features = ["extra-traits", "fold", "full", "visit-mut"] }
-time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
+time = { version = "0.3", features = ["formatting", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
 toml_writer = { version = "1" }
@@ -100,12 +100,10 @@ winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
-bitflags = { version = "2", default-features = false, features = ["std"] }
 libc = { version = "0.2", default-features = false, features = ["extra_traits"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
-bitflags = { version = "2", default-features = false, features = ["std"] }
 libc = { version = "0.2", default-features = false, features = ["extra_traits"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 

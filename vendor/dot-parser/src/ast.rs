@@ -14,9 +14,9 @@ use std::iter::FromIterator;
 use std::path::Path;
 
 #[cfg(feature = "to_tokens")]
-use quote::{ToTokens, quote, TokenStreamExt};
-#[cfg(feature = "to_tokens")]
 use proc_macro2::*;
+#[cfg(feature = "to_tokens")]
+use quote::{quote, ToTokens, TokenStreamExt};
 
 mod parser {
     use pest_derive::Parser;
@@ -165,7 +165,9 @@ pub struct Graph<A> {
 impl ToTokens for Graph<(String, String)> {
     fn to_tokens(&self, ts: &mut proc_macro2::TokenStream) {
         let name = match &self.name {
-            Some(name) => quote! { std::option::Option::Some( std::string::ToString::to_string(#name) ) },
+            Some(name) => {
+                quote! { std::option::Option::Some( std::string::ToString::to_string(#name) ) }
+            }
             None => quote! { std::option::Option::None },
         };
         let strict = self.strict;
@@ -185,7 +187,7 @@ impl ToTokens for Graph<(String, String)> {
 
 impl<'a, A> TryFrom<Pair<'a, Rule>> for Graph<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
@@ -231,8 +233,8 @@ where
 }
 
 impl Graph<(String, String)> {
-// Those errors are rarely return, so we can afford the size.
-#[allow(clippy::result_large_err)]
+    // Those errors are rarely return, so we can afford the size.
+    #[allow(clippy::result_large_err)]
     /// Parses a graph from a file, which path is given. Notice that when doing so, attributes are
     /// of type `(String, String)`, not the default `(&'a str, &'a str)`, since we are reading and taking
     /// ownership of the content of the file.
@@ -291,21 +293,20 @@ impl<A> Graph<A> {
 /// This is a thin wrapper over vectors of `[Graph]` in order to read files with multiple dotgraph descriptions.
 pub struct Graphs<A> {
     /// The set of graphs.
-    pub graphs: Vec::<Graph<A>>
+    pub graphs: Vec<Graph<A>>,
 }
 
-impl <'a, A> TryFrom<Pair<'a, Rule>> for Graphs<A>
+impl<'a, A> TryFrom<Pair<'a, Rule>> for Graphs<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
         let mut inner = p.clone().into_inner().into_iter();
-        let first_graph_pair = inner.next().ok_or(ParseError::missing_pair(
-            p.clone(),
-            vec![Rule::dotfile],
-        ))?;
-        let mut graphs = vec!(Graph::try_from(first_graph_pair)?);
+        let first_graph_pair = inner
+            .next()
+            .ok_or(ParseError::missing_pair(p.clone(), vec![Rule::dotfile]))?;
+        let mut graphs = vec![Graph::try_from(first_graph_pair)?];
         for p in inner {
             graphs.push(Graph::try_from(p)?);
         }
@@ -329,8 +330,8 @@ impl<'a> TryFrom<&'a str> for Graphs<(&'a str, &'a str)> {
 }
 
 impl Graphs<(String, String)> {
-// Those errors are rarely return, so we can afford the size.
-#[allow(clippy::result_large_err)]
+    // Those errors are rarely return, so we can afford the size.
+    #[allow(clippy::result_large_err)]
     /// Parses multiple graphs from a file, which path is given. Notice that when doing so, attributes are
     /// of type `(String, String)`, not the default `(&'a str, &'a str)`, since we are reading and taking
     /// ownership of the content of the file.
@@ -371,7 +372,7 @@ impl ToTokens for StmtList<(String, String)> {
 
 impl<'a, A> TryFrom<Pair<'a, Rule>> for StmtList<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
@@ -454,27 +455,27 @@ impl ToTokens for Stmt<(String, String)> {
                 quote! {
                     dot_parser::ast::Stmt::NodeStmt( #stmt )
                 }
-            },
+            }
             Self::EdgeStmt(stmt) => {
                 quote! {
                     dot_parser::ast::Stmt::EdgeStmt( #stmt )
                 }
-            },
+            }
             Self::AttrStmt(stmt) => {
                 quote! {
                     dot_parser::ast::Stmt::AttrStmt( #stmt )
                 }
-            },
+            }
             Self::IDEq(s1, s2) => {
-                quote!{
+                quote! {
                     dot_parser::ast::Stmt::IDEq( std::string::ToString::to_string(#s1), std::string::ToString::to_string(#s2) )
                 }
-            },
+            }
             Self::Subgraph(sub) => {
-                quote!{
+                quote! {
                     dot_parser::ast::Stmt::Subgraph( #sub )
                 }
-            },
+            }
         };
         ts.append_all(tokens);
     }
@@ -482,7 +483,7 @@ impl ToTokens for Stmt<(String, String)> {
 
 impl<'a, A> TryFrom<Pair<'a, Rule>> for Stmt<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
@@ -509,11 +510,13 @@ where
                 let id1 = inners
                     .next()
                     .ok_or(ParseError::missing_pair(p.clone(), vec![Rule::ident]))?
-                    .as_str().into();
+                    .as_str()
+                    .into();
                 let id2 = inners
                     .next()
                     .ok_or(ParseError::missing_pair(p.clone(), vec![Rule::ident]))?
-                    .as_str().into();
+                    .as_str()
+                    .into();
                 Ok(Stmt::IDEq(id1, id2))
             }
             Rule::subgraph => Subgraph::try_from(inner).map(Stmt::Subgraph),
@@ -668,18 +671,18 @@ pub enum AttrStmt<A> {
 #[cfg(feature = "to_tokens")]
 impl ToTokens for AttrStmt<(String, String)> {
     fn to_tokens(&self, ts: &mut proc_macro2::TokenStream) {
-          let new_tokens = match self {
-            AttrStmt::Graph(attrs) => quote!{ dot_parser::ast::AttrStmt::Graph(#attrs) },
-            AttrStmt::Node(attrs) => quote!{ dot_parser::ast::AttrStmt::Node(#attrs) },
-            AttrStmt::Edge(attrs) => quote!{ dot_parser::ast::AttrStmt::Edge(#attrs) },
-          };
-          ts.append_all(new_tokens);
+        let new_tokens = match self {
+            AttrStmt::Graph(attrs) => quote! { dot_parser::ast::AttrStmt::Graph(#attrs) },
+            AttrStmt::Node(attrs) => quote! { dot_parser::ast::AttrStmt::Node(#attrs) },
+            AttrStmt::Edge(attrs) => quote! { dot_parser::ast::AttrStmt::Edge(#attrs) },
+        };
+        ts.append_all(new_tokens);
     }
 }
 
 impl<'a, A> TryFrom<Pair<'a, Rule>> for AttrStmt<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
@@ -708,7 +711,7 @@ where
 }
 
 impl<A> AttrStmt<A> {
-    pub (in crate) fn filter_map_attr<B>(self, f: &dyn Fn(A) -> Option<B>) -> AttrStmt<B> {
+    pub(crate) fn filter_map_attr<B>(self, f: &dyn Fn(A) -> Option<B>) -> AttrStmt<B> {
         match self {
             AttrStmt::Graph(attr) => AttrStmt::Graph(attr.filter_map_attr(f)),
             AttrStmt::Node(attr) => AttrStmt::Node(attr.filter_map_attr(f)),
@@ -743,7 +746,7 @@ impl ToTokens for AttrList<(String, String)> {
 
 impl<'a, A> TryFrom<Pair<'a, Rule>> for AttrList<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
@@ -769,7 +772,7 @@ where
 }
 
 impl<A> AttrList<A> {
-    pub (in crate) fn filter_map_attr<B>(self, f: &dyn Fn(A) -> Option<B>) -> AttrList<B> {
+    pub(crate) fn filter_map_attr<B>(self, f: &dyn Fn(A) -> Option<B>) -> AttrList<B> {
         AttrList {
             elems: self
                 .into_iter()
@@ -832,7 +835,7 @@ pub struct AList<A> {
 impl ToTokens for AList<(String, String)> {
     fn to_tokens(&self, ts: &mut proc_macro2::TokenStream) {
         let elems = &self.elems;
-        let elems = elems.iter().map(|(s1, s2)| quote!{ (#s1, #s2) });
+        let elems = elems.iter().map(|(s1, s2)| quote! { (#s1, #s2) });
         let tokens = quote! {
             dot_parser::ast::AList {
                 elems: std::vec![ #( #elems ),* ]
@@ -870,14 +873,16 @@ impl<'a> TryFrom<Pair<'a, Rule>> for AList<(&'a str, &'a str)> {
             .as_str();
         let mut tail = inners
             .next()
-            .map(|p| AList::try_from(p).map(|alist| alist.elems).unwrap_or_default())
+            .map(|p| {
+                AList::try_from(p)
+                    .map(|alist| alist.elems)
+                    .unwrap_or_default()
+            })
             .unwrap_or_default();
         v.push((id1, id2));
         v.append(&mut tail);
 
-        Ok(AList {
-            elems: v,
-        })
+        Ok(AList { elems: v })
     }
 }
 
@@ -889,21 +894,25 @@ impl<'a> TryFrom<Pair<'a, Rule>> for AList<(String, String)> {
         let id1 = inners
             .next()
             .ok_or(ParseError::missing_pair(p.clone(), vec![Rule::ident]))?
-            .as_str().into();
+            .as_str()
+            .into();
         let id2 = inners
             .next()
             .ok_or(ParseError::missing_pair(p.clone(), vec![Rule::ident]))?
-            .as_str().into();
+            .as_str()
+            .into();
         let mut tail = inners
             .next()
-            .map(|p| AList::try_from(p).map(|alist| alist.elems).unwrap_or_default())
+            .map(|p| {
+                AList::try_from(p)
+                    .map(|alist| alist.elems)
+                    .unwrap_or_default()
+            })
             .unwrap_or_default();
         v.push((id1, id2));
         v.append(&mut tail);
 
-        Ok(AList {
-            elems: v,
-        })
+        Ok(AList { elems: v })
     }
 }
 
@@ -915,9 +924,7 @@ impl<A> AList<A> {
     }
 
     pub(crate) fn empty() -> Self {
-        AList {
-            elems: Vec::new(),
-        }
+        AList { elems: Vec::new() }
     }
 
     #[cfg(feature = "display")]
@@ -985,19 +992,19 @@ impl ToTokens for EdgeStmt<(String, String)> {
     fn to_tokens(&self, ts: &mut proc_macro2::TokenStream) {
         let from = match &self.from {
             Either::Left(id) => {
-                quote!{ dot_parser::ast::either::Either::Left( #id ) }
-            },
+                quote! { dot_parser::ast::either::Either::Left( #id ) }
+            }
             Either::Right(sub) => {
-                quote!{ dot_parser::ast::either::Either::Right( #sub ) }
-            },
+                quote! { dot_parser::ast::either::Either::Right( #sub ) }
+            }
         };
         let attr = match &self.attr {
             Some(attr) => {
-                quote!{ std::option::Option::Some( #attr ) }
-            },
+                quote! { std::option::Option::Some( #attr ) }
+            }
             None => {
-                quote!{ std::option::Option::None }
-            },
+                quote! { std::option::Option::None }
+            }
         };
         let next = &self.next;
         let tokens = quote! {
@@ -1013,7 +1020,7 @@ impl ToTokens for EdgeStmt<(String, String)> {
 
 impl<'a, A> TryFrom<Pair<'a, Rule>> for EdgeStmt<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
@@ -1121,8 +1128,8 @@ pub struct EdgeRHS<A> {
 impl ToTokens for EdgeRHS<(String, String)> {
     fn to_tokens(&self, ts: &mut proc_macro2::TokenStream) {
         let to = match &self.to {
-            Either::Left(id) => quote!{ dot_parser::ast::either::Either::Left( #id ) },
-            Either::Right(sub) => quote!{ dot_parser::ast::either::Either::Right( #sub ) },
+            Either::Left(id) => quote! { dot_parser::ast::either::Either::Left( #id ) },
+            Either::Right(sub) => quote! { dot_parser::ast::either::Either::Right( #sub ) },
         };
         let next = match &self.next {
             Some(next) => quote! {
@@ -1132,7 +1139,7 @@ impl ToTokens for EdgeRHS<(String, String)> {
             },
             None => quote! {
                 std::option::Option::None
-            }
+            },
         };
         let tokens = quote! {
             dot_parser::ast::EdgeRHS {
@@ -1146,7 +1153,7 @@ impl ToTokens for EdgeRHS<(String, String)> {
 
 impl<'a, A> TryFrom<Pair<'a, Rule>> for EdgeRHS<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
@@ -1168,7 +1175,11 @@ where
                 ));
             }
         };
-        let next = inners.next().map(EdgeRHS::try_from).transpose()?.map(Box::new);
+        let next = inners
+            .next()
+            .map(EdgeRHS::try_from)
+            .transpose()?
+            .map(Box::new);
         Ok(EdgeRHS { to, next })
     }
 }
@@ -1219,7 +1230,7 @@ impl ToTokens for NodeStmt<(String, String)> {
         let node = &self.node;
         let attrs = match &self.attr {
             Some(a) => quote! { std::option::Option::Some(#a) },
-            None => quote! { std::option::Option::None }
+            None => quote! { std::option::Option::None },
         };
         let tokens = quote! {
             dot_parser::ast::NodeStmt {
@@ -1233,7 +1244,7 @@ impl ToTokens for NodeStmt<(String, String)> {
 
 impl<'a, A> TryFrom<Pair<'a, Rule>> for NodeStmt<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
@@ -1249,7 +1260,7 @@ where
 }
 
 impl<A> NodeStmt<A> {
-    pub (in crate) fn filter_map_attr<B>(self, f: &dyn Fn(A) -> Option<B>) -> NodeStmt<B> {
+    pub(crate) fn filter_map_attr<B>(self, f: &dyn Fn(A) -> Option<B>) -> NodeStmt<B> {
         NodeStmt {
             node: self.node,
             attr: self.attr.map(|a| a.filter_map_attr(f)),
@@ -1262,7 +1273,7 @@ impl<A> NodeStmt<A> {
         &self.node.id
     }
 
-    pub (in crate) fn get_node_id(&self) -> &NodeID {
+    pub(crate) fn get_node_id(&self) -> &NodeID {
         &self.node
     }
 }
@@ -1282,10 +1293,10 @@ impl ToTokens for NodeID {
     fn to_tokens(&self, ts: &mut proc_macro2::TokenStream) {
         let id = &self.id;
         let port = match &self.port {
-            Some(port) => quote!{ std::option::Option::Some(#port) },
+            Some(port) => quote! { std::option::Option::Some(#port) },
             None => quote! { std::option::Option::None },
         };
-        let tokens = quote!{
+        let tokens = quote! {
             dot_parser::ast::NodeID {
                 id: std::string::ToString::to_string(#id),
                 port: #port,
@@ -1295,8 +1306,7 @@ impl ToTokens for NodeID {
     }
 }
 
-impl<'a> TryFrom<Pair<'a, Rule>> for NodeID
-{
+impl<'a> TryFrom<Pair<'a, Rule>> for NodeID {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
         let mut inners = p.clone().into_inner();
@@ -1323,26 +1333,23 @@ pub enum Port {
 impl ToTokens for Port {
     fn to_tokens(&self, ts: &mut proc_macro2::TokenStream) {
         let tokens = match self {
-            Port::ID(s, cpss) => {
-                match cpss {
-                    Some(cpss) => {
-                        quote!{ dot_parser::ast::Port::ID(std::string::ToString::to_string(#s), std::option::Option::Some(#cpss)) }
-                    },
-                    None => {
-                        quote!{ dot_parser::ast::Port::ID(std::string::ToString::to_string(#s), std::option::Option::None) }
-                    }
+            Port::ID(s, cpss) => match cpss {
+                Some(cpss) => {
+                    quote! { dot_parser::ast::Port::ID(std::string::ToString::to_string(#s), std::option::Option::Some(#cpss)) }
+                }
+                None => {
+                    quote! { dot_parser::ast::Port::ID(std::string::ToString::to_string(#s), std::option::Option::None) }
                 }
             },
             Port::Compass(cpss) => {
-                quote!{ dot_parser::ast::Port::Compass(#cpss) }
+                quote! { dot_parser::ast::Port::Compass(#cpss) }
             }
         };
         ts.append_all(tokens);
     }
 }
 
-impl<'a> TryFrom<Pair<'a, Rule>> for Port
-{
+impl<'a> TryFrom<Pair<'a, Rule>> for Port {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
         let mut inners = p.clone().into_inner();
@@ -1394,7 +1401,7 @@ pub struct Subgraph<A> {
 impl ToTokens for Subgraph<(String, String)> {
     fn to_tokens(&self, ts: &mut proc_macro2::TokenStream) {
         let id = match &self.id {
-            Some(s) => quote!{ std::option::Option::Some(#s) },
+            Some(s) => quote! { std::option::Option::Some(#s) },
             None => quote! { std::option::Option::None },
         };
         let stmts = &self.stmts;
@@ -1410,7 +1417,7 @@ impl ToTokens for Subgraph<(String, String)> {
 
 impl<'a, A> TryFrom<Pair<'a, Rule>> for Subgraph<A>
 where
-    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>
+    AList<A>: TryFrom<Pair<'a, Rule>, Error = ParseError<'a>>,
 {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
@@ -1446,7 +1453,7 @@ impl<A> Subgraph<A> {
     }
 
     /// Extract a subgraph as a standalone graph.
-    pub (in crate) fn into_graph(self, strict: bool, is_digraph: bool) -> Graph<A> {
+    pub(crate) fn into_graph(self, strict: bool, is_digraph: bool) -> Graph<A> {
         Graph {
             strict,
             is_digraph,
@@ -1503,7 +1510,7 @@ impl Display for CompassPt {
     }
 }
 
-impl<'a> TryFrom<Pair<'a, Rule>> for CompassPt { 
+impl<'a> TryFrom<Pair<'a, Rule>> for CompassPt {
     type Error = ParseError<'a>;
     fn try_from(p: Pair<'a, Rule>) -> Result<Self, ParseError<'a>> {
         match p
@@ -1558,19 +1565,19 @@ impl<'a> TryFrom<Pair<'a, Rule>> for CompassPt {
 
 #[cfg(feature = "to_tokens")]
 impl ToTokens for CompassPt {
-      fn to_tokens(&self, tokens: &mut TokenStream) {
-          let new_tokens = match self {
-            CompassPt::N => quote!{ dot_parser::ast::CompassPt::N},
-            CompassPt::NE => quote!{ dot_parser::ast::CompassPt::NE},
-            CompassPt::E => quote!{ dot_parser::ast::CompassPt::E},
-            CompassPt::SE => quote!{ dot_parser::ast::CompassPt::SE},
-            CompassPt::S => quote!{ dot_parser::ast::CompassPt::S},
-            CompassPt::SW => quote!{ dot_parser::ast::CompassPt::SW},
-            CompassPt::W => quote!{ dot_parser::ast::CompassPt::W},
-            CompassPt::NW => quote!{ dot_parser::ast::CompassPt::NW},
-            CompassPt::C => quote!{ dot_parser::ast::CompassPt::C},
-            CompassPt::Underscore => quote!{ dot_parser::ast::CompassPt::Underscore},
-          };
-          tokens.append_all(new_tokens);
-      }
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let new_tokens = match self {
+            CompassPt::N => quote! { dot_parser::ast::CompassPt::N},
+            CompassPt::NE => quote! { dot_parser::ast::CompassPt::NE},
+            CompassPt::E => quote! { dot_parser::ast::CompassPt::E},
+            CompassPt::SE => quote! { dot_parser::ast::CompassPt::SE},
+            CompassPt::S => quote! { dot_parser::ast::CompassPt::S},
+            CompassPt::SW => quote! { dot_parser::ast::CompassPt::SW},
+            CompassPt::W => quote! { dot_parser::ast::CompassPt::W},
+            CompassPt::NW => quote! { dot_parser::ast::CompassPt::NW},
+            CompassPt::C => quote! { dot_parser::ast::CompassPt::C},
+            CompassPt::Underscore => quote! { dot_parser::ast::CompassPt::Underscore},
+        };
+        tokens.append_all(new_tokens);
+    }
 }

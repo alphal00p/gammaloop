@@ -63,7 +63,7 @@ use crate::{
 };
 
 #[cfg_attr(
-    feature = "python",
+    feature = "python_api",
     pyo3::pyclass(from_py_object, unsendable, name = "IntegrationSettings")
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]

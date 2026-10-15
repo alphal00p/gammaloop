@@ -24,21 +24,25 @@ use tracing::{info, warn};
 use crate::{
     command_template::contains_placeholder,
     commands::{
-        process_settings::{serialize_runtime_named_settings, ProcessSettingsCompletionEntry},
         run::{
             prepare_command_histories_with_context, PreparedCommand, PreparedRun, MAX_RUN_DEPTH,
         },
         save::SaveState,
         CommandExecution, Commands, StartCommandsBlock,
     },
-    integrand_info::IntegrandKind,
-    render_smart_toml,
-    repl::{
+    completion::{
         IntegrandDetailCompletionEntry, IrProfileCompletionEntry, ModelVertexCompletionEntry,
         ProcessCompletionEntry, ProcessKind,
     },
+    integrand_info::IntegrandKind,
+    render_smart_toml,
     state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory, State},
     CLISettings, ReadOnlyStateOrigin,
+};
+
+#[cfg(feature = "cli")]
+use crate::commands::process_settings::{
+    serialize_runtime_named_settings, ProcessSettingsCompletionEntry,
 };
 
 const MAX_DISPLAY_COMMAND_LINES: usize = 5;
@@ -565,6 +569,7 @@ impl<'a> CliSession<'a> {
             .collect()
     }
 
+    #[cfg(feature = "cli")]
     pub(crate) fn current_process_settings_entries(&self) -> Vec<ProcessSettingsCompletionEntry> {
         let mut entries = Vec::new();
 
@@ -602,7 +607,7 @@ impl<'a> CliSession<'a> {
 
     pub fn current_model_parameter_entries(
         &self,
-    ) -> Vec<crate::repl::ModelParameterCompletionEntry> {
+    ) -> Vec<crate::completion::ModelParameterCompletionEntry> {
         let mut entries = self
             .state
             .model_parameters
@@ -612,10 +617,12 @@ impl<'a> CliSession<'a> {
                     .model
                     .parameter(name.namespaceless_string())
                     .ok()
-                    .map(|parameter| crate::repl::ModelParameterCompletionEntry {
-                        name: name.namespaceless_string().to_owned(),
-                        parameter_type: parameter.parameter_type.clone(),
-                    })
+                    .map(
+                        |parameter| crate::completion::ModelParameterCompletionEntry {
+                            name: name.namespaceless_string().to_owned(),
+                            parameter_type: parameter.parameter_type.clone(),
+                        },
+                    )
             })
             .collect::<Vec<_>>();
         entries.sort_by(|left, right| left.name.cmp(&right.name));

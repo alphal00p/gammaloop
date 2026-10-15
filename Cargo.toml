@@ -8,6 +8,7 @@ default-members = ["crates/gammaloop-api"]
 edition = "2024"
 
 [workspace.dependencies]
+serde_repr = "0.1.20"
 ahash = "0.8.12"
 alphal00p-docs-macros = { path = "crates/alphal00p-docs-macros/" }
 alphal00p-docs-schema = { path = "crates/alphal00p-docs-schema/" }
@@ -44,7 +45,7 @@ itertools = "0.14"
 json5 = "0.4.1"
 linnest = { path = "crates/linnest/" }
 linnet = { path = "crates/linnet/", default-features = false }
-momtrop = "0.3.0"
+momtrop = { git = "https://github.com/alphal00p/momtrop", rev = "2c80fae4dfb0f136ee07f750efd225d84feff072", default-features = false }
 ndarray = "0.17.2"
 notify = "8.2.0"
 numerica = { version = "3.0.1", default-features = false }
@@ -53,17 +54,16 @@ numpy = "0.28"
 pyo3 = "0.28"
 pyo3-build-config = "0.28"
 pyo3-stub-gen = { version = "0.17", default-features = false }
-pyo3-stub-gen-derive = { version = "0.17", default-features = false }
+pyo3-stub-gen-derive = { version = "0.17.2", default-features = false }
 percent-encoding = "2.3.2"
 rand = "0.9.4"
-ratatui = "0.30.0"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_29", "underline-color", "layout-cache"] }
 rayon = "1.5"
 regex = "1.12.3"
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"
 serde_json = "1"
-serde_repr = "0.1.20"
 serde_yaml = "0.9.34"
 smartstring = "1.0.1"
 spenso = { path = "crates/spenso/", default-features = false }
@@ -71,8 +71,8 @@ spenso-hep-lib = { path = "crates/spenso-hep-lib/", default-features = false }
 spenso-macros = { path = "crates/spenso-macros/", default-features = false }
 symbolica-utils = { path = "crates/symbolica-utils/", default-features = false }
 symbolica = { version = "3.0.1", default-features = false }
-sysinfo = "0.33.1"
-tabled = "0.22.0"
+sysinfo = { version = "0.33.1", default-features = false, features = ["system"] }
+tabled = { version = "0.22.0", default-features = false, features = ["std"] }
 three-dimensional-reps = { path = "crates/three-dimensional-reps/" }
 thiserror = "2.0"
 tiny_http = "0.12.0"
@@ -159,3 +159,4 @@ inherits = "release"
 opt-level = 3
 debug = true
 lto = "fat"
+

@@ -4,6 +4,7 @@ use colored::Colorize;
 use eyre::{eyre, Context};
 use gammalooprs::utils::F;
 
+#[cfg(feature = "cli")]
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -14,13 +15,12 @@ use serde::{Deserialize, Serialize};
 use std::{env, fs, sync::OnceLock};
 use tracing::info;
 
-#[cfg(feature = "ufo_support")]
-use pyo3::prelude::*;
-
 use crate::state::State;
 
 static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/models/json");
+#[cfg(feature = "cli")]
 static BUILTIN_MODEL_NAMES: OnceLock<Vec<String>> = OnceLock::new();
+#[cfg(feature = "cli")]
 static BUILTIN_MODEL_RESTRICTIONS: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -44,7 +44,7 @@ pub(crate) fn load_ufo_model(
     _simplify_model: bool,
 ) -> Result<(Model, InputParamCard<F<f64>>)> {
     Err(eyre!(
-        "UFO support not enabled in gammaloop. Please recompile with the `ufo_support` feature."
+        "UFO support not enabled in gammaloop. Please recompile with the `ufo-import` feature."
     ))
 }
 
@@ -167,10 +167,12 @@ impl ImportModel {
     }
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn builtin_json_model_names() -> &'static [String] {
     BUILTIN_MODEL_NAMES.get_or_init(scan_builtin_json_model_names)
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn builtin_json_model_restriction_names(model: &str) -> Option<&'static [String]> {
     BUILTIN_MODEL_RESTRICTIONS
         .get_or_init(scan_builtin_json_model_restriction_names)
@@ -518,6 +520,7 @@ fn builtin_has_model(model: &str) -> bool {
         .is_some()
 }
 
+#[cfg(feature = "cli")]
 fn scan_builtin_json_model_names() -> Vec<String> {
     let mut names = BUILTIN_MODELS
         .dirs()
@@ -529,6 +532,7 @@ fn scan_builtin_json_model_names() -> Vec<String> {
     names
 }
 
+#[cfg(feature = "cli")]
 fn scan_builtin_json_model_restriction_names() -> BTreeMap<String, Vec<String>> {
     BUILTIN_MODELS
         .dirs()

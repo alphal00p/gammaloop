@@ -81,26 +81,26 @@ macro_rules! finalized_runtime_dot {
 
     (@internal [$($code:tt)*], $model:literal) => {
 
-        stringify!($($code)*).into_finalized_runtime_graph(&$crate::utils::load_generic_model($model))
+        $crate::graph::parse::IntoFinalizedRuntimeGraph::into_finalized_runtime_graph(stringify!($($code)*), &$crate::utils::load_generic_model($model))
     };
 
     // Internal rule: End of parsing, with an optional argument.
     // This is matched when the accumulator has collected the code block and we hit a comma.
     (@internal [$($code:tt)*], $model:expr) => {
-       stringify!($($code)*).into_finalized_runtime_graph($model)
+       $crate::graph::parse::IntoFinalizedRuntimeGraph::into_finalized_runtime_graph(stringify!($($code)*), $model)
     };
 
     // Internal rule: End of parsing, no optional argument.
     // This is matched when the accumulator has run out of tokens to process.
     (@internal [$($code:tt)*]) => {
-        stringify!($($code)*).into_finalized_runtime_graph(&$crate::utils::load_generic_model("sm"))
+        $crate::graph::parse::IntoFinalizedRuntimeGraph::into_finalized_runtime_graph(stringify!($($code)*), &$crate::utils::load_generic_model("sm"))
     };
 
     // Internal rule: The "accumulator".
     // It takes the next token ($next), adds it to the $code accumulator,
     // and recursively calls the macro with the rest of the tokens ($($rest)*).
     (@internal [$($code:tt)*] $next:tt $($rest:tt)*) => {
-        finalized_runtime_dot!(@internal [$($code)* $next] $($rest)*)
+        $crate::finalized_runtime_dot!(@internal [$($code)* $next] $($rest)*)
     };
 
     // ------------------ Public Entry Point ------------------
@@ -108,7 +108,7 @@ macro_rules! finalized_runtime_dot {
     // This is the only rule users should call. It kicks off the process by
     // invoking the internal rules with an empty accumulator `[]`.
     ($($all_tokens:tt)+) => {
-        finalized_runtime_dot!(@internal [] $($all_tokens)+)
+        $crate::finalized_runtime_dot!(@internal [] $($all_tokens)+)
     };
 }
 

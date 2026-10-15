@@ -6,7 +6,6 @@ use eyre::{Context, eyre};
 use linnet::{
     half_edge::involution::{EdgeIndex, HedgePair},
     half_edge::subgraph::SubSetLike,
-    permutation::Permutation,
 };
 use serde::{Deserialize, Serialize};
 
@@ -143,17 +142,18 @@ impl ThresholdCountertermSpec {
             .context("failed to serialize graph threshold_counterterms TOML document")
     }
 
-    /// Applies the edge permutation used while importing split cross-section graphs.
+    /// Applies the exact edge map recorded while importing a graph. Sewn source
+    /// legs may share one final edge; set-like identities discard that duplicate.
     ///
     /// Set-like cut and threshold identities are sorted after remapping. Ordered subspace and
     /// parent-LMB declarations retain their declared order.
-    pub(crate) fn remap_edges(&mut self, permutation: &Permutation) -> Result<()> {
+    pub(crate) fn remap_edges(&mut self, source_edges: &[usize]) -> Result<()> {
         let remap = |edge: &mut EdgeIndex| -> Result<()> {
-            let mapped = permutation.map().get(edge.0).copied().ok_or_else(|| {
+            let mapped = source_edges.get(edge.0).copied().ok_or_else(|| {
                 eyre!(
                     "threshold_counterterms references edge {}, but the imported graph has only {} edges",
                     edge.0,
-                    permutation.map().len(),
+                    source_edges.len(),
                 )
             })?;
             *edge = EdgeIndex(mapped);
@@ -165,12 +165,14 @@ impl ThresholdCountertermSpec {
                 remap(edge)?;
             }
             cut.edges.sort_unstable();
+            cut.edges.dedup();
 
             for threshold in &mut cut.thresholds {
                 for edge in &mut threshold.edges {
                     remap(edge)?;
                 }
                 threshold.edges.sort_unstable();
+                threshold.edges.dedup();
 
                 for variant in &mut threshold.counterterms {
                     if let Some(subspace) = &mut variant.subspace {
@@ -658,7 +660,7 @@ parent_lmb = [1, 2, 0]
         .unwrap();
         let permutation = Permutation::from_map(vec![2, 0, 1]);
 
-        spec.remap_edges(&permutation).unwrap();
+        spec.remap_edges(permutation.map()).unwrap();
 
         assert_eq!(spec.cuts[0].edges, vec![EdgeIndex(1), EdgeIndex(2)]);
         assert_eq!(

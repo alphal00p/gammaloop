@@ -372,7 +372,7 @@ mod tests {
     use typed_index_collections::TiVec;
 
     use crate::finalized_runtime_dot;
-    use crate::graph::parse::from_dot::IntoFinalizedRuntimeGraph;
+
     use crate::graph::{FeynmanGraph, Graph, LMBext, LmbIndex, LoopMomentumBasis};
     use crate::initialisation::test_initialise;
     use crate::integrands::evaluation::{EvaluationMetaData, GenericEvaluationResult};
@@ -1584,10 +1584,16 @@ mod tests {
     #[test]
     fn nested_soft_fixed_e3_is_a_direct_candidate_coordinate() {
         test_initialise().unwrap();
-        let graph: Graph = include_str!(
-            "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+        let graph: Graph = Graph::import_dot(
+            include_str!(
+                "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+            ),
+            &load_generic_model("sm"),
         )
-        .into_graph(&load_generic_model("sm"))
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
         .unwrap();
         let candidate = graph
             .generate_loop_momentum_bases()
@@ -1619,10 +1625,16 @@ mod tests {
     #[test]
     fn candidate_lmb_affine_shift_is_applied_after_precision_cast() {
         test_initialise().unwrap();
-        let graph: Graph = include_str!(
-            "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+        let graph: Graph = Graph::import_dot(
+            include_str!(
+                "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+            ),
+            &load_generic_model("sm"),
         )
-        .into_graph(&load_generic_model("sm"))
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
         .unwrap();
         let candidate = graph
             .generate_loop_momentum_bases()

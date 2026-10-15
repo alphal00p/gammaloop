@@ -6,12 +6,12 @@ use std::{
 use crate::network::Ref;
 
 use enum_try_as_inner::EnumTryAsInner;
-use num_traits::{Float, One, Zero};
+use num::{Float, One, Zero};
 #[cfg(feature = "python")]
 use pyo3::types::{PyComplex, PyComplexMethods};
 use ref_ops::{RefAdd, RefDiv, RefMul, RefSub};
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica::domains::{
     float::{Complex as SymComplex, Constructible, Real},
     rational::Rational,
@@ -46,7 +46,7 @@ pub struct Complex<T> {
     pub im: T,
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 impl pyo3_stub_gen::PyStubType for Complex<f64> {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         pyo3_stub_gen::TypeInfo::builtin("complex")
@@ -105,10 +105,10 @@ pub mod neg;
 pub mod sub;
 pub mod sub_assign;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 pub mod symbolica_traits;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl From<f64> for Complex<Rational> {
     fn from(re: f64) -> Self {
         Complex {
@@ -118,7 +118,7 @@ impl From<f64> for Complex<Rational> {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl From<Complex<f64>> for Complex<Rational> {
     fn from(value: Complex<f64>) -> Self {
         Complex {
@@ -152,14 +152,14 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T: Real> From<Complex<T>> for SymComplex<T> {
     fn from(complex: Complex<T>) -> Self {
         SymComplex::new(complex.re, complex.im)
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T: Real> From<SymComplex<T>> for Complex<T> {
     fn from(complex: SymComplex<T>) -> Self {
         Complex::new(complex.re, complex.im)
@@ -185,7 +185,7 @@ pub trait NumTraitComplex {
     fn arg(&self) -> Self::R;
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T: Real> SymbolicaComplex for Complex<T> {
     type R = T;
     fn arg(&self) -> T {
@@ -318,7 +318,7 @@ impl<T> Complex<T> {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_zero() -> Self
     where
         T: Constructible,
@@ -329,7 +329,7 @@ impl<T> Complex<T> {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     #[inline]
     pub fn new_i() -> Self
     where

@@ -193,12 +193,11 @@ pub enum StrictTensorFilter {
 
 #[derive(Clone, Debug)]
 pub struct ParseSettings {
-    /// Fold factors that parse as pure scalars into one scalar factor while
-    /// parsing a product.
+    /// Fold pure scalar operands into one scalar while parsing a product or sum.
     ///
     /// This keeps scalar-only subexpressions out of the tensor graph when they
     /// cannot affect contraction topology. Disable it when the caller needs
-    /// every product factor to remain represented separately in the network.
+    /// every operand to remain represented separately in the network.
     pub precontract_scalars: bool,
 
     /// Parse only the first summand of an addition.

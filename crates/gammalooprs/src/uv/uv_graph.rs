@@ -155,13 +155,13 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         model: &Model,
         settings: &UVgenerationSettings,
         lmb: &LoopMomentumBasis,
-    ) -> Option<Spinney>
+    ) -> Result<Option<Spinney>>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let dod = self.compute_dod(&spinney.filter);
         if dod < 0 {
-            return None;
+            return Ok(None);
         }
 
         let renormalization_scheme =
@@ -170,7 +170,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         if renormalization_scheme != ApproximationType::Unsubtracted {
             Spinney::with_scheme(spinney, self, lmb, renormalization_scheme, dod)
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -180,18 +180,49 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         model: &Model,
         settings: &UVgenerationSettings,
         lmb: &LoopMomentumBasis,
-    ) -> Vec<Spinney>
+    ) -> Result<Vec<Spinney>>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         if !settings.subtract_uv {
-            return vec![Spinney::empty(self)];
+            return Ok(vec![Spinney::empty(self)]);
         }
 
-        self.spinneys(subgraph)
+        let graph = self.as_ref();
+        let (connected, disconnected): (Vec<_>, Vec<_>) = self
+            .spinneys(subgraph)
             .into_iter()
-            .filter_map(|spinney| self.classify_spinney(spinney, model, settings, lmb))
-            .collect()
+            .partition(|spinney| graph.connected_components(spinney).len() <= 1);
+
+        let mut classified: Vec<_> = connected
+            .into_iter()
+            .filter_map(|spinney| {
+                self.classify_spinney(spinney, model, settings, lmb)
+                    .transpose()
+            })
+            .collect::<Result<_>>()?;
+        let retained_factors: AHashSet<_> = classified
+            .iter()
+            .map(|spinney| spinney.filter().clone())
+            .collect();
+
+        for spinney in disconnected {
+            let components = graph.connected_components(&spinney);
+            if !components.into_iter().all(|component| {
+                let factor = InternalSubGraph::cleaned_filter_optimist(component, graph);
+                retained_factors.contains(&factor.filter)
+            }) {
+                continue;
+            }
+
+            let dod = self.compute_dod(&spinney.filter);
+            if let Some(spinney) =
+                Spinney::with_scheme(spinney, self, lmb, ApproximationType::MUV, dod)?
+            {
+                classified.push(spinney);
+            }
+        }
+        Ok(classified)
     }
 
     fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
@@ -235,11 +266,17 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         //     println!("ose{r}");
         // }
 
+        // This separate analytic copy uses native square-root Laurent series:
+        // after UV rescaling an energy invariant can have a pole, beyond the
+        // compact function's ordinary Taylor derivative domain. Lower energies
+        // after OSE substitution without distributing any numerator factors.
         let expr = expr
+            .replace_multiple(&ose_reps)
+            .replace_multiple(&mom_reps)
             .replace(function!(GS.broadcasting_sqrt, W_.a_))
             .with(Atom::var(W_.a_).sqrt())
-            .replace_multiple(&ose_reps)
-            .replace_multiple(&mom_reps);
+            .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
+            .with(Atom::var(W_.prop_).sqrt());
         // .replace_multiple(&q3_reps);
         let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
 
@@ -271,7 +308,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         &self,
         subgraph: &S,
         model: &Model,
-    ) -> Wood
+    ) -> Result<Wood>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
@@ -289,14 +326,14 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         model: &Model,
         settings: &UVgenerationSettings,
         lmb: &LoopMomentumBasis,
-    ) -> Wood
+    ) -> Result<Wood>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        Wood::from_spinneys(
-            self.classified_spinneys(subgraph, model, settings, lmb),
+        Ok(Wood::from_spinneys(
+            self.classified_spinneys(subgraph, model, settings, lmb)?,
             self,
-        )
+        ))
     }
 
     fn compute_dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32;

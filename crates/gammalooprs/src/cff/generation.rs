@@ -1855,7 +1855,6 @@ mod tests {
         graph::{
             ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator,
             cuts::{CutSet, LuCutSelection},
-            parse::from_dot::IntoFinalizedRuntimeGraph,
         },
         initialisation::test_initialise,
         settings::global::{GenerationSettings, OrientationPattern},

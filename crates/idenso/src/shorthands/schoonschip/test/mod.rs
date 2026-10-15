@@ -222,10 +222,10 @@ fn contracted_vector_sum_keeps_spectator_factors() {
         * (&a * function!(tensor, p!(0, mink.to_symbolic([])), nu.to_atom())
             + &b * function!(tensor, q!(0, mink.to_symbolic([])), nu.to_atom()));
 
-    let result = input.schoonschip_with_net_full::<AbstractIndex>().unwrap();
+    let result = crate::test_support::contracted_atom(input.as_view()).unwrap();
     assert_eq!(result, expected);
     assert_eq!(
-        result.schoonschip_with_net_full::<AbstractIndex>().unwrap(),
+        crate::test_support::contracted_atom(result.as_view()).unwrap(),
         result,
         "finite contraction must reach a fixed point without distributing spectators"
     );

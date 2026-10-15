@@ -13,7 +13,7 @@ use crate::{
 };
 use enum_try_as_inner::EnumTryAsInner;
 use eyre::{Result, eyre};
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica::{atom::Atom, evaluate::FunctionMap};
 
 use crate::structure::StructureError;
@@ -22,7 +22,7 @@ use crate::structure::representation::Representation;
 use crate::structure::slot::IsAbstractSlot;
 use delegate::delegate;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::{
     shadowing::{ShadowMapping, Shadowable},
     structure::{ToSymbolic, slot::ParseableAind},
@@ -31,7 +31,7 @@ use crate::{
         parametric::TensorCoefficient,
     },
 };
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use crate::{
@@ -58,7 +58,7 @@ use crate::{
     Eq,
 )]
 #[cfg_attr(
-feature = "symbolica",
+feature = "shadowing",
 trait_decode(trait = symbolica::state::HasStateMap),
 )]
 #[derive_err(Debug)]
@@ -238,7 +238,7 @@ impl<T: Clone, S: TensorStructure + Clone> HasTensorData for RealOrComplexTensor
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn symhashmap(
         &self,
         name: symbolica::atom::Symbol,
@@ -281,7 +281,7 @@ impl<T: Clone, S: TensorStructure, O: From<S> + TensorStructure>
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T: Clone, S: TensorStructure> Shadowable for RealOrComplexTensor<T, S>
 where
     S: HasName + Clone,
@@ -338,7 +338,7 @@ impl<T: Default + Clone + PartialEq, S: TensorStructure + Clone> SparseOrDense
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T: Clone + RefZero, S: TensorStructure> ShadowMapping for RealOrComplexTensor<T, S>
 where
     S: HasName + Clone,

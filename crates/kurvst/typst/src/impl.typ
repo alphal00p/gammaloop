@@ -201,7 +201,12 @@
   }
 }
 
-#let _same-point(a, b) = _point-pair(a) == _point-pair(b)
+// Treat points that differ only by floating-point noise as the same point.
+#let _same-point(a, b) = {
+  let ((ax, ay), (bx, by)) = (_point-pair(a), _point-pair(b))
+  let tolerance = 1e-9 * calc.max(1, calc.abs(ax), calc.abs(ay))
+  calc.abs(ax - bx) <= tolerance and calc.abs(ay - by) <= tolerance
+}
 
 #let _origin = (0, 0)
 
@@ -344,8 +349,9 @@
 
 /// Return a path with additional fragments or elements appended.
 ///
-/// If an appended fragment starts with a `move` at the current endpoint, the
-/// `move` is skipped. If it starts elsewhere, the `move` begins a new subpath.
+/// If an appended fragment starts with a `move` at the current endpoint (up to
+/// floating-point noise), the `move` is skipped. If it starts elsewhere, the
+/// `move` begins a new subpath.
 ///
 /// -> dictionary
 #let append(path, ..parts) = from-elements(_append-elements(
@@ -370,6 +376,38 @@
   move-to(start),
   cubic-to(control-start, control-end, end),
 )
+
+/// Build a circular arc path fragment from cubic segments.
+///
+/// The arc runs from `start` to `stop` counterclockwise (in y-up coordinates)
+/// when `stop > start` and clockwise otherwise, split into pieces of at most 90°.
+///
+/// -> dictionary
+#let arc(center, radius, start, stop) = {
+  assert(radius > 0, message: "arc radius must be positive")
+  let (cx, cy) = _point-pair(center)
+  let direction(a) = (calc.cos(a), calc.sin(a))
+  let at(a) = {
+    let (dx, dy) = direction(a)
+    (cx + radius * dx, cy + radius * dy)
+  }
+  let pieces = calc.max(1, calc.ceil(calc.abs((stop - start) / 90deg)))
+  let step = (stop - start) / pieces
+  // Control-point distance for a cubic approximating a circular arc of `step`.
+  let k = 4 / 3 * calc.tan(step / 4) * radius
+  path(..range(pieces).map(i => {
+    let a0 = start + i * step
+    let a1 = a0 + step
+    let (p0, p3) = (at(a0), at(a1))
+    let (d0, d3) = (direction(a0), direction(a1))
+    cubic(
+      p0,
+      (p0.at(0) - k * d0.at(1), p0.at(1) + k * d0.at(0)),
+      (p3.at(0) + k * d3.at(1), p3.at(1) - k * d3.at(0)),
+      p3,
+    )
+  }))
+}
 
 /// Build a path fragment from a cubic segment dictionary.
 ///
@@ -944,6 +982,34 @@
   if format == "cbor" { slices + (offset: distance) } else {
     slices.map(slice => (path: slice.path + (offset: distance), segments: slice.segments))
   }
+}
+
+/// Expand a stroked path into a closed outline that can be filled.
+///
+/// Uses Kurbo's stroker: each open subpath becomes one closed contour with
+/// joins at corners and caps at both ends; each closed subpath becomes an outer
+/// and an inner contour. Fill the result with the default non-zero rule.
+///
+/// -> dictionary
+#let outline(
+  path,
+  width: 0.1,
+  join: "miter",
+  miter-limit: 4,
+  cap: "butt",
+  start-cap: auto,
+  end-cap: auto,
+  accuracy: 0.001,
+) = {
+  cbor(_plugin.curve_stroke_outline(cbor.encode((
+    path: _path-value(path),
+    width: width,
+    join: join,
+    miter-limit: miter-limit,
+    start-cap: if start-cap == auto { cap } else { start-cap },
+    end-cap: if end-cap == auto { cap } else { end-cap },
+    accuracy: accuracy,
+  ))))
 }
 
 /// Build a derived visible path layer.

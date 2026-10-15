@@ -1,4 +1,3 @@
-
 use dot_parser::*;
 
 fn main() {

@@ -185,6 +185,7 @@ pub(crate) fn generate_default_momenta(
             helicities: vec![Helicity::PLUS, Helicity::PLUS],
             f_64_cache: None,
             f_128_cache: None,
+            arb_cache: Default::default(),
         });
     }
 
@@ -297,6 +298,7 @@ pub(crate) fn generate_default_momenta(
         helicities,
         f_64_cache: None,
         f_128_cache: None,
+        arb_cache: Default::default(),
     })
 }
 
@@ -682,11 +684,12 @@ fn improve_ps_vh<T: FloatLike>(
 #[cfg(test)]
 mod tests {
     use eyre::Result;
+    use linnet::half_edge::involution::Hedge;
     use typed_index_collections::TiVec;
 
     use crate::{
-        DependentMomentaConstructor, finalized_runtime_dot,
-        graph::{FeynmanGraph, Graph, parse::IntoFinalizedRuntimeGraph},
+        DependentMomentaConstructor,
+        graph::{FeynmanGraph, Graph},
         initialisation::test_initialise,
         model::Model,
         momentum::sample::ExternalIndex,
@@ -694,6 +697,159 @@ mod tests {
         momentum::{FourMomentum, SignOrZero},
         utils::{F, FloatLike, f128, load_generic_model},
     };
+
+    #[test]
+    fn arb_external_cache_preserves_native_constraints_and_archive_layout() {
+        use crate::momentum::{Dep, ExternalMomenta, Helicity, Rotatable, RotationMethod};
+        use crate::settings::runtime::kinematic::Externals;
+        use crate::utils::{ArbPrec, SamplingFloat};
+
+        test_initialise().unwrap();
+        let signature: SignatureLike<ExternalIndex> = [1i8, 1, -1, -1].into_iter().collect();
+        let constructor = DependentMomentaConstructor::Amplitude(&signature);
+        let masses: TiVec<ExternalIndex, F<f64>> = vec![F(0.0), F(0.0), F(1.0), F(1.0)].into();
+        let e_cm = F(10.0);
+        let mut externals = Externals::Constant {
+            momenta: vec![
+                [F(5.0), F(0.0), F(0.0), F(5.0)].into(),
+                [F(5.0), F(0.0), F(0.0), F(-5.0)].into(),
+                [F(5.0), F(3.0), F(0.0), F(15.0_f64.sqrt())].into(),
+                ExternalMomenta::Dependent(Dep::Dep),
+            ],
+            helicities: vec![Helicity::PLUS; 4],
+            improvement_settings: super::PhaseSpaceImprovementSettings {
+                mode: super::ImprovementMode::Vh,
+                ..Default::default()
+            },
+            f_64_cache: None,
+            f_128_cache: None,
+            arb_cache: Default::default(),
+        };
+        let unimproved_sampling = externals
+            .get_dependent_externals::<SamplingFloat>(constructor)
+            .unwrap();
+        externals
+            .improve_and_cache(constructor, &masses, &e_cm)
+            .unwrap();
+        let native = externals
+            .get_dependent_externals::<ArbPrec>(constructor)
+            .unwrap();
+        assert_eq!(
+            ArbPrec::try_extract_externals_from_cache(&externals),
+            Some(&native)
+        );
+        let native_masses = masses
+            .iter()
+            .map(|mass| F::<ArbPrec>::from_ff64(*mass))
+            .collect();
+        let native_e_cm = F::<ArbPrec>::from_ff64(e_cm);
+        // The existing independent conservation/on-shell checker uses native
+        // epsilon, so promoting a double or Quad improved point cannot pass.
+        test_kinematic_validity(&native, &signature, &native_masses, &native_e_cm).unwrap();
+        let sampling = externals
+            .get_dependent_externals::<SamplingFloat>(constructor)
+            .unwrap();
+        assert_ne!(sampling, unimproved_sampling);
+        let expected_sampling: TiVec<ExternalIndex, FourMomentum<F<SamplingFloat>>> = native
+            .iter()
+            .map(|p| p.map_ref(&|x| F::<SamplingFloat>::from_arb(&x.0).unwrap()))
+            .collect();
+        assert_eq!(sampling, expected_sampling);
+        test_kinematic_validity(
+            &sampling,
+            &signature,
+            &masses
+                .iter()
+                .map(|m| F::<SamplingFloat>::from_ff64(*m))
+                .collect(),
+            &F::<SamplingFloat>::from_ff64(e_cm),
+        )
+        .unwrap();
+
+        let rotated = externals.rotate(&RotationMethod::Pi2X.into());
+        let rotated_native = rotated
+            .get_dependent_externals::<ArbPrec>(constructor)
+            .unwrap();
+        assert_eq!(
+            rotated_native[ExternalIndex::from(2)].spatial.px,
+            native[ExternalIndex::from(2)].spatial.px
+        );
+        assert_eq!(
+            rotated_native[ExternalIndex::from(2)].spatial.py,
+            -native[ExternalIndex::from(2)].spatial.pz.clone()
+        );
+        test_kinematic_validity(&rotated_native, &signature, &native_masses, &native_e_cm).unwrap();
+        let rotated_sampling = rotated
+            .get_dependent_externals::<SamplingFloat>(constructor)
+            .unwrap();
+        let expected_rotated: TiVec<ExternalIndex, FourMomentum<F<SamplingFloat>>> = rotated_native
+            .iter()
+            .map(|p| p.map_ref(&|x| F::<SamplingFloat>::from_arb(&x.0).unwrap()))
+            .collect();
+        assert_eq!(rotated_sampling, expected_rotated);
+
+        let config = bincode::config::standard();
+        let encoded = bincode::encode_to_vec(&externals, config).unwrap();
+        let Externals::Constant {
+            momenta,
+            helicities,
+            improvement_settings,
+            f_64_cache,
+            f_128_cache,
+            ..
+        } = &externals;
+        let historical_fields = (
+            0usize,
+            momenta,
+            helicities,
+            improvement_settings,
+            f_64_cache,
+            f_128_cache,
+        );
+        assert_eq!(
+            encoded,
+            bincode::encode_to_vec(historical_fields, config).unwrap()
+        );
+        let (mut decoded, consumed): (Externals, usize) =
+            bincode::decode_from_slice(&encoded, config).unwrap();
+        assert_eq!(consumed, encoded.len());
+        assert!(ArbPrec::try_extract_externals_from_cache(&decoded).is_none());
+        decoded
+            .improve_and_cache(constructor, &masses, &e_cm)
+            .unwrap();
+        assert_eq!(
+            decoded
+                .get_dependent_externals::<ArbPrec>(constructor)
+                .unwrap(),
+            native
+        );
+        assert!(!toml::to_string(&externals).unwrap().contains("arb_cache"));
+
+        let Externals::Constant { momenta, .. } = &mut externals;
+        let ExternalMomenta::Independent(components) = &mut momenta[2] else {
+            panic!("fixture momentum is independent")
+        };
+        components[1] = F(3.0 + 1.0e-10);
+        externals
+            .improve_and_cache(constructor, &masses, &e_cm)
+            .unwrap();
+        let updated = externals
+            .get_dependent_externals::<ArbPrec>(constructor)
+            .unwrap();
+        assert_ne!(updated, native);
+        test_kinematic_validity(&updated, &signature, &native_masses, &native_e_cm).unwrap();
+
+        let Externals::Constant { momenta, .. } = &mut externals;
+        momenta.truncate(1);
+        assert!(
+            externals
+                .improve_and_cache(constructor, &masses, &e_cm)
+                .is_err()
+        );
+        assert!(f64::try_extract_externals_from_cache(&externals).is_none());
+        assert!(f128::try_extract_externals_from_cache(&externals).is_none());
+        assert!(ArbPrec::try_extract_externals_from_cache(&externals).is_none());
+    }
 
     fn test_default_momenta_graph(graph: &Graph, model: &Model, e_cm: &F<f64>) -> Result<()> {
         let external_signature = graph.get_external_signature();
@@ -722,7 +878,10 @@ mod tests {
 
         tracing::debug!("upcasted momenta f128: {:#?}", dependent_momenta_f128);
         let masses_f128 = graph.get_external_masses::<f128>(model);
-        let improve_ps_settings = super::PhaseSpaceImprovementSettings::default();
+        let improve_ps_settings = super::PhaseSpaceImprovementSettings {
+            mode: super::ImprovementMode::Mf,
+            ..Default::default()
+        };
 
         let improved_point = super::improve_ps(
             &dependent_momenta_f128,
@@ -807,94 +966,69 @@ mod tests {
         Ok(())
     }
 
-    mod failing {
-        use super::*;
+    #[test]
+    fn test_photon_box() {
+        test_initialise().unwrap();
+        let sm = load_generic_model("sm");
+        let mut graphs = Graph::import_dot(
+            "digraph photon_box {
+                ext [style=invis];
+                ext -> v1:0 [particle=a,id=0]; ext -> v2:1 [particle=a,id=1];
+                v3:2 -> ext [particle=a,id=2]; v4:3 -> ext [particle=a,id=3];
+                v1 -> v2 [particle=t,id=4]; v2 -> v3 [particle=t,id=5];
+                v3 -> v4 [particle=t,id=6]; v4 -> v1 [particle=t,id=7];
+            }",
+            &sm,
+        )
+        .unwrap();
+        assert_eq!(graphs.len(), 1);
+        let graph = graphs.pop().unwrap();
+        test_default_momenta_graph(&graph, &sm, &F(500.0)).unwrap();
+    }
 
-        #[test]
-        fn test_photon_box() {
-            test_initialise().unwrap();
+    #[test]
+    fn test_aa_tt() {
+        test_initialise().unwrap();
+        let sm = load_generic_model("sm");
+        let mut graphs = Graph::import_dot(
+            r#"digraph aa_tt {
+                ext [style=invis];
+                ext -> v1:0 [particle=a,id=0]; ext -> v2:1 [particle=a,id=1];
+                v1:2 -> ext [particle=t,id=2]; v2:3 -> ext [particle="t~",id=3];
+                v2 -> v1 [particle=t,id=4];
+            }"#,
+            &sm,
+        )
+        .unwrap();
+        assert_eq!(graphs.len(), 1);
+        let mut graph = graphs.pop().unwrap();
+        graph.global_prefactor.num *=
+            graph.underlying[Hedge(2)].color_kronekers(&graph.underlying[Hedge(3)]);
+        graph.validate_full_numerator_tensor_network().unwrap();
+        test_default_momenta_graph(&graph, &sm, &F(600.0)).unwrap();
+    }
 
-            let photon_box: Graph = finalized_runtime_dot!(
-                digraph photon_box {
-                    graph [projector=1]
-                    node [num=1]
-                    edge [num=1]
-                    ext [style=invis];
-                    ext -> v1:0 [particle = "a", id=0, sink="{ufo_order:0}"];
-                    ext -> v2:1 [particle = "a", id=1, sink="{ufo_order:0}"];
-                    v3:2 -> ext [particle = "a", id=2, source="{ufo_order:0}"];
-                    v4:3 -> ext [particle = "a", id=3, source="{ufo_order:0}"];
-                    v1 -> v2 [particle = "t", id=4, lmb_id=0, source="{ufo_order:1}", sink="{ufo_order:1}"];
-                    v2 -> v3 [particle = "t", id=5, source="{ufo_order:2}", sink="{ufo_order:1}"];
-                    v3 -> v4 [particle = "t", id=6, source="{ufo_order:2}", sink="{ufo_order:1}"];
-                    v4 -> v1 [particle = "t", id=7, source="{ufo_order:2}", sink="{ufo_order:2}"];
-                },
-                "sm"
-            )
-            .unwrap();
-
-            let sm = load_generic_model("sm");
-            let e_cm = F(500.0);
-
-            let photon_box_res = test_default_momenta_graph(&photon_box, &sm, &e_cm);
-            if let Some(err) = photon_box_res.err() {
-                panic!("Error in photon box test: {:?}", err);
-            }
+    #[test]
+    fn test_gt_gt() {
+        test_initialise().unwrap();
+        let sm = load_generic_model("sm");
+        let mut graphs = Graph::import_dot(
+            "digraph gt_gt {
+                ext [style=invis];
+                ext -> v1:0 [particle=g,id=0]; ext -> v1:1 [particle=t,id=1];
+                v2:2 -> ext [particle=g,id=2]; v2:3 -> ext [particle=t,id=3];
+                v1 -> v2 [particle=t,id=4];
+            }",
+            &sm,
+        )
+        .unwrap();
+        assert_eq!(graphs.len(), 1);
+        let mut graph = graphs.pop().unwrap();
+        for (source, sink) in [(0, 2), (1, 3)] {
+            graph.global_prefactor.num *=
+                graph.underlying[Hedge(source)].color_kronekers(&graph.underlying[Hedge(sink)]);
         }
-
-        #[test]
-        fn test_aa_tt() {
-            test_initialise().unwrap();
-            let sm = load_generic_model("sm");
-            let e_cm = F(600.0);
-
-            let aa_tt: Graph = finalized_runtime_dot!(
-                digraph aa_tt {
-                    graph [projector=1]
-                    node [num=1]
-                    edge [num=1]
-                    ext [style=invis];
-                    ext -> v1:0 [particle = "a", id=0, sink="{ufo_order:0}"];
-                    ext -> v2:1 [particle = "a", id=1, sink="{ufo_order:0}"];
-                    v1:2 -> ext [particle = "t", id=2, source="{ufo_order:1}"];
-                    v2:3 -> ext [particle = "t~", id=3, source="{ufo_order:1}"];
-                    v2 -> v1 [particle = "t", id=4, source="{ufo_order:2}", sink="{ufo_order:2}"];
-                },
-                "sm"
-            )
-            .unwrap();
-
-            let aa_tt_res = test_default_momenta_graph(&aa_tt, &sm, &e_cm);
-            if let Some(err) = aa_tt_res.err() {
-                panic!("Error in aa_tt test: {:?}", err);
-            }
-        }
-
-        #[test]
-        fn test_gt_gt() {
-            test_initialise().unwrap();
-            let sm = load_generic_model("sm");
-            let e_cm = F(700.0);
-
-            let gt_gt: Graph = finalized_runtime_dot!(
-                digraph gt_gt {
-                    graph [projector=1]
-                    node [num=1]
-                    edge [num=1]
-                    ext [style=invis];
-                    ext -> v1:0 [particle = "g", id=0, sink="{ufo_order:0}"];
-                    ext -> v1:1 [particle = "t", id=1, sink="{ufo_order:1}"];
-                    v2:2 -> ext [particle = "g", id=2, source="{ufo_order:0}"];
-                    v2:3 -> ext [particle = "t", id=3, source="{ufo_order:1}"];
-                    v1 -> v2 [particle = "t", id=4, source="{ufo_order:2}", sink="{ufo_order:2}"];
-                }, "sm"
-            )
-            .unwrap();
-
-            let gt_gt_res = test_default_momenta_graph(&gt_gt, &sm, &e_cm);
-            if let Some(err) = gt_gt_res.err() {
-                panic!("Error in gt_gt test: {:?}", err);
-            }
-        }
+        graph.validate_full_numerator_tensor_network().unwrap();
+        test_default_momenta_graph(&graph, &sm, &F(700.0)).unwrap();
     }
 }

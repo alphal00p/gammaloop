@@ -18,31 +18,31 @@ use delegate::delegate;
 use eyre::{Result, eyre};
 
 use crate::network::StructureLessDisplay;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::{
     structure::ToSymbolic,
     tensors::parametric::{ExpandedCoefficent, TensorCoefficient},
 };
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica_utils::IntoSymbol;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::{structure::FlatIndex, tensors::data::DenseTensor};
 
-#[cfg(not(feature = "symbolica"))]
+#[cfg(not(feature = "shadowing"))]
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
 
 #[derive(
     Clone, PartialEq, Eq, Default, Hash, bincode_trait_derive::Encode, bincode_trait_derive::Decode,
 )]
-#[cfg_attr(not(feature = "symbolica"), derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "shadowing"), derive(Serialize, Deserialize))]
 #[cfg_attr(
-    feature = "symbolica",
+    feature = "shadowing",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
-// #[cfg_attr(not(feature = "symbolica"), derive(bincode::Decode))]
+// #[cfg_attr(not(feature = "shadowing"), derive(bincode::Decode))]
 pub struct IndexLess<T: RepName = LibraryRep, Aind = AbstractIndex> {
     pub structure: Vec<Representation<T>>,
     ind: PhantomData<Aind>,
@@ -261,7 +261,7 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
         [].iter().cloned()
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn symbolic_external_args(&self) -> Vec<Atom>
     where
         Aind: super::slot::ParseableAind,
@@ -337,7 +337,7 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T: RepName<Dual = T>, Aind: AbsInd> ToSymbolic for IndexLess<T, Aind> {
     fn concrete_atom(&self, id: FlatIndex) -> ExpandedCoefficent<()> {
         ExpandedCoefficent {
@@ -406,9 +406,9 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> ToSymbolic for IndexLess<T, Aind> {
 #[derive(
     Clone, PartialEq, Eq, Default, Hash, bincode_trait_derive::Encode, bincode_trait_derive::Decode,
 )]
-#[cfg_attr(not(feature = "symbolica"), derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "shadowing"), derive(Serialize, Deserialize))]
 #[cfg_attr(
-    feature = "symbolica",
+    feature = "shadowing",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct IndexlessNamedStructure<
@@ -468,7 +468,7 @@ impl<Name, Args, R: RepName<Dual = R>, Aind: AbsInd> TensorStructure
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn symbolic_external_args(&self) -> Vec<Atom>
     where
         Aind: super::slot::ParseableAind,

@@ -2,16 +2,14 @@ name: Continuous integration
 
 on:
   workflow_dispatch:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, edited]
-    branches:
-      - main
-      - codex/raised-energy-cff-reviewed
+    inputs:
+      run_native_tests:
+        description: Run Linux/macOS native tests; disable for static-check debugging
+        type: boolean
+        default: true
   push:
     branches:
       - main
-      - feynkit
-  merge_group:
 env:
   CARGO_TERM_COLOR: always
   SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
@@ -21,18 +19,15 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.workflow }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   changes:
     name: Detect relevant changes
-    if: >-
-      github.event_name != 'pull_request' ||
-      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review'))
     runs-on: ubuntu-latest
     outputs:
-      rust: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.rust == 'true' }}
+      rust: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' || steps.filter.outputs.rust == 'true' }}
       tydenso: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.tydenso == 'true' }}
     steps:
       - uses: actions/checkout@v4
@@ -85,7 +80,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: symbolica-dev/symbolica-typst-plugin
-          ref: cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a
+          ref: 57b7455b37c30f4f87353c0073e49f5225e937ab
           path: tymbolica-pinned
 
       - uses: NixOS/nix-installer-action@main
@@ -103,10 +98,11 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just@1.58.0
 
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.98.1
           targets: wasm32-unknown-unknown
 
       - uses: typst-community/setup-typst@v4
@@ -148,9 +144,7 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     needs: [changes, test-matrix, checks, tydenso]
-    if: >-
-      always() && (github.event_name != 'pull_request' ||
-      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review')))
+    if: always()
     steps:
       - name: Tests successful
         if: ${{ !(contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
@@ -160,9 +154,11 @@ jobs:
         run: exit 1
 
   test-matrix:
-    name: Tests
+    # Nix's main-only long-test shards cover the extended scalar matrix and
+    # all six mandatory local soft-CT acceptance cases from the same archives.
+    name: Fast tests
     needs: [changes]
-    if: needs.changes.outputs.rust == 'true'
+    if: needs.changes.outputs.rust == 'true' && (github.event_name != 'workflow_dispatch' || inputs.run_native_tests)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
     strategy:
@@ -171,6 +167,8 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     env:
       SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
+      # Hosted runners have fewer CPUs than the local CI profile's 16-test cap.
+      NEXTEST_TEST_THREADS: num-cpus
     steps:
       - uses: actions/checkout@v4
         with:
@@ -186,7 +184,6 @@ jobs:
             libssl-dev \
             libgmp-dev \
             libmpfr-dev \
-            just \
             libmpc-dev \
             python3 \
             python3-dev
@@ -195,45 +192,92 @@ jobs:
         if: startsWith(matrix.os, 'macos-')
         run: |
           brew update
-          brew install pkg-config openssl@3 gmp mpfr libmpc just form
+          brew install pkg-config openssl@3 gmp mpfr libmpc form
 
       - uses: dtolnay/rust-toolchain@stable
-
-      - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest
+          toolchain: 1.98.1
+
+      - name: Install test command tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.58.0,cargo-nextest,cargo-binstall
+
+      - name: Install Jujutsu for provenance tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: cargo binstall --no-confirm --strategies crate-meta-data jj-cli@0.45.1
+
+      - uses: typst-community/setup-typst@v4
+        with:
+          typst-version: 0.15.1
 
       - uses: Swatinem/rust-cache@v2
         with:
           key: cargo-${{ matrix.os }}
 
+      - name: Clear previous nextest report
+        if: always()
+        run: rm -f target/nextest/ci_gammaloop/junit.xml
+
       - name: Set fallback Symbolica license
         run: |
           if [ -z "${SYMBOLICA_LICENSE:-}" ]; then
+            if [ "${{ github.ref }}" = refs/heads/main ]; then
+              echo "::error::Main test coverage requires the Symbolica license secret"
+              exit 1
+            fi
             echo "SYMBOLICA_LICENSE=GAMMALOOP_USER" >> "$GITHUB_ENV"
           fi
 
       - name: Verify external tools
         run: |
+          just --version
+          just --unstable --list > /dev/null
+          jj --version
+          typst --version
           command -v form
           form
           command -v python3
           python3 --version
 
-      - name: Run tests
+      - name: Run fast tests
         if: ${{ !startsWith(matrix.os, 'macos-') }}
         run: just --unstable test-ci
 
-      - name: Run tests
+      - name: Run fast tests
         if: startsWith(matrix.os, 'macos-')
         run: just --unstable test-ci-mac
+
+      - name: Export nextest timing metadata
+        if: always()
+        env:
+          CHECK_NAME: nextest-${{ matrix.os }}
+        run: |
+          report=target/nextest/ci_gammaloop/junit.xml
+          rm -f target/ci-results/metrics.csv
+          if [ -f "$report" ]; then
+            python3 .github/scripts/export-test-timings.py \
+              --check "$CHECK_NAME" \
+              --output target/ci-results/metrics.csv \
+              "$report"
+          fi
+
+      - name: Upload nextest timing metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-metrics-${{ matrix.os }}
+          path: target/ci-results/metrics.csv
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload nextest JUnit
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit-${{ matrix.os }}
-          path: target/nextest/ci_gammaloop/junit.xml
+          path: target/nextest/*/junit.xml
           if-no-files-found: ignore
           retention-days: 7
 
@@ -260,12 +304,16 @@ jobs:
             libmpfr-dev \
             libmpc-dev \
             python3 \
-            just \
             python3-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.98.1
           components: clippy, rustfmt
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.58.0
 
       - uses: Swatinem/rust-cache@v2
         if: matrix.check != 'fmt'
@@ -275,7 +323,7 @@ jobs:
 
       - name: Run clippy
         if: matrix.check == 'clippy'
-        run: just --unstable clippy -- -D warnings
+        run: just --unstable clippy --keep-going -- -D warnings
 
       - name: Check FeynKit dependency boundaries
         if: matrix.check == 'boundaries'
@@ -301,9 +349,7 @@ jobs:
     name: Checks
     runs-on: ubuntu-latest
     needs: [changes, checks-matrix]
-    if: >-
-      always() && (github.event_name != 'pull_request' ||
-      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review')))
+    if: always()
     steps:
       - name: Checks successful
         if: ${{ !(contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}

@@ -1,22 +1,6 @@
 name: Community graph WebAssembly
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/linnet-py-wasm.yml'
-      - '.cargo/**'
-      - 'Cargo.lock'
-      - 'Cargo.toml'
-      - 'crates/kurvst/**'
-      - 'crates/linnest/**'
-      - 'crates/linnet/**'
-      - 'crates/linnet-py/**'
-      - 'crates/feynkit-*/**'
-      - 'crates/spynso3/**'
-      - 'crates/typst-renderer/**'
-      - 'examples/notebooks/symbolica-host/**'
   push:
     branches:
       - main
@@ -25,6 +9,9 @@ on:
 permissions:
   contents: read
 
+# The standalone linnet_py wheel was replaced by the shared Symbolica
+# Community host, which ships graph, HEP toolkit and tensor modules together.
+# Keep full builds on main/manual dispatch; PR performance gating is separate.
 jobs:
   wheel:
     name: PyEmscripten wheel
@@ -35,6 +22,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.98.1
           targets: wasm32-unknown-emscripten
 
       - uses: pypa/cibuildwheel@v4.2.0

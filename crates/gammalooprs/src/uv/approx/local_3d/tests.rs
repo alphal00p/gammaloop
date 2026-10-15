@@ -9,10 +9,7 @@ use crate::{
         surface::LinearEnergyExpr,
     },
     finalized_runtime_dot,
-    graph::{
-        FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet,
-        parse::IntoFinalizedRuntimeGraph,
-    },
+    graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet},
     initialisation::test_initialise,
     settings::global::OrientationPattern,
     utils::GS,

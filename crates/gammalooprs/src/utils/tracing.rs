@@ -7,7 +7,10 @@ use std::{path::PathBuf, sync::OnceLock};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{fmt, prelude::*};
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 /// Amount of prefix and source detail shown by the terminal and logfile sinks.
 #[repr(usize)]
 #[derive(
@@ -36,7 +39,10 @@ pub enum LogFormat {
     None,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, JsonSchema, PartialEq, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct LogStyle {
@@ -106,8 +112,11 @@ impl From<LogStyle> for gammaloop_tracing_filter::LogStyle {
     Decode,
     JsonSchema,
 )]
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Default)]
 pub enum LogLevel {
     /// A level lower than all log levels.

@@ -1009,6 +1009,22 @@ mod tests {
     }
 
     #[test]
+    fn reversible_dimension_cooking_restores_declarations_and_slots_only() {
+        test_initialize();
+        let settings = CookSettings::reversible().with_representation_payloads(false, true);
+        let expression = parse_lit!(trace(
+            spenso::coad(Nc ^ 2 - 1),
+            spectator(spenso::coad(Nc ^ 2 - 1, a))
+        )) * parse_lit!(f(g(1))).cook_with_settings(&settings);
+        let cooked = settings
+            .try_cook(expression.as_view())
+            .expect("formal dimensions should cook");
+
+        assert_ne!(cooked, expression);
+        assert_eq!(settings.uncook(cooked.as_view()), expression);
+    }
+
+    #[test]
     fn function_cooking_filters_by_input_tags() {
         let cook_tag = "idenso::cook_me";
         let tagged = CookedFunction::tagged_symbol("idenso::tagged_filter_function", &[cook_tag]);

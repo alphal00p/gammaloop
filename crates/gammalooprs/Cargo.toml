@@ -13,23 +13,25 @@ categories = ["science"]
 build = "build.rs"
 
 [lib]
+# required-features = ["python_api"]
 bench = false
 
 [dependencies]
+dyn-clone = "1.0.17"
 feynkit-amplitude = { version = "0.1.0", path = "../feynkit-amplitude", default-features = false }
 ahash = { workspace = true, features = ["serde"] }
 base62 = "2.2.4"
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
+brotli = "7.0.0"
 clarabel = "0"
 color-eyre = { workspace = true }
 colored = { workspace = true }
 ctrlc = "3.5.2"
-delegate = "0.13.5"
-derive_more = { version = "2.1.1", features = ["from", "into"] }
+delegate = "0.12.0"
+derive_more = "0.99.20"
 dirs = { workspace = true }
 dot-parser = { workspace = true }
-dyn-clone = "1.0.17"
 enum_dispatch = "*"
 eyre = { workspace = true }
 feynkit-cff = { workspace = true }
@@ -38,7 +40,7 @@ feynkit-graph = { workspace = true }
 feynkit-kinematics = { workspace = true }
 feynkit-model = { workspace = true }
 gammaloop-tracing-filter = { workspace = true, features = ["symbolica"] }
-idenso = { workspace = true, features = ["native"] }
+idenso = { workspace = true, features = ["bincode", "native"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
 itertools = { workspace = true }
@@ -53,27 +55,30 @@ momtrop = { workspace = true }
 # log = { version = "*", features = ["release_max_level_debug"] }
 nu-ansi-term = { workspace = true }
 paste = "1.0.15"
+pathfinding = "4.15.0"
 rand = { workspace = true, features = ["small_rng"] }
-ratatui = { workspace = true }
+ratatui = { workspace = true, features = ["crossterm_0_28"] }
 rayon = { workspace = true }
 # constcat = "0.5.0"
 ref-ops = "0.2.5"
+ringbuffer = "0.16.0"
 # gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
 rug = { version = "1.29.0", features = ["serde"] }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true, features = ["float_roundtrip"] }
+serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 slotmap = { version = "1.1.1", features = ["serde"] }
 smallvec = { version = "1.15.1", features = ["const_generics", "serde"] }
 smartstring = { workspace = true, features = ["serde"] }
-spenso = { workspace = true, features = ["native-code-generation", "symbolica"] }
+spenso = { workspace = true, features = ["native-code-generation", "shadowing"] }
 spenso-hep-lib = { workspace = true, features = ["native"] }
+statrs = "0.16.1"
 symbolica-utils = { workspace = true, features = ["native"] }
 # compensated-summation = "0.3.0"
 # serde_with = "3.9.0"
-tabled = { workspace = true, features = ["ansi", "derive"] }
-three-dimensional-reps = { workspace = true, features = ["json_schema"] }
+tabled = { workspace = true, features = ["ansi"] }
+three-dimensional-reps = { workspace = true }
 # gxhash = "3.4.1"
 thiserror = { workspace = true }
 toml = { workspace = true }
@@ -81,6 +86,7 @@ tracing = { workspace = true, features = ["release_max_level_info"] }
 tracing-appender = { workspace = true }
 tracing-indicatif = { workspace = true }
 vakint = { workspace = true }
+vectorize = "0.2.0"
 gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
 
 [dependencies.clap]
@@ -139,7 +145,8 @@ features = [
 ]
 
 [dev-dependencies]
-insta = { workspace = true, features = ["json", "ron", "serde"] }
+criterion = { version = "0.5", features = ["html_reports"] }
+insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
 # oneloop_bridge = { git = "https://github.com/SecretGmG/OneLOopBridge", version = "0.2.0" }
 
 [build-dependencies]
@@ -149,9 +156,12 @@ insta = { workspace = true, features = ["json", "ron", "serde"] }
 [features]
 default = []
 fail-on-warnings = []
+fjcore = []
 higher_loops = []
-python = ["dep:pyo3", "three-dimensional-reps/python"]
+pyo3-extension-module = ["pyo3/extension-module"]
+python_abi = ["pyo3?/abi3", "pyo3?/abi3-py37"]
+python_api = ["pyo3"]
 # insta.opt-level = 3
-python-stubs = ["dep:pyo3-stub-gen", "python"]
+python_stubgen = ["dep:pyo3-stub-gen", "python_api"]
 
 # use-system-gmp = ["rug/gmp-mpfr-sys/use-system-libs"]
