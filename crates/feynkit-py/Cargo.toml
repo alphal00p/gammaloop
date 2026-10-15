@@ -45,7 +45,7 @@ features = ["python_export"]
 
 [features]
 default = ["ufo", "native"]
-# Generic Linnet graph exports and partial-topology Python filters are opt-in.
+# Generic Linnet graph exports are opt-in; callbacks use core Symbolica graphs.
 linnet-python = ["dep:linnet-py"]
 native = [
   "linnet-render-py/native", "linnet-py?/native", "feynkit-amplitude/native", "spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native", "feynkit-kinematics/native"]

@@ -405,6 +405,27 @@ impl PyDiagramEdge {
         )
     }
 
+    /// Return this physical edge's symbolic energy component before momentum routing.
+    ///
+    /// Use this scalar expression to build polynomial numerators for CFF energy integration.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> energy = edge.energy_expression()
+    /// >>> quadratic = energy ** 2
+    fn energy_expression(&self) -> PyResult<PythonExpression> {
+        if self.is_dummy() {
+            return Err(error::DiagramError::new_err("dummy edges have no momentum"));
+        }
+        let symbols = PropagatorSymbols {
+            momentum: feynkit_graph::symbols::momentum(),
+            denominator: feynkit_graph::symbols::denominator(),
+        };
+        Ok(symbols.energy(EdgeIndex(self.id)).into())
+    }
+
     /// Return the oriented edge momentum as a rank-one Minkowski TensorExpression.
     ///
     /// The default is Q(edge, mink(D)). With ``in_lmb=True``, return its linear
@@ -2055,7 +2076,10 @@ struct DiagramSelection {
 ///
 /// Examples
 /// --------
-/// Using the setup in the ``FeynmanDiagram`` class example:
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.phi4()
+/// >>> diagram = model.process(["phi", "phi"], ["phi", "phi"]).generate_diagrams(loops=1, progress=None).diagrams[0]
 ///
 /// >>> endpoints = [(half.id, half.vertex, half.edge.particle_name) for half in diagram.half_edges]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -2103,7 +2127,10 @@ pub struct PyDiagramHalfEdge {
 ///
 /// Examples
 /// --------
-/// Using the setup in the ``FeynmanDiagram`` class example:
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.phi4()
+/// >>> diagram = model.process(["phi", "phi"], ["phi", "phi"]).generate_diagrams(loops=1, progress=None).diagrams[0]
 ///
 /// >>> partitions = diagram.all_cuts([0], [1])
 /// >>> boundary_edges = partitions[0].boundary_left.edges
@@ -2179,7 +2206,10 @@ impl PyCutPartition {
 ///
 /// Examples
 /// --------
-/// Using the setup in the ``FeynmanDiagram`` class example:
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.phi4()
+/// >>> diagram = model.process(["phi", "phi"], ["phi", "phi"]).generate_diagrams(loops=1, progress=None).diagrams[0]
 ///
 /// >>> tree = diagram.depth_first_traverse(0)
 /// >>> discovery_order = [vertex.id for vertex in tree.nodes]
@@ -2781,7 +2811,7 @@ impl PyFeynmanDiagram {
         self.restrict_region(py, region)
     }
 
-    /// Select by predicates on FeynKit vertices, edges, and half-edges.
+    /// Select by predicates on diagram vertices, edges, and half-edges.
     ///
     /// Examples
     /// --------
@@ -4124,7 +4154,7 @@ impl PyFeynmanDiagram {
             .collect()
     }
 
-    /// Return FeynKit half-edges with native diagram IDs and physics edge objects.
+    /// Return diagram half-edges with native diagram IDs and physics edge objects.
     ///
     /// Examples
     /// --------
