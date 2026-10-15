@@ -399,7 +399,9 @@ end_anchor = "    fn series_preserving_factors(\n        &self,\n        variabl
 # Zero-metadata review: only an exactly zero complex-float component takes
 # its nonzero partner precision. Nonzero bytes and factorized spectators remain
 # unchanged; unequal finite coefficients remain distinct in the regression.
-digest = "127cb0e76070591ca371de8ba941ada3e087187e"
+# Reviewed 2026-10-15: Exact complex content uses rational-coordinate GCDs
+# and a canonical unit phase, retaining opaque bodies and inverse guards.
+digest = "4759b305455f1e7f26aa1fab03106f28dd551f2c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/overlap_numerators.rs"

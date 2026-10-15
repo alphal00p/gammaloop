@@ -70,6 +70,12 @@ powers, and guarded inverse factors remain opaque. Positive scalar powers share
 their complete base with linear occurrences; a summed base remains one opaque
 factor. Restoring it may expose another linear cancellation, so the same
 protected pass repeats only after a strict expression-size decrease.
+Literal numeric content uses the real rational GCD of all real and imaginary
+coefficient coordinates, including implicit units. The first coefficient in
+coefficient-free body order chooses a phase in `{1, -1, i, -i}` so its remaining
+real part is positive and its imaginary part is nonnegative. This preserves
+opposite and quarter-turned power owners without invoking Gaussian-integer GCD
+or changing any symbolic factor boundary.
 Each finite-component pass makes one bounded collection in repeated literal
 scalar factors. Complete scalar sums are admitted only after checking their
 native scalar interface. A retained sum owns its proper additive subsets,
