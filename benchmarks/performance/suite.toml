@@ -42,7 +42,7 @@ points = [
 
 [evaluator-aliases]
 card = "scalar-gl16-evaluators.toml"
-bench_duration_seconds = 0.2
+bench_duration_seconds = 0.75
 evaluator_methods = ["SingleParametric", "Iterative", "SummedFunctionMap", "Summed"]
 reference_method = "SingleParametric"
 required_metrics = ["generation_seconds", "evaluator_build_seconds", "warm_runtime_seconds_per_sample", "generation_peak_ram_bytes"]

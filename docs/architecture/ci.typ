@@ -238,8 +238,10 @@ compiled evaluators and isolated cold-load cost remain outside this fast gate.
 The extended scalar correctness suite supplies timing telemetry for the
 long Lorentz-quartic cases, including GL16 q₇⁴, on main.
 The requested benchmark duration per point is five seconds for GL15, two
-seconds for the scalar route cases, 0.2 seconds per evaluator for GL16 and
-one second per evaluator for GL1. Every point uses ten warmup samples and ten timed batches. The CLI
+seconds for the scalar route cases, 0.75 seconds per evaluator for GL16 and
+one second per evaluator for GL1. Shorter GL16 runs let runner timing noise
+alone make unchanged warm runtimes inconclusive, while a comparison with
+confirmation must still fit its four-minute budget. Every point uses ten warmup samples and ten timed batches. The CLI
 calibrates sample counts from its warmup, so the actual warmed loop can be
 shorter than that target. Each revision generates its state once per trial,
 regardless of the number of methods.
