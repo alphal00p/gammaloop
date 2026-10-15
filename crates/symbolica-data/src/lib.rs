@@ -100,14 +100,29 @@ impl Asset {
         if let Some(bytes) = data.bytes.get(&(self.name, self.sha256)) {
             return Ok(bytes.clone());
         }
-        let file = data.directories.iter().find_map(|root| {
-            match fs::File::open(root.join(self.name)) {
+        let install = if self.name.starts_with("render/fonts/") {
+            "install symbolica-fonts with `python -m pip install symbolica-fonts`"
+        } else if self.name.starts_with("vakint/") {
+            "install symbolica-vakint-data with `python -m pip install symbolica-vakint-data`"
+        } else {
+            "install its resource wheel"
+        };
+        let file = data
+            .directories
+            .iter()
+            .find_map(|root| match fs::File::open(root.join(self.name)) {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => None,
                 result => Some(result),
-            }
-        }).unwrap_or_else(|| Err(io::Error::new(io::ErrorKind::NotFound, format!(
-            "data asset {} is unavailable; install its resource wheel or configure a data directory", self.name
-        ))))?;
+            })
+            .unwrap_or_else(|| {
+                Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!(
+                        "data asset {} is unavailable; {install} or configure a data directory",
+                        self.name
+                    ),
+                ))
+            })?;
         let mut bytes = Vec::new();
         file.take(self.size + 1).read_to_end(&mut bytes)?;
         self.validate(&bytes)?;
@@ -188,6 +203,29 @@ impl Asset {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_resources_name_the_installable_package() {
+        for (name, package) in [
+            ("render/fonts/missing.otf", "symbolica-fonts"),
+            ("vakint/missing.txt", "symbolica-vakint-data"),
+        ] {
+            let asset = Asset {
+                name,
+                sha256: "",
+                size: 0,
+                description: "missing resource fixture",
+            };
+            let error = asset.bytes().unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::NotFound);
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("pip install {package}"))
+            );
+            assert!(!asset.is_loaded());
+        }
+    }
 
     #[test]
     fn failed_load_and_corrupt_install_do_not_prevent_a_verified_retry() {
