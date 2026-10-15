@@ -191,7 +191,7 @@ impl WitnessCache {
     }
 }
 
-fn witness_atom_bytes(witness: &ReplacementRules, mut bytes: usize) -> Option<usize> {
+pub(super) fn witness_atom_bytes(witness: &ReplacementRules, mut bytes: usize) -> Option<usize> {
     let mut add = |value: &Atom| -> Option<()> {
         bytes = bytes.checked_add(value.as_view().get_byte_size())?;
         Some(())

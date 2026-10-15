@@ -62,6 +62,14 @@ mod entry_probe_diagnostics;
 #[path = "five_loop/test_profiles.rs"]
 mod test_profiles;
 
+#[cfg(all(
+    test,
+    feature = "weighted-lowering-diagnostics",
+    feature = "feynkit-ingress"
+))]
+#[path = "five_loop/weighted_diagnostic.rs"]
+mod weighted_diagnostic;
+
 #[cfg(all(test, feature = "feynkit-ingress"))]
 #[path = "../../tests/fixtures/qcd_ladder/slow.rs"]
 mod slow;
@@ -193,13 +201,37 @@ impl Vakint {
         integral: AtomView,
         numerator: AtomView,
     ) -> Result<Option<ReplacementRules>, VakintError> {
-        self.topologies
+        #[cfg(all(
+            test,
+            feature = "weighted-lowering-diagnostics",
+            feature = "feynkit-ingress"
+        ))]
+        let diagnostic_thread = weighted_diagnostic::begin_search(integral, numerator)?;
+        let result = self
+            .topologies
             .match_topologies_to_user_input_with_acceptance(
                 integral,
                 settings.allow_unknown_integrals,
                 settings.rustred_momentum_match_limits,
-                |matched| self.rustred_matched_input_key(settings, numerator, matched),
-            )
+                |matched| {
+                    #[cfg(all(
+                        test,
+                        feature = "weighted-lowering-diagnostics",
+                        feature = "feynkit-ingress"
+                    ))]
+                    weighted_diagnostic::assert_thread(diagnostic_thread)?;
+                    self.rustred_matched_input_key(settings, numerator, matched)
+                },
+            );
+        #[cfg(all(
+            test,
+            feature = "weighted-lowering-diagnostics",
+            feature = "feynkit-ingress"
+        ))]
+        if let Ok(selected) = &result {
+            weighted_diagnostic::end_search(selected.as_ref())?;
+        }
+        result
     }
 
     /// Order already verified matcher witnesses by their exact surviving
@@ -211,6 +243,12 @@ impl Vakint {
         numerator: AtomView,
         matched: &ReplacementRules,
     ) -> Result<Option<Vec<(IntegralKey, Atom)>>, VakintError> {
+        #[cfg(all(
+            test,
+            feature = "weighted-lowering-diagnostics",
+            feature = "feynkit-ingress"
+        ))]
+        let diagnostic_original = matched;
         let mut matched = matched.clone();
         matched.apply_replacement_rules()?;
         let mut term = crate::VakintTerm {
@@ -238,16 +276,35 @@ impl Vakint {
             settings.rustred_scalar_numerator_limits,
         )
         .map_err(failure)?;
+        #[cfg(all(
+            test,
+            feature = "weighted-lowering-diagnostics",
+            feature = "feynkit-ingress"
+        ))]
+        let diagnostic_before = weighted_diagnostic::before_lowering()?;
         let lowered = scalar
             .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
             .map_err(failure)?;
         let mut key = Vec::with_capacity(lowered.terms().len());
-        for term in lowered.terms() {
+        for (_term_index, term) in lowered.terms().iter().enumerate() {
             if !prepared
                 .routed_entry_is_admitted(term.integral())
                 .map_err(failure)?
             {
                 log::debug!(target: "vakint::five_loop_match", "phase=candidate_rejected lowered_count={} rejected_key={:?} lowered_keys_prefix={:?}", lowered.terms().len(), term.integral().powers(), lowered.terms().iter().take(4).map(|term| term.integral().powers()).collect::<Vec<_>>());
+                #[cfg(all(
+                    test,
+                    feature = "weighted-lowering-diagnostics",
+                    feature = "feynkit-ingress"
+                ))]
+                weighted_diagnostic::candidate(
+                    diagnostic_original,
+                    &input,
+                    &lowered,
+                    Some(_term_index),
+                    None,
+                    diagnostic_before,
+                )?;
                 return Ok(None);
             }
             key.push((
@@ -256,6 +313,19 @@ impl Vakint {
             ));
         }
         key.sort();
+        #[cfg(all(
+            test,
+            feature = "weighted-lowering-diagnostics",
+            feature = "feynkit-ingress"
+        ))]
+        weighted_diagnostic::candidate(
+            diagnostic_original,
+            &input,
+            &lowered,
+            None,
+            Some(&key),
+            diagnostic_before,
+        )?;
         Ok(Some(key))
     }
 

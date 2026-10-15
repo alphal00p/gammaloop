@@ -62,6 +62,8 @@ test-log = "0.2.19"
 feynkit-ingress = []
 # Expose candidate diagnostics and offline validation helpers.
 experimental-rustred = []
+# Local dependent-libtest gate; no default runtime observation or policy knob.
+weighted-lowering-diagnostics = ["rustred/weighted-lowering-diagnostics"]
 python_stubgen = [
   "dep:pyo3-stub-gen",
   "feynkit-py/python_stubgen",

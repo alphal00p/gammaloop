@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[path = "../../../examples/five_loop_cancellation_fixtures/mod.rs"]
-mod cancellation_fixtures;
+pub(super) mod cancellation_fixtures;
 #[path = "r2_fixtures.rs"]
 mod fixtures;
 use fixtures::{Fixture, Result};
@@ -121,7 +121,7 @@ fn r2_physical_fixture_native_lowering_and_dot_transport() -> Result<()> {
     Ok(())
 }
 
-fn engine() -> Result<(Vakint, VakintSettings)> {
+pub(super) fn engine() -> Result<(Vakint, VakintSettings)> {
     let package = PathBuf::from(
         std::env::var_os("VAKINT_SAVED_APPLICATION")
             .ok_or("set VAKINT_SAVED_APPLICATION to the externally exported R2/D10 publication")?,
