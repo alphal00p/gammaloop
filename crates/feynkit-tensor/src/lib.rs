@@ -19,7 +19,7 @@ mod reduction;
 mod weingarten;
 
 pub use reduction::{
-    ContractionOrbit, FeynmanDiagramTensorExt, TensorReducer, TensorReduction,
-    TensorReductionError, TensorReductionTerm,
+    ContractionOrbit, FeynmanDiagramTensorExt, RepeatedIndexCompatibility, TensorReducer,
+    TensorReduction, TensorReductionError, TensorReductionTerm,
 };
 pub use weingarten::{CosetType, OrthogonalWeingarten, WeingartenError};
