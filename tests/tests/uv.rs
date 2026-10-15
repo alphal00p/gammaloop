@@ -3244,9 +3244,10 @@ fn genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs() -> Res
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const VACUUM_TADPOLE: &str = r#"
         digraph vacuum_tadpole {
+            projector=1
             edge [num=1 mass=2]
             node [num=1]
-            a -> a [id=0 lmb_id=0]
+            a -> a [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
         }
     "#;
     const VACUUM_RUNTIME: &str = r#"
@@ -3591,7 +3592,12 @@ fn classified_local_spinneys(
         let graph = &amplitude_graph.graph;
         classified.extend(
             graph
-                .classified_spinneys(&graph.full_filter(), settings, &graph.loop_momentum_basis)?
+                .classified_spinneys(
+                    &graph.full_filter(),
+                    &graph.model,
+                    settings,
+                    &graph.loop_momentum_basis,
+                )?
                 .into_iter()
                 .map(|spinney| {
                     let mut edge_ids = graph
@@ -3600,7 +3606,7 @@ fn classified_local_spinneys(
                         .collect::<Vec<_>>();
                     edge_ids.sort_unstable();
                     ClassifiedLocalSpinney {
-                        identifier: graph.ct_identifier(spinney.filter()),
+                        identifier: graph.ct_identifier(spinney.filter(), &graph.model),
                         edge_ids,
                         n_components: spinney.n_components(),
                         scheme: spinney.renormalization_scheme,
@@ -4547,6 +4553,7 @@ fn run_dgse_local_ir_profiles_are_non_vacuous(
         );
     }
     let soft_export = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(
+        &subtracted.state.model,
         "dgse",
         0,
         &gammalooprs::uv::export::UVForestExportSettings { computed: true },
@@ -4648,6 +4655,7 @@ fn run_dgse_local_ir_profiles_are_non_vacuous(
             .resolve_process_ref(Some(&ProcessRef::Unqualified("dgse".to_string())))?;
         let uv_export = uv_only.state.process_list.processes[uv_process_id]
             .export_uv_forest_graph(
+                &uv_only.state.model,
                 "dgse",
                 0,
                 &gammalooprs::uv::export::UVForestExportSettings { computed: true },
@@ -5177,13 +5185,9 @@ fn soft_ct_state_round_trip_child() -> Result<()> {
                         .process_list
                         .get_integrand(process_id, NAME)?
                         .require_generated()?;
-                    let export = loaded.state.process_list.processes[process_id].export_uv_forest_graph(
-NAME,
-0,
-                        &gammalooprs::uv::export::UVForestExportSettings {
+                    let export = loaded.state.process_list.processes[process_id].export_uv_forest_graph(&loaded.state.model, NAME, 0, &gammalooprs::uv::export::UVForestExportSettings {
                             computed: true,
-                        },
-                    )?;
+                        })?;
                     assert_unique_uv_forest_term_identities(
                         &export,
                         "fresh-process soft-CT state",
@@ -5381,7 +5385,7 @@ fn local_ir_disconnected_completed_components_form_nonzero_union() -> Result<()>
         .name("local-ir-disconnected-replay".to_string())
         .stack_size(64 * 1024 * 1024)
         .spawn(move || -> Result<()> {
-            use gammalooprs::graph::parse::IntoGraph;
+            use gammalooprs::graph::parse::IntoFinalizedRuntimeGraph;
 
             const NAME: &str = "local_ir_dod2_scalar_spectacles";
             let mut spectacles =
@@ -5414,13 +5418,9 @@ fn local_ir_disconnected_completed_components_form_nonzero_union() -> Result<()>
             let process_id = spectacles
                 .state
                 .resolve_process_ref(Some(&ProcessRef::Unqualified(NAME.to_string())))?;
-            let export = spectacles.state.process_list.processes[process_id].export_uv_forest_graph(
-NAME,
-0,
-                &gammalooprs::uv::export::UVForestExportSettings {
+            let export = spectacles.state.process_list.processes[process_id].export_uv_forest_graph(&spectacles.state.model, NAME, 0, &gammalooprs::uv::export::UVForestExportSettings {
                     computed: true,
-                },
-            )?;
+                })?;
             assert_unique_uv_forest_term_identities(
                 &export,
                 "disconnected spectacles forest",
@@ -5428,11 +5428,13 @@ NAME,
             let mut nodes = BTreeMap::<String, Atom>::new();
             for term in export.node_terms {
                 let graph: gammalooprs::graph::Graph =
-                    term.dot.as_str().into_graph(&spectacles.state.model)?;
+                    term.dot.as_str().into_finalized_runtime_graph(&spectacles.state.model)?;
+                let numerator =
+                    feynkit_graph::NumeratorInterface::export(&graph.global_prefactor.num).0;
                 nodes
                     .entry(term.node_key)
-                    .and_modify(|sum| *sum += &graph.global_prefactor.num)
-                    .or_insert(graph.global_prefactor.num);
+                    .and_modify(|sum| *sum += &numerator)
+                    .or_insert(numerator);
             }
             assert_eq!(
                 nodes.len(),
@@ -5558,7 +5560,7 @@ fn consecutive_soft_components_have_exact_forest_and_cli_profile() -> Result<()>
         .name("consecutive-soft-components".to_string())
         .stack_size(64 * 1024 * 1024)
         .spawn(move || -> Result<()> {
-            use gammalooprs::graph::parse::IntoGraph;
+            use gammalooprs::graph::parse::IntoFinalizedRuntimeGraph;
 
             const NAME: &str = "local_consecutive_soft_scalar_bubbles";
             const CARD: &str = "local_consecutive_soft_scalar_bubbles.toml";
@@ -5613,19 +5615,15 @@ fn consecutive_soft_components_have_exact_forest_and_cli_profile() -> Result<()>
             let process_id = subtracted
                 .state
                 .resolve_process_ref(Some(&ProcessRef::Unqualified(NAME.to_string())))?;
-            let export = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(
-NAME,
-0,
-                &gammalooprs::uv::export::UVForestExportSettings {
+            let export = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(&subtracted.state.model, NAME, 0, &gammalooprs::uv::export::UVForestExportSettings {
                     computed: true,
-                },
-            )?;
+                })?;
             assert_unique_uv_forest_term_identities(&export, "consecutive soft forest");
 
             let mut atoms_by_identity = BTreeMap::new();
             for term in &export.node_terms {
                 let graph: gammalooprs::graph::Graph =
-                    term.dot.as_str().into_graph(&subtracted.state.model)?;
+                    term.dot.as_str().into_finalized_runtime_graph(&subtracted.state.model)?;
                 let identity = UVForestTermIdentity::from(term);
                 assert!(
                     atoms_by_identity
@@ -5757,7 +5755,7 @@ fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
                 .derived_data
                 .representations
                 .values()
-                .flat_map(|data| data.all_mighty_integrand.iter().map(|(_, atom)| atom))
+                .flat_map(|data| data.all_mighty_integrand.expressions())
             {
                 let _ = expression.replace_map(|view, _, _| {
                     if let AtomView::Fun(function) = view
@@ -5824,6 +5822,8 @@ fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
 
 mod slow {
     use super::*;
+    use gammalooprs::model::ModelGammaLoopExt;
+    use gammalooprs::model::ModelGammaLoopExt;
 
     #[test]
     fn soft_ir_4d_representations_layouts_and_forests_match() -> Result<()> {
@@ -6273,6 +6273,7 @@ mod slow {
         // focused operator tests independently retain U, S, and US.
         let structural_forest = subtracted.state.process_list.processes[process_id]
             .export_uv_forest_graph(
+                &subtracted.state.model,
                 name,
                 0,
                 &gammalooprs::uv::export::UVForestExportSettings { computed: false },
@@ -6527,11 +6528,7 @@ mod slow {
             .resolve_process_ref(Some(&ProcessRef::Unqualified(
                 "local_nested_soft_top_self_energy".to_string(),
             )))?;
-        let structural_forest = nested_soft.state.process_list.processes[process_id].export_uv_forest_graph(
-"local_nested_soft_top_self_energy",
-0,
-            &gammalooprs::uv::export::UVForestExportSettings { computed: false },
-        )?;
+        let structural_forest = nested_soft.state.process_list.processes[process_id].export_uv_forest_graph(&nested_soft.state.model, "local_nested_soft_top_self_energy", 0, &gammalooprs::uv::export::UVForestExportSettings { computed: false })?;
         assert!(
             structural_forest.node_terms.is_empty(),
             "a structure-only nested H/H export must not construct local atoms",
@@ -6771,11 +6768,7 @@ child_only_uv.total > 0 && child_only_uv.resolved > 0
                 let process_id = subtracted
             .state
             .resolve_process_ref(Some(&ProcessRef::Unqualified(NAME.to_string())))?;
-        let structural_forest = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(
-"soft_ir",
-0,
-            &gammalooprs::uv::export::UVForestExportSettings { computed: false },
-        )?;
+        let structural_forest = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(&subtracted.state.model, "soft_ir", 0, &gammalooprs::uv::export::UVForestExportSettings { computed: false })?;
         assert!(
             structural_forest.node_terms.is_empty(),
             "a structure-only Appendix-B.1 export must not construct local atoms",
@@ -6786,11 +6779,7 @@ child_only_uv.total > 0 && child_only_uv.resolved > 0
             "Appendix-B.1 must contain the root, three singleton operations, and the two allowed child-to-outer chains",
         );
 
-        let computed_forest = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(
-"soft_ir",
-0,
-            &gammalooprs::uv::export::UVForestExportSettings { computed: true },
-        )?;
+        let computed_forest = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(&subtracted.state.model, "soft_ir", 0, &gammalooprs::uv::export::UVForestExportSettings { computed: true })?;
         assert_unique_uv_forest_term_identities(
             &computed_forest,
             "Appendix-B.1 direct-3D forest",
@@ -7178,7 +7167,7 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
                                 )
                             })?;
                         assert_eq!(
-                            (value.re.0, value.im.0),
+                            (value.re, value.im),
                             (expected_value, 0.0),
                             "{integrand} must use {parameter}={expected_value}",
                         );
@@ -7191,13 +7180,14 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
                     else {
                         return Err(eyre::eyre!("top-bubble fixture must be an amplitude"));
                     };
-                    let color_closure = amplitudes
+                    let color_closure = feynkit_graph::NumeratorInterface::export(&amplitudes
                         .get(integrand)
                         .ok_or_else(|| eyre::eyre!("missing integrand {integrand}"))?
                         .graphs[0]
                         .graph
                         .global_prefactor
-                        .num
+                        .num)
+                        .0
                         .to_canonical_string();
                     assert!(
                         color_closure.contains("1/3")
@@ -7350,11 +7340,7 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
                 let process_id = soft_ir
                     .state
                     .resolve_process_ref(Some(&ProcessRef::Unqualified(PROCESS.to_string())))?;
-                let structural_forest = soft_ir.state.process_list.processes[process_id].export_uv_forest_graph(
-"soft_ir",
-0,
-                    &gammalooprs::uv::export::UVForestExportSettings { computed: false },
-                )?;
+                let structural_forest = soft_ir.state.process_list.processes[process_id].export_uv_forest_graph(&soft_ir.state.model, "soft_ir", 0, &gammalooprs::uv::export::UVForestExportSettings { computed: false })?;
                 assert!(
                     structural_forest.node_terms.is_empty(),
                     "a structure-only top-bubble export must not construct local atoms",

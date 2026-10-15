@@ -883,11 +883,12 @@ mod raised_cross_section_tests;
 
 #[cfg(test)]
 mod tests {
+
     use symbolica::state::State;
 
     use crate::{
-        GammaLoopContextContainer, dot,
-        graph::{Graph, parse::IntoGraph},
+        GammaLoopContextContainer,
+        graph::Graph,
         initialisation::test_initialise,
         settings::{
             RuntimeSettings,
@@ -943,19 +944,26 @@ mod tests {
         // Use the model routing produced by graph import for the persistence roundtrip.
         let model = load_generic_model("sm");
 
-        let graph: Graph = dot!(
-            digraph G{
-                e1      [style=invis]
-                e2      [style=invis]
-                e1 -> n1  [particle=H]
-                n4 -> e2    [particle=H]
-                n1 -> n2    [particle=H]
-                n1 -> n3    [particle=H]
-                n2 -> n3    [particle=t]
-                n3 -> n4    [particle=t]
-                n4 -> n2    [particle=t]
-            }
+        let graph: Graph = crate::graph::Graph::import_dot(
+            stringify!(
+                digraph G{
+                    e1      [style=invis]
+                    e2      [style=invis]
+                    e1 -> n1  [particle=H]
+                    n4 -> e2    [particle=H]
+                    n1 -> n2    [particle=H]
+                    n1 -> n3    [particle=H]
+                    n2 -> n3    [particle=t]
+                    n3 -> n4    [particle=t]
+                    n4 -> n2    [particle=t]
+                }
+            ),
+            &crate::utils::load_generic_model("sm"),
         )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
         .unwrap();
         let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
 

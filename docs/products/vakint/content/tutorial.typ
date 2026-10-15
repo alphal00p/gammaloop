@@ -1,7 +1,7 @@
 #import "../../shared.typ": callout
 
 #let tutorial = [
-= Tutorial
+= Match your first integral
 
 This tutorial parses and canonicalizes one vacuum integral in Rust. It deliberately disables
 all evaluation backends, so the first success exercises Vakint's topology library and momentum
@@ -24,14 +24,13 @@ cargo test --locked -p alphal00p-docs-examples
 ```
 
 Vakint uses Symbolica; ensure your use satisfies its license terms. External integration tools
-are unnecessary for the matching-only settings below. The documentation test compiles this
-example against the same workspace revision as the published Rustdoc.
+are unnecessary for the matching-only settings below. Use the same workspace revision as the
+published Rustdoc for matching signatures.
 
 == Match a one-loop topology
 
-The following is a complete program. The documentation test compiles it directly; to inspect
-its output, place the same program in a scratch binary target in this checkout and run that
-target.
+The following is a complete native Rust program. Place it in a scratch binary target in this
+checkout and run that target to inspect its output.
 
 // docs-example: compile vakint-first-match
 ```rust
@@ -64,10 +63,10 @@ the `canonical:` line contains the short form `topo(I1L(muvsq,1))`, and the prog
 probing an external executable. Other canonical spellings may reorder identifiers or momentum
 routing; the normalized result, not the input's labels, is the comparison boundary.
 
-#callout("Verification scope and cost", [
-  The docs harness compiles this source against the current workspace and syntax-checks the setup
-  command. Run the program in a provisioned checkout to verify that both printed forms are
-  produced and the canonical form is recognized. Expect a dependency-heavy cold build to take
+#callout("Running locally and cost", [
+  Run the program locally in a provisioned checkout; this native Rust example cannot run in the
+  browser. Check that both printed forms are produced and the canonical form is recognized.
+  Expect a dependency-heavy cold build to take
   minutes and the matching operation itself to take seconds. Symbolica may refuse a second
   concurrent unlicensed process; stop the other instance or use a licensed environment before
   retrying.

@@ -1,7 +1,11 @@
 #import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let overview = [
-= Overview
+#context if target() == "html" {
+  html.elem("span", attrs: (id: "overview"))[]
+} else {
+  heading(level: 1)[Overview]
+}
 
 GammaLoop is alpha-stage research software that computes numerical amplitude integrands and
 uses Local Unitarity for differential partonic cross sections. Its current
@@ -84,7 +88,7 @@ A source checkout is still needed to change GammaLoop or to work through reposit
 cards. Its supported development path is the repository's Nix shell, or a local Rust toolchain
 together with `just`, a recent GNU toolchain, and Python 3.11 or newer when building bindings.
 FORM 4.2.1 or newer is needed for analytical integration of integrated UV counterterms. UFO
-model import also needs Python `ufo-model-loader>=1.0.0` and `symbolica>=3.0.0`.
+model import also needs Python `ufo-model-loader>=1.0.1` and `symbolica>=3.0.0`.
 
 Built-in model names such as `sm` select bundled JSON; an explicit directory such
 as `./assets/models/ufo/sm` selects UFO import. Both use the default restriction

@@ -1608,7 +1608,7 @@ fn parse_toml_command_history(value: TomlValue, context: &str) -> Result<Command
 }
 
 #[cfg_attr(
-    feature = "python",
+    feature = "python_api",
     pyo3::pyclass(from_py_object, unsendable, name = "GammaLoopState")
 )]
 #[derive(Clone)]
@@ -1659,7 +1659,17 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // regenerated rather than decoded as the new expression type.
 // Local UV forest contributions remain compatible with this layout because
 // they are combined into one persisted integrand before evaluator construction.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 20;
+// Version 18 combines the canonical FeynKit model and current compact runtime layout.
+// Older states from either development branch must be regenerated.
+// Version 19 retains tensor interfaces in runtime graph fragments and numerator
+// definitions. Older positional archives must be regenerated.
+// Version 20 also retains the graph's global numerator and projector interfaces.
+// Version 21 stores fully indexed tensor interfaces without PartialIndex wire tags.
+// Older positional archives must be regenerated; unresolved ports are not assigned indices.
+// Version 22 combines indexed FeynKit tensors with ordered CFF/LTD runtime payloads.
+// Main version20 and published FeynKit version21 have incompatible layouts and
+// must be rejected before model parsing, symbolic import or process decoding.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 22;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3685,8 +3695,9 @@ mod tests {
                     }
                 }
                 let mut model = state.model.clone();
-                model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(1.0)));
-                model.recompute_dependents().unwrap();
+                let mut card = model.default_param_card();
+                card.insert("aS".into(), Complex::new_re(F(1.0)));
+                model.apply_param_card(&card).unwrap();
                 params.update_model_values(&model).unwrap();
                 let coupling = model.get_coupling("GC_12");
                 let position = params.pairs.model_parameters.value_range.start
@@ -3695,12 +3706,14 @@ mod tests {
                         .model_parameters
                         .params
                         .iter()
-                        .position(|param| *param == Atom::from(coupling.name))
+                        .position(|param| {
+                            *param == Atom::from(UFOSymbol::from(coupling.name.as_str()))
+                        })
                         .unwrap();
                 for (value_index, values) in params.values.iter().enumerate() {
                     assert_eq!(
                         values[position * (value_index + 1)],
-                        coupling.value.unwrap().map(F)
+                        Complex::new(F(coupling.value.unwrap().re), F(coupling.value.unwrap().im))
                     );
                 }
                 for name in ["G", "orphan_ufo_printer"] {
@@ -3730,9 +3743,14 @@ mod tests {
         // Force a different registration order from the alphabetical manifest replay.
         let _ = UFOSymbol::from("GC_12");
         state.model = load_generic_model("sm");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
-        let mut graphs = Graph::from_string(
-            "digraph model_values { node [num=1]; edge [num=1, mass=0]; A -> A; }",
+        state.model_parameters = state.model.default_param_card();
+        let mut graphs = Graph::from_finalized_runtime_string(
+            r#"digraph model_values {
+                num=1; overall_factor=1; overall_factor_evaluated=1; projector=1;
+                A [num=1];
+                A:0 -> A:1 [particle="a", num=1, mass=0, id=0, lmb_id=0,
+                    lmb_rep="K(0,a___)", source="{ufo_order:0}", sink="{ufo_order:1}"];
+            }"#,
             &state.model,
         )
         .unwrap();
@@ -5094,16 +5112,22 @@ commands = ["quit -n"]
 
     #[test]
     fn state_save_rejects_legacy_target_before_writing() {
-        let temp = tempdir().unwrap();
-        let symbolica_state = temp.path().join("symbolica_state.bin");
-        fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 1\n").unwrap();
-        fs::write(&symbolica_state, b"legacy sentinel").unwrap();
-        let mut state = State::new_test();
+        for version in [1, 20] {
+            let temp = tempdir().unwrap();
+            let symbolica_state = temp.path().join("symbolica_state.bin");
+            fs::write(
+                temp.path().join(STATE_MANIFEST_FILE),
+                format!("version = {version}\n"),
+            )
+            .unwrap();
+            fs::write(&symbolica_state, b"legacy sentinel").unwrap();
+            let mut state = State::new_test();
 
-        let err = state.save(temp.path(), true, false).unwrap_err();
-        assert!(err.to_string().contains("cannot be migrated"));
-        assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
-        assert!(!temp.path().join("model.json").exists());
+            let err = state.save(temp.path(), true, false).unwrap_err();
+            assert!(err.to_string().contains("cannot be migrated"));
+            assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
+            assert!(!temp.path().join("model.json").exists());
+        }
     }
 
     #[test]
@@ -5121,6 +5145,24 @@ commands = ["quit -n"]
 
         let err = load_state_manifest(temp.path()).unwrap_err();
         assert!(format!("{err}").contains("newer than this binary supports"));
+    }
+
+    #[test]
+    fn state_manifest_rejects_pre_feynkit_unification_versions() {
+        let temp = tempdir().unwrap();
+        let legacy_manifest = StateManifest {
+            version: 1,
+            ufo_print_symbols: Vec::new(),
+            linnet_subgraph_print_labels: Vec::new(),
+        };
+        fs::write(
+            temp.path().join(STATE_MANIFEST_FILE),
+            toml::to_string_pretty(&legacy_manifest).unwrap(),
+        )
+        .unwrap();
+
+        let err = load_state_manifest(temp.path()).unwrap_err();
+        assert!(format!("{err}").contains("regenerate the saved state"));
     }
 
     #[test]
@@ -5212,11 +5254,15 @@ commands = ["quit -n"]
         let bubble = build_generated_scalar_bubble_state_with_external_backend();
         let mut kite = State::new_test();
         kite.model = load_generic_model("scalars");
-        kite.model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(1.0)));
-        kite.model_parameters = InputParamCard::default_from_model(&kite.model);
+        kite.model_parameters = kite.model.default_param_card();
+        kite.model_parameters
+            .insert("mass_scalar_1".into(), Complex::new_re(F(1.0)));
+        kite.model.apply_param_card(&kite.model_parameters)?;
         kite.import_graphs(
-            Graph::from_path(
-                crate::test_workspace_root().join("tests/resources/graphs/massive_kite.dot"),
+            Graph::import_dot(
+                &std::fs::read_to_string(
+                    crate::test_workspace_root().join("tests/resources/graphs/massive_kite.dot"),
+                )?,
                 &kite.model,
             )?,
             GraphImportOptions {
@@ -5287,10 +5333,11 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         // proposals; the broad components give the shifted Gaussian full support.
         let mut cut = State::new_test();
         cut.model = kite.model.clone();
-        cut.model_parameters = InputParamCard::default_from_model(&cut.model);
+        cut.model_parameters = cut.model.default_param_card();
         cut.import_graphs(
-            Graph::from_string(
+            Graph::import_dot(
                 r#"digraph sampling_cut_bubble {
+                    final_state="scalar_1,scalar_1";
                     num=1; edge [pdg=1001]; node [num=1];
                     ext [style=invis, is_cut=0];
                     ext -> a [id=0];

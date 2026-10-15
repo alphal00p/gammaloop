@@ -4,13 +4,15 @@ use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
     cff::esurface::EsurfaceExistenceStatus,
-    graph::{threshold_counterterms::ThresholdCountertermVariant, FeynmanGraph, Graph},
+    graph::{
+        threshold_counterterms::ThresholdCountertermVariant, FeynmanGraph, FinalizedCut, Graph,
+    },
     integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup, ParamBuilder},
     model::Model,
     processes::{
-        Amplitude, CrossSection, CrossSectionCut, CutId, ProcessCollection,
-        ThresholdCountertermAssociation, ThresholdCountertermMetadataRegistry,
-        ThresholdCountertermMultiplierMetadata, ThresholdCountertermStatus,
+        Amplitude, CrossSection, CutId, ProcessCollection, ThresholdCountertermAssociation,
+        ThresholdCountertermMetadataRegistry, ThresholdCountertermMultiplierMetadata,
+        ThresholdCountertermStatus,
     },
     settings::{global::FrozenCompilationMode, runtime::ParameterizationSettings, RuntimeSettings},
     utils::F,

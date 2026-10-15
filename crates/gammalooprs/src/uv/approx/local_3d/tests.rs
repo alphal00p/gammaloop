@@ -8,9 +8,10 @@ use crate::{
         orientations::GraphOrientation,
         surface::LinearEnergyExpr,
     },
-    dot,
-    graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet, parse::IntoGraph},
+    finalized_runtime_dot,
+    graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet},
     initialisation::test_initialise,
+    numerator::AppliedFeynmanRule,
     settings::global::OrientationPattern,
     utils::GS,
     uv::{
@@ -72,12 +73,13 @@ fn two_edge_graph() -> Result<Graph> {
     Ok(TWO_EDGE_GRAPH
         .get_or_init(|| {
             test_initialise().expect("test model initialization succeeds");
-            dot!(
+            finalized_runtime_dot!(
                 digraph G {
-                    edge [particle="scalar_1"];
+                    projector=1;
+                    edge [particle="scalar_1" num=1];
                     node [num=1];
-                    a -> b [id=0];
-                    a -> b [id=1];
+                    a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                    a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
                 },
                 "scalars"
             )
@@ -1534,12 +1536,13 @@ fn denominator_only_cff_has_no_localizer_fallback() -> Result<()> {
 fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = dot!(
+    let mut graph: Graph = finalized_runtime_dot!(
         digraph replaced_spinney_numerator {
+            projector=1;
             edge [pdg=1000 num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 num="1/(Q(0,spenso::cind(0))+1)"]
-            a -> b [id=1]
+            a -> b [id=0 lmb_id=0 num="1/(Q(0,spenso::cind(0))+1)" source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
         },
         "scalars"
     )?;
@@ -1570,7 +1573,11 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
         topo_order: 0,
     };
 
-    let localized = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
+    let localized = localizer.localize(
+        &AppliedFeynmanRule::new(Atom::one())?.expr,
+        &mut graph,
+        &integrated_node,
+    )?;
 
     assert!(localized.active.iter().any(|(_, atom)| !atom.is_zero()));
     Ok(())
@@ -1580,16 +1587,17 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
 fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = dot!(
+    let mut graph: Graph = finalized_runtime_dot!(
         digraph finite_ct_map {
-            edge [particle="scalar_1"];
+            projector=1;
+            edge [particle="scalar_1" num=1];
             node [num=1];
             external [style=invis];
-            external -> A:0 [id=3];
-            C:1 -> external [id=4];
-            A -> B [id=0];
-            A -> B [id=1];
-            B -> C [id=2];
+            external -> A:0 [id=3 sink="{ufo_order:0}"];
+            C:1 -> external [id=4 source="{ufo_order:1}"];
+            A -> B [id=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"];
+            A -> B [id=1 source="{ufo_order:2}" sink="{ufo_order:1}"];
+            B -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"];
         },
         "scalars"
     )?;
@@ -1642,8 +1650,14 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         topo_order: 0,
     };
 
-    let baseline = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
-    let localized = localizer.localize(&finite_ct, &mut graph, &integrated_node)?;
+    let one = AppliedFeynmanRule::new(Atom::one())?.expr;
+    let baseline = localizer.localize(&one, &mut graph, &integrated_node)?;
+    let localized = localizer.localize(
+        &AppliedFeynmanRule::new(finite_ct.clone())?.expr,
+        &mut graph,
+        &integrated_node,
+    )?;
+    let frozen_kernel = baseline.frozen_integrands.clone();
     let baseline = baseline
         .active
         .iter_orientations()
@@ -1655,8 +1669,159 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         .find_map(|(id, _, integrands)| (id == orientation_id).then_some(integrands))
         .expect("the selected production map has a finite-CT branch");
 
-    assert_eq!(localized, &baseline.map(|atom| atom * &mapped_finite_ct));
-    assert_ne!(localized, &baseline.map(|atom| atom * &finite_ct));
+    let localized = localized.resolved()?;
+    assert_eq!(localized, baseline.map(|atom| atom * &mapped_finite_ct));
+    assert_ne!(localized, baseline.map(|atom| atom * &finite_ct));
+
+    // A nontrivial finite matrix and a later cograph matrix must keep separate
+    // numerator definitions while their scalar CFF weights are assembled.
+    // This fixture is independent of a renormalization prescription.
+    let left = idenso::bis!(4, finite_left);
+    let middle = idenso::bis!(4, finite_middle);
+    let right = idenso::bis!(4, finite_right);
+    let tensor_ct =
+        &finite_ct * spenso::g!(&left, &middle) + Atom::num(3) * idenso::gamma0!(&left, &middle);
+    let marker = crate::uv::marker::UvMarker::new(&crate::uv::UVgenerationSettings {
+        add_marker: true,
+        keep_marker: true,
+        ..Default::default()
+    });
+    let marked = marker.apply(
+        crate::uv::marker::UvOperation::Approx,
+        &graph.full_filter(),
+        &graph.empty_subgraph(),
+        &tensor_ct,
+    );
+    let marked_localized = localizer.localize(
+        &AppliedFeynmanRule::new(marked.clone())?.expr,
+        &mut graph,
+        &integrated_node,
+    )?;
+    let marked_branches = DirectResidueBranches::from_transient(&marked_localized.active)?;
+    let marker_variable = symbolica::symbol!("marker_series_boundary::t");
+    let series = marked_branches.series_preserving_numerators(
+        marker_variable,
+        Atom::Zero.as_view(),
+        0,
+        DirectResidueBranches::numerator_scope().1,
+    )?;
+    assert_eq!(
+        series.materialize(false)?.resolved()?,
+        marked_branches.materialize(false)?.resolved()?
+    );
+    for (key, integrands) in marked_branches.iter_keys() {
+        assert!(
+            integrands
+                .iter()
+                .any(|(_, atom)| atom.contains_symbol(GS.ct_marker))
+        );
+        assert!(
+            integrands
+                .numerators()
+                .iter()
+                .all(|entry| !entry.rhs.expression().contains_symbol(GS.ct_marker))
+        );
+        let mapped = integrands.resolved()?;
+        for operation in [
+            crate::uv::marker::UvOperation::Approx,
+            crate::uv::marker::UvOperation::Integrate,
+        ] {
+            let apply = |atom: &Atom| {
+                marker.apply(
+                    operation,
+                    &graph.full_filter(),
+                    &graph.empty_subgraph(),
+                    atom,
+                )
+            };
+            assert_eq!(
+                integrands.map(apply).resolved()?,
+                mapped.map(apply),
+                "shared marker arguments preserve the complete history for {key:?}"
+            );
+        }
+        let prefix =
+            |atom: &Atom| marker.prefix(&graph.full_filter(), &graph.empty_subgraph(), atom);
+        assert_eq!(integrands.map(prefix).resolved()?, mapped.map(prefix));
+    }
+    let cograph = (&finite_ct + Atom::one()) * idenso::gamma0!(&middle, &right);
+    let tensor_localized = localizer.localize(
+        &AppliedFeynmanRule::new(tensor_ct.clone())?.expr,
+        &mut graph,
+        &integrated_node,
+    )?;
+    assert_eq!(tensor_localized.frozen_integrands, frozen_kernel);
+    let completed = DirectResidueBranches::from_transient(&tensor_localized.active)?
+        .multiply_key_mapped(
+            localizer.orientation,
+            &graph,
+            &crate::numerator::AppliedFeynmanRule::new(cograph.clone())?.expr,
+            DirectResidueBranches::numerator_scope(),
+        )?;
+    let baseline_all = localizer.localize(&one, &mut graph, &integrated_node)?;
+    let matrix_interfaces = [
+        idenso::gamma0!(&left, &middle),
+        idenso::gamma0!(&middle, &right),
+    ]
+    .into_iter()
+    .map(|matrix| {
+        Ok(crate::numerator::AppliedFeynmanRule::new(matrix)?
+            .expr
+            .structure()
+            .clone())
+    })
+    .collect::<Result<Vec<_>>>()?;
+    for (key, integrands) in completed.iter_keys() {
+        assert!(
+            integrands.numerators().len() >= 2,
+            "finite and cograph matrices keep their shared owners"
+        );
+        for expected in &matrix_interfaces {
+            assert!(
+                integrands
+                    .numerators()
+                    .iter()
+                    .any(|entry| entry.rhs.structure() == expected)
+            );
+        }
+        assert!(
+            integrands
+                .numerators()
+                .iter()
+                .all(|entry| matrix_interfaces.contains(entry.rhs.structure()))
+        );
+        for (_, scalar) in integrands.iter() {
+            // The calls have the interfaces of their separately retained
+            // tensor bodies. Inspect only the CFF coefficient, not the calls
+            // themselves, at this scalar boundary.
+            let coefficient = scalar.replace_map(|view, _, output| {
+                if let symbolica::atom::AtomView::Fun(call) = view
+                    && call.get_symbol() == symbolica::symbol!("gammalooprs::uv::numerator_family")
+                {
+                    **output = Atom::one();
+                }
+            });
+            assert!(
+                idenso::tensor::SymbolicTensor::infer_indexed(coefficient)?.is_scalar(),
+                "the CFF weight must not contain an inline finite tensor"
+            );
+        }
+        let baseline = baseline_all
+            .active
+            .iter_orientations()
+            .find_map(|(host, source_map, body)| {
+                (host == key.selector_host && source_map == key.source_edge_energy_map())
+                    .then_some(body)
+            })
+            .expect("the source map is unchanged by a numerator insertion");
+        let finite = key.map_numerator(localizer.orientation, &graph, &tensor_ct)?;
+        let outside = key.map_numerator(localizer.orientation, &graph, &cograph)?;
+        assert_eq!(
+            integrands.resolved()?,
+            baseline.map(|body| body * &finite * &outside),
+            "finite and cograph numerators are each mapped once with the same source key"
+        );
+    }
     Ok(())
 }
 

@@ -6,8 +6,9 @@ commands = [
   # "import graphs ./tests/resources/graphs/epem_dd_dt.dot",
   # "generate",
   # "save dot",
+  # Native GL0 is the former GL2 vertex topology; preserve the same physical input.
   # The virtual cuts require the complementary real-gluon cuts for IR finiteness.
-  "generate xs e+ e- > {d~ d,d~ d g} | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes --only-diagrams",
+  "generate xs e+ e- > {d~ d,d~ d g} | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL0 --clear-existing-processes --only-diagrams",
   "save dot",
   "generate"
   # "integrate"

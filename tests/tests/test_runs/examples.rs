@@ -25,6 +25,8 @@ fn discover_toml_cards(root: &Path, cards: &mut Vec<PathBuf>) -> Result<()> {
                 discover_toml_cards(&path, cards)?;
             }
         } else if !is_ignored_old_card(&path)
+            // Drawing examples also contain Typst package manifests.
+            && path.file_name().and_then(|name| name.to_str()) != Some("typst.toml")
             && path.extension().and_then(|extension| extension.to_str()) == Some("toml")
         {
             cards.push(path);

@@ -832,22 +832,19 @@ mod tests {
 
     #[test]
     fn raised_edge_comparison_preserves_complete_affine_routing() {
-        use crate::{
-            dot,
-            graph::{Graph, parse::from_dot::IntoGraph},
-            initialisation::test_initialise,
-        };
+        use crate::{graph::Graph, initialisation::test_initialise};
         use linnet::half_edge::involution::EdgeIndex;
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph raised_affine_signature {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph raised_affine_signature {
+            graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext -> a [id=0]
-            a -> b [id=1]
-            b -> c [id=2]
-            c -> a [id=3]
-            ext -> c [id=4]
+            ext -> a [id=0 sink="{ufo_order:0}"]
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            b -> c [id=2 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            c -> a [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            ext -> c [id=4 sink="{ufo_order:2}"]
         })
         .unwrap();
         let groups = graph.get_raised_edge_groups();

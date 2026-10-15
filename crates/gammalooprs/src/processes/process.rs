@@ -263,27 +263,17 @@ impl ProcessDefinition {
     }
 
     pub(crate) fn covariant_cut_representatives(&self, model: &Model) -> BTreeMap<isize, isize> {
-        if self.generation_type != GenerationType::CrossSection {
-            return BTreeMap::new();
-        }
-        let (_, unresolved) = self.unresolved_cut_content(model);
-        model
-            .covariant_cut_multiplets
-            .iter()
-            .filter(|(physical, _)| {
-                self.final_pdgs_lists
-                    .iter()
-                    .any(|state| state.contains(physical))
-                    || unresolved
-                        .iter()
-                        .any(|particle| particle.pdg_code as i64 == **physical)
-            })
-            .flat_map(|(&physical, members)| {
-                members
-                    .iter()
-                    .map(move |&member| (member as isize, physical as isize))
-            })
+        self.process
+            .covariant_cut_representatives(model, self.generation_type)
+            .expect("process selectors were validated against the graph model")
+            .into_iter()
+            .map(|(member, physical)| (member as isize, physical as isize))
             .collect()
+    }
+
+    pub fn may_filter_covariant_partners(&self, model: &Model) -> bool {
+        !self.covariant_cut_representatives(model).is_empty()
+            && self.generation_options.may_filter_covariant_partners()
     }
 
     // Best attempt at creating what process definition matches the given graphs
@@ -292,9 +282,39 @@ impl ProcessDefinition {
         generation_type: GenerationType,
         model: &Model,
     ) -> Result<Self> {
+        Self::infer_graph_process(
+            graphs
+                .iter()
+                .map(|graph| (graph, graph.finalized_cuts.as_slice())),
+            generation_type,
+            model,
+        )
+    }
+
+    /// Infer from the runtime cut owner after finalized inventories are consumed.
+    #[cfg(test)]
+    pub(crate) fn from_cross_section_graphs(
+        graphs: &[super::CrossSectionGraph],
+        model: &Model,
+    ) -> Result<Self> {
+        Self::infer_graph_process(
+            graphs
+                .iter()
+                .map(|graph| (&graph.graph, graph.cuts.raw.as_slice())),
+            GenerationType::CrossSection,
+            model,
+        )
+    }
+
+    fn infer_graph_process<'a>(
+        graphs: impl IntoIterator<Item = (&'a Graph, &'a [crate::graph::FinalizedCut])>,
+        generation_type: GenerationType,
+        model: &Model,
+    ) -> Result<Self> {
+        let graphs = graphs.into_iter().collect::<Vec<_>>();
         let mut initial_pdgs = HashSet::default();
 
-        for g in graphs {
+        for &(g, _) in &graphs {
             let mut initial_pdgs_of_graph = vec![];
             match generation_type {
                 GenerationType::Amplitude => {
@@ -307,7 +327,8 @@ impl ProcessDefinition {
                             }
                         ) {
                             if let PossibleParticle::Particle(particle) = &edge.data.particle {
-                                initial_pdgs_of_graph.push(particle.0.pdg_code as i64);
+                                initial_pdgs_of_graph
+                                    .push(model.particle_by_id(*particle)?.pdg_code);
                             } else {
                                 debug!("Edge without particle data in initial state");
                             }
@@ -317,7 +338,7 @@ impl ProcessDefinition {
                 GenerationType::CrossSection => {
                     for (_, _, edge) in g.iter_edges_of(&g.initial_state_cut) {
                         if let PossibleParticle::Particle(particle) = &edge.data.particle {
-                            initial_pdgs_of_graph.push(particle.0.pdg_code as i64);
+                            initial_pdgs_of_graph.push(model.particle_by_id(*particle)?.pdg_code);
                         } else {
                             debug!("Edge without particle data in initial state");
                         }
@@ -339,7 +360,7 @@ impl ProcessDefinition {
         let mut final_states = HashSet::default();
         match generation_type {
             GenerationType::Amplitude => {
-                for g in graphs {
+                for &(g, _) in &graphs {
                     let mut final_pdgs_of_graph = vec![];
                     for (pair, _, edge) in g.iter_edges() {
                         if matches!(
@@ -350,7 +371,7 @@ impl ProcessDefinition {
                             }
                         ) {
                             if let PossibleParticle::Particle(particle) = &edge.data.particle {
-                                final_pdgs_of_graph.push(particle.0.pdg_code as i64);
+                                final_pdgs_of_graph.push(model.particle_by_id(*particle)?.pdg_code);
                             } else {
                                 debug!("Edge without particle data in final state");
                             }
@@ -361,22 +382,22 @@ impl ProcessDefinition {
                 }
             }
             GenerationType::CrossSection => {
-                for g in graphs {
-                    let (source_nodes, target_nodes) = g.get_source_and_target();
-                    let st_cuts = g.all_st_cuts_for_cs(
-                        source_nodes,
-                        target_nodes,
-                        &g.get_initial_state_tree(),
-                    );
-                    for (_, cut, _) in st_cuts {
+                for &(g, cuts) in &graphs {
+                    for finalized in cuts {
                         let mut final_pdgs_of_cut = vec![];
-                        for (orientaion, edge) in cut.iter_edges(&g.underlying) {
+                        for (orientaion, edge) in finalized.cut.iter_edges(&g.underlying) {
                             if let PossibleParticle::Particle(particle) = &edge.data.particle {
                                 if orientaion == Orientation::Reversed {
-                                    final_pdgs_of_cut
-                                        .push(particle.0.get_anti_particle(model).pdg_code as i64);
+                                    final_pdgs_of_cut.push(
+                                        model
+                                            .particle_by_id(
+                                                model.particle_by_id(*particle)?.antiparticle,
+                                            )?
+                                            .pdg_code,
+                                    );
                                 } else {
-                                    final_pdgs_of_cut.push(particle.0.pdg_code as i64);
+                                    final_pdgs_of_cut
+                                        .push(model.particle_by_id(*particle)?.pdg_code);
                                 }
                             } else {
                                 debug!("Edge without particle data in final state");
@@ -393,7 +414,7 @@ impl ProcessDefinition {
         let mut min_loop_count = usize::MAX;
         let mut max_loop_count = 0usize;
 
-        for g in graphs {
+        for &(g, _) in &graphs {
             // don't know how the looop count is really intended, for now it doesn't matter I think
             let lc = g.underlying.cyclotomatic_number(&g.full_filter());
             if lc < min_loop_count {
@@ -404,13 +425,21 @@ impl ProcessDefinition {
             }
         }
 
-        let loop_count_range = (min_loop_count, max_loop_count);
+        let first_final = final_pdgs_lists.first().cloned().unwrap_or_default();
+        let process = match generation_type {
+            GenerationType::Amplitude => GenerationProcess::new(initial_pdgs, first_final),
+            GenerationType::CrossSection => GenerationProcess::new(initial_pdgs, first_final)
+                .with_final_state_alternatives(final_pdgs_lists)
+                .map_err(|error| eyre!(error))?,
+        };
 
         Ok(Self {
             generation_type,
-            initial_pdgs,
-            final_pdgs_lists,
-            loop_count_range,
+            process,
+            generation_options: Self::default()
+                .generation_options
+                .with_loop_count(min_loop_count, max_loop_count)
+                .map_err(|error| eyre!(error))?,
             ..Self::default()
         })
     }
@@ -463,6 +492,22 @@ impl Process {
 }
 
 impl Process {
+    fn load_settings_history(path: &Path) -> Result<Option<GlobalSettings>> {
+        let path = path.join(SETTINGS_HISTORY_TOML);
+        let source = match fs::read_to_string(&path) {
+            Ok(source) => source,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("Error reading process settings history {}", path.display())
+                });
+            }
+        };
+        toml::from_str(&source)
+            .map(Some)
+            .with_context(|| format!("Error parsing process settings history {}", path.display()))
+    }
+
     pub(crate) fn load_amplitude(
         path: impl AsRef<Path>,
         context: GammaLoopContextContainer,
@@ -472,8 +517,6 @@ impl Process {
             "Error reading def.bin in {}",
             path.as_ref().display()
         ))?;
-
-        let settings_history = load_settings_history(path.as_ref())?;
 
         let (definition, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)
@@ -497,7 +540,7 @@ impl Process {
         Ok(Self {
             definition,
             collection,
-            settings_history,
+            settings_history: Self::load_settings_history(path.as_ref())?,
         })
     }
 
@@ -511,7 +554,6 @@ impl Process {
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
         let mut collection = ProcessCollection::new_cross_section();
-        let settings_history = load_settings_history(path.as_ref())?;
         for path in saved_child_dirs(path.as_ref(), "cs.bin", "cross section")? {
             if selected_integrands.is_some_and(|selected| {
                 path.file_name()
@@ -529,7 +571,7 @@ impl Process {
         Ok(Self {
             definition,
             collection,
-            settings_history,
+            settings_history: Self::load_settings_history(path.as_ref())?,
         })
     }
 
@@ -553,9 +595,11 @@ impl Process {
                 let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
                 fs::write(p.join("def.bin"), binary)?;
 
-                if let Some(a) = &self.settings_history {
-                    File::create(p.join(SETTINGS_HISTORY_TOML))?
-                        .write_all(toml::to_string_pretty(a)?.as_bytes())?;
+                if let Some(settings) = &self.settings_history {
+                    fs::write(
+                        p.join(SETTINGS_HISTORY_TOML),
+                        toml::to_string_pretty(settings)?,
+                    )?;
                 }
 
                 for amp in a.values_mut() {
@@ -581,9 +625,11 @@ impl Process {
                 let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
                 fs::write(p.join("def.bin"), binary)?;
 
-                if let Some(a) = &self.settings_history {
-                    File::create(p.join(SETTINGS_HISTORY_TOML))?
-                        .write_all(toml::to_string_pretty(a)?.as_bytes())?;
+                if let Some(settings) = &self.settings_history {
+                    fs::write(
+                        p.join(SETTINGS_HISTORY_TOML),
+                        toml::to_string_pretty(settings)?,
+                    )?;
                 }
 
                 for cs in cs.values_mut() {
@@ -1252,9 +1298,9 @@ mod tests {
     fn computed_uv_forest_process_export_uses_stored_sources_in_all_routes()
     -> color_eyre::Result<()> {
         use crate::{
-            feyngen::GenerationType,
             graph::{Graph, GroupId},
             initialisation::test_initialise,
+            model::Model,
             processes::{
                 GraphGroupSelectionSpec, Process, ProcessCollection, ProcessDefinition, ProcessList,
             },
@@ -1266,11 +1312,10 @@ mod tests {
         use std::collections::{BTreeMap, BTreeSet};
 
         test_initialise()?;
-        let model = load_generic_model("scalars");
         let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
         let runtime = RuntimeSettings::default();
         let directory = fresh_temp_dir("computed-uv-process-export");
-        for (kind, folder, source) in [
+        for (kind, folder, source, model) in [
             (
                 GenerationType::Amplitude,
                 "amplitudes",
@@ -1278,6 +1323,7 @@ mod tests {
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../tests/resources/graphs/scalar_bubble.dot"
                 )),
+                load_generic_model("scalars"),
             ),
             (
                 GenerationType::CrossSection,
@@ -1286,6 +1332,9 @@ mod tests {
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
                 )),
+                Model::from_json(include_str!(
+                    "../../../../assets/models/json/scalars/scalars_2p_3p.json"
+                ))?,
             ),
         ] {
             for orchestrator in [UVOrchestrator::LegacyDagForest, UVOrchestrator::HedgePoset] {
@@ -1296,7 +1345,7 @@ mod tests {
                 ] {
                     // Keep the fixture's physical graph and all default subtraction
                     // terms; only the three requested CFF/UV routes differ.
-                    let mut graphs = Graph::from_string(source, &model)?;
+                    let mut graphs = Graph::import_dot(source, &model)?;
                     let exercise_selection = kind == GenerationType::CrossSection
                         && orchestrator == UVOrchestrator::HedgePoset
                         && mode == "direct_keyed";
@@ -1431,6 +1480,7 @@ mod tests {
                                 &GraphGroupSelectionSpec::from_master_graph_names(vec![
                                     graph_name.clone(),
                                 ]),
+                                &model,
                             )?;
                             assert_eq!(plan.retained_group_ids(), &[GroupId(1)]);
                             assert_eq!(plan.new_group_id_for_old(GroupId(1)), Some(GroupId(0)));
@@ -1531,6 +1581,7 @@ mod tests {
                         }
                         let export_dir = case_dir.join(phase);
                         processes.export_uv_forests(
+                            &model,
                             &export_dir,
                             0,
                             "default",
@@ -1579,10 +1630,16 @@ mod tests {
                                 actual.insert(residue.clone());
                                 let node_dot = fs::read_to_string(node.path())?;
                                 assert!(node_dot.contains("forest_residue_index"));
-                                for exported in Graph::from_string(&node_dot, &model)? {
+                                for exported in
+                                    Graph::from_finalized_runtime_string(&node_dot, &model)?
+                                {
                                     *exported_expressions
                                         .entry((forest_index, residue.clone()))
-                                        .or_insert(Atom::Zero) += exported.global_prefactor.num;
+                                        .or_insert(Atom::Zero) +=
+                                        feynkit_graph::NumeratorInterface::export(
+                                            &exported.global_prefactor.num,
+                                        )
+                                        .0;
                                 }
                             }
                             assert_eq!(&actual, expected, "a physical cut lost a residue order");
@@ -1654,6 +1711,7 @@ mod tests {
                     source_graph.name.push_str("_mismatch");
                     let error = processes
                         .export_uv_forests(
+                            &model,
                             case_dir.join("mismatch"),
                             0,
                             "default",
@@ -1677,6 +1735,7 @@ mod tests {
                     };
                     let topology_dir = case_dir.join("topology_without_source");
                     processes.export_uv_forests(
+                        &model,
                         &topology_dir,
                         0,
                         "default",
@@ -1699,6 +1758,7 @@ mod tests {
                     );
                     let error = processes
                         .export_uv_forests(
+                            &model,
                             case_dir.join("missing_source"),
                             0,
                             "default",

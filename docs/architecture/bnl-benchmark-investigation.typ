@@ -1,4 +1,4 @@
-= BNL Benchmark Investigation
+= BNL benchmark investigation
 
 #quote(block: true)[
 #strong[Status:] Archived, non-reproducible performance investigation

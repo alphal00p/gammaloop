@@ -2443,7 +2443,12 @@ impl LmbMultiChannelingSetup {
             .graph
             .underlying
             .iter_edges()
-            .filter_map(|(_, edge_id, edge)| edge.data.particle.is_massless().then_some(edge_id.0))
+            .filter_map(|(_, edge_id, edge)| {
+                edge.data
+                    .particle
+                    .is_massless(&self.graph.model)
+                    .then_some(edge_id.0)
+            })
             .collect::<Vec<_>>();
         Ok(catalogue.coverage_report(&all_lmbs, &massless_edges))
     }
@@ -2522,7 +2527,12 @@ impl LmbMultiChannelingSetup {
             .graph
             .underlying
             .iter_edges()
-            .filter_map(|(_, edge_id, edge)| edge.data.particle.is_massless().then_some(edge_id.0))
+            .filter_map(|(_, edge_id, edge)| {
+                edge.data
+                    .particle
+                    .is_massless(&self.graph.model)
+                    .then_some(edge_id.0)
+            })
             .collect::<Vec<_>>();
         Ok(build_sampling_channel_catalogue_with_surfaces_and_coverage(
             resolved,

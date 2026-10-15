@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::cff::expression::OrientationID;
+use crate::cff::OrientationID;
 
 use crate::graph::cuts::CutSet;
 use crate::graph::edge::ParseEdge;
@@ -38,8 +38,8 @@ use symbolica::atom::Symbol;
 use symbolica::symbol;
 
 use crate::{
-    dot,
-    graph::{Graph, parse::IntoGraph},
+    finalized_runtime_dot,
+    graph::{Graph, parse::IntoFinalizedRuntimeGraph},
     momentum::signature::LoopExtSignature,
     processes::{CrossSection, CutId},
     settings::RuntimeSettings,
@@ -54,17 +54,15 @@ use symbolica::{
 #[test]
 fn analytical_uv_limits_match_compact_and_explicit_energies() -> Result<(), eyre::Report> {
     test_initialise()?;
-    let graph: Graph = dot!(
-        digraph analytical_energy_limit {
-            edge [particle="H" num=1];
-            node [num=1];
-            ext [style=invis];
-            ext -> A:0 [id=0];
-            B:1 -> ext [id=1];
-            A -> B [id=2];
-            A -> B [id=3];
-        }
-    )?;
+    let graph: Graph = finalized_runtime_dot!(digraph analytical_energy_limit { graph [projector=1]
+        edge [particle="H" num=1];
+        node [num=1];
+        ext [style=invis];
+        ext -> A:0 [id=0 sink="{ufo_order:0}"];
+        B:1 -> ext [id=1 source="{ufo_order:0}"];
+        A -> B [id=2 source="{ufo_order:1}" sink="{ufo_order:1}" lmb_id=0];
+        A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
+    })?;
     let lmb = &graph.loop_momentum_basis;
     assert_eq!(lmb.loop_edges.len(), 1);
     let edge = lmb.loop_edges[LoopIndex(0)];
@@ -77,13 +75,18 @@ fn analytical_uv_limits_match_compact_and_explicit_energies() -> Result<(), eyre
     );
     let source = &numerator * &compact;
     let lambda = symbol!("analytical_energy_limit::lambda");
-    let compact_limits = graph.all_limits(&graph.full_filter(), &source, lambda, lmb);
+    let compact_limits = graph.all_limits(&graph.model, &graph.full_filter(), &source, lambda, lmb);
     for energy in [
         invariant.sqrt(),
         function!(GS.broadcasting_sqrt, &invariant),
     ] {
-        let explicit_limits =
-            graph.all_limits(&graph.full_filter(), &(&numerator * energy), lambda, lmb);
+        let explicit_limits = graph.all_limits(
+            &graph.model,
+            &graph.full_filter(),
+            &(&numerator * energy),
+            lambda,
+            lmb,
+        );
         assert_eq!(compact_limits, explicit_limits);
     }
     let [(_, series)] = compact_limits.as_slice() else {
@@ -196,7 +199,7 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
     let body = (&x + &y).pow(3) * (&x + Atom::num(1));
     let entry = Arc::new(FnMapEntry {
         lhs: function!(family, &scope, &x),
-        rhs: body.clone(),
+        rhs: crate::numerator::AppliedFeynmanRule::new(body.clone())?.expr,
         args: vec![parameter.into()],
         tags: vec![scope.clone()],
         inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -236,12 +239,15 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
     for (actual, expected) in products {
         assert_eq!(actual.numerators().len(), 1);
         assert!(Arc::ptr_eq(&actual.numerators()[0], &entry));
-        assert_eq!(actual.numerators()[0].rhs, body);
+        assert_eq!(actual.numerators()[0].rhs.expression(), &body);
         let resolved = actual.resolved()?;
         assert!(resolved.numerators().is_empty());
         assert_eq!(resolved, Integrands::from_iter([(cut, expected)]));
     }
-    let changed = roots.map_numerators(|rhs| Ok(rhs.replace(y.to_pattern()).with(Atom::num(3))))?;
+    let changed = roots.map_numerators(|rhs| {
+        Ok(rhs
+            .with_checked_expression(rhs.expression().replace(y.to_pattern()).with(Atom::num(3)))?)
+    })?;
     assert_eq!(changed.iter().next().unwrap().1, &call);
     assert_eq!(
         changed.resolved()?,
@@ -255,7 +261,7 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
     let mut state = Vec::new();
     State::export(&mut state)?;
     let state_map = State::import(&mut Cursor::new(state), None)?;
-    let model = Model::default();
+    let model = Model::empty("test");
     let (decoded, consumed): (Integrands, _) = bincode::decode_from_slice_with_context(
         &encoded,
         bincode::config::standard(),
@@ -283,7 +289,7 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
     let call = function!(family, &scope);
     let entry = Arc::new(FnMapEntry {
         lhs: call.clone(),
-        rhs: Atom::num(2),
+        rhs: crate::numerator::AppliedFeynmanRule::new(Atom::num(2))?.expr,
         args: Vec::new(),
         tags: vec![scope],
         inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -293,7 +299,7 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
     let roots = Integrands::from_iter([(cut, call.clone())]);
     let first = roots.clone().with_numerators([Arc::clone(&entry)])?;
     let conflicting = Arc::new(FnMapEntry {
-        rhs: Atom::num(3),
+        rhs: entry.rhs.with_checked_expression(Atom::num(3))?,
         ..entry.as_ref().clone()
     });
     let second = roots.clone().with_numerators([Arc::clone(&conflicting)])?;
@@ -309,7 +315,7 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
         roots
             .clone()
             .with_numerators([Arc::new(FnMapEntry {
-                rhs: call.clone(),
+                rhs: entry.rhs.with_checked_expression(call.clone())?,
                 ..entry.as_ref().clone()
             })])
             .is_err()
@@ -318,7 +324,11 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
     let unknown_call = function!(family, symbol!("uv_definition_test::unknown_scope"));
     assert!(roots.resolved().is_err());
     assert!(first.map(|atom| atom + &unknown_call).resolved().is_err());
-    assert!(first.map_numerators(|_| Ok(unknown_call.clone())).is_err());
+    assert!(
+        first
+            .map_numerators(|rhs| Ok(rhs.with_checked_expression(unknown_call.clone())?))
+            .is_err()
+    );
     Ok(())
 }
 
@@ -344,7 +354,7 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
     ] {
         let entry = Arc::new(FnMapEntry {
             lhs: family.call_args(std::iter::once(tag.clone()).chain(parameters.iter().cloned())),
-            rhs: parameters[0].clone(),
+            rhs: crate::numerator::AppliedFeynmanRule::new(parameters[0].clone())?.expr,
             args: parameters
                 .into_iter()
                 .map(|p| Indeterminate::try_from(p).unwrap())
@@ -360,7 +370,7 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
     let parameter = function!(head, &scope, 0);
     let entry = Arc::new(FnMapEntry {
         lhs: function!(family, &scope, &parameter),
-        rhs: parameter.clone(),
+        rhs: crate::numerator::AppliedFeynmanRule::new(parameter.clone())?.expr,
         args: vec![Indeterminate::try_from(parameter).unwrap()],
         tags: vec![scope.clone()],
         inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -462,7 +472,7 @@ fn integrands_retain_parametric_scalar_definitions_through_arithmetic_and_persis
     let mut state = Vec::new();
     State::export(&mut state)?;
     let state_map = State::import(&mut Cursor::new(state), None)?;
-    let model = Model::default();
+    let model = Model::empty("test");
     let (decoded, consumed): (Integrands, _) = bincode::decode_from_slice_with_context(
         &encoded,
         bincode::config::standard(),
@@ -534,7 +544,10 @@ fn integrands_resolve_nested_scalar_arguments_and_scalar_numerator_coefficients(
     let family = symbol!("gammalooprs::uv::numerator_family");
     let numerator = Arc::new(FnMapEntry {
         lhs: function!(family, &scope, &p),
-        rhs: function!(head, &scope, &p) * (&p + Atom::num(2)).pow(5),
+        rhs: crate::numerator::AppliedFeynmanRule::new(
+            function!(head, &scope, &p) * (&p + Atom::num(2)).pow(5),
+        )?
+        .expr,
         args: vec![parameter.into()],
         tags: vec![scope.clone()],
         inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -851,8 +864,8 @@ fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
 
 fn build_tta_uv_graph() -> Graph {
     let model = load_generic_model("sm");
-    let mut graph = Graph::from_dot(
-        linnet::dot!(
+    let mut graphs = Graph::import_dot(
+        stringify!(
             digraph G {
                 e [style=invis];
                 e -> A:0 [id=0 particle="t"];
@@ -862,13 +875,18 @@ fn build_tta_uv_graph() -> Graph {
                 C -> B [particle="t"];
                 A -> C [particle="t"];
             }
-        )
-        .unwrap(),
+        ),
         &model,
     )
     .unwrap();
-    graph.global_prefactor.num *=
-        graph.underlying[Hedge(0)].color_kronekers(&graph.underlying[Hedge(1)]);
+    assert_eq!(graphs.len(), 1);
+    let mut graph = graphs.remove(0);
+    let color = crate::numerator::AppliedFeynmanRule::new(
+        graph.underlying[Hedge(0)].color_kronekers(&graph.underlying[Hedge(1)]),
+    )
+    .unwrap()
+    .expr;
+    graph.global_prefactor.num = graph.global_prefactor.num.multiply(color).unwrap();
     graph.validate_full_numerator_tensor_network().unwrap();
     graph
 }
@@ -1262,7 +1280,7 @@ fn nested_bubble_soft_ct() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
+    let wood = uv_graph.wood(&uv_graph.full_graph(), &uv_graph.model).unwrap();
 
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
@@ -1464,7 +1482,7 @@ fn nested_bubble_scalar_quad() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
+    let wood = uv_graph.wood(&uv_graph.full_graph(), &uv_graph.model).unwrap();
 
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
@@ -1647,7 +1665,7 @@ fn nested_bubble_scalar() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
+    let wood = uv_graph.wood(&uv_graph.full_graph(), &uv_graph.model).unwrap();
 
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
@@ -1807,7 +1825,7 @@ fn disconnect_forest_scalar() {
         )
     );
 
-    let wood = uv_graph.wood(&uv_graph.full_graph()).unwrap();
+    let wood = uv_graph.wood(&uv_graph.full_graph(), &uv_graph.model).unwrap();
 
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
@@ -2074,7 +2092,7 @@ fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
 
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let cycle = graph
         .spinneys(&graph.no_dummy())
         .into_iter()
@@ -2094,7 +2112,9 @@ fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
         "Q(2,spenso::cind(0))*Q(2,spenso::mink(4,edge(2,1)))",
         1,
     );
-    let marginal: Graph = marginal_source.into_graph(&model).unwrap();
+    let marginal: Graph = marginal_source
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
     let marginal_cycle = marginal
         .spinneys(&marginal.no_dummy())
         .into_iter()
@@ -2125,12 +2145,14 @@ fn production_energy_gate_includes_factorized_global_numerator() {
 
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let q0 = function!(GS.emr_mom, 2, GS.cind(0));
     let convergent_numerator = (&q0 + Atom::one()) * (&q0 + Atom::num(2));
     let convergent = graph.with_global_numerator_only(
         "factorized_global_quadratic".to_string(),
-        convergent_numerator.clone(),
+        crate::numerator::AppliedFeynmanRule::new(convergent_numerator.clone())
+            .unwrap()
+            .expr,
     );
     let cycle = convergent
         .all_cycle_unions(&convergent.no_dummy())
@@ -2147,7 +2169,10 @@ fn production_energy_gate_includes_factorized_global_numerator() {
     convergent
         .ensure_energy_convergent_cycles(&convergent.no_dummy())
         .unwrap();
-    assert_eq!(convergent.global_prefactor.num, convergent_numerator);
+    assert_eq!(
+        convergent.global_prefactor.num.expression(),
+        &convergent_numerator
+    );
     assert_eq!(
         convergent.production_numerator_atom_for_full_3d_expression(),
         convergent_numerator,
@@ -2156,7 +2181,9 @@ fn production_energy_gate_includes_factorized_global_numerator() {
     let divergent_numerator = convergent_numerator * (&q0 + Atom::num(3));
     let divergent = graph.with_global_numerator_only(
         "factorized_global_cubic".to_string(),
-        divergent_numerator.clone(),
+        crate::numerator::AppliedFeynmanRule::new(divergent_numerator.clone())
+            .unwrap()
+            .expr,
     );
     let error = divergent
         .ensure_energy_convergent_cycles(&divergent.no_dummy())
@@ -2164,7 +2191,10 @@ fn production_energy_gate_includes_factorized_global_numerator() {
         .to_string();
     assert!(error.contains("DOD_4D=3"), "{error}");
     assert!(error.contains("DOD_E=0"), "{error}");
-    assert_eq!(divergent.global_prefactor.num, divergent_numerator);
+    assert_eq!(
+        divergent.global_prefactor.num.expression(),
+        &divergent_numerator
+    );
     let production_numerator = divergent.production_numerator_atom_for_full_3d_expression();
     assert_eq!(production_numerator, divergent_numerator);
 
@@ -2181,12 +2211,21 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
     test_initialise().unwrap();
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
-    let graph: Graph = source.into_graph(&model).unwrap();
-    let convergent = graph.with_global_numerator_only("four_d_unit_bubble".into(), Atom::one());
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
+    let convergent = graph.with_global_numerator_only(
+        "four_d_unit_bubble".into(),
+        crate::numerator::AppliedFeynmanRule::new(Atom::one())
+            .unwrap()
+            .expr,
+    );
     let q0 = function!(GS.emr_mom, 2, GS.cind(0));
     let divergent = graph.with_global_numerator_only(
         "four_d_energy_divergent_bubble".into(),
-        (&q0 + Atom::one()) * (&q0 + Atom::num(2)) * (&q0 + Atom::num(3)),
+        crate::numerator::AppliedFeynmanRule::new(
+            (&q0 + Atom::one()) * (&q0 + Atom::num(2)) * (&q0 + Atom::num(3)),
+        )
+        .unwrap()
+        .expr,
     );
 
     // A 4D forest does not need a stored CFF, but this does not remove the
@@ -2205,13 +2244,13 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
         };
         let mut bare = AmplitudeGraph::new(convergent.clone());
         assert!(bare.derived_data.representations.is_empty());
-        let part = bare.renormalization_part(&settings).unwrap();
+        let part = bare.renormalization_part(&model, &settings).unwrap();
         assert!(!part.expression.is_zero());
         assert!(bare.derived_data.representations.is_empty());
         let mut stored = AmplitudeGraph::new(convergent.clone());
         stored.generate_cff(&GenerationSettings::default()).unwrap();
         assert!(!stored.derived_data.representations.is_empty());
-        let with_cff = stored.renormalization_part(&settings).unwrap();
+        let with_cff = stored.renormalization_part(&model, &settings).unwrap();
         assert_eq!(
             part.expression.collect_factors(),
             with_cff.expression.collect_factors()
@@ -2225,7 +2264,7 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
         let mut unsupported = AmplitudeGraph::new(divergent.clone());
         assert!(unsupported.derived_data.representations.is_empty());
         let error = unsupported
-            .renormalization_part(&settings)
+            .renormalization_part(&model, &settings)
             .unwrap_err()
             .to_string();
         assert!(error.contains("DOD_4D=3"), "{error}");
@@ -2242,17 +2281,17 @@ fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
     // one r denominator and three q denominators carry the factor q0^2-r0^2.
     // Along the r-only cycle (q fixed), r0^2/Dr leaves a constant and therefore
     // has DOD_E=1. It is not a valid finite-pole oracle.
-    let graph: Graph = dot!(
-        digraph energy_divergent_r_contact {
-            edge [particle=scalar_1]
+    let graph: Graph = finalized_runtime_dot!(
+        digraph energy_divergent_r_contact { graph [projector=1]
+            edge [particle=scalar_1 num="1𝑖"]
             node [num=1]
             e [style=invis]
-            e -> A:0 [id=4]
-            A:1 -> e [id=5]
-            A -> A [id=0]
-            A -> B [id=1]
-            B -> C [id=2]
-            C -> A [id=3]
+            e -> A:0 [id=4 sink="{ufo_order:0}"]
+            A:1 -> e [id=5 source="{ufo_order:1}"]
+            A -> A [id=0 source="{ufo_order:2}" sink="{ufo_order:3}" lmb_id=0]
+            A -> B [id=1 source="{ufo_order:4}" sink="{ufo_order:0}" lmb_id=1]
+            B -> C [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            C -> A [id=3 sink="{ufo_order:5}" source="{ufo_order:1}"]
         },
         "scalars"
     )
@@ -2261,7 +2300,9 @@ fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
     let q0 = function!(GS.emr_mom, 1, GS.cind(0));
     let divergent = graph.with_global_numerator_only(
         "diagnostic_denominator_cancelling_r_contact".to_string(),
-        q0.pow(2) - r0.pow(2),
+        crate::numerator::AppliedFeynmanRule::new(q0.pow(2) - r0.pow(2))
+            .unwrap()
+            .expr,
     );
 
     let error = divergent
@@ -2280,7 +2321,7 @@ fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
 
 #[test]
 fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
-    use crate::utils::symbolica_ext::DOD;
+    use feynkit_graph::DOD;
 
     test_initialise().unwrap();
     let model = load_generic_model("scalars");
@@ -2288,18 +2329,18 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
     // denominator-cancelling-r contact regression. This explicitly imported
     // numerator is deliberately stored on q edge 1 but depends on r edge 0;
     // neither the parser nor the public graph source API forbids that input.
-    let source = r#"digraph nonlocal_edge_energy_degree {
+    let source = r#"digraph nonlocal_edge_energy_degree { graph [projector=1]
         edge [particle=scalar_1 num=1]
         node [num=1]
         e [style=invis]
-        e -> A:0 [id=4]
-        A:1 -> e [id=5]
-        A -> A [id=0]
-        A -> B [id=1 num="Q(0,spenso::cind(0))^2"]
-        B -> C [id=2]
-        C -> A [id=3]
+        e -> A:0 [id=4 sink="{ufo_order:0}"]
+        A:1 -> e [id=5 source="{ufo_order:1}"]
+        A -> A [id=0 source="{ufo_order:2}" sink="{ufo_order:3}" lmb_id=0]
+        A -> B [id=1 num="Q(0,spenso::cind(0))^2" source="{ufo_order:4}" sink="{ufo_order:0}" lmb_id=1]
+        B -> C [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+        C -> A [id=3 sink="{ufo_order:5}" source="{ufo_order:1}"]
     }"#;
-    let graph: Graph = source.into_graph(&model).unwrap();
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let r_squared = function!(GS.emr_mom, 0, GS.cind(0)).pow(2);
     assert_eq!(
         graph.production_numerator_atom_for_full_3d_expression(),
@@ -2311,7 +2352,7 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
     // outside a cycle and depending only on its own momentum is soft there.
     let owner_local: Graph = source
         .replace("Q(0,spenso::cind(0))", "Q(1,spenso::cind(0))")
-        .into_graph(&model)
+        .into_finalized_runtime_graph(&model)
         .unwrap();
     owner_local
         .ensure_energy_convergent_cycles(&owner_local.no_dummy())
@@ -2319,7 +2360,12 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
 
     // The same nonlocal input stored globally is already rejected. Rehosting
     // this factor cannot change convergence of the complete rational source.
-    let global = graph.with_global_numerator_only("global_r_squared".to_string(), r_squared);
+    let global = graph.with_global_numerator_only(
+        "global_r_squared".to_string(),
+        crate::numerator::AppliedFeynmanRule::new(r_squared)
+            .unwrap()
+            .expr,
+    );
     let global_error = global
         .ensure_energy_convergent_cycles(&global.no_dummy())
         .unwrap_err();
@@ -2348,9 +2394,10 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
             &lmb,
             &lmb,
             &(graph.production_numerator_atom_for_full_3d_expression()
-                / graph.denominator(&r_cycle.filter, |_| 1)),
+                / graph.denominator(&r_cycle.filter, &model, |_| 1)),
         )
-        .trailing_exponent()
+        .trailing_exponent(GS.rescale)
+        .unwrap()
         - 3;
     assert_eq!(
         local_degree, -1,

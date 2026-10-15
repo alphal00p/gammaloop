@@ -282,28 +282,30 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     */
     // m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
-    m.add_wrapped(wrap_pyfunction!(atom_to_dots))?;
+    m.add_wrapped(wrap_pyfunction!(atom_contract))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
 }
 
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 #[doc(hidden)]
 pub fn register_python_api_for_docs(m: &Bound<PyModule>) -> PyResult<()> {
     register_python_api(m)
 }
 
 /// Gather the Python API registered for `gammaloop._gammaloop`.
-#[cfg(feature = "python-stubs")]
-pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
-    pyo3_stub_gen::StubInfo::from_project_root(
-        "gammaloop._gammaloop".to_owned(),
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-    )
+#[cfg(feature = "python_stubgen")]
+pub fn stub_info() -> StubResult<StubInfo> {
+    // A caller can be another crate's test binary; its manifest directory is not ours.
+    let project_root = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/gammaloop-api"))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    StubInfo::from_project_root("gammaloop._gammaloop".to_owned(), project_root)
 }
 
 /// Read-only, detached view over serialized GammaLoop settings.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SettingsValue", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PySettingsValue {
@@ -311,8 +313,8 @@ pub struct PySettingsValue {
     path: String,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PySettingsValue {
     /// Dot-separated location of this value within the settings tree.

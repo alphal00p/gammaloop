@@ -6,13 +6,20 @@ use std::{
 };
 
 use crate::{
-    GammaLoopContext, cff::CutCFFIndex, integrands::process::param_builder::FnMapEntry,
-    numerator::aind::Aind, utils::GS, uv::approx::Rooted,
+    GammaLoopContext,
+    cff::CutCFFIndex,
+    integrands::process::param_builder::{FnMapEntry, NumeratorDefinition},
+    uv::approx::Rooted,
 };
+#[cfg(test)]
+use crate::{numerator::aind::Aind, utils::GS};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
+use idenso::tensor::SymbolicTensor;
 use itertools::{EitherOrBoth, Itertools};
+use spenso::structure::IndexedStructure;
+#[cfg(test)]
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
@@ -52,7 +59,7 @@ pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dim
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Integrands {
     atoms: BTreeMap<CutCFFIndex, Atom>,
-    numerators: Vec<Arc<FnMapEntry>>,
+    numerators: Vec<Arc<NumeratorDefinition>>,
     scalars: Vec<Arc<FnMapEntry>>,
 }
 
@@ -81,7 +88,7 @@ impl Integrands {
         self.atoms.iter()
     }
 
-    pub(crate) fn numerators(&self) -> &[Arc<FnMapEntry>] {
+    pub(crate) fn numerators(&self) -> &[Arc<NumeratorDefinition>] {
         &self.numerators
     }
 
@@ -238,7 +245,9 @@ impl Integrands {
     /// create new calls; nested calls may occur only in actual arguments.
     pub(crate) fn resolved_scalars(&self) -> Result<Self> {
         let mut resolve = Self::scalar_resolver(self.scalars.iter().cloned())?;
-        let mut resolved = self.fallible_map(&mut resolve)?.map_numerators(resolve)?;
+        let mut resolved = self.fallible_map(&mut resolve)?.map_numerators(|tensor| {
+            Ok(tensor.with_checked_expression(resolve(tensor.expression())?)?)
+        })?;
         resolved.scalars.clear();
         Ok(resolved)
     }
@@ -247,10 +256,10 @@ impl Integrands {
     /// entry; a reused call with a different body or binding is an error.
     pub(crate) fn with_numerators(
         mut self,
-        numerators: impl IntoIterator<Item = Arc<FnMapEntry>>,
+        numerators: impl IntoIterator<Item = Arc<NumeratorDefinition>>,
     ) -> Result<Self> {
         let family = symbol!("gammalooprs::uv::numerator_family");
-        let mut definitions: BTreeMap<Vec<Atom>, Arc<FnMapEntry>> = BTreeMap::new();
+        let mut definitions: BTreeMap<Vec<Atom>, Arc<NumeratorDefinition>> = BTreeMap::new();
         for numerator in numerators {
             let parameters = numerator
                 .args
@@ -290,7 +299,7 @@ impl Integrands {
                 }
                 continue;
             }
-            if numerator.rhs.contains_symbol(family) {
+            if numerator.rhs.expression().contains_symbol(family) {
                 return Err(eyre!(
                     "retained numerator definitions must be flat: {} contains a family call",
                     numerator.lhs
@@ -303,24 +312,28 @@ impl Integrands {
     }
 
     /// Transform shared bodies explicitly, preserving their call signatures and
-    /// the cut-indexed roots. Unchanged bodies retain their existing Arc.
+    /// the cut-indexed roots. Unchanged bodies and proof state retain their Arc.
     pub(crate) fn map_numerators(
         &self,
-        mut map: impl FnMut(&Atom) -> Result<Atom>,
+        mut map: impl FnMut(
+            &SymbolicTensor<IndexedStructure>,
+        ) -> Result<SymbolicTensor<IndexedStructure>>,
     ) -> Result<Self> {
         let numerators = self
             .numerators
             .iter()
             .map(|entry| {
                 let rhs = map(&entry.rhs)?;
-                Ok(if rhs == entry.rhs {
-                    Arc::clone(entry)
-                } else {
-                    Arc::new(FnMapEntry {
-                        rhs,
-                        ..entry.as_ref().clone()
-                    })
-                })
+                Ok(
+                    if rhs == entry.rhs && rhs.same_reduction_state(&entry.rhs) {
+                        Arc::clone(entry)
+                    } else {
+                        Arc::new(FnMapEntry {
+                            rhs,
+                            ..entry.as_ref().clone()
+                        })
+                    },
+                )
             })
             .collect::<Result<Vec<_>>>()?;
         self.clone().with_numerators(numerators)
@@ -478,6 +491,8 @@ mod marker;
 mod orchestrator;
 #[cfg(test)]
 pub(crate) mod overlap_control;
+#[cfg(test)]
+pub(crate) mod overlap_numerators;
 pub mod renormalization;
 pub use renormalization::{RenormalizationPart, RenormalizationStats};
 pub mod settings;

@@ -1,8 +1,6 @@
 use super::*;
 use crate::{
     cff::{VertexSet, esurface::Esurface},
-    dot,
-    graph::parse::from_dot::IntoGraph,
     initialisation::test_initialise,
     momentum::{FourMomentum, Rotatable, RotationMethod},
 };
@@ -15,30 +13,25 @@ fn gl638_c7_keeps_a_certified_full_overlap_after_solver_failure() {
     // GL638's directed topology with scalar numerators and common parent [4,10,7,12].
     // The paired initial-state halfedges are sewn exactly as in the imported graph.
     // Only routing and masses enter this test; no numerator or integrand is evaluated.
-    let graph: Graph = dot!(digraph GL638_C7 {
+    let graph: Graph = crate::finalized_runtime_dot!(digraph GL638_C7 {
+            graph [projector=1]
         edge [num=1 mass=0]
         node [num=1]
-        exte0 [style=invis]
-        exte1 [style=invis]
-        exte15 [style=invis]
-        exte16 [style=invis]
-        exte0 -> v9:0 [id=0 is_cut=28]
-        exte1 -> v9:1 [id=1 is_cut=29]
-        v0:2 -> v1:3 [id=2]
-        v0:4 -> v6:5 [id=3]
-        v7:6 -> v0:7 [id=4 lmb_id=0]
-        v3:8 -> v1:9 [id=5]
-        v1:10 -> v7:11 [id=6]
-        v2:12 -> v5:13 [id=7 lmb_id=2]
-        v6:14 -> v2:15 [id=8]
-        v2:16 -> v9:17 [id=9]
-        v4:18 -> v3:19 [id=10 lmb_id=1]
-        v3:20 -> v8:21 [id=11]
-        v5:22 -> v4:23 [id=12 lmb_id=3]
-        v4:24 -> v7:25 [id=13]
-        v5:26 -> v6:27 [id=14]
-        v8:28 -> exte15 [id=15 is_cut=28]
-        v8:29 -> exte16 [id=16 is_cut=29]
+        v8:28 -> v9:0 [id=0 is_cut=28 initial_state_connection=true source="{ufo_order:1}" sink="{ufo_order:0}"]
+        v8:29 -> v9:1 [id=1 is_cut=29 initial_state_connection=true source="{ufo_order:2}" sink="{ufo_order:1}"]
+        v0:2 -> v1:3 [id=2 source="{ufo_order:0}" sink="{ufo_order:0}"]
+        v0:4 -> v6:5 [id=3 source="{ufo_order:1}" sink="{ufo_order:0}"]
+        v7:6 -> v0:7 [id=4 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:2}"]
+        v3:8 -> v1:9 [id=5 source="{ufo_order:0}" sink="{ufo_order:1}"]
+        v1:10 -> v7:11 [id=6 source="{ufo_order:2}" sink="{ufo_order:1}"]
+        v2:12 -> v5:13 [id=7 lmb_id=2 source="{ufo_order:0}" sink="{ufo_order:0}"]
+        v6:14 -> v2:15 [id=8 source="{ufo_order:1}" sink="{ufo_order:1}"]
+        v2:16 -> v9:17 [id=9 source="{ufo_order:2}" sink="{ufo_order:2}"]
+        v4:18 -> v3:19 [id=10 lmb_id=1 source="{ufo_order:0}" sink="{ufo_order:1}"]
+        v3:20 -> v8:21 [id=11 source="{ufo_order:2}" sink="{ufo_order:0}"]
+        v5:22 -> v4:23 [id=12 lmb_id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
+        v4:24 -> v7:25 [id=13 source="{ufo_order:2}" sink="{ufo_order:2}"]
+        v5:26 -> v6:27 [id=14 source="{ufo_order:2}" sink="{ufo_order:2}"]
     })
     .unwrap();
     let lmbs = ti_vec![graph.loop_momentum_basis.clone()];

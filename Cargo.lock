@@ -555,13 +555,34 @@ dependencies = [
 
 [[package]]
 name = "brotli"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc97b8f16f944bba54f0433f07e30be199b6dc2bd25937444bbad560bcea29bd"
+dependencies = [
+ "alloc-no-stdlib",
+ "alloc-stdlib",
+ "brotli-decompressor 4.0.3",
+]
+
+[[package]]
+name = "brotli"
 version = "8.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4bd8b9603c7aa97359dbd97ecf258968c95f3adddd6db2f7e7a5bef101c84560"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
- "brotli-decompressor",
+ "brotli-decompressor 5.0.0",
+]
+
+[[package]]
+name = "brotli-decompressor"
+version = "4.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a334ef7c9e23abf0ce748e8cd309037da93e606ad52eb372e4ce327a0dcfbdfd"
+dependencies = [
+ "alloc-no-stdlib",
+ "alloc-stdlib",
 ]
 
 [[package]]
@@ -1230,6 +1251,22 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crossterm"
+version = "0.28.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "829d955a0bb380ef178a640b91779e3987da38c9aea133b20614cfed8cdea9c6"
+dependencies = [
+ "bitflags 2.13.2",
+ "crossterm_winapi",
+ "mio",
+ "parking_lot",
+ "rustix 0.38.44",
+ "signal-hook",
+ "signal-hook-mio",
+ "winapi",
+]
+
+[[package]]
+name = "crossterm"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
@@ -1240,7 +1277,7 @@ dependencies = [
  "document-features",
  "mio",
  "parking_lot",
- "rustix",
+ "rustix 1.1.4",
  "serde",
  "signal-hook",
  "signal-hook-mio",
@@ -1422,6 +1459,18 @@ name = "deltae"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5729f5117e208430e437df2f4843f5e5952997175992d1414f94c57d61e270b4"
+
+[[package]]
+name = "deprecate-until"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d0795c0c5b2cab72b80d75b5cb08bde679e616c67e954669a2476668319ac3a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "semver",
+ "syn 2.0.117",
+]
 
 [[package]]
 name = "deranged"
@@ -1781,7 +1830,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ce92ff622d6dadf7349484f42c93271a0d49b7cc4d466a936405bacbe10aa78"
 dependencies = [
  "cfg-if",
- "rustix",
+ "rustix 1.1.4",
  "windows-sys 0.59.0",
 ]
 
@@ -2174,7 +2223,7 @@ dependencies = [
  "color-eyre",
  "colored 3.1.1",
  "console 0.16.3",
- "crossterm",
+ "crossterm 0.29.0",
  "dirs",
  "eyre",
  "feynkit-cff",
@@ -2198,6 +2247,7 @@ dependencies = [
  "pyo3-build-config",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
+ "rand 0.9.4",
  "ratatui",
  "rayon",
  "reedline",
@@ -2301,7 +2351,7 @@ dependencies = [
  "clap",
  "clap_builder",
  "console 0.16.3",
- "crossterm",
+ "crossterm 0.29.0",
  "either",
  "hashbrown 0.17.1",
  "indenter",
@@ -2322,7 +2372,7 @@ dependencies = [
  "regex-automata",
  "regex-syntax",
  "rust-embed-utils",
- "rustix",
+ "rustix 1.1.4",
  "serde",
  "serde_core",
  "serde_json",
@@ -2350,18 +2400,21 @@ dependencies = [
  "base62",
  "bincode 2.0.1",
  "bincode-trait-derive",
+ "brotli 7.0.0",
  "clap",
  "clarabel",
  "color-eyre",
  "colored 3.1.1",
+ "criterion",
  "ctrlc",
- "delegate 0.13.5",
- "derive_more 2.1.1",
+ "delegate 0.12.0",
+ "derive_more 0.99.20",
  "dirs",
  "dot-parser",
  "dyn-clone",
  "enum_dispatch",
  "eyre",
+ "feynkit-amplitude",
  "feynkit-cff",
  "feynkit-generator",
  "feynkit-graph",
@@ -2379,12 +2432,14 @@ dependencies = [
  "momtrop",
  "nu-ansi-term",
  "paste",
+ "pathfinding",
  "pyo3",
  "pyo3-stub-gen",
  "rand 0.9.4",
  "ratatui",
  "rayon",
  "ref-ops",
+ "ringbuffer",
  "rug",
  "schemars",
  "serde",
@@ -2395,7 +2450,9 @@ dependencies = [
  "smartstring",
  "spenso",
  "spenso-hep-lib",
+ "statrs",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
@@ -2407,6 +2464,7 @@ dependencies = [
  "tracing-subscriber",
  "typed-index-collections",
  "vakint",
+ "vectorize",
 ]
 
 [[package]]
@@ -3311,6 +3369,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "integer-sqrt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "276ec31bcb4a9ee45f58bec6f9ec700ae4cf4f4f8f2fa7e06cb406bd5ffdd770"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "inventory"
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3736,6 +3803,12 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
 ]
+
+[[package]]
+name = "linux-raw-sys"
+version = "0.4.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab"
 
 [[package]]
 name = "linux-raw-sys"
@@ -4481,6 +4554,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 
 [[package]]
+name = "pathfinding"
+version = "4.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "835ad2773f8587ad2d90a0f7f0022ca743dfd5a6a24ea25062f3519c38d2fcfa"
+dependencies = [
+ "deprecate-until",
+ "indexmap",
+ "integer-sqrt",
+ "num-traits",
+ "rustc-hash 2.1.2",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "pdf-writer"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5224,7 +5311,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "567584a3b0e6a8203c23de40b4861497266725eb5363dbfd18a1edd603cca9f0"
 dependencies = [
  "cfg-if",
- "crossterm",
+ "crossterm 0.28.1",
+ "crossterm 0.29.0",
  "instability",
  "ratatui-core",
 ]
@@ -5333,7 +5421,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fb6657e89284163d4c081738148bd3c2c7487586898b38a004c3ea432c1a6f3"
 dependencies = [
  "chrono",
- "crossterm",
+ "crossterm 0.29.0",
  "fd-lock",
  "itertools 0.13.0",
  "nu-ansi-term",
@@ -5448,6 +5536,12 @@ checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "ringbuffer"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57b0b88a509053cbfd535726dcaaceee631313cef981266119527a1d110f6d2b"
 
 [[package]]
 name = "rkyv"
@@ -5623,6 +5717,19 @@ dependencies = [
 
 [[package]]
 name = "rustix"
+version = "0.38.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
+dependencies = [
+ "bitflags 2.13.2",
+ "errno",
+ "libc",
+ "linux-raw-sys 0.4.15",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "rustix"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
@@ -5630,7 +5737,7 @@ dependencies = [
  "bitflags 2.13.2",
  "errno",
  "libc",
- "linux-raw-sys",
+ "linux-raw-sys 0.12.1",
  "windows-sys 0.61.2",
 ]
 
@@ -6451,7 +6558,7 @@ dependencies = [
  "append-only-vec",
  "bincode 2.0.1",
  "bincode-trait-derive",
- "brotli",
+ "brotli 8.0.2",
  "byteorder",
  "bytes",
  "data-encoding",
@@ -6698,7 +6805,7 @@ dependencies = [
  "fastrand",
  "getrandom 0.4.2",
  "once_cell",
- "rustix",
+ "rustix 1.1.4",
  "windows-sys 0.61.2",
 ]
 
@@ -6719,7 +6826,7 @@ checksum = "9048a889effe34a5cddee0af7f53285198b16dca3be510858d38dfdb3e62a04e"
 dependencies = [
  "bitflags 2.13.2",
  "parking_lot",
- "rustix",
+ "rustix 1.1.4",
  "signal-hook",
  "windows-sys 0.61.2",
 ]
@@ -6730,7 +6837,7 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
- "rustix",
+ "rustix 1.1.4",
  "windows-sys 0.61.2",
 ]
 
@@ -6795,6 +6902,38 @@ dependencies = [
  "wezterm-dynamic",
  "wezterm-input-types",
  "winapi",
+]
+
+[[package]]
+name = "test-log"
+version = "0.2.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f46bf474f0a4afebf92f076d54fd5e63423d9438b8c278a3d2ccb0f47f7cdb3"
+dependencies = [
+ "env_logger",
+ "test-log-macros",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "test-log-core"
+version = "0.2.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37d4d41320b48bc4a211a9021678fcc0c99569b594ea31c93735b8e517102b4c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "test-log-macros"
+version = "0.2.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9beb9249a81e430dffd42400a49019bcf548444f1968ff23080a625de0d4d320"
+dependencies = [
+ "syn 2.0.117",
+ "test-log-core",
 ]
 
 [[package]]
@@ -8063,6 +8202,8 @@ dependencies = [
  "arrayvec",
  "colored 3.1.1",
  "eyre",
+ "feynkit-tensor",
+ "idenso",
  "log",
  "phf 0.13.1",
  "pyo3",
@@ -8073,6 +8214,7 @@ dependencies = [
  "spenso-macros",
  "string-template-plus",
  "symbolica",
+ "test-log",
  "thiserror 2.0.18",
  "tracing-subscriber",
  "version-compare",
@@ -8950,7 +9092,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
- "rustix",
+ "rustix 1.1.4",
 ]
 
 [[package]]

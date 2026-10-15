@@ -53,10 +53,11 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         &self,
         subgraph: &S,
         without: &S,
-    ) -> Numerator<AppliedFeynmanRule>;
+    ) -> Result<Numerator<AppliedFeynmanRule>>;
     fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
         subgraph: &S,
+        model: &Model,
         edge_powers: T,
     ) -> Atom;
 
@@ -177,6 +178,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn classified_spinneys<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
+        model: &Model,
         settings: &UVgenerationSettings,
         lmb: &LoopMomentumBasis,
     ) -> Result<Vec<Spinney>>
@@ -195,7 +197,10 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 
         let mut classified: Vec<_> = connected
             .into_iter()
-            .filter_map(|spinney| self.classify_spinney(spinney, settings, lmb).transpose())
+            .filter_map(|spinney| {
+                self.classify_spinney(spinney, model, settings, lmb)
+                    .transpose()
+            })
             .collect::<Result<_>>()?;
         let retained_factors: AHashSet<_> = classified
             .iter()

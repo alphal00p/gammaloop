@@ -1,13 +1,17 @@
 use std::{
-    env,
+    env, fs,
     path::{Path, PathBuf},
 };
 
 use clap::Subcommand;
+#[cfg(test)]
+use feynkit_graph::FeynmanDiagram;
 use gammalooprs::graph::Graph;
 use model::ImportModel;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::sync::Arc;
 use tracing::info;
 
 use crate::{
