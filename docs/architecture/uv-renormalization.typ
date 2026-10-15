@@ -66,7 +66,11 @@ this normalization, and coefficient factorization is retained.
 Exact finite-component certificates keep the tensor's external interface while
 contracting its finite entries. Scalar normalization extracts numeric content
 from integer powers before protecting their bodies. Functions, fractional
-powers, and guarded inverse factors remain opaque. A single bounded collection
+powers, and guarded inverse factors remain opaque. Positive scalar powers share
+their complete base with linear occurrences; a summed base remains one opaque
+factor. Restoring it may expose another linear cancellation, so the same
+protected pass repeats only after a strict expression-size decrease.
+A single bounded collection
 in repeated literal scalar factors can then cancel exact coefficient rows;
 complete scalar sums are admitted only after checking their native scalar
 interface. Unrelated product factors stay outside those rows. The certificate
