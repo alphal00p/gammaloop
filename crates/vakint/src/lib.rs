@@ -1936,14 +1936,10 @@ impl EvaluationMethod {
                 vakint.pysecdec_evaluate(settings, numerator, integral_specs, opts)
             }
         }?;
-        // Projected kernels contain only real scalar integral arguments. The
-        // monolithic numerator may contain complex user coefficients, so its
-        // functions must retain their original branches.
-        Ok(if settings.project_onto_tensor_integrals {
-            simplify_real(result.as_view())
-        } else {
-            result
-        })
+        // Scalar kernels contain only real integral arguments and opaque
+        // coefficient symbols. Complex user functions are restored afterward,
+        // preserving their original branches in both tensor-projection modes.
+        Ok(simplify_real(result.as_view()))
     }
 }
 
@@ -2132,8 +2128,10 @@ pub struct VakintSettings {
     pub precision_for_input_float_rationalization: InputFloatRationalizationPrecision,
     /// Whether reduced scalar products remain in dot-product notation.
     pub use_dot_product_notation: bool,
-    /// Project coefficient-one tensor integrals, keeping scalar coefficients
-    /// outside the backends. False sends each complete numerator through FORM.
+    /// Project coefficient-one tensor integrals. With AlphaLoop, false sends
+    /// the complete tensor numerator through FORM; native FeynKit uses its own
+    /// tensor reducer in either mode. Both modes keep loop-independent scalar
+    /// coefficients outside the analytic integration backend.
     pub project_onto_tensor_integrals: bool,
     /// Optional parent directory for uniquely named external-backend work directories.
     pub temporary_directory: Option<String>,
@@ -2433,17 +2431,12 @@ impl VakintTerm {
             self.integral = Atom::one();
             return Ok(());
         }
-        let (kernel, aliases, numerator_orders) = if settings.project_onto_tensor_integrals {
-            terms.backend_kernel(settings, slice::from_ref(&self.integral))?
-        } else {
-            let pole_order =
-                projection::ScalarTerms::epsilon_pole_order(numerator.as_view(), settings)?;
-            // One common Laurent pole is restored after backend evaluation;
-            // the complete numerator otherwise enters the backend unchanged.
-            let kernel =
-                numerator * Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(pole_order);
-            (kernel, Vec::new(), pole_order)
-        };
+        // Tensor projection has already completed. Both tensor-reduction
+        // modes now share the scalar coefficient boundary: the analytic
+        // backend sees one kernel, while complete graph coefficients retain
+        // their factorization and epsilon dependence for restoration below.
+        let (kernel, aliases, numerator_orders) =
+            terms.backend_kernel(settings, slice::from_ref(&self.integral))?;
         let epsilon_overflow = || VakintError::InvalidNumerator("epsilon order overflow".into());
         let n_loops = i64::try_from(integral_specs.canonical_topology.get_integral().n_loops)
             .map_err(|_| epsilon_overflow())?;
@@ -2588,14 +2581,7 @@ impl VakintTerm {
                     Replacement::new(alias.to_pattern(), coefficient.to_pattern())
                 })
                 .collect::<Vec<_>>(),
-        ) / normalization_power
-            / Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(
-                if settings.project_onto_tensor_integrals {
-                    0
-                } else {
-                    numerator_orders
-                },
-            );
+        ) / normalization_power;
         self.numerator = projection::ScalarTerms::epsilon_series(
             restored.as_view(),
             settings,
@@ -2840,7 +2826,20 @@ impl VakintTerm {
         settings: &VakintSettings,
         numerator: Atom,
     ) -> Result<Atom, VakintError> {
-        let mut form_numerator = numerator;
+        let dimension =
+            Atom::num(4) - Atom::num(2) * Atom::var(vk_symbol!(&settings.epsilon_symbol));
+        // FORM may distribute the loop-tensor polynomial, but unrelated
+        // scalar graph factors stay in the same coefficient owner used by
+        // analytic integration. Open Lorentz ports remain visible so FORM's
+        // index renaming also acts on their actual native tensor leaves.
+        let (mut form_numerator, coefficients) =
+            projection::ScalarTerms::protect_coefficients(numerator.as_view(), |term| {
+                if term.contains_symbol(S.k) {
+                    Ok(false)
+                } else {
+                    Ok(lorentz::LorentzTensor::parse(term, &dimension)?.is_scalar())
+                }
+            })?;
         // Make sure to undo the dot product notation.
         // If it was not used, the command below will do nothing.
         form_numerator = Vakint::convert_from_dot_notation(form_numerator.as_view());
@@ -2964,7 +2963,11 @@ impl VakintTerm {
                 )
         }
 
-        Ok(reduced_numerator)
+        Ok(
+            reduced_numerator.replace_multiple(coefficients.iter().map(|(coefficient, alias)| {
+                Replacement::new(alias.to_pattern(), coefficient.to_pattern())
+            })),
+        )
     }
 
     fn tensor_reduce_feynkit(&mut self, settings: &VakintSettings) -> Result<(), VakintError> {
@@ -7065,6 +7068,61 @@ mod tests {
                     Err(VakintError::InvalidNumerator(message))
                         if message.contains("open Lorentz indices remain after contraction")
                 ));
+            }
+        }
+    }
+
+    #[test]
+    fn tensor_backend_modes_retain_powered_external_coefficients() {
+        let vakint = Vakint::new().unwrap();
+        let spectator =
+            vk_parse!("(coefficient_a+coefficient_b)^11*(coefficient_c+coefficient_d)").unwrap();
+        for tensor_reduction_method in [
+            TensorReductionMethod::FeynKit,
+            TensorReductionMethod::AlphaLoop,
+        ] {
+            for project_onto_tensor_integrals in [false, true] {
+                let settings = VakintSettings {
+                    tensor_reduction_method,
+                    project_onto_tensor_integrals,
+                    use_dot_product_notation: true,
+                    ..VakintSettings::default()
+                };
+                let mut term = VakintTerm {
+                    integral: vk_parse!("topo(I1L(coefficient_mass_squared,3))").unwrap(),
+                    numerator: &spectator * vk_parse!("k(1,31)*k(1,32)").unwrap(),
+                    vectors: vec![("k".into(), 1)],
+                };
+                term.tensor_reduce(&vakint, &settings).unwrap();
+                assert!(
+                    term.numerator
+                        .pattern_match(&spectator.to_pattern(), None, None)
+                        .next()
+                        .is_some(),
+                    "{tensor_reduction_method:?}, projected={project_onto_tensor_integrals}: {}",
+                    term.numerator
+                );
+                // Compare only the rational projector coefficient; FORM may
+                // write 1/(4-2*epsilon) as -1/(-4+2*epsilon). No graph
+                // numerator or powered spectator enters denominator algebra.
+                let tensor_kernel = vk_parse!("g(31,32)*dot(k(1),k(1))").unwrap();
+                let stripped = term.numerator.replace(spectator.to_pattern()).with(1);
+                assert!(
+                    stripped
+                        .pattern_match(&tensor_kernel.to_pattern(), None, None)
+                        .next()
+                        .is_some(),
+                    "the exact rank-two tensor kernel must remain present"
+                );
+                let coefficient = stripped.replace(tensor_kernel.to_pattern()).with(1);
+                let dimension =
+                    Atom::num(4) - Atom::num(2) * Atom::var(vk_symbol!(&settings.epsilon_symbol));
+                assert_eq!(
+                    (coefficient * dimension).cancel(),
+                    Atom::one(),
+                    "{tensor_reduction_method:?}, projected={project_onto_tensor_integrals}: {}",
+                    term.numerator
+                );
             }
         }
     }
