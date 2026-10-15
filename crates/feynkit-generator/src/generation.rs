@@ -7491,6 +7491,9 @@ mod tests {
                 }
             }
         }
+        // This artificial spin/statistics model no longer describes the SM's
+        // physical vector/Goldstone/ghost quartets used for covariant cuts.
+        definition["covariant_cut_multiplets"] = serde_json::json!({});
         let half_integer_ghost_model: Model = serde_json::from_value(definition).unwrap();
         let generators = [
             Generator::new(model),
