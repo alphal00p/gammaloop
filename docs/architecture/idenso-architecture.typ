@@ -148,8 +148,16 @@ Uniformly reversed closed gamma and gamma5 words use the trace transpose
 identity before entering those same kernels: reverse the factor order and
 restore forward endpoints. The normalization remains local to the trace, so
 surrounding callbacks observe the evaluated result in the same pass. Mixed
-orientations and open chains remain opaque, and gamma5 retains its existing
-four-dimensional restrictions.
+orientations and open chains remain opaque to that trace-transpose identity,
+and gamma5 retains its existing four-dimensional restrictions.
+
+Fixed components of the physical Minkowski basis have a separate local rule.
+Their metric contractions use the physical signature while retaining the
+symbolic Lorentz dimension. In a four-dimensional spinor representation, a
+slash of the temporal basis vector becomes `gamma0`, and `gamma0` anticommutes
+with each fixed physical spatial slash. These identities preserve ordered
+spinor multiplication and do not set the Lorentz dimension to four. Formal
+spin dimensions and unsupported component representations retain their word.
 
 Lorentz-dimension changes map both the Atom and its declared interface here. Newly coincident
 explicit indices contract; excess occurrences fail. Callback validation compares the encoded

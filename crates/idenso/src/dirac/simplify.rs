@@ -297,6 +297,11 @@ impl DiracFactorKinds {
 }
 
 impl<'a> DiracFactor<'a> {
+    fn fixed_minkowski_basis_component(index: AtomView<'_>) -> Option<usize> {
+        let (component, representation) = SlotMatcher::default().fixed_basis_vector(index)?;
+        (representation.head() == *MINKOWSKI_SYMBOL && component < 4).then_some(component)
+    }
+
     /// Classifies a factor inside a `chain(...)` or `trace(...)` without
     /// materializing owned atoms.
     ///
@@ -1309,11 +1314,50 @@ impl<'settings> DiracSimplifier<'settings> {
         Some((result, observations))
     }
 
+    /// Identify the temporal vector of the physical basis without replacing
+    /// the Lorentz dimension. Formal spin dimensions keep their original word.
+    fn normalize_temporal_basis_slash(
+        word: DiracWord<'_>,
+        factors: &[AtomView<'_>],
+    ) -> Option<Atom> {
+        if !word.is_four_dimensional() {
+            return None;
+        }
+        let mut normalized = None;
+        for (position, factor) in factors.iter().enumerate() {
+            let AtomView::Fun(gamma) = factor else {
+                continue;
+            };
+            if gamma.get_symbol() != AGS.gamma || gamma.get_nargs() != 3 {
+                continue;
+            }
+            if DiracFactor::fixed_minkowski_basis_component(gamma.get(2)) == Some(0)
+                && (has_forward_chain_endpoints(gamma.get(0), gamma.get(1))
+                    || has_forward_chain_endpoints(gamma.get(1), gamma.get(0)))
+            {
+                let output = normalized.get_or_insert_with(|| {
+                    factors
+                        .iter()
+                        .map(|factor| factor.to_owned())
+                        .collect::<Vec<_>>()
+                });
+                output[position] = endpoint_factor(AGS.gamma0);
+            }
+        }
+        normalized.map(|factors| word.build(factors))
+    }
+
     fn simplify_chain_node(self, f: FunView, dummies: &ParseState<AbstractIndex>) -> Option<Atom> {
         let args = f.iter().collect::<Vec<_>>();
         let [start, end, factors @ ..] = args.as_slice() else {
             return None;
         };
+
+        if let Some(normalized) =
+            Self::normalize_temporal_basis_slash(DiracWord::Chain(*start, *end), factors)
+        {
+            return Some(normalized);
+        }
 
         let mut factor_kinds = DiracFactorKinds::default();
         let factors = factors
@@ -1454,6 +1498,18 @@ impl DiracSimplifier<'_> {
                 (DiracFactor::ProjectorPlus(_), DiracFactor::ProjectorMinus(_))
                 | (DiracFactor::ProjectorMinus(_), DiracFactor::ProjectorPlus(_)) => {
                     return Some(Atom::Zero);
+                }
+                (DiracFactor::Gamma0(_), DiracFactor::Gamma { mink_index, .. })
+                    if matches!(
+                        DiracFactor::fixed_minkowski_basis_component(*mink_index),
+                        Some(1..=3)
+                    ) =>
+                {
+                    // Keep the physical spatial basis in symbolic Lorentz d.
+                    // Moving gamma0 only to the right decreases inversions.
+                    return Some(-chain!(start, end; Self::chain_factors(
+                        factors, i, i + 1, [right.as_view(), left.as_view()],
+                    )));
                 }
                 _ => continue,
             };
@@ -2068,6 +2124,12 @@ impl DiracSimplifier<'_> {
     /// kernels; longer 4D words recurse until those kernels apply.
     fn simplify_trace_node(self, f: FunView, dummies: &ParseState<AbstractIndex>) -> Option<Atom> {
         let (rep, factors) = shadowing::trace_parts(f)?;
+
+        if let Some(normalized) =
+            Self::normalize_temporal_basis_slash(DiracWord::Trace(rep), &factors)
+        {
+            return Some(normalized);
+        }
 
         if factors.is_empty() {
             return Self::simplify_trace_terminal(trace!(rep).as_view());
