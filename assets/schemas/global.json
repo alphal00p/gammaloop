@@ -210,7 +210,7 @@
           "type": "boolean"
         },
         "summed_function_map": {
-          "description": "Sum all orientations, retaining each selected orientation as a separate\nSymbolica function-map alias instead of merging them into one expression.",
+          "description": "Represent a summed evaluator through a shared Symbolica function map.",
           "type": "boolean"
         },
         "tensor_network_contraction_order": {
@@ -771,6 +771,7 @@
           ]
         },
         "tensor_reduction_method": {
+          "description": "Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.",
           "$ref": "#/$defs/VakintTensorReductionMethod"
         }
       },

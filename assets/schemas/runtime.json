@@ -8,7 +8,7 @@
       "$ref": "#/$defs/GeneralSettings"
     },
     "h_function": {
-      "description": "Damping profile shared by Local Unitarity threshold terms; it also localizes\nzero-temperature Fermi-surface distributions.",
+      "description": "Damping profile shared by Local Unitarity threshold terms.",
       "$ref": "#/$defs/HFunctionSettings"
     },
     "integrator": {
@@ -517,6 +517,10 @@
         },
         "store_additional_weights_in_event": {
           "description": "Persist every configured additional weight on each generated event.",
+          "type": "boolean"
+        },
+        "use_ltd": {
+          "description": "Evaluate through the loop-tree-duality representation where the selected integrand supports it.",
           "type": "boolean"
         }
       },
@@ -1823,7 +1827,7 @@
           "format": "int32"
         },
         "levels": {
-          "description": "Ordered precision and representation choices with tolerances for stability escalation.",
+          "description": "Ordered numerical-precision levels and tolerances used during stability escalation.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/StabilityLevelSetting"

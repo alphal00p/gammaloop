@@ -330,14 +330,14 @@
         },
         "representation": {
           "description": "Three-dimensional representation to build.",
-          "$ref": "#/$defs/RepresentationMode",
+          "$ref": "#/$defs/CliRepresentationMode",
           "default": "cff"
         },
         "selection": {
           "$ref": "#/$defs/GraphSelectorArgs"
         },
         "show_details_for_orientation": {
-          "description": "Show a residue/orientation by row id or label, optionally suffixed with `|N<map>|<variant>`.",
+          "description": "Show detailed terms for the selected orientation.",
           "type": [
             "string",
             "null"
@@ -1169,7 +1169,7 @@
           "const": "Processes"
         },
         {
-          "description": "Show stored representations, graph groups, generation timings, and selected detail tables.",
+          "description": "Show generated integrands, graph groups, resources, and selected detail tables.",
           "type": "object",
           "properties": {
             "Integrands": {
@@ -1663,7 +1663,7 @@
           "type": "boolean"
         },
         "summed_function_map": {
-          "description": "Sum all orientations, retaining each selected orientation as a separate\nSymbolica function-map alias instead of merging them into one expression.",
+          "description": "Represent a summed evaluator through a shared Symbolica function map.",
           "type": "boolean"
         },
         "tensor_network_contraction_order": {
@@ -1924,6 +1924,10 @@
         },
         "store_additional_weights_in_event": {
           "description": "Persist every configured additional weight on each generated event.",
+          "type": "boolean"
+        },
+        "use_ltd": {
+          "description": "Evaluate through the loop-tree-duality representation where the selected integrand supports it.",
           "type": "boolean"
         }
       },
@@ -4404,7 +4408,7 @@
           "$ref": "#/$defs/GeneralSettings"
         },
         "h_function": {
-          "description": "Damping profile shared by Local Unitarity threshold terms; it also localizes\nzero-temperature Fermi-surface distributions.",
+          "description": "Damping profile shared by Local Unitarity threshold terms.",
           "$ref": "#/$defs/HFunctionSettings"
         },
         "integrator": {
@@ -5845,7 +5849,7 @@
           "format": "int32"
         },
         "levels": {
-          "description": "Ordered precision and representation choices with tolerances for stability escalation.",
+          "description": "Ordered numerical-precision levels and tolerances used during stability escalation.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/StabilityLevelSetting"
@@ -5980,7 +5984,7 @@
           ]
         },
         {
-          "description": "Construct and export the selected graph's three-dimensional expression.",
+          "description": "Construct and export the selected graph's CFF or LTD expression.",
           "type": "object",
           "properties": {
             "Build": {
@@ -6355,10 +6359,26 @@
           ]
         },
         "tensor_reduction_method": {
+          "description": "Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.",
           "$ref": "#/$defs/VakintTensorReductionMethod"
         }
       },
       "additionalProperties": false
+    },
+    "VakintTensorReductionMethod": {
+      "description": "Numerator tensor-reduction backend used by Vakint.",
+      "oneOf": [
+        {
+          "description": "Historical FORM implementation shipped with AlphaLoop.",
+          "type": "string",
+          "const": "alphaloop"
+        },
+        {
+          "description": "Native, FORM-less FeynKit tensor projector.",
+          "type": "string",
+          "const": "feynkit"
+        }
+      ]
     },
     "Validate": {
       "type": "object",
@@ -6376,21 +6396,6 @@
       },
       "required": [
         "selection"
-      ]
-    },
-    "VakintTensorReductionMethod": {
-      "description": "Numerator tensor-reduction backend used by Vakint.",
-      "oneOf": [
-        {
-          "description": "Historical FORM implementation shipped with AlphaLoop.",
-          "type": "string",
-          "const": "alphaloop"
-        },
-        {
-          "description": "Native, FORM-less FeynKit tensor projector.",
-          "type": "string",
-          "const": "feynkit"
-        }
       ]
     },
     "ValueRangeSelectorSerdeTag": {
