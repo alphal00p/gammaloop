@@ -1,6 +1,6 @@
 use kurbo::{
-    BezPath, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathEl, PathSeg, Point,
-    Vec2, offset::offset_cubic,
+    BezPath, Cap, CubicBez, Join, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathEl,
+    PathSeg, Point, Stroke, StrokeOpts, Vec2, offset::offset_cubic,
 };
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
@@ -178,6 +178,31 @@ pub struct PatternPathSpec {
     pub endpoint_slope: f64,
     #[serde(default, deserialize_with = "deserialize_f64_vec")]
     pub split_at: Vec<f64>,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct StrokeOutlineSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
+    pub path: BezPath,
+    #[serde(deserialize_with = "deserialize_f64")]
+    pub width: f64,
+    #[serde(default = "default_stroke_join")]
+    pub join: String,
+    #[serde(
+        default = "default_stroke_miter_limit",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub miter_limit: f64,
+    #[serde(default = "default_stroke_cap")]
+    pub start_cap: String,
+    #[serde(default = "default_stroke_cap")]
+    pub end_cap: String,
     #[serde(
         default = "default_arclen_accuracy",
         deserialize_with = "deserialize_f64"
@@ -586,6 +611,18 @@ fn default_coil_longitudinal_scale() -> f64 {
 
 fn default_anchor_endpoint() -> bool {
     true
+}
+
+fn default_stroke_join() -> String {
+    "miter".to_string()
+}
+
+fn default_stroke_cap() -> String {
+    "butt".to_string()
+}
+
+fn default_stroke_miter_limit() -> f64 {
+    4.0
 }
 
 fn default_parallel_optimize() -> bool {
@@ -1046,6 +1083,13 @@ pub fn curve_parallel_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: ParallelPathSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize parallel path spec: {err}"))?;
     let output = spec.parallel()?;
+    encode_cbor(&output)
+}
+
+pub fn curve_stroke_outline_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: StrokeOutlineSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize stroke outline spec: {err}"))?;
+    let output = stroke_outline(spec)?;
     encode_cbor(&output)
 }
 
@@ -1601,6 +1645,43 @@ impl ParallelPathSpec {
         let segments =
             PathTrimmer::new(offset_segments, accuracy).trim(start_outset, end_outset)?;
         curve_path_from_segments(segments)
+    }
+}
+
+/// Expand a stroked path into a closed fill outline with joins and caps.
+///
+/// Open subpaths become one closed contour; closed subpaths become an outer and
+/// an inner contour of opposite winding, so fill the result with the non-zero rule.
+fn stroke_outline(spec: StrokeOutlineSpec) -> Result<CurvePathOutput, String> {
+    let width = validate_positive(spec.width, "stroke outline width")?;
+    let accuracy = validate_positive_accuracy(spec.accuracy)?;
+    let miter_limit = validate_positive(spec.miter_limit, "stroke outline miter limit")?;
+    let style = Stroke {
+        join: parse_stroke_join(&spec.join)?,
+        miter_limit,
+        start_cap: parse_stroke_cap(&spec.start_cap)?,
+        end_cap: parse_stroke_cap(&spec.end_cap)?,
+        ..Stroke::new(width)
+    };
+    let path = kurbo::stroke(spec.path, &style, &StrokeOpts::default(), accuracy);
+    Ok(CurvePathOutput { path })
+}
+
+fn parse_stroke_join(value: &str) -> Result<Join, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "miter" => Ok(Join::Miter),
+        "round" => Ok(Join::Round),
+        "bevel" => Ok(Join::Bevel),
+        other => Err(format!("Unsupported stroke join: {other}")),
+    }
+}
+
+fn parse_stroke_cap(value: &str) -> Result<Cap, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "butt" => Ok(Cap::Butt),
+        "square" => Ok(Cap::Square),
+        "round" => Ok(Cap::Round),
+        other => Err(format!("Unsupported stroke cap: {other}")),
     }
 }
 
@@ -2973,6 +3054,114 @@ mod tests {
         assert_point_close(points[0], point(1.0, 0.25));
         assert_point_close(*points.last().unwrap(), point(3.0, 0.25));
         assert!((path_length_value(&output.path, 1e-6) - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pattern_split_at_cuts_one_patterned_path_into_joined_parts() {
+        let spec = |amplitude: f64, split_at: Vec<f64>| PatternPathSpec {
+            path: straight_path(3.0),
+            pattern: PatternInput::wave(16),
+            amplitude,
+            wavelength: 0.7,
+            phase: 0.0,
+            samples_per_period: 16,
+            coil_longitudinal_scale: default_coil_longitudinal_scale(),
+            anchor_start: true,
+            anchor_end: true,
+            endpoint_slope: 0.0,
+            accuracy: 1e-9,
+            split_at,
+        };
+
+        let whole = spec(0.2, Vec::new()).patterned().unwrap();
+        assert_eq!(whole.parts.len(), 1);
+        assert_eq!(whole.parts[0].path, whole.path);
+
+        // The native API clamps and retains every requested boundary, including
+        // empty intervals. The unsplit curve is exactly the original fit.
+        let split = spec(0.2, vec![2.1, 1.3, 1.3, 0.0, 3.0, 7.0])
+            .patterned()
+            .unwrap();
+        assert_eq!(split.parts.len(), 7);
+        assert_eq!(split.path, whole.path);
+        let nonempty = split
+            .parts
+            .iter()
+            .filter(|part| part.path.segments().next().is_some())
+            .collect::<Vec<_>>();
+        assert_eq!(nonempty.len(), 3);
+        for pair in nonempty.windows(2) {
+            let end = pair[0].path.segments().last().unwrap().end();
+            let start = pair[1].path.segments().next().unwrap().start();
+            assert_eq!(end, start);
+        }
+
+        // With zero amplitude the cut points sit exactly at the base distances.
+        let flat = spec(0.0, vec![1.3, 2.1]).patterned().unwrap();
+        let ends: Vec<_> = flat
+            .parts
+            .iter()
+            .map(|part| part.path.segments().last().unwrap().end())
+            .collect();
+        assert!((ends[0].x - 1.3).abs() < 1e-9 && ends[0].y.abs() < 1e-9);
+        assert!((ends[1].x - 2.1).abs() < 1e-9 && ends[1].y.abs() < 1e-9);
+    }
+
+    fn outline_spec(path: BezPath, width: f64, cap: &str) -> StrokeOutlineSpec {
+        StrokeOutlineSpec {
+            path,
+            width,
+            join: "miter".to_string(),
+            miter_limit: 4.0,
+            start_cap: cap.to_string(),
+            end_cap: cap.to_string(),
+            accuracy: 1e-6,
+        }
+    }
+
+    #[test]
+    fn stroke_outline_of_open_line_is_closed_rectangle() {
+        use kurbo::Shape;
+
+        let butt = stroke_outline(outline_spec(straight_path(3.0), 0.5, "butt")).unwrap();
+        let bbox = butt.path.bounding_box();
+        assert_close(bbox.x0, 0.0);
+        assert_close(bbox.x1, 3.0);
+        assert_close(bbox.y0, -0.25);
+        assert_close(bbox.y1, 0.25);
+        assert_close(butt.path.area().abs(), 1.5);
+        assert_eq!(butt.path.elements().last(), Some(&PathEl::ClosePath));
+
+        let square = stroke_outline(outline_spec(straight_path(3.0), 0.5, "square")).unwrap();
+        let bbox = square.path.bounding_box();
+        assert_close(bbox.x0, -0.25);
+        assert_close(bbox.x1, 3.25);
+    }
+
+    #[test]
+    fn stroke_outline_miters_sharp_corners() {
+        use kurbo::Shape;
+
+        let mut corner = BezPath::new();
+        corner.move_to((0.0, 2.0));
+        corner.line_to((0.0, 0.0));
+        corner.line_to((2.0, 0.0));
+        let output = stroke_outline(outline_spec(corner, 0.5, "butt")).unwrap();
+        let bbox = output.path.bounding_box();
+        assert_close(bbox.x0, -0.25);
+        assert_close(bbox.y0, -0.25);
+        assert_ne!(output.path.winding(Point::new(-0.2, -0.2)), 0);
+        assert_ne!(output.path.winding(Point::new(0.1, 1.0)), 0);
+        assert_eq!(output.path.winding(Point::new(1.0, 1.0)), 0);
+    }
+
+    #[test]
+    fn stroke_outline_rejects_unknown_styles() {
+        let mut spec = outline_spec(straight_path(1.0), 0.5, "butt");
+        spec.join = "sharp".to_string();
+        assert!(stroke_outline(spec).is_err());
+        assert!(stroke_outline(outline_spec(straight_path(1.0), 0.5, "flat")).is_err());
+        assert!(stroke_outline(outline_spec(straight_path(1.0), 0.0, "butt")).is_err());
     }
 
     fn straight_curve(length: f64) -> CubicBezierSpec {

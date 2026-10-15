@@ -25,6 +25,8 @@ pub use clustering::{ClusteringResult, Jet, JetAlgorithm, JetClustering};
 pub use events::{
     AdditionalWeightKey, CutInfo, Event, EventGroup, EventGroupList, GenericAdditionalWeightInfo,
     GenericEvent, GenericEventGroup, GenericEventGroupList,
+    GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
+    ThresholdCountertermComponentOccurrence,
 };
 
 pub type QuantitiesSettings = BTreeMap<String, QuantitySettings>;
@@ -37,7 +39,7 @@ pub struct HistogramProcessInfo {
     pub graph_to_group_id: Vec<usize>,
     pub graph_group_master_names: Vec<String>,
     pub orientation_labels_by_group: Vec<Vec<String>>,
-    pub lmb_channel_labels_by_group: Vec<Vec<String>>,
+    pub sampling_channel_labels_by_group: Vec<Vec<String>>,
 }
 
 #[derive(
@@ -584,7 +586,7 @@ pub enum QuantitySettings {
     GraphId {},
     GraphGroupId {},
     OrientationId {},
-    LmbChannelId {},
+    SamplingChannelId {},
 }
 
 impl QuantitySettings {
@@ -601,7 +603,7 @@ impl QuantitySettings {
             QuantitySettings::GraphId {} => Ok(QuantitySettings::GraphId {}),
             QuantitySettings::GraphGroupId {} => Ok(QuantitySettings::GraphGroupId {}),
             QuantitySettings::OrientationId {} => Ok(QuantitySettings::OrientationId {}),
-            QuantitySettings::LmbChannelId {} => Ok(QuantitySettings::LmbChannelId {}),
+            QuantitySettings::SamplingChannelId {} => Ok(QuantitySettings::SamplingChannelId {}),
         }
     }
 
@@ -919,7 +921,7 @@ pub enum DiscreteBinDomainSettings {
     GraphIds,
     GraphGroupIds,
     OrientationIds,
-    LmbChannelIds,
+    SamplingChannelIds,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -931,7 +933,7 @@ pub enum DiscreteBinLabelsSettings {
     GraphName,
     GraphGroupMasterName,
     Orientation,
-    LmbChannelEdgeIds,
+    SamplingChannelEdgeIds,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -1575,7 +1577,7 @@ enum MetadataQuantityKind {
     GraphId,
     GraphGroupId,
     OrientationID,
-    LmbChannelId,
+    SamplingChannelId,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1593,8 +1595,8 @@ impl MetadataQuantityDefinition {
             MetadataQuantityKind::OrientationID => {
                 event.cut_info.orientation_id.map(|id| id as isize)
             }
-            MetadataQuantityKind::LmbChannelId => {
-                event.cut_info.lmb_channel_id.map(|id| id as isize)
+            MetadataQuantityKind::SamplingChannelId => {
+                event.cut_info.sampling_channel_id.map(|id| id as isize)
             }
         };
         let Some(bin_id) = value else {
@@ -1676,9 +1678,9 @@ impl ObservableDefinition {
                     kind: MetadataQuantityKind::OrientationID,
                 })
             }
-            QuantitySettings::LmbChannelId {} => {
+            QuantitySettings::SamplingChannelId {} => {
                 ObservableDefinition::Metadata(MetadataQuantityDefinition {
-                    kind: MetadataQuantityKind::LmbChannelId,
+                    kind: MetadataQuantityKind::SamplingChannelId,
                 })
             }
         })
@@ -2789,7 +2791,13 @@ impl HistogramAccumulatorState {
             log_y_axis: snapshot.log_y_axis,
             discrete_min_bin_id,
             discrete_ordering: snapshot.discrete_ordering,
-            bin_labels: bins.iter().map(|bin| bin.label.clone()).collect(),
+            bin_labels: if snapshot.kind == HistogramSnapshotKind::Discrete
+                || bins.iter().any(|bin| bin.label.is_some())
+            {
+                bins.iter().map(|bin| bin.label.clone()).collect()
+            } else {
+                Vec::new()
+            },
             bins: bins
                 .iter()
                 .map(ObservableBinAccumulator::from_snapshot)
@@ -3780,22 +3788,22 @@ fn resolve_discrete_histogram_layout(
             })?;
             (0, labels.len() as isize - 1)
         }
-        DiscreteBinDomainSettings::LmbChannelIds => {
+        DiscreteBinDomainSettings::SamplingChannelIds => {
             let info = process_info.ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' uses LmbChannelIds but no process information is available.",
+                    "Observable '{}' uses SamplingChannelIds but no process information is available.",
                     observable_name
                 )
             })?;
             let group_id = graph_group_context.ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' uses LmbChannelIds but no singleton graph-group context could be resolved from its selections.",
+                    "Observable '{}' uses SamplingChannelIds but no singleton graph-group context could be resolved from its selections.",
                     observable_name
                 )
             })?;
-            let labels = info.lmb_channel_labels_by_group.get(group_id).ok_or_else(|| {
+            let labels = info.sampling_channel_labels_by_group.get(group_id).ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' resolved graph-group {} for LmbChannelIds, but no LMB-channel metadata is available.",
+                    "Observable '{}' resolved graph-group {} for SamplingChannelIds, but no sampling-channel metadata is available.",
                     observable_name,
                     group_id
                 )
@@ -3902,33 +3910,33 @@ fn resolve_discrete_histogram_layout(
                 .map(Some)
                 .collect()
         }
-        Some(DiscreteBinLabelsSettings::LmbChannelEdgeIds) => {
-            if !matches!(quantity_settings, QuantitySettings::LmbChannelId {}) {
+        Some(DiscreteBinLabelsSettings::SamplingChannelEdgeIds) => {
+            if !matches!(quantity_settings, QuantitySettings::SamplingChannelId {}) {
                 return Err(eyre!(
-                    "Observable '{}' uses LmbChannelEdgeIds labels, but its quantity is not lmb_channel_id.",
+                    "Observable '{}' uses SamplingChannelEdgeIds labels, but its quantity is not sampling_channel_id.",
                     observable_name
                 ));
             }
             let info = process_info.ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' uses LmbChannelEdgeIds labels but no process information is available.",
+                    "Observable '{}' uses SamplingChannelEdgeIds labels but no process information is available.",
                     observable_name
                 )
             })?;
             let group_id = graph_group_context.ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' uses LmbChannelEdgeIds labels but no singleton graph-group context could be resolved from its selections.",
+                    "Observable '{}' uses SamplingChannelEdgeIds labels but no singleton graph-group context could be resolved from its selections.",
                     observable_name
                 )
             })?;
-            info.lmb_channel_labels_by_group
+            info.sampling_channel_labels_by_group
                 .get(group_id)
                 .ok_or_else(|| {
                     eyre!(
-                        "Observable '{}' resolved graph group {} for LmbChannelEdgeIds labels, but the process only exposes {} graph groups.",
+                        "Observable '{}' resolved graph group {} for SamplingChannelEdgeIds labels, but the process only exposes {} graph groups.",
                         observable_name,
                         group_id,
-                        info.lmb_channel_labels_by_group.len()
+                        info.sampling_channel_labels_by_group.len()
                     )
                 })?
                 .iter()
@@ -4556,6 +4564,99 @@ mod tests {
     }
 
     #[test]
+    fn continuous_histogram_checkpoint_resumes_worker_merges() {
+        let mut uninterrupted = HistogramAccumulatorState::continuous(
+            "leading_jet_pt_hist".to_string(),
+            "AL".to_string(),
+            ObservablePhase::Real,
+            ObservableValueTransform::Identity,
+            0.0,
+            1000.0,
+            false,
+            true,
+            8,
+        );
+        for sample in [
+            &[
+                (5.0, 1.5),
+                (145.0, 0.5),
+                (-1.0, -0.75),
+                (1000.0, 2.0),
+                (f64::NAN, 1.0),
+            ][..],
+            &[(5.0, -0.5), (145.0, 1.25)][..],
+        ] {
+            uninterrupted.fill_continuous_sample(sample).unwrap();
+        }
+        uninterrupted.update_results();
+        let checkpoint = uninterrupted.snapshot();
+        let loaded: HistogramSnapshot =
+            serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
+        let mut resumed = loaded.into_accumulator_state();
+        assert_eq!(resumed.snapshot(), checkpoint);
+
+        let mut worker = uninterrupted.cleared_clone();
+        worker
+            .fill_continuous_sample(&[(260.0, 2.0), (145.0, -0.5), (-2.0, 0.25)])
+            .unwrap();
+        uninterrupted = uninterrupted.merged_with(&worker).unwrap();
+        resumed.merge_in_place(&mut worker).unwrap();
+        uninterrupted.update_results();
+        resumed.update_results();
+        assert_eq!(resumed.snapshot(), uninterrupted.snapshot());
+    }
+
+    #[test]
+    fn continuous_histogram_checkpoint_preserves_explicit_label_guard() {
+        let mut checkpoint = sample_histogram_snapshot();
+        let mut unlabeled = checkpoint.clone().into_accumulator_state();
+        checkpoint.bins[0].label = Some("region".to_string());
+        let loaded: HistogramSnapshot =
+            serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
+        let mut labeled = loaded.into_accumulator_state();
+        assert_eq!(labeled.bin_labels, vec![Some("region".to_string())]);
+        assert!(unlabeled.merge_in_place(&mut labeled).is_err());
+    }
+
+    #[test]
+    fn discrete_histogram_checkpoint_retains_ordering_and_labels() {
+        let mut uninterrupted = HistogramAccumulatorState::discrete(
+            "jet_count".to_string(),
+            "AL".to_string(),
+            ObservablePhase::Real,
+            0,
+            2,
+            DiscreteBinOrdering::ValueDescending,
+            true,
+            vec![Some("zero".to_string()), None, Some("two".to_string())],
+        )
+        .unwrap();
+        for sample in [
+            &[(0, 1.0), (1, 3.0), (2, 2.0), (-1, -0.5), (3, 0.25)][..],
+            &[(0, 0.5), (2, -1.0)][..],
+        ] {
+            uninterrupted.fill_discrete_sample(sample).unwrap();
+        }
+        uninterrupted.update_results();
+        let checkpoint = uninterrupted.snapshot();
+        assert_eq!(checkpoint.bins[0].bin_id, Some(1));
+        let loaded: HistogramSnapshot =
+            serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
+        let mut resumed = loaded.into_accumulator_state();
+        assert_eq!(resumed.snapshot(), checkpoint);
+        assert_eq!(resumed.bin_labels, uninterrupted.bin_labels);
+        assert_eq!(resumed.discrete_ordering, uninterrupted.discrete_ordering);
+
+        let mut worker = uninterrupted.cleared_clone();
+        worker.fill_discrete_sample(&[(2, 4.0), (0, -0.5)]).unwrap();
+        uninterrupted = uninterrupted.merged_with(&worker).unwrap();
+        resumed.merge_in_place(&mut worker).unwrap();
+        uninterrupted.update_results();
+        resumed.update_results();
+        assert_eq!(resumed.snapshot(), uninterrupted.snapshot());
+    }
+
+    #[test]
     fn histogram_snapshot_rescale_scales_weight_sums_only() {
         let snapshot = sample_histogram_snapshot();
         let scaled = snapshot.rescaled(2.0);
@@ -4782,7 +4883,7 @@ max = 0
                 "group2".to_string(),
             ],
             orientation_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
-            lmb_channel_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
+            sampling_channel_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
         };
 
         let resolved = resolve_graph_group_context(
@@ -4821,7 +4922,7 @@ max = 0
             graph_to_group_id: Vec::new(),
             graph_group_master_names: vec!["group0".to_string()],
             orientation_labels_by_group: vec![Vec::new()],
-            lmb_channel_labels_by_group: vec![Vec::new()],
+            sampling_channel_labels_by_group: vec![Vec::new()],
         };
 
         let err = resolve_graph_group_context(

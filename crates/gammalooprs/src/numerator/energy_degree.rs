@@ -2156,7 +2156,7 @@ mod tests {
 
     use crate::{
         finalized_runtime_dot,
-        graph::{Graph, LMBext, parse::IntoFinalizedRuntimeGraph},
+        graph::{Graph, LMBext},
         initialisation::test_initialise,
         numerator::energy_degree::{
             EnergyCandidateFamily, EnergyPowerAnalysisError, EnergyPowerAnalyzer, EnergyReference,

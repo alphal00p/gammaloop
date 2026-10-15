@@ -32,7 +32,7 @@ The required backend depth includes epsilon poles in numerator coefficients and 
 
 When integrated counterterms are enabled, the shared UV entry checks the raw edge and vertex numerators of the current UV subgraph before simplification. Gamma5 and chiral projectors are rejected with graph, subgraph and source context, including gamma5 pairs that could subsequently cancel. A dimensional gamma5 prescription is not implemented. Gamma5 belonging only to the cograph or an external-state projector is outside this check.
 
-The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defaults to `true`. It selects Vakint's universal tensor kernels and isolated scalar coefficients. With `false`, each complete numerator follows the base branch's full FORM reduction and scalar-backend input path. Distinct denominator topologies remain separate; both modes use the same GammaLoop dimensional-algebra boundaries and conservative forest epsilon depth. Positive epsilon prefactors do not reduce that depth, and final truncation removes any excess orders.
+The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defaults to `true`. It selects Vakint's universal tensor kernels and isolated scalar coefficients; `false` supplies the complete numerator to the selected tensor backend. This choice is independent of backend selection: the native FeynKit tensor reducer is the default, while AlphaLoop uses FORM. Scalar-master evaluation has its own backend policy. Distinct denominator topologies remain separate; both projection modes use the same GammaLoop dimensional-algebra boundaries and conservative forest epsilon depth. Positive epsilon prefactors do not reduce that depth, and final truncation removes any excess orders.
 
 == Orchestrators
 <orchestrators>
@@ -56,8 +56,8 @@ belong to the orchestrator because their traversal models differ.
 Comparison normalization sets the Lorentz dimension to four, reversibly cooks
 index syntax for checked `SymbolicTensor` admission, reduces colour identities,
 and contracts metrics and vector connections with chain and trace collection
-disabled. It then converts scalar-product notation, resolves aliases, and
-restores the original index encoding. Admission and normalization errors
+disabled. It then converts scalar-product notation and restores the original
+index encoding. Admission and normalization errors
 propagate to the comparison caller. No Dirac or epsilon identity is enabled by
 this normalization, and coefficient factorization is retained.
 

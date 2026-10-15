@@ -13,6 +13,7 @@ const GRAPH_SPEC: AttributeSpec = AttributeSpec {
     entity: "graph",
     known: &[
         "canonical_cuts_required",
+        "gammaloop_runtime",
         "group_id",
         "is_group_master",
         "num",

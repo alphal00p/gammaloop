@@ -25,7 +25,7 @@
 //! edges: `A -> B` and `A -> C`), as well as subgraphs (e.g. `A -> subgraph {B
 //! C}` contains two edges: `A -> B` and `A -> C`, and subgraph can be nested).
 //! On the other hand, [canonical::Graph] flattens all those edges for you,
-//! which makes iterating over the edges extremelly trivial: 
+//! which makes iterating over the edges extremelly trivial:
 //!
 //! ```
 //! use dot_parser::*;
@@ -54,7 +54,7 @@
 //!  - petgraph: if enabled, [Graph][canonical::Graph] can be converted into
 //!  [petgraphs'
 //!  graphs](https://docs.rs/petgraph/latest/petgraph/graph/struct.Graph.html).
-//!  Essentially, enabling this flag provides the following implementation: 
+//!  Essentially, enabling this flag provides the following implementation:
 //!  ```no_compile
 //! impl<A> From<Graph<A>> for PetGraph<Node<A>, AList<A>> { ... }
 //!  ```

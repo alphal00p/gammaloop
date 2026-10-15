@@ -7,6 +7,17 @@ for this repository.
 If instructions conflict, prefer the more specific local guidance and preserve
 the user's current work unless explicitly asked to change it.
 
+Before task edits, builds, tests, or experiments, create or resume your own
+feature workspace at `../<feature-name>`, relative to `main`. Keep `main`'s
+checked-out files read-only for implementation. Reuse only a workspace owned by
+the same task; see [CONTRIBUTING.typ](CONTRIBUTING.typ#agent-workspaces) for setup
+and resumption rules.
+
+Clean up your own temporary files, abandoned edits, and local processes as work
+continues. Preserve other contributors' work, shared caches, useful tests, and
+artifacts still needed for debugging, CI, or review. Follow
+[CONTRIBUTING.typ](CONTRIBUTING.typ#agent-cleanup) before removing a workspace.
+
 Before creating any new jj change, always ask the user which author name and
 email to use, and wait for their answer. Set that identity explicitly when
 creating the change.

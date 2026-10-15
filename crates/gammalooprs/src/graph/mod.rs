@@ -30,7 +30,7 @@ use typed_index_collections::TiVec;
 use crate::{
     cff::surface::SurfaceCache,
     define_index,
-    integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
+    integrands::process::{LmbMultiChannelingSetup, ParamBuilder, SamplingChannelId},
     model::Model,
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
@@ -44,6 +44,7 @@ pub(crate) mod attribute_warnings;
 pub mod autogen;
 pub mod cuts;
 pub mod global;
+pub mod threshold_counterterms;
 
 #[derive(Clone, Copy, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Default)]
 pub struct VertexOrder(pub u8);
@@ -93,6 +94,8 @@ pub struct Graph {
     pub finalized_cuts: Vec<FinalizedCut>,
     /// Complete topology-only threshold inventory finalized by FeynKit.
     pub finalized_topology_threshold_candidates: Vec<FinalizedTopologyThresholdCandidate>,
+    /// Compact graph-local threshold-counterterm directives from the DOT input.
+    pub threshold_counterterms: autogen::Autogen<threshold_counterterms::ThresholdCountertermSpec>,
 }
 
 impl LogMessage for Graph {
@@ -243,6 +246,7 @@ impl Graph {
             improvement_settings: PhaseSpaceImprovementSettings::default(),
             f_64_cache: None,
             f_128_cache: None,
+            arb_cache: Default::default(),
         }
     }
 
@@ -281,7 +285,15 @@ impl Graph {
         );
 
         LmbMultiChannelingSetup {
-            channels,
+            master_edge_masses: Default::default(),
+            sampling_bridge: Default::default(),
+            sampling_bridge_quad: Default::default(),
+            sampling_bridge_fixed256: Default::default(),
+            sampling_bridge_arb: Default::default(),
+            sampling_source: Default::default(),
+            sampling_catalogue: Default::default(),
+            sampling_programs: Default::default(),
+            lmb_basis_ids: channels,
             graph: self.clone(),
             all_bases: lmbs.clone(),
         }
@@ -292,7 +304,7 @@ impl Graph {
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         override_lmb_heuristics: bool,
         fallback: LmbChannelFallback,
-    ) -> TiVec<ChannelIndex, LmbIndex> {
+    ) -> TiVec<SamplingChannelId, LmbIndex> {
         if override_lmb_heuristics {
             return lmbs
                 .iter_enumerated()
@@ -347,7 +359,7 @@ impl Graph {
         &self,
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         fallback: LmbChannelFallback,
-    ) -> TiVec<ChannelIndex, LmbIndex> {
+    ) -> TiVec<SamplingChannelId, LmbIndex> {
         let fallback_index = match fallback {
             LmbChannelFallback::CurrentGraphBasis => lmbs
                 .iter_enumerated()
@@ -716,8 +728,8 @@ pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubSetLike>(
 mod tests {
     use super::*;
     use crate::{
-        finalized_runtime_dot, graph::parse::from_dot::IntoFinalizedRuntimeGraph,
-        initialisation::test_initialise, momentum::signature::LoopExtSignature,
+        finalized_runtime_dot, initialisation::test_initialise,
+        momentum::signature::LoopExtSignature,
     };
     use std::sync::OnceLock;
 

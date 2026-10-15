@@ -127,7 +127,7 @@ where
                 Stmt::NodeStmt(node) => nodes.push(node),
                 Stmt::EdgeStmt(edge) => edges.push(edge),
                 Stmt::AttrStmt(attr) => attrs.push(attr),
-                Stmt::IDEq(lhs, rhs) => ideqs.push(IDEq {lhs, rhs}),
+                Stmt::IDEq(lhs, rhs) => ideqs.push(IDEq { lhs, rhs }),
             }
         }
 
@@ -416,15 +416,9 @@ impl<A> AttrStmt<A> {
         F: Fn(A) -> Option<B>,
     {
         match self {
-            AttrStmt::Graph(a) => {
-                f(a).map(AttrStmt::Graph)
-            }
-            AttrStmt::Node(a) => {
-                f(a).map(AttrStmt::Node)
-            }
-            AttrStmt::Edge(a) => {
-                f(a).map(AttrStmt::Edge)
-            }
+            AttrStmt::Graph(a) => f(a).map(AttrStmt::Graph),
+            AttrStmt::Node(a) => f(a).map(AttrStmt::Node),
+            AttrStmt::Edge(a) => f(a).map(AttrStmt::Edge),
         }
     }
 }
@@ -441,17 +435,11 @@ impl<A> From<AstAttrStmt<A>> for Vec<AttrStmt<A>> {
             }
             AstAttrStmt::Node(list) => {
                 let alist: AList<A> = list.into();
-                alist
-                    .into_iter()
-                    .map(|attr| AttrStmt::Node(attr))
-                    .collect()
+                alist.into_iter().map(|attr| AttrStmt::Node(attr)).collect()
             }
             AstAttrStmt::Edge(list) => {
                 let alist: AList<A> = list.into();
-                alist
-                    .into_iter()
-                    .map(|attr| AttrStmt::Edge(attr))
-                    .collect()
+                alist.into_iter().map(|attr| AttrStmt::Edge(attr)).collect()
             }
         }
     }
@@ -481,7 +469,7 @@ pub struct IDEq {
 }
 
 #[cfg(feature = "display")]
-impl Display for IDEq { 
+impl Display for IDEq {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "{} = {}", self.lhs, self.rhs)
     }

@@ -84,7 +84,7 @@ use symbolica::{
 #[cfg(feature = "native-code-generation")]
 use symbolica::domains::float::SingleFloat;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn horner_contract_atom<CStrat: crate::network::AtomComponentOptimizer>(atom: Atom) -> Atom {
     let Some(min_byte_size) = CStrat::HORNER_MIN_BYTES else {
         return atom;
@@ -97,7 +97,7 @@ fn horner_contract_atom<CStrat: crate::network::AtomComponentOptimizer>(atom: At
     atom.collect_horner::<Indeterminate>(None)
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn horner_contract_tensor<CStrat, I>(tensor: DataTensor<Atom, I>) -> DataTensor<Atom, I>
 where
     CStrat: crate::network::AtomComponentOptimizer,
@@ -128,7 +128,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn horner_contract_composite<CStrat, I>(tensor: DataTensor<Atom, I>) -> ParamTensor<I>
 where
     CStrat: crate::network::AtomComponentOptimizer,
@@ -2284,7 +2284,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<I, const MIN_BYTE_SIZE: usize>
     crate::network::AtomComponentOptimizable<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>>
     for ParamTensor<I>
@@ -2301,7 +2301,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<C, I, const MIN_BYTE_SIZE: usize>
     crate::network::AtomComponentOptimizable<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>>
     for ParamOrConcrete<C, I>

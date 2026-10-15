@@ -38,7 +38,7 @@ build-cli: _sync-drawing-assets
 
 # Build gammaloop CLI without Python (no pyo3)
 build-cli-no-pyo3: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --no-default-features --features cli,no_pyo3 --profile dev-optim
+    cargo build -p gammaloop-api --bin gammaloop --no-default-features --features cli --profile dev-optim
 
 # Build gammaloop Python CLI with UFO support and stable ABI (dev-optim profile)
 build-cli-abi: _sync-drawing-assets
@@ -54,35 +54,35 @@ build-cli-release-abi: _sync-drawing-assets
 
 # Build gammaloop Python API with UFO support and dev-optim profile
 build-api: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
 build-api-abi: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module,python_abi --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and dev-optim profile
 build-api-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
-build-api-abi-weel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
+build-api-abi-wheel: _sync-drawing-assets
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module,python_abi --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and release profile
 build-api-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module --profile=release
 
 # Build gammaloop Python API with UFO support and stable ABI (release profile)
 build-api-abi-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=release
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module,python_abi --profile=release
 
 # Build gammaloop Python API wheel with UFO support and release profile
 build-api-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module --profile=release
 
-# Build gammaloop Python API weel with UFO support and stable ABI (release profile)
+# Build gammaloop Python API wheel with UFO support and stable ABI (release profile)
 build-api-abi-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=release
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module,python_abi --profile=release
 
 # Build all workspace packages
 build-all:
@@ -115,11 +115,8 @@ check-symbolica-feature-isolation:
     fi
     for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock" "$root/examples/notebooks/symbolica-host/Cargo.lock"; do
       for package in symbolica numerica graphica; do
-        source="registry+https://github.com/rust-lang/crates.io-index"
+        source="$symbolica_source"
         version="3.0.1"
-        if [ "$package" = symbolica ]; then
-          source="$symbolica_source"
-        fi
         expected="$(printf 'version = "%s"\nsource = "%s"\n' "$version" "$source")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
         if [ "$resolved" != "$expected" ]; then
@@ -171,19 +168,23 @@ docs-svg-assets-check:
 
     scripts/render-docs-svg-assets.sh "$check_root"
     checked_assets=(
+        docs/assets/about-*.svg
+        docs/assets/gammaloop-construction-*.svg
         docs/assets/graphs/portal-*.svg
         docs/assets/local-unitarity-*.svg
         docs/assets/spensologo.svg
         assets/gammalooplogo*.svg
     )
     generated_assets=(
+        "$check_root"/docs/assets/about-*.svg
+        "$check_root"/docs/assets/gammaloop-construction-*.svg
         "$check_root"/docs/assets/graphs/portal-*.svg
         "$check_root"/docs/assets/local-unitarity-*.svg
         "$check_root"/docs/assets/spensologo.svg
         "$check_root"/assets/gammalooplogo*.svg
     )
-    [ "${#checked_assets[@]}" -eq 28 ]
-    [ "${#generated_assets[@]}" -eq 28 ]
+    [ "${#checked_assets[@]}" -eq 34 ]
+    [ "${#generated_assets[@]}" -eq 34 ]
     for checked in "${checked_assets[@]}"; do
         cmp "$checked" "$check_root/$checked"
     done
@@ -283,6 +284,10 @@ docs-check:
     just docs-svg-assets-check
     just docs-linnet-graph-check
 
+# Render the front-page tour to target/showcase/ (needs Node, Playwright's Chromium, and ffmpeg).
+showcase-video *ARGS:
+    node scripts/render-showcase-video.mjs {{ ARGS }}
+
 # Build Linnet's extension and compare its real import surface with the checked-in stub.
 docs-linnet-graph-check:
     #!/usr/bin/env bash
@@ -332,7 +337,7 @@ docs-watch PRODUCT PORT="8000" OUTPUT="target/alphal00p-docs-watch":
     set -euo pipefail
 
     exec cargo run --locked --profile docs-watch -p alphal00p-docs-builder \
-        --features persistent-typst -- \
+        --features watch -- \
         watch \
         --product {{ quote(PRODUCT) }} \
         --port {{ quote(PORT) }} \
@@ -354,8 +359,8 @@ clippy *lint_args:
 build-release-all:
     cargo build --workspace --release
 
-# Quick development cycle: build deps, then build in release
-dev-release: build-deps-nix build-release-all
+# Build in release mode using the local Cargo artifacts.
+dev-release: build-release-all
 
 # Run gammaloop
 run *ARGS:

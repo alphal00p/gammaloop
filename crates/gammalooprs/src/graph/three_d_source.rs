@@ -4016,7 +4016,7 @@ mod tests {
         cff::expression::GammaLoopOrientationExpression,
         cff::surface::GammaLoopSurfaceCache,
         finalized_runtime_dot,
-        graph::{cuts::CutSet, parse::IntoFinalizedRuntimeGraph},
+        graph::cuts::CutSet,
         initialisation::test_initialise,
         momentum::sample::LoopIndex,
         numerator::energy_degree::{EnergyPowerAnalyzer, EquivalentEnergyCandidates},

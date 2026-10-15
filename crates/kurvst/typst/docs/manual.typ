@@ -189,6 +189,19 @@
   )
   ```
 
+  `arc(center, radius, start, stop)` builds a circular arc from cubic pieces of
+  at most 90°. Angles are measured counterclockwise from the positive x axis in
+  y-up coordinates, as in CeTZ; `stop < start` runs clockwise:
+
+  ```typ
+  #let stadium = kurvst.path(
+    kurvst.arc((1, 0.5), 1, 0deg, 180deg),
+    kurvst.line((0, 0.5), (0, -0.5)),
+    kurvst.arc((1, -0.5), 1, 180deg, 360deg),
+    kurvst.close(),
+  )
+  ```
+
   `path` and `append` flatten fragments. If an appended fragment starts where
   the current path ends, its leading `move` is skipped; if it starts elsewhere, the
   `move` begins a new subpath. The edited path can go straight back into Kurvst
@@ -420,6 +433,29 @@
     native-cubics(kurvst.segments(right), stroke: rgb("#355c9a") + 0.8pt)
   })
   ```
+
+  == Stroke Outlines
+
+  `outline` turns a stroked path into a closed region, so a line drawing
+  becomes a filled solid with the same visible shape. It wraps Kurbo's
+  stroker: `join` is `"miter"`, `"round"`, or `"bevel"`, and `cap` (or
+  `start-cap` and `end-cap` separately) is `"butt"`, `"square"`, or `"round"`.
+  Open subpaths become one contour; closed subpaths become an outer and an inner
+  contour, so fill with the default non-zero rule.
+
+  ```typ
+  #let base = kurvst.path(
+    kurvst.line((0, 1), (0, 0)),
+    kurvst.cubic((0, 0), (1, 0), (2, 1), (3, 0)),
+  )
+  #let solid = kurvst.outline(base, width: 0.2, cap: "round")
+  #cetz.canvas(kurvst.to-cetz(solid, fill: black, stroke: none))
+  ```
+
+  CeTZ `merge-path` bridges separate subpaths with straight lines. That leaves
+  fills unchanged, but a stroked outline with several contours shows the bridge;
+  use `to-native` to stroke the contours themselves.
+  See `examples/outline-logo.typ` for a full logo converted to solids.
 
   == Path Layers
 

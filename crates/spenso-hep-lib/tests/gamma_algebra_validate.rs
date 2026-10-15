@@ -363,3 +363,41 @@ mod failing {
         validate_gamma(expr.cook_indices(), const_map.clone());
     }
 }
+
+#[test]
+fn explicit_gamma_namespace_resolves_the_tensor_library() {
+    use idenso::dirac::AGS;
+    use spenso::network::{library::symbolic::ExplicitKey, parsing::StructureFromAtom};
+    use symbolica::atom::AtomView;
+
+    test_initialize();
+    let scalar_gamma = parse_lit!(
+        gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))),
+        default_namespace = "spenso"
+    )
+    .cook_indices();
+    let tensor_gamma = parse_lit!(
+        spenso::gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))),
+        default_namespace = "spenso"
+    )
+    .cook_indices();
+    let (AtomView::Fun(scalar), AtomView::Fun(tensor)) =
+        (scalar_gamma.as_view(), tensor_gamma.as_view())
+    else {
+        panic!("expected gamma function calls")
+    };
+    assert_eq!(scalar.get_symbol().get_namespace(), "symbolica");
+    assert_eq!(tensor.get_symbol(), AGS.gamma);
+
+    for (gamma, library_found) in [(scalar_gamma, false), (tensor_gamma, true)] {
+        let structure = ShadowedStructure::<AbstractIndex>::parse(gamma.as_view()).unwrap();
+        let key = ExplicitKey::from_structure(&structure).unwrap();
+        assert_eq!(key.order(), 3);
+        assert_eq!(
+            hep_lib_atom::<AbstractIndex, MixedTensor<f64, ExplicitKey<AbstractIndex>>>()
+                .get(&key)
+                .is_ok(),
+            library_found
+        );
+    }
+}

@@ -39,6 +39,10 @@ use crate::{
     VertexSelector, grouping, momentum_symbol,
 };
 
+#[cfg(test)]
+#[path = "main_generation_regressions.rs"]
+mod main_generation_regressions;
+
 #[derive(Debug, Error)]
 pub enum GenerationError {
     #[error(transparent)]
@@ -1336,12 +1340,54 @@ pub trait FeynmanDiagramRulesExt {
     /// are retained. Existing local numerator fragments are replaced with the
     /// model's Feynman rules, just as during diagram generation.
     fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError>;
+
+    /// Construct the external wavefunctions in the finalized half-edge frame.
+    /// Callers with an explicit projector retain that supplied expression.
+    fn external_state_projector(&self) -> Result<Atom, GenerationError>;
 }
 
 impl FeynmanDiagramRulesExt for FeynmanDiagram {
     fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError> {
         self.validate()?;
         Generator::new(self.model_arc()).construct_numerators(self.clone())
+    }
+
+    fn external_state_projector(&self) -> Result<Atom, GenerationError> {
+        let generator = Generator::new(self.model_arc());
+        let mut projector = Atom::one();
+        for (edge, endpoints, data) in self.edges() {
+            let Some(external) = &data.external else {
+                continue;
+            };
+            for (vertex, endpoint, state) in [
+                (
+                    endpoints.source,
+                    DiagramEndpoint::Source,
+                    ExternalState::Outgoing,
+                ),
+                (
+                    endpoints.target,
+                    DiagramEndpoint::Target,
+                    ExternalState::Incoming,
+                ),
+            ] {
+                if vertex.is_none() {
+                    continue;
+                }
+                let state = if endpoints.source.is_some() && endpoints.target.is_some() {
+                    state
+                } else {
+                    external.state
+                };
+                let hedge = self
+                    .half_edge_id(DiagramHalfEdge { edge, endpoint })
+                    .expect("finalized external endpoint")
+                    .0;
+                projector *=
+                    generator.external_wavefunction(state, data.particle, edge.0, hedge)?;
+            }
+        }
+        Ok(projector)
     }
 }
 
@@ -3005,33 +3051,44 @@ impl Generator {
                 .ok_or(GenerationError::ArithmeticOverflow(
                     "an external half-edge identifier",
                 ))?;
-            let index = feynkit_graph::symbols::hedge_index().call((hedge, 1_i64));
-            let particle = self.model.particle_by_id(external.particle)?;
-            let (head, index) = match particle.spin {
-                2 => {
-                    let head = match (external.state, particle.is_antiparticle()) {
-                        (ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
-                        (ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
-                        (ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
-                        (ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
-                    };
-                    (head, Bispinor {}.new_rep(4).to_symbolic([index]))
-                }
-                3 => {
-                    let head = match external.state {
-                        ExternalState::Incoming => feynkit_graph::symbols::epsilon(),
-                        ExternalState::Outgoing => feynkit_graph::symbols::epsilonbar(),
-                    };
-                    (head, Minkowski {}.new_rep(4).to_symbolic([index]))
-                }
-                _ => continue,
-            };
-            projector *= FunctionBuilder::new(head)
-                .add_arg(edge_id)
-                .add_arg(index)
-                .finish();
+            projector *=
+                self.external_wavefunction(external.state, external.particle, edge_id, hedge)?;
         }
         Ok(projector)
+    }
+
+    fn external_wavefunction(
+        &self,
+        state: ExternalState,
+        particle: ParticleId,
+        edge: usize,
+        hedge: usize,
+    ) -> Result<Atom, GenerationError> {
+        let index = feynkit_graph::symbols::hedge_index().call((hedge, 1_i64));
+        let particle = self.model.particle_by_id(particle)?;
+        let (head, index) = match particle.spin {
+            2 => {
+                let head = match (state, particle.is_antiparticle()) {
+                    (ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
+                    (ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
+                    (ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
+                    (ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
+                };
+                (head, Bispinor {}.new_rep(4).to_symbolic([index]))
+            }
+            3 => {
+                let head = match state {
+                    ExternalState::Incoming => feynkit_graph::symbols::epsilon(),
+                    ExternalState::Outgoing => feynkit_graph::symbols::epsilonbar(),
+                };
+                (head, Minkowski {}.new_rep(4).to_symbolic([index]))
+            }
+            _ => return Ok(Atom::one()),
+        };
+        Ok(FunctionBuilder::new(head)
+            .add_arg(edge)
+            .add_arg(index)
+            .finish())
     }
 
     fn interaction_half_edges(
@@ -3946,8 +4003,8 @@ impl ResolvedProcess {
                         .unwrap_or(edge.vertices.1),
                 );
                 // As in the legacy comparison graph, all external edges point
-                // into the interaction graph.  Internal direction is omitted
-                // from the reduced skeleton but restored below.
+                // into the interaction graph. Internal fermion direction is
+                // omitted from the reduced skeleton but restored below.
                 let external_outgoing = matches!(
                     graph.nodes()[edge.vertices.1].data,
                     ColoredNode::External(_)
@@ -3955,17 +4012,21 @@ impl ResolvedProcess {
                 if external_outgoing {
                     vertices = (vertices.1, vertices.0);
                 }
-                let color = if external {
-                    let particle = if external_outgoing {
-                        model.particle_by_id(edge.data.particle)?.antiparticle
-                    } else {
-                        edge.data.particle
-                    };
-                    model.particle_by_id(particle)?.name.clone()
-                } else if exact_internal_particles {
-                    model.particle_by_id(edge.data.particle)?.name.clone()
+                let particle = model.particle_by_id(if external_outgoing {
+                    model.particle_by_id(edge.data.particle)?.antiparticle
                 } else {
-                    let particle = model.particle_by_id(edge.data.particle)?;
+                    edge.data.particle
+                })?;
+                // Ghost vertices differentiate one propagator end. Preserve its
+                // physical arrow in the momentum chart: reversing storage while
+                // conjugating the ghost must describe the same directed edge.
+                if particle.is_ghost() && particle.is_antiparticle() {
+                    vertices = (vertices.1, vertices.0);
+                }
+                let keep_direction = external || particle.is_ghost();
+                let color = if external || exact_internal_particles {
+                    particle.name.clone()
+                } else {
                     format!(
                         "{} | {}",
                         model.parameter_by_id(particle.mass)?.name,
@@ -3976,7 +4037,7 @@ impl ResolvedProcess {
                     .add_edge(
                         vertices.0,
                         vertices.1,
-                        external,
+                        keep_direction,
                         NumeratorCanonicalEdge(color),
                     )
                     .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
@@ -4045,8 +4106,15 @@ impl ResolvedProcess {
                 if edge.directed && flipped {
                     data.particle = model.particle_by_id(data.particle)?.antiparticle;
                 }
-                if edge.directed && left_right_swapped {
-                    data.particle = model.particle_by_id(data.particle)?.antiparticle;
+                let particle = model.particle_by_id(data.particle)?;
+                // CP acts on neutral adjoint Faddeev-Popov ghosts through
+                // color, without exchanging ghost and antighost fields. Their
+                // derivative momentum must keep its ghost-number orientation.
+                if edge.directed
+                    && left_right_swapped
+                    && !(particle.is_ghost() && particle.color == 8 && particle.charge.is_zero())
+                {
+                    data.particle = particle.antiparticle;
                 }
                 let pdg_code = model.particle_by_id(data.particle)?.pdg_code;
                 Ok((vertices, edge.directed, data, pdg_code))

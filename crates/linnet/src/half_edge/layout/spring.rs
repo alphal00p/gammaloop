@@ -1520,7 +1520,7 @@ impl Default for ParamTuning {
     }
 }
 
-#[cfg(feature = "energy_trace")]
+#[cfg(feature = "energy-timing")]
 mod energy_trace {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::Duration;
@@ -1620,7 +1620,7 @@ mod energy_trace {
     }
 }
 
-#[cfg(feature = "energy_trace")]
+#[cfg(feature = "energy-timing")]
 pub use energy_trace::{
     reset as energy_timing_reset, snapshot as energy_timing_snapshot, EnergyTiming,
 };
@@ -1664,28 +1664,28 @@ impl SpringChargeEnergy {
         0.5 * self.c_vv / (dist + self.eps)
     }
 
-    #[cfg_attr(feature = "energy_trace", inline(never))]
+    #[cfg_attr(feature = "energy-timing", inline(never))]
     fn ev_term(&self, dist: f64) -> f64 {
         self.c_ev / (dist + self.eps)
     }
 
-    #[cfg_attr(feature = "energy_trace", inline(never))]
+    #[cfg_attr(feature = "energy-timing", inline(never))]
     fn spring_term_with_length(&self, dist: f64, length: f64) -> f64 {
         let t = length - dist;
         0.5 * self.k_spring * (t * t)
     }
 
-    #[cfg_attr(feature = "energy_trace", inline(never))]
+    #[cfg_attr(feature = "energy-timing", inline(never))]
     fn ee_local_term(&self, dist: f64) -> f64 {
         0.5 * self.c_ee_local / (dist + self.eps)
     }
 
-    #[cfg_attr(feature = "energy_trace", inline(never))]
+    #[cfg_attr(feature = "energy-timing", inline(never))]
     fn dangling_term(&self, dist: f64) -> f64 {
         0.5 * self.dangling_charge / (dist + self.eps)
     }
 
-    #[cfg_attr(feature = "energy_trace", inline(never))]
+    #[cfg_attr(feature = "energy-timing", inline(never))]
     fn dangling_centroid_term(&self, dist: f64) -> f64 {
         self.dangling_centroid_charge / (dist + self.eps)
     }
@@ -1733,12 +1733,12 @@ impl SpringChargeEnergy {
             .sum()
     }
 
-    #[cfg_attr(feature = "energy_trace", inline(never))]
+    #[cfg_attr(feature = "energy-timing", inline(never))]
     fn center_term(&self, r: f64) -> f64 {
         0.5 * self.c_center * r.powi(2)
     }
 
-    #[cfg_attr(feature = "energy_trace", inline(never))]
+    #[cfg_attr(feature = "energy-timing", inline(never))]
     fn crossing_term(&self) -> f64 {
         self.crossing_penalty
     }
@@ -1846,7 +1846,7 @@ impl SpringChargeEnergy {
     where
         N: NodeStorageOps<NodeData = V> + Clone,
     {
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let total_start = std::time::Instant::now();
 
         let n = s.vertex_points.len().0;
@@ -1854,7 +1854,7 @@ impl SpringChargeEnergy {
 
         let mut energy = 0.0;
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let vv_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -1871,10 +1871,10 @@ impl SpringChargeEnergy {
                 energy += self.vv_term(np.distance(vj));
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_vv(vv_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let ev_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -1894,12 +1894,12 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_ev(ev_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let spring_start = std::time::Instant::now();
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let ee_local_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -1933,13 +1933,13 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         {
             energy_trace::record_spring(spring_start.elapsed());
             energy_trace::record_ee_local(ee_local_start.elapsed());
         }
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let center_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -1951,10 +1951,10 @@ impl SpringChargeEnergy {
                 energy += self.center_term(np.distance(EuclideanSpace::origin()));
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_center(center_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let dangling_start = std::time::Instant::now();
         for hi in s.ext.included_iter() {
             for hj in s.ext.included_iter() {
@@ -1969,10 +1969,10 @@ impl SpringChargeEnergy {
             }
         }
         energy += self.dangling_centroid_energy(s);
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_dangling(dangling_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let crossing_start = std::time::Instant::now();
         if self.crossing_penalty != 0.0 {
             let m = s.edge_points.len().0;
@@ -1992,10 +1992,10 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_crossing(crossing_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_total(total_start.elapsed());
         energy
     }
@@ -2011,14 +2011,14 @@ impl SpringChargeEnergy {
     where
         N: NodeStorageOps<NodeData = V> + Clone,
     {
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let total_start = std::time::Instant::now();
 
         let n = next.vertex_points.len().0;
         let m = next.edge_points.len().0;
         let mut delta = 0.0;
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let vv_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -2042,10 +2042,10 @@ impl SpringChargeEnergy {
                     - self.vv_term(prev_np.distance(prev_vj));
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_vv(vv_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let ev_start = std::time::Instant::now();
         if self.c_ev != 0.0 {
             for i in 0..n {
@@ -2071,12 +2071,12 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_ev(ev_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let spring_start = std::time::Instant::now();
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let ee_local_start = std::time::Instant::now();
         for i in 0..n {
             let ni = NodeIndex(i);
@@ -2124,13 +2124,13 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         {
             energy_trace::record_spring(spring_start.elapsed());
             energy_trace::record_ee_local(ee_local_start.elapsed());
         }
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let center_start = std::time::Instant::now();
         if self.c_center != 0.0 {
             for i in 0..n {
@@ -2146,10 +2146,10 @@ impl SpringChargeEnergy {
                 delta += self.center_term(next_r);
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_center(center_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let dangling_start = std::time::Instant::now();
         for hi in next.ext.included_iter() {
             let edge_i = next.graph[&hi];
@@ -2180,10 +2180,10 @@ impl SpringChargeEnergy {
         {
             delta += self.dangling_centroid_energy(next) - self.dangling_centroid_energy(prev);
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_dangling(dangling_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         let crossing_start = std::time::Instant::now();
         if self.crossing_penalty != 0.0 {
             let m = next.edge_points.len().0;
@@ -2211,10 +2211,10 @@ impl SpringChargeEnergy {
                 }
             }
         }
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_crossing(crossing_start.elapsed());
 
-        #[cfg(feature = "energy_trace")]
+        #[cfg(feature = "energy-timing")]
         energy_trace::record_partial(total_start.elapsed());
         delta
     }
@@ -2443,8 +2443,10 @@ mod tests {
                     let scales = normalized_pull_scales(length + 1, &internal, &external);
                     let expected = (multiplicity as f64 / legs as f64).min(1.0);
                     for scale in scales {
-                        assert!((scale - expected).abs() < 1e-8,
-                            "length={length}, multiplicity={multiplicity}, legs={legs}: {scale} != {expected}");
+                        assert!(
+                            (scale - expected).abs() < 1e-8,
+                            "length={length}, multiplicity={multiplicity}, legs={legs}: {scale} != {expected}"
+                        );
                         assert!(scale <= 1.0);
                     }
                 }

@@ -69,7 +69,7 @@ impl PhysicalSoftMap {
             .map(|(_, edge, data)| {
                 Replacement::new(
                     GS.ose(edge).to_pattern(),
-                    GS.ose_full(edge, 0.into(), data.data.mass_atom(), None),
+                    GS.ose_full(edge, 0.into(), data.data.mass_atom(&graph.model), None),
                 )
             })
             .collect();

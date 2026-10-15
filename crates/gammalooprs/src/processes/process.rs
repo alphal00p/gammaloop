@@ -4,7 +4,7 @@ use linnet::half_edge::involution::HedgePair;
 use linnet::half_edge::involution::Orientation;
 use rayon::ThreadPool;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
@@ -26,10 +26,7 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     integrands::process::ProcessIntegrand,
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
-    uv::{
-        approx::OrientationProjection,
-        export::{UVForestExportSettings, sanitize_file_component},
-    },
+    uv::export::{UVForestExportSettings, sanitize_file_component},
 };
 use eyre::{Context, eyre};
 use feynkit_generator::{
@@ -90,7 +87,11 @@ fn create_overwriting_file(path: &Path, file_kind: &str) -> Result<File> {
     })
 }
 
-fn saved_child_dirs(root: &Path, expected_binary: &str, kind: &str) -> Result<Vec<PathBuf>> {
+pub(crate) fn saved_child_dirs(
+    root: &Path,
+    expected_binary: &str,
+    kind: &str,
+) -> Result<Vec<PathBuf>> {
     let mut saved_dirs = Vec::new();
 
     for entry in fs::read_dir(root).with_context(|| format!("Error reading {}", root.display()))? {
@@ -472,6 +473,7 @@ impl Process {
     pub(crate) fn load_amplitude(
         path: impl AsRef<Path>,
         context: GammaLoopContextContainer,
+        selected_integrands: Option<&BTreeSet<String>>,
     ) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("def.bin")).context(format!(
             "Error reading def.bin in {}",
@@ -484,6 +486,13 @@ impl Process {
 
         let mut collection = ProcessCollection::new_amplitude();
         for path in saved_child_dirs(path.as_ref(), "amp.bin", "amplitude")? {
+            if selected_integrands.is_some_and(|selected| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_none_or(|name| !selected.contains(name))
+            }) {
+                continue;
+            }
             debug!("loading amplitude at {}", path.display());
             let amp = Amplitude::load(path, context).context("Error loading amplitude")?;
 
@@ -500,6 +509,7 @@ impl Process {
     pub(crate) fn load_cross_section(
         path: impl AsRef<Path>,
         context: GammaLoopContextContainer,
+        selected_integrands: Option<&BTreeSet<String>>,
     ) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("def.bin"))?;
         let (definition, _) =
@@ -507,6 +517,13 @@ impl Process {
 
         let mut collection = ProcessCollection::new_cross_section();
         for path in saved_child_dirs(path.as_ref(), "cs.bin", "cross section")? {
+            if selected_integrands.is_some_and(|selected| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_none_or(|name| !selected.contains(name))
+            }) {
+                continue;
+            }
             debug!("loading cross section at {}", path.display());
             let cs = CrossSection::load(path, context).context("Error loading cross section")?;
 
@@ -822,18 +839,8 @@ impl Process {
         graph_ids: &[usize],
         settings: &UVForestExportSettings,
     ) -> Result<()> {
-        let generation_settings = &self
-            .settings_history
-            .as_ref()
-            .ok_or_else(|| {
-                eyre!(
-                    "Cannot export UV forests for process {} without generation settings history",
-                    self.definition.folder_name
-                )
-            })?
-            .generation;
         let resolved = self.get_integrand(integrand_name)?;
-        let integrand = resolved.require_generated()?;
+        resolved.require_generated()?;
         let integrand_path = match &self.collection {
             ProcessCollection::Amplitudes(_) => path
                 .as_ref()
@@ -854,68 +861,7 @@ impl Process {
         })?;
 
         for &graph_id in graph_ids {
-            let source = if settings.computed {
-                let (graph, expression) = match &self.collection {
-                    ProcessCollection::Amplitudes(amplitudes) => {
-                        let source = amplitudes[&resolved.canonical_name]
-                            .graphs
-                            .get(graph_id)
-                            .ok_or_else(|| eyre!("Missing source amplitude graph {graph_id}"))?;
-                        (&source.graph, source.derived_data.cff_expression.as_ref())
-                    }
-                    ProcessCollection::CrossSections(cross_sections) => {
-                        let source = cross_sections[&resolved.canonical_name]
-                            .supergraphs
-                            .get(graph_id)
-                            .ok_or_else(|| {
-                                eyre!("Missing source cross-section graph {graph_id}")
-                            })?;
-                        (
-                            &source.graph,
-                            source.derived_data.global_cff_expression.as_ref(),
-                        )
-                    }
-                };
-                // Generation and persistent selection preserve graph order;
-                // reject stale runtime metadata instead of pairing a different
-                // graph with this stored production residue map.
-                if integrand.graph_name_by_id(graph_id) != Some(graph.name.as_str()) {
-                    return Err(eyre!(
-                        "Source/runtime graph mismatch for computed UV forest export at id {graph_id}"
-                    ));
-                }
-                Some((
-                    graph,
-                    expression.ok_or_else(|| {
-                        eyre!(
-                            "Graph {} has no stored production CFF for computed UV forest export",
-                            graph.name
-                        )
-                    })?,
-                ))
-            } else {
-                None
-            };
-            let cff_options = source
-                .map(|(graph, _)| graph.production_cff_3d_expression_options(generation_settings))
-                .transpose()?;
-            let orientation = source
-                .zip(cff_options.as_ref())
-                .map(|((_, expression), options)| {
-                    OrientationProjection::exact_expression(
-                        expression,
-                        options,
-                        &generation_settings.orientation_pattern,
-                        generation_settings.explicit_orientation_sum_only,
-                    )
-                });
-            let export = integrand.export_uv_forest_graph(
-                model,
-                graph_id,
-                orientation,
-                generation_settings,
-                settings,
-            )?;
+            let export = self.export_uv_forest_graph(model, integrand_name, graph_id, settings)?;
             let graph_name = sanitize_file_component(&export.graph_name);
             let forest_path = integrand_path.join(format!("{graph_name}.forest.dot"));
             let mut forest_file = create_overwriting_file(&forest_path, "UV forest")?;
@@ -1687,10 +1633,10 @@ mod tests {
                             let path = saved.join(folder).join("export_fixture");
                             processes.processes[0] = match kind {
                                 GenerationType::Amplitude => {
-                                    Process::load_amplitude(path, context)?
+                                    Process::load_amplitude(path, context, None)?
                                 }
                                 GenerationType::CrossSection => {
-                                    Process::load_cross_section(path, context)?
+                                    Process::load_cross_section(path, context, None)?
                                 }
                             };
                         }
@@ -1772,35 +1718,25 @@ mod tests {
         Ok(())
     }
 
-    mod failing {
-        use super::*;
+    #[test]
+    fn test_proc_definition_encode() {
+        let def = crate::processes::ProcessDefinition::default();
+        let encoded = bincode::encode_to_vec(&def, bincode::config::standard()).unwrap();
+        let model_sm = load_generic_model("sm");
 
-        #[test]
-        fn test_proc_definition_encode() {
-            let def = crate::processes::ProcessDefinition::default();
-            let encoded = bincode::encode_to_vec(&def, bincode::config::standard()).unwrap();
-            let model_sm = load_generic_model("sm");
+        let mut symbols = Vec::new();
+        symbolica::state::State::export(&mut symbols).unwrap();
+        let state_map =
+            symbolica::state::State::import(&mut std::io::Cursor::new(symbols), None).unwrap();
 
-            let temp = fresh_temp_dir("process-definition-state-map");
-            let mut state_file = std::fs::File::create(temp.join("state_map.bin")).unwrap();
-            symbolica::state::State::export(&mut state_file).unwrap();
-            let state_map = symbolica::state::State::import(&mut state_file, None).unwrap();
+        let context = GammaLoopContextContainer {
+            model: &model_sm,
+            state_map: &state_map,
+        };
 
-            let context = GammaLoopContextContainer {
-                model: &model_sm,
-                state_map: &state_map,
-            };
-
-            let (decoded, _): (crate::processes::ProcessDefinition, _) =
-                bincode::decode_from_slice_with_context(
-                    &encoded,
-                    bincode::config::standard(),
-                    context,
-                )
+        let (decoded, _): (crate::processes::ProcessDefinition, _) =
+            bincode::decode_from_slice_with_context(&encoded, bincode::config::standard(), context)
                 .unwrap();
-            assert_eq!(def, decoded);
-            drop(state_file);
-            fs::remove_dir_all(temp).unwrap();
-        }
+        assert_eq!(def, decoded);
     }
 }

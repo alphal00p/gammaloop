@@ -3,10 +3,13 @@
 use super::*;
 
 impl FeynmanDiagram {
-    pub(super) fn from_compact_dot(
+    /// Resolve compact physics DOT and retain the exact source-to-final map
+    /// used by finalization. Consumers can transport graph-local metadata
+    /// without reconstructing ownership from momentum or particle labels.
+    pub fn from_compact_dot(
         model: Arc<Model>,
         parsed: DotGraph,
-    ) -> Result<Self, DiagramError> {
+    ) -> Result<(Self, DiagramSourceMap), DiagramError> {
         let attributes = &parsed.global_data.statements;
         let mut builder = Self::builder(Arc::clone(&model), parsed.global_data.name.clone());
         for (attribute, destination) in [
@@ -272,8 +275,64 @@ impl FeynmanDiagram {
                     })
                     .collect(),
             );
+        } else {
+            // Supplied expressions use the parsed DOT half-edge chart. The
+            // generated-vertex finalizer consumes the builder's edge/end chart.
+            // Transport this interface from recorded incidence before sewing;
+            // the finalizer then applies its existing signed ownership map.
+            let source_hedges = parsed
+                .iter_hedges()
+                .map(|(hedge, _)| {
+                    let edge = parsed[&hedge];
+                    let endpoint = usize::from(parsed.flow(hedge) == Flow::Sink);
+                    (hedge.0, 2 * edge.0 + endpoint)
+                })
+                .collect::<BTreeMap<_, _>>();
+            let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
+                let mut invalid = None;
+                let translated = atom.replace_map(|part, _, output| {
+                    let symbolica::atom::AtomView::Fun(index) = part else {
+                        return;
+                    };
+                    if index.get_symbol() != symbols::hedge_index() {
+                        return;
+                    }
+                    let Some(source) = index
+                        .iter()
+                        .next()
+                        .and_then(|arg| usize::try_from(arg).ok())
+                    else {
+                        return;
+                    };
+                    let Some(&target) = source_hedges.get(&source) else {
+                        invalid = Some(source);
+                        return;
+                    };
+                    **output = symbolica::atom::FunctionBuilder::new(symbols::hedge_index())
+                        .add_arg(target)
+                        .add_args(index.iter().skip(1))
+                        .finish();
+                });
+                if let Some(source) = invalid {
+                    return Err(DiagramError::InvalidDotAttribute {
+                        target: "compact numerator interface".into(),
+                        attribute: "num",
+                        value: format!("half-edge {source} is outside the parsed source graph"),
+                    });
+                }
+                Ok(translated)
+            };
+            builder.overall_factor = translate(&builder.overall_factor)?;
+            builder.numerator_prefactor = translate(&builder.numerator_prefactor)?;
+            builder.projector = translate(&builder.projector)?;
+            for vertex in &mut builder.vertices {
+                vertex.numerator = translate(&vertex.numerator)?;
+            }
+            for (_, edge) in &mut builder.edges {
+                edge.numerator = translate(&edge.numerator)?;
+            }
         }
-        let mut diagram = builder.build()?;
+        let (mut diagram, source_map) = builder.finalize()?;
         if !loop_edges.is_empty() {
             if loop_edges.keys().copied().ne(0..loop_edges.len()) {
                 return Err(DiagramError::InvalidLoopMomentumBasis(
@@ -282,19 +341,7 @@ impl FeynmanDiagram {
             }
             let requested = loop_edges
                 .into_values()
-                .map(|edge| {
-                    if sewn {
-                        EdgeId(
-                            diagram.graph.n_edges() - internal_order.len()
-                                + internal_order
-                                    .iter()
-                                    .position(|id| *id == edge.0)
-                                    .expect("internal loop edge"),
-                        )
-                    } else {
-                        edge
-                    }
-                })
+                .map(|edge| source_map.edges[edge.0])
                 .collect::<Vec<_>>();
             diagram = diagram.with_loop_momentum_edges(&requested)?;
         }
@@ -393,6 +440,56 @@ impl FeynmanDiagram {
             });
         }
         diagram.validate()?;
-        Ok(diagram)
+        Ok((diagram, source_map))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compact_dot_source_map_records_sewing_and_loop_ownership() {
+        let model = Arc::new(
+            Model::from_json(include_str!(
+                "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+            ))
+            .unwrap(),
+        );
+        let input = r#"digraph mapped_bubble {
+            final_state="scalar_1,scalar_1"
+            ext [style=invis]
+            ext -> a [id=0 particle=scalar_1 is_cut=7]
+            a -> b [id=1 particle=scalar_1 lmb_id=0]
+            b -> ext [id=2 particle=scalar_1 is_cut=7]
+            a -> b [id=3 particle=scalar_1]
+        }"#;
+        let parsed = DotGraph::from_string(input).unwrap();
+        let (diagram, source) = FeynmanDiagram::from_compact_dot(model, parsed).unwrap();
+        assert_eq!(
+            source.edges(),
+            &[EdgeId(0), EdgeId(1), EdgeId(0), EdgeId(2)]
+        );
+        assert_eq!(
+            &source.vertices()[..2],
+            &[Some(VertexId(0)), Some(VertexId(1))]
+        );
+        assert_eq!(
+            diagram.loop_momentum_basis().loop_edges,
+            [source.edges()[1]]
+        );
+        assert_eq!(diagram.edges().count(), 3);
+        assert!(!diagram.cuts().is_empty());
+        for cut in diagram.cuts() {
+            let edges = cut
+                .cut
+                .iter()
+                .map(|half| half.edge)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                edges,
+                BTreeSet::from([source.edges()[1], source.edges()[3]])
+            );
+        }
     }
 }

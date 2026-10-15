@@ -51,11 +51,11 @@ use symbolica::{
     coefficient::{Coefficient, CoefficientView},
     domains::float::{FloatLike, RealLike},
 };
-#[cfg(feature = "python")]
+#[cfg(feature = "symbolica_community_module")]
 pub mod symbolica_community_module;
 
 /// Gather the Python API registered for the Vakint Symbolica community module.
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     pyo3_stub_gen::StubInfo::from_project_root(
         "symbolica".to_owned(),

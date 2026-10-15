@@ -6,12 +6,10 @@ use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use symbolica::prelude::*;
-pub use three_dimensional_reps::MediumMode;
 
 use crate::{
     GammaLoopContext,
     cff::{expression::OrientationSelector, orientations::GraphOrientation},
-    feyngen::GenerationType,
     processes::EvaluatorSettings,
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
@@ -24,7 +22,10 @@ use crate::{
     uv::UVgenerationSettings,
 };
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -68,35 +69,10 @@ pub struct GenerationSettings {
     /// Sum all generated residue branches explicitly, removing runtime orientation selectors.
     #[serde(skip_serializing_if = "is_false")]
     pub explicit_orientation_sum_only: bool,
-    /// Medium for amplitude generation; non-vacuum modes require local 3D UV subtraction
-    /// and disabled threshold subtraction.
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub medium: MediumSettings,
 }
 
 impl GenerationSettings {
-    pub fn validate_for_process(&self, generation_type: GenerationType) -> EyreResult<()> {
-        if self.medium.mode == MediumMode::Vacuum && self.medium.vacuum_subtraction {
-            return Err(eyre!(
-                "`global.generation.medium.vacuum_subtraction = true` requires a medium mode other than `vacuum`"
-            ));
-        }
-
-        if generation_type == GenerationType::CrossSection && self.medium.mode != MediumMode::Vacuum
-        {
-            return Err(eyre!(
-                "Cross-section (`xs`) generation is not supported in thermal modes or with vacuum subtraction"
-            ));
-        }
-
-        if self.medium.mode != MediumMode::Vacuum && self.threshold_subtraction.enable_thresholds {
-            return Err(eyre!(
-                "Threshold subtraction is not supported in thermal modes; set `global.generation.threshold_subtraction.enable_thresholds = false`"
-            ));
-        }
-
-        self.validate_medium_uv_compatibility()?;
-
+    pub(crate) fn validate_explicit_orientation_sum_options(&self) -> EyreResult<()> {
         if self.uv.local_uv_cts_from_expanded_4d_integrands && !self.explicit_orientation_sum_only {
             return Err(eyre!(
                 "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` requires `global.generation.explicit_orientation_sum_only = true` because projected 4D counterterms have term-local CFF orientation sums"
@@ -111,127 +87,11 @@ impl GenerationSettings {
 
         Ok(())
     }
-
-    pub(crate) fn validate_medium_uv_compatibility(&self) -> EyreResult<()> {
-        if (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
-            && self.uv.local_uv_cts_from_expanded_4d_integrands
-        {
-            return Err(eyre!(
-                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is unsupported for finite-medium modes or vacuum subtraction; use local 3D subtraction instead"
-            ));
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod generation_settings_tests {
-    use super::{GenerationSettings, GenerationType, MediumMode, OrientationPattern};
-
-    #[test]
-    fn cross_sections_require_vacuum_mode_without_vacuum_subtraction() {
-        let mut settings = GenerationSettings::default();
-        settings
-            .validate_for_process(GenerationType::CrossSection)
-            .unwrap();
-
-        settings
-            .validate_for_process(GenerationType::Amplitude)
-            .unwrap();
-
-        settings.threshold_subtraction.enable_thresholds = false;
-        for mode in [
-            MediumMode::ThermodynamicEquilibrium,
-            MediumMode::ZeroTemperatureEquilibrium,
-        ] {
-            for vacuum_subtraction in [false, true] {
-                settings.medium.mode = mode;
-                settings.medium.vacuum_subtraction = vacuum_subtraction;
-                settings
-                    .validate_for_process(GenerationType::Amplitude)
-                    .unwrap();
-                let error = settings
-                    .validate_for_process(GenerationType::CrossSection)
-                    .unwrap_err();
-                assert!(error.to_string().contains("`xs`"));
-                assert!(error.to_string().contains("not supported"));
-            }
-        }
-    }
-
-    #[test]
-    fn thermal_modes_require_threshold_subtraction_disabled() {
-        for mode in [
-            MediumMode::ThermodynamicEquilibrium,
-            MediumMode::ZeroTemperatureEquilibrium,
-        ] {
-            for vacuum_subtraction in [false, true] {
-                let mut settings = GenerationSettings::default();
-                settings.medium.mode = mode;
-                settings.medium.vacuum_subtraction = vacuum_subtraction;
-
-                let error = settings
-                    .validate_for_process(GenerationType::Amplitude)
-                    .unwrap_err();
-                assert!(
-                    error
-                        .to_string()
-                        .contains("Threshold subtraction is not supported")
-                );
-                assert!(
-                    error.to_string().contains(
-                        "global.generation.threshold_subtraction.enable_thresholds = false"
-                    )
-                );
-
-                settings.threshold_subtraction.enable_thresholds = false;
-                settings
-                    .validate_for_process(GenerationType::Amplitude)
-                    .unwrap();
-            }
-        }
-    }
-
-    #[test]
-    fn vacuum_subtraction_requires_a_medium_mode() {
-        let mut settings = GenerationSettings::default();
-        settings.medium.vacuum_subtraction = true;
-        for generation_type in [GenerationType::Amplitude, GenerationType::CrossSection] {
-            let error = settings.validate_for_process(generation_type).unwrap_err();
-            assert!(error.to_string().contains("vacuum_subtraction = true"));
-            assert!(error.to_string().contains("other than `vacuum`"));
-        }
-    }
-
-    #[test]
-    fn finite_medium_supports_only_local_3d_subtraction() {
-        for (mode, vacuum_subtraction) in [
-            (MediumMode::ThermodynamicEquilibrium, false),
-            (MediumMode::ZeroTemperatureEquilibrium, false),
-            (MediumMode::ThermodynamicEquilibrium, true),
-            (MediumMode::ZeroTemperatureEquilibrium, true),
-        ] {
-            let mut settings = GenerationSettings::default();
-            settings.medium.mode = mode;
-            settings.medium.vacuum_subtraction = vacuum_subtraction;
-            settings.threshold_subtraction.enable_thresholds = false;
-            settings
-                .validate_for_process(GenerationType::Amplitude)
-                .unwrap();
-
-            settings.explicit_orientation_sum_only = true;
-            settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
-            let error = settings
-                .validate_for_process(GenerationType::Amplitude)
-                .unwrap_err();
-            assert!(
-                error
-                    .to_string()
-                    .contains("use local 3D subtraction instead")
-            );
-        }
-    }
+    use super::{GenerationSettings, OrientationPattern};
 
     #[test]
     fn projected_4d_cff_requires_an_unfiltered_explicit_orientation_sum() {
@@ -239,7 +99,7 @@ mod generation_settings_tests {
         settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
 
         let error = settings
-            .validate_for_process(GenerationType::Amplitude)
+            .validate_explicit_orientation_sum_options()
             .unwrap_err();
         assert!(
             error
@@ -249,12 +109,12 @@ mod generation_settings_tests {
 
         settings.explicit_orientation_sum_only = true;
         settings
-            .validate_for_process(GenerationType::Amplitude)
+            .validate_explicit_orientation_sum_options()
             .unwrap();
 
         settings.orientation_pattern = OrientationPattern::from_user_pattern("(+,-)").unwrap();
         let error = settings
-            .validate_for_process(GenerationType::Amplitude)
+            .validate_explicit_orientation_sum_options()
             .unwrap_err();
         assert!(
             error
@@ -264,7 +124,10 @@ mod generation_settings_tests {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -310,7 +173,7 @@ impl Default for ThresholdSubtractionSettings {
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
 )]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum VectorPolarizationSumGauge {
     #[serde(rename = "Feynman", alias = "feynman")]
     Feynman,
@@ -322,7 +185,7 @@ pub enum VectorPolarizationSumGauge {
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
 )]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(rename_all = "snake_case")]
 pub enum UniformNumeratorSamplingScale {
     #[default]
@@ -332,7 +195,7 @@ pub enum UniformNumeratorSamplingScale {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, Copy, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 #[derive(Default)]
 pub enum CompilationOptimizationLevel {
@@ -388,7 +251,10 @@ pub fn is_default_external_compiler(compiler: &str) -> bool {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Default)]
 pub enum CompilationMode {
     #[serde(rename = "c++", alias = "cpp")]
@@ -410,21 +276,17 @@ impl fmt::Display for CompilationMode {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
+)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
-pub struct CompilationOptionsSnapshot {
-    /// Optimization level for the evaluator compiler. Indirect JIT translation caps it
-    /// at O2; direct JIT translation always uses O2, regardless of this setting.
+pub struct ExternalCompilationOptionsSnapshot {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub optimization_level: CompilationOptimizationLevel,
-    /// Skip Symbolica's tree-based analysis by translating instructions directly to SymJIT IR.
-    /// Enabled by default to reduce JIT preparation work; disable to use the tree-based
-    /// translator when comparing or diagnosing backend behavior. Also applies when JIT
-    /// is the fallback for external artifacts. Direct translation always uses SymJIT O2,
-    /// regardless of `optimization_level`; disable it to use JIT O0 or O1.
-    #[serde(skip_serializing_if = "is_true")]
-    pub jit_direct_translation: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub fast_math: bool,
     #[serde(skip_serializing_if = "is_true")]
@@ -435,19 +297,12 @@ pub struct CompilationOptionsSnapshot {
     pub custom: Vec<String>,
 }
 
-impl Default for CompilationOptionsSnapshot {
-    fn default() -> Self {
-        GammaloopCompileOptions::default().options_snapshot()
-    }
-}
-
-impl fmt::Display for CompilationOptionsSnapshot {
+impl fmt::Display for ExternalCompilationOptionsSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} jit_direct_translation={} fast_math={} unsafe_math={} compiler={} custom={}",
+            "{} fast_math={} unsafe_math={} compiler={} custom={}",
             self.optimization_level,
-            self.jit_direct_translation,
             self.fast_math,
             self.unsafe_math,
             self.compiler,
@@ -463,9 +318,9 @@ impl fmt::Display for CompilationOptionsSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
 pub enum FrozenCompilationMode {
     Eager,
-    Symjit(CompilationOptionsSnapshot),
-    Cpp(CompilationOptionsSnapshot),
-    Assembly(CompilationOptionsSnapshot),
+    Symjit(CompilationOptimizationLevel),
+    Cpp(ExternalCompilationOptionsSnapshot),
+    Assembly(ExternalCompilationOptionsSnapshot),
 }
 
 impl FrozenCompilationMode {
@@ -482,7 +337,7 @@ impl FrozenCompilationMode {
         }
     }
 
-    pub fn external_options(&self) -> Option<&CompilationOptionsSnapshot> {
+    pub fn external_options(&self) -> Option<&ExternalCompilationOptionsSnapshot> {
         match self {
             FrozenCompilationMode::Cpp(options) | FrozenCompilationMode::Assembly(options) => {
                 Some(options)
@@ -524,11 +379,7 @@ impl fmt::Display for FrozenCompilationMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FrozenCompilationMode::Eager => f.write_str("eager"),
-            FrozenCompilationMode::Symjit(options) => write!(
-                f,
-                "symjit ({}, jit_direct_translation={})",
-                options.optimization_level, options.jit_direct_translation,
-            ),
+            FrozenCompilationMode::Symjit(level) => write!(f, "symjit ({level})"),
             FrozenCompilationMode::Cpp(options) => write!(f, "c++ ({options})"),
             FrozenCompilationMode::Assembly(options) => write!(f, "assembly ({options})"),
         }
@@ -536,25 +387,19 @@ impl fmt::Display for FrozenCompilationMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct GammaloopCompileOptions {
     /// Evaluator backend: Symbolica JIT, generated C++, or generated assembly.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub compilation_mode: CompilationMode,
 
-    /// Optimization level for the evaluator compiler. Indirect JIT translation caps it
-    /// at O2; direct JIT translation always uses O2, regardless of this setting.
+    /// Optimization level passed to the selected evaluator compiler.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub optimization_level: CompilationOptimizationLevel,
-
-    /// Skip Symbolica's tree-based analysis by translating instructions directly to SymJIT IR.
-    /// Enabled by default to reduce JIT preparation work; disable to use the tree-based
-    /// translator when comparing or diagnosing backend behavior. Also applies when JIT
-    /// is the fallback for external artifacts. Direct translation always uses SymJIT O2,
-    /// regardless of `optimization_level`; disable it to use JIT O0 or O1.
-    #[serde(skip_serializing_if = "is_true")]
-    pub jit_direct_translation: bool,
 
     /// Permit algebraic floating-point transformations that ignore strict IEEE ordering.
     #[serde(skip_serializing_if = "is_true")]
@@ -577,7 +422,6 @@ impl Default for GammaloopCompileOptions {
         Self {
             compilation_mode: CompilationMode::Symjit,
             optimization_level: CompilationOptimizationLevel::O2,
-            jit_direct_translation: true,
             fast_math: true,
             unsafe_math: true,
             compiler: default_external_compiler_owned(),
@@ -587,10 +431,9 @@ impl Default for GammaloopCompileOptions {
 }
 
 impl GammaloopCompileOptions {
-    pub fn options_snapshot(&self) -> CompilationOptionsSnapshot {
-        CompilationOptionsSnapshot {
+    pub fn external_options_snapshot(&self) -> ExternalCompilationOptionsSnapshot {
+        ExternalCompilationOptionsSnapshot {
             optimization_level: self.optimization_level,
-            jit_direct_translation: self.jit_direct_translation,
             fast_math: self.fast_math,
             unsafe_math: self.unsafe_math,
             compiler: self.compiler.clone(),
@@ -610,11 +453,12 @@ impl GammaloopCompileOptions {
             return FrozenCompilationMode::Eager;
         }
 
-        let options = self.options_snapshot();
         match self.compilation_mode {
-            CompilationMode::Cpp => FrozenCompilationMode::Cpp(options),
-            CompilationMode::Assembly => FrozenCompilationMode::Assembly(options),
-            CompilationMode::Symjit => FrozenCompilationMode::Symjit(options),
+            CompilationMode::Cpp => FrozenCompilationMode::Cpp(self.external_options_snapshot()),
+            CompilationMode::Assembly => {
+                FrozenCompilationMode::Assembly(self.external_options_snapshot())
+            }
+            CompilationMode::Symjit => FrozenCompilationMode::Symjit(self.optimization_level),
         }
     }
 
@@ -629,7 +473,10 @@ impl GammaloopCompileOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 #[derive(Default)]
 pub struct FeyGenSettings {
@@ -639,7 +486,10 @@ pub struct FeyGenSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct TropicalSubgraphTableSettings {
     /// Abort generation instead of reporting and skipping a failed tropical table construction.
@@ -665,7 +515,7 @@ impl Default for TropicalSubgraphTableSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct OrientationPattern {
     /// Symbolica pattern matched against serialized causal orientations.
@@ -909,7 +759,10 @@ mod orientation_pattern_tests {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct Parallelisation {
     /// Worker threads used by Feynman-graph generation.
@@ -933,30 +786,6 @@ impl Default for Parallelisation {
             generate: 1,
             compile: 1,
             integrate: 1,
-        }
-    }
-}
-
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[trait_decode(trait = GammaLoopContext)]
-#[serde(default, deny_unknown_fields)]
-pub struct MediumSettings {
-    /// `vacuum`, `thermodynamic_equilibrium` at `runtime.general.inverse_temperature`, or its
-    /// `zero_temperature_equilibrium` limit; equilibrium modes use the model's chemical potentials.
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub mode: MediumMode,
-    /// Subtract each medium weight's vacuum limit, keeping only the medium-dependent part;
-    /// requires a non-vacuum mode.
-    #[serde(skip_serializing_if = "is_false")]
-    pub vacuum_subtraction: bool,
-}
-
-impl Default for MediumSettings {
-    fn default() -> Self {
-        Self {
-            mode: MediumMode::Vacuum,
-            vacuum_subtraction: false,
         }
     }
 }

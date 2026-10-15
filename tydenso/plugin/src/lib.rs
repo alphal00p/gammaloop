@@ -5,7 +5,7 @@ use std::{io::Cursor, sync::Once};
 use ciborium::value::Value;
 use idenso::color::ColorSimplifySettings;
 use idenso::dirac::GammaSimplifySettings;
-use idenso::tensor::{ContractionSettings, SymbolicTensor};
+use idenso::tensor::{AlgebraSettings, ContractSettings, SymbolicTensor};
 use idenso::{Cookable, IndexTooling};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::portable_payload::{
@@ -1414,7 +1414,10 @@ pub fn simplify_color(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
     let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
     let result = source
-        .simplify_color(ColorSimplifySettings::default())
+        .simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
         .map_err(|error| error.to_string())?;
     encode_atom_with_context(result.expression(), &context)
 }
@@ -1424,7 +1427,10 @@ pub fn simplify_gamma(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
     let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
     let result = source
-        .simplify_gamma(GammaSimplifySettings::default())
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            ..Default::default()
+        })
         .map_err(|error| error.to_string())?;
     encode_atom_with_context(result.expression(), &context)
 }
@@ -1434,7 +1440,7 @@ pub fn contract(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
     let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
     let result = source
-        .contract(ContractionSettings::default())
+        .contract(ContractSettings::default())
         .map_err(|error| error.to_string())?;
     if !result.contraction_complete() {
         return Err("tensor contraction did not complete".into());
@@ -2228,7 +2234,7 @@ mod tests {
         assert_eq!(
             SymbolicTensor::infer(expression.clone())
                 .unwrap()
-                .contract(ContractionSettings::default())
+                .contract(ContractSettings::default())
                 .unwrap()
                 .into_expression(),
             vector.call(i.clone())

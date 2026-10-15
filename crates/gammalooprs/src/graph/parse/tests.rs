@@ -1,7 +1,19 @@
 use feynkit_graph::{DiagramEdge, EdgeEndpoints, EdgeId, VertexId};
+use linnet::half_edge::NodeIndex;
 use linnet::half_edge::{
     involution::{EdgeIndex, HedgePair},
     subgraph::SubSetLike,
+};
+use spenso::{
+    network::tags::SPENSO_TAG,
+    structure::{
+        abstract_index::AIND_SYMBOLS,
+        representation::{Minkowski, RepName},
+    },
+};
+use symbolica::{
+    atom::{Atom, AtomCore, FunctionBuilder},
+    symbol,
 };
 use typed_index_collections::ti_vec;
 
@@ -15,7 +27,8 @@ use crate::{
     initialisation::test_initialise,
     momentum::sample::LoopIndex,
     processes::DotExportSettings,
-    uv::uv_graph::UVE,
+    utils::GS,
+    uv::{UltravioletGraph, uv_graph::UVE},
 };
 
 fn triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> String {
@@ -793,3 +806,758 @@ fn native_subgraph_routing_matches_runtime_for_empty_and_disconnected_selections
 
 #[path = "finalized_reference.rs"]
 mod finalized_reference;
+
+#[test]
+fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
+    use crate::numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt};
+    use idenso::{dirac::AGS, representations::Bispinor};
+    use spenso::{
+        network::library::symbolic::ETS,
+        structure::{TensorStructure, slot::IsAbstractSlot},
+    };
+    use symbolica::function;
+
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("sm");
+    let source = r#"digraph port_self_energy {
+        projector=1
+        ext[style=invis]
+        ext -> a[id=0 particle=t]
+        a -> b[id=1 particle=t lmb_id=0]
+        a -> b[id=2 particle=g]
+        b -> ext[id=3 particle=t]
+    }"#;
+    let graph = Graph::import_dot(source, &model).unwrap().remove(0);
+    let numerator = graph
+        .numerator(&graph.full_filter(), &graph.empty_subgraph())
+        .get_single_atom()
+        .unwrap();
+    let mut source_ports = numerator.parse_into_net().unwrap().graph.dangling_indices();
+    source_ports.sort();
+    let external = graph.external_filter::<linnet::half_edge::subgraph::SuBitGraph>();
+    let mut runtime_ports = Vec::new();
+    for hedge in external.included_iter() {
+        let data = &graph.underlying[hedge];
+        runtime_ports.extend(
+            data.num_indices
+                .spin_indices
+                .vertex_indices
+                .external_structure_iter(),
+        );
+        runtime_ports.extend(
+            data.num_indices
+                .color_indices
+                .vertex_indices
+                .external_structure_iter(),
+        );
+        let spin = data
+            .edge_spin_slots()
+            .next()
+            .expect("a top boundary has one spin port");
+        assert_eq!(spin.aind, Aind::Hedge(hedge.0 as u16, 1));
+        assert!(
+            numerator.contains(spin.to_atom()),
+            "the component port must occur in its source factor"
+        );
+        let dummy = Bispinor {}
+            .new_rep(4)
+            .to_symbolic([Atom::var(symbol!("port_interface::dummy"))]);
+        let port = spin.to_atom();
+        let projector = (function!(ETS.metric, &port, &dummy)
+            + function!(AGS.gamma0, &port, &dummy))
+            / Atom::num(2);
+        let projected = projector
+            * numerator
+                .replace(port.to_pattern())
+                .with(dummy.to_pattern());
+        let mut projected_ports = projected.parse_into_net().unwrap().graph.dangling_indices();
+        projected_ports.sort();
+        assert_eq!(
+            projected_ports, source_ports,
+            "ordered projector insertion cannot create a phantom port"
+        );
+    }
+    runtime_ports.sort();
+    assert_eq!(
+        runtime_ports, source_ports,
+        "spin and oriented color interfaces must both agree"
+    );
+
+    // A literal artifact owns its supplied labels, including the zero-based
+    // labels of hand-authored numerators. Reindex complete local factors only.
+    let reindex = |atom: &Atom| {
+        (0..graph.underlying.n_hedges()).fold(atom.clone(), |atom, hedge| {
+            atom.replace(Atom::from(Aind::Hedge(hedge as u16, 1)).to_pattern())
+                .with(Atom::from(Aind::Hedge(hedge as u16, 0)).to_pattern())
+        })
+    };
+    let mut literal = graph.clone();
+    literal.underlying = graph.underlying.map_data_ref(
+        |_, _, vertex| {
+            let mut vertex = vertex.clone();
+            vertex.num.value = reindex(&vertex.num);
+            vertex
+        },
+        |_, _, _, edge| {
+            edge.map(|edge| {
+                let mut edge = edge.clone();
+                edge.num.value = reindex(&edge.num);
+                edge
+            })
+        },
+        |_, data| data.clone(),
+    );
+    let restored = Graph::import_dot(
+        &literal.dot_serialize(&DotExportSettings::default()),
+        &model,
+    )
+    .unwrap()
+    .remove(0);
+    for hedge in external.included_iter() {
+        let port = restored.underlying[hedge].edge_spin_slots().next().unwrap();
+        assert_eq!(port.aind, Aind::Hedge(hedge.0 as u16, 0));
+        assert!(
+            restored
+                .numerator(&restored.full_filter(), &restored.empty_subgraph())
+                .get_single_atom()
+                .unwrap()
+                .contains(port.to_atom())
+        );
+    }
+
+    let hedge = external.included_iter().next().unwrap();
+    let [first, second] = [0, 1].map(|local| {
+        Bispinor {}
+            .new_rep(4)
+            .to_symbolic([Atom::from(Aind::Hedge(hedge.0 as u16, local))])
+    });
+    literal.global_prefactor.num *= function!(ETS.metric, first, second);
+    let error = Graph::import_dot(
+        &literal.dot_serialize(&DotExportSettings::default()),
+        &model,
+    )
+    .err()
+    .expect("conflicting literal labels must not select a guessed port");
+    assert!(
+        error
+            .to_string()
+            .contains("ambiguous literal tensor interface"),
+        "{error:?}"
+    );
+
+    literal.global_prefactor.num = Atom::one();
+    literal.underlying = literal.underlying.map_data_ref(
+        |_, _, vertex| {
+            let mut vertex = vertex.clone();
+            vertex.num.value = Atom::one();
+            vertex
+        },
+        |_, _, _, edge| {
+            edge.map(|edge| {
+                let mut edge = edge.clone();
+                edge.num.value = Atom::one();
+                edge
+            })
+        },
+        |_, data| data.clone(),
+    );
+    let scalar = Graph::import_dot(
+        &literal.dot_serialize(&DotExportSettings::default()),
+        &model,
+    )
+    .unwrap()
+    .remove(0);
+    for hedge in external.included_iter() {
+        assert!(
+            scalar.underlying[hedge].edge_spin_slots().next().is_none(),
+            "literal scalar fragments cannot manufacture a component spin port"
+        );
+    }
+}
+
+#[test]
+fn compact_model_import_preserves_metadata_in_the_finalized_frame() {
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let mut parsed = linnet::parser::DotGraph::from_string(
+        r#"digraph mapped_bubble {
+        final_state="scalar_1,scalar_1"
+        group_id=0
+        is_group_master=true
+        params="source_weight"
+        ext [style=invis]
+        ext -> a [id=0 particle=scalar_1 is_cut=7]
+        a -> b [id=1 particle=scalar_1 lmb_id=0]
+        b -> ext [id=2 particle=scalar_1 is_cut=7]
+        a -> b [id=3 particle=scalar_1]
+    }"#,
+    )
+    .unwrap();
+    parsed.global_data.statements.insert(
+        "threshold_counterterms".into(),
+        r#"
+schema_version = 1
+[[cuts]]
+edges = [1, 3]
+[[cuts.thresholds]]
+edges = [1, 3]
+[[cuts.thresholds.counterterms]]
+subspace = [3]
+parent_lmb = [3]
+"#
+        .into(),
+    );
+    let imported = Graph::from_compact_model_dot(parsed, &model).unwrap();
+    assert_eq!(imported.group_id, Some(crate::graph::GroupId(0)));
+    assert!(imported.is_group_master);
+    assert_eq!(
+        imported.param_builder.pairs.additional_params.params.len(),
+        1
+    );
+    let cut = &imported.threshold_counterterms.cuts[0];
+    assert_eq!(cut.edges, [EdgeIndex(1), EdgeIndex(2)]);
+    assert_eq!(cut.thresholds[0].edges, [EdgeIndex(1), EdgeIndex(2)]);
+    let variant = &cut.thresholds[0].counterterms[0];
+    assert_eq!(variant.subspace.as_ref().unwrap(), &[EdgeIndex(2)]);
+    assert_eq!(variant.parent_lmb.as_ref().unwrap(), &[EdgeIndex(2)]);
+    assert!(!imported.finalized_cuts.is_empty());
+}
+
+#[test]
+fn compact_qcd_import_instantiates_rules_and_retains_explicit_fragments() {
+    use feynkit_generator::FeynmanDiagramRulesExt;
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("sm");
+    let source = r#"digraph physical_top_self_energy {
+        ext [style=invis]
+        ext -> a [id=0 particle=t]
+        a -> b [id=1 particle=t lmb_id=0]
+        a -> b [id=2 particle=g]
+        b -> ext [id=3 particle=t]
+    }"#;
+    let topology =
+        feynkit_graph::FeynmanDiagram::from_dot(std::sync::Arc::new(model.clone()), source)
+            .unwrap();
+    assert_eq!(topology.numerator(), &Atom::one());
+    let reference = topology.apply_feynman_rules().unwrap();
+    let imported = Graph::import_dot(source, &model).unwrap().remove(0);
+    assert_ne!(reference.numerator(), &Atom::one());
+    assert_eq!(
+        imported
+            .numerator(&imported.full_filter(), &imported.empty_subgraph())
+            .get_single_atom()
+            .unwrap(),
+        *reference.numerator()
+    );
+    assert_eq!(
+        imported.global_prefactor.projector,
+        reference.external_state_projector().unwrap()
+    );
+    assert!(!imported.global_prefactor.projector.is_one());
+    let supplied = source.replace(
+        "ext [style=invis]",
+        "projector=1; a[num=7]; ext [style=invis]",
+    );
+    let explicit = Graph::import_dot(&supplied, &model).unwrap().remove(0);
+    assert!(explicit.global_prefactor.projector.is_one());
+    assert_eq!(
+        explicit.underlying[linnet::half_edge::NodeIndex(0)]
+            .num
+            .value,
+        Atom::num(7)
+    );
+    assert!(!explicit.underlying[EdgeIndex(1)].num.value.is_one());
+}
+
+#[test]
+fn compact_gamma_loop_indices_bind_to_native_rule_ports() {
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("sm");
+    let source =
+        include_str!("../../../../../tests/resources/graphs/local_ir_gluon_self_energy.dot");
+    let qualified = Graph::import_dot(source, &model).unwrap().remove(0);
+    let unqualified = Graph::import_dot(&source.replace("gammalooprs::", ""), &model)
+        .unwrap()
+        .remove(0);
+    // This explicitly supplied gluon projector closes the independently
+    // instantiated color and Lorentz ports; disconnected copies of either
+    // interface would fail exact network closure.
+    qualified.validate_full_numerator_tensor_network().unwrap();
+    unqualified
+        .validate_full_numerator_tensor_network()
+        .unwrap();
+    assert_eq!(qualified.global_prefactor, unqualified.global_prefactor);
+    let projector = &qualified.global_prefactor.projector;
+    for hedge in qualified
+        .external_filter::<linnet::half_edge::subgraph::SuBitGraph>()
+        .included_iter()
+    {
+        let native = Atom::from(crate::numerator::aind::Aind::Hedge(hedge.0 as u16, 1));
+        let source = Atom::from(crate::numerator::aind::Aind::Hedge(hedge.0 as u16, 0));
+        assert!(projector.contains(&native));
+        assert!(!projector.contains(&source));
+    }
+}
+
+#[test]
+fn compact_sewn_projector_uses_the_source_half_edge_chart() {
+    use crate::numerator::aind::Aind;
+    use idenso::representations::Bispinor;
+    use linnet::half_edge::involution::Flow;
+    use symbolica::function;
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("sm");
+    let mut source = linnet::parser::DotGraph::from_string(
+        r#"digraph sewn_top_self_energy {
+        final_state="t,g"
+        ext[style=invis]
+        ext -> a[id=0 particle=t is_cut=7]
+        a -> b[id=1 particle=t lmb_id=0]
+        b -> ext[id=2 particle=t is_cut=7]
+        a -> b[id=3 particle=g]
+    }"#,
+    )
+    .unwrap();
+    let automatic = Graph::from_compact_model_dot(source.clone(), &model).unwrap();
+    let mut projector = Atom::one();
+    for (pair, edge, _) in source.iter_edges() {
+        if let HedgePair::Unpaired { hedge, flow } = pair {
+            let slot = Bispinor {}
+                .new_rep(4)
+                .to_symbolic([Atom::from(Aind::Hedge(hedge.0 as u16, 0))]);
+            projector *= function!(
+                if flow == Flow::Sink { GS.u } else { GS.ubar },
+                edge.0,
+                slot
+            );
+        }
+    }
+    source
+        .global_data
+        .statements
+        .insert("projector".into(), projector.to_canonical_string());
+    let explicit = Graph::from_compact_model_dot(source, &model).unwrap();
+    assert_eq!(
+        explicit.global_prefactor.projector, automatic.global_prefactor.projector,
+        "supplied wavefunctions must follow actual source incidence through sewing"
+    );
+    assert_eq!(explicit.loop_momentum_basis, automatic.loop_momentum_basis);
+    assert_eq!(
+        explicit
+            .numerator(&explicit.full_filter(), &explicit.empty_subgraph())
+            .get_single_atom()
+            .unwrap(),
+        automatic
+            .numerator(&automatic.full_filter(), &automatic.empty_subgraph())
+            .get_single_atom()
+            .unwrap()
+    );
+}
+
+#[test]
+fn full_numerator_requires_one_q3_structure_argument() {
+    test_initialise().unwrap();
+    let mut graph: Graph = crate::graph::Graph::import_dot(
+        stringify!(
+        digraph q3_validation {
+            edge [pdg=1000]
+            ext [style=invis]
+            ext -> v4
+            ext -> v5
+            v6 -> ext
+            v5 -> v4 [lmb_id=0]
+            v6 -> v5
+            v4 -> v6
+        }),
+        &crate::utils::load_generic_model("scalars"),
+    )
+    .map(|mut graphs| {
+        assert_eq!(graphs.len(), 1);
+        graphs.remove(0)
+    })
+    .unwrap();
+
+    graph.overall_factor = GS.emr_vec.call_args([Atom::num(3)]);
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Q3 in graph 'q3_validation' must have exactly two arguments"),
+        "unexpected Q3 arity error: {error:?}"
+    );
+
+    graph.overall_factor = GS
+        .emr_vec
+        .call_args([Atom::var(symbol!("invalid_q3_edge")), GS.cind(1)]);
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("found non-canonical edge argument invalid_q3_edge"),
+        "unexpected Q3 edge error: {error:?}"
+    );
+
+    graph.overall_factor = GS.emr_vec(EdgeIndex(3), Atom::var(symbol!("invalid_q3_structure")));
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("found non-canonical second argument invalid_q3_structure"),
+        "unexpected Q3 structure error: {error:?}"
+    );
+
+    graph.overall_factor = GS.emr_vec(EdgeIndex(3), Minkowski {}.new_rep(3).to_symbolic([]));
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("found non-canonical second argument"),
+        "unexpected Q3 dimension error: {error:?}"
+    );
+
+    let out_of_range_edge = EdgeIndex(graph.underlying.n_edges());
+    graph.overall_factor = GS.emr_vec(out_of_range_edge, Minkowski {}.new_rep(4).to_symbolic([]));
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error.to_string().contains(&format!(
+            "found edge ID {} outside the valid range 0..{}",
+            out_of_range_edge.0,
+            graph.underlying.n_edges(),
+        )),
+        "unexpected out-of-range Q3 edge error: {error:?}"
+    );
+
+    graph.overall_factor = GS.emr_mom(out_of_range_edge, GS.cind(1));
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error.to_string().contains(&format!(
+            "found edge ID {} outside the valid range 0..{}",
+            out_of_range_edge.0,
+            graph.underlying.n_edges(),
+        )),
+        "unexpected out-of-range Q edge error: {error:?}"
+    );
+
+    let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
+    let represented = GS.emr_vec(EdgeIndex(3), minkowski);
+    graph.overall_factor = SPENSO_TAG.dot.call_args([represented.clone(), represented]);
+    graph.validate_full_numerator_tensor_network().unwrap();
+
+    let indexed_minkowski = Minkowski {}
+        .new_rep(4)
+        .to_symbolic([Atom::var(symbol!("q3_validator_mu"))]);
+    let indexed = GS.emr_vec(EdgeIndex(3), indexed_minkowski);
+    graph.overall_factor = &indexed * &indexed;
+    graph.validate_full_numerator_tensor_network().unwrap();
+
+    graph.overall_factor = GS.emr_vec(EdgeIndex(3), GS.cind(1));
+    assert_eq!(
+        graph.overall_factor,
+        GS.emr_mom(EdgeIndex(3), GS.cind(1)),
+        "a transient tensor-network Q3 component must normalize immediately",
+    );
+
+    let abstract_slot = Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)]);
+    graph.overall_factor = GS.emr_vec(EdgeIndex(3), abstract_slot);
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Full numerator still has dangling tensor indices"),
+        "a numeric Minkowski index must be validated as an abstract index: {error:?}",
+    );
+    assert!(
+        graph.overall_factor.contains_symbol(GS.emr_vec)
+            && !graph.overall_factor.contains_symbol(GS.emr_mom),
+        "a numeric Minkowski index must remain an abstract Q3 label, not normalize to a Q component",
+    );
+
+    for malformed_component in [
+        AIND_SYMBOLS.cind.call_args([Atom::num(-1)]),
+        AIND_SYMBOLS.cind.call_args([Atom::num(4)]),
+        AIND_SYMBOLS.cind.call_args([Atom::num(1), Atom::num(2)]),
+    ] {
+        graph.overall_factor = GS.emr_vec(EdgeIndex(3), malformed_component);
+        let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("found non-canonical second argument"),
+            "unexpected malformed Q3 component error: {error:?}",
+        );
+    }
+
+    let wrapper = symbol!("q3_validation_wrapper");
+    let scalar = Atom::var(symbol!("q3_validation_scalar"));
+    let malformed_q3 = GS.emr_vec.call_args([Atom::num(3)]);
+    for nested in [
+        wrapper.call_args([malformed_q3.clone()]),
+        wrapper.call_args([malformed_q3.pow(2)]),
+        wrapper.call_args([&malformed_q3 + &scalar]),
+        wrapper.call_args([&malformed_q3 * &scalar]),
+    ] {
+        graph.overall_factor = nested;
+        let error = graph.validate_spatial_momentum_convention().unwrap_err();
+        assert!(
+            error.to_string().contains("Q3 in graph 'q3_validation'"),
+            "nested factorized payload must retain Q3 validation: {error:?}",
+        );
+    }
+
+    let malformed_q = FunctionBuilder::new(GS.emr_mom).finish();
+    graph.overall_factor = wrapper.call_args([&malformed_q3 + &malformed_q.pow(2)]);
+    let error = graph.validate_spatial_momentum_convention().unwrap_err();
+    assert!(
+        error.to_string().contains("Spatial momentum Q3"),
+        "the Q3 pass must retain priority over malformed Q: {error:?}",
+    );
+
+    let nested_q = wrapper.call_args([scalar.pow(malformed_q)]);
+    graph.overall_factor = nested_q.clone();
+    let error = graph.validate_spatial_momentum_convention().unwrap_err();
+    assert!(
+        error.to_string().contains("found no edge argument"),
+        "a malformed Q in a power exponent must remain visible: {error:?}",
+    );
+
+    graph.overall_factor = Atom::one();
+    let original_global = graph.global_prefactor.clone();
+    graph.global_prefactor.num = nested_q.clone();
+    assert!(graph.validate_spatial_momentum_convention().is_err());
+    graph.global_prefactor = original_global.clone();
+    graph.global_prefactor.projector = nested_q;
+    assert!(graph.validate_spatial_momentum_convention().is_err());
+    graph.global_prefactor = original_global;
+
+    // Component normalization happens before either traversal sees the atom.
+    let component = GS.emr_vec(out_of_range_edge, GS.cind(1));
+    assert_eq!(component, GS.emr_mom(out_of_range_edge, GS.cind(1)));
+    graph.overall_factor = wrapper.call_args([component]);
+    let error = graph.validate_spatial_momentum_convention().unwrap_err();
+    assert!(
+        error.to_string().contains("Momentum Q in graph"),
+        "a normalized Q3 component must be checked as Q: {error:?}",
+    );
+
+    // Validate the normalized product, including cancellation and annihilation.
+    graph.overall_factor = &malformed_q3 - &malformed_q3;
+    graph.validate_spatial_momentum_convention().unwrap();
+    graph.overall_factor = malformed_q3;
+    graph.global_prefactor.num = Atom::Zero;
+    graph.validate_spatial_momentum_convention().unwrap();
+}
+
+#[test]
+fn graph_set_import_enforces_the_q3_convention_without_tensor_closure() {
+    test_initialise().unwrap();
+    for numerator in [
+        r#"num = "gammalooprs::Q3(0)""#,
+        r#"edge [num = "gammalooprs::Q3(0)"]"#,
+        r#"node [num = "gammalooprs::Q3(0)"]"#,
+    ] {
+        let malformed = format!(
+            r#"
+            digraph q3_graph_set_validation {{
+                {numerator}
+                edge [pdg=1000]
+                ext [style=invis]
+                ext -> v4
+                ext -> v5
+                v6 -> ext
+                v5 -> v4 [lmb_id=0]
+                v6 -> v5
+                v4 -> v6
+            }}
+            "#
+        );
+
+        let error = crate::graph::Graph::import_dot(
+            &malformed,
+            &crate::utils::load_generic_model("scalars"),
+        )
+        .err()
+        .expect("multi-graph imports must reject the obsolete one-argument Q3 form");
+        assert!(
+            format!("{error:#}")
+                .contains("Q3 in graph 'q3_graph_set_validation' must have exactly two arguments"),
+            "unexpected graph-set Q3 validation error: {error:?}"
+        );
+    }
+}
+
+#[test]
+fn hedge_payload_does_not_require_dod() {
+    test_initialise().unwrap();
+    let graph: Graph = crate::finalized_runtime_dot!(digraph missing_hedge_dod{
+    graph [projector=1]
+                   ext_in [style=invis]
+                   ext_out [style=invis]
+                   A [num=1 dod=0]
+                   ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0}"]
+                   A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1}"]
+               })
+    .unwrap();
+
+    let mut orders = graph
+        .underlying
+        .iter_hedges()
+        .map(|(_, hedge)| {
+            assert!(!hedge.ufo_order.autogenerated);
+            hedge.ufo_order.value
+        })
+        .collect::<Vec<_>>();
+    orders.sort();
+    assert_eq!(orders, vec![0, 1]);
+    assert_eq!(graph.underlying[NodeIndex(0)].dod.value, 0);
+    assert!(!graph.underlying[NodeIndex(0)].dod.autogenerated);
+    for edge in [EdgeIndex(0), EdgeIndex(1)] {
+        assert_eq!(graph.underlying[edge].dod.value, -2);
+        assert!(!graph.underlying[edge].dod.autogenerated);
+    }
+}
+
+#[test]
+fn initial_state_cut_permutation_preserves_specified_loop_edges() {
+    test_initialise().unwrap();
+    let graph: Graph = crate::finalized_runtime_dot!(digraph cut_lmb_permutation {
+ graph [projector=1]
+        edge [num=1 mass=2]
+        node [num=1]
+        a -> b [id=0 name=first_loop lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+        a -> b [id=1 name=second_loop lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+        a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+        b -> a [id=3 is_cut=0 source="{ufo_order:3}" sink="{ufo_order:3}"]
+        b -> a [id=4 is_cut=1 source="{ufo_order:4}" sink="{ufo_order:4}"]
+    }, &crate::utils::load_generic_model("sm"))
+    .unwrap();
+
+    assert_eq!(
+        graph.loop_momentum_basis.ext_edges.raw,
+        [EdgeIndex(0), EdgeIndex(1)]
+    );
+    for (loop_id, name) in ["first_loop", "second_loop"].into_iter().enumerate() {
+        assert_eq!(
+            graph.loop_momentum_basis.loop_edges[LoopIndex(loop_id)],
+            graph.edge_name_to_index(name).unwrap()
+        );
+    }
+}
+
+#[test]
+fn missing_vertex_dod_is_autogenerated() {
+    test_initialise().unwrap();
+    let graph: Graph = crate::finalized_runtime_dot!(digraph missing_vertex_dod{
+    graph [projector=1]
+                   ext_in [style=invis]
+                   ext_out [style=invis]
+                   A [num=1]
+                   ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0,dod:-2}"]
+                   A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1,dod:-2}"]
+               })
+    .unwrap();
+
+    let dod = &graph.underlying[NodeIndex(0)].dod;
+    assert_eq!(dod.value, 0);
+    assert!(dod.autogenerated);
+}
+
+#[test]
+fn open_fundamental_color_requires_an_explicit_projector() {
+    test_initialise().unwrap();
+    let mut graph: Graph = crate::graph::Graph::import_dot(stringify!(
+        digraph open_fundamental_color {
+            num = "1/3*spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(0))),spenso::cof(3,gammalooprs::hedge(1)))"
+            ext [style=invis]
+
+            ext -> v1:0 [id=0 particle=d]
+            v2:1 -> ext [id=1 particle=d]
+            v1:2 -> v2:3 [id=2 particle=d lmb_id=0]
+            v1:4 -> v2:5 [id=3 particle=g]
+        }
+    ), &crate::utils::load_generic_model("sm")).map(|mut graphs| { assert_eq!(graphs.len(),1); graphs.remove(0) })
+    .unwrap();
+
+    graph.validate_full_numerator_tensor_network().unwrap();
+    graph.global_prefactor.num = Atom::num(1);
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Full numerator still has dangling tensor indices"),
+        "removing delta_i^j/N_c must expose the open fundamental color string: {error:?}"
+    );
+}
+
+#[test]
+fn vacuum_loop_edges_must_leave_a_spanning_forest() {
+    test_initialise().unwrap();
+    let graph: eyre::Result<Graph> = crate::finalized_runtime_dot!(digraph invalid_vacuum_basis {
+ graph [projector=1]
+        edge [num=1 mass=2]
+        node [num=1]
+        a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+        b -> a [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+    }, &crate::utils::load_generic_model("sm"));
+    let error = graph
+        .err()
+        .expect("an overcomplete loop basis must be rejected");
+    assert!(format!("{error:?}").contains("loop edges specified are not actual loop edges"));
+}
+
+#[test]
+fn vacuum_tadpoles_keep_all_loop_generators_without_external_legs() {
+    use linnet::half_edge::subgraph::SubSetLike;
+
+    test_initialise().unwrap();
+    let graphs: Vec<Graph> = crate::finalized_runtime_dot!(
+        digraph canonical_vacuum {
+ graph [projector=1]
+            edge [num=1 mass=2]
+            node [num=1]
+            a -> a [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
+            a -> a [id=1 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:3}"]
+        }
+        digraph specified_vacuum {
+ graph [projector=1]
+            edge [num=1 mass=2]
+            node [num=1]
+            a -> a [id=0 lmb_id=1 source="{ufo_order:4}" sink="{ufo_order:5}"]
+            a -> a [id=1 lmb_id=0 source="{ufo_order:6}" sink="{ufo_order:7}"]
+        }
+        digraph disconnected_vacuum {
+ graph [projector=1]
+            edge [num=1 mass=2]
+            node [num=1]
+            a -> a [id=0 lmb_id=1 source="{ufo_order:8}" sink="{ufo_order:9}"]
+            b -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
+        }
+    , &crate::utils::load_generic_model("sm"))
+    .unwrap();
+
+    for (graph, expected_edges) in graphs.iter().zip([[0, 1], [1, 0], [1, 0]]) {
+        let lmb = &graph.loop_momentum_basis;
+        assert!(graph.initial_state_cut.is_empty());
+        assert!(lmb.tree.is_empty());
+        assert!(lmb.ext_edges.is_empty());
+        assert_eq!(lmb.loop_edges.raw, expected_edges.map(EdgeIndex));
+        for (loop_id, edge) in lmb.loop_edges.iter().enumerate() {
+            let signature = &lmb.edge_signatures[*edge];
+            assert!(signature.external.is_empty());
+            assert_eq!(
+                signature
+                    .internal
+                    .iter()
+                    .map(|sign| *sign * 1_i32)
+                    .collect::<Vec<_>>(),
+                (0..2)
+                    .map(|index| i32::from(index == loop_id))
+                    .collect::<Vec<_>>()
+            );
+        }
+        let exported = graph.dot_serialize(&DotExportSettings::default());
+        let reparsed: Graph = exported
+            .into_finalized_runtime_graph(&crate::utils::load_generic_model("sm"))
+            .unwrap();
+        assert_eq!(reparsed.loop_momentum_basis, *lmb);
+    }
+}

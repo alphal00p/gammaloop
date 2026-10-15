@@ -74,7 +74,13 @@ impl PhysicalOverlapInput {
             &generation.orientation_pattern,
             true,
         );
-        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &generation)?.unfold();
+        let mut forests = Wood::new(
+            CutStructure::empty(&graph),
+            &graph,
+            &graph.model,
+            &generation.uv,
+        )?
+        .unfold();
         let [(compatible, cutset)] = forests.cuts.as_slice() else {
             return Err(eyre!("the overlap fixture must have one empty cut"));
         };
@@ -159,8 +165,10 @@ impl PhysicalOverlapInput {
             file.generation_settings = ?generation,
             "Generate the complete FullH signed forest; retain all numerator definitions"
         );
+        let model = graph.model.clone();
         forests.compute(
             &mut graph,
+            &model,
             crate::utils::vakint()?,
             orientation,
             &generation.uv,
@@ -176,7 +184,20 @@ impl PhysicalOverlapInput {
             // FinalIntegrands::iter/export would resolve every numerator; do not use them.
             let integrands = computed
                 .final_integrands
-                .map_expressions(|atom| Ok(atom.collect_color()))?
+                .map_expressions(|atom| {
+                    let color = spenso::shadowing::TensorCollectFilter::Reps([
+                        idenso::representations::ColorAdjoint {}.into(),
+                        idenso::representations::ColorFundamental {}.into(),
+                        idenso::representations::ColorSextet {}.into(),
+                    ]);
+                    let cooking = idenso::CookSettings::indices()
+                        .with_mode(idenso::CookMode::ReversibleEncoding)
+                        .with_representation_payloads(true, true);
+                    let collected =
+                        idenso::tensor::SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+                            .collect(color)?;
+                    Ok(cooking.uncook(collected.expression().as_view()))
+                })?
                 .into_integrands();
             assert_eq!(integrands.iter().count(), 1);
             assert!(

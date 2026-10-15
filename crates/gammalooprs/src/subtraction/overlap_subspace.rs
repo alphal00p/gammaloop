@@ -1253,7 +1253,7 @@ mod tests {
             esurface::{Esurface, EsurfaceExistence, EsurfaceID},
         },
         finalized_runtime_dot,
-        graph::{LMBext, parse::from_dot::IntoFinalizedRuntimeGraph},
+        graph::LMBext,
         initialisation::test_initialise,
         momentum::{FourMomentum, Rotatable, Rotation, RotationMethod},
     };
@@ -1391,16 +1391,17 @@ mod tests {
     #[test]
     fn overlap_partitions_remap_complements_and_keep_instance_kinematics() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph partitioned_centers {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph partitioned_centers {
+            graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->a:0 [id=0]
-            a->b [id=1]
-            b->a [id=2]
-            a->b [id=3]
-            b->a [id=4]
-            ext->b:1 [id=5]
+            ext->a:0 [id=0 sink="{ufo_order:0}"]
+            a->b [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            b->a [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            a->b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
+            b->a [id=4 source="{ufo_order:3}" sink="{ufo_order:4}"]
+            ext->b:1 [id=5 sink="{ufo_order:4}"]
         })
         .unwrap();
         let lmbs = ti_vec![graph.loop_momentum_basis.clone()];

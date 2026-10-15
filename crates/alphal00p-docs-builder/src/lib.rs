@@ -1781,13 +1781,20 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
-            // Preserve the versioned upstream package verbatim. This vendor-owned
-            // changelog is not an editable repository documentation source.
-            if source
-                == Path::new(
-                    "crates/linnet-py/vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md",
+            // Preserve upstream package metadata and executable HTML interfaces.
+            // These exact assets are not authored repository prose; neighboring
+            // documentation still follows the Typst-only policy.
+            if matches!(
+                source.to_str(),
+                Some(
+                    "crates/linnet-py/vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md"
+                        | "vendor/clarabel/CHANGELOG.md"
+                        | "vendor/clarabel/LICENSE.md"
+                        | "vendor/clarabel/html/rustdocs-header.html"
+                        | "crates/feynkit-py/src/cff/display.html"
+                        | "examples/layout/impred/playground.html"
                 )
-            {
+            ) {
                 continue;
             }
             if !matches!(
@@ -10499,6 +10506,29 @@ mod tests {
         builder.legacy_prose.source.clear();
         fs::write(temporary.path().join("new-note.typ"), "= New prose").unwrap();
         assert!(builder.check_prose_sources().is_err());
+    }
+
+    #[test]
+    fn prose_source_gate_distinguishes_runtime_assets_from_neighboring_prose() {
+        let temporary = tempfile::tempdir().unwrap();
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = temporary.path().to_path_buf();
+        for asset in [
+            "vendor/clarabel/CHANGELOG.md",
+            "vendor/clarabel/LICENSE.md",
+            "vendor/clarabel/html/rustdocs-header.html",
+            "crates/feynkit-py/src/cff/display.html",
+            "examples/layout/impred/playground.html",
+        ] {
+            let path = temporary.path().join(asset);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, "Asset").unwrap();
+            assert!(builder.check_prose_sources().is_ok(), "{asset}");
+            let prose = path.parent().unwrap().join("new-note.html");
+            fs::write(&prose, "New prose").unwrap();
+            assert!(builder.check_prose_sources().is_err(), "{asset}");
+            fs::remove_file(prose).unwrap();
+        }
     }
 
     #[test]

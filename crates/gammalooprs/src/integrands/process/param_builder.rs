@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::HashMap,
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -10,7 +11,6 @@ use color_eyre::Result;
 use idenso::{coad, cof, color::CS, color_cas, color_idx};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
-use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{
         algebraic_traits::{IsZero, RefZero},
@@ -20,6 +20,7 @@ use spenso::{
     network::{ExecutionResult, parsing::ParseSettings},
     structure::concrete_index::ExpandedIndex,
 };
+use symbolica::evaluate::{FunctionRegistrationOptions, InliningPolicy};
 use symbolica::prelude::{
     Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, FunctionMap, Indeterminate, Rational,
     ReplaceWith, Replacement, Symbol, parse_lit, symbol,
@@ -35,12 +36,12 @@ use crate::{
         amplitude::export::ExportAtomTo,
         evaluators::{InputParams, SliceMut},
     },
-    model::{Model, ModelGammaLoopExt},
+    model::{Model, ModelGammaLoopExt, UFOSymbol},
     momentum::sample::{ExternalFourMomenta, MomentumSample},
     momentum::{Helicity, PolType},
     numerator::ParsingNet,
     utils::{
-        ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
+        F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128,
         hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
     },
 };
@@ -593,33 +594,32 @@ impl GammaLoopPairs {
 
 #[derive(Clone)]
 pub struct ParamCache<T: FloatLike> {
-    cache: ConstGenericRingBuffer<Vec<Complex<F<T>>>, 64>,
+    cache: [Option<Vec<Complex<F<T>>>>; 64],
     len: usize,
 }
 
 impl<T: FloatLike> ParamCache<T> {
+    const CAPACITY: usize = 64;
+
     pub fn get(&self, key: usize) -> Option<&Vec<Complex<F<T>>>> {
-        if self.len <= key || key + 64 < self.len {
+        if key >= self.len || self.len - key > Self::CAPACITY {
             None
-        } else if self.len < 64 {
-            Some(&self.cache[key])
         } else {
-            let cachekey = (64 + key) - self.len;
-            Some(&self.cache[cachekey])
+            self.cache[key % Self::CAPACITY].as_ref()
         }
     }
 
     pub fn checked_push(&mut self, key: usize, value: Vec<Complex<F<T>>>) {
         debug_assert_eq!(self.len, key);
+        self.cache[self.len % Self::CAPACITY] = Some(value);
         self.len += 1;
-        self.cache.enqueue(value);
     }
 }
 
 impl<T: FloatLike> Default for ParamCache<T> {
     fn default() -> Self {
         Self {
-            cache: ConstGenericRingBuffer::new(),
+            cache: [const { None }; 64],
             len: 0,
         }
     }
@@ -642,8 +642,7 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
     }
 }
 
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = GammaLoopContext)]
+#[derive(Clone, bincode_trait_derive::Encode)]
 pub struct ParamBuilder<T: FloatLike = f64> {
     pub values: Vec<Vec<Complex<F<T>>>>,
     pub pairs: GammaLoopPairs,
@@ -655,18 +654,99 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub fn_map: FunctionMap,
 }
 
-#[derive(
-    Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug, PartialEq, Eq, Hash,
-)]
-#[trait_decode(trait = GammaLoopContext)]
+impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T> {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let values = Decode::decode(decoder)?;
+        let pairs = Decode::decode(decoder)?;
+        let polarization_cache = Decode::decode(decoder)?;
+        let reps: Vec<FnMapEntry> = Decode::decode(decoder)?;
+        // Consume the existing wire field, then rebuild from the recorded entries:
+        // Symbolica's imported map can retain stale inline argument symbol IDs.
+        let _: FunctionMap = Decode::decode(decoder)?;
+        let mut fn_map = FunctionMap::new();
+        for entry in &reps {
+            entry
+                .register(&mut fn_map)
+                .map_err(bincode::error::DecodeError::OtherString)?;
+        }
+        Ok(Self {
+            values,
+            pairs,
+            polarization_cache,
+            reps,
+            fn_map,
+        })
+    }
+}
+
+#[derive(Clone, bincode_trait_derive::Encode, Debug, PartialEq, Eq, Hash)]
 pub struct FnMapEntry {
     pub lhs: Atom,
     pub rhs: Atom,
     pub args: Vec<Indeterminate>,
     pub tags: Vec<Atom>,
+    pub inlining: InliningPolicy,
+    pub is_alias: bool,
 }
 
+impl<C: GammaLoopContext> Decode<C> for FnMapEntry {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let lhs = Decode::decode(decoder)?;
+        let rhs = Decode::decode(decoder)?;
+        let args: Vec<Indeterminate> = Decode::decode(decoder)?;
+        // The Symbol/Atom is remapped on import; Indeterminate's inline symbol
+        // cache is not. Recreate the formal from its remapped representation.
+        let args = args
+            .into_iter()
+            .map(|arg| Indeterminate::try_from(Atom::from(arg)))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(bincode::error::DecodeError::OtherString)?;
+        Ok(Self {
+            lhs,
+            rhs,
+            args,
+            tags: Decode::decode(decoder)?,
+            inlining: Decode::decode(decoder)?,
+            is_alias: Decode::decode(decoder)?,
+        })
+    }
+}
+
+pub type SerializedFnMapEntry<T> = (T, T, Vec<T>, Vec<T>, InliningPolicy, bool);
+
 impl FnMapEntry {
+    /// Keep registration policy and caller-scope aliases intact when rebuilding a map.
+    pub fn register(&self, fn_map: &mut FunctionMap) -> Result<(), String> {
+        if self.is_alias {
+            if !self.args.is_empty() || self.inlining != InliningPolicy::Always {
+                return Err(
+                    "Caller-scope aliases require no formal arguments and Always inlining".into(),
+                );
+            }
+            return fn_map
+                .add_aliases([(self.lhs.clone(), self.rhs.clone())])
+                .map_err(|error| error.to_string());
+        }
+        let name = match self.lhs.as_view() {
+            AtomView::Fun(function) => function.get_symbol(),
+            AtomView::Var(variable) if self.tags.is_empty() => variable.get_symbol(),
+            _ => return Err("Function definitions require a symbol or function call".into()),
+        };
+        fn_map
+            .add_tagged_function_with_options(
+                name,
+                self.tags.clone(),
+                self.args.clone(),
+                self.rhs.clone(),
+                FunctionRegistrationOptions::new().inlining(self.inlining),
+            )
+            .map_err(|error| error.to_string())
+    }
+
     pub fn replacement(&self) -> Replacement {
         let mut rhs = self.rhs.clone();
         let mut lhs = self.lhs.clone();
@@ -685,7 +765,7 @@ impl FnMapEntry {
         Replacement::new(lhs.to_pattern(), rhs)
     }
 
-    pub fn archive<T: ExportAtomTo>(&self) -> Result<(T, T, Vec<T>, Vec<T>)> {
+    pub fn archive<T: ExportAtomTo>(&self) -> Result<SerializedFnMapEntry<T>> {
         Ok((
             T::export_atom_to(&self.lhs)?,
             T::export_atom_to(&self.rhs)?,
@@ -697,6 +777,8 @@ impl FnMapEntry {
                 .iter()
                 .map(|t| T::export_atom_to(&Atom::from(t.clone())))
                 .collect::<Result<Vec<_>>>()?,
+            self.inlining,
+            self.is_alias,
         ))
     }
 }
@@ -919,19 +1001,22 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
     }
 }
 
-impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
+impl<const N: u32> UpdateAndGetParams<VarFloat<N>> for ParamBuilder<f64>
+where
+    VarFloat<N>: FloatLike,
+{
     #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params<'a>(
         &'a mut self,
         _cache: (bool, bool),
-        sample: &MomentumSample<ArbPrec>,
+        sample: &MomentumSample<VarFloat<N>>,
         graph: &Graph,
         helicities: &[Helicity],
-        additional_params: &[F<ArbPrec>],
-        left_threshold_params: Option<&ThresholdParams<ArbPrec>>,
-        right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
-        lu_params: Option<&LUParams<ArbPrec>>,
-    ) -> InputParams<'a, ArbPrec> {
+        additional_params: &[F<VarFloat<N>>],
+        left_threshold_params: Option<&ThresholdParams<VarFloat<N>>>,
+        right_threshold_params: Option<&ThresholdParams<VarFloat<N>>>,
+        lu_params: Option<&LUParams<VarFloat<N>>>,
+    ) -> InputParams<'a, VarFloat<N>> {
         let multiplicative_offset = if let Some(dual_loops) = &sample.sample.dual_loop_moms {
             dual_loops.first().unwrap().px.values.len()
         } else {
@@ -942,12 +1027,12 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
 
         let loop_mom_start = self.pairs.loop_moms_spatial.value_range.start * multiplicative_offset;
 
-        let mut values: Vec<Complex<F<ArbPrec>>> = self.values[value_index]
+        let mut values: Vec<Complex<F<VarFloat<N>>>> = self.values[value_index]
             .iter()
             .map(|value| {
                 Complex::new(
-                    F::<ArbPrec>::from_ff64(value.re),
-                    F::<ArbPrec>::from_ff64(value.im),
+                    F::<VarFloat<N>>::from_ff64(value.re),
+                    F::<VarFloat<N>>::from_ff64(value.im),
                 )
             })
             .collect();
@@ -1057,22 +1142,23 @@ impl<T: FloatLike> ParamBuilder<T> {
     ) -> Result<(), String> {
         let args = args.into_iter().map(|a| a.into()).collect_vec();
         let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
-
-        self.reps.push(FnMapEntry {
+        self.add_function_entry(FnMapEntry {
             lhs: FunctionBuilder::new(name)
                 .add_args(&tags)
                 .add_args(&atom_args)
                 .finish(),
-            rhs: body.clone(),
-            tags: tags.clone(),
-            args: args.clone(),
-        });
+            rhs: body,
+            tags,
+            args,
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+        })
+    }
 
-        self.fn_map
-            .add_tagged_function(name, tags, args, body)
-            .map_err(|e| e.to_string())
-
-        // body.evaluate(coeff_map, const_map, function_map)
+    pub fn add_function_entry(&mut self, entry: FnMapEntry) -> Result<(), String> {
+        entry.register(&mut self.fn_map)?;
+        self.reps.push(entry);
+        Ok(())
     }
 
     pub fn add_function<A: Into<Indeterminate> + Clone>(
@@ -1081,18 +1167,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
-        let args = args.into_iter().map(|a| a.into()).collect_vec();
-        let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
-        self.reps.push(FnMapEntry {
-            lhs: FunctionBuilder::new(name).add_args(&atom_args).finish(),
-            rhs: body.clone(),
-            tags: vec![],
-            args: args.clone(),
-        });
-
-        self.fn_map
-            .add_function(name, args, body)
-            .map_err(|e| e.to_string())
+        self.add_tagged_function(name, Vec::new(), String::new(), args, body)
     }
 
     pub fn initialize_duals(&mut self, max_dual_size: usize) {
@@ -1130,17 +1205,15 @@ impl<T: FloatLike> ParamBuilder<T> {
     }
 
     pub fn add_constant(&mut self, key: Atom, value: symbolica::domains::float::Complex<Rational>) {
-        self.reps.push(FnMapEntry {
-            lhs: key.clone(),
-            rhs: Atom::num(value.clone()),
+        self.add_function_entry(FnMapEntry {
+            lhs: key,
+            rhs: Atom::num(value),
             tags: vec![],
             args: vec![],
-        });
-
-        self.fn_map
-            .add_aliases([(key, Atom::num(value))])
-            .map_err(|e| e.to_string())
-            .expect("failed to add constant to function map");
+            inlining: InliningPolicy::Always,
+            is_alias: true,
+        })
+        .expect("failed to add constant to function map");
     }
 
     pub(crate) fn new_empty() -> Self {
@@ -1175,6 +1248,15 @@ impl<T: FloatLike> ParamBuilder<T> {
         let arg = symbol!("argument");
         new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
             .unwrap();
+        // Compile the energy definition once at the evaluator boundary. The
+        // integrand keeps a semantic function with visible momentum dependence.
+        let invariant = symbol!("energy_invariant");
+        new.add_function(
+            GS.on_shell_energy,
+            vec![symbol!("on_shell_energy_owner"), invariant],
+            Atom::var(invariant).pow((1, 2)),
+        )
+        .unwrap();
 
         let lmb_ose_replacements = graph
             .iter_edge_ids()
@@ -1336,34 +1418,50 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     /// Refresh model-dependent parameter slots while preserving the builder's graph layout.
     pub fn update_model_values(&mut self, model: &Model) {
-        for (value_index, values) in self.values.iter_mut().enumerate() {
-            let multiplicative_offset = value_index + 1;
-            let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
-            let _value_index = multiplicative_offset - 1;
-            for cpl in model.couplings().iter().filter(|c| c.value.is_some()) {
-                if let Some(value) = cpl.value {
-                    values[pos] = Complex::new(
-                        F::<T>::from_ff64(F::<f64>(value.re)),
-                        F::<T>::from_ff64(F::<f64>(value.im)),
-                    );
-                    pos += multiplicative_offset;
-                }
+        // Importing symbols can change model iteration order. The evaluator
+        // still expects the parameter order recorded in this builder.
+        let model_values: HashMap<Atom, Complex<F<T>>> = model
+            .couplings()
+            .iter()
+            .filter_map(|coupling| {
+                coupling.value.map(|value| {
+                    (
+                        Atom::from(UFOSymbol::from(&coupling.name)),
+                        Complex::new(
+                            F::<T>::from_ff64(F::<f64>(value.re)),
+                            F::<T>::from_ff64(F::<f64>(value.im)),
+                        ),
+                    )
+                })
+            })
+            .chain(model.parameters().iter().filter_map(|parameter| {
+                parameter.value.map(|value| {
+                    (
+                        Atom::from(UFOSymbol::from(&parameter.name)),
+                        Complex::new(
+                            F::<T>::from_ff64(F::<f64>(value.re)),
+                            F::<T>::from_ff64(F::<f64>(value.im)),
+                        ),
+                    )
+                })
+            }))
+            .collect();
+        for (param, position) in self
+            .pairs
+            .model_parameters
+            .params
+            .iter()
+            .zip_eq(self.pairs.model_parameters.value_range.clone())
+        {
+            let value = model_values.get(param).unwrap_or_else(|| {
+                panic!(
+                    "Model parameter {param} has no value in model {}",
+                    model.name()
+                )
+            });
+            for (value_index, values) in self.values.iter_mut().enumerate() {
+                values[position * (value_index + 1)] = value.clone();
             }
-            for param in model.parameters().iter().filter(|p| p.value.is_some()) {
-                if let Some(value) = param.value {
-                    let value = Complex::new(
-                        F::<T>::from_ff64(F::<f64>(value.re)),
-                        F::<T>::from_ff64(F::<f64>(value.im)),
-                    );
-                    values[pos] = value.clone();
-                    pos += multiplicative_offset;
-                }
-            }
-
-            debug_assert_eq!(
-                pos,
-                self.pairs.model_parameters.value_range.end * multiplicative_offset
-            );
         }
     }
 
@@ -1731,10 +1829,212 @@ mod tests {
     use super::*;
     use crate::{
         finalized_runtime_dot,
-        graph::parse::from_dot::IntoFinalizedRuntimeGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
+        utils::{ArbPrec, SamplingFloat},
     };
+
+    #[test]
+    fn polarization_cache_keeps_the_latest_64_absolute_keys() {
+        let mut cache = ParamCache::<f64>::default();
+        assert!(cache.get(0).is_none());
+        assert!(cache.get(usize::MAX).is_none());
+
+        for key in 0..130 {
+            let value = vec![Complex::new(F(key as f64), F(0.0))];
+            cache.checked_push(key, value.clone());
+            assert_eq!(cache.get(key), Some(&value));
+            assert_eq!(cache.len, key + 1);
+            assert_eq!(cache.cache.iter().flatten().count(), (key + 1).min(64));
+
+            let first_key = (key + 1).saturating_sub(64);
+            for retained_key in first_key..=key {
+                assert_eq!(
+                    cache.get(retained_key),
+                    Some(&vec![Complex::new(F(retained_key as f64), F(0.0))]),
+                );
+            }
+            if first_key > 0 {
+                assert!(cache.get(first_key - 1).is_none());
+            }
+            assert!(cache.get(key + 1).is_none());
+            assert!(cache.get(usize::MAX).is_none());
+        }
+    }
+
+    #[test]
+    fn polarization_cache_looks_up_absolute_keys_without_overflow() {
+        let first_key = usize::MAX - 65;
+        let mut cache = ParamCache::<f64> {
+            len: first_key,
+            ..Default::default()
+        };
+        for value in 0..64 {
+            cache.checked_push(
+                first_key + value,
+                vec![Complex::new(F(value as f64), F(0.0))],
+            );
+        }
+        for value in 0..64 {
+            assert_eq!(
+                cache.get(first_key + value),
+                Some(&vec![Complex::new(F(value as f64), F(0.0))]),
+            );
+        }
+        assert!(cache.get(first_key - 1).is_none());
+        assert!(cache.get(usize::MAX - 1).is_none());
+        assert!(cache.get(usize::MAX).is_none());
+
+        let value = vec![Complex::new(F(64.0), F(0.0))];
+        cache.checked_push(usize::MAX - 1, value.clone());
+        assert!(cache.get(first_key).is_none());
+        assert_eq!(cache.get(usize::MAX - 1), Some(&value));
+        assert!(cache.get(usize::MAX).is_none());
+        assert_eq!(cache.len, usize::MAX);
+        assert_eq!(cache.cache.iter().flatten().count(), 64);
+    }
+
+    #[test]
+    fn model_values_follow_saved_names_in_all_derivative_buffers() {
+        test_initialise().unwrap();
+        let mass = UFOSymbol::from("slot_order_mass");
+        let coupling = UFOSymbol::from("slot_order_coupling");
+        let zero = UFOSymbol::zero();
+        let make_model = |mass_value: f64, coupling_value: Complex<f64>| {
+            let definition = serde_json::json!({
+                "name": "slot_order", "restriction": null, "orders": [],
+                "particles": [], "propagators": [], "lorentz_structures": [],
+                "vertex_rules": [],
+                "parameters": [
+                    {"name":"slot_order_mass", "nature":"external", "parameter_type":"real",
+                     "lhablock":null, "lhacode":null, "expression":null, "value":[mass_value,0.0]},
+                    {"name":"ZERO", "nature":"external", "parameter_type":"real",
+                     "lhablock":null, "lhacode":null, "expression":null, "value":[0.0,0.0]}
+                ],
+                "couplings": [{"name":"slot_order_coupling", "expression":"1", "orders":[],
+                    "value":[coupling_value.re,coupling_value.im]}]
+            });
+            Model::from_json(&definition.to_string()).unwrap()
+        };
+        let model = make_model(17.0, Complex::new(2.0, 3.0));
+
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        builder.pairs.model_parameters = ParamValuePairs {
+            value_range: 2..5,
+            params: vec![mass.into(), zero.into(), coupling.into()],
+        };
+        assert_ne!(
+            builder.pairs.model_parameters.params,
+            model.generate_params()
+        );
+        let sentinel = Complex::new(F(-123.0), F(456.0));
+        builder.values = vec![vec![sentinel; 7]];
+        builder.initialize_duals(3);
+        for values in &mut builder.values {
+            values.fill(sentinel);
+        }
+
+        for (mass_value, coupling_value) in [
+            (17.0, Complex::new(2.0, 3.0)),
+            (29.0, Complex::new(5.0, -7.0)),
+        ] {
+            let model = make_model(mass_value, coupling_value);
+            builder.update_model_values(&model);
+            for (buffer_index, values) in builder.values.iter().enumerate() {
+                let stride = buffer_index + 1;
+                for (position, value) in values.iter().enumerate() {
+                    let expected = if position == 2 * stride {
+                        Complex::new_re(F(mass_value))
+                    } else if position == 3 * stride {
+                        Complex::new_re(F(0.0))
+                    } else if position == 4 * stride {
+                        coupling_value.map(F)
+                    } else {
+                        sentinel
+                    };
+                    assert_eq!(*value, expected, "buffer {buffer_index}, slot {position}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn function_entry_roundtrip_preserves_policy_and_alias_scope() {
+        use crate::GammaLoopContextContainer;
+        use std::io::Cursor;
+        use symbolica::prelude::State;
+
+        let x = Atom::var(symbol!("entry_roundtrip::x"));
+        let global = Atom::var(symbol!("entry_roundtrip::global"));
+        let alias = symbol!("entry_roundtrip::alias").call_args([Atom::num(0)]);
+        let function = symbol!("entry_roundtrip::function");
+        for inlining in [InliningPolicy::Always, InliningPolicy::Never] {
+            let entries = vec![
+                FnMapEntry {
+                    lhs: alias.clone(),
+                    rhs: x.pow(2),
+                    args: vec![],
+                    tags: vec![Atom::num(0)],
+                    inlining: InliningPolicy::Always,
+                    is_alias: true,
+                },
+                FnMapEntry {
+                    lhs: function.call_args([Atom::num(7), x.clone()]),
+                    rhs: &alias + &global,
+                    args: vec![x.clone().try_into().unwrap()],
+                    tags: vec![Atom::num(7)],
+                    inlining,
+                    is_alias: false,
+                },
+            ];
+            let encoded = bincode::encode_to_vec(&entries, bincode::config::standard()).unwrap();
+            let mut state = Vec::new();
+            State::export(&mut state).unwrap();
+            let state_map = State::import(&mut Cursor::new(state), None).unwrap();
+            let model = crate::utils::load_generic_model("scalars");
+            let (restored, consumed): (Vec<FnMapEntry>, _) =
+                bincode::decode_from_slice_with_context(
+                    &encoded,
+                    bincode::config::standard(),
+                    GammaLoopContextContainer {
+                        state_map: &state_map,
+                        model: &model,
+                    },
+                )
+                .unwrap();
+            assert_eq!(consumed, encoded.len());
+            assert_eq!(restored, entries);
+            let mut builder = ParamBuilder::<f64>::new_empty();
+            for entry in restored {
+                builder.add_function_entry(entry).unwrap();
+            }
+            assert_eq!(builder.reps, entries);
+            assert!(builder.add_function_entry(entries[1].clone()).is_err());
+            assert_eq!(builder.reps.len(), 2);
+            let root = function.call_args([Atom::num(7), Atom::num(2)])
+                + function.call_args([Atom::num(7), Atom::num(3)]);
+            let mut evaluator = root
+                .evaluator(&[global.clone(), x.clone()])
+                .function_map(builder.fn_map)
+                .horner_iterations(1)
+                .build()
+                .unwrap()
+                .map_coeff(&|c| {
+                    symbolica::domains::float::Complex::new(c.re.to_f64(), c.im.to_f64())
+                });
+            assert_eq!(
+                evaluator.export_instructions().sub_evaluators.len(),
+                usize::from(inlining == InliningPolicy::Never)
+            );
+            assert_eq!(
+                evaluator.evaluate_single(&[
+                    symbolica::domains::float::Complex::new(10.0, 0.0),
+                    symbolica::domains::float::Complex::new(11.0, 0.0),
+                ]),
+                symbolica::domains::float::Complex::new(33.0, 0.0)
+            );
+        }
+    }
 
     #[test]
     fn initialize_duals_extends_value_buffers_by_requested_size() {
@@ -1772,50 +2072,57 @@ mod tests {
     #[test]
     fn arb_parameter_baseline_uses_decimal_promotion() {
         test_initialise().unwrap();
-        let graph = finalized_runtime_dot!(
-            digraph arb_parameter_baseline {
-                edge [num=1 mass=0]
-                node [num=1]
-                A -> B [id=0]
-            }
-        )
-        .unwrap();
-        let mut param_builder = ParamBuilder::<f64>::new_empty();
-        param_builder.values = vec![vec![Complex::new(F(0.1_f64), F(-0.3_f64))]];
-        let sample = MomentumSample {
-            sample: BareMomentumSample {
-                loop_moms: LoopMomenta(Vec::new()),
-                dual_loop_moms: None,
-                loop_mom_cache_id: 0,
-                loop_mom_base_cache_id: 0,
-                external_moms: Vec::new().into(),
-                external_mom_cache_id: 0,
-                external_mom_base_cache_id: 0,
-                jacobian: F::<ArbPrec>::from_f64(1.0),
-                orientation: None,
-                parameterization_branch: None,
-            },
-        };
+        fn check<T: FloatLike>()
+        where
+            ParamBuilder<f64>: UpdateAndGetParams<T>,
+        {
+            let graph = finalized_runtime_dot!(
+                digraph arb_parameter_baseline {
+                    edge [num=1 mass=0]
+                    node [num=1]
+                    A -> B [id=0]
+                }
+            )
+            .unwrap();
+            let mut param_builder = ParamBuilder::<f64>::new_empty();
+            param_builder.values = vec![vec![Complex::new(F(0.1_f64), F(-0.3_f64))]];
+            let sample = MomentumSample {
+                sample: BareMomentumSample {
+                    loop_moms: LoopMomenta(Vec::new()),
+                    dual_loop_moms: None,
+                    loop_mom_cache_id: 0,
+                    loop_mom_base_cache_id: 0,
+                    external_moms: Vec::new().into(),
+                    external_mom_cache_id: 0,
+                    external_mom_base_cache_id: 0,
+                    jacobian: F::<T>::from_f64(1.0),
+                    orientation: None,
+                    parameterization_branch: None,
+                },
+            };
 
-        let lifted = <ParamBuilder<f64> as UpdateAndGetParams<ArbPrec>>::update_emr_and_get_params(
-            &mut param_builder,
-            (false, false),
-            &sample,
-            &graph,
-            &[],
-            &[],
-            None,
-            None,
-            None,
-        );
-        // These fractions give the decimal-promoted values at Arb precision.
-        let zero = F::<ArbPrec>::default();
-        let expected = Complex::new(
-            zero.from_i64(1) / zero.from_i64(10),
-            zero.from_i64(-3) / zero.from_i64(10),
-        );
+            let lifted = <ParamBuilder<f64> as UpdateAndGetParams<T>>::update_emr_and_get_params(
+                &mut param_builder,
+                (false, false),
+                &sample,
+                &graph,
+                &[],
+                &[],
+                None,
+                None,
+                None,
+            );
+            // These fractions give the decimal-promoted values at native precision.
+            let zero = F::<T>::default();
+            let direct = Complex::new(
+                zero.from_i64(1) / zero.from_i64(10),
+                zero.from_i64(-3) / zero.from_i64(10),
+            );
 
-        assert_eq!(lifted.as_slice(), &[expected]);
+            assert_eq!(lifted.as_slice(), &[direct]);
+        }
+        check::<ArbPrec>();
+        check::<SamplingFloat>();
     }
 }
 

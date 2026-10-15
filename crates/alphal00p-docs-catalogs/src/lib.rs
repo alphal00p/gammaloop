@@ -211,7 +211,9 @@ pub fn export_catalog(
             let stub = python_stub.context("a checked-in Python stub is required")?;
             python_scope(request, workspace_root, stub)?
         }
-        language => bail!("unsupported catalog exporter language {language}"),
+        language => {
+            bail!("unsupported catalog exporter language {language}");
+        }
     };
     let product = DocProduct::new(&request.product_id, &request.product_title);
     let mut component = DocComponent::new(
@@ -370,9 +372,9 @@ fn rust_item_required_features(component: &str, item: &str) -> &'static [&'stati
     match (component, item) {
         ("feynkit", "Model") => &["model"],
         // The entire parametric module is behind Spenso's Symbolica-backed
-        // `shadowing` feature, not merely extra implementations on the type.
+        // `symbolica` feature, not merely extra implementations on the type.
         ("spenso", "NetworkParse" | "ParamTensor" | "ParseSettings" | "SymbolicParallelism") => {
-            &["shadowing"]
+            &["symbolica"]
         }
         _ => &[],
     }
@@ -1105,7 +1107,9 @@ fn python_export_is_supported(component: &str, name: &str) -> Result<bool> {
     match component {
         "feynkit-community" | "linnet-graph" | "vakint-community" => Ok(true),
         "gammaloop-python" | "spynso3" => Ok(python_required_exports(component)?.contains(&name)),
-        _ => bail!("unknown Python component {component}"),
+        _ => {
+            bail!("unknown Python component {component}");
+        }
     }
 }
 
@@ -1336,7 +1340,7 @@ mod tests {
             .values()
             .flat_map(|item| item.members.iter().map(move |member| (item, member)))
             .collect::<Vec<_>>();
-        assert_eq!(members.len(), 75);
+        assert_eq!(members.len(), 71);
         let undocumented = members
             .iter()
             .filter(|(_, member)| {
@@ -1425,7 +1429,7 @@ mod tests {
             );
         }
         for entry in ["ParseSettings", "NetworkParse", "SymbolicParallelism"] {
-            assert_eq!(rust_item_required_features("spenso", entry), &["shadowing"]);
+            assert_eq!(rust_item_required_features("spenso", entry), &["symbolica"]);
         }
     }
 

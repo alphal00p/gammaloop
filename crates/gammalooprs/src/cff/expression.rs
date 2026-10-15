@@ -239,8 +239,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        cff::surface::LinearEnergyExpr, finalized_runtime_dot,
-        graph::parse::from_dot::IntoFinalizedRuntimeGraph, initialisation::test_initialise,
+        cff::surface::LinearEnergyExpr, finalized_runtime_dot, initialisation::test_initialise,
         utils::external_energy_atom_from_index,
     };
 

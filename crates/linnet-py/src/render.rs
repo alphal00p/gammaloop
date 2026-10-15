@@ -1065,4 +1065,35 @@ mod tests {
                 > 0
         );
     }
+    #[test]
+    fn embedded_packages_keep_nested_sources_and_licenses() {
+        assert!(EmbeddedLinnestPackage::get("src/impl/draw.typ").is_some());
+        assert!(EmbeddedKurvstPackage::get("src/impl.typ").is_some());
+        for path in [
+            "LICENSE",
+            "LICENSE.ec-layout",
+            "LICENSE.clarabel",
+            "typst.toml",
+            "ec-layout.wasm",
+        ] {
+            assert!(EmbeddedLinnestPackage::get(path).is_some());
+        }
+        assert!(EmbeddedKurvstPackage::get("LICENSE").is_some());
+        assert!(EmbeddedLinnestPackage::iter()
+            .chain(EmbeddedKurvstPackage::iter())
+            .all(|file| {
+                !["docs", "examples", "benches"]
+                    .iter()
+                    .any(|directory| Path::new(file.as_ref()).starts_with(directory))
+                    && file != "README.md"
+            }));
+        for path in [
+            "preview/cetz/0.5.1/cetz-core/cetz_core.wasm",
+            "preview/cetz/0.5.1/LICENSE",
+            "preview/oxifmt/1.0.0/LICENSE-MIT",
+            "preview/oxifmt/1.0.0/LICENSE-APACHE",
+        ] {
+            assert!(EmbeddedTypstPackages::get(path).is_some());
+        }
+    }
 }

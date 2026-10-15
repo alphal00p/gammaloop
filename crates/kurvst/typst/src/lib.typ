@@ -7,6 +7,8 @@
 // they use, rather than repeatedly hashing the complete implementation module.
 #import "impl.typ": (
   append as _impl-append,
+  arc as _impl-arc,
+  outline as _impl-outline,
   center-outset as _impl-center-outset,
   close as _impl-close,
   coil as _impl-coil,
@@ -231,6 +233,19 @@
   /// Endpoint. -> array
   end,
 ) = _impl-cubic(start, control-start, control-end, end)
+
+/// Build a circular arc path fragment from cubic segments.
+/// -> dictionary
+#let arc(
+  /// Arc center. -> array
+  center,
+  /// Positive arc radius. -> int | float
+  radius,
+  /// Start angle, measured counterclockwise from the positive x axis. -> angle
+  start,
+  /// Stop angle; `stop < start` runs clockwise. -> angle
+  stop,
+) = _impl-arc(center, radius, start, stop)
 
 /// Build a path fragment from a cubic segment dictionary.
 /// -> dictionary
@@ -487,6 +502,36 @@
     optimize: optimize,
   )
 }
+
+/// Expand a stroked path into a closed outline that can be filled.
+/// -> dictionary
+#let outline(
+  /// Kurvst path dictionary to stroke. -> dictionary
+  path,
+  /// Stroke width in path units. -> int | float
+  width: 0.1,
+  /// Corner join: `"miter"`, `"round"`, or `"bevel"`. -> string
+  join: "miter",
+  /// Miter length limit as a multiple of the width; longer miters are beveled. -> int | float
+  miter-limit: 4,
+  /// End cap for both ends: `"butt"`, `"square"`, or `"round"`. -> string
+  cap: "butt",
+  /// Cap at each subpath start; `auto` uses `cap`. -> auto | string
+  start-cap: auto,
+  /// Cap at each subpath end; `auto` uses `cap`. -> auto | string
+  end-cap: auto,
+  /// Curve fitting tolerance passed to the Rust geometry engine. -> float
+  accuracy: 0.001,
+) = _impl-outline(
+  path,
+  width: width,
+  join: join,
+  miter-limit: miter-limit,
+  cap: cap,
+  start-cap: start-cap,
+  end-cap: end-cap,
+  accuracy: accuracy,
+)
 
 /// Build a derived visible path layer.
 /// Returns drawable geometry and `offset`, the resolved signed offset before

@@ -687,10 +687,6 @@
   }
 }
 
-#let _segment-length(segment, accuracy) = {
-  curve-api.length(curve-api.from-cubic(segment), accuracy: accuracy)
-}
-
 #let _visible-half-outsets(
   base-length,
   half-start,
@@ -1475,7 +1471,7 @@
   patterned
 }
 
-#let _segments-elements(segments, style, phase, anchor-start, anchor-end) = {
+#let _segments-elements(segments, style, phase, anchor-start, anchor-end, complete: true) = {
   if _style-value(style, "label-only") { return (elements: (), length: 0) }
   if _has-mark(style) {
     return _derived-path-elements(
@@ -1484,6 +1480,7 @@
       phase,
       anchor-start,
       anchor-end,
+      complete: complete,
     )
   }
   let elements = ()
@@ -1498,7 +1495,7 @@
     let phase = if phase == auto { pattern-style.pattern-phase } else { phase }
     assert(wavelength > 0, message: "pattern-wavelength must be positive")
     // Fit only complete edges; split styles and crossing gaps retain phase continuity.
-    let natural = pattern-style.pattern-natural-endpoints and anchor-start and anchor-end
+    let natural = complete and pattern-style.pattern-natural-endpoints and anchor-start and anchor-end
     if natural and length > 0 {
       assert(
         type(pattern) == str and pattern.trim() in ("coil", "helix", "spring"),
@@ -1515,7 +1512,7 @@
       wavelength = length
       samples = calc.max(1, samples)
       phase = 0
-    } else if pattern-style.pattern-fit and anchor-start and anchor-end and length > 0 {
+    } else if complete and pattern-style.pattern-fit and anchor-start and anchor-end and length > 0 {
       wavelength = length / calc.max(1, calc.round(length / wavelength))
     }
     let draw-style = _draw-style(style)
@@ -1871,24 +1868,24 @@
 
 // Keep geometry preparation independent of the element callback wrapper, so
 // candidate arrows can share one numeric placement batch with ordinary drawing.
-#let _derived-path(path, style, phase, anchor-start, anchor-end) = {
+#let _derived-path(path, style, phase, anchor-start, anchor-end, complete: true) = {
   let segments = curve-api.segments(path)
   if segments.len() == 0 { return (elements: (), marker: none, length: 0) }
   if _has-mark(style) {
     if _has-pattern(style) {
-      let painted = _segments-elements(segments, _without-mark-style(style), phase, anchor-start, anchor-end)
+      let painted = _segments-elements(segments, _without-mark-style(style), phase, anchor-start, anchor-end, complete: complete)
       (..painted, marker: _mark-carrier-input(path, style))
     } else {
       (elements: (), marker: _mark-carrier-input(path, style, paint: true),
         length: curve-api.length(path, accuracy: _style-value(style, "accuracy")))
     }
   } else {
-    (.._segments-elements(segments, style, phase, anchor-start, anchor-end), marker: none)
+    (.._segments-elements(segments, style, phase, anchor-start, anchor-end, complete: complete), marker: none)
   }
 }
 
-#let _derived-path-elements(path, style, phase, anchor-start, anchor-end) = {
-  let prepared = _derived-path(path, style, phase, anchor-start, anchor-end)
+#let _derived-path-elements(path, style, phase, anchor-start, anchor-end, complete: true) = {
+  let prepared = _derived-path(path, style, phase, anchor-start, anchor-end, complete: complete)
   (
     elements: prepared.elements + if prepared.marker == none { () } else {
       ((_mark-carrier.with(..prepared.marker),),)
@@ -1903,6 +1900,7 @@
   phase,
   anchor-start,
   anchor-end,
+  complete: true,
 ) = {
   if segments.len() == 0 {
     (elements: (), length: 0)
@@ -1913,6 +1911,7 @@
       phase,
       anchor-start,
       anchor-end,
+      complete: complete,
     )
   }
 }
@@ -2477,6 +2476,7 @@
       auto,
       true,
       true,
+      complete: false,
     ).elements
     let sink-elements = _derived-segments-elements(
       halves.sink,
@@ -2484,6 +2484,7 @@
       auto,
       true,
       true,
+      complete: false,
     ).elements
     if _has-mark(source-style) and not _has-mark(sink-style) {
       for element in sink-elements {
@@ -3766,6 +3767,7 @@
                     auto,
                     true,
                     true,
+                    complete: false,
                   ).elements
                 ) {
                   elements.push(element)
@@ -3778,6 +3780,7 @@
                     auto,
                     true,
                     true,
+                    complete: false,
                   ).elements
                 ) {
                   elements.push(element)

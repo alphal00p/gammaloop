@@ -921,13 +921,18 @@ impl ParticleGammaLoopExt for Particle {
                     VectorPolarizationSumGauge::LightLikeAxial => {
                         let temporal_component = GS.emr_mom(edge, GS.cind(0));
                         let n_a = temporal_component.clone() * GS.energy_delta(W_.a_)
-                            - GS.emr_vec_index(edge, W_.a_);
+                            - GS.emr_vec(edge, W_.a_);
                         let n_b = temporal_component.clone() * GS.energy_delta(W_.b_)
-                            - GS.emr_vec_index(edge, W_.b_);
+                            - GS.emr_vec(edge, W_.b_);
+                        // Q3 already carries its Minkowski representation:
+                        // Q3·Q3 = -|q|², so q·n = q0² - Q3·Q3.
+                        let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
                         let q_dot_n = temporal_component.pow(2)
-                            + Euclidean {}
-                                .new_rep(4)
-                                .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
+                            - function!(
+                                spenso::network::tags::SPENSO_TAG.dot,
+                                GS.emr_vec(edge, &minkowski),
+                                GS.emr_vec(edge, &minkowski)
+                            );
                         Some(AxialReference {
                             left: n_a,
                             right: n_b,

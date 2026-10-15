@@ -52,7 +52,7 @@ Install and verify the published assembly with
 `python -m pip install --upgrade symbolica` and
 `python -c "import symbolica.community.hepkit.vakint"`. Custom Symbolica builds can add Vakint to the
 #link("https://github.com/symbolica-dev/symbolica-community")[symbolica-community] assembly, enable the
-`python` feature, and register `VakintWrapper` while building the extension.
+`symbolica_community_module` feature, and register `VakintWrapper` while building the extension.
 
 The structured #link("reference/python/")[Python reference] covers the four exported classes:
 `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and

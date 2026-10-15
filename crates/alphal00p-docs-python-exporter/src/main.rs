@@ -319,7 +319,7 @@ fn validate_exact_surface(
 }
 
 fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Box<dyn Error>> {
-    match component {
+    let gathered: Result<_, Box<dyn Error>> = match component {
         #[cfg(feature = "feynkit")]
         "feynkit-community" => Ok(("symbolica.community.hepkit", feynkit_py::stub_info()?)),
         #[cfg(feature = "gammaloop")]
@@ -334,7 +334,59 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
             "component {component} is not enabled; select its matching Cargo feature"
         )
         .into()),
+    };
+    let (module_name, stub_info) = gathered?;
+    #[cfg(any(
+        feature = "gammaloop",
+        feature = "linnet",
+        feature = "spenso",
+        feature = "feynkit",
+        feature = "vakint"
+    ))]
+    let stub_info = scope_symbolica_floats(stub_info);
+    Ok((module_name, stub_info))
+}
+
+#[cfg(any(
+    feature = "gammaloop",
+    feature = "linnet",
+    feature = "spenso",
+    feature = "feynkit",
+    feature = "vakint"
+))]
+fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_gen::StubInfo {
+    use std::any::TypeId;
+    use symbolica::domains::float::{PythonComplexFloat, PythonFloat};
+
+    // Numerica leaves these two classes unscoped in its stub inventory.
+    // They belong to Symbolica, even when another product gathers first.
+    let float_types = [
+        TypeId::of::<PythonFloat>(),
+        TypeId::of::<PythonComplexFloat>(),
+    ];
+    let mut floats = Vec::new();
+    for (name, module) in &mut stub_info.modules {
+        if name != "symbolica" {
+            for type_id in float_types {
+                if let Some(class) = module.class.remove(&type_id) {
+                    floats.push((type_id, class));
+                }
+            }
+        }
     }
+    if !floats.is_empty() {
+        let module = stub_info
+            .modules
+            .entry("symbolica".to_owned())
+            .or_insert_with(|| pyo3_stub_gen::generate::Module {
+                name: "symbolica".to_owned(),
+                default_module_name: "symbolica".to_owned(),
+                ..Default::default()
+            });
+        module.default_module_name = "symbolica".to_owned();
+        module.class.extend(floats);
+    }
+    stub_info
 }
 
 #[cfg(test)]
@@ -571,6 +623,26 @@ def validate(runtime_module, stub_source):
             );
         }
         assert_eq!(canonical.matches("def anchor(self)").count(), 1);
+    }
+
+    #[cfg(feature = "linnet")]
+    #[test]
+    fn linnet_stub_keeps_aliases_before_import_like_docstrings() {
+        let (module_name, mut stub_info) = super::gather("linnet-py").unwrap();
+        let module = stub_info.modules.get_mut(module_name).unwrap();
+        module
+            .class
+            .values_mut()
+            .find(|class| class.name == "Graph")
+            .unwrap()
+            .doc = "Construct a graph\nfrom its nodes and edges.\nimport drawing data as needed.";
+
+        let canonical = super::render("linnet-py", module).unwrap();
+        let graph = canonical.find("class Graph:").unwrap();
+        assert!(canonical.find("\n__all__ = [\n").unwrap() < graph);
+        assert!(canonical.find("\n_NativeValue: typing.TypeAlias").unwrap() < graph);
+        assert!(canonical.contains("    from its nodes and edges."));
+        assert!(canonical.contains("    import drawing data as needed."));
     }
 
     #[cfg(feature = "gammaloop")]

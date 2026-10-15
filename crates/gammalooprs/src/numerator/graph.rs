@@ -284,6 +284,7 @@ mod test {
         tensor::{SymbolicNetParse, SymbolicTensor},
     };
 
+    use crate::{graph::Graph, uv::UltravioletGraph};
     use spenso::network::parsing::ParseSettings;
     use symbolica::parse_lit;
 
@@ -376,5 +377,58 @@ mod test {
                 ..Default::default()
             })
             .unwrap();
+    }
+    #[test]
+    fn user_numerator_tree_fixtures_match_ufo_tree_algebra() {
+        test_initialise().unwrap();
+        let model = crate::utils::load_generic_model("sm");
+        let mut expected = None;
+        for source in [
+            include_str!("../../../../tests/resources/graphs/qqx_aaa_tree_unprocessed.dot"),
+            include_str!(
+                "../../../../tests/resources/graphs/qqx_aaa_tree_user_numerator_unprocessed.dot"
+            ),
+            include_str!("../../../../tests/resources/graphs/qqx_aaa_tree_user_numerator.dot"),
+            include_str!("../../../../tests/resources/graphs/trees/qqx_aaa.dot"),
+        ] {
+            let graph = Graph::import_dot(source, &model).unwrap().remove(0);
+            let numerator = graph
+                .numerator(&graph.full_filter(), &graph.empty_subgraph())
+                .state
+                .expr
+                * &graph.global_prefactor.projector
+                * &graph.global_prefactor.num
+                * &graph.overall_factor;
+            let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+            let numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view()).unwrap())
+                .unwrap()
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(idenso::color::ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .into_expression();
+            if let Some(expected) = &expected {
+                assert_eq!(
+                    &numerator, expected,
+                    "manual tree must include both UFO propagator phases"
+                );
+            } else {
+                expected = Some(numerator);
+            }
+        }
+    }
+
+    #[test]
+    fn user_pentabox_numerator_closes_all_external_indices() {
+        test_initialise().unwrap();
+        let model = crate::utils::load_generic_model("sm");
+        let graph = Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot"),
+            &model,
+        )
+        .unwrap()
+        .remove(0);
+        graph.validate_full_numerator_tensor_network().unwrap();
     }
 }

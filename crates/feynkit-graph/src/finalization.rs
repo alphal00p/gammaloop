@@ -19,7 +19,7 @@ struct PendingEdge {
 }
 
 impl FeynmanDiagramBuilder {
-    pub(super) fn finalize(self) -> Result<FeynmanDiagram, DiagramError> {
+    pub(super) fn finalize(self) -> Result<(FeynmanDiagram, DiagramSourceMap), DiagramError> {
         let generated = !self.generation_externals.is_empty();
         let mut external_indices = BTreeSet::new();
         for (vertex, external) in &self.generation_externals {
@@ -624,7 +624,19 @@ impl FeynmanDiagramBuilder {
         thresholds.sort_by_cached_key(|candidate| diagram.cut_order_key(&candidate.cut));
         diagram.topology_threshold_candidates = thresholds;
         diagram.id = DiagramId::from_key(diagram.model.fingerprint(), &diagram.structural_key()?)?;
-        Ok(diagram)
+        let source_map = DiagramSourceMap {
+            edges: (0..self.edges.len())
+                .map(|source| EdgeId(logical[&EdgeId(source)]))
+                .collect(),
+            vertices: (0..self.vertices.len())
+                .map(|source| {
+                    vertices
+                        .get(&VertexId(source))
+                        .map(|target| VertexId(target.0))
+                })
+                .collect(),
+        };
+        Ok((diagram, source_map))
     }
 }
 

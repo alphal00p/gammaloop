@@ -795,10 +795,8 @@ mod tests {
     use typed_index_collections::{TiVec, ti_vec};
 
     use crate::{
-        dot,
         graph::{
             Graph, LMBext, LmbIndex,
-            parse::from_dot::IntoGraph,
             threshold_counterterms::{ThresholdCountertermMultiplier, ThresholdCountertermSpec},
         },
         initialisation::test_initialise,
@@ -853,15 +851,16 @@ mod tests {
     #[test]
     fn materialized_export_adds_only_eligible_implicit_defaults() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph materialized_threshold_defaults {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph materialized_threshold_defaults {
+ graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->v1:0 [id=0]
-            v1->v2 [id=1]
-            v2->v1 [id=2]
-            ext->v2:1 [id=3]
-        })
+            ext -> v1:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            ext -> v2:1 [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let all_lmbs = ti_vec![graph.loop_momentum_basis.clone()];
         let basis_edge = graph.loop_momentum_basis.loop_edges[LoopIndex(0)];
@@ -965,18 +964,20 @@ mod tests {
     #[test]
     fn materialized_raised_defaults_round_trip_association_local_embeddings() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph raised_materialized_threshold_defaults {
+        let graph: Graph =
+            crate::finalized_runtime_dot!(digraph raised_materialized_threshold_defaults {
+ graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->v1:0 [id=0]
-            v1->v2 [id=1]
-            v2->v1 [id=2]
-            v2->v3 [id=3]
-            v3->v2 [id=4]
-            ext->v3:1 [id=5]
-        })
-        .unwrap();
+            ext -> v1:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            v2 -> v3 [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            v3 -> v2 [id=4 source="{ufo_order:1}" sink="{ufo_order:3}"]
+            ext -> v3:1 [id=5 source="{ufo_order:1}" sink="{ufo_order:2}"]
+        }, &crate::utils::load_generic_model("sm"))
+            .unwrap();
         let all_lmbs = graph.generate_loop_momentum_bases();
         let containing_subgraph = graph.full_filter();
         let subspaces = all_lmbs
@@ -1138,15 +1139,16 @@ mod tests {
     #[test]
     fn graph_registry_expands_components_in_stable_cartesian_order() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph threshold_metadata_registry {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph threshold_metadata_registry {
+ graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->v1:0 [id=0]
-            v1->v2 [id=1]
-            v2->v1 [id=2]
-            ext->v2:1 [id=3]
-        })
+            ext -> v1:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            ext -> v2:1 [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let all_lmbs = ti_vec![graph.loop_momentum_basis.clone()];
         let basis_edge = graph.loop_momentum_basis.loop_edges[LoopIndex(0)];

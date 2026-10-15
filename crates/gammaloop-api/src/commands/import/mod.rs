@@ -1,16 +1,17 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use clap::Subcommand;
+#[cfg(test)]
 use feynkit_graph::FeynmanDiagram;
-use gammalooprs::feyngen::feynkit::FeynmanDiagramGammaLoopExt;
 use gammalooprs::graph::Graph;
 use model::ImportModel;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::sync::Arc;
 use tracing::info;
 
 use crate::{
@@ -168,17 +169,11 @@ impl Import {
     }
 
     fn load_graph_string(input: &str, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
-        if !input.contains("model_fingerprint") {
-            return Graph::from_finalized_runtime_string(input, model);
+        let graphs = Graph::import_dot(input, model)?;
+        if graphs.is_empty() {
+            return Err(eyre!("No diagrams found."));
         }
-        let diagrams = FeynmanDiagram::from_dot_set(Arc::new(model.clone()), input)?;
-        if diagrams.is_empty() {
-            return Err(eyre!("No canonical FeynKit diagrams found."));
-        }
-        diagrams
-            .iter()
-            .map(|diagram| diagram.to_gamma_loop_graph(None, true).map_err(Into::into))
-            .collect()
+        Ok(graphs)
     }
 
     fn resolve_graph_import_path(path: &Path, state_folder: &Path) -> Result<PathBuf> {

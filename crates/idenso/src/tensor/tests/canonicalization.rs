@@ -18,6 +18,13 @@ fn canonicalize(expression: &Atom) -> Atom {
         .expect("test expression should canonicalize")
 }
 
+fn canonicalize_formal(expression: &Atom) -> Atom {
+    let cooking = crate::CookSettings::reversible().with_representation_payloads(true, true);
+    let admitted = cooking.try_cook(expression.as_view()).unwrap();
+    let canonical = canonicalize(&admitted);
+    cooking.uncook(canonical.as_view())
+}
+
 #[test]
 fn formal_color_dimensions_canonicalize_closed_quark_trace_partners() {
     test_initialize();
@@ -43,9 +50,9 @@ fn formal_color_dimensions_canonicalize_closed_quark_trace_partners() {
         ([6, 10, 12, 6, 10, 12], [6, 12, 10, 6, 12, 10]),
         ([6, 14, 10, 6, 14, 10], [6, 10, 14, 6, 10, 14]),
     ] {
-        let canonical = canonicalize(&trace(left));
-        assert_eq!(canonical, canonicalize(&trace(right)));
-        assert_eq!(canonical, canonicalize(&canonical));
+        let canonical = canonicalize_formal(&trace(left));
+        assert_eq!(canonical, canonicalize_formal(&trace(right)));
+        assert_eq!(canonical, canonicalize_formal(&canonical));
         assert!(canonical.contains(&adjoint_dimension));
     }
 }
@@ -74,8 +81,8 @@ fn formal_color_dimensions_preserve_free_adjoint_and_fundamental_slots() {
     let renamed_adjoint = open_adjoint
         .replace(parse_lit!(formal_free_b, default_namespace = "spenso"))
         .with(parse_lit!(formal_free_d, default_namespace = "spenso"));
-    let canonical = canonicalize(&open_adjoint);
-    assert_ne!(canonical, canonicalize(&renamed_adjoint));
+    let canonical = canonicalize_formal(&open_adjoint);
+    assert_ne!(canonical, canonicalize_formal(&renamed_adjoint));
     assert!(canonical.contains(&parse_lit!(
         coad(Nc ^ 2 - 1, formal_free_b),
         default_namespace = "spenso"
@@ -96,15 +103,15 @@ fn formal_color_dimensions_preserve_free_adjoint_and_fundamental_slots() {
     let renamed_fundamental = open_fundamental
         .replace(parse_lit!(formal_free_i, default_namespace = "spenso"))
         .with(parse_lit!(formal_free_l, default_namespace = "spenso"));
-    let canonical = canonicalize(&open_fundamental);
-    assert_ne!(canonical, canonicalize(&renamed_fundamental));
+    let canonical = canonicalize_formal(&open_fundamental);
+    assert_ne!(canonical, canonicalize_formal(&renamed_fundamental));
     for external in [
         parse_lit!(cof(Nc, formal_free_i), default_namespace = "spenso"),
         parse_lit!(dind(cof(Nc, formal_free_k)), default_namespace = "spenso"),
     ] {
         assert!(canonical.contains(&external));
     }
-    assert_eq!(canonical, canonicalize(&canonical));
+    assert_eq!(canonical, canonicalize_formal(&canonical));
 }
 
 fn odd_cycle() -> Atom {

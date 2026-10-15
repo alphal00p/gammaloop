@@ -136,7 +136,6 @@
       "idenso",
       "linnet",
       "spenso",
-      "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
     ],
@@ -431,9 +430,6 @@
       "spenso": [
         "native",
         "shadowing"
-      ],
-      "symbolica-utils": [
-        "native"
       ],
       "three-dimensional-reps": [
         "eval"
@@ -749,6 +745,8 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
+      "kurvst",
+      "linnest",
       "linnet",
       "spenso",
       "spenso-macros",
@@ -811,6 +809,7 @@
       "feynkit-kinematics",
       "feynkit-model",
       "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -1047,6 +1046,8 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
+      "kurvst",
+      "linnest",
       "linnet",
       "spenso",
       "spenso-macros",
@@ -1109,6 +1110,7 @@
       "feynkit-kinematics",
       "feynkit-model",
       "feynkit-tensor",
+      "feynkit-ufo",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -1443,7 +1445,6 @@
       "idenso",
       "linnet",
       "spenso",
-      "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
     ],
@@ -1743,9 +1744,6 @@
       "spenso": [
         "native",
         "shadowing"
-      ],
-      "symbolica-utils": [
-        "native"
       ],
       "three-dimensional-reps": [
         "eval"

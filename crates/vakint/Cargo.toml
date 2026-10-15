@@ -38,6 +38,7 @@ default-features = false
 features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 test-log = "0.2.19"
 
 [features]

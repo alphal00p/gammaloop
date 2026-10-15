@@ -1,7 +1,10 @@
 use super::*;
-use crate::coad;
+use crate::{
+    coad,
+    shorthands::{UndoShorthands, chain::Chain},
+};
 use insta::assert_snapshot;
-use spenso::{antisym, g, mink, shadowing::IntoAtom};
+use spenso::{antisym, g, mink, shadowing::IntoAtom, structure::representation::RepName};
 use symbolica::{function, symbol};
 
 macro_rules! fco {
@@ -101,6 +104,456 @@ fn two_generator_trace_normalizes_to_tr_metric() {
         .with(dimension.to_pattern());
 
     assert_snapshot!(result.to_bare_ordered_string(), @"g(coad(-1+Nc^2,a),coad(-1+Nc^2,b))*idx(2,cof(Nc))");
+}
+
+#[test]
+fn invariant_open_fundamental_chain_reduces_with_symbolic_nc() {
+    test_initialize();
+    let n = Atom::var(CS.nc);
+    let adjoints = [
+        parse_lit!(coad(Nc ^ 2 - 1, a), default_namespace = "spenso"),
+        parse_lit!(coad(Nc ^ 2 - 1, b), default_namespace = "spenso"),
+        parse_lit!(coad(Nc ^ 2 - 1, c), default_namespace = "spenso"),
+    ];
+    let factors = adjoints
+        .into_iter()
+        .map(|adjoint| color_t!(adjoint))
+        .collect::<Vec<_>>();
+    let closed = trace!(ColorFundamental {}.to_symbolic([n.clone()]); factors.clone());
+    let start = parse_lit!(cof(Nc, i), default_namespace = "spenso");
+    let end = parse_lit!(dind(cof(Nc, j)), default_namespace = "spenso");
+    let metric = function!(spenso::network::library::symbolic::ETS.metric, &start, &end);
+    let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 5 * (opaque(z) + opaque(w)));
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    for reverse in [false, true] {
+        let mut word = factors.clone();
+        if reverse {
+            word.reverse();
+        }
+        let open = chain!(&start, &end; word);
+        // Independent Fierz contraction gives the scalar operator; the two
+        // original free fundamental slots and spectator remain factorized.
+        let coefficient = if reverse {
+            (n.clone().pow(2) - Atom::num(1)) * (n.clone().pow(2) - Atom::num(2))
+                / (Atom::num(8) * n.clone().pow(2))
+        } else {
+            -(n.clone().pow(2) - Atom::num(1)) / (Atom::num(4) * n.clone().pow(2))
+        };
+        let simplified = simplify_formal_color(&(&closed * &open * &spectator), settings);
+        let scalar = simplified.coefficient((&metric * &spectator).as_view());
+        assert_eq!(scalar.expand(), coefficient.expand());
+        assert_eq!(simplified, scalar * &metric * &spectator);
+        assert_eq!(simplify_formal_color(&simplified, settings), simplified);
+        assert_eq!(
+            crate::CookSettings::reversible()
+                .with_representation_payloads(true, true)
+                .cook(simplified.as_view())
+                .list_dangling::<AbstractIndex>()
+                .expect("formal reference slots"),
+            crate::CookSettings::reversible()
+                .with_representation_payloads(true, true)
+                .cook(metric.as_view())
+                .list_dangling::<AbstractIndex>()
+                .expect("formal reference slots"),
+        );
+    }
+}
+
+#[test]
+fn repeated_generators_in_long_fundamental_trace_use_fierz() {
+    test_initialize();
+    let n = Atom::var(CS.nc);
+    let factors = [
+        parse_lit!(coad(Nc ^ 2 - 1, a), default_namespace = "spenso"),
+        parse_lit!(coad(Nc ^ 2 - 1, b), default_namespace = "spenso"),
+        parse_lit!(coad(Nc ^ 2 - 1, c), default_namespace = "spenso"),
+    ]
+    .into_iter()
+    .map(|adjoint| color_t!(adjoint))
+    .collect::<Vec<_>>();
+    let word = factors.iter().chain(&factors).cloned().collect::<Vec<_>>();
+    let trace = trace!(ColorFundamental {}.to_symbolic([n.clone()]); word);
+    // Sum_abc Tr(Ta Tb Tc Ta Tb Tc) = (Nc^2 - Nc^-2)/8.
+    let expected = (n.clone().pow(2) - n.pow(-2)) / Atom::num(8);
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    assert_eq!(
+        simplify_formal_color(&trace, settings).expand(),
+        expected.expand()
+    );
+    assert_eq!(
+        simplify_formal_color(&trace, settings.without_trace_evaluation()),
+        trace,
+    );
+}
+
+#[test]
+fn equivariant_open_fundamental_chain_keeps_its_adjoint_generator() {
+    test_initialize();
+    let n = Atom::var(CS.nc);
+    let adjoints = [
+        parse_lit!(coad(Nc ^ 2 - 1, a), default_namespace = "spenso"),
+        parse_lit!(coad(Nc ^ 2 - 1, b), default_namespace = "spenso"),
+        parse_lit!(coad(Nc ^ 2 - 1, c), default_namespace = "spenso"),
+    ];
+    let factors = adjoints
+        .iter()
+        .map(|adjoint| color_t!(adjoint.clone()))
+        .collect::<Vec<_>>();
+    let start = parse_lit!(cof(Nc, i), default_namespace = "spenso");
+    let end = parse_lit!(dind(cof(Nc, j)), default_namespace = "spenso");
+    let generator = color_t!(adjoints[0].clone(), &start, &end);
+    let open = chain!(&start, &end; factors[1..].iter().cloned());
+    let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 5 * (opaque(z) + opaque(w)));
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    for reverse in [false, true] {
+        let mut word = factors.clone();
+        if reverse {
+            word.reverse();
+        }
+        let closed = trace!(ColorFundamental {}.to_symbolic([n.clone()]); word);
+        // The two-loop DIS networks contain Tr(Ta Tb Tc) Tb Tc and its
+        // reversed quark trace. Independent Fierz contraction gives these
+        // coefficients of the same free generator, with ratio -(Nc^2-2)/2.
+        let coefficient = if reverse {
+            (n.clone().pow(2) - Atom::num(2)) / (Atom::num(4) * n.clone())
+        } else {
+            -Atom::one() / (Atom::num(2) * n.clone())
+        };
+        let input = &closed * &open * &spectator;
+        let simplified = simplify_formal_color(&input, settings);
+        let scalar = simplified.coefficient((&generator * &spectator).as_view());
+        assert_eq!(scalar.expand(), coefficient.expand());
+        assert_eq!(simplified, scalar * &generator * &spectator);
+        assert_eq!(simplify_formal_color(&simplified, settings), simplified);
+        assert_eq!(
+            crate::CookSettings::reversible()
+                .with_representation_payloads(true, true)
+                .cook(simplified.as_view())
+                .list_dangling::<AbstractIndex>()
+                .expect("formal reference slots"),
+            crate::CookSettings::reversible()
+                .with_representation_payloads(true, true)
+                .cook(generator.as_view())
+                .list_dangling::<AbstractIndex>()
+                .expect("formal reference slots"),
+        );
+        assert_eq!(
+            simplify_formal_color(&input, settings.without_trace_evaluation()),
+            input,
+        );
+        // The preserved free index must not be captured by a trace dummy,
+        // including when the input already reserves the first dummy labels.
+        for index in [
+            Atom::var(symbol!("idenso::x")),
+            Atom::from(AbstractIndex::Dummy(0)),
+            // This is a literal tensor label, although Symbolica patterns
+            // interpret its trailing underscore as a wildcard.
+            Atom::var(symbol!("free_adjoint_")),
+        ] {
+            let adjoint = ColorAdjoint {}.to_symbolic([n.clone().pow(2) - 1, index]);
+            let internal = ColorAdjoint {}
+                .to_symbolic([n.clone().pow(2) - 1, Atom::from(AbstractIndex::Dummy(1))]);
+            let replacements = [
+                symbolica::id::Replacement::new(
+                    symbolica::id::Pattern::Literal(adjoints[0].clone()),
+                    symbolica::id::Pattern::Literal(adjoint),
+                ),
+                symbolica::id::Replacement::new(
+                    symbolica::id::Pattern::Literal(adjoints[1].clone()),
+                    symbolica::id::Pattern::Literal(internal),
+                ),
+            ];
+            let renamed = input.replace_multiple(&replacements);
+            let expected = simplified.replace_multiple(&replacements);
+            let actual = simplify_formal_color(&renamed, settings);
+            assert_eq!(actual, expected);
+            assert_eq!(
+                crate::CookSettings::reversible()
+                    .with_representation_payloads(true, true)
+                    .cook(actual.as_view())
+                    .list_dangling::<AbstractIndex>()
+                    .expect("formal reference slots"),
+                crate::CookSettings::reversible()
+                    .with_representation_payloads(true, true)
+                    .cook(expected.as_view())
+                    .list_dangling::<AbstractIndex>()
+                    .expect("formal reference slots"),
+            );
+        }
+    }
+}
+
+#[test]
+fn equivariant_projection_rejects_additional_adjoints_and_unknown_operators() {
+    test_initialize();
+    let _ = spenso::tensor_symbol!("spenso::unknown_color_operator");
+    let expression = parse!(
+        "chain(cof(Nc,i), dind(cof(Nc,j)),
+            t(coad(Nc^2-1,a), spenso::in, spenso::out),
+            t(coad(Nc^2-1,b), spenso::in, spenso::out))",
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        simplify_formal_color(&expression, ColorSimplifySettings::default()),
+        expression
+    );
+    let unknown = parse_lit!(
+        unknown_color_operator(coad(Nc ^ 2 - 1, a), cof(Nc, i), dind(cof(Nc, j))),
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        simplify_formal_color(&unknown, ColorSimplifySettings::default())
+            .undo_chain::<AbstractIndex>()
+            .unwrap(),
+        unknown,
+    );
+}
+
+#[test]
+fn cubic_trace_contraction_preserves_two_open_color_lines() {
+    test_initialize();
+    let n = Atom::var(CS.nc);
+    let adjoints = [
+        parse_lit!(coad(Nc ^ 2 - 1, a), default_namespace = "spenso"),
+        parse_lit!(coad(Nc ^ 2 - 1, b), default_namespace = "spenso"),
+        parse_lit!(coad(Nc ^ 2 - 1, c), default_namespace = "spenso"),
+    ];
+    let factors = adjoints
+        .iter()
+        .map(|adjoint| color_t!(adjoint.clone()))
+        .collect::<Vec<_>>();
+    let start = parse_lit!(cof(Nc, i), default_namespace = "spenso");
+    let end = parse_lit!(dind(cof(Nc, j)), default_namespace = "spenso");
+    let other = parse_lit!(
+        t(coad(Nc ^ 2 - 1, a), cof(Nc, k), dind(cof(Nc, l))),
+        default_namespace = "spenso"
+    );
+    let generator = color_t!(adjoints[0].clone(), &start, &end);
+    let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 5 * (opaque(z) + opaque(w)));
+    let tensor = &generator * &other * &spectator;
+    let default_settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    let settings = default_settings.without_cross_chain_fierz_expansion();
+    let fierz_tensor = simplify_formal_color(&(&generator * &other), default_settings);
+    for reverse_trace in [false, true] {
+        for reverse_chain in [false, true] {
+            let mut word = factors.clone();
+            let mut pair = factors[1..].to_vec();
+            if reverse_trace {
+                word.reverse();
+            }
+            if reverse_chain {
+                pair.reverse();
+            }
+            let closed = trace!(ColorFundamental {}.to_symbolic([n.clone()]); word);
+            let open = chain!(&start, &end; pair);
+            let input = &closed * &open * &other * &spectator;
+            // Independent Fierz contraction gives -1/(2 Nc) and
+            // (Nc^2-2)/(4 Nc), hence the four-incoming DIS ratio -7/2
+            // at Nc=3. The second open quark line is a spectator.
+            let coefficient = if reverse_trace != reverse_chain {
+                (n.clone().pow(2) - Atom::num(2)) / (Atom::num(4) * n.clone())
+            } else {
+                -Atom::one() / (Atom::num(2) * n.clone())
+            };
+            let simplified = simplify_formal_color(&input, settings);
+            let scalar = simplified.coefficient(tensor.as_view());
+            assert_eq!(
+                scalar.expand(),
+                coefficient.expand(),
+                "reverse_trace={reverse_trace}, reverse_chain={reverse_chain}; simplified={simplified}; tensor={tensor}"
+            );
+            let default_result = simplify_formal_color(&input, default_settings);
+            let default_color = default_result.coefficient(spectator.as_view());
+            assert_eq!(default_result, &default_color * &spectator);
+            // Compare the independent coefficient in the existing Fierz basis.
+            // Only the isolated color expression is expanded; the momentum
+            // spectator remains factorized in both simplification modes.
+            assert_eq!(
+                default_color.expand(),
+                (&coefficient * &fierz_tensor).expand()
+            );
+            assert_eq!(simplified, scalar * &tensor);
+            assert_eq!(simplify_formal_color(&simplified, settings), simplified);
+            assert_eq!(
+                crate::CookSettings::reversible()
+                    .with_representation_payloads(true, true)
+                    .cook(simplified.as_view())
+                    .list_dangling::<AbstractIndex>()
+                    .expect("formal reference slots"),
+                crate::CookSettings::reversible()
+                    .with_representation_payloads(true, true)
+                    .cook(tensor.as_view())
+                    .list_dangling::<AbstractIndex>()
+                    .expect("formal reference slots"),
+            );
+            assert_eq!(
+                simplify_formal_color(&input, settings.without_trace_evaluation()),
+                input,
+            );
+            for index in [
+                Atom::var(symbol!("idenso::x")),
+                Atom::from(AbstractIndex::Dummy(0)),
+                Atom::var(symbol!("boundary_adjoint_")),
+            ] {
+                let adjoint = ColorAdjoint {}.to_symbolic([n.clone().pow(2) - 1, index]);
+                let internal = ColorAdjoint {}
+                    .to_symbolic([n.clone().pow(2) - 1, Atom::from(AbstractIndex::Dummy(1))]);
+                let replacements = [
+                    symbolica::id::Replacement::new(
+                        symbolica::id::Pattern::Literal(adjoints[0].clone()),
+                        symbolica::id::Pattern::Literal(adjoint),
+                    ),
+                    symbolica::id::Replacement::new(
+                        symbolica::id::Pattern::Literal(adjoints[1].clone()),
+                        symbolica::id::Pattern::Literal(internal),
+                    ),
+                ];
+                assert_eq!(
+                    simplify_formal_color(&input.replace_multiple(&replacements), settings),
+                    simplified.replace_multiple(&replacements),
+                );
+            }
+        }
+    }
+
+    let before = parse_lit!(coad(Nc ^ 2 - 1, d), default_namespace = "spenso");
+    let after = parse_lit!(coad(Nc ^ 2 - 1, e), default_namespace = "spenso");
+    let open = chain!(&start, &end;
+        [color_t!(before.clone()), factors[1].clone(), factors[2].clone(), color_t!(after.clone())]
+    );
+    let preserved_color = chain!(&start, &end;
+        [color_t!(before), factors[0].clone(), color_t!(after)]
+    ) * &other;
+    let preserved = &preserved_color * &spectator;
+    let symmetric =
+        CS.symmetric_generator_trace(ColorFundamental {}.to_symbolic([n.clone()]), adjoints);
+    let input = &symmetric * open * &other * &spectator;
+    let simplified = simplify_formal_color(&input, settings);
+    let scalar = simplified.coefficient(preserved.as_view());
+    let coefficient = (n.clone().pow(2) - Atom::num(4)) / (Atom::num(8) * n);
+    assert_eq!(scalar.expand(), coefficient.expand());
+    let default_result = simplify_formal_color(&input, default_settings);
+    let default_color = default_result.coefficient(spectator.as_view());
+    assert_eq!(default_result, &default_color * &spectator);
+    let fierz_tensor = simplify_formal_color(&preserved_color, default_settings);
+    assert_eq!(
+        default_color.expand(),
+        (&coefficient * fierz_tensor).expand()
+    );
+    assert_eq!(simplified, scalar * preserved);
+    assert_eq!(simplify_formal_color(&simplified, settings), simplified);
+}
+
+#[test]
+fn cubic_trace_contraction_rejects_unowned_or_incompatible_slots() {
+    test_initialize();
+    let _ = spenso::tensor_symbol!("spenso::unknown_color_operator");
+    let settings = ColorSimplifySettings::default().without_cross_chain_fierz_expansion();
+    let symmetric = parse!(
+        "trace(cof(Nc), sym(t(coad(Nc^2-1,a), spenso::in, spenso::out),
+            t(coad(Nc^2-1,b), spenso::in, spenso::out),
+            t(coad(Nc^2-1,c), spenso::in, spenso::out)))",
+        default_namespace = "spenso"
+    );
+    let spectator = parse_lit!(
+        t(coad(Nc ^ 2 - 1, a), cof(Nc, k), dind(cof(Nc, l))),
+        default_namespace = "spenso"
+    );
+    for open in [
+        // The contracted pair must be adjacent in the ordered chain.
+        parse!(
+            "chain(cof(Nc,i), dind(cof(Nc,j)),
+            t(coad(Nc^2-1,b), spenso::in, spenso::out),
+            t(coad(Nc^2-1,d), spenso::in, spenso::out),
+            t(coad(Nc^2-1,c), spenso::in, spenso::out))",
+            default_namespace = "spenso"
+        ),
+        // An unknown matrix cannot certify a known invariant color network.
+        parse!(
+            "chain(cof(Nc,i), dind(cof(Nc,j)),
+            unknown_color_operator(spenso::in, spenso::out),
+            t(coad(Nc^2-1,b), spenso::in, spenso::out),
+            t(coad(Nc^2-1,c), spenso::in, spenso::out))",
+            default_namespace = "spenso"
+        ),
+        parse!(
+            "chain(cof(Nc+1,i), dind(cof(Nc+1,j)),
+            t(coad(Nc^2-1,b), spenso::in, spenso::out),
+            t(coad(Nc^2-1,c), spenso::in, spenso::out))",
+            default_namespace = "spenso"
+        ),
+    ] {
+        let input = &symmetric * open * &spectator;
+        assert_eq!(simplify_formal_color(&input, settings), input);
+    }
+    let open = parse!(
+        "chain(cof(Nc,i), dind(cof(Nc,j)),
+        t(coad(Nc^2-1,b), spenso::in, spenso::out),
+        t(coad(Nc^2-1,c), spenso::in, spenso::out))",
+        default_namespace = "spenso"
+    );
+    let third_occurrence = parse_lit!(
+        t(coad(Nc ^ 2 - 1, b), cof(Nc, m), dind(cof(Nc, n))),
+        default_namespace = "spenso"
+    );
+    let input = &symmetric * &open * &spectator * third_occurrence;
+    assert_eq!(simplify_formal_color(&input, settings), input);
+    for incompatible_spectator in [
+        parse_lit!(
+            t(coad(Nc ^ 2 - 1, a), cof(Nc + 1, k), dind(cof(Nc + 1, l))),
+            default_namespace = "spenso"
+        ),
+        parse_lit!(
+            t(coad(Nc ^ 2, a), cof(Nc, k), dind(cof(Nc, l))),
+            default_namespace = "spenso"
+        ),
+    ] {
+        let input = &symmetric * &open * incompatible_spectator;
+        // Unsupported dimensions may retain a one-generator chain. Normalize
+        // only that notation while requiring the contraction to stay untouched.
+        assert_eq!(
+            simplify_formal_color(&input, settings).undo_single_length(),
+            input.undo_single_length(),
+        );
+    }
+    let wrong_dimension = symmetric
+        .replace(symbolica::id::Pattern::Literal(parse_lit!(
+            coad(Nc ^ 2 - 1, b),
+            default_namespace = "spenso"
+        )))
+        .with(symbolica::id::Pattern::Literal(parse_lit!(
+            coad(dA, b),
+            default_namespace = "spenso"
+        )));
+    let input = wrong_dimension * open * spectator;
+    assert_eq!(simplify_formal_color(&input, settings), input);
+}
+
+#[test]
+fn schur_reduction_keeps_free_adjoint_slots_and_unknown_tensors() {
+    test_initialize();
+    let _ = spenso::tensor_symbol!("spenso::unknown_color_operator");
+    let generator = parse_lit!(
+        t(coad(Nc ^ 2 - 1, a), cof(Nc, i), dind(cof(Nc, j))),
+        default_namespace = "spenso"
+    );
+    // A free adjoint label makes this a covariant operator, whose trace is
+    // zero although the original operator is nonzero.
+    assert_eq!(
+        simplify_formal_color(&generator, ColorSimplifySettings::default()),
+        generator
+    );
+    let unknown = parse_lit!(
+        unknown_color_operator(cof(Nc, i), dind(cof(Nc, j))),
+        default_namespace = "spenso"
+    );
+    // Simplification may represent the same operator as a chain shorthand.
+    assert_eq!(
+        simplify_formal_color(&unknown, ColorSimplifySettings::default())
+            .undo_chain::<AbstractIndex>()
+            .unwrap(),
+        unknown,
+    );
 }
 
 #[test]
@@ -229,6 +682,69 @@ fn chain_one_generator_trace_vanishes() {
     );
 
     assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"0");
+}
+
+#[test]
+fn separated_fundamental_generators_contract_against_structure_constant() {
+    test_initialize();
+    let expression = parse_lit!(
+        t(coad(Nc ^ 2 - 1, a), cof(Nc, i), dind(cof(Nc, j)))
+            * t(coad(Nc ^ 2 - 1, b), cof(Nc, j), dind(cof(Nc, k)))
+            * t(coad(Nc ^ 2 - 1, c), cof(Nc, k), dind(cof(Nc, l)))
+            * f(
+                coad(Nc ^ 2 - 1, c),
+                coad(Nc ^ 2 - 1, e),
+                coad(Nc ^ 2 - 1, a)
+            ),
+        default_namespace = "spenso"
+    );
+    // Keep TR symbolic, as in the other trace identities. For Pauli/2
+    // generators TR=1/2 and the coefficient is independently -i/4.
+    let expected = -Atom::i()
+        * parse_lit!(
+            idx(2, cof(Nc))
+                ^ 2 * g(coad(Nc ^ 2 - 1, b), coad(Nc ^ 2 - 1, e)) * g(cof(Nc, i), dind(cof(Nc, l))),
+            default_namespace = "spenso"
+        );
+    assert_eq!(
+        simplify_formal_color(&expression, ColorSimplifySettings::default()),
+        expected
+    );
+
+    let reversed = parse_lit!(
+        t(coad(Nc ^ 2 - 1, c), cof(Nc, i), dind(cof(Nc, j)))
+            * t(coad(Nc ^ 2 - 1, b), cof(Nc, j), dind(cof(Nc, k)))
+            * t(coad(Nc ^ 2 - 1, a), cof(Nc, k), dind(cof(Nc, l)))
+            * f(
+                coad(Nc ^ 2 - 1, c),
+                coad(Nc ^ 2 - 1, e),
+                coad(Nc ^ 2 - 1, a)
+            ),
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        simplify_formal_color(&reversed, ColorSimplifySettings::default()),
+        -expected
+    );
+
+    // The three missed DIS color zeros close the same subchain through a
+    // fourth generator and f(b,d,e); the metric sets b=e and kills f.
+    let closing_factor = parse_lit!(
+        t(coad(Nc ^ 2 - 1, d), cof(Nc, l), dind(cof(Nc, m)))
+            * f(
+                coad(Nc ^ 2 - 1, b),
+                coad(Nc ^ 2 - 1, d),
+                coad(Nc ^ 2 - 1, e)
+            ),
+        default_namespace = "spenso"
+    );
+    assert!(
+        simplify_formal_color(
+            &(expression * closing_factor),
+            ColorSimplifySettings::default()
+        )
+        .is_zero()
+    );
 }
 
 #[test]
@@ -1163,7 +1679,9 @@ fn su_fnan_n3() {
     test_initialize();
     let result = parse_lit!(-1𝑖 * a ^ 3 * nf * NF ^ 2 + 1𝑖 * a ^ 3 * nf * NF ^ 4);
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"-1𝑖*NF^2*a^3*nf+1𝑖*NF^4*a^3*nf");
+    // Keep the exact reference independent of Symbolica's imaginary-unit printer.
+    assert_eq!(result, parse!("-1𝑖*NF^2*a^3*nf+1𝑖*NF^4*a^3*nf"));
+    assert_snapshot!(result.to_bare_ordered_string(), @"-𝑖*NF^2*a^3*nf+NF^4*a^3*nf*𝑖");
 }
 
 #[test]

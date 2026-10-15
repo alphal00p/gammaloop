@@ -282,6 +282,13 @@ abstract index, and dual orientation. Products contract matching dual slots; add
 expose compatible external structure. `chain`, `trace`, `dot`, metrics, and bracket-like syntax
 are parser-owned shorthands rather than arbitrary opaque functions.
 
+Index canonicalization temporarily gives composite dimensions such as `Nc^2-1`
+reversible symbols so the tensor parser can recognize their slots. Each symbol
+stores its defining expression inside an `idenso::representation_dimension`
+wrapper in Symbolica user data. Canonicalization restores only those dimension
+payloads afterward; separately cooked spectator functions remain cooked. This
+preserves formal dimensions without expanding the graph numerator.
+
 `UndoShorthands` selects Spenso `ShorthandParsing::Expand` modes, parses a symbolic network, and
 executes it to reconstruct explicit tensor products with fresh parse-local dummies. The
 shared contractor requests opaque shorthand with fast structure inference so it can
@@ -317,8 +324,8 @@ default features disabled. The core Rust rewrite layer always includes Symbolica
 initialization; its `python_stubgen` feature adds metadata for the unified Spenso module.
 `reference-cases` exposes the otherwise test-only curated identity cases.
 
-The optional `bincode` feature derives binary encoding only for Idenso's zero-sized
-representation marker types. `SymbolicTensor`, rewrite settings, symbol registries, networks,
+Binary encoding is always derived for Idenso's zero-sized representation marker types.
+`SymbolicTensor`, rewrite settings, symbol registries, networks,
 and cooked expressions do not form an Idenso checkpoint format. Reversible cooking stores the
 source atom in Symbolica symbol user data and derives a stable-looking hash name, but recovery
 still depends on the matching Symbolica registry and cooking settings. Printed or binary names

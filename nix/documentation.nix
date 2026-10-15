@@ -7,15 +7,22 @@
   cargoSources,
   localCargoPatchSources,
   nonCargoBuildSources,
-  commonArgs,
+  ciArgs,
+  ciCargoProfile,
+  nativeCargoArtifacts,
   dummyCargoTarget,
   normalizeWorkspaceHackBuildScriptTimestampScript,
   workspacePackageSrcFor,
   workspaceMissingCargoTargetsScript,
+  workspaceAnchorCargoTomlFor,
+  workspacePrebuildDependencyPackages,
+  workspacePrebuildPackage,
+  workspacePrebuildPackageDir,
+  craneCiFeaturesFor,
 }:
 let
   inherit (pkgs) lib;
-  docsCargoProfile = "docs";
+  docsCargoProfile = ciCargoProfile;
   documentationRevision = self.dirtyRev or (self.rev or (self.narHash or "local"));
   typst015 =
     assert lib.assertMsg (docsPkgs.typst.version == "0.15.1")
@@ -24,8 +31,14 @@ let
 
   docsTypst = typst015.withPackages (
     typstPackages: with typstPackages; [
-      cetz_0_5_1
+      # Linnest's marker batching uses the same reviewed CeTZ extension as
+      # the embedded renderer and Python wheels.
+      (cetz_0_5_1.overrideAttrs (_: {
+        src = workspaceRoot + "/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1";
+      }))
       mitex_0_2_6
+      parsely_0_1_0
+      parsely_0_1_1
       tidy_0_4_3
     ]
   );
@@ -83,6 +96,8 @@ let
         (workspaceRoot + "/docs")
         (workspaceRoot + "/scripts/check-docs-html.py")
         (workspaceRoot + "/scripts/render-docs-svg-assets.sh")
+        # The GammaLoop marks import the logo geometry from this Kurvst example.
+        (workspaceRoot + "/crates/kurvst/typst/examples/knot-logo.typ")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
         (workspaceRoot + "/examples/api/python")
         (workspaceRoot + "/examples/notebooks")
@@ -97,9 +112,12 @@ let
           + "/examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym"
         )
         (workspaceRoot + "/examples/cli/BNL/profiling/bnl_scalar_alias_captures.ansi.txt")
+        (workspaceRoot + "/examples/cli/epem_a_ttxh/NNLO/graphs/GL297.dot")
+        (workspaceRoot + "/examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
         (workspaceRoot + "/examples/cli/gg_hhh/3L/3L_graph.dot")
         (workspaceRoot + "/tests/resources/graphs/double_triangle.dot")
         (workspaceRoot + "/tests/resources/graphs/gghhh.dot")
+        (workspaceRoot + "/tests/resources/graphs/massive_kite.dot")
         (workspaceRoot + "/tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot")
         (workspaceRoot + "/tests/resources/graphs/raised_cut_numerator_cancellation.dot")
         (workspaceRoot + "/tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot")
@@ -148,18 +166,63 @@ let
   );
   alphal00pDocsCargoTargetRoot = "target/alphal00p-docs-rustdoc";
   alphal00pDocsCargoTarget = "${alphal00pDocsCargoTargetRoot}/cargo-target-v1";
-  alphal00pDocsCargoArgs = commonArgs // {
+  alphal00pDocsCargoArgs = ciArgs // {
     buildType = docsCargoProfile;
     CARGO_PROFILE = docsCargoProfile;
     CARGO_TARGET_DIR = alphal00pDocsCargoTarget;
-    PYO3_PYTHON = "${pkgs.python313}/bin/python3";
-    PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
     # Symbolica 3 needs no compile-time key in either the reusable producer or
     # the documentation consumer; the build below supplies its runtime license.
   };
   alphal00pDocsRealCargoArgs = alphal00pDocsCargoArgs // {
-    postPatch = normalizeWorkspaceHackBuildScriptTimestampScript;
+    postPatch = normalizeWorkspaceHackBuildScriptTimestampScript + ''
+      install -D -m 0644 ${documentationNativeCargoToml} ${workspacePrebuildPackageDir}/Cargo.toml
+      install -D -m 0644 ${dummyCargoTarget} ${workspacePrebuildPackageDir}/src/lib.rs
+      # Cargo separates build-script features from target features. Match the
+      # native workspace-hack's Symbolica build dependency on the host too.
+      cat >> ${workspacePrebuildPackageDir}/Cargo.toml <<'EOF'
+      [build-dependencies.symbolica]
+      workspace = true
+      features = ["tracing_max_level_info"]
+      EOF
+      install -D -m 0644 ${dummyCargoTarget} ${workspacePrebuildPackageDir}/build.rs
+      touch -d @0 ${workspacePrebuildPackageDir}/Cargo.toml ${workspacePrebuildPackageDir}/src/lib.rs ${workspacePrebuildPackageDir}/build.rs
+      ${lib.concatMapStringsSep "\n" (package: ''
+        cat >> crates/${package}/Cargo.toml <<'EOF'
+        [dependencies.${workspacePrebuildPackage}]
+        path = "../${workspacePrebuildPackage}"
+        EOF
+        touch -d @0 crates/${package}/Cargo.toml
+      '') ["alphal00p-docs-builder" "alphal00p-docs-examples" "alphal00p-docs-python-exporter"]}
+      install -D -m 0644 ${documentationCatalogCargoToml} crates/alphal00p-docs-catalogs/Cargo.toml
+      touch -d @0 crates/alphal00p-docs-catalogs/Cargo.toml
+    '';
+    # Cargo's vendor configuration is installed during configurePhase.
+    preBuild = (alphal00pDocsCargoArgs.preBuild or "") + ''
+      cargo update --offline --workspace
+    '';
   };
+  documentationNativeCargoToml = workspaceAnchorCargoTomlFor workspacePrebuildPackage
+    (lib.filter (package:
+      !lib.hasPrefix "alphal00p-docs-" package
+      && package != "gammaloop-integration-tests"
+      && package != "clinnet") workspacePrebuildDependencyPackages)
+    craneCiFeaturesFor;
+  # The examples build script uses neutral catalogs. Keep the native anchor
+  # out of that host dependency graph until a reference exporter needs it.
+  documentationCatalogCargoToml =
+    let
+      manifest = builtins.fromTOML (builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-catalogs/Cargo.toml"));
+    in
+    (pkgs.formats.toml {}).generate "alphal00p-docs-catalogs-Cargo.toml" (manifest // {
+      dependencies = manifest.dependencies // {
+        ${workspacePrebuildPackage} = {
+          path = "../${workspacePrebuildPackage}";
+          optional = true;
+        };
+      };
+      features = manifest.features // lib.genAttrs ["gammaloop-reference" "vakint-reference"]
+        (feature: manifest.features.${feature} ++ ["dep:${workspacePrebuildPackage}"]);
+    });
   documentationRustComponents = lib.concatMap (
     product: product.rust_components or [ ]
   ) documentationRegistry.product;
@@ -190,13 +253,14 @@ let
   alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation (
     alphal00pDocsRealCargoArgs
     // {
-      cargoArtifacts = null;
+      # Reuse the same optimized native libraries as unit/integration tests.
+      cargoArtifacts = nativeCargoArtifacts;
       doInstallCargoArtifacts = true;
       pname = "alphal00p-docs-cargo";
       src = documentationWorkspaceBuildSrc;
       # Prime content-sensitive test dependency contexts without adding
       # authored documentation to this reusable source boundary.
-      postPatch = normalizeWorkspaceHackBuildScriptTimestampScript + ''
+      postPatch = alphal00pDocsRealCargoArgs.postPatch + ''
         install -D -m 0644 ${dummyCargoTarget} crates/alphal00p-docs-examples/build.rs
         install -D -m 0644 ${dummyCargoTarget} crates/alphal00p-docs-examples/src/lib.rs
       '';
@@ -219,14 +283,14 @@ let
   );
 
   # Exercise the embedded Typst watcher behind its opt-in feature without
-  # adding Typst's compiler crates to normal workspace or Pages artifacts.
-  persistentTypstArgs = commonArgs // {
-    pname = "alphal00p-docs-persistent-typst";
+  # adding the file watcher, live server or Typst compiler to ordinary builds.
+  watchArgs = ciArgs // {
+    pname = "alphal00p-docs-watch";
     src = workspacePackageSrcFor "alphal00p-docs-builder";
     buildType = "docs-watch";
     CARGO_PROFILE = "docs-watch";
-    cargoExtraArgs = "--locked -p alphal00p-docs-builder --features persistent-typst";
-    nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [
+    cargoExtraArgs = "--locked -p alphal00p-docs-builder --features watch";
+    nativeBuildInputs = (ciArgs.nativeBuildInputs or [ ]) ++ [
       docsTypst
       pkgs.roboto
     ];
@@ -234,20 +298,22 @@ let
     TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
   };
 
-  persistentTypstCargoArtifacts = craneLib.buildDepsOnly persistentTypstArgs;
+  watchCargoArtifacts = craneLib.buildDepsOnly watchArgs;
 
-  persistentTypstCheck = craneLib.mkCargoDerivation (
-    persistentTypstArgs
+  watchCheck = craneLib.mkCargoDerivation (
+    watchArgs
     // {
-      cargoArtifacts = persistentTypstCargoArtifacts;
+      cargoArtifacts = watchCargoArtifacts;
       doNotLinkInheritedArtifacts = true;
       doInstallCargoArtifacts = false;
       postPatch = workspaceMissingCargoTargetsScript;
       buildPhaseCargoCommand = ''
         mkdir -p "$out"
-        cargoWithProfile check ${persistentTypstArgs.cargoExtraArgs} --all-targets
-        cargoWithProfile test ${persistentTypstArgs.cargoExtraArgs} typst_render::persistent::tests
-        cargoWithProfile clippy ${persistentTypstArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings
+        cargoWithProfile check ${watchArgs.cargoExtraArgs} --all-targets
+        cargoWithProfile test ${watchArgs.cargoExtraArgs} --lib typst_render::persistent::tests
+        cargoWithProfile test ${watchArgs.cargoExtraArgs} --lib watch::tests
+        cargoWithProfile test ${watchArgs.cargoExtraArgs} --lib server::tests
+        cargoWithProfile clippy ${watchArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings
       '';
       checkPhaseCargoCommand = "";
       doCheck = false;
@@ -316,8 +382,8 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
-    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
-    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet linnet_package_and_docs_share_the_typed_stub_info_surface
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet
     linnet_python="$TMPDIR/alphal00p-docs-linnet-graph"
     export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
     export UV_OFFLINE=true
@@ -341,6 +407,7 @@ let
       docs/assets/about-*.svg
       docs/assets/graphs/portal-*.svg
       docs/assets/local-unitarity-*.svg
+      docs/assets/gammaloop-construction-*.svg
       docs/assets/spensologo.svg
       assets/gammalooplogo*.svg
     )
@@ -348,11 +415,12 @@ let
       "$svg_assets"/docs/assets/about-*.svg
       "$svg_assets"/docs/assets/graphs/portal-*.svg
       "$svg_assets"/docs/assets/local-unitarity-*.svg
+      "$svg_assets"/docs/assets/gammaloop-construction-*.svg
       "$svg_assets"/docs/assets/spensologo.svg
       "$svg_assets"/assets/gammalooplogo*.svg
     )
-    test "''${#checked_assets[@]}" -eq 32
-    test "''${#generated_assets[@]}" -eq 32
+    test "''${#checked_assets[@]}" -eq 34
+    test "''${#generated_assets[@]}" -eq 34
     for checked_asset in "''${checked_assets[@]}"; do
       cmp "$checked_asset" "$svg_assets/$checked_asset"
     done
@@ -610,6 +678,6 @@ in
     alphal00pDocsPages
     alphal00pDocsSnapshotFixture
     alphal00pDocsCheck
-    persistentTypstCheck
+    watchCheck
     ;
 }

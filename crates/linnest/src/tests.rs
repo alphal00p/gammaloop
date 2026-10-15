@@ -5346,8 +5346,7 @@ fn dangling_centroid_incremental_delta_matches_total_delta() {
         let incremental_centroid = incremental - baseline_incremental;
         let exact_centroid = exact - baseline_exact;
         assert!(
-            (incremental_centroid - exact_centroid).abs()
-                <= 1e-9 * (1.0 + exact_centroid.abs()),
+            (incremental_centroid - exact_centroid).abs() <= 1e-9 * (1.0 + exact_centroid.abs()),
             "iteration {iteration}: incremental={incremental_centroid}, exact={exact_centroid}, difference={}",
             incremental_centroid - exact_centroid,
         );

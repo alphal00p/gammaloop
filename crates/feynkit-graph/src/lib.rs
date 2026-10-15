@@ -2021,7 +2021,7 @@ impl FeynmanDiagram {
                 .iter_edges()
                 .any(|(_, _, edge)| edge.data.statements.contains_key("particle_id"))
         {
-            return Self::from_compact_dot(model, parsed);
+            return Self::from_compact_dot(model, parsed).map(|(diagram, _)| diagram);
         }
         let serialized_fingerprint = parsed
             .global_data
@@ -2796,7 +2796,25 @@ impl FeynmanDiagramBuilder {
     }
 
     pub fn build(self) -> Result<FeynmanDiagram, DiagramError> {
-        self.finalize()
+        self.finalize().map(|(diagram, _)| diagram)
+    }
+}
+
+/// Exact source ownership recorded by diagram finalization. Sewing maps two
+/// source legs to one final edge; removed generation vertices have no image.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DiagramSourceMap {
+    edges: Vec<EdgeId>,
+    vertices: Vec<Option<VertexId>>,
+}
+
+impl DiagramSourceMap {
+    pub fn edges(&self) -> &[EdgeId] {
+        &self.edges
+    }
+
+    pub fn vertices(&self) -> &[Option<VertexId>] {
+        &self.vertices
     }
 }
 
