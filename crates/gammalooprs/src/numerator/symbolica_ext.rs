@@ -544,26 +544,36 @@ impl NumeratorAtomExt for AtomView<'_> {
                     },
                     _ => Coefficient::one(),
                 };
-                if !matches!(number, Coefficient::Complex(_)) {
+                let Coefficient::Complex(exact) = &number else {
                     return value.to_owned();
-                }
-                terms.push((term / Atom::num(&number).as_view(), number));
+                };
+                terms.push((term / Atom::num(&number).as_view(), exact.clone()));
             }
             terms.sort_by(|left, right| left.0.cmp(&right.0));
-            let mut content = terms[0].1.clone();
+            let first = &terms[0].1;
+            // Only real rational GCDs are needed for literal content. The
+            // upstream Gaussian GCD can cycle, e.g. on 2+i and 2-i; never call
+            // it even for a small, exact complex coefficient.
+            let mut content = first.re.gcd(&first.im);
             for (_, number) in &terms[1..] {
-                content = content.gcd(number);
+                content = content.gcd(&number.re).gcd(&number.im);
             }
-            let first = Atom::num(&terms[0].1) / Atom::num(&content);
-            if let AtomView::Num(first) = first.as_view()
-                && first.get_coeff_view().to_owned().is_negative()
-            {
-                content = -content;
-            }
+            // Choose a unit so the first coefficient has positive real part
+            // and nonnegative imaginary part. This preserves real/imaginary
+            // content and gives opposite or quarter-turned sums one owner.
+            let unit = if first.re > 0 && first.im >= 0 {
+                Atom::one()
+            } else if first.re <= 0 && first.im > 0 {
+                Atom::i()
+            } else if first.re < 0 && first.im <= 0 {
+                -Atom::one()
+            } else {
+                -Atom::i()
+            };
+            let content = Atom::num(content) * unit;
             if content.is_one() {
                 return value.to_owned();
             }
-            let content = Atom::num(content);
             &content * Atom::add_many(sum.iter().map(|term| term / content.as_view()))
         };
         let split_number = |value: &Atom| {
@@ -1167,6 +1177,87 @@ mod tests {
         let retained = (&spectator * base.pow(3)).collect_compact_factors();
         assert!(retained.contains(&parse_lit!((a + b) ^ 11)));
         assert!(retained.contains(&parse_lit!(c + d)));
+    }
+
+    #[test]
+    fn compact_factors_keep_mixed_complex_content_bounded_and_exact() {
+        test_initialise().unwrap();
+        let a = Atom::var(symbol!("mixed_content::a"));
+        let b = Atom::var(symbol!("mixed_content::b"));
+        // Native Gaussian GCD alternates these coefficients indefinitely.
+        let mixed = (Atom::num(2) + Atom::i()) * &a + (Atom::num(2) - Atom::i()) * &b;
+        let normalized = mixed.collect_compact_factors();
+        assert!(!normalized.is_zero());
+        assert_eq!(normalized.collect_compact_factors(), normalized);
+        let coefficients = normalized
+            .coefficient_list_exact(&[a.clone(), b.clone()])
+            .expect("the exact linear coefficient remains collectible")
+            .into_iter()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(
+            coefficients,
+            std::collections::BTreeMap::from([
+                (a, Atom::num(2) + Atom::i()),
+                (b, Atom::num(2) - Atom::i()),
+            ])
+        );
+    }
+
+    #[test]
+    fn compact_factors_preserve_complex_unit_power_owners_and_opaque_scopes() {
+        test_initialise().unwrap();
+        let a = Atom::var(symbol!("complex_power::a"));
+        let b = Atom::var(symbol!("complex_power::b"));
+        let mixed = (Atom::num(2) + Atom::i()) * &a + (Atom::num(2) - Atom::i()) * &b;
+        let spectator = parse_lit!((x + y) ^ 11 * opaque(z + 2 * (u + v)));
+        for unit in [Atom::one(), -Atom::one(), Atom::i(), -Atom::i()] {
+            // Form the rotated Add explicitly: a numeric prefactor outside a
+            // power would already normalize before reaching the compact owner.
+            let rotated = (&unit * (Atom::num(2) + Atom::i())) * &a
+                + (&unit * (Atom::num(2) - Atom::i())) * &b;
+            for exponent in [-2, -1, 2, 3, 11] {
+                let normalized = rotated.pow(exponent).collect_compact_factors();
+                assert_eq!(
+                    normalized,
+                    (unit.pow(exponent) * mixed.pow(exponent)).collect_compact_factors(),
+                    "integer power {exponent} must keep the complete complex base"
+                );
+                assert_eq!(normalized.collect_compact_factors(), normalized);
+            }
+            let difference = rotated.pow(2) - unit.pow(2) * mixed.pow(2);
+            assert!(
+                (&spectator * &difference)
+                    .collect_compact_factors()
+                    .is_zero()
+            );
+            assert_eq!(
+                (&spectator * (difference + Atom::one())).collect_compact_factors(),
+                spectator
+            );
+        }
+        let fractional = mixed.sqrt();
+        let opaque = function!(symbol!("complex_power::opaque"), &mixed);
+        assert_eq!(fractional.collect_compact_factors(), fractional);
+        assert_eq!(opaque.collect_compact_factors(), opaque);
+        let inverse = mixed.pow(-1);
+        let guard = function!(symbolica::atom::Symbol::IF, &a, &b, 0);
+        let guarded = &guard * &a * &inverse + &b * &inverse;
+        assert_eq!(guarded.collect_compact_factors(), guarded);
+    }
+
+    #[test]
+    fn compact_factors_preserve_real_and_imaginary_rational_content() {
+        test_initialise().unwrap();
+        let a = Atom::var(symbol!("rational_content::a"));
+        let b = Atom::var(symbol!("rational_content::b"));
+        let base = Atom::num(2) * &a + Atom::num(3) * &b;
+        for unit in [Atom::one(), -Atom::one(), Atom::i(), -Atom::i()] {
+            let content = unit * Atom::num((3, 7));
+            let source = (&content * Atom::num(2)) * &a + (&content * Atom::num(3)) * &b;
+            let normalized = source.collect_compact_factors();
+            assert_eq!(normalized, &content * &base);
+            assert_eq!(normalized.collect_compact_factors(), normalized);
+        }
     }
 
     #[test]
