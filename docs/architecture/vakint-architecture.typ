@@ -271,8 +271,10 @@ metadata with the source's symbolic dimension, leaving scalar evanescent
 coefficients untouched. Fresh projected dummy slots are then checked against
 the existing complete source slots in that unified frame. Allocating before
 this metadata normalization could identify a fresh slot with an already
-reserved source index. Raw indexed momenta and projected metrics use the same
-topology-local chart; compact fixed vectors keep their native leaves. Only after
+reserved source index. Raw numeric backend dummies use the same topology-local
+chart in momentum and metric leaves. Symbolic source labels regain their
+representation without changing identity; compact fixed vectors keep their native
+leaves. Only after
 completed dimensional tensor algebra and residual-contraction checks does the
 bridge replace scalar dimension dependence for Laurent expansion. A retained
 external basis keeps its representation metadata.
