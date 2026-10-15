@@ -17,6 +17,8 @@ except ImportError:
 
 UUS1 = Lorentz(name="UUS1", spins=[-1, -1, 1], structure="1")
 
+# The derivative in -barc partial D c acts on the antighost after integration
+# by parts. With the declared [ghost, antighost, vector] order it is P2.
 UUV1 = Lorentz(name="UUV1", spins=[-1, -1, 3], structure="P(3,2)")
 
 SSS1 = Lorentz(name="SSS1", spins=[1, 1, 1], structure="1")

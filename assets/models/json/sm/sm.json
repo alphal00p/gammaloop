@@ -2316,7 +2316,7 @@
     "texname": "{\\overline{\\nu}_e}",
     "width": "ZERO",
     "y_charge": null,
-    "y_charge_right": 1
+    "y_charge_right": "1"
   }, {
     "antiname": "vm~",
     "antitexname": "{\\overline{\\nu}_\\mu}",
@@ -2348,7 +2348,7 @@
     "texname": "{\\overline{\\nu}_\\mu}",
     "width": "ZERO",
     "y_charge": null,
-    "y_charge_right": 1
+    "y_charge_right": "1"
   }, {
     "antiname": "vt~",
     "antitexname": "{\\overline{\\nu}_\\tau}",
@@ -2380,7 +2380,7 @@
     "texname": "{\\overline{\\nu}_\\tau}",
     "width": "ZERO",
     "y_charge": null,
-    "y_charge_right": 1
+    "y_charge_right": "1"
   }, {
     "antiname": "u~",
     "antitexname": "{\\overline{u}}",
@@ -2654,8 +2654,8 @@
     "spin": 2,
     "texname": "{e^-}",
     "width": "ZERO",
-    "y_charge": -1,
-    "y_charge_right": -2
+    "y_charge": "-1",
+    "y_charge_right": "-2"
   }, {
     "antiname": "e-",
     "antitexname": "{e^-}",
@@ -2670,8 +2670,8 @@
     "spin": 2,
     "texname": "{e^+}",
     "width": "ZERO",
-    "y_charge": 2,
-    "y_charge_right": 1
+    "y_charge": "2",
+    "y_charge_right": "1"
   }, {
     "antiname": "mu+",
     "antitexname": "{\\mu^+}",
@@ -2686,8 +2686,8 @@
     "spin": 2,
     "texname": "{\\mu^-}",
     "width": "ZERO",
-    "y_charge": -1,
-    "y_charge_right": -2
+    "y_charge": "-1",
+    "y_charge_right": "-2"
   }, {
     "antiname": "mu-",
     "antitexname": "{\\mu^-}",
@@ -2702,8 +2702,8 @@
     "spin": 2,
     "texname": "{\\mu^+}",
     "width": "ZERO",
-    "y_charge": 2,
-    "y_charge_right": 1
+    "y_charge": "2",
+    "y_charge_right": "1"
   }, {
     "antiname": "ta+",
     "antitexname": "{\\tau^+}",
@@ -2718,8 +2718,8 @@
     "spin": 2,
     "texname": "{\\tau^-}",
     "width": "WTau",
-    "y_charge": -1,
-    "y_charge_right": -2
+    "y_charge": "-1",
+    "y_charge_right": "-2"
   }, {
     "antiname": "ta-",
     "antitexname": "{\\tau^-}",
@@ -2734,8 +2734,8 @@
     "spin": 2,
     "texname": "{\\tau^+}",
     "width": "WTau",
-    "y_charge": 2,
-    "y_charge_right": 1
+    "y_charge": "2",
+    "y_charge_right": "1"
   }],
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
