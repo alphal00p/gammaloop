@@ -134,13 +134,16 @@ class Fixture:
         "point_count": 4,
     }
     GL04_SOURCE_HASHES: ClassVar[dict[str, str]] = {
-        "shared_fixture_sha256": "c8cf76ae153e8e1ae9a88e719ff59f6a6f41b64c6e42b43a94ca620ccf1991ac",
+        # FeynKit spells the external sewn edge as incoming/outgoing halves.
+        # Internal edges 1..8, Q1 squared, phase, model, card and corpus retain
+        # their certified contents; runtime cut/support checks remain required.
+        "shared_fixture_sha256": "2f44fe6754e7d935280ee1cfa3b882bfae9ced6f5e859a80d656e3c7b4855a43",
         "corpus_sha256": "91546c7de9b78fac35c1f29dd55d7e08033c13d8e4c40b8719ae2ae1cfbb497c",
         "config_sha256": "a1c9331b0dc3de9cdfd1e895d0c39c6bf5fe99981ec041cc8acdd9f11e65dbef",
     }
     GL04_REPRESENTATION_HASHES: ClassVar[dict[str, str]] = {
-        "cff": "b21a3046667d70b9449f7119d7d654a2c8085c320a91bb654d932dbe34989673",
-        "ltd": "543e27d418d9ccc03f369da9a847a1964e3c46b5eaf0d375df4624733d5a3aaa",
+        "cff": "aa7df23d4bdbc507e3690ab89e1c4d1ffdceb1b1c92ccdd6245b6011537e3707",
+        "ltd": "77e29c4ab900b2972432c4e3ae93dec445756b620eba633eca8a5c3f6255c1ab",
     }
 
     @staticmethod
