@@ -491,8 +491,14 @@
     "feynkit-amplitude" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
-    "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
-    "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-generator" = [
+      "crates/feynkit-model/tests/fixtures"
+      "crates/feynkit-generator/tests/fixtures"
+    ];
+    "feynkit-model" = [
+      "crates/feynkit-model/tests/fixtures"
+      "assets/models/json/sm/sm.json"
+    ];
     "feynkit-py" = [
       "crates/feynkit-model/tests/fixtures"
       "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"

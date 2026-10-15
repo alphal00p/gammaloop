@@ -179,7 +179,10 @@ anchor = "pub fn generate("
 # Reviewed 2026-10-15: Generation owns native rule construction, grouping and external
 # projectors. Compact topology parsing alone does not instantiate rules; explicit rule
 # application and exact source maps are documented.
-digest = "fb7cb5f546b8a8010fe79e2e9ab78fffe1ac89c0"
+# Reviewed 2026-10-15: The spin/statistics diagnostic clears physical gauge-quartet declarations
+# after changing ghost spin; production generation and its documented ownership
+# are unchanged. The endpoint-sampling convention is documented separately.
+digest = "2e2d7d15ff14e009f18cdcb3ee84993157a10bdd"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -1517,7 +1520,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # runtime wheels; removed nonexistent test paths do not alter test selection.
 # Reviewed 2026-10-15: Renderer data manifests are compilation inputs; their pinned font payloads
 # remain in a separate runtime closure, as recorded in the cache note.
-digest = "e478838cab2e0aae211c48b9470a1673d2d9c823"
+# Reviewed 2026-10-15: Compile-time test inputs now include the authoritative SM JSON for the
+# built-in model check and the captured paired-wavefunction numerator fixtures.
+# These remain in test producers, preserving production/runtime source ownership.
+digest = "1bc79899f1e405548da2fe598f2c18fceb2c04d0"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
