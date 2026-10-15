@@ -36,7 +36,10 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
 # No state-lifecycle impact 2026-09-29: imported-graph validation reads the
 # process definition's stored generation_type; State::load and version 8 persistence are unchanged.
-digest = "0c212c7b234d3ca35b92eab288d5ab93958ac890"
+# Reviewed 2026-10-15: Manifest version 17 and regeneration of older positional
+# layouts match the current architecture. Canonical model loading and symbol
+# registration precede saved symbolic data.
+digest = "8a473e53100378726072a3ec27ba93f101a90087"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -47,7 +50,10 @@ anchor = "fn default_workspace_path(&self"
 # No integration/dashboard impact 2026-09-16: graph-group selection now
 # receives the canonical model; persistence and terminal ownership are unchanged.
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
-digest = "3d3ec5e44087c857deff2b0ae1aea9da5e186dba"
+# Reviewed 2026-10-15: The maintained notes cover completed-iteration resume, read-
+# only output placement, signed/absolute views and terminal cleanup. Explicit model
+# access and fixture formatting preserve workspace and dashboard ownership.
+digest = "1533bd7ce353e5f6e20b61f1aa548c1146bdc5f1"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -77,7 +83,10 @@ anchor = "pub fn warm_up(&mut self, model"
 # Reviewed 2026-09-16: selection receives the canonical model and CFF IDs
 # come from FeynKit; warm-up and evaluator activation remain downstream.
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
-digest = "5ec599dd227d0ba40cfd141d1e4098fbd5572248"
+# Reviewed 2026-10-15: Canonical model arguments, shared numerator definitions,
+# evaluator activation and Gaussian reference behavior match the maintained
+# architecture; runtime orchestration remains downstream of generation.
+digest = "904c8f215e109144153e47243206d32b31d96ad0"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -101,7 +110,10 @@ anchor = "pub struct EventProcessingRuntime {"
 # No event-ownership impact 2026-09-16: canonical model access and finite,
 # nonnegative jet-threshold validation preserve grouping and accumulation.
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
-digest = "fd2c408eec5d2aad4a7c4ec2284fe779c8a53ce7"
+# Reviewed 2026-10-15: Canonical model lookups preserve graph-group event ownership
+# and per-sample accumulation. Retained main observable and cut metadata behavior
+# stays in the runtime owner.
+digest = "e0a87225a5073e48c6d82a4d8f39cddac43d1684"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python.rs"
@@ -119,7 +131,10 @@ anchor = "struct GammaLoopAPI {"
 # GammaLoopAPI state, threading, command dispatch and persistence are unchanged.
 # The helper explicitly retains its previous metric/vector scope without
 # enabling the unified contractor's new chain/trace collection defaults.
-digest = "b3398b339c6f52399406f3882ec4b9b67343a22d"
+# Reviewed 2026-10-15: Python delegates imports and symbolic operations to canonical
+# graph and typed tensor owners. Session/state ownership and the f64 boundary remain
+# unchanged; compact import now has a dedicated documented scope.
+digest = "adc6974f20de538c6acfb2913aa5c9b16b590617"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -148,7 +163,10 @@ anchor = "pub fn generate("
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
 # Reviewed 2026-09-29: the neutral Process, call-owned generation mode and
 # options, loop-only irreducibility policy and completed-amplitude boundary are documented.
-digest = "d695bf01d6364f5c38ed2a5855740cf3bf38d5b1"
+# Reviewed 2026-10-15: Generation owns native rule construction, grouping and external
+# projectors. Compact topology parsing alone does not instantiate rules; explicit rule
+# application and exact source maps are documented.
+digest = "fb7cb5f546b8a8010fe79e2e9ab78fffe1ac89c0"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -161,7 +179,10 @@ anchor = "pub struct Model {"
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
 # Reviewed 2026-09-29: exact charges, optional chiral hypercharges, parameter
 # labels and shared oriented propagator lookup remain owned by the canonical model.
-digest = "949005906364167c56f055306da7b44ea264877f"
+# Reviewed 2026-10-15: The canonical model owns validated particle/rule identifiers
+# and persistence reconstruction. Runtime mass and rule queries use the supplied model
+# rather than a second model representation.
+digest = "ce417083dc59bbe8a06e1cc529d46307f42b3f62"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
@@ -182,7 +203,10 @@ anchor = "pub struct FeynmanDiagram {"
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
 # No graph-ownership impact 2026-09-29: QuadraticMomentum is re-exported and
 # integral-family tests explicitly pass their additional propagators.
-digest = "b0b3fdaef5bb4a552f65f0e19563e2c711e972f6"
+# Reviewed 2026-10-15: Canonical diagrams retain source-map ownership through import
+# and runtime conversion. Explicit fragments retain their declared frame; the new
+# importer scope owns compact GammaLoop frame conversion.
+digest = "e4169b6a7cffecd3b1ef38d1b8a25ac31dfc94f1"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -192,6 +216,17 @@ anchor = "mod orbit_projector;"
 # FeynKit owner, with GammaLoop application state downstream.
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
 digest = "f424864aa88eaacddbfe2c220aacef0a3af2f98d"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/graph/parse/mod.rs"
+symbol = "gammalooprs::graph::Graph DOT import boundary"
+anchor = "    pub fn import_dot(input: &str, model: &Model) -> Result<Vec<Self>> {"
+end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {"
+# Reviewed 2026-10-15: Compact import owns dialect dispatch, native rules, explicit
+# fragments, represented half-edge index conversion and source-map metadata.
+# Canonical/finalized literals bypass compact conversion.
+# Draft only: compute the final digest after bridge and prose review.
+digest = "f37eb0bb029fc31b8b0c0b5917cd3e6416802e9e"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -217,7 +252,10 @@ anchor = "fn dashboard_event_loop(receiver"
 # No integration/dashboard impact 2026-09-16: graph-group selection now
 # receives the canonical model; persistence and terminal ownership are unchanged.
 # Reviewed 2026-09-23: The main integration status and terminal ownership paths remain downstream of canonical FeynKit data.
-digest = "3d3ec5e44087c857deff2b0ae1aea9da5e186dba"
+# Reviewed 2026-10-15: The maintained notes cover completed-iteration resume, read-
+# only output placement, signed/absolute views and terminal cleanup. Explicit model
+# access and fixture formatting preserve workspace and dashboard ownership.
+digest = "1533bd7ce353e5f6e20b61f1aa548c1146bdc5f1"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -236,7 +274,10 @@ anchor = "mod render_ratatui;"
 # No dashboard impact 2026-09-16: unit-volume fixtures use named empty
 # FeynKit models; production status flow and terminal ownership are unchanged.
 # Reviewed 2026-09-23: The main integration status and terminal ownership paths remain downstream of canonical FeynKit data.
-digest = "3d96c87757c8ffdd07f74d3b28a45c39e599aad9"
+# Reviewed 2026-10-15: The note covers physical sums before componentwise absolute
+# values, shallow monitoring without RNG changes and completed-iteration checkpoints.
+# Retained main behavior preserves renderer ownership.
+digest = "bd284d98cc1ea29035996e21c08ff204eb9f9d7e"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -264,7 +305,55 @@ anchor = "impl UVOrchestrator {"
 # Reviewed 2026-09-23: Both orchestrators retain their projection/assembly roles; graph-bound canonical model context feeds the shared production CFF engine.
 # Reviewed 2026-09-29: documented checked comparison normalization, explicit
 # colour/structural permissions, reversible indices, and propagated errors.
-digest = "37b54a4e77cb19213832776108a52791ecd9fff5"
+# Reviewed 2026-10-15: Comparison uses checked typed contraction, reversible indices
+# and scalar-product normalization without the removed tensor-alias carrier.
+# Scheduling, forest ownership and returned legacy result retain their documented
+# meaning.
+digest = "317b0dce74d18eee916b0d32b311b5d25789d035"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/integrated.rs"
+symbol = "gammalooprs::uv::approx::Integrated analytic phase ordering"
+anchor = "                integrand_vakint.canonicalize("
+end_anchor = "                coefficient = Atom::from(integrand_vakint).replace_multiple("
+# Reviewed 2026-10-15: Tensor projection precedes completed native dimensional
+# algebra, then scalar Laurent evaluation. This range owns the phase ordering required
+# by evanescent coefficients.
+# Draft only: compute the final digest after bridge and prose review.
+digest = "7e91a1a44ebfff04a113559c853eaa9b876fa079"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/integrated.rs"
+symbol = "gammalooprs::uv::approx::Integrated projected numerator interface"
+anchor = "    fn simplify_projected_numerator("
+end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
+# Reviewed 2026-10-15: Typed projected-numerator restoration, branch-local residual
+# guards and dimension metadata own the bridge. Actual native ports and factorization
+# survive dot and indexed notation.
+# Draft only: compute the final digest after bridge and prose review.
+digest = "d33868ac114a27b97beeb189e35441ca797cd1a1"
+
+[[section.note.scope]]
+path = "crates/vakint/src/lib.rs"
+symbol = "vakint::VakintSettings tensor and scalar policy fields"
+anchor = "    /// Ordered analytic and numerical backends considered for each integral."
+end_anchor = "    /// Optional parent directory for uniquely named external-backend work directories."
+# Reviewed 2026-10-15: Tensor backend, coefficient-one projection, dot notation and
+# epsilon depth are distinct policies. Complete-numerator mode does not itself select
+# FORM; scalar evaluation has its own policy.
+# Draft only: compute the final digest after bridge and prose review.
+digest = "70d8d2815a16186713fb2b25f84643e27554481e"
+
+[[section.note.scope]]
+path = "crates/vakint/src/lib.rs"
+symbol = "vakint::VakintTerm tensor backend dispatch"
+anchor = "    fn project_numerator("
+end_anchor = "    fn tensor_reduce_form("
+# Reviewed 2026-10-15: Native and AlphaLoop dispatch share topology validation.
+# AlphaLoop distinguishes complete-numerator and coefficient-one FORM projection;
+# scalar evaluation order is independent.
+# Draft only: compute the final digest after bridge and prose review.
+digest = "22a7663f68fb673976a0dcf4d701abed6134db8a"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -297,7 +386,9 @@ anchor = "pub enum ShorthandParsing {"
 # invalidate trust.
 # Test-only follow-up 2026-09-29: the existing Symbolica initializer reserves
 # the collision fixture before concurrent tests; production parsing is unchanged.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: The parsing note now records original admitted index spelling
+# without callback replay, compatible rank-one dot admission and metric syntax for
+# partial contractions. Scalar execution already documents MinIntermediateCost.
 digest = "6a90b9c6cbd74ed6561f6d355ada3bc7a799457b"
 
 [[section.note]]
@@ -325,7 +416,9 @@ anchor = "pub(crate) trait Schoonschip {"
 # Documentation-impact review 2026-09-29: removed NetworkSchoonschip and its public
 # wrappers. The note records shared structural contraction, capability scheduling, exact
 # unfinished statuses, cached opaque boundaries and independent notation conversion.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Removing the internal temporary pass argument leaves the
+# documented shared scheduler, exact graph frontier, capability selection and
+# completion semantics unchanged.
 digest = "3d4e374d18d8e9d69be971e943712b6246a6f362"
 
 [[section.note]]
@@ -357,7 +450,10 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # current preface now names the style composer alongside its three adapters.
 # No-impact attestation 2026-09-16: the test module imports ModelGammaLoopExt
 # for the canonical model API; production template extraction is unchanged.
-digest = "140a80d416120a105cb96d30f922401115920170"
+# Reviewed 2026-10-15: Embedding now uses include_dir while retaining canonical
+# generated asset paths and shared drawing callbacks. This migration record remains
+# historical below its implemented preface.
+digest = "3dca6f84cadbe237f3beaa7ab05e11cea309cd41"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -408,7 +504,9 @@ anchor = "pub trait IndexTooling {"
 # Documentation-impact review 2026-09-29: documented independent canonicalization and
 # adjoint construction, valid index_scope wrapping, explicit notation conversions and the
 # shared domain planner replacing public family passes.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Plain-Atom typed admission and canonical index registration
+# match the maintained notes; the former tensor-alias implementation remains archived.
+# Evaluator scalar aliases are a separate downstream owner.
 digest = "ccbcffa11a97dab555ad9b97182f7f4036520ab9"
 
 [[section.note]]
@@ -435,7 +533,9 @@ anchor = "pub trait TensorStructure {"
 # Reviewed 2026-09-14: the note distinguishes canonical layouts from pending
 # index permutations and records backend features and portable attachments.
 # Reviewed 2026-09-23: Structure and network ownership remain in Spenso; parsing preserves fresh dummy indices.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Checked slot access and representation metadata enforce the
+# existing logical-interface contract. Symbolic unresolved slots and finite component
+# execution remain distinct.
 digest = "c324b7b72073391cbd6d4d5f97dd7db31b4ff320"
 
 [[section.note.scope]]
@@ -446,7 +546,9 @@ anchor = "pub enum DataTensor<T, I = OrderedStructure> {"
 # explicit storage reindexing replace the previous permuted wrapper.
 # Reviewed 2026-10-12: Capability feature names and formatting are updated;
 # the reviewed implementation and data contracts are unchanged.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Shadowing feature ownership and typed storage/layout boundaries
+# already match the note. Test/import migration preserves finite tensor storage and
+# contraction semantics.
 digest = "f0e8de6af46e1464919245b04739bb6c8fb20eb2"
 
 [[section.note.scope]]
@@ -470,7 +572,9 @@ anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # Documentation-impact review 2026-09-29: documented occurrence-local mapping,
 # simultaneous port reindexing, bound-port materialization, logical versus storage layouts
 # and graph-derived arithmetic state.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Sparse coordinate-permutation repair enforces documented
+# logical slot alignment. Borrowed operation graphs, execution ownership and verbose-
+# profile controls remain as described.
 digest = "022085d55aacc0d51b944997a83c4ed4cd429d16"
 
 [[section.note.scope]]
@@ -488,7 +592,9 @@ anchor = "pub struct ParseSettings {"
 # instrumentation; ordinary admission and materialization retain checked paths.
 # Test-only follow-up 2026-09-29: the existing Symbolica initializer reserves
 # the collision fixture before concurrent tests; production parsing is unchanged.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: The parsing note now records original admitted index spelling
+# without callback replay, compatible rank-one dot admission and metric syntax for
+# partial contractions. Scalar execution already documents MinIntermediateCost.
 digest = "6a90b9c6cbd74ed6561f6d355ada3bc7a799457b"
 
 [[section.note.scope]]
@@ -535,7 +641,9 @@ anchor = "pub trait IndexTooling {"
 # Reviewed 2026-09-23: Idenso retains symbolic tensor algebra and staged simplification; structural network ownership remains in Spenso.
 # Reviewed 2026-09-29: index canonicalization reconstructs the admitted graph
 # without implicit algebra; conjugation and scoped index tooling use the shared tensor owner.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Plain-Atom typed admission and canonical index registration
+# match the maintained notes; the former tensor-alias implementation remains archived.
+# Evaluator scalar aliases are a separate downstream owner.
 digest = "ccbcffa11a97dab555ad9b97182f7f4036520ab9"
 
 [[section.note.scope]]
@@ -546,7 +654,9 @@ anchor = "pub struct CookSettings {"
 # without changing selected tags or transformation behavior.
 # Reviewed 2026-09-29: explicit reversible dimension cooking and its checked
 # portable arithmetic subset are documented separately from function/index cooking.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Expression-local memoization preserves reversible cooking and
+# original admitted names; it does not introduce a second normalization or persistence
+# boundary.
 digest = "681ba4265136ebb3d377f7a3db015821a11491ad"
 
 [[section.note.scope]]
@@ -559,7 +669,9 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # Reviewed 2026-09-23: Idenso retains symbolic tensor algebra and staged simplification; structural network ownership remains in Spenso.
 # Reviewed 2026-09-29: the same carrier owns partial and aliased interfaces,
 # trusted validation, domain observations and reusable opaque-leaf proofs.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: The documented typed interface remains authoritative for scalar
+# zero, declared open ports and callback validation. Reconciliation retains plain-Atom
+# storage and checked interfaces.
 digest = "09cad935c92903ee530cd789b803e3e001305470"
 
 [[section.note.scope]]
@@ -580,7 +692,9 @@ anchor = "pub struct ContractSettings<'a> {"
 # external-boundary proof after substitution, with stable completed reruns.
 # Reviewed performance follow-up: domain contraction borrows the existing
 # registry, reports additions only, and resolves original bindings on demand.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Contraction and algebra share the documented regional scheduler
+# with independent permissions. Factorized coefficients and logical interfaces retain
+# the shared graph/tape owner.
 digest = "0ec4859455f2b7a71d319a843fc1486167b5ad3d"
 
 [[section.note.scope]]
@@ -591,7 +705,9 @@ anchor = "pub struct AlgebraSettings {"
 # planner, with incremental observations, dependency invalidation and exact caps.
 # Reviewed performance follow-up: observed no-op prerequisites precede budget
 # admission; exact completion policies survive only unchanged domains.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: The note covers the unified scheduler and selected identity
+# families. Removed tensor-coefficient alias plumbing is reflected in the GammaLoop
+# summary; evaluator scalar aliases remain separate.
 digest = "240d92e3bab01bca7feedfb421066572f29c3899"
 
 [[section.note.scope]]
@@ -601,7 +717,9 @@ anchor = "pub(crate) struct DomainObservations {"
 # Reviewed 2026-09-29: regional head multiplicities, source ports, dummy names,
 # and maximum per-branch incidence share one observation traversal. Replacements
 # reuse unchanged regions and invalidate only affected interface facts.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Borrowed regional observations retain branch-local slots and
+# callback-sensitive validation. The note distinguishes admitted facts from explicit
+# component execution.
 digest = "17c9fc628ce90f8a60165660e014bf477e610040"
 
 
@@ -613,7 +731,9 @@ anchor = "    fn simplify_product("
 # collected color-product owner. Main's cubic/ordered-chain reference cases
 # use explicit reversible dimension admission instead of the retired raw
 # whole-expression Schur/Fierz helper path.
-# Reviewed 2026-10-15: reconciled source retains the documented typed/native owner.
+# Reviewed 2026-10-15: Color reduction uses the typed regional owner and preserves
+# unrelated spin/momentum coefficients. Native tag and fixture migration retain exact
+# color and collision assertions.
 digest = "2361bd76b48391fdb441b457a41fc6e55b7d61df"
 
 [[section.note]]
@@ -735,7 +855,11 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-09-23: Native FeynKit reduction remains the default and FORM remains an explicit backend; external evaluation ownership is unchanged.
 # Reviewed 2026-09-29: documented filtered native projection, opaque vector
 # metadata, branch-local dimensions, independent power scopes, and usage citations.
-digest = "edbe3c2c0802da9194d30f64603b1c497d18abc4"
+# Reviewed 2026-10-15: Both tensor modes share ScalarTerms coefficient kernels before
+# scalar backend evaluation and final Laurent projection. Whole AlphaLoop tensor
+# reduction protects only loop-independent Lorentz scalars; native ports and supported
+# compact/indexed syntax remain explicit.
+digest = "8ab00d4b0492fa752bfabd69195a2186f08614b2"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -767,7 +891,33 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-09-23: Native FeynKit reduction remains the default and FORM remains an explicit backend; external evaluation ownership is unchanged.
 # Reviewed 2026-09-29: the note records the symbolica.community.hepkit.vakint namespace and cumulative
 # citation hook; wrappers still delegate evaluation and error conversion to Rust.
-digest = "8c4ae30cd8255b79da4f501833c84e8a16e6de59"
+# Reviewed 2026-10-15: Python backend settings and complex numerical substitutions
+# retain the documented API boundary. Physical PySecDec integration remains manual;
+# pure adapter tests remain automatic.
+digest = "ed9496f4848c867bf0da7d51378705f0f06d312d"
+
+[[section.note.scope]]
+path = "crates/vakint/src/lorentz.rs"
+symbol = "vakint::lorentz::LorentzTensor native incidence"
+anchor = "impl LorentzTensor {"
+end_anchor = "#[cfg(test)]"
+# Reviewed 2026-10-15: Complete represented slots and declared projector markers
+# retain actual native incidence. Hidden compound interfaces and loop-dependent native
+# leaves are rejected; ordinary raw loop/external pairs still contract.
+# Draft only: compute the final digest after bridge and prose review.
+digest = "7aad07324120a92b0666e358cf6bde7e996149e3"
+
+[[section.note.scope]]
+path = "crates/vakint/src/projection.rs"
+symbol = "vakint::projection::ScalarTerms analytic coefficient boundary"
+anchor = "impl ScalarTerms {"
+end_anchor = "    /// Every coefficient is evaluated at the supplied point before one"
+# Reviewed 2026-10-15: Scalar loop inventory, collision-checked coefficient
+# protection, backend kernels and Laurent guards share this owner. Both scalar modes
+# preserve coefficient factors; whole-FORM protection additionally requires a closed
+# Lorentz interface.
+# Draft only: compute the final digest after bridge and prose review.
+digest = "faee7fa232d9dd355e96826a5a49f66db9de802c"
 
 [[section.note]]
 id = "cff-surface-cache-ownership"
@@ -1212,7 +1362,9 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # Reviewed 2026-10-12: ABI/Python capability names are updated and
 # watcher/server checks are grouped under watch; reusable compiler and
 # terminal publication boundaries are retained.
-digest = "2c7dc06eb8221eb03f5d2925fbea9dc4fd61536d"
+# Reviewed 2026-10-15: The live registry remains the source of authored note/product
+# inputs. Historical CI experiments defer current policy to ci.typ.
+digest = "a6e8d348f30ef64d9c936604c62dcb59ca635d1a"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1229,7 +1381,10 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # Source-scope review 2026-09-29 against commit 37e804d5: the sole range delta stages the
 # packaged Spenso stub for paired exporter validation. The note records this terminal
 # source input; reusable producer ownership is unchanged.
-digest = "4310739439035f395a1b42aabd6392cfa1b7fcc0"
+# Reviewed 2026-10-15: Declared notes and native product assets remain explicit
+# documentation inputs. Current producer/runtime separation and all six products match
+# the maintained note.
+digest = "d25b60f920d763e030505a5d7a2bc100566936e9"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1238,7 +1393,10 @@ anchor = "workspaceDependencyManifestFiles ="
 end_anchor = "cargoGraphGenerationSrc ="
 # No architecture impact 2026-10-10: remove the inactive virtual-workspace
 # build.rs input; member build scripts retain the platform linking behavior.
-digest = "1783ac735c1881e1fc45d30750138beccf1e2814"
+# Reviewed 2026-10-15: Dependency manifests remain the compilation input tier. Current
+# CI policy retains selected local checks, artifact upload and the existing
+# performance trigger.
+digest = "6ae7769a5fab0c19db4004118a07e14882b6f4af"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1265,7 +1423,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Source-scope review 2026-09-29 against commit 6c4159e6: the sole range delta gives
 # feynkit-amplitude tests the existing model fixture directory. The note records package
 # fixture ownership; producer partitioning is unchanged.
-digest = "e95800cb84eb701c525f2cc9abcfada8a37bc7c3"
+# Reviewed 2026-10-15: Annotated-item paths remain derived from the catalog owner,
+# preserving the documented narrow documentation source-filter boundary.
+digest = "8d509a545a9faa89ae05d43a7265b4a8e3744f07"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1287,7 +1447,10 @@ end_anchor = "\nin\n{\n  inherit"
 # Source-scope review 2026-09-29 against commit 19a56863: the sole range delta adds
 # feynkit_amplitude to terminal Rust reference assertions. The note records the extra
 # route; artifact consumers and cache boundaries are unchanged.
-digest = "0445127b9fc9d568313cf94890dff2855408511d"
+# Reviewed 2026-10-15: Documentation keeps its producer/runtime distinction. Four-
+# minute ordinary tests, larger main-push workloads and final-review performance
+# triggers remain owned by ci.typ.
+digest = "59d71a304a2ed326189de22f9b01149e38bf34e2"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1298,6 +1461,8 @@ end_anchor = "sortedUnique ="
 # Jujutsu workspaces; the terminal test closure supplies both Git and Jujutsu.
 # No-impact attestation 2026-09-29: the Clinnet group gains the pinned Typst
 # runtime tool so its Typst tests run; documentation groups are unchanged.
+# Reviewed 2026-10-15: Package grouping remains part of runtime producer selection;
+# this historical note defers current limits and trigger policy to ci.typ.
 digest = "0a568cb5712045aee37d96bfb2f91d3d32b7e9b9"
 
 [[section.note.scope]]
@@ -1305,6 +1470,8 @@ path = "nix/rust-workspace.nix"
 symbol = "nextestRuntimeSrcFor"
 anchor = "nextestRuntimeSrcFor ="
 end_anchor = "nextestFeatureArgsFor ="
+# Reviewed 2026-10-15: Runtime source selection retains the producer/runtime split.
+# Reconciliation does not add feature-branch performance triggers.
 digest = "e70efccc2a78b7ab7b002facfefa375418e590f0"
 
 [[section.note.scope]]

@@ -829,8 +829,11 @@ impl Integrated<'_> {
         // gamma matrices. Complete their d-dimensional algebra before Vakint
         // expands scalar coefficients in epsilon; otherwise an evanescent
         // contraction can multiply a pole only after its finite term was lost.
-        let numerator = Vakint::convert_to_dot_notation(self.vakint_settings, numerator.as_view())?;
-        let numerator = Self::restore_numerator(numerator, topology_order);
+        // The projected expression contains native gamma/fixed-vector leaves
+        // alongside Vakint momenta and metrics. Restore their shared typed
+        // interface before contraction; the scalar-only Vakint dot parser
+        // cannot account for ports carried by those native tensor leaves.
+        let numerator = Self::restore_numerator(numerator.clone(), topology_order);
         let numerator = simplify(&numerator)?;
         Self::ensure_resolved_lorentz_contractions(&numerator)?;
         let numerator = Self::dimensionally_regularized(&numerator)
@@ -935,6 +938,26 @@ impl Integrated<'_> {
         // Projector indices may close two opaque tensor leaves. Restore their
         // complete Minkowski representation before exposing the tensor bodies.
         let mink = Minkowski {}.new_rep(GS.dim);
+        let minkowski = mink.to_symbolic([]).get_symbol().unwrap();
+        let regulated_dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        // The projector works in 4-2*epsilon while opaque source slots retain
+        // d. These are the same Lorentz representation; unify only metadata,
+        // leaving every scalar evanescent coefficient for the later expansion.
+        res = res
+            .replace(function!(minkowski, &regulated_dimension, W_.x___))
+            .with(function!(minkowski, GS.dim, W_.x___))
+            .replace(function!(
+                minkowski,
+                W_.d_,
+                vakint::symbols::S.dot_dummy_ind(W_.j_)
+            ))
+            .when(W_.j_.filter(|r| r.is_integer().is_true()))
+            .with(function!(
+                minkowski,
+                W_.d_,
+                function!(GS.uvaind, topology_order, W_.j_)
+            ));
+
         let mut projected_indices = std::collections::BTreeMap::new();
         res = res.replace_map(|view, _, out| {
             if matches!(view, AtomView::Fun(index) if index.get_symbol() == vakint::symbols::S.tensor_index) {
@@ -956,94 +979,83 @@ impl Integrated<'_> {
 
         let vk_metric = vakint_symbol!("g");
 
-        // Vakint scalar products omit vector ports. Restore the compact
-        // Minkowski port before the shared tensor owner inspects their leaves.
+        // Vakint momenta omit their compact ports, whereas fixed native
+        // vectors retain them. Restore both operands of the same dot without
+        // removing or reconstructing the fixed vector's actual tensor leaf.
         res = res.replace_map(|view, _, out| {
             let AtomView::Fun(dot) = view else { return };
             if dot.get_symbol() != vakint::symbols::S.dot || dot.get_nargs() != 2 {
                 return;
             }
-            let (AtomView::Fun(left), AtomView::Fun(right)) = (dot.get(0), dot.get(1)) else {
-                return;
-            };
-            let heads = [vakint::symbols::S.k, vakint::symbols::S.p];
-            if left.get_nargs() != 1
-                || right.get_nargs() != 1
-                || !heads.contains(&left.get_symbol())
-                || !heads.contains(&right.get_symbol())
-            {
-                return;
-            }
-            let restored = [left, right].map(|vector| {
-                let head = if vector.get_symbol() == vakint::symbols::S.k {
-                    GS.loop_mom
+            let restored = [dot.get(0), dot.get(1)].map(|vector| {
+                if let AtomView::Fun(momentum) = vector
+                    && [vakint::symbols::S.k, vakint::symbols::S.p].contains(&momentum.get_symbol())
+                    && momentum.get_nargs() == 1
+                {
+                    let head = if momentum.get_symbol() == vakint::symbols::S.k {
+                        GS.loop_mom
+                    } else {
+                        GS.emr_mom
+                    };
+                    function!(head, momentum.get(0), mink.to_symbolic([]))
                 } else {
-                    GS.emr_mom
-                };
-                function!(head, vector.get(0), mink.to_symbolic([]))
+                    vector.to_owned()
+                }
             });
             **out = function!(SPENSO_TAG.dot, &restored[0], &restored[1]);
         });
 
-        // apply metric
-        res = res
-            .replace(vakint::symbols::S.p.call_args([W_.i_, W_.j_]))
-            .when(W_.j_.filter(|r| r.is_integer().is_true()))
-            .with(
-                vakint::symbols::S.p.call_args([
-                    Atom::var(W_.i_),
-                    mink.to_symbolic([GS
-                        .uvaind
-                        .call_args([Atom::num(topology_order), Atom::var(W_.j_)])]),
-                ]),
-            )
-            .replace(
-                vakint::symbols::S
-                    .p
-                    .call_args([Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
-            )
-            .when(W_.j_.filter(|r| r.is_integer().is_true()))
-            .with(
-                vakint::symbols::S.p.call_args([
-                    Atom::var(W_.i_),
-                    mink.to_symbolic([GS
-                        .uvaind
-                        .call_args([Atom::num(topology_order), Atom::var(W_.j_)])]),
-                ]),
-            )
-            .replace(vakint::symbols::S.p.call_args([W_.x__]))
-            .with(GS.emr_mom.call_args([W_.x__]));
-        res = res
-            .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
-            .with(function!(GS.emr_mom, W_.x___, W_.y_))
-            .replace(function!(
-                vk_metric,
-                vakint::symbols::S.dot_dummy_ind(W_.x_),
-                W_.y_
-            ))
-            .when(W_.x_.filter(|r| r.is_integer().is_true()))
-            .with(function!(
-                vk_metric,
-                mink.to_symbolic([GS
-                    .uvaind
-                    .call_args([Atom::num(topology_order), Atom::var(W_.x_)])]),
-                W_.y_
-            ))
-            .replace(function!(
-                vk_metric,
-                W_.x_,
-                vakint::symbols::S.dot_dummy_ind(W_.y_)
-            ))
-            .when(W_.y_.filter(|r| r.is_integer().is_true()))
-            .with(function!(
-                vk_metric,
-                mink.to_symbolic([GS
-                    .uvaind
-                    .call_args([Atom::num(topology_order), Atom::var(W_.y_)])]),
-                W_.x_
-            ))
-            .replace(function!(vk_metric, W_.x_, W_.y_))
-            .with(function!(ETS.metric, W_.x_, W_.y_));
+        // Raw indexed momenta also occur when dot notation is disabled. Bind
+        // loop and external indices in the same topology-local chart before
+        // the native tensor owner contracts them with projected metrics.
+        for (source, target) in [
+            (vakint::symbols::S.k, GS.loop_mom),
+            (vakint::symbols::S.p, GS.emr_mom),
+        ] {
+            res = res
+                .replace(function!(source, W_.i_, W_.j_))
+                .when(W_.j_.filter(|r| r.is_integer().is_true()))
+                .with(function!(
+                    source,
+                    W_.i_,
+                    mink.to_symbolic([function!(GS.uvaind, topology_order, W_.j_)])
+                ))
+                .replace(function!(
+                    source,
+                    W_.i_,
+                    vakint::symbols::S.dot_dummy_ind(W_.j_)
+                ))
+                .when(W_.j_.filter(|r| r.is_integer().is_true()))
+                .with(function!(
+                    source,
+                    W_.i_,
+                    mink.to_symbolic([function!(GS.uvaind, topology_order, W_.j_)])
+                ))
+                .replace(function!(source, W_.x___))
+                .with(function!(target, W_.x___));
+        }
+        res = res.replace_map(|view, _, out| {
+            let AtomView::Fun(metric) = view else { return };
+            if metric.get_symbol() != vk_metric || metric.get_nargs() != 2 {
+                return;
+            }
+            let slots = [metric.get(0), metric.get(1)].map(|slot| {
+                let raw_index = if let AtomView::Fun(index) = slot
+                    && index.get_symbol() == vakint::symbols::S.dot_dummy_ind
+                    && index.get_nargs() == 1
+                {
+                    index.get(0)
+                } else {
+                    slot
+                };
+                if raw_index.is_integer().is_true() {
+                    mink.to_symbolic([function!(GS.uvaind, topology_order, raw_index)])
+                } else {
+                    slot.to_owned()
+                }
+            });
+            **out = function!(ETS.metric, &slots[0], &slots[1]);
+        });
 
         res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
 
@@ -1066,12 +1078,29 @@ impl Integrated<'_> {
             .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___))
-            .replace(function!(
-                SPENSO_TAG.dot,
-                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
-                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
-            ))
-            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
+            .replace_map(|view, _, out| {
+                let AtomView::Fun(dot) = view else { return };
+                if dot.get_symbol() != SPENSO_TAG.dot || dot.get_nargs() != 2 {
+                    return;
+                }
+                let vectors = [dot.get(0), dot.get(1)].map(|vector| {
+                    if let AtomView::Fun(momentum) = vector
+                        && [vakint::symbols::S.k, vakint::symbols::S.p]
+                            .contains(&momentum.get_symbol())
+                        && momentum.get_nargs() == 2
+                        && momentum.get(1)
+                            == (Minkowski {}).new_rep(GS.dim).to_symbolic([]).as_view()
+                    {
+                        function!(momentum.get_symbol(), momentum.get(0))
+                    } else {
+                        // Only Vakint momenta have an implicit representation.
+                        // A fixed vector must retain its native compact port so
+                        // angular projection restores the actual tensor leaf.
+                        vector.to_owned()
+                    }
+                });
+                **out = vakint::symbols::S.dot(&vectors[0], &vectors[1]);
+            })
             .replace(function!(
                 ETS.metric,
                 Minkowski {}.to_symbolic([W_.a__]),
@@ -1958,22 +1987,26 @@ mod tests {
                         let expected = &spectator
                             * function!(vakint::symbols::S.k, 7, &reserved)
                             * function!(reserved_vector, &reserved)
-                            * vakint::symbols::S.dot(
-                                function!(GS.delta_vec, GS.cind(0)),
-                                function!(vakint::symbols::S.p, 8),
-                            )
+                            * vakint::symbols::S
+                                .dot(&temporal, &function!(vakint::symbols::S.p, 8))
                             * coefficient.pow(power)
                             * vakint::symbols::S
-                                .dot(
-                                    function!(GS.delta_vec, GS.cind(0)),
-                                    function!(converted_head, 7),
-                                )
+                                .dot(&temporal, &function!(converted_head, 7))
                                 .pow(power);
                         assert_eq!(
                             converted, expected,
                             "vector={vector}, coefficient={coefficient}, power={power}"
                         );
                         assert!(!converted.contains_symbol(SPENSO_TAG.dot));
+                        assert_eq!(
+                            Integrated::to_vakint_numerator(&Integrated::restore_numerator(
+                                converted.clone(),
+                                0
+                            ))
+                            .unwrap(),
+                            converted,
+                            "native fixed-vector and momentum ports roundtrip exactly"
+                        );
                         assert!(
                             converted
                                 .pattern_match(&spectator.to_pattern(), None, None)
@@ -1993,6 +2026,161 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn projected_temporal_and_external_slashes_share_a_native_interface() -> Result<()> {
+        use idenso::shorthands::UndoShorthands;
+
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let nu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let bis = Bispinor {}.new_rep(4);
+        let a = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let b = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let c = bis.to_symbolic([Aind::new_dummy().to_atom()]);
+        let compact = mink.to_symbolic([]);
+        let temporal = GS.energy_delta(&compact);
+        let k = function!(GS.loop_mom, 1, &compact);
+        let p = function!(GS.emr_mom, 0, &compact);
+        let mass = Atom::var(symbol!("projected_temporal::mass"; Scalar));
+        let spectator = (Atom::var(symbol!("projected_temporal::x"; Scalar))
+            + Atom::var(symbol!("projected_temporal::y"; Scalar)))
+        .pow(11);
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let source = &spectator
+            * (Atom::var(GS.dim) - Atom::num(4))
+            * (function!(SPENSO_TAG.dot, &k, Atom::num(3) * &mass * &temporal)
+                * function!(GS.loop_mom, 1, &mu)
+                * function!(AGS.gamma, &a, &b, &mu)
+                * function!(AGS.gamma0, &b, &c)
+                + function!(SPENSO_TAG.dot, &k, &p)
+                    * function!(GS.loop_mom, 1, &nu)
+                    * function!(AGS.gamma, &a, &c, &nu));
+        // Independently, <k_mu k_nu> = k^2 g_mu_nu/d and
+        // slash(e0) gamma0 = 1. Both terms therefore share the open (a,c)
+        // spinor interface; the evanescent factor is kept before pole expansion.
+        let reference = &spectator * Atom::num(-2) * &epsilon / &dimension
+            * function!(SPENSO_TAG.dot, &k, &k)
+            * (Atom::num(3) * &mass * function!(ETS.metric, &a, &c)
+                + function!(AGS.gamma, &a, &c, &p));
+        let expected = Integrated::to_vakint_numerator(&reference)?;
+        // FeynKit consumes the native compact fixed-vector form directly.
+        // The independent cross-backend comparison also materializes exactly
+        // those vector arguments, as required by AlphaLoop's existing input
+        // notation, without distributing surrounding numerator factors.
+        for (tensor_reduction_method, compact_fixed_vectors) in [
+            (vakint::TensorReductionMethod::FeynKit, true),
+            (vakint::TensorReductionMethod::FeynKit, false),
+            (vakint::TensorReductionMethod::AlphaLoop, false),
+        ] {
+            for project_onto_tensor_integrals in [false, true] {
+                for use_dot_product_notation in [false, true] {
+                    let settings = vakint::VakintSettings {
+                        number_of_terms_in_epsilon_expansion: 3,
+                        tensor_reduction_method,
+                        project_onto_tensor_integrals,
+                        use_dot_product_notation,
+                        ..VakintSettings::default().true_settings()
+                    };
+                    let numerator = if compact_fixed_vectors {
+                        Integrated::to_vakint_numerator(&source)?
+                    } else {
+                        source
+                            .undo_dots::<Aind>()?
+                            .replace(function!(GS.loop_mom, W_.x___))
+                            .with(function!(vakint::symbols::S.k, W_.x___))
+                            .replace(function!(GS.emr_mom, W_.x___))
+                            .with(function!(vakint::symbols::S.p, W_.x___))
+                    };
+                    let mut term = vakint::VakintTerm {
+                        integral: vakint::vakint_parse!("topo(I1L(projected_mass_squared,3))")
+                            .unwrap(),
+                        numerator,
+                        vectors: vec![("k".into(), 1)],
+                    };
+                    debug_tags!(#uv, #integrated, #vakint, #inspect;
+                        stage = "mixed_native_tensor_projection_input",
+                        backend = ?tensor_reduction_method,
+                        compact = compact_fixed_vectors,
+                        projected = project_onto_tensor_integrals,
+                        dots = use_dot_product_notation,
+                        file.numerator = %term.numerator.to_canonical_string(),
+                        "Exact mixed fixed-vector input before tensor projection"
+                    );
+                    term.tensor_reduce(&vakint, &settings).wrap_err_with(|| format!(
+                        "mixed native input: backend={tensor_reduction_method:?}, compact={compact_fixed_vectors}, projected={project_onto_tensor_integrals}, dots={use_dot_product_notation}"
+                    ))?;
+                    let resolved = Integrated::new(&vakint, &settings)
+                        .simplify_projected_numerator(&term.numerator, 0)?;
+                    assert!(
+                        resolved
+                            .pattern_match(&spectator.to_pattern(), None, None)
+                            .next()
+                            .is_some()
+                    );
+                    // Remove the identical opaque spectator before exact scalar
+                    // coefficient cancellation; never distribute its powered sum.
+                    let difference = resolved.replace(spectator.to_pattern()).with(1)
+                        - expected.replace(spectator.to_pattern()).with(1);
+                    let difference = Integrated::restore_numerator(difference, 0);
+                    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+                    assert!(
+                        SymbolicTensor::infer(cooking.try_cook(simplify(&difference)?.as_view())?)?
+                            .coefficients_are_zero(
+                                spenso::shadowing::TensorCollectFilter::<0>::Tensors
+                            )?
+                            .is_true(),
+                        "backend={tensor_reduction_method:?}, compact={compact_fixed_vectors}, projected={project_onto_tensor_integrals}, dots={use_dot_product_notation}"
+                    );
+                    let mut scalar = vakint::VakintTerm {
+                        integral: term.integral.clone(),
+                        numerator: vakint::symbols::S.dot(
+                            function!(vakint::symbols::S.k, 1),
+                            function!(vakint::symbols::S.k, 1),
+                        ),
+                        vectors: term.vectors.clone(),
+                    };
+                    term.numerator = resolved;
+                    term.evaluate_integral(&vakint, &settings)?;
+                    scalar.evaluate_integral(&vakint, &settings)?;
+                    let spin = Atom::num(3) * &mass * function!(ETS.metric, &a, &c)
+                        + function!(AGS.gamma, &a, &c, &p);
+                    // Expand only the scalar Laurent coefficient. The spin
+                    // matrix and powered spectator remain literal factors in
+                    // both the result and this independent reference.
+                    let scalar_reference = series(
+                        &(Atom::num(-2) * &epsilon / &dimension * &scalar.numerator),
+                        1,
+                    )?
+                    .to_atom();
+                    let expected_integral = &spectator * spin * scalar_reference;
+                    assert!(
+                        term.numerator
+                            .pattern_match(&spectator.to_pattern(), None, None)
+                            .next()
+                            .is_some()
+                    );
+                    let difference = Integrated::restore_numerator(
+                        term.numerator.replace(spectator.to_pattern()).with(1),
+                        0,
+                    ) - expected_integral.replace(spectator.to_pattern()).with(1);
+                    let difference = simplify(&difference)?;
+                    assert!(
+                        SymbolicTensor::infer(cooking.try_cook(difference.as_view())?)?
+                            .coefficients_are_zero(
+                                spenso::shadowing::TensorCollectFilter::<0>::Tensors
+                            )?
+                            .is_true(),
+                        "backend={tensor_reduction_method:?}, compact={compact_fixed_vectors}, projected={project_onto_tensor_integrals}, dots={use_dot_product_notation}: {difference}"
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]
@@ -2412,6 +2600,37 @@ mod tests {
     }
 
     #[test]
+    fn restored_projector_indices_are_fresh_after_dimension_unification() {
+        test_initialise().unwrap();
+        let Aind::Dummy(previous) = Aind::new_dummy() else {
+            unreachable!()
+        };
+        let reserved_index = Aind::new_dummy_at(previous + 1).to_atom();
+        let native = Minkowski {}.new_rep(GS.dim).to_symbolic([reserved_index]);
+        let regulated = native
+            .replace(GS.dim)
+            .with(Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon));
+        let first = spenso::tensor_symbol!("reserved_projector_port");
+        let second = spenso::tensor_symbol!("fresh_projector_port");
+        let input = function!(first, regulated)
+            * function!(second, function!(vakint::symbols::S.tensor_index, 1, 0));
+        let restored = Integrated::restore_numerator(input, 0);
+        assert!(!restored.contains_symbol(vakint::symbols::S.tensor_index));
+        assert!(
+            restored
+                .pattern_match(&function!(first, &native).to_pattern(), None, None)
+                .next()
+                .is_some()
+        );
+        assert!(
+            restored
+                .pattern_match(&function!(second, &native).to_pattern(), None, None)
+                .next()
+                .is_none()
+        );
+    }
+
+    #[test]
     fn scalar_dimensions_are_substituted_inside_functions_but_not_lorentz_slots() {
         test_initialise().unwrap();
         let slot = Minkowski {}
@@ -2425,6 +2644,14 @@ mod tests {
             Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon)
         ) * function!(tensor, &slot);
         assert_eq!(Integrated::dimensionally_regularized(&input), expected);
+        let dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        let projected_slot = slot.replace(GS.dim).with(dimension);
+        let evanescent = Atom::var(GS.dim) - Atom::num(4);
+        assert_eq!(
+            Integrated::restore_numerator(&evanescent * function!(tensor, projected_slot), 0),
+            evanescent * function!(tensor, &slot),
+            "restoration unifies Lorentz metadata without changing scalar d dependence"
+        );
     }
 
     #[test]
@@ -2780,28 +3007,7 @@ mod tests {
             function!(GS.loop_mom, 1, mink.clone())
         );
 
-        let converted = SymbolicTensor::infer(numerator)
-            .unwrap()
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })
-            .unwrap()
-            .to_dots()
-            .unwrap()
-            .into_expression()
-            .replace(function!(GS.loop_mom, W_.x___))
-            .with(function!(vakint::symbols::S.k, W_.x___))
-            .replace(function!(GS.emr_mom, W_.x___))
-            .with(function!(vakint::symbols::S.p, W_.x___))
-            .replace(function!(
-                SPENSO_TAG.dot,
-                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
-                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
-            ))
-            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)));
+        let converted = Integrated::to_vakint_numerator(&numerator).unwrap();
 
         assert_eq!(
             converted,
