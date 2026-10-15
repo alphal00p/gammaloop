@@ -832,7 +832,7 @@
             "source": {
               "identifier": "gammaloop_api::state::State::get_integrand_info",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 2294,
+              "line": 2304,
               "column": 1
             }
           },
@@ -1080,7 +1080,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::import::model::ImportModel::run",
               "file": "crates/gammaloop-api/src/commands/import/model.rs",
-              "line": 192,
+              "line": 226,
               "column": 1
             }
           },
@@ -1510,7 +1510,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::integrate::Integrate",
               "file": "crates/gammaloop-api/src/commands/integrate.rs",
-              "line": 68,
+              "line": 70,
               "column": 1
             }
           },
@@ -1567,7 +1567,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::integrate::Integrate::run",
               "file": "crates/gammaloop-api/src/commands/integrate.rs",
-              "line": 1696,
+              "line": 1717,
               "column": 1
             }
           },
@@ -1633,7 +1633,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::integrate::IntegrationOutput",
               "file": "crates/gammaloop-api/src/commands/integrate.rs",
-              "line": 193,
+              "line": 195,
               "column": 1
             }
           },
@@ -2243,7 +2243,7 @@
             "source": {
               "identifier": "gammaloop_api::state::StateFolderKind",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1722,
+              "line": 1732,
               "column": 1
             }
           },
@@ -2286,7 +2286,7 @@
             "source": {
               "identifier": "gammaloop_api::state::classify_state_folder",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1740,
+              "line": 1750,
               "column": 1
             }
           },

@@ -1,0 +1,338 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/gammalooprs/src/integrands/process/fermi_surface.rs`."><title>fermi_surface.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="gammalooprs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="stylesheet" href="../../../../theme.css"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="alphal00p-rustdoc-bar" aria-label="αLoop documentation"><a href="https://alphal00p.github.io/gammaloop/">αLoop docs</a><span aria-hidden="true">/</span><span>GammaLoop · Rust API</span></nav>
+<nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">gammalooprs/integrands/process/</div>fermi_surface.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Localization of zero-temperature distribution derivatives on independent cyclic chains.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! Each factor `N^(r)(E)` becomes `delta^(r-1)(E - sigma*mu)`. The CFF coefficient
+<a href=#4 id=4 data-nosnippet>4</a>//! already owns the cyclic-chain sign and factorial. This module supplies the
+<a href=#5 id=5 data-nosnippet>5</a>//! distribution action and spatial measure, and evaluates compiled smooth
+<a href=#6 id=6 data-nosnippet>6</a>//! coefficients in the amplitude's existing momentum and parameter layout.
+<a href=#7 id=7 data-nosnippet>7</a>//!
+<a href=#8 id=8 data-nosnippet>8</a>//! In a basis containing one edge from each chain, insert a normalized positive
+<a href=#9 id=9 data-nosnippet>9</a>//! scale integral and dilate that edge momentum, `q = t*k`. With shell offset
+<a href=#10 id=10 data-nosnippet>10</a>//! `u = E - sigma*mu`, the inverse map is analytic:
+<a href=#11 id=11 data-nosnippet>11</a>//! `t(u) = sqrt((sigma*mu + u)^2 - m^2) / |k|`. Its complete weight is
+<a href=#12 id=12 data-nosnippet>12</a>//! `h(t) * t^3 / g'(t) = h(t) * E * (E^2 - m^2) / |k|^4`.
+<a href=#13 id=13 data-nosnippet>13</a>//! Evaluating this weight and the coefficient on energy-offset jets implements
+<a href=#14 id=14 data-nosnippet>14</a>//! the same change-of-variable derivative as a raised-cut residue, including
+<a href=#15 id=15 data-nosnippet>15</a>//! every derivative of the profile, Jacobian and coefficient.
+<a href=#16 id=16 data-nosnippet>16</a>
+<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">use </span>bincode_trait_derive::{Decode, Encode};
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>color_eyre::eyre::{<span class="prelude-ty">Result</span>, eyre};
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>spenso::algebra::complex::Complex;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>symbolica::{
+<a href=#21 id=21 data-nosnippet>21</a>    domains::{
+<a href=#22 id=22 data-nosnippet>22</a>        dual::{DualNumberStructure, HyperDual},
+<a href=#23 id=23 data-nosnippet>23</a>        float::SingleFloat,
+<a href=#24 id=24 data-nosnippet>24</a>    },
+<a href=#25 id=25 data-nosnippet>25</a>    prelude::Real,
+<a href=#26 id=26 data-nosnippet>26</a>};
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>three_dimensional_reps::thermal::ThermalDistributionFactor;
+<a href=#28 id=28 data-nosnippet>28</a>
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use crate</span>::{
+<a href=#30 id=30 data-nosnippet>30</a>    graph::LoopMomentumBasis,
+<a href=#31 id=31 data-nosnippet>31</a>    integrands::process::sampling::maps::SamplingEvaluationError,
+<a href=#32 id=32 data-nosnippet>32</a>    momentum::sample::LoopMomenta,
+<a href=#33 id=33 data-nosnippet>33</a>    utils::{F, FloatLike, Length, hyperdual_utils::new_constant},
+<a href=#34 id=34 data-nosnippet>34</a>};
+<a href=#35 id=35 data-nosnippet>35</a>
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">mod </span>evaluation;
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">mod </span>routing;
+<a href=#38 id=38 data-nosnippet>38</a><span class="kw">mod </span>sectors;
+<a href=#39 id=39 data-nosnippet>39</a>
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>evaluation::FermiSurfaceEvaluator;
+<a href=#41 id=41 data-nosnippet>41</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>sectors::FermiSurfaceSector;
+<a href=#42 id=42 data-nosnippet>42</a>
+<a href=#43 id=43 data-nosnippet>43</a><span class="doccomment">/// A product of Fermi distributions whose cyclic-chain momenta are independent.
+<a href=#44 id=44 data-nosnippet>44</a>///
+<a href=#45 id=45 data-nosnippet>45</a>/// The first loop coordinates of `lmb()` follow `factors()` in order. External
+<a href=#46 id=46 data-nosnippet>46</a>/// shifts are retained in the basis routing, so the selected coordinates are
+<a href=#47 id=47 data-nosnippet>47</a>/// the actual edge momenta about which the Fermi spheres are centred.
+<a href=#48 id=48 data-nosnippet>48</a></span><span class="attr">#[derive(Clone, Debug, Encode, Decode)]
+<a href=#49 id=49 data-nosnippet>49</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>FermiSurfaceProduct {
+<a href=#50 id=50 data-nosnippet>50</a>    factors: Vec&lt;ThermalDistributionFactor&gt;,
+<a href=#51 id=51 data-nosnippet>51</a>    lmb: LoopMomentumBasis,
+<a href=#52 id=52 data-nosnippet>52</a>    derivative_orders: Vec&lt;usize&gt;,
+<a href=#53 id=53 data-nosnippet>53</a>    shape: Vec&lt;Vec&lt;usize&gt;&gt;,
+<a href=#54 id=54 data-nosnippet>54</a>}
+<a href=#55 id=55 data-nosnippet>55</a>
+<a href=#56 id=56 data-nosnippet>56</a><span class="kw">impl </span>FermiSurfaceProduct {
+<a href=#57 id=57 data-nosnippet>57</a>    <span class="doccomment">/// Localize a smooth coefficient while preserving the spatial integration dimension.
+<a href=#58 id=58 data-nosnippet>58</a>    ///
+<a href=#59 id=59 data-nosnippet>59</a>    /// `loop_momenta` is in `lmb()`. Masses and oriented chemical potentials
+<a href=#60 id=60 data-nosnippet>60</a>    /// (`sigma*mu`, not their absolute values) follow `factors()` in order;
+<a href=#61 id=61 data-nosnippet>61</a>    /// only the squared mass enters the shell. `profile(t)` must integrate to
+<a href=#62 id=62 data-nosnippet>62</a>    /// one over `t &gt; 0`.
+<a href=#63 id=63 data-nosnippet>63</a>    /// Both callbacks must return jets with the supplied shape. The coefficient
+<a href=#64 id=64 data-nosnippet>64</a>    /// includes all routed numerator/denominator dependence; the localizer owns
+<a href=#65 id=65 data-nosnippet>65</a>    /// the scale profiles, spatial dilation factors and delta Jacobians.
+<a href=#66 id=66 data-nosnippet>66</a>    ///
+<a href=#67 id=67 data-nosnippet>67</a>    /// A future conditional Cutkosky localization can be evaluated inside the
+<a href=#68 id=68 data-nosnippet>68</a>    /// coefficient callback. Its root and Jacobian must retain their dependence
+<a href=#69 id=69 data-nosnippet>69</a>    /// on all shell-offset jets before the Fermi derivatives are extracted.
+<a href=#70 id=70 data-nosnippet>70</a>    /// No delta or discontinuous step function may be numerically differentiated
+<a href=#71 id=71 data-nosnippet>71</a>    /// inside this smooth callback. Expand such derivatives symbolically first,
+<a href=#72 id=72 data-nosnippet>72</a>    /// and validate any generated intersection together with its host surface
+<a href=#73 id=73 data-nosnippet>73</a>    /// using `FermiSurfaceProduct::new`.
+<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>localize&lt;T: FloatLike&gt;(
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#76 id=76 data-nosnippet>76</a>        loop_momenta: <span class="kw-2">&amp;</span>LoopMomenta&lt;F&lt;T&gt;&gt;,
+<a href=#77 id=77 data-nosnippet>77</a>        masses: <span class="kw-2">&amp;</span>[F&lt;T&gt;],
+<a href=#78 id=78 data-nosnippet>78</a>        oriented_chemical_potentials: <span class="kw-2">&amp;</span>[F&lt;T&gt;],
+<a href=#79 id=79 data-nosnippet>79</a>        <span class="kw-2">mut </span>profile: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>HyperDual&lt;F&lt;T&gt;&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;HyperDual&lt;F&lt;T&gt;&gt;&gt;,
+<a href=#80 id=80 data-nosnippet>80</a>        coefficient: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;</span>LoopMomenta&lt;HyperDual&lt;F&lt;T&gt;&gt;&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;HyperDual&lt;Complex&lt;F&lt;T&gt;&gt;&gt;&gt;,
+<a href=#81 id=81 data-nosnippet>81</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Complex&lt;F&lt;T&gt;&gt;&gt; {
+<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw">if </span>loop_momenta.len() != <span class="self">self</span>.lmb.loop_edges.len()
+<a href=#83 id=83 data-nosnippet>83</a>            || masses.len() != <span class="self">self</span>.factors.len()
+<a href=#84 id=84 data-nosnippet>84</a>            || oriented_chemical_potentials.len() != <span class="self">self</span>.factors.len()
+<a href=#85 id=85 data-nosnippet>85</a>        {
+<a href=#86 id=86 data-nosnippet>86</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#87 id=87 data-nosnippet>87</a>                <span class="string">"Fermi localization requires {} loop momenta and {} masses/chemical potentials"</span>,
+<a href=#88 id=88 data-nosnippet>88</a>                <span class="self">self</span>.lmb.loop_edges.len(),
+<a href=#89 id=89 data-nosnippet>89</a>                <span class="self">self</span>.factors.len()
+<a href=#90 id=90 data-nosnippet>90</a>            ));
+<a href=#91 id=91 data-nosnippet>91</a>        }
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>representative = <span class="kw-2">&amp;</span>oriented_chemical_potentials[<span class="number">0</span>];
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">for </span>(index, (mass, nu)) <span class="kw">in </span>masses.iter().zip(oriented_chemical_potentials).enumerate() {
+<a href=#94 id=94 data-nosnippet>94</a>            <span class="kw">if </span>!mass.is_finite() || !nu.is_finite() {
+<a href=#95 id=95 data-nosnippet>95</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#96 id=96 data-nosnippet>96</a>                    <span class="string">"Fermi surface on edge {} requires a finite mass and finite oriented chemical potential"</span>,
+<a href=#97 id=97 data-nosnippet>97</a>                    <span class="self">self</span>.factors[index].edge_id
+<a href=#98 id=98 data-nosnippet>98</a>                ));
+<a href=#99 id=99 data-nosnippet>99</a>            }
+<a href=#100 id=100 data-nosnippet>100</a>        }
+<a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">let </span>masses = masses.iter().map(|mass| mass.abs()).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">if </span>loop_momenta.iter().any(|momentum| {
+<a href=#103 id=103 data-nosnippet>103</a>            [<span class="kw-2">&amp;</span>momentum.px, <span class="kw-2">&amp;</span>momentum.py, <span class="kw-2">&amp;</span>momentum.pz]
+<a href=#104 id=104 data-nosnippet>104</a>                .into_iter()
+<a href=#105 id=105 data-nosnippet>105</a>                .any(|value| !value.is_finite())
+<a href=#106 id=106 data-nosnippet>106</a>        }) {
+<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(SamplingEvaluationError::Unrepresentable {
+<a href=#108 id=108 data-nosnippet>108</a>                operation: <span class="string">"Fermi localization"</span>,
+<a href=#109 id=109 data-nosnippet>109</a>                detail: <span class="string">"Fermi localization requires finite loop momenta"</span>.to_owned(),
+<a href=#110 id=110 data-nosnippet>110</a>            }
+<a href=#111 id=111 data-nosnippet>111</a>            .into());
+<a href=#112 id=112 data-nosnippet>112</a>        }
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="comment">// Empty support is a physical zero, independent of the smooth coefficient.
+<a href=#114 id=114 data-nosnippet>114</a>        // A zero chemical potential leaves the occupation constant on E &gt; 0,
+<a href=#115 id=115 data-nosnippet>115</a>        // also for a massless fermion, exactly as for a particle without one.
+<a href=#116 id=116 data-nosnippet>116</a>        </span><span class="kw">if </span>masses
+<a href=#117 id=117 data-nosnippet>117</a>            .iter()
+<a href=#118 id=118 data-nosnippet>118</a>            .zip(oriented_chemical_potentials)
+<a href=#119 id=119 data-nosnippet>119</a>            .any(|(mass, nu)| nu &lt; mass || nu.is_zero())
+<a href=#120 id=120 data-nosnippet>120</a>        {
+<a href=#121 id=121 data-nosnippet>121</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(Complex::new_re(representative.zero()));
+<a href=#122 id=122 data-nosnippet>122</a>        }
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">let </span><span class="kw-2">mut </span>template = HyperDual::from_values(
+<a href=#124 id=124 data-nosnippet>124</a>            <span class="self">self</span>.shape.clone(),
+<a href=#125 id=125 data-nosnippet>125</a>            <span class="macro">vec!</span>[representative.zero(); <span class="self">self</span>.shape.len()],
+<a href=#126 id=126 data-nosnippet>126</a>        );
+<a href=#127 id=127 data-nosnippet>127</a>        template.values[<span class="number">0</span>] = representative.one();
+<a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">let </span><span class="kw-2">mut </span>momenta = LoopMomenta::from_iter(
+<a href=#129 id=129 data-nosnippet>129</a>            loop_momenta
+<a href=#130 id=130 data-nosnippet>130</a>                .iter()
+<a href=#131 id=131 data-nosnippet>131</a>                .map(|momentum| momentum.map_ref(<span class="kw-2">&amp;</span>|value| new_constant(<span class="kw-2">&amp;</span>template, value))),
+<a href=#132 id=132 data-nosnippet>132</a>        );
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">let </span><span class="kw-2">mut </span>measures = Vec::with_capacity(<span class="self">self</span>.factors.len());
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="kw">for </span>(axis, ((factor, mass), nu)) <span class="kw">in </span><span class="self">self
+<a href=#136 id=136 data-nosnippet>136</a>            </span>.factors
+<a href=#137 id=137 data-nosnippet>137</a>            .iter()
+<a href=#138 id=138 data-nosnippet>138</a>            .zip(<span class="kw-2">&amp;</span>masses)
+<a href=#139 id=139 data-nosnippet>139</a>            .zip(oriented_chemical_potentials)
+<a href=#140 id=140 data-nosnippet>140</a>            .enumerate()
+<a href=#141 id=141 data-nosnippet>141</a>        {
+<a href=#142 id=142 data-nosnippet>142</a>            <span class="comment">// Check the selected sector at its actual evaluation precision, after
+<a href=#143 id=143 data-nosnippet>143</a>            // the empty-product return above. Binary64 warm-up can round a shell
+<a href=#144 id=144 data-nosnippet>144</a>            // resolved by Quad/Arb to an apparent onset.
+<a href=#145 id=145 data-nosnippet>145</a>            </span><span class="kw">if </span>nu == mass {
+<a href=#146 id=146 data-nosnippet>146</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#147 id=147 data-nosnippet>147</a>                    <span class="string">"Degenerate Fermi surface on edge {} at sigma*mu = mass; the regular-shell localization does not define the onset"</span>,
+<a href=#148 id=148 data-nosnippet>148</a>                    factor.edge_id
+<a href=#149 id=149 data-nosnippet>149</a>                ));
+<a href=#150 id=150 data-nosnippet>150</a>            }
+<a href=#151 id=151 data-nosnippet>151</a>            <span class="kw">let </span>momentum = <span class="kw-2">&amp;</span>loop_momenta[axis.into()];
+<a href=#152 id=152 data-nosnippet>152</a>            <span class="kw">let </span>norm_squared = momentum.norm_squared();
+<a href=#153 id=153 data-nosnippet>153</a>            <span class="kw">if </span>norm_squared &lt;= representative.zero() || !norm_squared.is_finite() {
+<a href=#154 id=154 data-nosnippet>154</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(SamplingEvaluationError::Unrepresentable {
+<a href=#155 id=155 data-nosnippet>155</a>                    operation: <span class="string">"Fermi localization"</span>,
+<a href=#156 id=156 data-nosnippet>156</a>                    detail: <span class="macro">format!</span>(
+<a href=#157 id=157 data-nosnippet>157</a>                        <span class="string">"Fermi surface on edge {} requires a finite nonzero radial sampling momentum"</span>,
+<a href=#158 id=158 data-nosnippet>158</a>                        factor.edge_id
+<a href=#159 id=159 data-nosnippet>159</a>                    ),
+<a href=#160 id=160 data-nosnippet>160</a>                }
+<a href=#161 id=161 data-nosnippet>161</a>                .into());
+<a href=#162 id=162 data-nosnippet>162</a>            }
+<a href=#163 id=163 data-nosnippet>163</a>            <span class="kw">let </span><span class="kw-2">mut </span>energy = new_constant(<span class="kw-2">&amp;</span>template, nu);
+<a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">if </span><span class="self">self</span>.derivative_orders[axis] &gt; <span class="number">0 </span>{
+<a href=#165 id=165 data-nosnippet>165</a>                <span class="kw">let </span><span class="kw-2">mut </span>unit = <span class="macro">vec!</span>[<span class="number">0</span>; <span class="self">self</span>.factors.len()];
+<a href=#166 id=166 data-nosnippet>166</a>                unit[axis] = <span class="number">1</span>;
+<a href=#167 id=167 data-nosnippet>167</a>                <span class="kw">let </span>index = <span class="self">self
+<a href=#168 id=168 data-nosnippet>168</a>                    </span>.shape
+<a href=#169 id=169 data-nosnippet>169</a>                    .iter()
+<a href=#170 id=170 data-nosnippet>170</a>                    .position(|orders| <span class="kw-2">*</span>orders == unit)
+<a href=#171 id=171 data-nosnippet>171</a>                    .expect(<span class="string">"mixed derivative shape contains each active first derivative"</span>);
+<a href=#172 id=172 data-nosnippet>172</a>                energy.values[index] = representative.one();
+<a href=#173 id=173 data-nosnippet>173</a>            }
+<a href=#174 id=174 data-nosnippet>174</a>            <span class="comment">// Take square roots before multiplying, preserving representable
+<a href=#175 id=175 data-nosnippet>175</a>            // radii even when their squares underflow. The massless radius is
+<a href=#176 id=176 data-nosnippet>176</a>            // exactly E; using it directly also avoids cancelling higher jets.
+<a href=#177 id=177 data-nosnippet>177</a>            </span><span class="kw">let </span>radius = <span class="kw">if </span><span class="kw-2">*</span>mass == mass.zero() {
+<a href=#178 id=178 data-nosnippet>178</a>                energy.clone()
+<a href=#179 id=179 data-nosnippet>179</a>            } <span class="kw">else </span>{
+<a href=#180 id=180 data-nosnippet>180</a>                <span class="kw">let </span>mass = new_constant(<span class="kw-2">&amp;</span>template, mass);
+<a href=#181 id=181 data-nosnippet>181</a>                (energy.clone() - <span class="kw-2">&amp;</span>mass).sqrt() * (energy.clone() + <span class="kw-2">&amp;</span>mass).sqrt()
+<a href=#182 id=182 data-nosnippet>182</a>            };
+<a href=#183 id=183 data-nosnippet>183</a>            <span class="kw">let </span>scale = radius / new_constant(<span class="kw-2">&amp;</span>template, <span class="kw-2">&amp;</span>norm_squared.sqrt());
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="kw">if </span>scale.values[<span class="number">0</span>] &lt;= representative.zero()
+<a href=#185 id=185 data-nosnippet>185</a>                || scale.values.iter().any(|value| !value.is_finite())
+<a href=#186 id=186 data-nosnippet>186</a>            {
+<a href=#187 id=187 data-nosnippet>187</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(SamplingEvaluationError::Unrepresentable {
+<a href=#188 id=188 data-nosnippet>188</a>                    operation: <span class="string">"Fermi localization"</span>,
+<a href=#189 id=189 data-nosnippet>189</a>                    detail: <span class="macro">format!</span>(<span class="string">"Nonfinite Fermi root jet on edge {}"</span>, factor.edge_id),
+<a href=#190 id=190 data-nosnippet>190</a>                }
+<a href=#191 id=191 data-nosnippet>191</a>                .into());
+<a href=#192 id=192 data-nosnippet>192</a>            }
+<a href=#193 id=193 data-nosnippet>193</a>            <span class="kw">let </span>density = profile(<span class="kw-2">&amp;</span>scale)<span class="question-mark">?</span>;
+<a href=#194 id=194 data-nosnippet>194</a>            <span class="kw">if </span>density.get_shape() != template.get_shape()
+<a href=#195 id=195 data-nosnippet>195</a>                || density.values.len() != <span class="self">self</span>.shape.len()
+<a href=#196 id=196 data-nosnippet>196</a>            {
+<a href=#197 id=197 data-nosnippet>197</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#198 id=198 data-nosnippet>198</a>                    <span class="string">"Fermi scale profile returned an incompatible derivative shape"
+<a href=#199 id=199 data-nosnippet>199</a>                </span>));
+<a href=#200 id=200 data-nosnippet>200</a>            }
+<a href=#201 id=201 data-nosnippet>201</a>            momenta[axis.into()] =
+<a href=#202 id=202 data-nosnippet>202</a>                momentum.map_ref(<span class="kw-2">&amp;</span>|value| new_constant(<span class="kw-2">&amp;</span>template, value) * <span class="kw-2">&amp;</span>scale);
+<a href=#203 id=203 data-nosnippet>203</a>            measures.push((density, energy, scale, norm_squared));
+<a href=#204 id=204 data-nosnippet>204</a>        }
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">let </span>value = coefficient(<span class="kw-2">&amp;</span>momenta)<span class="question-mark">?</span>;
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">if </span>value.get_shape() != template.get_shape() || value.values.len() != <span class="self">self</span>.shape.len() {
+<a href=#208 id=208 data-nosnippet>208</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#209 id=209 data-nosnippet>209</a>                <span class="string">"Fermi coefficient returned an incompatible derivative shape"
+<a href=#210 id=210 data-nosnippet>210</a>            </span>));
+<a href=#211 id=211 data-nosnippet>211</a>        }
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="comment">// E*t*t/|k|^2 equals t^3/g'(t) without forming |k|^4. Keep its factors
+<a href=#213 id=213 data-nosnippet>213</a>        // separate until the coefficient is available: either multiplying the
+<a href=#214 id=214 data-nosnippet>214</a>        // small profile first or the large geometry first can lose a finite
+<a href=#215 id=215 data-nosnippet>215</a>        // fully weighted result. Logs below only choose the arithmetic order.
+<a href=#216 id=216 data-nosnippet>216</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>factors = Vec::with_capacity(<span class="number">5 </span>* measures.len());
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="kw">for </span>(density, energy, scale, norm_squared) <span class="kw">in </span>measures {
+<a href=#218 id=218 data-nosnippet>218</a>            <span class="kw">for </span>(factor, divide) <span class="kw">in </span>[
+<a href=#219 id=219 data-nosnippet>219</a>                (density, <span class="bool-val">false</span>),
+<a href=#220 id=220 data-nosnippet>220</a>                (energy, <span class="bool-val">false</span>),
+<a href=#221 id=221 data-nosnippet>221</a>                (scale.clone(), <span class="bool-val">false</span>),
+<a href=#222 id=222 data-nosnippet>222</a>                (scale, <span class="bool-val">false</span>),
+<a href=#223 id=223 data-nosnippet>223</a>                (new_constant(<span class="kw-2">&amp;</span>template, <span class="kw-2">&amp;</span>norm_squared), <span class="bool-val">true</span>),
+<a href=#224 id=224 data-nosnippet>224</a>            ] {
+<a href=#225 id=225 data-nosnippet>225</a>                <span class="kw">if </span>factor.values.iter().any(|value| !value.is_finite()) {
+<a href=#226 id=226 data-nosnippet>226</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(SamplingEvaluationError::Unrepresentable {
+<a href=#227 id=227 data-nosnippet>227</a>                        operation: <span class="string">"Fermi localization"</span>,
+<a href=#228 id=228 data-nosnippet>228</a>                        detail: <span class="string">"Nonfinite Fermi measure jet"</span>.to_owned(),
+<a href=#229 id=229 data-nosnippet>229</a>                    }
+<a href=#230 id=230 data-nosnippet>230</a>                    .into());
+<a href=#231 id=231 data-nosnippet>231</a>                }
+<a href=#232 id=232 data-nosnippet>232</a>                <span class="kw">let </span>magnitude = factor
+<a href=#233 id=233 data-nosnippet>233</a>                    .values
+<a href=#234 id=234 data-nosnippet>234</a>                    .iter()
+<a href=#235 id=235 data-nosnippet>235</a>                    .map(|value| value.abs())
+<a href=#236 id=236 data-nosnippet>236</a>                    .max_by(|left, right| left.partial_cmp(right).unwrap())
+<a href=#237 id=237 data-nosnippet>237</a>                    .unwrap();
+<a href=#238 id=238 data-nosnippet>238</a>                <span class="kw">let </span>score = <span class="kw">if </span>divide {
+<a href=#239 id=239 data-nosnippet>239</a>                    -magnitude.log()
+<a href=#240 id=240 data-nosnippet>240</a>                } <span class="kw">else </span>{
+<a href=#241 id=241 data-nosnippet>241</a>                    magnitude.log()
+<a href=#242 id=242 data-nosnippet>242</a>                };
+<a href=#243 id=243 data-nosnippet>243</a>                factors.push((factor, divide, score));
+<a href=#244 id=244 data-nosnippet>244</a>            }
+<a href=#245 id=245 data-nosnippet>245</a>        }
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>index = <span class="self">self
+<a href=#247 id=247 data-nosnippet>247</a>            </span>.shape
+<a href=#248 id=248 data-nosnippet>248</a>            .iter()
+<a href=#249 id=249 data-nosnippet>249</a>            .position(|orders| orders == <span class="kw-2">&amp;</span><span class="self">self</span>.derivative_orders)
+<a href=#250 id=250 data-nosnippet>250</a>            .expect(<span class="string">"mixed derivative shape contains the requested derivative"</span>);
+<a href=#251 id=251 data-nosnippet>251</a>        <span class="kw">let </span><span class="kw-2">mut </span>components = [representative.zero(), representative.zero()];
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">for </span>(component, imaginary) <span class="kw">in </span>components.iter_mut().zip([<span class="bool-val">false</span>, <span class="bool-val">true</span>]) {
+<a href=#253 id=253 data-nosnippet>253</a>            <span class="kw">let </span><span class="kw-2">mut </span>weighted = HyperDual::from_values(
+<a href=#254 id=254 data-nosnippet>254</a>                <span class="self">self</span>.shape.clone(),
+<a href=#255 id=255 data-nosnippet>255</a>                value
+<a href=#256 id=256 data-nosnippet>256</a>                    .values
+<a href=#257 id=257 data-nosnippet>257</a>                    .iter()
+<a href=#258 id=258 data-nosnippet>258</a>                    .map(|value| {
+<a href=#259 id=259 data-nosnippet>259</a>                        <span class="kw">if </span>imaginary {
+<a href=#260 id=260 data-nosnippet>260</a>                            value.im.clone()
+<a href=#261 id=261 data-nosnippet>261</a>                        } <span class="kw">else </span>{
+<a href=#262 id=262 data-nosnippet>262</a>                            value.re.clone()
+<a href=#263 id=263 data-nosnippet>263</a>                        }
+<a href=#264 id=264 data-nosnippet>264</a>                    })
+<a href=#265 id=265 data-nosnippet>265</a>                    .collect(),
+<a href=#266 id=266 data-nosnippet>266</a>            );
+<a href=#267 id=267 data-nosnippet>267</a>            <span class="kw">if </span>weighted.values.iter().any(|value| !value.is_finite()) {
+<a href=#268 id=268 data-nosnippet>268</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(SamplingEvaluationError::Unrepresentable {
+<a href=#269 id=269 data-nosnippet>269</a>                    operation: <span class="string">"Fermi localization"</span>,
+<a href=#270 id=270 data-nosnippet>270</a>                    detail: <span class="string">"Nonfinite Fermi coefficient jet"</span>.to_owned(),
+<a href=#271 id=271 data-nosnippet>271</a>                }
+<a href=#272 id=272 data-nosnippet>272</a>                .into());
+<a href=#273 id=273 data-nosnippet>273</a>            }
+<a href=#274 id=274 data-nosnippet>274</a>            <span class="comment">// Balance each observable component independently. A large imaginary
+<a href=#275 id=275 data-nosnippet>275</a>            // coefficient must not determine the scaling of a small real one.
+<a href=#276 id=276 data-nosnippet>276</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>remaining = (<span class="number">0</span>..factors.len()).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#277 id=277 data-nosnippet>277</a>            remaining
+<a href=#278 id=278 data-nosnippet>278</a>                .sort_by(|left, right| factors[<span class="kw-2">*</span>left].<span class="number">2</span>.partial_cmp(<span class="kw-2">&amp;</span>factors[<span class="kw-2">*</span>right].<span class="number">2</span>).unwrap());
+<a href=#279 id=279 data-nosnippet>279</a>            <span class="kw">while </span>!remaining.is_empty() {
+<a href=#280 id=280 data-nosnippet>280</a>                <span class="kw">let </span>magnitude = weighted
+<a href=#281 id=281 data-nosnippet>281</a>                    .values
+<a href=#282 id=282 data-nosnippet>282</a>                    .iter()
+<a href=#283 id=283 data-nosnippet>283</a>                    .map(|value| value.abs())
+<a href=#284 id=284 data-nosnippet>284</a>                    .max_by(|left, right| left.partial_cmp(right).unwrap())
+<a href=#285 id=285 data-nosnippet>285</a>                    .unwrap();
+<a href=#286 id=286 data-nosnippet>286</a>                <span class="kw">let </span>next = <span class="kw">if </span>magnitude &gt;= representative.one() {
+<a href=#287 id=287 data-nosnippet>287</a>                    remaining.remove(<span class="number">0</span>)
+<a href=#288 id=288 data-nosnippet>288</a>                } <span class="kw">else </span>{
+<a href=#289 id=289 data-nosnippet>289</a>                    remaining.pop().unwrap()
+<a href=#290 id=290 data-nosnippet>290</a>                };
+<a href=#291 id=291 data-nosnippet>291</a>                <span class="kw">let </span>(factor, divide, <span class="kw">_</span>) = <span class="kw-2">&amp;</span>factors[next];
+<a href=#292 id=292 data-nosnippet>292</a>                <span class="kw">if </span><span class="kw-2">*</span>divide {
+<a href=#293 id=293 data-nosnippet>293</a>                    <span class="kw">for </span>value <span class="kw">in </span><span class="kw-2">&amp;mut </span>weighted.values {
+<a href=#294 id=294 data-nosnippet>294</a>                        <span class="kw-2">*</span>value /= <span class="kw-2">&amp;</span>factor.values[<span class="number">0</span>];
+<a href=#295 id=295 data-nosnippet>295</a>                    }
+<a href=#296 id=296 data-nosnippet>296</a>                } <span class="kw">else </span>{
+<a href=#297 id=297 data-nosnippet>297</a>                    weighted <span class="kw-2">*</span>= factor;
+<a href=#298 id=298 data-nosnippet>298</a>                }
+<a href=#299 id=299 data-nosnippet>299</a>                <span class="kw">if </span>weighted.values.iter().any(|value| !value.is_finite()) {
+<a href=#300 id=300 data-nosnippet>300</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(SamplingEvaluationError::Unrepresentable {
+<a href=#301 id=301 data-nosnippet>301</a>                        operation: <span class="string">"Fermi localization"</span>,
+<a href=#302 id=302 data-nosnippet>302</a>                        detail: <span class="string">"Nonfinite localized Fermi contribution"</span>.to_owned(),
+<a href=#303 id=303 data-nosnippet>303</a>                    }
+<a href=#304 id=304 data-nosnippet>304</a>                    .into());
+<a href=#305 id=305 data-nosnippet>305</a>                }
+<a href=#306 id=306 data-nosnippet>306</a>            }
+<a href=#307 id=307 data-nosnippet>307</a>            <span class="kw-2">*</span>component = weighted.values[index].clone();
+<a href=#308 id=308 data-nosnippet>308</a>            <span class="comment">// Convert Taylor coefficients to ordinary distribution derivatives,
+<a href=#309 id=309 data-nosnippet>309</a>            // avoiding an independently overflowing integer or float factorial.
+<a href=#310 id=310 data-nosnippet>310</a>            </span><span class="kw">for </span>order <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.derivative_orders {
+<a href=#311 id=311 data-nosnippet>311</a>                <span class="kw">for </span>factor <span class="kw">in </span><span class="number">1</span>..=<span class="kw-2">*</span>order {
+<a href=#312 id=312 data-nosnippet>312</a>                    <span class="kw-2">*</span>component <span class="kw-2">*</span>= -representative.from_usize(factor);
+<a href=#313 id=313 data-nosnippet>313</a>                }
+<a href=#314 id=314 data-nosnippet>314</a>            }
+<a href=#315 id=315 data-nosnippet>315</a>        }
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">let </span>[real, imaginary] = components;
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="kw">let </span>result = Complex::new(real, imaginary);
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="kw">if </span>!result.re.is_finite() || !result.im.is_finite() {
+<a href=#319 id=319 data-nosnippet>319</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(SamplingEvaluationError::Unrepresentable {
+<a href=#320 id=320 data-nosnippet>320</a>                operation: <span class="string">"Fermi localization"</span>,
+<a href=#321 id=321 data-nosnippet>321</a>                detail: <span class="string">"Nonfinite localized Fermi contribution"</span>.to_owned(),
+<a href=#322 id=322 data-nosnippet>322</a>            }
+<a href=#323 id=323 data-nosnippet>323</a>            .into());
+<a href=#324 id=324 data-nosnippet>324</a>        }
+<a href=#325 id=325 data-nosnippet>325</a>        <span class="prelude-val">Ok</span>(result)
+<a href=#326 id=326 data-nosnippet>326</a>    }
+<a href=#327 id=327 data-nosnippet>327</a>}
+<a href=#328 id=328 data-nosnippet>328</a>
+<a href=#329 id=329 data-nosnippet>329</a><span class="attr">#[cfg(test)]
+<a href=#330 id=330 data-nosnippet>330</a></span><span class="kw">mod </span>tests;
+<a href=#331 id=331 data-nosnippet>331</a>
+<a href=#332 id=332 data-nosnippet>332</a><span class="attr">#[cfg(test)]
+<a href=#333 id=333 data-nosnippet>333</a></span><span class="kw">mod </span>residue_tests;
+<a href=#334 id=334 data-nosnippet>334</a>
+<a href=#335 id=335 data-nosnippet>335</a><span class="attr">#[cfg(test)]
+<a href=#336 id=336 data-nosnippet>336</a></span><span class="kw">mod </span>subtraction_tests;
+</code></pre></div></section></main></body></html>

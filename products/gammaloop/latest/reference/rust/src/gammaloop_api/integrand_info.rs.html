@@ -729,7 +729,7 @@
 <a href=#728 id=728 data-nosnippet>728</a>            <span class="kw">let </span>master_graph = <span class="kw-2">&amp;</span>integrand.data.graph_terms[master_graph_id];
 <a href=#729 id=729 data-nosnippet>729</a>            <span class="kw">let </span><span class="kw-2">mut </span>active_model_param_builder: ParamBuilder =
 <a href=#730 id=730 data-nosnippet>730</a>                master_graph.graph.param_builder.clone();
-<a href=#731 id=731 data-nosnippet>731</a>            active_model_param_builder.update_model_values(model);
+<a href=#731 id=731 data-nosnippet>731</a>            active_model_param_builder.update_model_values(model)<span class="question-mark">?</span>;
 <a href=#732 id=732 data-nosnippet>732</a>            <span class="kw">let </span>channel_ids = sampling_channel_ids(
 <a href=#733 id=733 data-nosnippet>733</a>                <span class="kw-2">&amp;</span>master_graph.lmbs,
 <a href=#734 id=734 data-nosnippet>734</a>                <span class="kw-2">&amp;</span>master_graph.multi_channeling_setup,

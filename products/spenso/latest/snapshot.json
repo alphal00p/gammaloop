@@ -4,8 +4,8 @@
   "title": "Spenso",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "3e88cd0d1e57b95bf51c266b155ae533dd459b77",
-  "git_timestamp": 1792059592,
+  "git_commit": "8c92672b21772f91d479cb1f6c24b25b24a462de",
+  "git_timestamp": 1792069877,
   "route": "/products/spenso/latest/",
   "components": [
     {

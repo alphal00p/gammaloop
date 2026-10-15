@@ -1302,6 +1302,12 @@
     "kind": "developer proposal heading"
   },
   {
+    "title": "Symbolica evaluation-domain bug and fix",
+    "summary": "Historical thermal callback-dispatch fix for GammaLoop and Spenso numeric wrappers, including precision and original validation.",
+    "href": "architecture/symbolica-evaluation-domain-fix/",
+    "kind": "developer archived historical fix record"
+  },
+  {
     "title": "GammaLoop Evaluated-Field Proposal",
     "summary": "The superseded proposal for executable Typst fields in DOT drawing data, preserved separately from the maintained callback-based drawing architecture.",
     "href": "architecture/gammaloop-drawing-evaluated-fields-history/",
@@ -3351,6 +3357,12 @@
     "title": "Amplitudes",
     "summary": "Phase conventions and forward-cut conjugation",
     "href": "architecture/phase-conventions/#amplitudes",
+    "kind": "developer investigation preserved during main integration heading"
+  },
+  {
+    "title": "Connected vacuum amplitudes and pressure",
+    "summary": "Phase conventions and forward-cut conjugation",
+    "href": "architecture/phase-conventions/#connected-vacuum-amplitudes-and-pressure",
     "kind": "developer investigation preserved during main integration heading"
   },
   {

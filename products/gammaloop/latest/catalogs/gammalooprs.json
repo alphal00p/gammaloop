@@ -561,7 +561,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Damping profile shared by Local Unitarity threshold terms."
+                  "body": "Damping profile shared by Local Unitarity threshold terms; it also localizes\nzero-temperature Fermi-surface distributions."
                 },
                 "signature": "HFunctionSettings",
                 "default": null,

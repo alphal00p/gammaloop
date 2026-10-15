@@ -3439,7 +3439,7 @@
 <a href=#3438 id=3438 data-nosnippet>3438</a>    workspace.join(<span class="string">"integration_result.json"</span>)
 <a href=#3439 id=3439 data-nosnippet>3439</a>}
 <a href=#3440 id=3440 data-nosnippet>3440</a>
-<a href=#3441 id=3441 data-nosnippet>3441</a><span class="kw">fn </span>workspace_result_archive_path(workspace: <span class="kw-2">&amp;</span>Path, iter: usize) -&gt; PathBuf {
+<a href=#3441 id=3441 data-nosnippet>3441</a><span class="kw">pub fn </span>workspace_result_archive_path(workspace: <span class="kw-2">&amp;</span>Path, iter: usize) -&gt; PathBuf {
 <a href=#3442 id=3442 data-nosnippet>3442</a>    workspace
 <a href=#3443 id=3443 data-nosnippet>3443</a>        .join(<span class="string">"results"</span>)
 <a href=#3444 id=3444 data-nosnippet>3444</a>        .join(<span class="macro">format!</span>(<span class="string">"integration_result_iter_{iter:04}.json"</span>))
