@@ -4,6 +4,7 @@ use crate::{
         CutCFFIndex,
         esurface::{Esurface, EsurfaceRay},
         expression::OrientationID,
+        hsurface::HsurfaceID,
         orientations::GraphOrientation,
         surface::HybridSurfaceID,
     },
@@ -641,6 +642,8 @@ pub struct CrossSectionGraphTerm {
     pub param_builder: ParamBuilder<f64>,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
     production_orientation_keys: Vec<String>,
+    /// Actual source denominators, kept separate for runtime representation selection.
+    denominator_hsurfaces: Vec<(RepresentationMode, Vec<HsurfaceID>)>,
     pub orientation_filter: SubSet<OrientationID>,
     pub explicit_orientation_sum_only: bool,
     #[allow(private_interfaces)]
@@ -879,6 +882,30 @@ impl CrossSectionGraphTerm {
             .iter()
             .map(|orientation| orientation.residue_map_key())
             .collect_vec();
+        let denominator_hsurfaces = settings
+            .generation
+            .three_dimensional_representations
+            .iter()
+            .map(|representation| {
+                let expression = &graph.derived_data.expressions[representation].expression;
+                let surfaces = expression
+                    .orientations
+                    .iter()
+                    .filter(|orientation| {
+                        settings.generation.requires_complete_orientation_sum()
+                            || settings.generation.orientation_pattern.filter(*orientation)
+                    })
+                    .flat_map(|orientation| orientation.iter_denominator_nodes())
+                    .filter_map(|node| match node.data {
+                        HybridSurfaceID::Hsurface(id) => Some(id),
+                        _ => None,
+                    })
+                    .sorted()
+                    .dedup()
+                    .collect_vec();
+                (*representation, surfaces)
+            })
+            .collect();
         if orientations.is_empty() {
             let pattern = settings
                 .generation
@@ -1509,6 +1536,7 @@ impl CrossSectionGraphTerm {
                 orientation_filter: SubSet::full(orientations.len()),
                 orientations,
                 production_orientation_keys,
+                denominator_hsurfaces,
                 explicit_orientation_sum_only: settings
                     .generation
                     .requires_complete_orientation_sum(),
@@ -2642,6 +2670,23 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.graph.param_builder.update_model_values(model)?;
         self.graph
             .validate_medium_parameters(model, settings.general.inverse_temperature)?;
+        let generated_representations = self
+            .denominator_hsurfaces
+            .iter()
+            .map(|(representation, _)| *representation)
+            .collect_vec();
+        let selected_representations = settings
+            .stability
+            .levels
+            .iter()
+            .map(|level| level.resolved_representation(&generated_representations))
+            .collect::<Result<HashSet<_>>>()?;
+        for (representation, surfaces) in &self.denominator_hsurfaces {
+            if selected_representations.contains(representation) {
+                self.graph
+                    .validate_denominator_hsurfaces(model, &externals, surfaces)?;
+            }
+        }
 
         self.param_builder = self.graph.param_builder.clone();
         self.multi_channeling_setup

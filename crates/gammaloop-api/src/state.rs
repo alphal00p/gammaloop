@@ -1626,7 +1626,8 @@ pub struct State {
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 16 combines representation-indexed factorized programs and exact residue rows
-// with medium parameters, Fermi sectors and the common source frame. Regenerate
+// with medium parameters, Fermi sectors, representation-specific amplitude/cross-section
+// denominator catalogues and the common source frame. Regenerate
 // older main and LTD feature states before importing symbolic data.
 // Version 15 gives each orientation-specific Fermi sector a one-entry evaluator
 // catalogue indexed locally from zero. Older full-catalogue sectors must be regenerated.

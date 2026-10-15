@@ -264,11 +264,13 @@ all of its edges share the full momentum signature (loop and external) up to sig
 symbolic mass key. Reducing it contributes `(-1)^(m-1)/(m-1)!` to the CFF coefficient and a
 distribution derivative of order `m-1` on the chain's lowest edge ID. Equal routing
 with distinct mass keys is not a common pole and stays a divided difference.
-Amplitude warm-up calls `Graph::validate_denominator_hsurfaces` to reject
+Amplitude and cross-section warm-up call `Graph::validate_denominator_hsurfaces` to reject
 selected-orientation denominator H-surfaces that vanish identically at the current masses
 and external momenta, including distinct mass parameters with values equal up to sign.
-These comparisons use exact equality; the check does not cover UV-counterterm expressions
-or cross sections.
+Each generated representation retains its source denominator IDs; only representations
+selected by the runtime stability stack are checked. These comparisons use exact equality;
+the check does not cover UV-counterterm expressions or coincidences introduced only by
+Cutkosky localization, including the existing CFF coincident-cut limitation.
 Ordinary thermal contractions require a connected virtual complement. Sources
 and sinks take priority; a mixed vertex needs at least three virtual boundary
 edges, or one incoming and one outgoing virtual edge with external attachments
@@ -1426,7 +1428,8 @@ performance-heavy data.
 - State format is versioned with `state_manifest.toml` (`version = 16` currently).
 - Version 16 combines ordered representation payloads, factorized numerator rows
   and auxiliary programs with medium parameters, Fermi sectors and one source-frame
-  sign. Model parameters refresh by persisted symbol identity. Earlier main and LTD
+  sign. Amplitude and cross-section graph terms retain representation-specific source
+  denominator catalogues. Model parameters refresh by persisted symbol identity. Earlier main and LTD
   feature states must be regenerated before symbolic import.
 - Standalone amplitude and cross-section payload versions are 14 and 17. Older
   archives are rejected before importing symbolic state.

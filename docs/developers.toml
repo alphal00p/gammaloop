@@ -78,7 +78,9 @@ anchor = "load_state_manifest(&save_path)?"
 # payloads, source-frame signs and JIT compilation snapshots; old states reject.
 # Reviewed 2026-10-15: Native thermal-weight records and one source frame preserve
 # exact detached residue maps; state16 rejects prior incompatible medium/representation layouts.
-digest = "c6ededaed8c9f59fbc65142b87c917543ff2c1e2"
+# Reviewed 2026-10-15: State16 also retains representation-specific cross-section
+# source-denominator catalogues for runtime coincident-pole validation.
+digest = "fbe3c42460cd0986be68856b6a88d1968d873dba"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
