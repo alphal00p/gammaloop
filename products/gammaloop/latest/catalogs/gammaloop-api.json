@@ -1792,7 +1792,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 76,
+              "line": 77,
               "column": 1
             }
           },
@@ -1842,7 +1842,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 384,
+              "line": 366,
               "column": 1
             }
           },
@@ -1892,7 +1892,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 373,
+              "line": 355,
               "column": 1
             }
           },
@@ -2046,7 +2046,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 215,
+              "line": 202,
               "column": 1
             }
           },
@@ -2096,7 +2096,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 353,
+              "line": 335,
               "column": 1
             }
           },
@@ -2146,7 +2146,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 342,
+              "line": 324,
               "column": 1
             }
           },
