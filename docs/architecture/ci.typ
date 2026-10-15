@@ -174,9 +174,10 @@ a read-only secondary cache. The temporary credential file has mode 0600 and
 is removed on success or failure. Compiler products are cached; measurements
 always run afresh.
 
-The single manifest in `benchmarks/performance/suite.toml` defines twelve
+The single manifest in `benchmarks/performance/suite.toml` defines thirteen
 comparisons: the existing physical workload and nine scalar route cases, plus
-two cases that build and benchmark every evaluator method. Scalar route cases
+two cases that build and benchmark every evaluator method and one thermal
+case. Scalar route cases
 share their point corpus and settings. The runner renders `scalar.toml` with
 each workload's graph and route settings; the other cases use fixed cards.
 The exact rendered card and declared inputs, including DOT graphs and shared
@@ -192,6 +193,7 @@ revisions receive those same bytes.
   [Scalar GL02, (q₁⁰)⁴], [Quartic energy numerator], [All three LU routes],
   [Scalar GL16 evaluator probe], [Reachable aliases and selected function maps], [All four evaluator methods],
   [Two-loop gluon self-energy GL1], [Weighted local-UV guards and runtime arithmetic], [All four evaluator methods],
+  [Thermal gluon self-energy GL1], [QCD numerators with thermal weights and nested local UV forests], [SingleParametric and SummedFunctionMap],
 )
 
 The scalar routes are orientation-local 3D with the summed evaluator,
@@ -218,18 +220,31 @@ SummedFunctionMap and Summed, then check all four at the same two fixed points.
 They pin graph and LMB selectors and sum their retained orientations, with
 stability rotations disabled.
 
+The thermal probe generates the same GL1 graph, without its orientation
+pattern, in thermodynamic equilibrium at inverse temperature one and muB = 3,
+with a fixed timelike external momentum. Its quark loop and triple-gluon vertex
+supply QCD numerators with thermal weights. Vacuum subtraction is off: it
+would remove the two-loop forest in which both overlapping one-loop
+counterterms nest. Only local UV counterterms are built; integrated addbacks
+more than triple its generation time, and building all four evaluators would
+also exceed the case budget. It builds and checks SingleParametric and
+SummedFunctionMap at two fixed points, with graph and LMB selectors pinned,
+all orientations summed and stability rotations disabled. Three-loop QCD
+vacuum graphs keep nested forests with vacuum subtraction, but each takes
+minutes and over 1 GB to generate on one worker.
+
 Generation uses Hyperfine 2.0.0 to measure the complete import, generation and state-save CLI process. Its raw export is retained and verified against the numeric metric; this scope supersedes the earlier Python-controller clock.
 For scalar cases, graph enumeration is outside this timing because the graph
 is supplied as a fixed DOT input. GL15 also runs graph enumeration.
 Numeric metadata retains the native per-graph total and the Spenso, Symbolica
 and compilation durations from `generation_summary.json`. The native total
-excludes CLI initialization, import and state saving. All-mode cases also gate
+excludes CLI initialization, import and state saving. Probe cases also gate
 each evaluator's construction duration from the existing structured milestones,
 summed across the graph's complete evaluator stacks. Missing, duplicate or
 unfinished stages invalidate the measurement. Whole-generation peak RAM is
 gated separately; it is not attributed to individual evaluator modes.
 Runtime measures the existing `bench` command at four distinct fixed points
-for the original cases, and two points for each all-evaluator probe,
+for the original cases, and two points for each evaluator or thermal probe,
 with caching disabled and evaluator compilation disabled. Each point is
 repeated within its own warmed benchmark. GL15 fixes one helicity/external
 configuration and selects one orientation and LMB channel, with stability
@@ -244,8 +259,10 @@ compiled evaluators and isolated cold-load cost remain outside this fast gate.
 The extended scalar correctness suite supplies timing telemetry for the
 long Lorentz-quartic cases, including GL16 q₇⁴, on main.
 The requested benchmark duration per point is five seconds for GL15, two
-seconds for the scalar route cases, 0.2 seconds per evaluator for GL16 and
-one second per evaluator for GL1. Every point uses ten warmup samples and ten timed batches. The CLI
+seconds for the scalar route cases, 0.75 seconds per evaluator for GL16 and
+thermal GL1, and one second per evaluator for GL1. Shorter runs let runner
+timing noise alone make unchanged warm runtimes inconclusive, while a
+comparison with confirmation must still fit its four-minute budget. Every point uses ten warmup samples and ten timed batches. The CLI
 calibrates sample counts from its warmup, so the actual warmed loop can be
 shorter than that target. Each revision generates its state once per trial,
 regardless of the number of methods.
@@ -299,7 +316,7 @@ do not trigger this workflow. Manual benchmark dispatch remains available.
 A relevant new commit while `final-review` remains set must rerun the gate.
 Returning to development means removing that label; PR-number concurrency
 cancels superseded work. Compiled CLI packages are reused from Nix caches, but
-the benchmark always measures fresh states. All twelve cases run sequentially on
+the benchmark always measures fresh states. All thirteen cases run sequentially on
 one worker in a single runner invocation and pinned runtime shell, to avoid timing
 interference and reuse the two CLI packages built once before measurement.
 The runner gives each case separate work and output subdirectories. Every case
