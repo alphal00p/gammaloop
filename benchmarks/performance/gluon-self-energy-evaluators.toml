@@ -1,7 +1,8 @@
 # Weighted local-UV terms repeat orientation guards in the two-loop gluon self-energy.
 # Build all evaluators and sum the nine retained orientations at fixed selectors.
+# The builtin SM lets each revision read its own model format.
 commands = [
-  "import model ./assets/models/json/sm/sm-default.json",
+  "import model sm-default",
   "remove processes",
   "import graphs benchmarks/performance/gluon-self-energy-gl1.dot --process-spec 'g > g [{2}] | g u' -p double_triangle -i 2L",
   "generate existing -p double_triangle -i 2L",

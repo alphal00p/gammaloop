@@ -154,9 +154,11 @@ worker, outside cached Nix check derivations. Build each revision once; every
 measurement generates a fresh state and uses that revision's own serialized
 format. The baseline and candidate commits, fixture, point corpus and settings
 are recorded by their hashes. Both revisions receive identical settings and
-run with one worker. Model and restriction files are imported from the shared
-candidate repository and included in the workload hash; a builtin model name
-would instead select each binary's own embedded model.
+run with one worker. Scalar model and restriction files are imported from the
+shared candidate repository and included in the workload hash. The SM cases
+use the builtin `sm-default` name instead, so each binary loads its own
+embedded model and a change to the SM JSON format cannot stop the baseline
+from parsing it. Every result must still agree between revisions.
 
 The Actions workflow authenticates NixCI downloads with the repository's
 `NIXCI_NETRC` secret, containing only the `cache.nix-ci.com` machine entry.
@@ -171,8 +173,8 @@ comparisons: the existing physical workload and nine scalar route cases, plus
 two cases that build and benchmark every evaluator method. Scalar route cases
 share their point corpus and settings. The runner renders `scalar.toml` with
 each workload's graph and route settings; the other cases use fixed cards.
-The exact rendered card and declared inputs, including scalar DOT graphs and
-shared model and restriction files, are hashed before measurement. Both
+The exact rendered card and declared inputs, including DOT graphs and shared
+scalar model and restriction files, are hashed before measurement. Both
 revisions receive those same bytes.
 
 #table(
