@@ -131,6 +131,45 @@ impl ScalarTerms {
         }
     }
 
+    /// Hide selected composite coefficients only while a backend or polynomial
+    /// collector works on the surrounding loop kernel. Function payloads are
+    /// atomic: an unselected tensor must keep its actual exposed slots intact.
+    pub(crate) fn protect_coefficients(
+        input: AtomView<'_>,
+        mut select: impl FnMut(AtomView<'_>) -> Result<bool, VakintError>,
+    ) -> Result<(Atom, BTreeMap<Atom, Atom>), VakintError> {
+        let mut used = input.get_all_symbols(true);
+        let mut serial = 0;
+        let mut aliases = BTreeMap::<Atom, Atom>::new();
+        let mut failure = None;
+        let protected = input.replace_map(|term, _, out| {
+            if failure.is_some() || matches!(term, AtomView::Num(_) | AtomView::Var(_)) {
+                return;
+            }
+            match select(term) {
+                Ok(true) => {
+                    let alias = aliases.entry(term.to_owned()).or_insert_with(|| {
+                        loop {
+                            let symbol = vk_symbol!(format!("scalar_coefficient_{serial}"));
+                            serial += 1;
+                            if used.insert(symbol) {
+                                break Atom::var(symbol);
+                            }
+                        }
+                    });
+                    **out = alias.clone();
+                }
+                Ok(false) if matches!(term, AtomView::Fun(_)) => **out = term.to_owned(),
+                Ok(false) => {}
+                Err(error) => failure = Some(error),
+            }
+        });
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        Ok((protected, aliases))
+    }
+
     pub(crate) fn parse(view: AtomView<'_>) -> Result<Self, VakintError> {
         // Select only complete loop-dot atoms. Symbolica's existing AtomField
         // collector retains every external scalar/tensor AST as a coefficient;
@@ -195,32 +234,11 @@ impl ScalarTerms {
             return Ok(result);
         }
         let dots = dots.into_iter().collect::<Vec<_>>();
-        let mut used = view.get_all_symbols(true);
-        let mut serial = 0;
-        let mut aliases = BTreeMap::<Atom, Atom>::new();
         // AtomField retains products of sums, but its polynomial collector
-        // can rewrite an unselected c^(a+b) as c^a*c^b. Hide maximal external
-        // composite coefficients too, so their complete AST survives intact.
-        let protected = view.replace_map(|term, _, out| {
-            if term.get_all_symbols(true).contains(&S.k) {
-                if matches!(term, AtomView::Fun(dot) if dot.get_symbol() == S.dot) {
-                    // A selected complete dot is one variable: do not visit
-                    // its momentum arguments or replace their integer IDs.
-                    **out = term.to_owned();
-                }
-            } else if !matches!(term, AtomView::Num(_) | AtomView::Var(_)) {
-                let alias = aliases.entry(term.to_owned()).or_insert_with(|| {
-                    loop {
-                        let symbol = vk_symbol!(format!("scalar_coefficient_{serial}"));
-                        serial += 1;
-                        if used.insert(symbol) {
-                            break Atom::var(symbol);
-                        }
-                    }
-                });
-                **out = alias.clone();
-            }
-        });
+        // can rewrite an unselected c^(a+b) as c^a*c^b. Use the same coefficient
+        // boundary as FORM, retaining each complete external AST literally.
+        let (protected, aliases) =
+            Self::protect_coefficients(view, |term| Ok(!term.contains_symbol(S.k)))?;
         for (monomial, mut coefficient) in protected.coefficient_list::<i32>(&dots) {
             for (original, alias) in &aliases {
                 coefficient = coefficient
@@ -1245,6 +1263,27 @@ mod tests {
                     .with(spectator.to_pattern())
             );
         }
+    }
+
+    #[test]
+    fn scalar_laurent_boundary_preserves_powered_opaque_coefficients() {
+        let settings = VakintSettings {
+            epsilon_symbol: "eps".into(),
+            ..VakintSettings::default()
+        };
+        let spectator = atom("(a+b)^11*(c+d)*tensor(p(1,mu),mu)");
+        let input = &spectator * atom("(1+eps)/(eps*(4-2*eps))");
+        let result = ScalarTerms::epsilon_series(
+            input.as_view(),
+            &settings,
+            symbolica::poly::series::SeriesDepth::absolute(1),
+        )
+        .unwrap()
+        .to_atom();
+        assert_eq!(
+            result,
+            &spectator / atom("4*eps") + &spectator * atom("3/8") + &spectator * atom("3*eps/16")
+        );
     }
 
     #[test]
