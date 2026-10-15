@@ -25,8 +25,7 @@ class NativeRenderingTests(unittest.TestCase):
         svg = result.to_svg()
         self.assertIn("data-linnet-kind", svg)
         self.assertEqual(ET.fromstring(svg).get("data-linnet-renderer"), "native")
-        # Configuration remains inspectable; exports embed the rendered SVG.
-        self.assertIn("_linnet_template.render", result.typst_source)
+        # Portable Typst exports embed the immutable native SVG.
         self.assertIn("image", result.to_linnest())
         root = ET.fromstring(svg)
         for target in root.iter():
@@ -87,20 +86,19 @@ class NativeRenderingTests(unittest.TestCase):
                 path = result.save(Path(directory) / f"native.{suffix}")
                 self.assertGreater(path.stat().st_size, 0)
 
-    def test_advanced_requests_keep_full_typst_rendering(self):
+    def test_multiple_layout_passes_use_native_geometry(self):
         advanced = graph.RenderSettings(
             layouts=graph.LayoutSettings(impred_steps=1).then(impred_steps=1),
             drawing=graph.DrawOptions(node_fill=graph.Color("#246813")),
         )
         result = self.graph.render(config=advanced)
-        self.assertIn("_linnet_template.render", result.typst_source)
+        self.assert_native(result)
         self.assertIn("#246813", result.to_svg())
         # A selection containing only one half of an internal edge must retain
         # its distinct half-edge styles instead of coloring the whole edge.
         selected = self.graph.subgraph(half_edges=[self.graph.edge("ab").source.index])
-        result = selected.render()
-        self.assertIn("_linnet_subgraph.focus", result.typst_source)
-        self.assertIn("#c58b13", result.to_svg())
+        with self.assertRaisesRegex(ValueError, "native SVG renderer"):
+            selected.render()
 
 
 if __name__ == "__main__":

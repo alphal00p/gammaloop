@@ -60,6 +60,53 @@ fn position_path(kind: &str, index: usize) -> String {
 }
 
 impl ProjectionSession {
+    /// Retain the current physical carriers when continuing a native layout.
+    #[cfg(feature = "svg")]
+    pub(crate) fn from_layout(graph: TypstGraph) -> Result<Self> {
+        let mut positions = BTreeMap::new();
+        let mut nodes = BTreeMap::new();
+        let mut anchors = BTreeMap::new();
+        let mut routes = BTreeMap::new();
+        for node in graph.node_records()? {
+            let key = format!("node:{}", node.node);
+            let position = node.pos.ok_or("laid-out node has no position")?;
+            positions.insert(key.clone(), [position.x, position.y]);
+            nodes.insert(node.node, key);
+        }
+        for edge in graph.edge_records()? {
+            let anchor = format!("anchor:{}", edge.edge);
+            let position = edge.pos.ok_or("laid-out edge has no position")?;
+            positions.insert(anchor.clone(), [position.x, position.y]);
+            let mut route = Vec::new();
+            if let Some(source) = edge.source {
+                route.push(nodes[&source.node].clone());
+                for (index, point) in source.route_points.iter().enumerate() {
+                    let key = format!("source:{}:{index}", edge.edge);
+                    positions.insert(key.clone(), [point.x, point.y]);
+                    route.push(key);
+                }
+            }
+            route.push(anchor.clone());
+            if let Some(sink) = edge.sink {
+                for (index, point) in sink.route_points.iter().enumerate().rev() {
+                    let key = format!("sink:{}:{index}", edge.edge);
+                    positions.insert(key.clone(), [point.x, point.y]);
+                    route.push(key);
+                }
+                route.push(nodes[&sink.node].clone());
+            }
+            anchors.insert(edge.edge, anchor);
+            routes.insert(edge.edge, route);
+        }
+        Self::new(
+            graph,
+            json!({
+                "positions": positions, "node_ids": nodes,
+                "anchor_ids": anchors, "routes": routes,
+            }),
+        )
+    }
+
     pub fn new(graph: TypstGraph, seed: Value) -> Result<Self> {
         let template = serde_json::to_value(graph)?;
         let initial = coordinates(&seed["positions"])?;

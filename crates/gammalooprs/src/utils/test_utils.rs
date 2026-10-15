@@ -98,7 +98,11 @@ impl crate::graph::Graph {
                 for (hedge, slot) in slots {
                     parsed.graph[hedge].ufo_order = Some(u8::try_from(slot)?);
                 }
-                let edges = parsed.graph.iter_edges().map(|(_, edge, _)| edge).collect::<Vec<_>>();
+                let edges = parsed
+                    .graph
+                    .iter_edges()
+                    .map(|(_, edge, _)| edge)
+                    .collect::<Vec<_>>();
                 for edge in edges {
                     let edge = &mut parsed.graph[edge];
                     eyre::ensure!(

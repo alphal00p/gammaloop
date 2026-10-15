@@ -1787,7 +1787,7 @@ impl SiteBuilder {
             if matches!(
                 source.to_str(),
                 Some(
-                    "crates/linnet-render-py/vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md"
+                    "vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md"
                         | "vendor/clarabel/CHANGELOG.md"
                         | "vendor/clarabel/LICENSE.md"
                         | "vendor/clarabel/html/rustdocs-header.html"

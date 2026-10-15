@@ -89,9 +89,9 @@ impl<'a> Document<'a> {
         packages: &'a Path,
         files: &'a BTreeMap<String, Vec<u8>>,
     ) -> Result<Self, String> {
-        let mut fonts = Self::fonts()?;
+        let fonts = Self::fonts()?;
         #[cfg(feature = "full")]
-        if let Some(paths) = std::env::var_os("TYPST_FONT_PATHS") {
+        let fonts = if let Some(paths) = std::env::var_os("TYPST_FONT_PATHS") {
             let mut custom = FontStore::new();
             for path in std::env::split_paths(&paths) {
                 custom.extend(typst_kit::fonts::scan(&path));
@@ -102,8 +102,10 @@ impl<'a> Document<'a> {
                     custom.extend([(font, info)]);
                 }
             }
-            fonts = Arc::new(custom);
-        }
+            Arc::new(custom)
+        } else {
+            fonts
+        };
         Ok(Self {
             root,
             packages,

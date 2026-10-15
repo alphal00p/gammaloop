@@ -55,7 +55,7 @@ class CommunityRenderingTests(unittest.TestCase):
                         any(item.get("particle") == "phi" for item in details)
                     )
 
-    def test_all_owners_preserve_multipage_snapshots_and_exports(self):
+    def test_all_owners_preserve_native_snapshots_and_exports(self):
         diagrams = (
             hepkit.Model.phi3()
             .process(["phi", "phi"], ["phi", "phi"])
@@ -65,37 +65,34 @@ class CommunityRenderingTests(unittest.TestCase):
         diagram = diagrams[0]
         generic = diagram.to_graph()
         owners = (
-            (generic, 2),
-            (generic.full_subgraph(), 2),
-            (diagram, 2),
-            (tensor.TensorNetwork(E("x+2")), 2),
-            (hepkit.Amplitude(diagrams[:2]), 4),
+            (generic, 1),
+            (generic.full_subgraph(), 1),
+            (diagram, 1),
+            (tensor.TensorNetwork(E("x+2")), 1),
+            (hepkit.Amplitude(diagrams[:2]), 2),
         )
         self.assertFalse(hasattr(hepkit, "AmplitudeRender"))
         with TemporaryDirectory() as directory:
             root = Path(directory)
-            template = root / "pages.typ"
-            template.write_text(
-                "#let render(config) = {\n"
-                "  set page(width: 80pt, height: 40pt, margin: 2pt, fill: none)\n"
-                "  [First #pagebreak() Second]\n"
-                "}\n"
+            settings = graph.RenderSettings(
+                layouts=graph.LayoutSettings(impred_steps=1).then(impred_steps=1)
             )
-            settings = graph.RenderSettings(template=template)
             results = [
                 (owner.render(config=settings), pages) for owner, pages in owners
             ]
-            template.unlink()
             for index, (result, count) in enumerate(results):
                 with self.subTest(owner=type(owners[index][0]).__name__):
                     self.assertIs(type(result), graph.DiagramRender)
                     self.assertEqual(len(result.to_svg_pages()), count)
                     self.assertEqual(result.to_html().count("<svg"), count)
-                    self.assertTrue(result.typst_source)
-                    self.assertIsNone(result._repr_svg_())
+                    if count == 1:
+                        self.assertIn("<svg", result._repr_svg_())
+                    else:
+                        self.assertIsNone(result._repr_svg_())
                     self.assertEqual(result._mime_(), ("text/html", result.to_html()))
-                    with self.assertRaisesRegex(ValueError, f"{count} pages"):
-                        result.to_svg()
+                    if count > 1:
+                        with self.assertRaisesRegex(ValueError, f"{count} pages"):
+                            result.to_svg()
                     output = root / str(index)
                     self.assertEqual(
                         len(result.save_pages(output, format="png")), count

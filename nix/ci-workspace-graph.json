@@ -185,7 +185,6 @@
       "linnet-render-py"
     ],
     "linnet-render-py": [
-      "kurvst",
       "linnest",
       "linnet",
       "typst-renderer"
@@ -524,14 +523,11 @@
       "linnet-render-py": []
     },
     "linnet-render-py": {
-      "kurvst": [],
       "linnest": [
         "svg"
       ],
       "linnet": [],
-      "typst-renderer": [
-        "full"
-      ]
+      "typst-renderer": []
     },
     "spenso": {
       "gammaloop-workspace-hack": [],
@@ -1529,7 +1525,6 @@
       "linnet-render-py"
     ],
     "linnet-render-py": [
-      "kurvst",
       "linnest",
       "linnet",
       "typst-renderer"
@@ -1877,14 +1872,11 @@
       "linnet-render-py": []
     },
     "linnet-render-py": {
-      "kurvst": [],
       "linnest": [
         "svg"
       ],
       "linnet": [],
-      "typst-renderer": [
-        "full"
-      ]
+      "typst-renderer": []
     },
     "spenso": {
       "gammaloop-workspace-hack": [],

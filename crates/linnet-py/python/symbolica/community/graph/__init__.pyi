@@ -247,13 +247,10 @@ _AutoFunction: typing.TypeAlias = _FunctionExpression | Auto
 _OptionalNumber: typing.TypeAlias = _Number | None
 _EdgeLengthResolver: typing.TypeAlias = EdgeLengthResolution | _ValueExpression | _FunctionExpression | Inherit
 _OptionalPadding: typing.TypeAlias = _Padding | None
-_TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
-_SourceRootPath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
 _RenderLayouts: typing.TypeAlias = LayoutSettings | None | Inherit
 _RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit
 _RenderSelectors: typing.TypeAlias = DrawingSelectors | None | Inherit
-_TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
 
 
 AUTO: Auto
@@ -328,20 +325,13 @@ class Dash:
 @typing.final
 class DiagramRender:
     r"""
-    An immutable graph rendering with source inspection, file exports, and notebook display.
-    Render inputs and referenced assets are captured when the result is created.
+    An immutable native SVG rendering with file exports and notebook display.
+    Geometry and typeset labels are captured when the result is created.
     """
     @property
     def diagrams(self) -> builtins.list[DiagramRender]:
         r"""
         Configured child snapshots for a rendered collection, in display order.
-        """
-    @property
-    def typst_source(self) -> builtins.str: ...
-    @staticmethod
-    def from_sources(sources: dict[str, bytes], *, config: typing.Optional[RenderSettings] = None) -> DiagramRender:
-        r"""
-        Snapshot an authored Typst project, including its referenced assets.
         """
     def to_svg(self) -> builtins.str:
         r"""
@@ -1201,14 +1191,6 @@ class RenderSettings:
     Complete typed rendering configuration.
     """
     @property
-    def template(self) -> _TemplatePath: ...
-    @template.setter
-    def template(self, value: _TemplatePath) -> None: ...
-    @property
-    def source_root(self) -> _SourceRootPath: ...
-    @source_root.setter
-    def source_root(self, value: _SourceRootPath) -> None: ...
-    @property
     def title(self) -> _AutoOptionalStaticContent: ...
     @title.setter
     def title(self, value: _AutoOptionalStaticContent) -> None: ...
@@ -1228,29 +1210,9 @@ class RenderSettings:
     def selectors(self) -> _RenderSelectors: ...
     @selectors.setter
     def selectors(self, value: _RenderSelectors) -> None: ...
-    @property
-    def template_options(self) -> _TemplateOptions: ...
-    @template_options.setter
-    def template_options(self, value: _TemplateOptions) -> None: ...
     def overlay(self, overlay: RenderSettings) -> RenderSettings: ...
-    def native_drawing_options(self) -> tuple[dict[str, typing.Any], dict[str, typing.Any]] | None:
-        r"""
-        The options a native renderer can honour without Typst.
-
-        Returns ``(template_options, layout)`` with plain template option values
-        and the ``impred-*`` options of a single layout pass, keyed by their
-        Typst names, or ``None`` when this configuration needs the Typst renderer
-        (templates, selectors, graph styles, drawing options or titles).
-
-        Examples
-        --------
-        >>> from symbolica.community import graph as ln
-        >>> ln.RenderSettings(template_options={"momentum-arrows": True}).native_drawing_options()
-        ({'momentum-arrows': True}, {})
-        >>> ln.RenderSettings(drawing=ln.DrawOptions(node_radius=5)).native_drawing_options()
-        """
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, template: _TemplatePath = ..., source_root: _SourceRootPath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderSettings: ...
+    def __new__(cls, *, title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ...) -> RenderSettings: ...
 
 @typing.final
 class Stroke:

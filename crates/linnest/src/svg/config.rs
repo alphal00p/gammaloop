@@ -8,10 +8,9 @@ use serde_json::{Map, Value};
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub title: Option<String>,
-    pub layouts: Map<String, Value>,
+    pub layouts: Vec<Map<String, Value>>,
     pub drawing: Map<String, Value>,
     pub style: Map<String, Value>,
-    pub template_options: Map<String, Value>,
 }
 
 impl Config {
@@ -23,51 +22,86 @@ impl Config {
         if let Some(title) = &self.title {
             scene.title = Some(format!("#{title:?}"));
         }
-        for (key, value) in &self.layouts {
-            let key = key.replace('_', "-");
-            let key = if key == "steps" {
-                "impred-steps".to_owned()
-            } else {
-                key
-            };
-            if ![
-                "layout-algo",
-                "tree-dx",
-                "tree-dy",
-                "impred-steps",
-                "impred-step-scale",
-                "impred-spacing",
-                "impred-repulsion",
-                "impred-attraction",
-                "impred-parallel-balance",
-                "impred-pull",
-                "impred-pull-balance",
-                "impred-external-max-points",
-                "impred-split-length-ratio",
-                "impred-contract-chord-ratio",
-                "impred-edge-clearance",
-                "impred-node-edge-strength",
-                "impred-labels",
-                "impred-level",
-            ]
-            .contains(&key.as_str())
-            {
-                return Err(format!(
-                    "layout option {key:?} is not supported by the native SVG renderer"
-                ));
+        if !self.layouts.is_empty() {
+            let defaults = scene.layout.clone();
+            let default_feedback = scene.label_feedback;
+            let mut layouts = Vec::with_capacity(self.layouts.len());
+            let graph_options = serde_json::to_value(crate::LayoutConfig::default())
+                .map_err(|error| error.to_string())?;
+            for pass in &self.layouts {
+                let mut layout = defaults.clone();
+                scene.label_feedback = default_feedback;
+                for (key, value) in pass {
+                    let key = key.replace('_', "-");
+                    let algorithm = pass
+                        .get("layout-algo")
+                        .or_else(|| defaults.get("layout-algo"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("impred");
+                    let key = if key == "steps" && algorithm == "impred" {
+                        "impred-steps".to_owned()
+                    } else {
+                        key
+                    };
+                    if ![
+                        "layout-algo",
+                        "tree-dx",
+                        "tree-dy",
+                        "impred-steps",
+                        "impred-step-scale",
+                        "impred-spacing",
+                        "impred-repulsion",
+                        "impred-attraction",
+                        "impred-parallel-balance",
+                        "impred-pull",
+                        "impred-pull-balance",
+                        "impred-pull-attachment",
+                        "impred-external-max-points",
+                        "impred-split-length-ratio",
+                        "impred-contract-chord-ratio",
+                        "impred-edge-clearance",
+                        "impred-node-edge-strength",
+                        "impred-labels",
+                        "impred-level",
+                    ]
+                    .contains(&key.as_str())
+                        && graph_options.get(&key).is_none()
+                    {
+                        return Err(format!(
+                            "layout option {key:?} is not supported by the native SVG renderer"
+                        ));
+                    }
+                    if key == "layout-algo"
+                        && !matches!(
+                            value.as_str(),
+                            Some(
+                                "dot"
+                                    | "impred"
+                                    | "force"
+                                    | "anneal"
+                                    | "tree"
+                                    | "stable-layered"
+                                    | "railroad"
+                            )
+                        )
+                    {
+                        return Err("unsupported native layout algorithm".into());
+                    }
+                    if matches!(key.as_str(), "tree-dx" | "tree-dy")
+                        && !value.as_f64().is_some_and(|v| v.is_finite() && v > 0.0)
+                    {
+                        return Err(format!("{key} must be positive"));
+                    }
+                    if key == "impred-labels" {
+                        scene.label_feedback =
+                            value.as_bool().ok_or("impred-labels must be boolean")?;
+                    }
+                    layout.insert(key, value.clone());
+                }
+                layouts.push(layout);
             }
-            if key == "layout-algo" && !matches!(value.as_str(), Some("dot" | "impred")) {
-                return Err("layout-algo must be dot or impred".into());
-            }
-            if matches!(key.as_str(), "tree-dx" | "tree-dy")
-                && !value.as_f64().is_some_and(|v| v.is_finite() && v > 0.0)
-            {
-                return Err(format!("{key} must be positive"));
-            }
-            if key == "impred-labels" {
-                scene.label_feedback = value.as_bool().ok_or("impred-labels must be boolean")?;
-            }
-            scene.layout.insert(key, value.clone());
+            scene.layout = layouts.remove(0);
+            scene.layout_passes = layouts;
         }
         for (key, value) in &self.drawing {
             match key.replace('_', "-").as_str() {

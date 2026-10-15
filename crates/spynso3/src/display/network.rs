@@ -430,6 +430,7 @@ impl SpensoNet {
                 "external-label-length-scale": 0.35,
             }))
             .unwrap(),
+            layout_passes: Vec::new(),
             layout_edges: Some(Vec::new()),
             label_feedback: false,
         };

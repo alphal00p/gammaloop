@@ -49,7 +49,7 @@ layout streams, graph algorithms, and rendering. There is no separate Linnet Pyt
 `RenderSettings` combines drawing options, layout sequences, selectors, templates, and
 export configuration. `LayoutSettings`, `Stroke`, and `DiagramRender` are shared by graphs,
 HepKit diagrams, and tensor networks. Ordinary domain drawings use native SVG geometry and
-embedded Typst labels; advanced rendering uses the embedded Linnest Typst pipeline.
+embedded Typst labels. Layout pass sequences run natively; unsupported settings raise errors.
 
 ```python
 from symbolica.community import graph
@@ -62,7 +62,7 @@ settings = graph.RenderSettings(
 )
 ```
 
-Call `.render(config=settings)` to capture a `DiagramRender`. Its SVG, HTML, source,
+Call `.render(config=settings)` to capture a `DiagramRender`. Its SVG, HTML, portable Typst,
 and file exports reuse the snapshot, even after later graph or settings mutations.
 HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
 For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one page.
@@ -383,52 +383,35 @@ same SVG explicitly, and `region.render(config=None)` prepares it for inspection
 export through `DiagramRender`. Like other selection operations, rendering checks the topology
 revision and raises `ReferenceError` for a stale selection.
 
-The selected template's defaults are overlaid by the graph's `render_config` and then by a sparse
-per-call `config`. `render(config=None).save(output)` writes PDF, SVG, PNG, HTML, or portable Typst according to the output
-suffix. Use `save_pages(directory, format="svg")` to export each page separately. `to_svg(config=None)` returns SVG text; `_repr_html_()` supports interactive notebook
-display, while `_repr_svg_()` supplies the SVG representation. These are
-the only high-level rendering methods; there are no raw command-line inputs or string-expression
-escape hatches. The Community wheel embeds the Typst compiler and compiles in-process without
-looking up or launching a Typst executable. Generated inputs and imported modules remain alive
-until compilation completes. The wheel has no Clinnet dependency and embeds the Linnest, Kurvst,
-CeTZ 0.5.1, and oxifmt 1.0.0 assets required by its default renderer, so that path does not depend
-on an installed Typst package cache or a network fetch.
+The graph's `render_config` is overlaid by a sparse per-call `config`.
+`render(config=None).save(output)` writes PDF, SVG, PNG, HTML, or portable Typst according to
+the output suffix. `save_pages(directory, format="svg")` exports each captured page separately.
+`to_svg(config=None)` returns SVG text; `_repr_html_()` supplies interactive notebook display.
+Rendering evaluates selectors once and captures native SVG geometry and typeset labels in an
+immutable `DiagramRender`. Arbitrary Python `.data` stays in Python; selectors may explicitly
+convert it to drawing values.
 
-For inspection tools, `render(config=None)` evaluates selectors once and returns a
-`DiagramRender`. Its `typst_source` property is the exact generated entrypoint subsequently used
-by `to_svg()` or `save(path)` on that result. It keeps the ephemeral entrypoint, versioned
-topology-only CBOR graph spec, bundled assets, and snapshots of referenced user template/module
-source trees alive. Editing or deleting the original files after preparation therefore cannot
-change that preparation. The graph spec contains structural names, indices, incidence, flow, and
-orientation, while typed drawing values travel in `config.elements`; it is not a hidden DOT
-serialization and never inspects arbitrary Python `.data`.
+Typst runs in-process only for labels and titles. Python does not expose `from_sources`,
+`typst_source`, custom templates, `source_root`, or `template_options`, and ships no Linnest,
+Kurvst, CeTZ, or MiTeX plugin assets. Standalone Typst packages remain separate tools.
+PDF and PNG exports convert the captured SVG directly. `to_linnest()` emits portable Typst
+source that embeds the same SVG; it does not execute a second layout.
 
-The shipped notebook display is generic and model-neutral, including for graphs with dangling
-edges. It never infers amplitude, cross-section, particle, or momentum semantics from topology.
-An application that needs those concepts selects its own template and passes that template's
-closed native settings through `RenderSettings.template_options`. `INHERIT` leaves the preceding
-configuration layer unchanged, while `None` becomes Typst `none`.
+The notebook display is generic and model-neutral, including for graphs with dangling edges.
+Domain renderers supply their own native scenes and labels. Use typed settings and Python
+selectors for customization. `INHERIT` leaves the preceding configuration layer unchanged.
 
 ```python
-domain_template = RenderSettings(
-    template="templates/domain-figure.typ",
-    source_root=".",
-    template_options={
-        "theme": "review",
-        "accent": Color("teal"),
-    },
+config = RenderSettings(
+    layouts=LayoutSettings(impred_steps=50).then(impred_steps=20),
+    drawing=DrawOptions(node_fill=Color("teal")),
 )
+drawing = graph.render(config=config)
 ```
 
-`template_options` is intentionally a string-keyed dictionary because the selected template,
-not Linnet, defines that open schema. Its values still use the closed native-value model; it is
-not a dictionary of Typst source strings.
-
-`source_root` identifies the project tree staged for file-based templates and modules. Set it when
-a source imports files outside its own directory, such as `../shared.typ`. Without an explicit
-root, Linnet uses the nearest ancestor containing `typst.toml`, or otherwise the source file's
-parent directory; it does not infer project boundaries from generic directory names such as
-`src`.
+Layout passes execute natively in order. An ImPrEd pass following another ImPrEd pass retains
+the previous geometry instead of constructing a fresh seed. Unsupported executable styles
+raise an error instead of falling back to full-document Typst compilation.
 
 `graph.render_config` is a live mutable object: assign its fields directly, or replace the whole
 configuration. The nested style, layout, drawing, and selector option objects are immutable
@@ -479,7 +462,8 @@ particle_style_example = RenderSettings(
 
 This is ordinary userland settings composition: Linnet neither defines `ParticleStyle` nor
 inspects it. GammaLoop's richer particle decorations, momentum annotations, and diagram modes
-belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `linnet`.
+belong to domain renderers, exposed through HepKit's `DiagramStyle` rather than a
+`PhysicsOptions` type in `linnet`.
 The #source-link(
   "crates/linnet-py/examples/physics_render_settings.py",
   label: "editable DOT physics notebook",
@@ -515,48 +499,10 @@ geometry includes explicit DOT placement constraints and per-edge spring lengths
 not Typst label measurement, styling, or final label relaxation. It does not alter an
 existing Python `Graph` or its payloads.
 
-Typst callbacks that require measured geometry use an explicit module function reference:
-
-```python
-from symbolica.community.graph import TypstModule
-
-styles = TypstModule.file("styles.typ")
-graph.node("in").drawing.label = styles.content("incoming_label")
-graph.edge("propagator").drawing.style = styles.function("edge_style").bind(
-    emphasis=True
-)
-graph.edge("propagator").drawing.extensions = {
-    "lane-map": styles.value("lane_map"),
-}
-```
-
-`TypstModule.file` and `TypstModule.package` are the only routes for custom executable Typst.
-`value`, `content`, and `function` select a typed export; `call` and `bind` construct typed
-applications. The binding never accepts a raw Typst expression and never calls Typst `eval`.
-
-A custom rendering template is a Typst module with one mandatory V1 export:
-
-```typst
-#let render(config) = {
-  assert(config.schema == "linnet-render-config")
-  assert(config.version == 1)
-  let options = config.at("options", default: (:))
-  // Read typed element values and template-owned options, then render content.
-  config.elements.nodes.at(0).label
-}
-```
-
-The bundled generic template uses this contract and ignores unknown domain concepts. A custom
-template that needs the native topology can import Linnest's `graph.typ` and call
-`graph.from-spec(read(config.at("graph-spec-path"), encoding: none))`, attach native values with
-Linnest's `attach-elements(g, config.elements)`, and delegate to `layout-graph(config, g)`.
-Final labels and styles are measured before layout so their sizes affect spacing.
-
-GammaLoop's separate `figure.typ` consumes DOT through `data-path`; it cannot be selected directly
-by this Python graph-spec adapter. GammaLoop supplies ordinary Typst particle/momentum callbacks
-and optional external-edge placement without Python. Python callers retain this API's own drawing
-records and selectors, or import styling through `TypstModule`; the physics notebook is an
-independent example of that interface.
+Custom graph behavior is expressed through Python drawing selectors and native scenes.
+Executable Typst module references cannot define graph geometry or styles. Use `TextLabel`
+and `MathSymbol` for labels; their sizes are measured before native layout. Standalone
+Typst documents can still use Linnest's separate Typst package.
 
 === Explicit DOT codecs
 
