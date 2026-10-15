@@ -5542,7 +5542,7 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (d1^(-2 - n1)*rat(3 + 3*n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d5*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 1 && n3 == 1 && n4 == 2 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1
-        if(count(d1,1)==0) id,only 1/d2/d3/d4^2/d5/d6/d7/d8/d9/d10 = 1/(d10*d2*d3^2*d4*d5*d6*d7*d8*d9);
+        if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2/d3/d4^2/d5/d6/d7/d8/d9/d10 = 1/(d10*d2*d3^2*d4*d5*d6*d7*d8*d9);
 
         if(count(d1,1)==0) id,only 1/d2/d3/d4/d5/d6/d7/d8/d9/d10 = PR0/intX;
 

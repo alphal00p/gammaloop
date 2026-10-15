@@ -70,3 +70,39 @@ fn every_registered_four_loop_route_preserves_fmft_propagator_squares() {
     assert_eq!(checked_classes, 19);
     assert_eq!(checked_edges, 123);
 }
+
+#[test]
+fn late_x_dot_symmetry_reenters_reduction() {
+    let vakint = Vakint::new().unwrap();
+    let settings = VakintSettings {
+        evaluation_order: crate::EvaluationOrder::fmft_only(Some(FMFTOptions {
+            expand_masters: false,
+            susbstitute_masters: false,
+        })),
+        integral_normalization_factor: crate::LoopNormalizationFactor::FMFTandMATAD,
+        ..Default::default()
+    };
+    // X edges 2 and 3 map to FMFT denominators d3 and d4. The d4-dot
+    // symmetry rule is below the d3-dot recurrence, so it must repeat redX.
+    let mut results = Vec::new();
+    for input in [
+        "topo(I4L_X(muvsq,1,2,1,1,1,1,1,1,1))",
+        "topo(I4L_X(muvsq,1,1,2,1,1,1,1,1,1))",
+    ] {
+        let input = vk_parse!(input).unwrap();
+        let canonical = vakint
+            .to_canonical(&settings, input.as_view(), false)
+            .unwrap();
+        let result = vakint
+            .evaluate_integral(&settings, canonical.as_view())
+            .unwrap();
+        assert!(!result.is_zero());
+        results.push(result);
+    }
+    assert!(
+        (results[0].clone() - &results[1])
+            .together()
+            .cancel()
+            .is_zero()
+    );
+}
