@@ -1980,6 +1980,7 @@ dependencies = [
  "linnest",
  "linnet",
  "linnet-py",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
@@ -3759,6 +3760,21 @@ version = "0.1.0"
 dependencies = [
  "ciborium",
  "dot-parser",
+ "linnest",
+ "linnet",
+ "linnet-render-py",
+ "pyo3",
+ "pyo3-stub-gen",
+ "pyo3-stub-gen-derive",
+ "serde",
+ "serde_json",
+ "symbolica",
+]
+
+[[package]]
+name = "linnet-render-py"
+version = "0.1.0"
+dependencies = [
  "kurvst",
  "linnest",
  "linnet",
@@ -6307,7 +6323,7 @@ dependencies = [
  "itertools 0.14.0",
  "linnest",
  "linnet",
- "linnet-py",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",

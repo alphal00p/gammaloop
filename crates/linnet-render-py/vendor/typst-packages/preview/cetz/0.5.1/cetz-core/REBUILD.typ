@@ -54,18 +54,18 @@ Cargo configuration, with no custom Rust flags or target directory:
 cetz_source=$(mktemp -d)
 git clone --depth 1 --branch v0.5.1 https://github.com/cetz-package/cetz.git "$cetz_source"
 test "$(git -C "$cetz_source" rev-parse HEAD)" = 100ea3c52342c8bf866e8f154589ce8cd309265c
-git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/batched-bounds.patch"
-git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/content-placement.patch"
-git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/sampled-curves.patch"
-git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/marker-geometry.patch"
-git -C "$cetz_source" apply "$PWD/crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/marker-footprints.patch"
+git -C "$cetz_source" apply "$PWD/crates/linnet-render-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/batched-bounds.patch"
+git -C "$cetz_source" apply "$PWD/crates/linnet-render-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/content-placement.patch"
+git -C "$cetz_source" apply "$PWD/crates/linnet-render-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/sampled-curves.patch"
+git -C "$cetz_source" apply "$PWD/crates/linnet-render-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/marker-geometry.patch"
+git -C "$cetz_source" apply "$PWD/crates/linnet-render-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/marker-footprints.patch"
 (
   cd "$cetz_source" || exit
   unset RUSTC RUSTDOC RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_RUSTFLAGS CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS CARGO_TARGET_DIR
   export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER=/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld
   CARGO_PROFILE_RELEASE_OPT_LEVEL=3 cargo +1.98.1 build --locked --release --target wasm32-unknown-unknown --manifest-path cetz-core/Cargo.toml
 )
-cp "$cetz_source/cetz-core/target/wasm32-unknown-unknown/release/cetz_core.wasm" crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/cetz_core.wasm
+cp "$cetz_source/cetz-core/target/wasm32-unknown-unknown/release/cetz_core.wasm" crates/linnet-render-py/vendor/typst-packages/preview/cetz/0.5.1/cetz-core/cetz_core.wasm
 ```
 
 The resulting binary's SHA-256 is

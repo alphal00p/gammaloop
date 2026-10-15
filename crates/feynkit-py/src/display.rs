@@ -1,13 +1,13 @@
 use feynkit_graph::FeynmanDiagram;
 use feynkit_model::{Model, ParticleId};
 use linnest::svg::Scene;
-use linnet_py::PyRenderSettings;
+use linnet_render_py::PyRenderSettings;
 
 use crate::render_settings::PyDiagramStyle;
 use pyo3::prelude::*;
 use std::fmt::Write;
 
-use linnet_py::PyDiagramRender;
+use linnet_render_py::PyDiagramRender;
 
 /// Energy representations reuse Linnet's layout with their own orientation marks.
 pub(crate) fn energy_graph_svg(

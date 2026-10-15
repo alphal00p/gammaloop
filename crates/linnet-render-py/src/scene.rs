@@ -1,19 +1,10 @@
 //! Domain scenes use the native renderer when possible and the common Typst pipeline otherwise.
-use crate::{
-    dot::PyGlobalData,
-    graph::{EdgeRecord, GraphState, HalfEdgeRecord, NodeRecord, PyGraph},
-    native_graph::{PyHedgeGraph, PyNodeStore},
-    PyDiagramRender, PyRenderSettings,
-};
+use crate::{PyDiagramRender, PyRenderSettings};
 use linnest::svg::{Dash, Pattern, Scene, Stroke};
-use linnet::half_edge::{
-    builder::{HedgeData, HedgeGraphBuilder},
-    involution::{Flow, Orientation},
-};
 use pyo3::{
     exceptions::PyRuntimeError,
     prelude::*,
-    types::{PyDict, PyDictMethods},
+    types::{PyDict, PyDictMethods, PyList},
 };
 use std::collections::BTreeMap;
 
@@ -113,9 +104,9 @@ impl PyDiagramRender {
                 },
             )
         };
-        let mut builder = HedgeGraphBuilder::new();
-        let mut nodes = BTreeMap::new();
-        for (index, (spec, node)) in scene.graph.nodes.iter().zip(&scene.nodes).enumerate() {
+        let nodes = PyList::empty(py);
+        let edges = PyList::empty(py);
+        for node in &scene.nodes {
             let drawing = PyDict::new(py);
             label(&drawing, node.label)?;
             let style = PyDict::new(py);
@@ -150,16 +141,9 @@ impl PyDiagramRender {
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?,),
             )?;
             extensions.set_item("inspection", &details)?;
-            nodes.insert(
-                spec.index.unwrap_or(index),
-                builder.add_node(NodeRecord {
-                    name: spec.name.clone(),
-                    data: details.unbind(),
-                    drawing: drawing.unbind(),
-                }),
-            );
+            nodes.append(drawing)?;
         }
-        for (spec, edge) in scene.graph.edges.iter().zip(&scene.edges) {
+        for edge in &scene.edges {
             let drawing = PyDict::new(py);
             label(&drawing, edge.label)?;
             let extensions = PyDict::new(py);
@@ -213,53 +197,64 @@ impl PyDiagramRender {
                 .map_err(|e| PyRuntimeError::new_err(e.to_string()))?,),
             )?;
             extensions.set_item("inspection", &details)?;
-            let record = EdgeRecord {
-                name: spec.name.clone(),
-                data: details.unbind(),
-                drawing: drawing.unbind(),
-            };
-            let endpoint = |end: &linnest::TypstEndpointSpec| HedgeData {
-                node: nodes[&end.node],
-                data: HalfEdgeRecord {
-                    data: py.None(),
-                    drawing: PyDict::new(py).unbind(),
-                },
-                is_in_subgraph: end.in_subgraph,
-            };
-            let orientation = match spec.orientation.as_deref() {
-                Some("undirected") => Orientation::Undirected,
-                Some("reversed") => Orientation::Reversed,
-                _ => Orientation::Default,
-            };
-            match (&spec.source, &spec.sink) {
-                (Some(a), Some(b)) => {
-                    builder.add_edge(endpoint(a), endpoint(b), record, orientation)
-                }
-                (Some(a), None) => {
-                    builder.add_external_edge(endpoint(a), record, orientation, Flow::Source);
-                }
-                (None, Some(b)) => {
-                    builder.add_external_edge(endpoint(b), record, orientation, Flow::Sink);
-                }
-                _ => return Err(PyRuntimeError::new_err("scene edge has no endpoints")),
+            edges.append(drawing)?;
+        }
+        let elements = PyDict::new(py);
+        elements.set_item("graph", PyDict::new(py))?;
+        elements.set_item("nodes", &nodes)?;
+        elements.set_item("edges", &edges)?;
+        let hedges = PyList::empty(py);
+        for spec in &scene.graph.edges {
+            for _ in spec.source.iter().chain(&spec.sink) {
+                hedges.append(PyDict::new(py))?;
             }
         }
-        let graph = Py::new(
-            py,
-            PyGraph::from_state(GraphState {
-                graph: PyHedgeGraph::build(builder, PyNodeStore::Vec),
-                name: scene.graph.name.clone(),
-                global_data: PyGlobalData::default(),
-                codec: None,
-                render_config: Py::new(py, settings)?.into_any(),
-                revision: 0,
-            }),
-        )?;
+        elements.set_item("hedges", &hedges)?;
+        let transport = if settings.has_selectors(py) {
+            let selector = SCENE_SELECTORS.get().ok_or_else(|| {
+                PyRuntimeError::new_err(
+                    "drawing selectors require the optional Linnet Python graph bindings",
+                )
+            })?;
+            selector(py, &scene.graph, &elements, &settings)?
+        } else {
+            let normalized = PyDict::new(py);
+            normalized.set_item("graph", PyDict::new(py))?;
+            for (name, kind) in [
+                ("nodes", crate::drawing::DrawingKind::Node),
+                ("edges", crate::drawing::DrawingKind::Edge),
+                ("hedges", crate::drawing::DrawingKind::HalfEdge),
+            ] {
+                let values = PyList::empty(py);
+                for value in elements.get_item(name)?.unwrap().cast::<PyList>()? {
+                    values.append(crate::drawing::element_drawing(
+                        py,
+                        value.cast::<PyDict>()?,
+                        kind,
+                    )?)?;
+                }
+                normalized.set_item(name, values)?;
+            }
+            let base = Py::new(py, settings)?.into_any();
+            crate::typst::render_config_transport(py, &base, None, &normalized)?
+        };
         // Preparation snapshots every referenced label file before the temporary module is dropped.
-        Ok(Self::prepared(crate::render::prepare_scene(
-            py,
-            &graph,
-            &scene.graph,
+        Ok(Self::prepared(crate::render::prepare(
+            linnest::encode_graph_spec_bytes(&scene.graph).map_err(PyRuntimeError::new_err)?,
+            transport,
+            None,
         )?))
     }
+}
+
+/// Optional graph bindings provide live views only when selectors need them.
+pub type SceneSelectors = fn(
+    Python<'_>,
+    &linnest::TypstGraphSpec,
+    &Bound<'_, PyDict>,
+    &PyRenderSettings,
+) -> PyResult<crate::typst::RenderSettingsTransport>;
+static SCENE_SELECTORS: std::sync::OnceLock<SceneSelectors> = std::sync::OnceLock::new();
+pub fn register_scene_selectors(selectors: SceneSelectors) {
+    let _ = SCENE_SELECTORS.set(selectors);
 }

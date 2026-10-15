@@ -16,8 +16,8 @@ use pyo3::types::{PyAny, PyDict, PyTuple, PyType};
 
 use crate::dot::{self, PyDotCodec, PyEdgeValue, PyGlobalData, PyNodeValue};
 use crate::drawing::{
-    copy_drawing, drawing_dict, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing, EDGE_FIELDS,
-    HEDGE_FIELDS, NODE_FIELDS,
+    copy_drawing, drawing_dict, DrawingGuard, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing,
+    EDGE_FIELDS, HEDGE_FIELDS, NODE_FIELDS,
 };
 use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyTraversalTree};
@@ -660,6 +660,21 @@ impl PyGraph {
     }
 }
 
+struct GraphDrawingGuard {
+    graph: Py<PyGraph>,
+    revision: u64,
+}
+
+impl DrawingGuard for GraphDrawingGuard {
+    fn check(&self, py: Python<'_>) -> PyResult<()> {
+        self.graph.borrow(py).check_revision(self.revision)
+    }
+
+    fn traverse(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        visit.call(&self.graph)
+    }
+}
+
 #[derive(Clone, Copy)]
 enum ViewIndex {
     Node(usize),
@@ -865,8 +880,10 @@ impl PyNode {
         Ok(PyNodeDrawing::live(
             py,
             &state.as_ref().expect("checked").graph[NodeIndex(self.index)].drawing,
-            graph_obj.clone_ref(py),
-            self.revision,
+            Box::new(GraphDrawingGuard {
+                graph: graph_obj.clone_ref(py),
+                revision: self.revision,
+            }),
         ))
     }
 
@@ -956,8 +973,10 @@ impl PyEdge {
         Ok(PyEdgeDrawing::live(
             py,
             &state.as_ref().expect("checked").graph[EdgeIndex(self.index)].drawing,
-            graph_obj.clone_ref(py),
-            self.revision,
+            Box::new(GraphDrawingGuard {
+                graph: graph_obj.clone_ref(py),
+                revision: self.revision,
+            }),
         ))
     }
 
@@ -1049,8 +1068,10 @@ impl PyHalfEdge {
         Ok(PyHalfEdgeDrawing::live(
             py,
             &state.as_ref().expect("checked").graph[Hedge(self.index)].drawing,
-            graph_obj.clone_ref(py),
-            self.revision,
+            Box::new(GraphDrawingGuard {
+                graph: graph_obj.clone_ref(py),
+                revision: self.revision,
+            }),
         ))
     }
 
