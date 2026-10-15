@@ -1699,3 +1699,63 @@ impl<S: TensorStructure + Clone> TensorAtomOps for ParamTensor<S> {
         self.tensor.get_all_indeterminates(enter_functions)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        structure::{
+            Canonicalized, OrderedStructure,
+            representation::{Euclidean, RepName},
+            slot::IsAbstractSlot,
+        },
+        tensors::data::SetTensorData,
+    };
+    use symbolica::symbol;
+
+    #[test]
+    fn sparse_evaluation_preserves_flat_positions_and_zero_holes() {
+        let structure: OrderedStructure = Canonicalized::from_iter([
+            Euclidean {}.new_slot(2, 0).to_lib(),
+            Euclidean {}.new_slot(3, 1).to_lib(),
+        ])
+        .into_canonical();
+        let parameter = Atom::var(symbol!("spenso_test::sparse_eval_parameter"));
+        let mut sparse = SparseTensor::empty(structure.clone(), Atom::Zero);
+        sparse.set_flat(1.into(), parameter.clone()).unwrap();
+        sparse
+            .set_flat(5.into(), Atom::i() * (&parameter + Atom::num(2)))
+            .unwrap();
+        // An explicitly stored zero must not shift a later nonzero either.
+        sparse.set_flat(3.into(), Atom::Zero).unwrap();
+        let parameters = [parameter];
+        let functions = FunctionMap::default();
+        let convert = |coefficient: &SymComplex<Rational>| {
+            SymComplex::new(f64::from(&coefficient.re), f64::from(&coefficient.im))
+        };
+        let mut tree = DataTensor::Sparse(sparse.clone())
+            .to_evaluation_tree(&functions, &parameters)
+            .unwrap()
+            .map_coeff(&convert);
+        let mut optimized = sparse
+            .evaluator(&functions, &parameters, &OptimizationSettings::default())
+            .unwrap()
+            .map_coeff(&convert);
+        for input in [2.0, -3.0] {
+            let parameters = [SymComplex::new(input, 0.0)];
+            let expected = vec![
+                SymComplex::new(0.0, 0.0),
+                SymComplex::new(input, 0.0),
+                SymComplex::new(0.0, 0.0),
+                SymComplex::new(0.0, 0.0),
+                SymComplex::new(0.0, 0.0),
+                SymComplex::new(0.0, input + 2.0),
+            ];
+            for evaluated in [tree.evaluate(&parameters), optimized.evaluate(&parameters)] {
+                assert!(matches!(evaluated, DataTensor::Sparse(_)));
+                assert_eq!(evaluated.structure(), &structure);
+                assert_eq!(evaluated.to_bare_dense().data, expected);
+            }
+        }
+    }
+}

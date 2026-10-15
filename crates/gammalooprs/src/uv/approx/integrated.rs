@@ -2065,6 +2065,35 @@ mod tests {
     }
 
     #[test]
+    fn exact_os_coefficients_use_fundamental_color_dimension_identities() -> Result<()> {
+        test_initialise()?;
+        let spectator = parse_lit!((color_a + color_b) * (color_c - color_d) ^ 11);
+        for dimension in [3, 5] {
+            let casimir = idenso::color_cas!(2, idenso::cof!(dimension as usize));
+            let index = idenso::color_idx!(2, idenso::cof!(dimension as usize));
+            let dimension_ratio = Atom::num(dimension * dimension - 1) / Atom::num(dimension);
+            let settings = idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                ..Default::default()
+            };
+            let difference = casimir.pow(2) - &dimension_ratio * &casimir * index;
+            assert!(
+                SymbolicTensor::infer(&spectator * difference)?
+                    .simplify_algebra(&settings)?
+                    .into_expression()
+                    .is_zero()
+            );
+            assert_eq!(
+                SymbolicTensor::infer(&spectator * casimir)?
+                    .simplify_algebra(&settings)?
+                    .into_expression(),
+                &spectator * dimension_ratio / Atom::num(2),
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn analytic_spin_simplification_preserves_shared_color_factor() {
         use idenso::{bis, coad, cof, color_f, color_idx, color_t, gamma};
         use spenso::{mink, trace, trace_sym};

@@ -116,3 +116,9 @@ test_one TEST_NAME:
 [positional-arguments]
 test-verbose TEST_NAME:
     just _test-ci "$@" --nocapture
+
+# Exact algebra regressions independent of the on-shell component operation.
+[positional-arguments]
+test-fixed-frame-algebra *args:
+    cargo nextest run -p spenso -p idenso -p spenso-hep-lib -p gammalooprs --features spenso/shadowing --lib --test on_shell_projectors --cargo-profile {{ ci_cargo_profile }} --profile ci_gammaloop --locked --no-fail-fast \
+        -E 'binary(=on_shell_projectors) or test(fixed_frame_regressions) or test(fixed_basis_products) or test(fixed_minkowski_basis_products) or test(metric_constructor) or test(sparse_evaluation_preserves_flat_positions) or (package(gammalooprs) and (test(projected_fixed_velocity) or test(exact_os_coefficients_use_fundamental_color_dimension_identities) or test(analytic_os_temporal_dot) or test(analytic_spin_expansion_preserves_powered_scalar_products) or test(analytic_spin_simplification_preserves_shared_color_factor) or test(projected_dirac_algebra_precedes_single_and_double_pole_expansion) or test(projected_dirac_numerator_matches_scalar_master_before_backend_truncation) or test(analytic_uv_spin_algebra_rejects_unsupported_residual_contractions) or test(residual_tensor_contractions_are_checked_per_analytic_branch) or test(scalar_dimensions_are_substituted_inside_functions_but_not_lorentz_slots)))' "$@"
