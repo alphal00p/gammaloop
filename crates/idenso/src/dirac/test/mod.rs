@@ -1,3 +1,5 @@
+mod fixed_frame_regressions;
+
 use insta::assert_snapshot;
 use spenso::network::StructureLessDisplay;
 use spenso::network::parsing::ParseSettings;
