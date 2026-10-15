@@ -145,7 +145,7 @@ impl PyCffRepresentation {
         };
         let data = data.to_string().replace('<', "\\u003c");
         Ok(format!(
-            "<style>{}{}{}</style><section class=\"feynkit-cff-result feynkit-expression\" data-feynkit-notebook data-linnet-frame-owner><header class=\"hs-meta\"><code title=\"{}\">{kind}</code><span data-metadata></span></header>{}<template data-drawing>{}</template><script type=\"application/json\" data-cff>{data}</script><noscript>Enable notebook JavaScript to explore orientations and families. Use to_expression() for the symbolic expression.</noscript></section><script>{}</script><script>{}</script><script>{}</script>",
+            "<style>{}{}{}</style><section class=\"feynkit-cff-result feynkit-expression\" aria-label=\"Cross-free family energy integration\" data-feynkit-notebook data-linnet-frame-owner><header class=\"hs-meta\"><code title=\"{}\">{kind}</code><span data-metadata></span></header>{}<template data-drawing>{}</template><script type=\"application/json\" data-cff>{data}</script><noscript>Enable notebook JavaScript to explore orientations and families. Use to_expression() for the symbolic expression.</noscript></section><script>{}</script><script>{}</script><script>{}</script>",
             spynso3::display::NOTEBOOK_STYLE,
             include_str!("../expression.css"),
             include_str!("display.css"),

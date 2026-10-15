@@ -68,11 +68,6 @@ impl FeynkitModule {
         // Jedi only collects adjacent overloads with the bare decorator name;
         // `@typing.overload` silently exposes just the last CFF/LTD signature.
         let source = module.to_string();
-        #[cfg(not(feature = "linnet-python"))]
-        let source = source.replace(
-            "collections.abc.Callable[[symbolica.community.graph.Graph, int], bool] | None",
-            "None",
-        );
         source
             .replace(
                 "import typing\n",
@@ -521,6 +516,16 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
         Python::initialize();
         Python::attach(|py| {
             let module = registered_module(py);
+            // CFF presentation uses the tensor module supplied by the Community host.
+            let tensor = PyModule::new(py, "symbolica.community.tensor").unwrap();
+            spynso3::SpensoModule::register_module(&tensor).unwrap();
+            spynso3::SpensoModule::initialize(py).unwrap();
+            py.import("sys")
+                .unwrap()
+                .getattr("modules")
+                .unwrap()
+                .set_item("symbolica.community.tensor", tensor)
+                .unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
             locals
