@@ -728,7 +728,9 @@ mod tests {
     #[test]
     fn ltd_matches_current_cff_for_simple_and_repeated_sources() {
         let mut forward_bubble = test_graphs::initial_state_cut_line_graph(1);
-        forward_bubble.node_name_to_internal.insert("v1".to_string(), 1);
+        forward_bubble
+            .node_name_to_internal
+            .insert("v1".to_string(), 1);
         forward_bubble.internal_edges[0].head = 1;
         forward_bubble.internal_edges[1].tail = 1;
         forward_bubble.internal_edges[1].head = 0;

@@ -43,6 +43,8 @@ pub struct Scene {
     pub pages: Vec<String>,
     /// Layout options; `layout-algo` selects `dot` or `impred` (the default).
     pub layout: serde_json::Map<String, Value>,
+    /// Further passes, applied in order to the previous pass's geometry.
+    pub layout_passes: Vec<serde_json::Map<String, Value>>,
     /// Edges defining the layered hierarchy, in spec order. Other edges are
     /// routed around it without changing the ranks. `None` uses all edges.
     pub layout_edges: Option<Vec<usize>>,
@@ -172,16 +174,43 @@ impl Scene {
             node.statements
                 .insert("layout-height".into(), (2.0 * h).to_string());
         }
-        let graph = TypstGraph::from_spec(spec)?;
-        match self.layout.get("layout-algo").and_then(Value::as_str) {
-            Some("dot") => {
-                let laid = Laid::layered(graph, self)?;
-                return Ok(Drawing::new(self, typeset, &laid)?.svg(typeset));
+        let mut graph = TypstGraph::from_spec(spec)?;
+        let mut run: Option<ImpredRun> = None;
+        let mut laid = None;
+        for options in std::iter::once(&self.layout).chain(&self.layout_passes) {
+            match options
+                .get("layout-algo")
+                .and_then(Value::as_str)
+                .unwrap_or("impred")
+            {
+                "impred" => {
+                    let options = Value::Object(options.clone());
+                    if let Some(run) = &mut run {
+                        run.refine(&options)?;
+                    } else {
+                        run = Some(ImpredRun::seeded(graph, &options)?);
+                    }
+                    let current = run.as_ref().unwrap();
+                    graph = current
+                        .session
+                        .apply_impred_layout(&current.layout)
+                        .map_err(|error| error.to_string())?;
+                    laid = Some(Laid::new(current)?);
+                }
+                "dot" | "force" | "anneal" | "tree" | "stable-layered" | "railroad" => {
+                    laid = Some(Laid::layered(
+                        &mut graph,
+                        options,
+                        self.layout_edges.as_ref(),
+                    )?);
+                    run = None;
+                }
+                algo => return Err(format!("unsupported SVG layout algorithm {algo:?}")),
             }
-            Some("impred") | None => {}
-            Some(algo) => return Err(format!("unsupported SVG layout algorithm {algo:?}")),
         }
-        let mut run = ImpredRun::seeded(graph, &Value::Object(self.layout.clone()))?;
+        let Some(mut run) = run else {
+            return Ok(Drawing::new(self, typeset, &laid.unwrap())?.svg(typeset));
+        };
         let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
         if !self.label_feedback {
             return Ok(drawing.svg(typeset));
@@ -224,12 +253,14 @@ struct Laid {
 }
 
 impl Laid {
-    fn layered(mut graph: TypstGraph, scene: &Scene) -> Result<Self, String> {
-        graph.layout_config = serde_json::from_value(Value::Object(scene.layout.clone()))
+    fn layered(
+        graph: &mut TypstGraph,
+        options: &serde_json::Map<String, Value>,
+        edges: Option<&Vec<usize>>,
+    ) -> Result<Self, String> {
+        graph.layout_config = serde_json::from_value(Value::Object(options.clone()))
             .map_err(|error| format!("invalid layered layout options: {error}"))?;
-        let selected = scene
-            .layout_edges
-            .as_ref()
+        let selected = edges
             .map(|edges| {
                 let mut selected = graph.empty_subgraph::<SuBitGraph>();
                 for &edge in edges {
@@ -1062,6 +1093,7 @@ mod tests {
             title: Some("#\"bubble\"".to_owned()),
             pages: vec!["[x]".to_owned()],
             layout: serde_json::Map::new(),
+            layout_passes: Vec::new(),
             layout_edges: None,
             label_feedback: false,
         }
@@ -1076,6 +1108,67 @@ mod tests {
     fn typeset(scene: &Scene) -> Typeset {
         let label = page(r#"<g/><a href="linnest-metrics:10,8,8,12"><rect/></a>"#);
         scene.typeset(&[page("<g/>"), label]).unwrap()
+    }
+
+    #[test]
+    fn layout_passes_continue_from_the_previous_geometry() {
+        let mut scene = bubble(true);
+        scene.layout.insert("impred-steps".into(), Value::from(3));
+        let labels = typeset(&scene);
+        let first = scene.render(&labels).unwrap();
+
+        // A zero-step second pass must retain the solved geometry, not reseed it.
+        scene.layout_passes.push(
+            serde_json::from_value(serde_json::json!({
+                "impred-steps": 0
+            }))
+            .unwrap(),
+        );
+        assert_eq!(scene.render(&labels).unwrap(), first);
+
+        scene.layout_passes[0].insert("impred-steps".into(), Value::from(3));
+        let refined = scene.render(&labels).unwrap();
+        assert_ne!(refined, first);
+        assert_eq!(refined, scene.render(&labels).unwrap());
+    }
+
+    #[test]
+    fn a_later_layout_pass_reports_invalid_options() {
+        let mut scene = bubble(false);
+        scene.layout.insert("impred-steps".into(), Value::from(0));
+        scene.layout_passes.push(
+            serde_json::from_value(serde_json::json!({
+                "impred-step-scale": 0
+            }))
+            .unwrap(),
+        );
+        assert!(scene
+            .render(&typeset(&scene))
+            .unwrap_err()
+            .contains("step scale"));
+    }
+
+    #[test]
+    fn an_impred_pass_preserves_a_preceding_layered_layout() {
+        let mut scene = bubble(false);
+        // A single carrier is valid input for either solver. Layered parallel
+        // carriers can overlap, which ImPrEd correctly refuses to refine.
+        let mut edge = scene.graph.edges.remove(1);
+        edge.id = Some(0);
+        scene.graph.edges = vec![edge];
+        scene.edges = vec![scene.edges.remove(1)];
+        scene
+            .layout
+            .insert("layout-algo".into(), Value::from("dot"));
+        let labels = typeset(&scene);
+        let layered = scene.render(&labels).unwrap();
+        scene.layout_passes.push(
+            serde_json::from_value(serde_json::json!({
+                "layout-algo": "impred", "impred-steps": 0
+            }))
+            .unwrap(),
+        );
+        assert_eq!(scene.render(&labels).unwrap(), layered);
     }
 
     #[test]
@@ -1241,7 +1334,12 @@ mod tests {
                 ("layout-height".into(), "1".into()),
             ]);
         }
-        let laid = Laid::layered(TypstGraph::from_spec(spec).unwrap(), &scene).unwrap();
+        let laid = Laid::layered(
+            &mut TypstGraph::from_spec(spec).unwrap(),
+            &scene.layout,
+            scene.layout_edges.as_ref(),
+        )
+        .unwrap();
         assert!(laid.node(3)[1] > laid.node(0)[1]);
         assert!(laid.node(0)[1] > laid.node(1)[1]);
         assert_eq!(laid.node(1)[1], laid.node(2)[1]);

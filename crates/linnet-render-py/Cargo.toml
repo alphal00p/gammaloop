@@ -18,22 +18,19 @@ required-features = ["python_stubgen"]
 symbolica = { workspace = true, features = ["python_export"] }
 linnet = { workspace = true }
 linnest = { workspace = true, features = ["svg"] }
-# Maturin follows path dependencies into sdists; render.rs embeds Kurvst's Typst assets.
-kurvst = { path = "../kurvst" }
 pyo3 = { workspace = true, features = ["multiple-pymethods"] }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true, default-features = false }
-rust-embed = { version = "8.4", features = ["debug-embed", "include-exclude", "interpolate-folder-path"] }
-roxmltree = "0.21.1"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tempfile = "3.8"
-typst-renderer = { path = "../typst-renderer", features = ["full"] }
-walkdir = { workspace = true }
+typst-renderer = { path = "../typst-renderer" }
+resvg = { version = "0.47.0", default-features = false }
+krilla = { version = "0.8.2", default-features = false }
+krilla-svg = { version = "0.8.1", default-features = false }
 
-[build-dependencies]
-pyo3-build-config = { workspace = true }
-walkdir = { workspace = true }
+[dev-dependencies]
+tempfile = "3.8"
+roxmltree = "0.21.1"
 
 [features]
 default = ["native"]

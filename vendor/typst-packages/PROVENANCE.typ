@@ -1,7 +1,7 @@
-= Bundled Typst packages
+= Standalone Typst packages
 
-These packages are embedded in the graph renderer and Symbolica community wheel so rendering
-does not depend on a network connection or an installed Typst package cache.
+These vendored packages support standalone Typst documents and documentation builds.
+The Python graph renderer does not embed these packages or their WASM plugins.
 
 - CeTZ 0.5.1 (`preview/cetz/0.5.1`), LGPL-3.0-or-later
   - Source: `https://packages.typst.org/preview/cetz-0.5.1.tar.gz`

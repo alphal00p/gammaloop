@@ -252,7 +252,8 @@ impl Graph {
                     }
                 } else {
                     let antiparticle = PossibleParticle::from(particle.antiparticle);
-                    let anti_mu = mu_value(antiparticle.chemical_potential_atom(graph_model).as_ref())?;
+                    let anti_mu =
+                        mu_value(antiparticle.chemical_potential_atom(graph_model).as_ref())?;
                     if anti_mu.re != -mu.re {
                         return Err(eyre::eyre!(
                             "Thermal graph '{}' requires opposite chemical potentials for particle '{}' and antiparticle '{}' on edge {edge_id}; got {mu} and {anti_mu}",

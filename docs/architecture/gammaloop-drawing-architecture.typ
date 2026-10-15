@@ -313,28 +313,24 @@ GammaLoop styles.
 
 == Typed Render Configuration And Precedence
 
-`Graph.render_config` stores typed `GraphStyleOptions`, ordered `LayoutOptions`, `DrawOptions`,
-generic `DrawingSelectors`, and the selected template's closed native `template_options`. A sparse
-configuration supplied to `render` or `to_svg` overlays the rendering layers in this order:
-
-```text
-selected-template defaults -> graph configuration -> per-call configuration
-```
+`Graph.render_config` stores typed `GraphStyleOptions`, ordered `LayoutSettings`, `DrawOptions`,
+and Python `DrawingSelectors`. A sparse per-call configuration overlays the graph configuration.
+Python renders geometry directly to SVG and uses Typst only for labels and titles. Ordered
+layout passes continue natively from the preceding geometry; unsupported executable styles
+raise an error. Python exposes no custom templates, document-source compiler, or bundled
+Typst plugin assets.
 
 The `Graph.render_config` object itself is live and mutable, while its nested option objects are
-immutable values whose getters reconstruct copies. Replace `style`, `layouts`, `drawing`,
-`selectors`, or `template_options` after changing an option. `RenderConfig.overlay` returns a new
-configuration, and per-call overlays do not mutate the graph configuration. The template-options
-dictionary is open only in its string keys; every value still belongs to the validated native
-Typst model.
+immutable values whose getters reconstruct copies. Replace `style`, `layouts`, `drawing`, or
+`selectors` after changing an option. `RenderSettings.overlay` returns a new configuration, and
+per-call overlays do not mutate the graph configuration.
 
 The shipped Python notebook display is always generic, even when topology has dangling edges. Core
 Linnet has no `RenderMode`, `PhysicsOptions`, or topology-based diagram inference. GammaLoop's CLI
 and generated bundle select GammaLoop's `figure.typ` and provide its mode and particle settings as
-template-owned options. Another application can select another template without teaching Linnet
-its domain vocabulary.
+template-owned options. Those standalone Typst bundles are separate from Python's native renderer.
 
-Attachment correlates node, edge, and half-edge records by topology index before optional domain
+In standalone Typst bundles, attachment correlates node, edge, and half-edge records by topology index before optional domain
 preparation. Linnest composes edge layers once: graph defaults, explicit draw edge styles, record
 edge styles, draw endpoint styles, then endpoint-local styles. Native labels and callbacks remain
 Typst values. Explicit XY placement remains authoritative; GammaLoop's external preparation always

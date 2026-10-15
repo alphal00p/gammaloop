@@ -112,12 +112,12 @@
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
     (workspaceRoot + "/crates/linnet-py/typst/subgraph.css")
-    (workspaceRoot + "/crates/linnet-render-py/typst")
-    (workspaceRoot + "/crates/linnet-render-py/vendor")
     # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
     # adding its source directory does not change the documentation cache boundaries.
     (workspaceRoot + "/crates/spynso3/typst")
+    (workspaceRoot + "/crates/spynso3/data.json")
     (workspaceRoot + "/crates/typst-renderer/fonts")
+    (workspaceRoot + "/crates/typst-renderer/data.json")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
   ];
@@ -472,23 +472,9 @@
       "crates/linnet-py/README.md"
       "crates/linnet-py/typst/subgraph.css"
     ];
-    "linnet-render-py" = [
-      "crates/linnet-render-py/typst"
-      "crates/kurvst/typst/LICENSE"
-      "crates/kurvst/typst/kurvst.wasm"
-      "crates/kurvst/typst/src"
-      "crates/kurvst/typst/typst.toml"
-      "crates/linnest/typst/linnest.wasm"
-      "crates/linnest/typst/ec-layout.wasm"
-      "crates/linnest/typst/LICENSE.clarabel"
-      "crates/linnest/typst/LICENSE.ec-layout"
-      "crates/linnest/typst/LICENSE"
-      "crates/linnest/typst/src"
-      "crates/linnest/typst/typst.toml"
-      "crates/linnet-render-py/vendor"
-    ];
-    spynso3 = ["crates/spynso3/typst"];
-    "typst-renderer" = ["crates/typst-renderer/fonts"];
+    "linnet-render-py" = [ ];
+    spynso3 = ["crates/spynso3/typst" "crates/spynso3/data.json"];
+    "typst-renderer" = ["crates/typst-renderer/fonts" "crates/typst-renderer/data.json"];
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"
