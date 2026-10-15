@@ -129,13 +129,21 @@ impl PossibleParticle {
 
     /// Literal ZERO, including constants canonicalized at model construction,
     /// is absent. Adjustable named parameters remain present even at value zero.
-    pub(crate) fn chemical_potential_atom(&self) -> Option<Atom> {
+    pub(crate) fn chemical_potential_atom(&self, model: &Model) -> Option<Atom> {
         self.particle()
-            .and_then(|particle| particle.chemical_potential)
+            .and_then(|particle| particle.resolve(model).chemical_potential)
             .map(|mu| {
-                Atom::var(mu.0.0)
-                    .replace(UFOSymbol::zero().0)
-                    .with(Atom::Zero)
+                let parameter = model
+                    .parameter_by_id(mu)
+                    .expect("validated chemical potential");
+                if parameter.name == "ZERO"
+                    || (parameter.nature == crate::model::ParameterNature::Internal
+                        && parameter.expression.as_ref().is_some_and(Atom::is_zero))
+                {
+                    Atom::Zero
+                } else {
+                    Atom::var(UFOSymbol::from(parameter.name.as_str()).0)
+                }
             })
             .filter(|mu| !mu.is_zero())
     }
@@ -307,12 +315,12 @@ impl UVE for Edge {
         self.particle.is_massive(model)
     }
 
-    fn is_fermion(&self) -> bool {
-        self.particle.is_fermion()
+    fn is_fermion(&self, model: &Model) -> bool {
+        self.particle.is_fermion(model)
     }
 
-    fn chemical_potential_atom(&self) -> Option<Atom> {
-        self.particle.chemical_potential_atom()
+    fn chemical_potential_atom(&self, model: &Model) -> Option<Atom> {
+        self.particle.chemical_potential_atom(model)
     }
 }
 
@@ -493,12 +501,12 @@ impl UVE for ParseEdge {
         self.particle.is_massive(model)
     }
 
-    fn is_fermion(&self) -> bool {
-        self.particle.is_fermion()
+    fn is_fermion(&self, model: &Model) -> bool {
+        self.particle.is_fermion(model)
     }
 
-    fn chemical_potential_atom(&self) -> Option<Atom> {
-        self.particle.chemical_potential_atom()
+    fn chemical_potential_atom(&self, model: &Model) -> Option<Atom> {
+        self.particle.chemical_potential_atom(model)
     }
 }
 

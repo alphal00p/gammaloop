@@ -1,4 +1,5 @@
 use crate::model::ModelGammaLoopExt;
+use feynkit_generator::GenerationType;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
@@ -39,7 +40,6 @@ use crate::{
         surface::HybridSurfaceID,
     },
     debug_tags, define_index,
-    feyngen::GenerationType,
     graph::{
         FinalizedCut, FinalizedTopologyThresholdCandidate, GraphGroup, GroupId, LMBext,
         LmbChannelFallback, LmbIndex, LoopMomentumBasis, ThresholdPinchStatus,
@@ -4627,6 +4627,7 @@ pub(crate) fn params_for_iterated_threshold_ct(
 
 #[cfg(test)]
 mod tests {
+    use crate::model::ModelGammaLoopExt;
     use std::{
         fs,
         path::PathBuf,
@@ -5218,7 +5219,14 @@ mod tests {
     #[test]
     fn cross_section_lmb_cut_edge_exclusion_prefers_massive_then_fermion_then_id() {
         test_initialise().unwrap();
-        let model = crate::utils::load_generic_model("sm");
+        let mut model = crate::utils::load_generic_model("sm");
+        let mut parameters = crate::model::InputParamCard::from_str(
+            include_str!("../../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+                .to_owned(),
+            "json",
+        )
+        .unwrap();
+        model.simplify(&mut parameters).unwrap();
         let graph: crate::graph::Graph = finalized_runtime_dot!(
             digraph cut_edge_priority {
                 graph [projector=1]
@@ -5229,7 +5237,7 @@ mod tests {
                 A -> B [id=2 particle="t" mass=1 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
                 A -> B [id=3 particle="a" lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
                 A -> B [id=4 mass=0 source="{ufo_order:4}" sink="{ufo_order:4}"]
-            }
+            }, &model
         )
         .unwrap();
 

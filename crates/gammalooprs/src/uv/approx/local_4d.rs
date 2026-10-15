@@ -2725,7 +2725,7 @@ mod tests {
         finalized_runtime_dot,
         graph::{Graph, GraphThreeDSource},
         initialisation::test_initialise,
-        model::InputParamCard,
+        model::{InputParamCard, ModelGammaLoopExt},
         numerator::{aind::Aind, energy_degree::EnergyPowerAnalyzer},
         uv::approx::projected_4d::Local4dProjectionContext,
         uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode, uv_graph::UVE},
@@ -2959,13 +2959,20 @@ mod tests {
     }
 
     fn paper_appendix_b1_massless_graph() -> Graph {
+        let mut model = crate::utils::load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../../assets/models/json/sm/restrict_default.json").to_owned(),
+            "json",
+        )
+        .unwrap();
+        model.simplify(&mut parameters).unwrap();
         Graph::import_dot(&(include_str!(
             "../../../../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"
         )
         // Keep the checked-in GammaLoop route p=GL e2, k=GL e3 used to
         // realize the loop coordinates of B.1 and B.15, changing only the
         // fermion species for B.10-B.16.
-        .replace("particle=t", "particle=d")), &crate::utils::load_generic_model("sm")).map(|mut graphs| { assert_eq!(graphs.len(), 1, "one fixture graph expected"); graphs.remove(0) })
+        .replace("particle=t", "particle=d")), &model).map(|mut graphs| { assert_eq!(graphs.len(), 1, "one fixture graph expected"); graphs.remove(0) })
         .unwrap()
     }
 
@@ -5384,9 +5391,15 @@ mod tests {
     #[test]
     fn integrated_massless_gauge_soft_jet_vanishes_but_completed_hat_does_not() -> Result<()> {
         test_initialise()?;
+        let mut model = crate::utils::load_generic_model("sm");
+        let mut parameters = InputParamCard::from_str(
+            include_str!("../../../../../assets/models/json/sm/restrict_default.json").to_owned(),
+            "json",
+        )?;
+        model.simplify(&mut parameters)?;
         let graph: Graph = Graph::import_dot(
             include_str!("../../../../../tests/resources/graphs/local_ir_gluon_self_energy.dot"),
-            &crate::utils::load_generic_model("sm"),
+            &model,
         )
         .map(|mut graphs| {
             assert_eq!(graphs.len(), 1, "one fixture graph expected");

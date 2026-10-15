@@ -288,7 +288,7 @@ mod test {
     use spenso::network::parsing::ParseSettings;
     use symbolica::parse_lit;
 
-    use crate::{initialisation::test_initialise, numerator::aind::Aind};
+    use crate::{initialisation::test_initialise, model::ModelGammaLoopExt, numerator::aind::Aind};
 
     #[test]
     fn simplify() {
@@ -382,7 +382,7 @@ mod test {
     fn user_numerator_tree_fixtures_match_ufo_tree_algebra() {
         test_initialise().unwrap();
         let mut model = crate::utils::load_generic_model("sm");
-        let mut parameters = InputParamCard::from_str(
+        let mut parameters = crate::model::InputParamCard::from_str(
             include_str!("../../../../assets/models/json/sm/restrict_light_quarks_massless.json")
                 .to_owned(),
             "json",

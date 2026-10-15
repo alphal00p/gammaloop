@@ -39,7 +39,10 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-15: Manifest version 17 and regeneration of older positional
 # layouts match the current architecture. Canonical model loading and symbol
 # registration precede saved symbolic data.
-digest = "8a473e53100378726072a3ec27ba93f101a90087"
+# Reviewed 2026-10-15: State version 18 combines canonical FeynKit ownership and
+# thermal/Fermi payloads; the current architecture records regeneration of older
+# states.
+digest = "db36f2c7e1e51d40b43421317cc190adfeef640a"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -53,7 +56,9 @@ anchor = "fn default_workspace_path(&self"
 # Reviewed 2026-10-15: The maintained notes cover completed-iteration resume, read-
 # only output placement, signed/absolute views and terminal cleanup. Explicit model
 # access and fixture formatting preserve workspace and dashboard ownership.
-digest = "1533bd7ce353e5f6e20b61f1aa548c1146bdc5f1"
+# Reviewed 2026-10-15: The dashboard note covers retained main behavior: streamed panic
+# recovery shuts down the renderer; non-streamed runs preserve unwinding.
+digest = "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -86,7 +91,9 @@ anchor = "pub fn warm_up(&mut self, model"
 # Reviewed 2026-10-15: Canonical model arguments, shared numerator definitions,
 # evaluator activation and Gaussian reference behavior match the maintained
 # architecture; runtime orchestration remains downstream of generation.
-digest = "904c8f215e109144153e47243206d32b31d96ad0"
+# Reviewed 2026-10-15: The current architecture covers Fermi-surface evaluation and
+# weighted precise profiles alongside canonical FeynKit models.
+digest = "31e1c406bd1947e8297329482f496389e69e9751"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -182,7 +189,10 @@ anchor = "pub struct Model {"
 # Reviewed 2026-10-15: The canonical model owns validated particle/rule identifiers
 # and persistence reconstruction. Runtime mass and rule queries use the supplied model
 # rather than a second model representation.
-digest = "ce417083dc59bbe8a06e1cc529d46307f42b3f62"
+# Reviewed 2026-10-15: The current architecture records typed chemical-potential
+# ownership, persistence and structural-zero normalization without freezing adjustable
+# zeros.
+digest = "3727526953c1320fbc2185082203d5e1cdedb2aa"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
@@ -225,7 +235,9 @@ end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> S
 # Reviewed 2026-10-15: Compact import owns dialect dispatch, native rules, explicit
 # fragments, represented half-edge index conversion and source-map metadata.
 # Canonical/finalized literals bypass compact conversion.
-digest = "f37eb0bb029fc31b8b0c0b5917cd3e6416802e9e"
+# Reviewed 2026-10-15: Canonical graph ownership is unchanged; model-parameter
+# construction errors propagate through every finalized import path.
+digest = "3fab07858377157d1938b09240c1cb42bf280c5c"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -254,7 +266,9 @@ anchor = "fn dashboard_event_loop(receiver"
 # Reviewed 2026-10-15: The maintained notes cover completed-iteration resume, read-
 # only output placement, signed/absolute views and terminal cleanup. Explicit model
 # access and fixture formatting preserve workspace and dashboard ownership.
-digest = "1533bd7ce353e5f6e20b61f1aa548c1146bdc5f1"
+# Reviewed 2026-10-15: The dashboard note covers retained main behavior: streamed panic
+# recovery shuts down the renderer; non-streamed runs preserve unwinding.
+digest = "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -276,7 +290,9 @@ anchor = "mod render_ratatui;"
 # Reviewed 2026-10-15: The note covers physical sums before componentwise absolute
 # values, shallow monitoring without RNG changes and completed-iteration checkpoints.
 # Retained main behavior preserves renderer ownership.
-digest = "bd284d98cc1ea29035996e21c08ff204eb9f9d7e"
+# Reviewed 2026-10-15: Model access follows canonical FeynKit ownership; checkpoint,
+# worker and renderer contracts remain unchanged.
+digest = "d131b0f6a513af1310b647474fac787105610a1b"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -308,7 +324,9 @@ anchor = "impl UVOrchestrator {"
 # and scalar-product normalization without the removed tensor-alias carrier.
 # Scheduling, forest ownership and returned legacy result retain their documented
 # meaning.
-digest = "317b0dce74d18eee916b0d32b311b5d25789d035"
+# Reviewed 2026-10-15: The UV orchestrator retains canonical model access and complete
+# generation settings for medium-dependent forest selection.
+digest = "b366988fb7451148c68402ae7fc9ca36bd3a1952"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"
@@ -1036,6 +1054,21 @@ title = "Engineering investigations"
 summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
 
 [[section.note]]
+id = "symbolica-evaluation-domain-fix"
+title = "Symbolica evaluation-domain bug and fix"
+summary = "Historical thermal callback-dispatch fix for GammaLoop and Spenso numeric wrappers, including precision and original validation."
+source = "docs/architecture/symbolica-evaluation-domain-fix.typ"
+kind = "Correctness investigation"
+status = "Historical fix record"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-09-09"
+# Historical validation before the Symbolica 3 rebase, outside current branch history.
+evidence_revision = "2fde2185a5989b08f702083b5f58567a3dc3486f"
+products = ["gammaloop", "spenso"]
+topics = ["thermal", "evaluation", "precision"]
+
+[[section.note]]
 id = "tensor-engine-checkpoint"
 title = "Tensor engine correctness checkpoint"
 summary = "Saved validation and measurement scope for the earlier shared tensor-owner consolidation, preceding the unified reduction API."
@@ -1467,7 +1500,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # fixture ownership; producer partitioning is unchanged.
 # Reviewed 2026-10-15: Annotated-item paths remain derived from the catalog owner,
 # preserving the documented narrow documentation source-filter boundary.
-digest = "8d509a545a9faa89ae05d43a7265b4a8e3744f07"
+# Reviewed 2026-10-15: The cache note records rendering source ownership and locked UFO
+# runtime wheels; removed nonexistent test paths do not alter test selection.
+digest = "46d4adf2cd7685c97ba19285aa6081ef3c5daeb4"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

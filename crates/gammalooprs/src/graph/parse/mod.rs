@@ -514,7 +514,7 @@ impl Graph {
         self.threshold_counterterms =
             Autogen::from_option_or_generate(metadata.threshold_counterterms, Default::default);
         self.param_builder =
-            ParamBuilder::new(self, model, &self.loop_momentum_basis, metadata.parameters);
+            ParamBuilder::new(self, model, &self.loop_momentum_basis, metadata.parameters)?;
         self.threshold_counterterms.validate_for_graph(self)
     }
 
@@ -664,7 +664,7 @@ impl Graph {
             model,
             &loop_momentum_basis,
             initial_data.additional_params.clone(),
-        );
+        )?;
 
         let underlying =
             Self::build_underlying_graph(graph, model, &param_builder).with_context(|| {
@@ -701,7 +701,7 @@ impl Graph {
             model,
             &result.loop_momentum_basis,
             initial_data.additional_params,
-        );
+        )?;
         let runtime_numerator = result
             .numerator(&result.full_filter(), &result.empty_subgraph())
             .get_single_atom()?;
@@ -805,7 +805,7 @@ impl Graph {
             model,
             &loop_momentum_basis,
             initial_data.additional_params.clone(),
-        );
+        )?;
 
         let underlying = Self::build_underlying_graph(graph, model, &param_builder)
             .with_context(|| format!("Failed to build underlying graph {}", initial_data.name))?;

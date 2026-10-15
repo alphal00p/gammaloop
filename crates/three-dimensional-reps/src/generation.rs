@@ -386,6 +386,8 @@ mod generated_expression_persistence_tests {
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
+    #[error("LTD currently supports vacuum generation only; use CFF for medium mode {0:?}")]
+    LtdMediumNotSupported(MediumMode),
     #[error("invalid LTD residue coordinate: {0}")]
     InvalidResidueCoordinate(String),
     #[error(
@@ -597,6 +599,11 @@ fn generate_3d_expression_from_parsed_generated(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<GeneratedThreeDExpression> {
+    if options.representation == RepresentationMode::Ltd
+        && options.medium_mode != MediumMode::Vacuum
+    {
+        return Err(GenerationError::LtdMediumNotSupported(options.medium_mode));
+    }
     let bounds = if options.representation == RepresentationMode::Cff {
         normalize_energy_degree_bounds(
             options.energy_degree_bounds.as_deref().unwrap_or(&[]),
@@ -718,7 +725,8 @@ fn build_expression_preserving_internal_edges(
 
     let (active_parsed, active_to_orig) = contract_preserved_parsed_edges(parsed, &preserved);
     if active_parsed.denominator_internal_edge_ids().is_empty() {
-        let mut generated = expression_with_only_preserved_edges(parsed, &preserved, options.medium_mode)?;
+        let mut generated =
+            expression_with_only_preserved_edges(parsed, &preserved, options.medium_mode)?;
         generated.representation = options.representation;
         return Ok(generated);
     }

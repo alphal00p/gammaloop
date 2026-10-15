@@ -1,3 +1,4 @@
+use feynkit_generator::GenerationType;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
@@ -31,7 +32,6 @@ use crate::{
         CutCFFIndex,
         esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
     },
-    feyngen::GenerationType,
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
         cuts::{CutSet, ResidueSelector},

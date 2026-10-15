@@ -81,6 +81,8 @@ pub(crate) struct ParticleDefinition {
     pub color: i64,
     pub mass: String,
     pub width: String,
+    #[serde(default)]
+    pub chemical_potential: Option<String>,
     pub texname: String,
     pub antitexname: String,
     /// Native Typst math source (without dollar delimiters).
@@ -331,6 +333,7 @@ pub struct Particle {
     pub color: i64,
     pub mass: ParameterId,
     pub width: ParameterId,
+    pub chemical_potential: Option<ParameterId>,
     pub texname: String,
     pub antitexname: String,
     /// Native Typst math source (without dollar delimiters).
@@ -368,10 +371,10 @@ impl Particle {
 
     /// Symbolic UFO mass parameter, without substituting its numerical value.
     pub fn symbolic_mass(&self, model: &Model) -> Atom {
-        let mass = model.parameter_by_id(self.mass).unwrap();
-        if mass.name == "ZERO" {
+        if self.is_massless(model) {
             Atom::num(0)
         } else {
+            let mass = model.parameter_by_id(self.mass).unwrap();
             Atom::var(symbol!(&format!("UFO::{}", mass.name)))
         }
     }
@@ -395,13 +398,8 @@ impl Particle {
     pub fn is_massless(&self, model: &Model) -> bool {
         let mass = model.parameter_by_id(self.mass).unwrap();
         mass.name == "ZERO"
-            || mass
-                .value
-                .is_some_and(|value| value.re == 0.0 && value.im == 0.0)
-            || mass
-                .expression
-                .as_ref()
-                .is_some_and(|expression| expression.is_zero())
+            || (mass.nature == ParameterNature::Internal
+                && mass.expression.as_ref().is_some_and(Atom::is_zero))
     }
 
     /// How the shared physics renderer draws this particle's line.
@@ -673,7 +671,7 @@ impl Model {
                 parameter.typstname.as_deref(),
             )?;
         }
-        let parameters = definition
+        let mut parameters = definition
             .parameters
             .iter()
             .map(|parameter| {
@@ -701,6 +699,53 @@ impl Model {
                 })
             })
             .collect::<Result<Vec<_>, ModelError>>()?;
+        // Structural zeros come only from exact internal expressions. External
+        // parameters remain adjustable even when their current value is zero.
+        let mut zero_parameters = BTreeSet::from(["ZERO".to_owned()]);
+        loop {
+            let previous_len = zero_parameters.len();
+            let replacements = zero_parameters
+                .iter()
+                .map(|name| {
+                    Replacement::new(
+                        Atom::var(symbol!(&format!("UFO::{name}"))).to_pattern(),
+                        Atom::Zero,
+                    )
+                })
+                .collect::<Vec<_>>();
+            zero_parameters.extend(parameters.iter().filter_map(|parameter| {
+                (parameter.nature == ParameterNature::Internal
+                    && parameter.expression.as_ref().is_some_and(|expression| {
+                        expression.replace_multiple(&replacements).is_zero()
+                    }))
+                .then(|| parameter.name.clone())
+            }));
+            if zero_parameters.len() == previous_len {
+                break;
+            }
+        }
+        for parameter in &mut parameters {
+            if parameter.nature == ParameterNature::Internal
+                && parameter.expression.is_some()
+                && zero_parameters.contains(&parameter.name)
+            {
+                parameter.expression = Some(Atom::Zero);
+            }
+        }
+        let zero_mass_replacements = definition
+            .particles
+            .iter()
+            .map(|particle| &particle.mass)
+            .filter(|mass| zero_parameters.contains(*mass))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|name| {
+                Replacement::new(
+                    Atom::var(symbol!(&format!("UFO::{name}"))).to_pattern(),
+                    Atom::Zero,
+                )
+            })
+            .collect::<Vec<_>>();
         let particles = definition
             .particles
             .iter()
@@ -710,8 +755,27 @@ impl Model {
                 antiparticle: indexes.particles[&particle.antiname],
                 spin: particle.spin,
                 color: particle.color,
-                mass: indexes.parameters[&particle.mass],
+                mass: if zero_parameters.contains(&particle.mass) {
+                    indexes
+                        .parameters
+                        .get("ZERO")
+                        .copied()
+                        .unwrap_or(indexes.parameters[&particle.mass])
+                } else {
+                    indexes.parameters[&particle.mass]
+                },
                 width: indexes.parameters[&particle.width],
+                chemical_potential: particle.chemical_potential.as_ref().map(|name| {
+                    if zero_parameters.contains(name) {
+                        indexes
+                            .parameters
+                            .get("ZERO")
+                            .copied()
+                            .unwrap_or(indexes.parameters[name])
+                    } else {
+                        indexes.parameters[name]
+                    }
+                }),
                 texname: particle.texname.clone(),
                 antitexname: particle.antitexname.clone(),
                 typstname: particle.typstname.clone(),
@@ -741,13 +805,15 @@ impl Model {
                         &propagator.name,
                         "numerator",
                         &propagator.numerator,
-                    )?,
+                    )?
+                    .replace_multiple(&zero_mass_replacements),
                     denominator: parse_expression(
                         EntityKind::Propagator,
                         &propagator.name,
                         "denominator",
                         &propagator.denominator,
-                    )?,
+                    )?
+                    .replace_multiple(&zero_mass_replacements),
                 })
             })
             .collect::<Result<Vec<_>, ModelError>>()?;
@@ -1070,6 +1136,9 @@ impl Model {
                     color: particle.color,
                     mass: self.parameters[particle.mass.index()].name.clone(),
                     width: self.parameters[particle.width.index()].name.clone(),
+                    chemical_potential: particle
+                        .chemical_potential
+                        .map(|id| self.parameters[id.index()].name.clone()),
                     texname: particle.texname.clone(),
                     antitexname: particle.antitexname.clone(),
                     typstname: particle.typstname.clone(),
@@ -2140,6 +2209,16 @@ fn validate_particles(
             &particle.width,
             parameters,
         )?;
+        if let Some(name) = &particle.chemical_potential {
+            reference(
+                EntityKind::Particle,
+                &particle.name,
+                "chemical_potential",
+                EntityKind::Parameter,
+                name,
+                parameters,
+            )?;
+        }
         let antiparticle_id = *reference(
             EntityKind::Particle,
             &particle.name,
@@ -2336,6 +2415,54 @@ mod tests {
         assert_eq!(decoded.fingerprint(), model.fingerprint());
         assert_eq!(decoded.to_json().unwrap(), model.to_json().unwrap());
         assert_eq!(decoded.particle("s").unwrap(), model.particle("s").unwrap());
+    }
+
+    #[test]
+    fn chemical_potentials_preserve_adjustable_zeros_and_follow_exact_restrictions() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["parameters"][1]["value"] = serde_json::json!([0.0, 0.0]);
+        definition["particles"][0]["chemical_potential"] = serde_json::json!("double_mass");
+        let mut model = Model::from_json(&definition.to_string()).unwrap();
+        let particle = model.particle("s").unwrap();
+        assert!(!particle.symbolic_mass(&model).is_zero());
+        assert!(!particle.is_massless(&model));
+        assert_eq!(
+            particle.chemical_potential,
+            Some(model.parameter_id("double_mass").unwrap())
+        );
+
+        let bytes = bincode::encode_to_vec(&model, bincode::config::standard()).unwrap();
+        let (restored, _): (Model, _) =
+            bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+        assert_eq!(
+            restored.particle("s").unwrap().chemical_potential,
+            particle.chemical_potential
+        );
+
+        model.simplify_zero_values().unwrap();
+        let particle = model.particle("s").unwrap();
+        let zero = model.parameter_id("ZERO").unwrap();
+        assert_eq!(particle.mass, zero);
+        assert_eq!(particle.chemical_potential, Some(zero));
+        assert!(particle.symbolic_mass(&model).is_zero());
+        assert!(particle.is_massless(&model));
+        assert_eq!(
+            model.propagator("s_prop").unwrap().denominator,
+            Atom::var(symbol!("UFO::P")).pow(2)
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_chemical_potential_parameters() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["particles"][0]["chemical_potential"] = serde_json::json!("missing_mu");
+        let error = Model::from_json(&definition.to_string())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("chemical_potential") && error.contains("missing_mu"),
+            "{error}"
+        );
     }
 
     #[test]

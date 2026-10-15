@@ -591,15 +591,18 @@ impl CffGenerationGraph {
     /// caller's energy convention. Cyclic orientations have no branches.
     pub fn try_surface_chains<S: Clone, E>(
         &self,
-        surface: &mut impl FnMut(&CffVertex) -> Result<S, E>,
-    ) -> Result<Vec<Vec<S>>, E> {
+        surface: &mut impl FnMut(&CffVertex) -> std::result::Result<S, E>,
+    ) -> std::result::Result<Vec<Vec<S>>, E> {
         if self.has_directed_cycle() {
             return Ok(Vec::new());
         }
         if self.vertices.len() < 2 {
             return Ok(vec![Vec::new()]);
         }
-        let Some(vertex) = self.source_sink_greedy() else {
+        let Some(vertex) = self.vertices.iter().find(|vertex| {
+            matches!(vertex.vertex_type(), VertexType::Source | VertexType::Sink)
+                && self.has_connected_complement(&vertex.nodes)
+        }) else {
             return Ok(Vec::new());
         };
         let selected = surface(vertex)?;

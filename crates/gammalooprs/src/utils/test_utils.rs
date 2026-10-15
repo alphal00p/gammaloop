@@ -37,6 +37,110 @@ pub(crate) fn dummy_hedge_graph(n_edges: usize) -> HedgeGraph<NoData, NoData, No
     builder.build()
 }
 
+impl crate::graph::Graph {
+    /// Construct denominator-only fixtures without asking a physical model to
+    /// supply interactions. Unit fragments have no rule-leg tensor slots; their
+    /// incident half-edges supply an explicit frame for the strict runtime parser.
+    pub(crate) fn unit_numerator_fixtures(
+        input: &str,
+        model: &crate::model::Model,
+    ) -> eyre::Result<Vec<Self>> {
+        use crate::{
+            graph::{LMBext, parse::ParseGraph},
+            momentum::sample::LoopIndex,
+        };
+        use linnet::{
+            half_edge::{
+                nodestore::NodeStorageVec,
+                subgraph::{ModifySubSet, SuBitGraph},
+            },
+            parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, GraphSet},
+        };
+        let set: GraphSet<
+            DotEdgeData,
+            DotVertexData,
+            DotHedgeData,
+            GlobalData,
+            NodeStorageVec<DotVertexData>,
+        > = GraphSet::from_string(input.to_owned()).map_err(|error| eyre::eyre!("{error}"))?;
+        set.set
+            .into_iter()
+            .zip(set.global_data)
+            .map(|(graph, global_data)| {
+                let mut parsed = ParseGraph::from_parsed(DotGraph { graph, global_data }, model)?;
+                eyre::ensure!(
+                    parsed.global_data.num.is_one()
+                        && parsed
+                            .global_data
+                            .projectors
+                            .as_ref()
+                            .is_none_or(Atom::is_one),
+                    "unit-numerator fixtures require a unit numerator and projector"
+                );
+                parsed.global_data.projectors = Some(Atom::one());
+                for (_, _, vertex) in parsed.graph.iter_nodes_mut() {
+                    eyre::ensure!(
+                        vertex.num.as_ref().is_none_or(Atom::is_one),
+                        "non-unit fixture vertex"
+                    );
+                    vertex.num = Some(Atom::one());
+                }
+                let slots = parsed
+                    .graph
+                    .iter_nodes()
+                    .flat_map(|(_, hedges, _)| {
+                        hedges
+                            .enumerate()
+                            .map(|(slot, hedge)| (hedge, slot))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                for (hedge, slot) in slots {
+                    parsed.graph[hedge].ufo_order = Some(u8::try_from(slot)?);
+                }
+                let edges = parsed.graph.iter_edges().map(|(_, edge, _)| edge).collect::<Vec<_>>();
+                for edge in edges {
+                    let edge = &mut parsed.graph[edge];
+                    eyre::ensure!(
+                        edge.num.as_ref().is_none_or(Atom::is_one),
+                        "non-unit fixture edge"
+                    );
+                    eyre::ensure!(
+                        edge.is_cut.is_none(),
+                        "unit fixtures must be amplitude graphs"
+                    );
+                    edge.num = Some(Atom::one());
+                }
+                let mut full: SuBitGraph = parsed.graph.full_filter();
+                let mut tree = full.clone();
+                let mut assigned = std::collections::BTreeSet::new();
+                for (pair, _, edge) in parsed.graph.iter_edges() {
+                    if edge.data.is_dummy {
+                        full.sub(pair);
+                        tree.sub(pair);
+                    }
+                    if let Some(slot) = edge.data.lmb_id {
+                        assigned.insert(slot.0);
+                        tree.sub(pair);
+                    }
+                }
+                let basis =
+                    parsed
+                        .graph
+                        .lmb_impl(&full, &tree, parsed.graph.internal_crown(&full))?;
+                for edge in basis.loop_edges {
+                    if parsed.graph[edge].lmb_id.is_none() {
+                        let slot = (0..).find(|slot| !assigned.contains(slot)).unwrap();
+                        parsed.graph[edge].lmb_id = Some(LoopIndex(slot));
+                        assigned.insert(slot);
+                    }
+                }
+                Self::from_parsed_with_validation(parsed, model)
+            })
+            .collect()
+    }
+}
+
 #[test]
 fn normalization() {
     let a = GS.emr_vec(EdgeIndex(1), AIND_SYMBOLS.cind.call_args([0]));

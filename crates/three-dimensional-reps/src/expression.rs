@@ -24,7 +24,8 @@ use typed_index_collections::TiVec;
 mod ltd;
 
 use crate::{
-    MediumMode, ThermalWeight, generation::RepresentationMode,
+    MediumMode, ThermalWeight,
+    generation::RepresentationMode,
     graph_io::EnergyEdgeIndexMap,
     surface::{EsurfaceID, HybridSurfaceID, LinearEnergyExpr, SurfaceCache},
     symbols::{

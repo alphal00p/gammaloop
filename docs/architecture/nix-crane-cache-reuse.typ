@@ -1492,6 +1492,17 @@ producers that compile it. The package-specific source map keeps them out
 of unrelated per-crate producers, while downloaded Python wheels remain
 confined to the terminal documentation/runtime closure.
 
+=== Community rendering and UFO runtime inputs
+
+The shared Python rendering package is `linnet-render-py`; its embedded Typst
+sources and vendor trees enter that package's source key. The graph API remains
+in `linnet-py`, and both packages retain separate Cargo dependency boundaries.
+UFO import tests use the released wheels locked in `nix/ufo-runtime/uv.lock`
+(Symbolica 3.0.0 and ufo-model-loader 1.0.0). This runtime lock is independent
+of the root notebook environment's Community source pin. Native Rust continues
+to use the workspace Cargo lock. The UFO wheel closure is attached only to
+the selected runtime groups and does not enter unrelated compiled producers.
+
 == Follow-up: persistent Typst worlds in the live watcher
 <follow-up-persistent-typst-worlds>
 The release and Pages builders still use the pinned Typst 0.15 command-line

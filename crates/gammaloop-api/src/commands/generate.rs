@@ -2212,7 +2212,7 @@ mod tests {
         let mut cross_sections = BTreeMap::new();
         cross_sections.insert(
             "default".to_string(),
-            CrossSection::from_graph_list("default".to_string(), vec![], &state.model)?,
+            CrossSection::from_graph_list("default".to_string(), vec![])?,
         );
         state.process_list.add_process(Process {
             definition: ProcessDefinition {

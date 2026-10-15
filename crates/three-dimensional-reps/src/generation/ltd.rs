@@ -9,19 +9,20 @@ use super::{
     CffEnergyFactorComponent, CffEnergyFactorOwnership, CffGlobalPrefactorSign,
     ExpressionAssembler, Generate3DExpressionOptions, GeneratedThreeDExpression, GenerationError,
     LinearEnergyExpr, MomentumSignature, ParsedGraph, Rational, RationalExt, RepresentationMode,
-    Result, apply_initial_state_cut_edge_energy_exprs, denominator_tree_from_chain,
-    edge_q0_from_loop_exprs, energy_residues, normalize_energy_degree_bounds, repeated_groups,
+    Result, apply_initial_state_cut_edge_energy_exprs, denominator_tree_from_chains,
+    edge_q0_from_loop_exprs, energy_residues, normalize_energy_degree_bounds,
     solve_loop_energy_from_target_edge_exprs, solve_rational_system,
 };
 use crate::{
     ThreeDExpression,
     cut_structure::{ContourClosure, EnergyResidue},
     expression::CFFVariant,
+    graph_io::repeated_groups,
     surface::{HybridSurfaceID, SurfaceOrigin},
     utils::determinant_i32,
 };
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
 use std::collections::{BTreeMap, HashMap, hash_map::Entry};
 
 struct Channel {
@@ -145,16 +146,14 @@ impl<'a> LtdBuilder<'a> {
                 .then_some(CffEnergyFactorComponent {
                     internal_edge_ids: denominator_edges,
                     ownership: CffEnergyFactorOwnership::VariantLocal,
-                    denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::default(),
-                    core_global_prefactor_sign: CffGlobalPrefactorSign::default(),
+                    source_frame: CffGlobalPrefactorSign::default(),
                 })
                 .into_iter()
                 .collect(),
             source_energy_degree_bounds: Vec::new(),
             // LTD is already the signed dq0/(2*pi*i) contour. Consumers must
             // not apply the CFF source-frame conversion to this representation.
-            denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::default(),
-            core_global_prefactor_sign: CffGlobalPrefactorSign::default(),
+            source_frame: CffGlobalPrefactorSign::default(),
         })
     }
 
@@ -343,6 +342,8 @@ impl<'a> LtdBuilder<'a> {
                     self.assembly.push_variant_for_maps(
                         loop_map.clone(),
                         edge_map.clone(),
+                        &EdgeVec::from(Vec::new()),
+                        &BTreeMap::new(),
                         CFFVariant {
                             origin: Some("ltd".to_string()),
                             prefactor: &sample_coefficient * &term.coefficient,
@@ -351,8 +352,11 @@ impl<'a> LtdBuilder<'a> {
                             denominator_surface_signs: BTreeMap::new(),
                             denominator_edge_support_signs: BTreeMap::new(),
                             uniform_scale_power,
+                            thermal_weight: Default::default(),
                             numerator_surfaces: Vec::new(),
-                            denominator: denominator_tree_from_chain(&term.chain),
+                            denominator: denominator_tree_from_chains(std::slice::from_ref(
+                                &term.chain,
+                            )),
                         },
                     );
                 }
@@ -538,6 +542,26 @@ mod tests {
     }
 
     #[test]
+    fn ltd_rejects_medium_modes_without_dropping_thermal_weights() {
+        let parsed = repeated_cycle(2, &[1, -1]);
+        for medium_mode in [
+            crate::MediumMode::ThermodynamicEquilibrium,
+            crate::MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let options = Generate3DExpressionOptions {
+                representation: RepresentationMode::Ltd,
+                medium_mode,
+                energy_degree_bounds: Some(Vec::new()),
+                ..Default::default()
+            };
+            assert!(matches!(
+                generate_3d_expression(&parsed, &options),
+                Err(GenerationError::LtdMediumNotSupported(mode)) if mode == medium_mode
+            ));
+        }
+    }
+
+    #[test]
     fn repeated_ltd_requires_explicit_numerator_capacity() {
         let parsed = repeated_cycle(2, &[1, -1]);
         let options = Generate3DExpressionOptions {
@@ -620,16 +644,8 @@ mod tests {
                 .energy_factor_components
                 .iter()
                 .map(|component| {
-                    let source_frame = match component.ownership {
-                        CffEnergyFactorOwnership::GlobalSourceProduct => {
-                            component.core_global_prefactor_sign
-                        }
-                        CffEnergyFactorOwnership::VariantLocal => {
-                            component.denominator_only_global_prefactor_sign
-                        }
-                    };
                     CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                        .product(source_frame)
+                        .product(component.source_frame)
                         .factor()
                 })
                 .product()
@@ -712,6 +728,8 @@ mod tests {
     #[test]
     fn ltd_matches_current_cff_for_simple_and_repeated_sources() {
         let mut forward_bubble = test_graphs::initial_state_cut_line_graph(1);
+        forward_bubble.node_name_to_internal.insert("v1".to_string(), 1);
+        forward_bubble.internal_edges[0].head = 1;
         forward_bubble.internal_edges[1].tail = 1;
         forward_bubble.internal_edges[1].head = 0;
         let mut second = forward_bubble.internal_edges[1].clone();

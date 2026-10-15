@@ -1156,8 +1156,16 @@ impl<S: StorageTensor<Data = Atom>> TensorAtomMaps for S {
 
     /// Check if the expression could be 0, using (potentially) numerical sampling with
     /// a given tolerance and number of iterations.
-    fn zero_test(&self, iterations: usize, tolerance: f64) -> Self::ContainerData<ConditionResult> {
-        self.map_data_ref(|a| a.zero_test(iterations, tolerance))
+    fn zero_test(
+        &self,
+        iterations: usize,
+        _tolerance: f64,
+    ) -> Self::ContainerData<ConditionResult> {
+        let settings = symbolica::atom::ZeroTestSettings::default()
+            .finite_field_samples(iterations)
+            .numerical_samples(iterations)
+            .exact_fallback(iterations != 0);
+        self.map_data_ref(|a| a.check_zero_with(&settings))
     }
 
     /// Set the coefficient ring to the multivariate rational polynomial with `vars` variables.

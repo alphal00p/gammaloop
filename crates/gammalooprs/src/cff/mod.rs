@@ -7539,7 +7539,11 @@ mod tests {
                 write!(dot, "v{source} -> v{sink} [id={edge} mass=\"m{mass}\"];")?;
             }
             dot.push('}');
-            let mut graph: Graph = dot.into_graph(model)?;
+            let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(&(dot), model)
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })?;
             let numerator = if odd {
                 // Hold the reference momentum direction fixed when reversing
                 // the DOT arrows: the raw edge energy then changes sign.
@@ -7574,7 +7578,12 @@ mod tests {
             // contour J = integral dq0/(2*pi*i), as in the vacuum test below.
             let sum = sum * (Atom::num(2) * Atom::var(GS.pi)).pow(3) / Atom::i();
             let mut explicit = graph
-                .make_thermal_distributions_explicit(&sum, mode, graph.iter_edge_ids())?
+                .make_thermal_distributions_explicit(
+                    &graph.model,
+                    &sum,
+                    mode,
+                    graph.iter_edge_ids(),
+                )?
                 .replace(function!(GS.thermal_weight_wrapper, W_.a_))
                 .with(W_.a_);
             if fermion {
@@ -7582,9 +7591,13 @@ mod tests {
                 // replacing the edge's chemical-potential symbol would mask it.
                 explicit = model
                     .apply_parameter_replacement_rules(&explicit)
-                    .replace(Atom::from(model.get_parameter("muB").name))
+                    .replace(Atom::from(crate::model::UFOSymbol::from(
+                        model.get_parameter("muB").name.as_str(),
+                    )))
                     .with(Atom::num(3) * Atom::num(mu))
-                    .replace(Atom::from(model.get_parameter("muQ").name))
+                    .replace(Atom::from(crate::model::UFOSymbol::from(
+                        model.get_parameter("muQ").name.as_str(),
+                    )))
                     .with(Atom::zero());
             }
             for (edge, mass) in masses.iter().enumerate() {

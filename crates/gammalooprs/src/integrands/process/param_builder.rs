@@ -113,6 +113,7 @@ pub trait ParamBuilderGraph {
     /// localization and return an error rather than a pointwise body.
     fn explicit_thermal_distribution_atom(
         &self,
+        model: &Model,
         edge: EdgeIndex,
         derivative_order: usize,
         thermal_sign: Atom,
@@ -121,6 +122,7 @@ pub trait ParamBuilderGraph {
     ) -> Result<Atom>;
     fn make_thermal_distributions_explicit(
         &self,
+        model: &Model,
         atom: &Atom,
         limit: MediumMode,
         edges: impl IntoIterator<Item = EdgeIndex>,
@@ -156,6 +158,7 @@ pub trait ParamBuilderGraph {
                 return;
             }
             match self.explicit_thermal_distribution_atom(
+                model,
                 edge,
                 derivative_order,
                 thermal_sign,
@@ -1550,7 +1553,7 @@ impl<T: FloatLike> ParamBuilder<T> {
                 model_values.get(param).ok_or_else(|| {
                     color_eyre::eyre::eyre!(
                         "Model parameter {param} has no value in model {}",
-                        model.name
+                        model.name()
                     )
                 })
             })
@@ -1559,12 +1562,6 @@ impl<T: FloatLike> ParamBuilder<T> {
             .into_iter()
             .zip_eq(self.pairs.model_parameters.value_range.clone())
         {
-            let value = model_values.get(param).unwrap_or_else(|| {
-                panic!(
-                    "Model parameter {param} has no value in model {}",
-                    model.name()
-                )
-            });
             for (value_index, values) in self.values.iter_mut().enumerate() {
                 values[position * (value_index + 1)] = value.clone();
             }
@@ -2047,7 +2044,7 @@ mod tests {
             (29.0, Complex::new(5.0, -7.0)),
         ] {
             let model = make_model(mass_value, coupling_value);
-            builder.update_model_values(&model);
+            builder.update_model_values(&model).unwrap();
             for (buffer_index, values) in builder.values.iter().enumerate() {
                 let stride = buffer_index + 1;
                 for (position, value) in values.iter().enumerate() {
@@ -2184,8 +2181,8 @@ mod tests {
         let mut builder = ParamBuilder::<f64>::new_empty();
         builder.pairs.model_parameters = ParamValuePairs {
             params: vec![
-                model.get_parameter("MT").name.into(),
-                model.get_parameter("aS").name.into(),
+                Atom::from(UFOSymbol::from(model.get_parameter("MT").name.as_str())),
+                Atom::from(UFOSymbol::from(model.get_parameter("aS").name.as_str())),
             ],
             value_range: 0..2,
         };
@@ -2199,12 +2196,32 @@ mod tests {
             ],
         ];
         let previous = builder.values.clone();
-        model.get_parameter_mut("MT").unwrap().value = Some(Complex::new_re(F(13.0)));
-        model.get_parameter_mut("aS").unwrap().value = None;
+        let mut definition: serde_json::Value =
+            serde_json::from_str(&model.to_json().unwrap()).unwrap();
+        for parameter in definition["parameters"].as_array_mut().unwrap() {
+            match parameter["name"].as_str() {
+                Some("MT") => parameter["value"] = serde_json::json!([13.0, 0.0]),
+                Some("aS") => {
+                    // A validated external parameter always has a value. An
+                    // unevaluated internal parameter exercises the same missing
+                    // slot without constructing an invalid model.
+                    parameter["nature"] = serde_json::json!("internal");
+                    parameter["expression"] = serde_json::json!("17");
+                    parameter["value"] = serde_json::Value::Null;
+                }
+                _ => {}
+            }
+        }
+        model = Model::from_json(&definition.to_string()).unwrap();
         let error = builder.update_model_values(&model).unwrap_err().to_string();
         assert!(error.contains("aS"), "{error}");
         assert_eq!(builder.values, previous);
-        model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(17.0)));
+        for parameter in definition["parameters"].as_array_mut().unwrap() {
+            if parameter["name"] == "aS" {
+                parameter["value"] = serde_json::json!([17.0, 0.0]);
+            }
+        }
+        model = Model::from_json(&definition.to_string()).unwrap();
         builder.update_model_values(&model).unwrap();
         assert_eq!(
             builder.values,
@@ -2225,9 +2242,16 @@ mod tests {
         // A call must also work before GammaLoop's Symbolica initializer has run.
         let _ = ThermalDistributionCall::atom(0, 0, 1, 1, 1);
         test_initialise().unwrap();
-        let mut graph: Graph = dot!(digraph thermal {
-            node [num=1]; edge [num=1 particle="d"];
-            A -> B; B -> A [particle="g"];
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph thermal {
+                node [num=1]; edge [num=1 particle="d"];
+                A -> B; B -> A [particle="g"];
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })
         .unwrap();
         let alias = symbolica::function!(symbol!("thermal_mode_test_alias"), 7);
@@ -2298,21 +2322,31 @@ mod tests {
         test_initialise().unwrap();
         let model = load_generic_model("sm");
         for particle in ["d", "G+", "g"] {
-            let mut graph: Graph = format!(
-                r#"digraph thermal_cycle {{
+            let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+                &(format!(
+                    r#"digraph thermal_cycle {{
                     node [num=1]; edge [num=1 particle="{particle}"];
                     A -> B; B -> C; C -> D; D -> E; E -> A;
                 }}"#
+                )),
+                &model,
             )
-            .into_graph(&model)
+            .map(|mut graphs| {
+                assert_eq!(graphs.len(), 1);
+                graphs.remove(0)
+            })
             .unwrap();
             let edge = EdgeIndex(0);
             // Concrete orientation calls must not depend on a global sign slot.
             let mut params = vec![GS.ose(edge), GS.inverse_temperature.to_atom()];
             let mut input = vec![1.0, 2.0];
-            if let Some(mu) = graph[edge].chemical_potential_atom() {
+            if let Some(mu) = graph[edge].chemical_potential_atom(&graph.model) {
                 params.push(mu);
-                input.push(if graph[edge].is_fermion() { 1.5 } else { 0.4 });
+                input.push(if graph[edge].is_fermion(&graph.model) {
+                    1.5
+                } else {
+                    0.4
+                });
             }
             for limit in [
                 MediumMode::ThermodynamicEquilibrium,
@@ -2336,6 +2370,7 @@ mod tests {
                                 ),
                                 graph
                                     .explicit_thermal_distribution_atom(
+                                        &graph.model,
                                         edge,
                                         order as usize,
                                         Atom::num(thermal_sign),
@@ -2363,7 +2398,7 @@ mod tests {
                                         * input.get(2).copied().unwrap_or(0.0);
                                 let occupation = if limit.is_finite_temperature() {
                                     let tanh = (input[1] * shifted_energy / 2.0).tanh();
-                                    if graph[edge].is_fermion() {
+                                    if graph[edge].is_fermion(&graph.model) {
                                         tanh
                                     } else {
                                         tanh.recip()
@@ -2387,10 +2422,17 @@ mod tests {
     #[test]
     fn thermal_weight_wrapper_survives_partial_vacuum_limits_and_evaluates() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph G {
-            edge [particle="scalar_1"]; node [num=1];
-            v1 -> v2; v1 -> v2;
-        }, "scalars")
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph G {
+                edge [particle="scalar_1"]; node [num=1];
+                v1 -> v2; v1 -> v2;
+            }),
+            &crate::utils::load_generic_model("scalars"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
         .unwrap();
         let weight = symbolica::function!(
             GS.thermal_weight_wrapper,
@@ -2399,7 +2441,12 @@ mod tests {
                 - 1
         );
         let partial = graph
-            .make_thermal_distributions_explicit(&weight, MediumMode::Vacuum, [EdgeIndex(0)])
+            .make_thermal_distributions_explicit(
+                &graph.model,
+                &weight,
+                MediumMode::Vacuum,
+                [EdgeIndex(0)],
+            )
             .unwrap();
         assert_eq!(
             partial,
@@ -2410,7 +2457,12 @@ mod tests {
         );
         assert!(
             graph
-                .make_thermal_distributions_explicit(&partial, MediumMode::Vacuum, [EdgeIndex(1)],)
+                .make_thermal_distributions_explicit(
+                    &graph.model,
+                    &partial,
+                    MediumMode::Vacuum,
+                    [EdgeIndex(1)],
+                )
                 .unwrap()
                 .is_zero()
         );
@@ -2466,26 +2518,39 @@ mod tests {
         };
 
         test_initialise().unwrap();
-        let mut graph: Graph = dot!(digraph thermal_sunrise {
-            node [num=1]
-            edge [num=1]
-            A -> B [particle="d"]
-            B -> A [particle="d"]
-            A -> B [particle="g"]
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph thermal_sunrise {
+                node [num=1]
+                edge [num=1]
+                A -> B [particle="d"]
+                B -> A [particle="d"]
+                A -> B [particle="g"]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })
         .unwrap();
         // Order the edges as quark, quark, gluon; DOT import assigns the indices.
         let mut edges = graph.iter_edge_ids().collect_vec();
-        edges.sort_by_key(|&edge| !graph[edge].is_fermion());
+        edges.sort_by_key(|&edge| !graph[edge].is_fermion(&graph.model));
         let edges: [EdgeIndex; 3] = edges.try_into().unwrap();
-        assert!(graph[edges[2]].chemical_potential_atom().is_none());
+        assert!(
+            graph[edges[2]]
+                .chemical_potential_atom(&graph.model)
+                .is_none()
+        );
         let orientations = [1, -1, 1];
         let params = edges
             .map(|edge| GS.ose(edge))
             .into_iter()
             .chain([
                 Atom::var(GS.inverse_temperature),
-                graph[edges[0]].chemical_potential_atom().unwrap(),
+                graph[edges[0]]
+                    .chemical_potential_atom(&graph.model)
+                    .unwrap(),
             ])
             .collect_vec();
         // With beta = 2, edge e has a = E - sigma*mu = scale * shifts[e], so its

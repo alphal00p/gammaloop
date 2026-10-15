@@ -149,6 +149,7 @@ fn fermi_surface_matches_integrated_finite_temperature_derivatives() -> Result<(
         )?;
         let expression = graph
             .explicit_thermal_distribution_atom(
+                &graph.model,
                 EdgeIndex(1),
                 derivative_order,
                 Atom::num(1),
@@ -156,7 +157,9 @@ fn fermi_surface_matches_integrated_finite_temperature_derivatives() -> Result<(
                 MediumMode::ThermodynamicEquilibrium,
             )
             .unwrap();
-        let chemical_potential = graph[EdgeIndex(1)].chemical_potential_atom().unwrap();
+        let chemical_potential = graph[EdgeIndex(1)]
+            .chemical_potential_atom(&graph.model)
+            .unwrap();
         let mut thermal = expression
             .evaluator(&[
                 GS.ose(EdgeIndex(1)),

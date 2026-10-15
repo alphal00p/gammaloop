@@ -7137,7 +7137,7 @@ mod tests {
             let mut state = Vec::new();
             State::export(&mut state).unwrap();
             let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-            let model = Model::default();
+            let model = Model::empty("evaluator_fixture");
             let ((mut decoded, decoded_compilation), _): (
                 (GenericEvaluator, FrozenCompilationMode),
                 _,

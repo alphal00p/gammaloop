@@ -250,10 +250,17 @@ mod tests {
             settings::global::OrientationPattern,
         };
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph G {
-            edge [particle="scalar_1"]; node [num=1];
-            v1 -> v2; v1 -> v2; v1 -> v2;
-        }, "scalars")?;
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph G {
+                edge [particle="scalar_1"]; node [num=1];
+                v1 -> v2; v1 -> v2; v1 -> v2;
+            }),
+            &crate::utils::load_generic_model("scalars"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         for medium in [
             MediumMode::ThermodynamicEquilibrium,
             MediumMode::ZeroTemperatureEquilibrium,
@@ -275,6 +282,7 @@ mod tests {
             for ((raw_key, raw), (actual_key, actual)) in raw.iter().zip(actual.iter()) {
                 assert_eq!(raw_key, actual_key);
                 let vacuum = graph.make_thermal_distributions_explicit(
+                    &graph.model,
                     raw,
                     MediumMode::Vacuum,
                     graph.iter_edges().map(|(_, edge, _)| edge),
@@ -311,16 +319,23 @@ mod tests {
     #[test]
     fn thermal_surface_conversion_preserves_distribution_atoms() -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph thermal_triangle {
-            edge [num=1 mass=0]
-            node [num=1]
-            ext [style=invis]
-            ext -> a [id=3]
-            ext -> b [id=4]
-            c -> ext [id=5]
-            c -> a [id=0 lmb_id=0]
-            a -> b [id=1]
-            b -> c [id=2]
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph thermal_triangle {
+                edge [num=1 mass=0]
+                node [num=1]
+                ext [style=invis]
+                ext -> a [id=3]
+                ext -> b [id=4]
+                c -> ext [id=5]
+                c -> a [id=0 lmb_id=0]
+                a -> b [id=1]
+                b -> c [id=2]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })?;
         for medium_mode in [
             MediumMode::ThermodynamicEquilibrium,

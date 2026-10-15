@@ -205,6 +205,11 @@ The canonical model retains exact rational electric charges and optional
 left- and right-handed hypercharges. Model-supplied parameter labels are
 registered before parsing their expressions. Propagator lookup, including
 antiparticle orientation, belongs to the model and is reused by generation.
+Chemical potentials are optional validated parameter identifiers in that same
+model and survive JSON and binary round trips. Exact internal zero expressions
+are propagated through dependent masses and chemical potentials when the model
+is constructed or restricted. An external parameter whose current numerical
+value is zero remains adjustable; it does not establish a structural zero.
 Converting a generation result into a coherent amplitude requires its completed
 status; cancellation cannot silently publish a complete amplitude.
 

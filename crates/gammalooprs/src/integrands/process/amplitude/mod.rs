@@ -3456,7 +3456,7 @@ mod sampling_tests {
 
         test_initialise()?;
         let model = load_generic_model("scalars");
-        let graphs = Graph::from_string(
+        let graphs = Graph::import_dot(
             r#"digraph vacuum_cube {
                 node [num=1]; edge [num=1 particle=scalar_1];
                 A -> B [id=0 lmb_id=0 mass=2];

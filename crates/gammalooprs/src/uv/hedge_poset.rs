@@ -49,8 +49,8 @@ use crate::{
         cuts::CutSet,
         parse::string_utils::{ToOrderedSimple, dot_attr_value},
     },
-    settings::global::GenerationSettings,
     model::Model,
+    settings::global::GenerationSettings,
     utils::{GS, W_},
     uv::{
         ApproximationType, RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
@@ -1793,9 +1793,12 @@ mod tests {
                 assert_eq!(graphs.len(), 1, "one fixture graph expected");
                 graphs.remove(0)
             })?;
-            let settings = UVgenerationSettings {
-                generate_integrated: false,
-                local_uv_cts_from_expanded_4d_integrands: project_local_4d,
+            let settings = GenerationSettings {
+                uv: UVgenerationSettings {
+                    generate_integrated: false,
+                    local_uv_cts_from_expanded_4d_integrands: project_local_4d,
+                    ..Default::default()
+                },
                 ..Default::default()
             };
             let orientation_pattern = crate::settings::global::OrientationPattern::default();
@@ -1856,7 +1859,8 @@ mod tests {
         use crate::settings::global::MediumMode;
 
         test_initialise()?;
-        let graphs: Vec<Graph> = dot!(
+        let graphs: Vec<Graph> = Graph::unit_numerator_fixtures(
+            stringify!(
             digraph sunrise {
                 edge [particle="scalar_1"];
                 v1 -> v2; v1 -> v2; v1 -> v2;
@@ -1873,7 +1877,8 @@ mod tests {
                 v1 -> v2; v1 -> v2; v1 -> v2;
                 v2 -> v3;
                 ext -> v3; v3 -> ext;
-            }, "scalars"
+            }),
+            &crate::utils::load_generic_model("scalars"),
         )?;
         for graph in graphs {
             // The counterterm covers the loop part, leaving any bridge untouched.
@@ -1884,7 +1889,8 @@ mod tests {
             for subtract_uv in [false, true] {
                 let mut settings = GenerationSettings::default();
                 settings.uv.subtract_uv = subtract_uv;
-                let ordinary = Wood::new(CutStructure::empty(&graph), &graph, &settings)?;
+                let ordinary =
+                    Wood::new(CutStructure::empty(&graph), &graph, &graph.model, &settings)?;
                 let all = ordinary
                     .graph
                     .iter_nodes()
@@ -1912,7 +1918,12 @@ mod tests {
                         }
                         settings.medium.vacuum_subtraction = vacuum_subtraction;
                         let expected = if vacuum_subtraction { &proper } else { &all };
-                        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings)?;
+                        let wood = Wood::new(
+                            CutStructure::empty(&graph),
+                            &graph,
+                            &graph.model,
+                            &settings,
+                        )?;
                         assert_eq!(
                             &wood
                                 .graph
@@ -1926,6 +1937,7 @@ mod tests {
                         // The shared filter also supplies the legacy executor.
                         let mut spinneys = graph.classified_spinneys(
                             &graph.full_filter(),
+                            &graph.model,
                             &settings.uv,
                             &graph.loop_momentum_basis,
                         )?;
@@ -1959,7 +1971,8 @@ mod tests {
         use symbolica::atom::AtomView;
         use three_dimensional_reps::thermal::OCCUPATION_FORM;
         test_initialise()?;
-        let graphs: Vec<Graph> = dot!(
+        let graphs: Vec<Graph> = Graph::unit_numerator_fixtures(
+            stringify!(
             digraph nested {
                 edge [particle="scalar_1"]; node [num=1];
                 v1 -> v2; v1 -> v2; v1 -> v2;
@@ -1970,7 +1983,8 @@ mod tests {
                 v1 -> v2; v1 -> v2;
                 v3 -> v4; v3 -> v4;
                 v2 -> v3; v1 -> v4;
-            }, "scalars"
+            }),
+            &crate::utils::load_generic_model("scalars"),
         )?;
         for graph in graphs {
             for medium in [
@@ -2000,10 +2014,17 @@ mod tests {
                         .with_vacuum_subtraction(early_subtraction);
                         // Both routes use precisely the same proper forests. Only the
                         // boundary where the full vacuum projection acts is different.
-                        let mut forests =
-                            Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
+                        let mut forests = Wood::new(
+                            CutStructure::empty(&graph),
+                            &graph,
+                            &graph.model,
+                            &settings,
+                        )?
+                        .unfold();
+                        let model = graph.model.clone();
                         forests.compute(
                             &mut graph,
+                            &model,
                             crate::utils::vakint()?,
                             projection,
                             &settings.uv,
@@ -2019,6 +2040,7 @@ mod tests {
                         {
                             assert_eq!(late_key, early_key);
                             let vacuum = graph.make_thermal_distributions_explicit(
+                                &graph.model,
                                 raw,
                                 MediumMode::Vacuum,
                                 graph.iter_edges().map(|(_, edge, _)| edge),
@@ -2088,7 +2110,7 @@ mod tests {
             CutStructure::empty(&dumbell),
             &dumbell,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?
         .unfold();
 
@@ -2208,7 +2230,7 @@ mod tests {
         };
         let cut_structure = CutStructure::empty(&graph);
         let mut forests = Wood::new(cut_structure, &graph, &graph.model, &settings)?.unfold();
-        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings.uv)?;
 
         let unions = forests
             .graph
@@ -2462,19 +2484,22 @@ mod tests {
             assert_eq!(graphs.len(), 1, "one fixture graph expected");
             graphs.remove(0)
         })?;
-        let settings = UVgenerationSettings {
-            generate_integrated: false,
-            renormalization_prescription: RenormalizationPrescriptionSettings {
-                log_divergent: ApproximationType::IR,
-                massive_power_divergent: ApproximationType::IR,
-                massless_power_divergent: ApproximationType::IR,
+        let settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: false,
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    log_divergent: ApproximationType::IR,
+                    massive_power_divergent: ApproximationType::IR,
+                    massless_power_divergent: ApproximationType::IR,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             ..Default::default()
         };
         let mut forests =
             Wood::new(CutStructure::empty(&graph), &graph, &graph.model, &settings)?.unfold();
-        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings.uv)?;
 
         let union = forests
             .graph
@@ -2728,7 +2753,7 @@ mod tests {
         let model = scalar_model();
         let mut forests =
             Wood::new(CutStructure::empty(&graph), &graph, &model, &settings)?.unfold();
-        forests.integrate(&graph, &model, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, &model, crate::utils::vakint()?, &settings.uv)?;
 
         let terminals = forests
             .graph
@@ -2833,7 +2858,7 @@ mod tests {
             CutStructure::empty(&dumbell),
             &dumbell,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
 
         println!("{}", f);
@@ -2935,7 +2960,7 @@ mod tests {
             CutStructure::empty(&dt),
             &dt,
             &standard_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
 
         println!("{}", dt.dot_serialize(&DotExportSettings::default()));
@@ -2981,7 +3006,7 @@ mod tests {
             CutStructure::empty(&dumbell),
             &dumbell,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
 
         println!("{}", f);
@@ -3042,7 +3067,7 @@ mod tests {
                     CutStructure::empty(&g),
                     &g,
                     &standard_model(),
-                    &UVgenerationSettings::default(),
+                    &GenerationSettings::default(),
                 )?;
 
                 println!("{}", f);
@@ -3114,7 +3139,7 @@ mod tests {
             CutStructure::empty(&mercedes),
             &mercedes,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
@@ -3151,7 +3176,7 @@ mod tests {
             CutStructure::empty(&sunrise),
             &sunrise,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
@@ -3190,7 +3215,7 @@ mod tests {
             CutStructure::empty(&sunrise),
             &sunrise,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
@@ -3231,7 +3256,7 @@ mod tests {
             CutStructure::empty(&sunrise),
             &sunrise,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
@@ -3631,7 +3656,7 @@ mod tests {
             .expect("the collective region has a compatible source chart"),
             topo_order: 1,
         };
-        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings.uv);
         let input = Full4dCts::from_factorized_local(&Local4dCts::root());
         let prefix = local_4d::uv_limit(&input, &ctx, &divergent, &root, &divergent, &root)?;
         // The two physical forests containing U are {U} and {A,U}:
@@ -3655,7 +3680,7 @@ mod tests {
         )?;
         let expected = atomic.atom() + nested.atom();
         let mut forests = wood.unfold();
-        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings.uv)?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -3871,7 +3896,7 @@ mod tests {
         };
         let root_local = Local4dCts::root();
         let input = Full4dCts::from_factorized_local(&root_local);
-        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings.uv);
         let convergent = components
             .iter()
             .find(|component| graph.compute_dod(*component) < 0)
@@ -4010,7 +4035,7 @@ mod tests {
             expected += term.atom();
         }
         let mut forests = wood.unfold();
-        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings.uv)?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -4122,14 +4147,14 @@ mod tests {
             &spectacles,
             &spectacles.model,
             crate::utils::vakint()?,
-            &settings,
+            &settings.uv,
         )?;
 
         let step_order = f.graph[union].key.op_count();
         let (current, given) = f.wood.current_given_pair(edge, step_order);
         let expected = local_4d::uv_limit(
             &f.recursion_input_4d(union)?,
-            &UVCtx::new(&spectacles, &spectacles.model, &settings),
+            &UVCtx::new(&spectacles, &spectacles.model, &settings.uv),
             &current,
             &given,
             &current,
@@ -4162,7 +4187,7 @@ mod tests {
             CutStructure::empty(&basketball),
             &basketball,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
@@ -4203,7 +4228,7 @@ mod tests {
             CutStructure::empty(&fourloop_b),
             &fourloop_b,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
@@ -4243,7 +4268,7 @@ mod tests {
             CutStructure::empty(&four_loop_a),
             &four_loop_a,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
@@ -4283,7 +4308,7 @@ mod tests {
             CutStructure::empty(&dumbell),
             &dumbell,
             &scalar_model(),
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )?;
 
         insta::assert_snapshot!(
@@ -4325,7 +4350,7 @@ mod tests {
                 CutStructure::empty(&dumbell),
                 &dumbell,
                 &scalar_model(),
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             )?;
 
             println!("{}", f);
@@ -4366,7 +4391,7 @@ mod tests {
                 CutStructure::empty(&dumbell),
                 &dumbell,
                 &scalar_model(),
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             )?
             .unfold_uncached();
             assert!(f.compute_store.entries.is_empty());
@@ -4407,7 +4432,7 @@ mod tests {
                 CutStructure::empty(&dumbell),
                 &dumbell,
                 &scalar_model(),
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             )?;
 
             println!("{}", f);
@@ -4428,7 +4453,7 @@ mod tests {
                 CutStructure::empty(&dumbell),
                 &dumbell,
                 &scalar_model(),
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             )?
             .unfold_uncached();
 
