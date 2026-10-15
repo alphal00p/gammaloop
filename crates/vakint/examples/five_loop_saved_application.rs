@@ -3,6 +3,8 @@
 
 #[path = "five_loop_cancellation_fixtures/mod.rs"]
 mod cancellation_fixtures;
+#[path = "saved_application/dot.rs"]
+mod saved_application_dot;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::{path::PathBuf, time::Instant};
@@ -405,8 +407,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .skip(1)
         .map(PathBuf::from)
         .collect::<Vec<_>>();
-    if !(1..=2).contains(&args.len()) {
-        return Err("usage: five_loop_saved_application APPLICATION_DIRECTORY [VACUUM_DOT|--admitted-tadpoles|--admitted-rank11|--admitted-suite]".into());
+    let scalar_dot = saved_application_dot::ScalarDotInput::from_arguments(&args)?;
+    if args.is_empty() || (scalar_dot.is_none() && !(1..=2).contains(&args.len())) {
+        return Err("usage: five_loop_saved_application APPLICATION_DIRECTORY [VACUUM_DOT|--admitted-tadpoles|--admitted-rank11|--admitted-suite|--dot PATH --powers CSV]".into());
     }
     let mut settings = VakintSettings {
         epsilon_symbol: "eps".into(),
@@ -554,7 +557,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         return Ok(());
     }
-    let input = if args[1].as_os_str() == "--admitted-tadpoles"
+    let input = if let Some(input) = &scalar_dot {
+        let prepared = input.prepare()?;
+        println!(
+            "scalar_dot_loops={} physical_denominators={} powers={:?} mass_squared=1 numerator=1",
+            prepared.diagram.loop_count(),
+            prepared.family.denominators().len(),
+            input.powers
+        );
+        prepared.expression
+    } else if args[1].as_os_str() == "--admitted-tadpoles"
         || args[1].as_os_str() == "--admitted-suite"
     {
         // Generation54 point00162: 15-slot powers

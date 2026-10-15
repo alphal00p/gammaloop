@@ -267,6 +267,57 @@ outside the recorded union: one surviving key is
 `[-3,1,1,1,2,1,1,1,1,1,0,1,0,0,1]`. The separate homogeneous degree-ten control
 on the admitted five-tadpole support succeeds. These are deliberately distinct
 tests; the easier factorized case is not evidence for full-parent coverage.
+
+For a scalar input with explicitly selected powers, use the separate generic
+DOT mode instead of that degree-ten regression fixture:
+
+```sh
+cargo run --release -p vakint --features feynkit-ingress \
+  --example five_loop_saved_application -- /path/to/application \
+  --dot /path/to/scalar-vacuum.dot --powers 1,1,1,1,1,4
+```
+
+This example mode reads either supported FeynKit DOT dialect with the built-in
+scalar model, takes numerator1, and normalizes its sole scalar mass to1 through
+native simultaneous substitutions. The integer power list is in native family
+denominator order; its length must match exactly. There is no topology-name
+dispatch, new DOT parser or implicit rule generation. Existing named example
+modes retain their behavior. Native routing and the loaded saved-domain union,
+not an edge count or drawing symmetry, decide whether the input is supported.
+
+The new ignored `rustred_five_loop_dot_tests` regression constructs a six-line
+banana from native effective vertices, exports and reparses its stable DOT,
+and checks powers `(1,1,1,1,1,4)` against the known admitted R0/D9 common-family
+key. It requires an actual simultaneous routing witness and successful saved
+admission before comparing exact qualified-master values and guards, including
+a warm repeat with an invalid FORM path. Fast companion tests cover option
+parsing, native routing preservation and power-count mismatches.
+
+On 15 October 2026, all three fast tests and the actual ignored external test
+passed against the separate completed generation1 R0/D10 package (329 terminal
+maps), using RustRed `78cbc5c1`, Symbolica `400a53c4` and FeynKit `024f96d6` optimized
+libraries. The external test took 231.84s, including 75.014s package preparation.
+Whole-frontend first and warm applications took 51.866s and 50.630s, respectively:
+these figures demonstrate correctness, not an end-to-end warm-cache speedup.
+The terminal application cache recorded 47,804 cumulative hits and 3,753 rules,
+retaining 7,627 integrals and 7.807MB of coefficients. The test did not separately
+time each frontend phase, so a routing bottleneck remains a hypothesis rather
+than a measured attribution in that test. Exact DOT/reference values, qualified
+families and normalized guard sets agree. No numerical masters or FORM were used.
+
+A separate run of the public `--dot` example then passed its standard/detailed,
+simultaneous-basis/relabel/orientation, indexed-input, guard-domain and cache
+option controls in 353.045s supervised wall, with 2.884GB sampled peak RSS. Its
+existing phase logs resolve the bottleneck: the 44.808s warm total includes
+44.789s of admission-aware witness search but only 0.000572s of saved-rule
+application and 0.001525s of terminal handling. First application was 53.832s,
+including 41.045s witness search and 12.708s saved-rule application. Package
+preparation was 73.366s, reported separately. Thus intermediate coefficient
+memoization works; repeated frontend witness selection dominates this DOT
+control's warm time. These are separate runs, not a controlled speed comparison.
+This one R0/D9 connected control does not cover the full R6 scope, all graph
+classes, the complete D10 boundary or the physical numerator ladder.
+
 The Python `examples/five_loop_saved_application.py` uses the installed native
 HepKit DOT reader, family constructor and Vakint ingress. Its optional `--powers`
 argument follows the native family order. It checks an exact warm repeat of the
