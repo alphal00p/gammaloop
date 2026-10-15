@@ -378,8 +378,8 @@ and release-tag publishing remain available. The lightweight NixCI readiness
 check still runs on PR and merge-group events because it is required to merge.
 After configuration validation, it runs a paired performance comparison for
 relevant changes on same-repository final-review PRs and merge-group commits.
-Documentation-only changes skip that comparison. Main pushes do not repeat
-the paired benchmark. See #link("docs/architecture/ci.typ")[CI maintenance and
+Documentation-only PR changes skip that comparison. The separate main-push
+workflow records fresh gammabench measurements for every merge. See #link("docs/architecture/ci.typ")[CI maintenance and
 measurements] for the workload, coverage limits and trigger policy.
 
 Edit only the top-level toggle manually: `just ci-update` preserves it while

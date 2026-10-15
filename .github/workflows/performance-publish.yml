@@ -1,0 +1,45 @@
+name: Publish performance results
+on:
+  workflow_run:
+    workflows: [NixCI readiness, Performance main]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Original measurement workflow run ID
+        type: string
+        required: true
+      attempt:
+        description: Original measurement run attempt
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # This workflow and publisher come from default branches. Candidate code
+      # is never checked out or executed by the job holding the publication key.
+      - uses: actions/checkout@v4
+        with:
+          repository: alphal00p/gammabench
+          ref: main
+          path: gammabench
+          persist-credentials: false
+      - uses: typst-community/setup-typst@48aeee7543d37f01afd1ffb27307dc277387ba13
+        with:
+          typst-version: '0.15.1'
+      - name: Verify and publish the original capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GAMMABENCH_PUBLISH_TOKEN: ${{ secrets.GAMMABENCH_PUBLISH_TOKEN }}
+          SOURCE_RUN: ${{ inputs.run_id || github.event.workflow_run.id }}
+          SOURCE_ATTEMPT: ${{ inputs.attempt || github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          test -n "$GAMMABENCH_PUBLISH_TOKEN"
+          PYTHONPATH="$PWD/gammabench/src" python3 gammabench/scripts/publish-ci.py \
+            --run-id "$SOURCE_RUN" --attempt "$SOURCE_ATTEMPT"

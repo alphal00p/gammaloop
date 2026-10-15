@@ -62,6 +62,27 @@ jobs:
         run: |
           echo "candidate=$(git -C candidate rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "baseline=$(git -C baseline rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - id: framework
+        name: Read the pinned gammabench revision
+        run: |
+          revision=$(cat candidate/benchmarks/performance/gammabench.rev)
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: alphal00p/gammabench
+          ref: ${{ steps.framework.outputs.revision }}
+          path: gammabench
+          persist-credentials: false
+      - name: Record CI source identity
+        env:
+          CANDIDATE: ${{ steps.revisions.outputs.candidate }}
+          BASELINE: ${{ steps.revisions.outputs.baseline }}
+          SOURCE_EVENT: ${{ github.event_name }}
+          FRAMEWORK_REVISION: ${{ steps.framework.outputs.revision }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python3 candidate/.github/scripts/performance_metadata.py identity --output "$RUNNER_TEMP/performance-ci.json"
       - name: Authenticate with the NixCI cache
         env:
           NIXCI_NETRC_SECRET: ${{ secrets.NIXCI_NETRC }}
@@ -114,6 +135,15 @@ jobs:
             nix copy --netrc-file "$RUNNER_TEMP/nixci.netrc" \
             --to 'https://cache.nix-ci.com?compression=xz&parallel-compression=true' \
             "$BASELINE_PACKAGE" "$CANDIDATE_PACKAGE"
+      - name: Build pinned Hyperfine
+        run: |
+          package=$(nix build ./gammabench#hyperfine --no-link --print-out-paths)
+          echo "$package/bin" >> "$GITHUB_PATH"
+      - name: Record CLI build identities
+        env:
+          BASELINE_PACKAGE: ${{ steps.binaries.outputs.baseline-package }}
+          CANDIDATE_PACKAGE: ${{ steps.binaries.outputs.candidate-package }}
+        run: python3 candidate/.github/scripts/performance_metadata.py builds --output "$RUNNER_TEMP/performance-builds.json"
       - name: Measure and enforce the performance thresholds
         env:
           SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
@@ -131,25 +161,34 @@ jobs:
           # state, evidence and a four-minute budget for each comparison.
           nix --option post-build-hook "" shell --accept-flake-config --inputs-from ./candidate \
             nixpkgs#python313 nixpkgs#form nixpkgs#gcc nixpkgs#gnum4 \
-            --command env -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH \
+            --command env -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH PYTHONPATH="$PWD/gammabench/src" \
             python3 candidate/.github/scripts/run_performance.py \
             --input-root "$PWD/candidate" \
             --baseline-binary "$BASELINE_BINARY" --candidate-binary "$CANDIDATE_BINARY" \
             --baseline-commit "$BASELINE_COMMIT" --candidate-commit "$CANDIDATE_COMMIT" \
             --work-dir "$RUNNER_TEMP/performance-private-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
-            --output-dir "$PWD/target/performance"
-      - name: Upload numeric performance evidence
+            --output-dir "$PWD/target/performance" \
+            --ci-metadata "$RUNNER_TEMP/performance-ci.json" \
+            --build-metadata "$RUNNER_TEMP/performance-builds.json"
+      - name: Retain a failed build or runner outcome
+        if: always() && steps.revisions.outcome == 'success'
+        run: |
+          python3 candidate/.github/scripts/performance_metadata.py finish \
+            --output target/performance/run.json --identity "$RUNNER_TEMP/performance-ci.json"
+      - name: Upload sealed performance evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: performance-${{ github.run_id }}-${{ github.run_attempt }}
-          # Explicit files only: no generated states, expressions or logs.
-          path: |
-            target/performance/*/measurements.json
-            target/performance/*/report.json
-            target/performance/*/measurement_metadata.json
+          name: gammabench-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/performance/
           if-no-files-found: ignore
           retention-days: 14
+      - name: Link performance results
+        if: always() && github.event_name == 'pull_request'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Performance preview (published after this workflow completes): https://alphal00p.github.io/gammabench/previews/pr-$PR_NUMBER/" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove the cache credentials
         if: always()
         run: rm -f "$RUNNER_TEMP/nixci.netrc"

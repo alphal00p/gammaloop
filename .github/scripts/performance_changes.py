@@ -24,9 +24,10 @@ PATTERNS = (
     "nix/*",
     "benchmarks/performance/*",
     ".github/scripts/run_performance.py",
-    ".github/scripts/performance_gate.py",
+    ".github/scripts/performance_metadata.py",
     ".github/scripts/performance_changes.py",
     ".github/workflows/performance.yml",
+    ".github/workflows/performance-main.yml",
     ".github/workflows/nixci-readiness.yml",
 )
 

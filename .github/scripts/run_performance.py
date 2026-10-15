@@ -8,6 +8,7 @@ import math
 import os
 import re
 import shlex
+import shutil
 import signal
 import statistics
 import subprocess
@@ -15,10 +16,24 @@ import sys
 import time
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from string import Template
 
-from performance_gate import EVALUATOR_METHODS, MODE_METRICS, PerformanceGate
+EVALUATOR_METHODS = ("Iterative", "SingleParametric", "Summed", "SummedFunctionMap")
+MODE_METRICS = {
+    "evaluator_build_seconds": (0.20, 0.1),
+    "warm_runtime_seconds_per_sample": (0.15, 1e-6),
+}
+THRESHOLDS = {
+    "generation_seconds": (0.20, 0.5),
+    "generation_peak_ram_bytes": (0.20, 64 * 1024**2),
+    **{
+        f"{metric}.{method}": limits
+        for metric, limits in MODE_METRICS.items()
+        for method in EVALUATOR_METHODS
+    },
+}
 
 
 def positive_number(value, label):
@@ -329,7 +344,7 @@ def run_cli(command, repository, log_path, deadline, *, logfile_filter="off"):
             stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=subprocess.STDOUT,
-            start_new_session=True,
+            start_new_session=not os.environ.get("GAMMABENCH_PRIVATE_TRIAL"),
         )
         # POSIX wait(timeout=...) polls with sleeps of up to 50 ms. Wait for
         # the actual exit in a worker and enforce the shared deadline separately.
@@ -339,14 +354,18 @@ def run_cli(command, repository, log_path, deadline, *, logfile_filter="off"):
                 status = completion.result(timeout=check_deadline(deadline))
             except TimeoutError:
                 try:
-                    os.killpg(process.pid, signal.SIGTERM)
+                    os.kill(process.pid, signal.SIGTERM) if os.environ.get(
+                        "GAMMABENCH_PRIVATE_TRIAL"
+                    ) else os.killpg(process.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
                 try:
                     completion.result(timeout=5)
                 except TimeoutError:
                     try:
-                        os.killpg(process.pid, signal.SIGKILL)
+                        os.kill(process.pid, signal.SIGKILL) if os.environ.get(
+                            "GAMMABENCH_PRIVATE_TRIAL"
+                        ) else os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
                     completion.result()
@@ -356,7 +375,9 @@ def run_cli(command, repository, log_path, deadline, *, logfile_filter="off"):
             finally:
                 # A successful parent must not leave compiler or evaluator children.
                 try:
-                    os.killpg(process.pid, signal.SIGKILL)
+                    os.kill(process.pid, signal.SIGKILL) if os.environ.get(
+                        "GAMMABENCH_PRIVATE_TRIAL"
+                    ) else os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
     if status:
@@ -414,9 +435,19 @@ def measure(binary, repository, directory, fixture, deadline):
     state = directory / "state"
     generation_card = directory / "generation.toml"
     generation_card.write_text(fixture.card)
-    started = time.monotonic()
+    from gammabench import hyperfine
+
+    binding = hyperfine.resolve()
+    generation_command = [
+        str(binary),
+        "--clean-state",
+        "-s",
+        str(state),
+        str(generation_card),
+    ]
+    export = directory / "generation-hyperfine.json"
     run_cli(
-        [str(binary), "--clean-state", "-s", str(state), str(generation_card)],
+        hyperfine.invocation(binding, generation_command, export),
         repository,
         directory / "generation.log",
         deadline,
@@ -426,7 +457,10 @@ def measure(binary, repository, directory, fixture, deadline):
             else "off"
         ),
     )
-    generation_seconds = time.monotonic() - started
+    measured = hyperfine.read_measurement(export, generation_command)
+    if measured["returncode"]:
+        raise ValueError("Generation CLI failed")
+    generation_seconds = measured["process_wall_ns"] / 1e9
     summaries = list(state.rglob("generation_summary.json"))
     if len(summaries) != 1:
         raise ValueError("Fresh generation must save one integrand summary")
@@ -475,14 +509,16 @@ def measure(binary, repository, directory, fixture, deadline):
         directory / "benchmark.log",
         deadline,
     )
-    outputs, sample_counts = {}, {}
+    outputs, sample_counts, per_point = {}, {}, {}
     for method in fixture.methods:
+        per_point[method] = []
         timings, outputs[method], sample_counts[method] = [], [], []
         for index in range(len(fixture.corpus["points"])):
             check_deadline(deadline)
             timing, output, samples = benchmark_result(
                 directory / f"bench-{method}-{index}.json", fixture, index
             )
+            per_point[method].append(timing)
             timings.append(timing)
             outputs[method].extend(output)
             sample_counts[method].append(samples)
@@ -493,6 +529,7 @@ def measure(binary, repository, directory, fixture, deadline):
         outputs,
         {
             "samples_per_point": sample_counts,
+            "runtime_seconds_per_point": per_point,
             "evaluator_count": count,
             "generation_peak_ram_bytes": peak_ram,
             **generation_timings,
@@ -501,113 +538,204 @@ def measure(binary, repository, directory, fixture, deadline):
     )
 
 
-def measure_phase(
-    arguments,
-    fixture,
-    phase,
-    run_id,
-    first_order,
-    details,
-    deadline,
-    measurement,
-    checkpoint,
-):
-    result = {"run_id": run_id, "pairs": []}
-    measurement[phase] = result
-    checkpoint()
-    for index in range(fixture.config["pairs"]):
-        order = first_order if index % 2 == 0 else first_order[::-1]
-        pair = {"order": order}
-        result["pairs"].append(pair)
-        for side in order:
-            label = "baseline" if side == "A" else "candidate"
-            metrics, outputs, metadata = measure(
-                getattr(arguments, label + "_binary"),
-                arguments.input_root,
-                arguments.work_dir / phase / str(index) / label,
-                fixture,
-                deadline,
-            )
-            pair[label] = metrics
-            pair[label + "_output"] = outputs
-            details.append({"phase": phase, "pair": index, "side": label, **metadata})
-            checkpoint()
-    return result
-
-
 def run_case(args, suite, name):
-    measurement = {}
-    gate = PerformanceGate(args.baseline_commit, args.candidate_commit)
-    output_ready = False
-    try:
-        args.output_dir.mkdir(parents=True, exist_ok=False)
-        output_ready = True
-        fixture = Fixture.from_suite(suite, name, args.input_root)
-        measurement = {
-            "schema_version": 2,
-            "required_metrics": fixture.metrics,
-            "evaluator_methods": fixture.methods,
-            "reference_method": fixture.config["reference_method"],
-            "correctness_tolerance": fixture.config["correctness_tolerance"],
-            **{
-                side: {"commit": getattr(args, side + "_commit"), **fixture.hashes}
-                for side in ("baseline", "candidate")
-            },
+    """Prepare this workload; gammabench owns all scheduling and gate policy."""
+    from gammabench import hyperfine
+    from gammabench.gate import run
+    from gammabench.snapshot import sha256
+
+    fixture = Fixture.from_suite(suite, name, args.input_root)
+    prepared = args.work_dir.parent / (args.work_dir.name + "-suite")
+    prepared.mkdir(parents=True, exist_ok=False)
+    # Retain the complete public fixture inputs with their repository-relative
+    # layout. Both binaries consume these exact bytes; generated states are private.
+    (prepared / "inputs").mkdir()
+    inputs = {}
+    for index, relative in enumerate(fixture.corpus["inputs"]):
+        target = prepared / "inputs" / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(fixture.source(args.input_root, relative), target)
+        inputs[f"input-{index}"] = str(target.relative_to(prepared))
+    (prepared / "card.toml").write_text(fixture.card)
+    write_json(
+        prepared / "fixture.json",
+        {"card": fixture.card, "corpus": fixture.corpus, "config": fixture.config},
+    )
+    shutil.copyfile(__file__, prepared / "adapter.py")
+    inputs.update(card="card.toml", fixture="fixture.json")
+    tools = {
+        side: {
+            "kind": "executable",
+            "path": str(getattr(args, side + "_binary")),
+            "sha256": sha256(getattr(args, side + "_binary")),
+            "version": getattr(args, side + "_commit"),
         }
-        details = []
-        input_path = args.output_dir / "measurements.json"
-        report_path = args.output_dir / "report.json"
+        for side in ("baseline", "candidate")
+    }
+    binding = hyperfine.resolve()
+    tools["hyperfine"] = {
+        "kind": "executable",
+        "path": binding["path"],
+        "sha256": binding["sha256"],
+        "version": binding["version"],
+    }
+    tools["python"] = {
+        "kind": "executable",
+        "path": sys.executable,
+        "sha256": sha256(Path(sys.executable)),
+        "version": sys.version.split()[0],
+    }
+    ci = getattr(args, "ci", {})
+    contract = "fixed-point-integrand-v1"
+    metrics = {
+        metric: {
+            "unit": "bytes"
+            if metric.endswith("bytes")
+            else "s/sample"
+            if metric.startswith("warm_runtime")
+            else "s",
+            "direction": "lower",
+            "result_field": "metrics." + metric,
+            "scope": "Hyperfine 2.0.0 complete generation CLI process including import and state save"
+            if metric == "generation_seconds"
+            else "Native whole-generation peak RAM"
+            if metric.endswith("bytes")
+            else "Native evaluator construction stages summed over stacks"
+            if metric.startswith("evaluator_build")
+            else "Mean native warmed seconds per sample over the fixed corpus; ten warmup samples excluded",
+        }
+        for metric in fixture.metrics
+    }
+    definition = {
+        "schema_version": 1,
+        "runner": "paired-gate-v1",
+        "id": "gammaloop-ci-" + name,
+        "description": "GammaLoop CI " + name,
+        "contracts": {
+            contract: {
+                "description": "Finite nonzero integrands agree within the declared tolerance across revisions and requested evaluators",
+                "included": [
+                    "Fresh generated state",
+                    "Declared evaluator implementations",
+                    "Fixed-point numerical validation",
+                ],
+                "excluded": ["CLI compilation", "Point caching", "Event processing"],
+            }
+        },
+        "metadata": {
+            "schema_version": 1,
+            "values": {
+                "implementation.tool": "gammaloop",
+                "implementation.tool_label": "GammaLoop",
+                "implementation.way": "native",
+                "implementation.way_label": "Native",
+            },
+        },
+        "metrics": metrics,
+        "tools": tools,
+        "gate_adapter": "adapter.py",
+        "ci": ci,
+        "build": getattr(args, "build", {}),
+        "gate": {
+            side: {"commit": getattr(args, side + "_commit"), **fixture.hashes}
+            for side in ("baseline", "candidate")
+        },
+        "tasks": [
+            {
+                "id": side,
+                "case": name,
+                "engine": "gammaloop",
+                "variant": side,
+                "contract": contract,
+                "tool_ids": [side, "hyperfine", "python"],
+                "inputs": inputs,
+                "process_measurements": {
+                    "generation": {
+                        "path": "trial/generation-hyperfine.json",
+                        "metric": "generation_seconds",
+                        "argv": [
+                            "{tool:" + side + "}",
+                            "--clean-state",
+                            "-s",
+                            "{workdir}/trial/state",
+                            "{workdir}/trial/generation.toml",
+                        ],
+                    }
+                },
+                "environment": {
+                    "RAYON_NUM_THREADS": "1",
+                    "OMP_NUM_THREADS": "1",
+                    "GAMMABENCH_PRIVATE_TRIAL": "1",
+                },
+                "argv": [
+                    "{tool:python}",
+                    "{suite_dir}/adapter.py",
+                    "sample",
+                    "--fixture",
+                    "{suite_dir}/fixture.json",
+                    "--binary",
+                    "{tool:" + side + "}",
+                    "--work-dir",
+                    "{workdir}",
+                    "--result",
+                    "{result}",
+                    "--deadline",
+                    "{deadline}",
+                ],
+            }
+            for side in ("baseline", "candidate")
+        ],
+    }
+    policy = {
+        "schema_version": 1,
+        "pairs": 5,
+        "budget_seconds": fixture.timeout,
+        "thresholds": {metric: THRESHOLDS[metric] for metric in fixture.metrics},
+        "output_groups": fixture.methods,
+        "reference_group": fixture.config["reference_method"],
+        "metric_families": list(MODE_METRICS),
+        "correctness_tolerance": fixture.config["correctness_tolerance"],
+    }
+    write_json(prepared / "suite.json", definition)
+    write_json(prepared / "policy.json", policy)
+    capture = (
+        "gammaloop-"
+        + args.candidate_commit
+        + "-"
+        + str(ci.get("run_id", "local"))
+        + "-"
+        + str(ci.get("run_attempt", 1))
+        + "-"
+        + name
+    )
+    return run(
+        prepared / "suite.json",
+        args.output_dir,
+        policy_path=prepared / "policy.json",
+        private_work_dir=args.work_dir,
+        label=capture,
+    )
 
-        def checkpoint():
-            check_deadline(deadline)
-            write_json(input_path, measurement)
-            write_json(args.output_dir / "measurement_metadata.json", details)
 
-        # One deadline covers every discovery trial and any confirmation.
-        # Executables are built before invoking this measurement harness.
-        deadline = time.monotonic() + fixture.timeout
-        measure_phase(
-            args,
-            fixture,
-            "discovery",
-            1,
-            "AB",
-            details,
-            deadline,
-            measurement,
-            checkpoint,
-        )
-        check_deadline(deadline)
-        report = gate.analyze(measurement)
-        check_deadline(deadline)
-        if report["status"] == 2 and report["confirmation_required"] == 1:
-            measure_phase(
-                args,
-                fixture,
-                "confirmation",
-                2,
-                "BA",
-                details,
-                deadline,
-                measurement,
-                checkpoint,
-            )
-            check_deadline(deadline)
-            report = gate.analyze(measurement)
-            check_deadline(deadline)
-        write_json(report_path, report)
-        gate.print_report(report)
-        return report["status"]
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        if output_ready:
-            # The comparator owns numeric failure reports too. An incomplete
-            # phase cannot become either a pass or a confirmed regression.
-            write_json(args.output_dir / "measurements.json", measurement)
-            report = gate.analyze(None)
-            write_json(args.output_dir / "report.json", report)
-            gate.print_report(report)
-        print(f"Performance measurement failed: {error}", file=sys.stderr)
-        return 2
+def sample_main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fixture", required=True, type=Path)
+    parser.add_argument("--binary", required=True, type=Path)
+    parser.add_argument("--work-dir", required=True, type=Path)
+    parser.add_argument("--result", required=True, type=Path)
+    parser.add_argument("--deadline", required=True, type=float)
+    args = parser.parse_args(sys.argv[2:])
+    value = json.loads(args.fixture.read_text())
+    fixture = Fixture(
+        value["card"], value["corpus"], value["config"], args.fixture.parent / "inputs"
+    )
+    metrics, outputs, metadata = measure(
+        args.binary, fixture.input_root, args.work_dir / "trial", fixture, args.deadline
+    )
+    write_json(
+        args.result, {"metrics": metrics, "outputs": outputs, "metadata": metadata}
+    )
+    return 0
 
 
 def main():
@@ -636,7 +764,13 @@ def main():
         required=True,
         help="Metadata and numeric report directory",
     )
+    parser.add_argument("--ci-metadata", type=Path)
+    parser.add_argument("--build-metadata", type=Path)
     args = parser.parse_args()
+    args.ci = json.loads(args.ci_metadata.read_text()) if args.ci_metadata else {}
+    args.build = (
+        json.loads(args.build_metadata.read_text()) if args.build_metadata else {}
+    )
     try:
         for side in ("baseline", "candidate"):
             if not re.fullmatch(r"[0-9a-f]{40}", getattr(args, side + "_commit")):
@@ -674,6 +808,7 @@ def main():
         args.work_dir.mkdir(parents=True, exist_ok=False)
         args.output_dir.mkdir(parents=True, exist_ok=False)
         status = 0
+        captured_at = datetime.now(UTC).isoformat()
         for name in names:
             print(f"Measuring {name}", flush=True)
             case_args = argparse.Namespace(
@@ -685,7 +820,26 @@ def main():
                     }
                 )
             )
-            status = max(status, run_case(case_args, suite, name))
+            try:
+                case_status = run_case(case_args, suite, name)
+            except (OSError, ValueError, KeyError, TypeError):
+                case_status = 2
+                case_args.output_dir.mkdir(parents=True, exist_ok=True)
+                write_json(
+                    case_args.output_dir / "failure.json",
+                    {"schema_version": 1, "case": name, "status": 2},
+                )
+            status = max(status, case_status)
+        write_json(
+            args.output_dir / "run.json",
+            {
+                "schema_version": 1,
+                "ci": args.ci,
+                "cases": names,
+                "status": status,
+                "created_at": captured_at,
+            },
+        )
         return status
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"Performance suite failed: {error}", file=sys.stderr)
@@ -693,4 +847,4 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(sample_main() if sys.argv[1:2] == ["sample"] else main())
