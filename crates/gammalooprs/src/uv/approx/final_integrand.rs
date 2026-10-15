@@ -624,10 +624,11 @@ mod tests {
     fn final_integrand_collects_tensor_factors_without_merging_denominators() -> Result<()> {
         test_initialise()?;
         let graph: Graph = finalized_runtime_dot!(digraph factorized_final {
+            projector=1;
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
         let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
@@ -891,10 +892,11 @@ mod tests {
     fn projected_zero_sectors_preserve_cut_orders_without_energy_maps() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = finalized_runtime_dot!(digraph projected_zero {
+            projector=1;
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let current = OwnedForestNode {
             spinney: Spinney::new(
