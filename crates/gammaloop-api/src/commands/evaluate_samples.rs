@@ -8,8 +8,9 @@ use gammalooprs::{
             PreciseSampleEvaluationResult, PreciseSingleSampleEvaluationResult,
             SampleEvaluationResult, SingleSampleEvaluationResult,
         },
-        process::MomentumSpaceEvaluationInput,
+        process::{MomentumSpaceEvaluationInput, ProcessIntegrand},
     },
+    model::Model,
     momentum::ThreeMomentum,
     observables::ObservableSnapshotBundle,
     utils::F,
@@ -103,90 +104,76 @@ impl<'a> EvaluateSamples<'a> {
         let process_ref = self.process_id.map(ProcessRef::Id);
         let (process_id, integrand_name) =
             state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
-        let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
-
-        let integrand = state
-            .process_list
-            .get_integrand_mut(process_id, &integrand_name)?;
-        let run_result = with_return_generated_events_override(
-            integrand,
+        with_warmed_integrand(
+            state,
+            process_id,
+            &integrand_name,
             self.return_generated_events,
-            |integrand| {
-                integrand.warm_up(&model)?;
+            |integrand, model| self.run_warmed(integrand, model),
+        )
+    }
 
-                let batch_len = self.points.nrows();
-                let integrator_weights =
-                    normalize_integrator_weights(self.integrator_weights.as_ref(), batch_len)?;
-                let graph_names = normalize_optional_per_sample(
-                    self.graph_names.as_ref(),
+    /// Evaluate with an integrand already warmed up for `model` by
+    /// [`with_warmed_integrand`], which also applies [`Self::return_generated_events`].
+    pub(crate) fn run_warmed(
+        &self,
+        integrand: &mut ProcessIntegrand,
+        model: &Model,
+    ) -> Result<BatchSampleEvaluationResult> {
+        let batch_len = self.points.nrows();
+        let integrator_weights =
+            normalize_integrator_weights(self.integrator_weights.as_ref(), batch_len)?;
+        let graph_names =
+            normalize_optional_per_sample(self.graph_names.as_ref(), batch_len, "graph_names")?;
+        let orientations =
+            normalize_optional_per_sample(self.orientations.as_ref(), batch_len, "orientations")?;
+
+        if !self.momentum_space
+            && (graph_names.iter().any(Option::is_some) || orientations.iter().any(Option::is_some))
+        {
+            return Err(eyre!(
+                "Graph and orientation selection are only supported in momentum-space evaluation."
+            ));
+        }
+
+        if let Some(discrete_dims) = &self.discrete_dims {
+            if discrete_dims.nrows() != batch_len {
+                return Err(eyre!(
+                    "Expected {} rows in discrete_dims, got {}.",
                     batch_len,
-                    "graph_names",
-                )?;
-                let orientations = normalize_optional_per_sample(
-                    self.orientations.as_ref(),
-                    batch_len,
-                    "orientations",
-                )?;
+                    discrete_dims.nrows()
+                ));
+            }
+        }
 
-                if !self.momentum_space
-                    && (graph_names.iter().any(Option::is_some)
-                        || orientations.iter().any(Option::is_some))
-                {
-                    return Err(eyre!(
-                        "Graph and orientation selection are only supported in momentum-space evaluation."
-                    ));
-                }
+        let raw_batch = if self.momentum_space {
+            let inputs = build_momentum_inputs(
+                integrand,
+                &self.points,
+                &integrator_weights,
+                self.discrete_dims.as_ref(),
+                &graph_names,
+                &orientations,
+            )?;
+            integrand.evaluate_momentum_configurations_raw(model, &inputs, self.use_arb_prec)?
+        } else {
+            let samples = build_havana_samples(
+                integrand,
+                &self.points,
+                &integrator_weights,
+                self.discrete_dims.as_ref(),
+            )?;
+            integrand.evaluate_samples_raw(
+                EvaluationTarget::Physical(model),
+                &samples,
+                1,
+                self.use_arb_prec,
+                false,
+                Complex::new_zero(),
+            )?
+        };
 
-                if let Some(discrete_dims) = &self.discrete_dims {
-                    if discrete_dims.nrows() != batch_len {
-                        return Err(eyre!(
-                            "Expected {} rows in discrete_dims, got {}.",
-                            batch_len,
-                            discrete_dims.nrows()
-                        ));
-                    }
-                }
-
-                let raw_batch = if self.momentum_space {
-                    let inputs = build_momentum_inputs(
-                        integrand,
-                        &self.points,
-                        &integrator_weights,
-                        self.discrete_dims.as_ref(),
-                        &graph_names,
-                        &orientations,
-                    )?;
-                    integrand.evaluate_momentum_configurations_raw(
-                        &model,
-                        &inputs,
-                        self.use_arb_prec,
-                    )?
-                } else {
-                    let samples = build_havana_samples(
-                        integrand,
-                        &self.points,
-                        &integrator_weights,
-                        self.discrete_dims.as_ref(),
-                    )?;
-                    integrand.evaluate_samples_raw(
-                        EvaluationTarget::Physical(&model),
-                        &samples,
-                        1,
-                        self.use_arb_prec,
-                        false,
-                        Complex::new_zero(),
-                    )?
-                };
-
-                let observables = integrand
-                    .observable_snapshot_bundle()
-                    .unwrap_or_else(ObservableSnapshotBundle::default);
-
-                Ok((raw_batch, observables))
-            },
-        );
-
-        let (raw_batch, observables) = run_result?;
+        let observables = integrand.observable_snapshot_bundle().unwrap_or_default();
         let numerical_stability =
             (!self.minimal_output).then(|| raw_batch.statistics.numerical_stability_snapshot());
 
@@ -242,17 +229,12 @@ impl<'a> EvaluateSamplesPrecise<'a> {
         let process_ref = self.process_id.map(ProcessRef::Id);
         let (process_id, integrand_name) =
             state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
-        let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
-
-        let integrand = state
-            .process_list
-            .get_integrand_mut(process_id, &integrand_name)?;
-        let (raw_samples, observables) = with_return_generated_events_override(
-            integrand,
+        let (raw_samples, observables) = with_warmed_integrand(
+            state,
+            process_id,
+            &integrand_name,
             self.return_generated_events,
-            |integrand| {
-                integrand.warm_up(&model)?;
-
+            |integrand, model| {
                 let batch_len = self.points.nrows();
                 let integrator_weights =
                     normalize_integrator_weights(self.integrator_weights.as_ref(), batch_len)?;
@@ -297,7 +279,7 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                     )?;
                     integrand
                         .evaluate_momentum_configurations_precise_raw(
-                            &model,
+                            model,
                             &inputs,
                             self.use_arb_prec,
                         )?
@@ -311,7 +293,7 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                     )?;
                     integrand
                         .evaluate_samples_precise_raw(
-                            &model,
+                            model,
                             &samples,
                             self.use_arb_prec,
                             Complex::new_zero(),
@@ -398,10 +380,30 @@ pub fn evaluate_sample<'a>(
     })
 }
 
-fn with_return_generated_events_override<R>(
-    integrand: &mut gammalooprs::integrands::process::ProcessIntegrand,
+/// Resolve the integrand's model, warm it up once and run `evaluate` under the
+/// optional event-generation override. Repeated evaluations, such as `bench`
+/// batches, share this preparation instead of repeating it per batch.
+pub(crate) fn with_warmed_integrand<R>(
+    state: &mut State,
+    process_id: usize,
+    integrand_name: &str,
     return_generated_events: Option<bool>,
-    run: impl FnOnce(&mut gammalooprs::integrands::process::ProcessIntegrand) -> Result<R>,
+    evaluate: impl FnOnce(&mut ProcessIntegrand, &Model) -> Result<R>,
+) -> Result<R> {
+    let model = state.resolve_model_for_integrand(process_id, integrand_name)?;
+    let integrand = state
+        .process_list
+        .get_integrand_mut(process_id, integrand_name)?;
+    with_return_generated_events_override(integrand, return_generated_events, |integrand| {
+        integrand.warm_up(&model)?;
+        evaluate(integrand, &model)
+    })
+}
+
+fn with_return_generated_events_override<R>(
+    integrand: &mut ProcessIntegrand,
+    return_generated_events: Option<bool>,
+    run: impl FnOnce(&mut ProcessIntegrand) -> Result<R>,
 ) -> Result<R> {
     let previous_generate_events = integrand.get_settings().general.generate_events;
     if let Some(return_generated_events) = return_generated_events {

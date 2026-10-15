@@ -25,12 +25,13 @@ use tabled::{
 use tracing::info;
 
 use crate::{
-    commands::evaluate_samples::{evaluate_samples, EvaluateSamples},
+    commands::evaluate_samples::{with_warmed_integrand, EvaluateSamples},
     completion::CompletionArgExt,
     state::{ProcessRef, State},
 };
 use gammalooprs::{
-    integrands::evaluation::EvaluationResultOutput,
+    integrands::{evaluation::EvaluationResultOutput, process::ProcessIntegrand},
+    model::Model,
     settings::{runtime::StabilityLevelSetting, RuntimeSettings},
     utils::F,
 };
@@ -254,7 +255,6 @@ impl Bench {
         points: &'a Array2<f64>,
         discrete_dims: &'a Array2<usize>,
         graph_name: &Option<String>,
-        return_generated_events: bool,
     ) -> EvaluateSamples<'a> {
         let batch_len = points.nrows();
         EvaluateSamples {
@@ -262,7 +262,8 @@ impl Bench {
             integrand_name: Some(integrand_name),
             use_arb_prec: self.use_arb_prec,
             minimal_output: false,
-            return_generated_events: Some(return_generated_events),
+            // `run` disables event generation once for the whole benchmark.
+            return_generated_events: None,
             momentum_space: self.momentum_space,
             points: points.view(),
             integrator_weights: None,
@@ -313,7 +314,8 @@ impl Bench {
 
     fn run_benchmark(
         &self,
-        state: &mut State,
+        integrand: &mut ProcessIntegrand,
+        model: &Model,
         process_id: usize,
         integrand_name: String,
         graph_name: Option<String>,
@@ -327,17 +329,15 @@ impl Bench {
         let warmup_points = self.repeated_point_array(BENCH_WARMUP_SAMPLES)?;
         let warmup_discrete_dims = self.repeated_discrete_dim_array(BENCH_WARMUP_SAMPLES)?;
         let warmup_start = Instant::now();
-        let warmup = evaluate_samples(
-            state,
-            &self.evaluate_samples_request(
+        let warmup = self
+            .evaluate_samples_request(
                 process_id,
                 integrand_name.clone(),
                 &warmup_points,
                 &warmup_discrete_dims,
                 &graph_name,
-                false,
-            ),
-        )?;
+            )
+            .run_warmed(integrand, model)?;
         let warmup_timing = warmup_start.elapsed();
         let warmup_samples = warmup.samples.len().max(1);
         let warmup_per_sample = warmup_timing.as_secs_f64() / warmup_samples as f64;
@@ -364,17 +364,15 @@ impl Bench {
                 let points = self.repeated_point_array(batch_size)?;
                 let discrete_dims = self.repeated_discrete_dim_array(batch_size)?;
                 let batch_start = Instant::now();
-                let batch = evaluate_samples(
-                    state,
-                    &self.evaluate_samples_request(
+                let batch = self
+                    .evaluate_samples_request(
                         process_id,
                         integrand_name.clone(),
                         &points,
                         &discrete_dims,
                         &graph_name,
-                        false,
-                    ),
-                )?;
+                    )
+                    .run_warmed(integrand, model)?;
                 let total_timing = batch_start.elapsed();
                 batch_timings.push(bench_batch_timing(total_timing, &batch)?);
                 update_bench_progress(
@@ -446,7 +444,19 @@ impl Bench {
             state,
             process_id,
             &integrand_name_for_restore,
-            |state| self.run_benchmark(state, process_id, integrand_name, graph_name),
+            |state| {
+                // Resolve the model and warm up once, outside every timed region,
+                // with event generation disabled for the whole benchmark.
+                with_warmed_integrand(
+                    state,
+                    process_id,
+                    &integrand_name_for_restore,
+                    Some(false),
+                    |integrand, model| {
+                        self.run_benchmark(integrand, model, process_id, integrand_name, graph_name)
+                    },
+                )
+            },
         )
         .map(drop)
     }
