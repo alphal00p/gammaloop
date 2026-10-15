@@ -40,7 +40,7 @@ WASM workspace therefore each keep their own defaults. To align native and WASM
 builds, select the same versions and payload revision in both build roots and
 rebuild both artifacts.
 Changing a Cargo patch does not update an already compiled Typst plugin or its
-bundled Typst renderer sources.
+native SVG renderer and Typst label compiler.
 
 In the host's existing core module, after `create_symbolica_module(m)?`, use its registration
 macro:

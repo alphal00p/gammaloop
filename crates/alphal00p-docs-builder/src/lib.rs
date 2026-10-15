@@ -1771,7 +1771,7 @@ impl SiteBuilder {
             // changelog is not an editable repository documentation source.
             if source
                 == Path::new(
-                    "crates/linnet-render-py/vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md",
+                    "vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md",
                 )
             {
                 continue;

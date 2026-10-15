@@ -6,9 +6,6 @@ use linnest::{
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
-use linnet_render_py::render::prepare;
-#[cfg(test)]
-use linnet_render_py::render::PreparedRender;
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
@@ -352,15 +349,8 @@ pub(crate) fn render_graph(
     };
     let envelope: linnest::TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    if let Some(scene) = transport.native_scene(envelope.graph, selection.as_ref()) {
-        let result = crate::PyDiagramRender::from_scene(py, scene, None)?;
-        // Keep inspecting the same snapshotted configuration even when Rust
-        // supplies geometry. File exports use the actual native SVG snapshot.
-        return Ok(
-            result.with_source(prepare(topology, transport, selection)?.typst_source_value()?)
-        );
-    }
-    prepare(topology, transport, selection).map(crate::PyDiagramRender::prepared)
+    let scene = transport.native_scene(envelope.graph, selection.as_ref(), None)?;
+    crate::PyDiagramRender::from_scene(py, scene, None)
 }
 
 /// Supply live generic graph views only when the optional Linnet bindings are registered.
@@ -481,13 +471,12 @@ mod tests {
             let case = fixture.getattr("SvgInteractionTests")?.call0()?;
             case.call_method0("setUp")?;
             let graph = case.getattr("graph")?.extract::<Py<PyGraph>>()?;
-            let (topology, transport) = request(py, &graph, None, false)?;
-            let prepared = prepare(topology, transport, None)?;
-            let pages = prepared.svg_pages(py)?;
+            let drawing = render_graph(py, &graph, None, None)?;
+            let pages = drawing.to_svg_pages()?;
             assert_eq!(pages.len(), 1);
             case.call_method1(
                 "assert_native_drawing_unchanged",
-                (&pages[0], prepared.svg(py)?),
+                (&pages[0], drawing.to_svg()?),
             )?;
             Ok(())
         })

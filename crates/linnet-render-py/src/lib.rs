@@ -1,7 +1,6 @@
 //! Shared graph presentation bindings, independent of Python graph construction.
 use pyo3::prelude::*;
 pub mod drawing;
-pub mod render;
 mod scene;
 mod snapshot;
 mod svg;
@@ -176,13 +175,10 @@ _AutoFunction: typing.TypeAlias = _FunctionExpression | Auto
 _OptionalNumber: typing.TypeAlias = _Number | None
 _EdgeLengthResolver: typing.TypeAlias = EdgeLengthResolution | _ValueExpression | _FunctionExpression | Inherit
 _OptionalPadding: typing.TypeAlias = _Padding | None
-_TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
-_SourceRootPath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
 _RenderLayouts: typing.TypeAlias = LayoutSettings | None | Inherit
 _RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit
 _RenderSelectors: typing.TypeAlias = DrawingSelectors | None | Inherit
-_TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
 "#;
 
 /// Render the installed and documented Python surface from one stub inventory.
@@ -355,51 +351,40 @@ mod tests {
     }
 
     #[test]
-    fn authored_project_snapshots_assets_and_exports_without_graph_bindings() {
+    fn full_document_rendering_is_not_exposed() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
             let module = PyModule::new(py, "symbolica.community.graph")?;
             register(&module)?;
-            let directory = tempfile::tempdir()?;
             let locals = PyDict::new(py);
             locals.set_item("graph", module)?;
-            locals.set_item("directory", directory.path())?;
             py.run(
-                cr#"
-from pathlib import Path
-root = Path(directory)
-labels = root / 'labels.typ'
-labels.write_text('#let title = [captured title]')
-config = graph.RenderSettings(
-    title=graph.TypstModule.file(labels).content('title'),
-    template_options={'marker': 'original'},
-)
-result = graph.DiagramRender.from_sources({
-    'main.typ': b'''#set page(width: auto, height: auto, margin: 2pt, fill: none)
-#assert.eq(_linnet_config.options.marker, "original")
-#_linnet_config.title
-''',
-}, config=config)
-config.template_options = {'marker': 'changed'}
-labels.unlink()
-assert 'original' in result.typst_source
-assert '<svg' in result.to_svg()
-result.save(root / 'snapshot.pdf')
-assert (root / 'snapshot.pdf').read_bytes().startswith(b'%PDF')
-result.save(root / 'snapshot.typ')
-portable = graph.DiagramRender.from_sources({'main.typ': (root / 'snapshot.typ').read_bytes()})
-assert len(portable.to_svg_pages()) == 1
-"#,
+                c"assert not hasattr(graph.DiagramRender, 'from_sources')",
                 Some(&locals),
                 Some(&locals),
             )?;
+            py.run(
+                c"assert not hasattr(graph.DiagramRender, 'typst_source')",
+                Some(&locals),
+                Some(&locals),
+            )?;
+            for option in ["template", "source_root", "template_options"] {
+                let kwargs = PyDict::new(py);
+                kwargs.set_item(option, py.None())?;
+                assert!(locals
+                    .get_item("graph")?
+                    .unwrap()
+                    .getattr("RenderSettings")?
+                    .call((), Some(&kwargs))
+                    .is_err());
+            }
             Ok(())
         })
         .unwrap();
     }
 
     #[test]
-    fn scene_typst_fallback_preserves_labels_and_paint_without_graph_bindings() {
+    fn native_layout_passes_preserve_labels_paint_and_exports_without_graph_bindings() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
             let module = PyModule::new(py, "symbolica.community.graph")?;
@@ -408,8 +393,7 @@ assert len(portable.to_svg_pages()) == 1
             locals.set_item("graph", module)?;
             py.run(cr#"
 config = graph.RenderSettings(
-    layouts=graph.LayoutSettings(algorithm=graph.LayoutAlgorithm.Dot),
-    template_options={'force_typst': True},
+    layouts=graph.LayoutSettings(impred_steps=1).then(impred_steps=1),
 )
 "#, Some(&locals), Some(&locals))?;
             let settings = locals.get_item("config")?.unwrap();
@@ -443,10 +427,11 @@ config = graph.RenderSettings(
                 title: None,
                 pages: vec!["[$x$]".into()],
                 layout: Default::default(),
+                layout_passes: Vec::new(),
                 layout_edges: None,
                 label_feedback: false,
             };
-            // from_scene's temporary label module is gone before compilation below.
+            // The captured native geometry and labels also supply PDF export.
             let result = PyDiagramRender::from_scene(py, scene, Some(&settings))?;
             let svg = result.to_svg()?;
             for value in ["<svg", "#357913", "#246813", "particle"] {

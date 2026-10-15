@@ -1,4 +1,4 @@
-//! Typed Python values for configuring Linnest's Typst renderer.
+//! Typed Python drawing values and Typst label expressions.
 //!
 //! This module deliberately models a closed subset of Typst's native value
 //! language. Strings are always data, never source, and executable Typst
@@ -8,7 +8,7 @@ mod native;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyOverflowError, PyTypeError, PyValueError};
@@ -123,16 +123,9 @@ fn typst_float(value: f64) -> String {
 /// Renderer-owned module dependency collected from typed native values.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "kebab-case")]
-pub enum TypstModuleSource {
+pub(crate) enum TypstModuleSource {
     File(PathBuf),
     Package(String),
-}
-
-/// One deterministic import required by a serialized Typst expression.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypstImport {
-    pub alias: String,
-    pub source: TypstModuleSource,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -598,29 +591,6 @@ impl NativeValue {
             }
             Self::Expression(expression) => expression.source(aliases)?,
         })
-    }
-
-    fn render_source(&self) -> PyResult<(String, Vec<TypstImport>)> {
-        let mut modules = BTreeSet::new();
-        self.collect_modules(&mut modules);
-        let imports = modules
-            .into_iter()
-            .enumerate()
-            .map(|(index, source)| TypstImport {
-                alias: format!("_linnet_m{index}"),
-                source,
-            })
-            .collect::<Vec<_>>();
-        let aliases = imports
-            .iter()
-            .map(|import| (import.source.clone(), import.alias.clone()))
-            .collect();
-        if !matches!(self, Self::Dict(_)) {
-            return Err(PyTypeError::new_err(
-                "render configuration must be a dictionary",
-            ));
-        }
-        Ok((self.source(&aliases)?, imports))
     }
 
     fn kind(&self) -> &'static str {
@@ -3188,30 +3158,6 @@ impl PyDrawOptions {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-enum PathSetting {
-    #[default]
-    Inherit,
-    None,
-    Value(PathBuf),
-}
-
-impl PathSetting {
-    fn overlay(&self, overlay: &Self) -> Self {
-        match overlay {
-            Self::Inherit => self.clone(),
-            _ => overlay.clone(),
-        }
-    }
-
-    fn resolved(&self) -> Option<PathBuf> {
-        match self {
-            Self::Value(path) => Some(path.clone()),
-            Self::Inherit | Self::None => None,
-        }
-    }
-}
-
 fn deep_overlay(
     base: &BTreeMap<String, NativeValue>,
     overlay: &BTreeMap<String, NativeValue>,
@@ -3242,8 +3188,6 @@ fn deep_overlay(
 )]
 #[derive(Clone, Debug, Default)]
 pub struct PyRenderSettings {
-    template: PathSetting,
-    source_root: PathSetting,
     values: BTreeMap<String, NativeValue>,
     selectors: SelectorSettings,
 }
@@ -3255,7 +3199,7 @@ impl PyRenderSettings {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, template=..., source_root=..., title=..., style=..., layouts=..., drawing=..., selectors=..., template_options=...)"
+        text_signature = "(*, title=..., style=..., layouts=..., drawing=..., selectors=...)"
     )]
     #[gen_stub(skip)]
     pub fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -3272,34 +3216,6 @@ impl PyRenderSettings {
 
     fn overlay(&self, overlay: &PyRenderSettings) -> Self {
         self.merged(overlay)
-    }
-
-    #[getter]
-    #[gen_stub(override_return_type(type_repr = "_TemplatePath"))]
-    fn template(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.path_setting(py, &self.template)
-    }
-
-    #[setter]
-    fn set_template(
-        &mut self,
-        #[gen_stub(override_type(type_repr = "_TemplatePath"))] value: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        self.assign("template", value)
-    }
-
-    #[getter]
-    #[gen_stub(override_return_type(type_repr = "_SourceRootPath"))]
-    fn source_root(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.path_setting(py, &self.source_root)
-    }
-
-    #[setter]
-    fn set_source_root(
-        &mut self,
-        #[gen_stub(override_type(type_repr = "_SourceRootPath"))] value: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        self.assign("source_root", value)
     }
 
     #[getter]
@@ -3431,61 +3347,8 @@ impl PyRenderSettings {
         self.assign("selectors", value)
     }
 
-    #[getter]
-    #[gen_stub(override_return_type(type_repr = "_TemplateOptions"))]
-    fn template_options(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.native_setting(py, "options")
-    }
-
-    #[setter]
-    fn set_template_options(
-        &mut self,
-        #[gen_stub(override_type(type_repr = "_TemplateOptions"))] value: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        self.assign("template_options", value)
-    }
-
-    /// The options a native renderer can honour without Typst.
-    ///
-    /// Returns ``(template_options, layout)`` with plain template option values
-    /// and the ``impred-*`` options of a single layout pass, keyed by their
-    /// Typst names, or ``None`` when this configuration needs the Typst renderer
-    /// (templates, selectors, graph styles, drawing options or titles).
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import graph as ln
-    /// >>> ln.RenderSettings(template_options={"momentum-arrows": True}).native_drawing_options()
-    /// ({'momentum-arrows': True}, {})
-    /// >>> ln.RenderSettings(drawing=ln.DrawOptions(node_radius=5)).native_drawing_options()
-    #[gen_stub(override_return_type(
-        type_repr = "tuple[dict[str, typing.Any], dict[str, typing.Any]] | None",
-        imports = ("typing")
-    ))]
-    fn native_drawing_options(&self, py: Python<'_>) -> PyResult<Option<Py<PyTuple>>> {
-        let Some(maps) = self.native_drawing_values() else {
-            return Ok(None);
-        };
-        let dicts = maps
-            .iter()
-            .map(|values| {
-                let dict = PyDict::new(py);
-                for (key, value) in values {
-                    dict.set_item(key, native_to_py(py, value)?)?;
-                }
-                Ok(dict)
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        Ok(Some(PyTuple::new(py, dicts)?.unbind()))
-    }
-
     fn __repr__(&self) -> String {
-        format!(
-            "RenderSettings(template={:?}, source_root={:?}, fields={})",
-            self.template.resolved(),
-            self.source_root.resolved(),
-            self.values.len()
-        )
+        format!("RenderSettings(fields={})", self.values.len())
     }
 
     #[gen_stub(skip)]
@@ -3574,35 +3437,13 @@ pyo3_stub_gen::inventory::submit! {
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyRenderSettings:
-            def __new__(cls, *, template: _TemplatePath = ..., source_root: _SourceRootPath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderSettings: ...
+            def __new__(cls, *, title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ...) -> RenderSettings: ...
     "# }
 }
 
 impl PyRenderSettings {
     fn assign(&mut self, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
         match key {
-            "template" => {
-                self.template = if value.extract::<PyRef<'_, PyInherit>>().is_ok() {
-                    PathSetting::Inherit
-                } else if value.is_none() {
-                    PathSetting::None
-                } else {
-                    PathSetting::Value(value.extract::<PathBuf>().map_err(|_| {
-                        PyTypeError::new_err("template must be a path, None, or INHERIT")
-                    })?)
-                };
-            }
-            "source_root" => {
-                self.source_root = if value.extract::<PyRef<'_, PyInherit>>().is_ok() {
-                    PathSetting::Inherit
-                } else if value.is_none() {
-                    PathSetting::None
-                } else {
-                    PathSetting::Value(value.extract::<PathBuf>().map_err(|_| {
-                        PyTypeError::new_err("source_root must be a path, None, or INHERIT")
-                    })?)
-                };
-            }
             "title" => {
                 let title = native_from_py(value, 0)?;
                 title.validate(0)?;
@@ -3702,22 +3543,6 @@ impl PyRenderSettings {
                     self.selectors = options.settings.clone();
                 }
             }
-            "template_options" => {
-                if value.extract::<PyRef<'_, PyInherit>>().is_ok() {
-                    self.values.remove("options");
-                } else if value.is_none() {
-                    self.values.insert("options".to_owned(), NativeValue::None);
-                } else {
-                    let options = native_from_py(value, 0)?;
-                    if !matches!(options, NativeValue::Dict(_)) {
-                        return Err(PyTypeError::new_err(
-                            "template_options must be a dictionary, None, or INHERIT",
-                        ));
-                    }
-                    options.validate(0)?;
-                    self.values.insert("options".to_owned(), options);
-                }
-            }
             _ => {
                 return Err(PyTypeError::new_err(format!(
                     "unknown RenderSettings option {key:?}"
@@ -3725,18 +3550,6 @@ impl PyRenderSettings {
             }
         }
         Ok(())
-    }
-
-    fn path_value(&self, py: Python<'_>, path: &Path) -> PyResult<Py<PyAny>> {
-        Ok(path.to_path_buf().into_pyobject(py)?.into_any().unbind())
-    }
-
-    fn path_setting(&self, py: Python<'_>, setting: &PathSetting) -> PyResult<Py<PyAny>> {
-        match setting {
-            PathSetting::Inherit => Ok(inherit(py)),
-            PathSetting::None => Ok(py.None()),
-            PathSetting::Value(path) => self.path_value(py, path),
-        }
     }
 
     fn native_setting(&self, py: Python<'_>, key: &str) -> PyResult<Py<PyAny>> {
@@ -3747,8 +3560,6 @@ impl PyRenderSettings {
 
     pub fn merged(&self, overlay: &Self) -> Self {
         Self {
-            template: self.template.overlay(&overlay.template),
-            source_root: self.source_root.overlay(&overlay.source_root),
             values: deep_overlay(&self.values, &overlay.values),
             selectors: self.selectors.overlay(&overlay.selectors),
         }
@@ -3767,70 +3578,13 @@ impl PyRenderSettings {
             .or_insert(NativeValue::None);
         NativeValue::Dict(values)
     }
-
-    /// Plain template options and the `impred-*` options of one layout pass;
-    /// `None` when Typst must draw, as templates, selectors, graph styles,
-    /// drawing options and titles require.
-    fn native_drawing_values(&self) -> Option<[BTreeMap<String, NativeValue>; 2]> {
-        if matches!(self.template, PathSetting::Value(_))
-            || !(self.selectors.is_inherit() || self.selectors.is_none())
-        {
-            return None;
-        }
-        let plain = |value: &NativeValue| {
-            matches!(
-                value,
-                NativeValue::None
-                    | NativeValue::Auto
-                    | NativeValue::Bool(_)
-                    | NativeValue::Int(_)
-                    | NativeValue::Float(_)
-                    | NativeValue::String(_)
-            )
-        };
-        // Option groups list every field; unset ones inherit.
-        let set = |values: &BTreeMap<String, NativeValue>| -> BTreeMap<String, NativeValue> {
-            values
-                .iter()
-                .filter(|(_, value)| !matches!(value, NativeValue::Inherit))
-                .map(|(key, value)| (key.clone(), value.clone()))
-                .collect()
-        };
-        let [mut options, mut layout] = [BTreeMap::new(), BTreeMap::new()];
-        for (key, value) in &self.values {
-            match (key.as_str(), value) {
-                ("title", NativeValue::Auto)
-                | ("style" | "draw" | "options", NativeValue::None) => {}
-                ("style" | "draw", NativeValue::Dict(values)) if set(values).is_empty() => {}
-                ("options", NativeValue::Dict(values)) if set(values).values().all(plain) => {
-                    options = set(values);
-                }
-                ("layouts", NativeValue::Array(passes)) => match passes.as_slice() {
-                    [] => {}
-                    [NativeValue::Dict(values)]
-                        if set(values)
-                            .iter()
-                            .all(|(key, value)| key.starts_with("impred-") && plain(value)) =>
-                    {
-                        layout = set(values);
-                    }
-                    _ => return None,
-                },
-                _ => return None,
-            }
-        }
-        Some([options, layout])
-    }
 }
 
 /// Resolved renderer transport plus its closed native Typst configuration.
 #[derive(Debug)]
 pub struct RenderSettingsTransport {
     native: NativeValue,
-    pub config_source: String,
-    pub imports: Vec<TypstImport>,
-    pub template: Option<PathBuf>,
-    pub source_root: Option<PathBuf>,
+    pub(crate) imports: BTreeSet<TypstModuleSource>,
     pub selectors: SelectorCallbacks,
 }
 
@@ -4624,13 +4378,11 @@ pub fn render_config_transport(
     let elements = native_from_py(elements.as_any(), 0)?;
     elements.validate(0)?;
     let native = config.native(elements);
-    let (config_source, imports) = native.render_source()?;
+    let mut imports = BTreeSet::new();
+    native.collect_modules(&mut imports);
     Ok(RenderSettingsTransport {
         native,
-        config_source,
         imports,
-        template: config.template.resolved(),
-        source_root: config.source_root.resolved(),
         selectors: config.selectors.resolved(py),
     })
 }
@@ -4758,22 +4510,22 @@ impl NativeValue {
             Self::Array(v) => Value::Array(v.iter().map(Self::json).collect::<PyResult<_>>()?),
             _ => {
                 return Err(PyValueError::new_err(
-                    "this option requires the full Typst renderer",
+                    "this option is not supported by the native SVG renderer",
                 ));
             }
         })
     }
 }
 impl PyRenderSettings {
-    /// Convert the supported native subset; advanced settings use the Typst path.
+    pub(crate) fn has_selectors(&self) -> bool {
+        !(self.selectors.is_none() || self.selectors.is_inherit())
+    }
+
+    /// Convert settings for native SVG drawing.
     pub fn config(&self) -> PyResult<linnest::svg::Config> {
         use serde_json::{json, Map, Value};
-        if self.template.resolved().is_some()
-            || !(self.selectors.is_none() || self.selectors.is_inherit())
-        {
-            return Err(PyValueError::new_err(
-                "templates and selectors require the full Typst renderer",
-            ));
+        if !(self.selectors.is_none() || self.selectors.is_inherit()) {
+            return Err(PyValueError::new_err("selectors need graph element views"));
         }
         let mut config = linnest::svg::Config::default();
         let object = |v: &NativeValue| -> PyResult<Map<String, Value>> {
@@ -4787,19 +4539,16 @@ impl PyRenderSettings {
             match key.as_str() {
                 "title" => config.title = value.json()?.as_str().map(str::to_owned),
                 "layouts" => match value {
-                    NativeValue::Array(passes) if passes.len() == 1 => {
-                        config.layouts = object(&passes[0])?
+                    NativeValue::Array(passes) => {
+                        config.layouts = passes.iter().map(object).collect::<PyResult<_>>()?
                     }
                     NativeValue::None => {}
                     _ => {
-                        return Err(PyValueError::new_err(
-                            "layout sequences require the full Typst renderer",
-                        ));
+                        return Err(PyValueError::new_err("expected a native layout sequence"));
                     }
                 },
                 "style" => config.style = object(value)?,
                 "draw" => config.drawing = object(value)?,
-                "options" => config.template_options = object(value)?,
                 _ => {
                     return Err(PyValueError::new_err(format!(
                         "unsupported native setting {key}"
@@ -4823,142 +4572,5 @@ impl PyRenderSettings {
             }
         }
         Ok(config)
-    }
-}
-
-/// References into a snapshotted domain label module retain typed content semantics.
-pub fn label_reference(py: Python<'_>, path: PathBuf, name: &str) -> PyResult<Py<PyAny>> {
-    Ok(Py::new(py, PyTypstModule::file(path).content(name)?)?.into_any())
-}
-pub fn point_length(py: Python<'_>, value: f64) -> PyResult<Py<PyAny>> {
-    Ok(Py::new(
-        py,
-        PyLength {
-            value,
-            unit: LengthUnit::Pt,
-        },
-    )?
-    .into_any())
-}
-
-/// Domain defaults participate in the same overlay model as user settings.
-impl PyRenderSettings {
-    pub fn scene_style(
-        &self,
-        py: Python<'_>,
-        module: PathBuf,
-        kind: &str,
-        defaults: &Bound<'_, PyDict>,
-    ) -> PyResult<Py<PyAny>> {
-        let empty = NativeValue::Dict(BTreeMap::new());
-        let function = PyTypstModule::file(module).function("scene-style")?;
-        let expression = TypstExpression::Bind {
-            function: Box::new(function.expression),
-            arguments: CallArguments {
-                positional: vec![
-                    NativeValue::String(kind.into()),
-                    native_from_py(defaults.as_any(), 0)?,
-                    self.values.get("style").unwrap_or(&empty).clone(),
-                    self.values.get("draw").unwrap_or(&empty).clone(),
-                ],
-                named: BTreeMap::new(),
-            },
-        };
-        Ok(Py::new(py, PyTypstBind { expression })?.into_any())
-    }
-
-    pub fn with_scene_defaults(
-        &self,
-        py: Python<'_>,
-        scene: &linnest::svg::Scene,
-        module: PathBuf,
-    ) -> PyResult<Self> {
-        let layout = py.import("json")?.call_method1(
-            "loads",
-            (serde_json::to_string(&scene.layout)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?,),
-        )?;
-        let NativeValue::Dict(mut defaults) = native_from_py(&layout, 0)? else {
-            unreachable!()
-        };
-        defaults.insert(
-            "impred-labels".into(),
-            NativeValue::Bool(scene.label_feedback),
-        );
-        if let Some(edges) = &scene.layout_edges {
-            let mut bits = vec![
-                false;
-                scene
-                    .graph
-                    .edges
-                    .iter()
-                    .map(|e| usize::from(e.source.is_some()) + usize::from(e.sink.is_some()))
-                    .sum()
-            ];
-            for &index in edges {
-                let edge = &scene.graph.edges[index];
-                for end in [&edge.source, &edge.sink].into_iter().flatten() {
-                    if let Some(id) = end.id {
-                        bits[id] = true;
-                    }
-                }
-            }
-            defaults.insert(
-                "subgraph".into(),
-                NativeValue::Array(bits.into_iter().map(NativeValue::Bool).collect()),
-            );
-        }
-        let mut result = self.clone();
-        let module = PyTypstModule::file(module);
-        let drawing = ["draw-node", "source-style", "sink-style"]
-            .into_iter()
-            .map(|name| {
-                let function = Py::new(py, module.function(name)?)?;
-                Ok((name.into(), native_from_py(function.bind(py).as_any(), 0)?))
-            })
-            .collect::<PyResult<BTreeMap<_, _>>>()?;
-        let merged = match result.values.get("draw") {
-            Some(NativeValue::Dict(values)) => deep_overlay(&drawing, values),
-            _ => drawing,
-        };
-        result
-            .values
-            .insert("draw".into(), NativeValue::Dict(merged));
-        match result.values.get_mut("layouts") {
-            Some(NativeValue::Array(passes)) => {
-                if let Some(NativeValue::Dict(pass)) = passes.first_mut() {
-                    *pass = deep_overlay(&defaults, pass);
-                }
-            }
-            Some(_) => {}
-            None => {
-                result.values.insert(
-                    "layouts".into(),
-                    NativeValue::Array(vec![NativeValue::Dict(defaults)]),
-                );
-            }
-        }
-        Ok(result)
-    }
-}
-pub fn scene_color(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
-    if value == "none" {
-        Ok(py.None())
-    } else {
-        Ok(Py::new(py, PyColor::new(value)?)?.into_any())
-    }
-}
-
-pub fn scene_hatch(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
-    Ok(Py::new(py, PyTypstModule::file(path).value("hatch")?)?.into_any())
-}
-
-impl PyRenderSettings {
-    pub fn has_selectors(&self, py: Python<'_>) -> bool {
-        let selectors = self.selectors.resolved(py);
-        selectors.node.is_some()
-            || selectors.edge.is_some()
-            || selectors.source.is_some()
-            || selectors.sink.is_some()
     }
 }

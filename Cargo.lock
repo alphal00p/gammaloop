@@ -3780,21 +3780,20 @@ dependencies = [
 name = "linnet-render-py"
 version = "0.1.0"
 dependencies = [
- "kurvst",
+ "krilla",
+ "krilla-svg",
  "linnest",
  "linnet",
  "pyo3",
- "pyo3-build-config",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
+ "resvg",
  "roxmltree 0.21.1",
- "rust-embed",
  "serde",
  "serde_json",
  "symbolica",
  "tempfile",
  "typst-renderer",
- "walkdir",
 ]
 
 [[package]]

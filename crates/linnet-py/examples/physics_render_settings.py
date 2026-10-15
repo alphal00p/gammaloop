@@ -3,7 +3,6 @@
 # dependencies = [
 #     "symbolica==3.0.1",
 #     "marimo==0.24.0",
-#     "typst==0.15.0",
 # ]
 # ///
 
@@ -34,47 +33,13 @@ def _(mo):
     mo.md(r"""
     # FeynKit DOT rendering
 
-    Edit compact physics DOT. FeynKit resolves `particle` names or `pdg` codes
-    against the Standard Model, infers interaction slots, and renders the parsed
-    diagram with Linnet/Linnest. The preview and table inspect the same object.
-    Annotated DOT from `FeynmanDiagram.to_dot()` is also accepted.
+    Edit physics DOT to inspect a Standard Model diagram. FeynKit draws the graph
+    directly to SVG and typesets its labels with Typst. Incoming and outgoing legs,
+    particles, momentum labels, and interaction details come from the same diagram.
 
-    The amplitude is a photon-scattering diagram with a top loop and gluon
-    exchange. The cross-section describes photon-mediated electron–positron
-    annihilation into muons. Its `is_cut` tags pair initial-state legs;
-    `final_state="mu-,mu+"` selects physical cuts with those particles.
-    Use `int_id` when particles alone do not identify an interaction uniquely.
-    Numerators default to one; compact import does not generate Feynman rules.
-
-    **Automatic** placement uses momentum flow to pull incoming legs left and
-    outgoing legs right with a constant force. The graph can stretch with its
-    chain of interactions. All-incoming or all-outgoing diagrams spread radially.
-    Repulsion grows once from a compact start to its final strength.
-    Cross-sections open initial-state connections into left/right legs by default;
-    matching pairs share movable rows. Disable **Split initial state** to draw
-    the sewn graph. Internal labels keep a uniform gap to their text bounds,
-    sliding along their curves or switching sides to avoid overlaps.
-    Momentum labels use the diagram's stored loop momentum basis. Arrows and
-    their labels slide together at a fixed offset; automatic sides can flip
-    to avoid collisions. **Momentum settings** controls their offset, requested
-    length, maximum fraction of the edge, label gap, and preferred position.
-    Disable **Automatic momentum placement** to pin the pair. **Debug IDs** adds node and half-edge IDs.
-    **Collision boxes** shows padded label boxes: dashed purple for label–label
-    clearance, cyan for label–edge/node clearance, and orange for edge/node
-    obstacles. Only matching purple–purple or cyan–orange overlaps are penalized.
-    Labels ignore their own edge's boxes, except for self-loops; their fixed
-    offset already controls clearance from the carrier.
-    **Extra label collision padding** enlarges both label boxes by that amount
-    on every side, in canvas units; zero restores their base sizes.
-
-    Hover for physics information; click to inspect an edge or vertex.
-    Shift-click toggles selection. The outer quarters of an internal edge
-    select its half-edges; the middle selects the whole edge. The transparent
-    SVG follows the documentation's light or dark theme.
-
-    Open **Layout settings** for the sliders. FeynKit's mode-specific presets
-    stay active unless you enable custom force parameters. Edits render after
-    typing pauses; slider changes render on release.
+    ImPrEd layout runs the requested passes in order. A second pass continues from
+    the first drawing. Layered layout is also available. Portable Typst exports
+    embed the captured SVG, preserving the preview's geometry.
     """)
     return
 
@@ -118,54 +83,26 @@ def _():
 @app.cell(hide_code=True)
 def _(examples, mo):
     example = mo.ui.dropdown(options=examples, value="Amplitude", label="Example")
-    mode = mo.ui.dropdown(
-        options={
-            "Automatic": "auto",
-            "Amplitude": "amplitude",
-            "Cross-section": "cross-section",
-            "No external preparation": "generic",
-        },
-        value="Automatic",
-        label="External placement",
-    )
     split_initial_state = mo.ui.checkbox(value=True, label="Split initial state")
     show_momenta = mo.ui.checkbox(value=False, label="Momentum arrows")
     show_momentum_labels = mo.ui.checkbox(value=False, label="Momentum labels")
-    show_half_edge_ids = mo.ui.checkbox(value=False, label="Debug IDs")
-    show_collision_boxes = mo.ui.checkbox(value=False, label="Collision boxes")
-    label_collision_padding = mo.ui.slider(
-        0,
-        0.6,
-        0.05,
-        0.6,
-        debounce=True,
-        show_value=True,
-        label="Extra label collision padding",
-    )
+    show_indices = mo.ui.checkbox(value=False, label="Node and edge indices")
     mo.hstack(
         [
             example,
-            mode,
             split_initial_state,
             show_momenta,
             show_momentum_labels,
-            show_half_edge_ids,
-            show_collision_boxes,
-            label_collision_padding,
+            show_indices,
         ],
-        justify="start",
         wrap=True,
-        gap=1.5,
     )
     return (
         example,
-        label_collision_padding,
-        mode,
-        show_collision_boxes,
-        show_half_edge_ids,
-        show_momentum_labels,
-        show_momenta,
         split_initial_state,
+        show_momenta,
+        show_momentum_labels,
+        show_indices,
     )
 
 
@@ -184,251 +121,27 @@ def _(example, mo):
 
 
 @app.cell(hide_code=True)
-def _(lp, mo):
+def _(mo):
     layout_algorithm = mo.ui.dropdown(
-        options={
-            "Force": lp.LayoutAlgorithm.Force,
-            "Stable layered": lp.LayoutAlgorithm.StableLayered,
-        },
-        value="Force",
-        label="Layout algorithm",
+        options=["ImPrEd", "Layered"], value="ImPrEd", label="Layout"
     )
-    custom_forces = mo.ui.checkbox(value=False, label="Override FeynKit force presets")
-    force_steps = mo.ui.slider(
-        0,
-        2400,
-        100,
-        100,
-        debounce=True,
-        show_value=True,
-        label="Steps per epoch (30 epochs)",
+    first_steps = mo.ui.slider(
+        0, 500, 10, 100, debounce=True, show_value=True, label="First pass steps"
     )
-    force_seed = mo.ui.slider(
-        0,
-        99,
-        1,
-        42,
-        debounce=True,
-        show_value=True,
-        label="Seed",
+    second_steps = mo.ui.slider(
+        0, 500, 10, 50, debounce=True, show_value=True, label="Second pass steps"
     )
-    directional_force = mo.ui.slider(
-        0,
-        5,
-        0.05,
-        0.45,
-        debounce=True,
-        show_value=True,
-        label="Directional force",
-    )
-    spring_strength = mo.ui.slider(
-        1,
-        100,
-        1,
-        9,
-        debounce=True,
-        show_value=True,
-        label="Spring strength",
-    )
-    spring_length_scale = mo.ui.slider(
-        0.25,
-        2,
-        0.05,
-        0.75,
-        debounce=True,
-        show_value=True,
-        label="Spring rest-length multiplier",
-    )
-    external_pull = mo.ui.slider(
-        0,
-        3,
-        0.05,
-        1,
-        debounce=True,
-        show_value=True,
-        label="Constant external pull",
-    )
-    external_pull_balance = mo.ui.slider(
-        0,
-        3,
-        0.05,
-        1,
-        debounce=True,
-        show_value=True,
-        label="Pull balancing",
-    )
-    initial_repulsion = mo.ui.slider(
-        0,
-        1,
-        0.05,
-        0.15,
-        debounce=True,
-        show_value=True,
-        label="Initial repulsion fraction",
-    )
-    repulsion_growth = mo.ui.slider(
-        0,
-        1,
-        0.05,
-        0.7,
-        debounce=True,
-        show_value=True,
-        label="Fraction of run used to grow repulsion",
-    )
-    beta = mo.ui.slider(
-        0,
-        250,
-        5,
-        50,
-        debounce=True,
-        show_value=True,
-        label="Vertex repulsion (β)",
-    )
-    dangling_repulsion = mo.ui.slider(
-        0,
-        10,
-        0.1,
-        5,
-        debounce=True,
-        show_value=True,
-        label="External-leg repulsion",
-    )
-    dangling_centroid_repulsion = mo.ui.slider(
-        0,
-        5,
-        0.05,
-        1.25,
-        debounce=True,
-        show_value=True,
-        label="External legs from node centroid",
-    )
-    edge_edge_repulsion = mo.ui.slider(
-        0,
-        0.5,
-        0.01,
-        0.1,
-        debounce=True,
-        show_value=True,
-        label="Edge–edge repulsion",
-    )
-    label_steps = mo.ui.slider(
-        0,
-        200,
-        10,
-        80,
-        debounce=True,
-        show_value=True,
-        label="Label relaxation steps",
+    spacing = mo.ui.slider(
+        1.0, 5.0, 0.1, 2.4, debounce=True, show_value=True, label="Spacing"
     )
     mo.accordion(
         {
             "Layout settings": mo.vstack(
-                [
-                    layout_algorithm,
-                    force_steps,
-                    force_seed,
-                    custom_forces,
-                    mo.md(
-                        "The remaining sliders apply only when force overrides are enabled. "
-                        "Otherwise the renderer chooses FeynKit's amplitude or cross-section presets."
-                    ),
-                    directional_force,
-                    spring_strength,
-                    spring_length_scale,
-                    external_pull,
-                    external_pull_balance,
-                    mo.md(
-                        "Pull balancing: 0 keeps uniform pull; 1 balances spring loads; "
-                        "values above 1 strengthen the balancing."
-                    ),
-                    beta,
-                    initial_repulsion,
-                    repulsion_growth,
-                    dangling_repulsion,
-                    dangling_centroid_repulsion,
-                    edge_edge_repulsion,
-                    label_steps,
-                ],
-                gap=0.75,
-            ),
-        }
-    )
-    return (
-        custom_forces,
-        layout_algorithm,
-        beta,
-        dangling_repulsion,
-        dangling_centroid_repulsion,
-        directional_force,
-        edge_edge_repulsion,
-        force_seed,
-        force_steps,
-        label_steps,
-        spring_strength,
-        spring_length_scale,
-        external_pull,
-        external_pull_balance,
-        initial_repulsion,
-        repulsion_growth,
-    )
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    auto_momentum_placement = mo.ui.checkbox(
-        value=True, label="Automatic momentum placement"
-    )
-    momentum_side = mo.ui.dropdown(
-        options={"Automatic": "auto", "Left": "left", "Right": "right"},
-        value="Automatic",
-        label="Momentum side",
-    )
-    momentum_offset = mo.ui.slider(
-        0, 1, 0.05, 0.5, debounce=True, show_value=True, label="Arrow offset"
-    )
-    momentum_length = mo.ui.slider(
-        0.2, 2, 0.1, 1.4, debounce=True, show_value=True, label="Requested arrow length"
-    )
-    momentum_ratio = mo.ui.slider(
-        0.1,
-        1,
-        0.05,
-        0.5,
-        debounce=True,
-        show_value=True,
-        label="Maximum arrow fraction of edge",
-    )
-    momentum_gap = mo.ui.slider(
-        0, 0.8, 0.05, 0.2, debounce=True, show_value=True, label="Momentum label gap"
-    )
-    momentum_shift = mo.ui.slider(
-        -2, 2, 0.1, 0, debounce=True, show_value=True, label="Preferred momentum shift"
-    )
-    mo.accordion(
-        {
-            "Momentum settings": mo.vstack(
-                [
-                    auto_momentum_placement,
-                    momentum_side,
-                    momentum_offset,
-                    momentum_length,
-                    momentum_ratio,
-                    momentum_gap,
-                    momentum_shift,
-                ],
-                gap=0.75,
+                [layout_algorithm, first_steps, second_steps, spacing]
             )
         }
     )
-    return (
-        auto_momentum_placement,
-        momentum_side,
-        momentum_offset,
-        momentum_length,
-        momentum_ratio,
-        momentum_gap,
-        momentum_shift,
-    )
+    return layout_algorithm, first_steps, second_steps, spacing
 
 
 @app.cell
@@ -444,97 +157,44 @@ def _(dot_source, fk, model):
 
 @app.cell
 def _(
-    auto_momentum_placement,
-    momentum_side,
-    momentum_offset,
-    momentum_length,
-    momentum_ratio,
-    momentum_gap,
-    momentum_shift,
-    beta,
-    custom_forces,
-    dangling_centroid_repulsion,
-    dangling_repulsion,
-    directional_force,
-    edge_edge_repulsion,
-    force_seed,
-    force_steps,
-    label_steps,
-    label_collision_padding,
-    layout_algorithm,
+    fk,
     lp,
-    mode,
-    show_collision_boxes,
-    show_half_edge_ids,
-    show_momentum_labels,
+    layout_algorithm,
+    first_steps,
+    second_steps,
+    spacing,
     show_momenta,
-    spring_strength,
-    spring_length_scale,
-    external_pull,
-    external_pull_balance,
-    initial_repulsion,
-    repulsion_growth,
+    show_momentum_labels,
+    show_indices,
     split_initial_state,
 ):
-    _forces = {}
-    if custom_forces.value:
-        _forces = {
-            "directional_force": directional_force.value,
-            "spring_strength": spring_strength.value,
-            "spring_length_scale": spring_length_scale.value,
-            "external_pull": external_pull.value,
-            "external_pull_balance": external_pull_balance.value,
-            "initial_repulsion": initial_repulsion.value,
-            "repulsion_growth": repulsion_growth.value,
-            "beta": beta.value,
-            "dangling_repulsion": dangling_repulsion.value,
-            "dangling_centroid_repulsion": dangling_centroid_repulsion.value,
-            "edge_edge_repulsion": edge_edge_repulsion.value,
-            "label_steps": label_steps.value,
-        }
-    # The shared physics template lightens sink halves by 45% and owns the
-    # particle, label, arrow, and placement conventions.
-    render_config = lp.RenderSettings(
-        drawing=lp.DrawOptions(
-            debug_label_collisions=show_collision_boxes.value,
-            label_collision_padding=label_collision_padding.value,
-        ),
-        layouts=lp.LayoutSettings(
-            algorithm=layout_algorithm.value,
-            steps=force_steps.value,
-            seed=force_seed.value,
-            **_forces,
-        ),
-        template_options={
-            "mode": mode.value,
-            "split-initial-state": split_initial_state.value,
-            "momentum-arrows": show_momenta.value,
-            "show-momentum": show_momentum_labels.value,
-            "momentum-label-slide": auto_momentum_placement.value,
-            "momentum-arrow-side": momentum_side.value,
-            "momentum-arrow-offset": momentum_offset.value,
-            "momentum-arrow-length": momentum_length.value,
-            "momentum-arrow-ratio": momentum_ratio.value,
-            "momentum-label-gap": momentum_gap.value,
-            "momentum-arrow-shift": momentum_shift.value,
-            "debug": show_half_edge_ids.value,
-        },
+    if layout_algorithm.value == "ImPrEd":
+        layouts = lp.LayoutSettings(
+            impred_steps=first_steps.value, impred_spacing=spacing.value
+        ).then(impred_steps=second_steps.value, impred_spacing=spacing.value)
+    else:
+        layouts = lp.LayoutSettings(algorithm=lp.LayoutAlgorithm.Dot)
+    render_config = lp.RenderSettings(layouts=layouts)
+    diagram_style = fk.DiagramStyle(
+        split_initial_state=split_initial_state.value,
+        momentum_arrows=show_momenta.value,
+        show_momentum=show_momentum_labels.value,
+        show_node_index=show_indices.value,
+        show_edge_index=show_indices.value,
     )
-    route_momenta = show_momenta.value or show_momentum_labels.value
-    return render_config, route_momenta
+    return render_config, diagram_style
 
 
 @app.cell
-def _(diagram, fk, render_config, route_momenta):
+def _(diagram, diagram_style, fk, render_config):
     rendered_html = None
     typst_source = None
     render_error = None
     if diagram is not None:
         try:
-            rendered_html = diagram.to_html(config=render_config, momenta=route_momenta)
-            typst_source = diagram.to_linnest(
-                config=render_config, momenta=route_momenta
-            )
+            drawing = diagram.render(config=render_config, style=diagram_style)
+            rendered_html = drawing.to_html()
+            typst_source = drawing.to_linnest()
         except (fk.DiagramError, OSError, RuntimeError, TypeError, ValueError) as error:
             render_error = f"{type(error).__name__}: {error}"
     return render_error, rendered_html, typst_source
@@ -577,12 +237,11 @@ def _(mo, typst_source):
     else:
         _source_panel = mo.accordion(
             {
-                "Live generated Typst": mo.vstack(
+                "Portable Typst export": mo.vstack(
                     [
                         mo.md(
-                            "FeynKit's Typst source for the diagram and rendering "
-                            "controls above. The SVG's hover and selection behavior "
-                            "is added after Typst rendering."
+                            "Portable Typst source embeds the captured SVG. "
+                            "Graph layout and drawing have already run natively."
                         ),
                         mo.ui.code_editor(
                             value=typst_source,
@@ -590,7 +249,7 @@ def _(mo, typst_source):
                             disabled=True,
                             min_height=320,
                             max_height=700,
-                            label="Generated Typst (read-only)",
+                            label="Portable Typst (read-only)",
                         ),
                     ]
                 ),

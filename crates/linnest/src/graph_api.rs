@@ -610,7 +610,25 @@ impl ImpredRun {
     /// Seed the graph with its embedding-constrained drawing at the `impred-spacing`
     /// scale, as the Typst layout does, then solve.
     #[cfg(feature = "svg")]
-    pub(crate) fn seeded(graph: TypstGraph, options: &serde_json::Value) -> Result<Self, String> {
+    pub(crate) fn seeded(
+        mut graph: TypstGraph,
+        options: &serde_json::Value,
+    ) -> Result<Self, String> {
+        graph.layout_config = serde_json::from_value(options.clone())
+            .map_err(|error| format!("invalid layout options: {error}"))?;
+        if graph.layout_initialized {
+            let (config, attachment) = Self::options(options)?;
+            graph.layout_config.spring.external_pull_attachment = attachment;
+            let session = crate::impred_projection::ProjectionSession::from_layout(graph)
+                .map_err(|error| error.to_string())?;
+            let mut layout = session.impred_layout().map_err(|error| error.to_string())?;
+            layout.solve(config)?;
+            return Ok(Self {
+                session,
+                layout,
+                config,
+            });
+        }
         let diagram = graph.impred_diagram().map_err(|error| error.to_string())?;
         let request = crate::SeedRequest {
             diagram: serde_json::from_value(diagram).map_err(|error| error.to_string())?,
@@ -636,6 +654,20 @@ impl ImpredRun {
     ) -> Result<Self, String> {
         use crate::impred_projection::ProjectionSession;
 
+        let (config, attachment) = Self::options(options)?;
+        graph.layout_config.spring.external_pull_attachment = attachment;
+        let (session, _) =
+            ProjectionSession::initialize(graph, seed).map_err(|error| error.to_string())?;
+        let mut layout = session.impred_layout().map_err(|error| error.to_string())?;
+        layout.solve(config)?;
+        Ok(Self {
+            session,
+            layout,
+            config,
+        })
+    }
+
+    fn options(options: &serde_json::Value) -> Result<(ImpredConfig, f64), String> {
         let mut settings =
             serde_json::to_value(ImpredConfig::default()).map_err(|error| error.to_string())?;
         for (option, field) in [
@@ -670,16 +702,20 @@ impl ImpredRun {
         if !attachment.is_finite() || attachment < 0.0 {
             return Err("ImPrEd attachment pull must be finite and nonnegative".to_owned());
         }
-        graph.layout_config.spring.external_pull_attachment = attachment;
-        let (session, _) =
-            ProjectionSession::initialize(graph, seed).map_err(|error| error.to_string())?;
-        let mut layout = session.impred_layout().map_err(|error| error.to_string())?;
-        layout.solve(config)?;
-        Ok(Self {
-            session,
-            layout,
-            config,
-        })
+        config.validate()?;
+        Ok((config, attachment))
+    }
+
+    /// Continue from the current geometry without creating a new EC seed.
+    #[cfg(feature = "svg")]
+    pub(crate) fn refine(&mut self, options: &serde_json::Value) -> Result<(), String> {
+        let mut graph = self
+            .session
+            .apply_impred_layout(&self.layout)
+            .map_err(|error| error.to_string())?;
+        graph.layout_initialized = true;
+        *self = Self::seeded(graph, options)?;
+        Ok(())
     }
 
     /// The layout graph and complete carriers, as `graph_impred_layout` returns.
