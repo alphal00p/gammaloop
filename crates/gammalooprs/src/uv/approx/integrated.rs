@@ -1031,6 +1031,16 @@ impl Integrated<'_> {
                     W_.i_,
                     mink.to_symbolic([function!(GS.uvaind, topology_order, W_.j_)])
                 ))
+                // Native projection can return the original abstract label
+                // without its representation. Preserve that source identity;
+                // only raw numeric backend dummies use the topology-local chart.
+                .replace(function!(source, W_.i_, W_.j_))
+                .when(W_.j_.filter(|index| Aind::try_from(index).is_ok()))
+                .with(function!(
+                    source,
+                    W_.i_,
+                    mink.to_symbolic([Atom::var(W_.j_)])
+                ))
                 .replace(function!(source, W_.x___))
                 .with(function!(target, W_.x___));
         }
@@ -1050,6 +1060,8 @@ impl Integrated<'_> {
                 };
                 if raw_index.is_integer().is_true() {
                     mink.to_symbolic([function!(GS.uvaind, topology_order, raw_index)])
+                } else if Aind::try_from(raw_index).is_ok() {
+                    mink.to_symbolic([raw_index.to_owned()])
                 } else {
                     slot.to_owned()
                 }
@@ -2597,6 +2609,49 @@ mod tests {
                 .expand()
                 .is_zero()
         );
+    }
+
+    #[test]
+    fn restored_symbolic_vakint_slots_preserve_the_native_source_interface() -> Result<()> {
+        test_initialise()?;
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spectator = parse_lit!((restore_a + restore_b) ^ 11);
+        for label in [
+            Aind::new_dummy(),
+            Aind::Vertex(2, 3),
+            Aind::UVTerm(5, 7),
+            Aind::Symbol(symbol!("restored_source_slot")),
+        ] {
+            let index = label.to_atom();
+            let other = Aind::new_dummy().to_atom();
+            let left = mink.to_symbolic([index.clone()]);
+            let right = mink.to_symbolic([other.clone()]);
+            for represented_left in [false, true] {
+                let source_left = if represented_left { &left } else { &index };
+                let backend = &spectator
+                    * (function!(vakint::symbols::S.g, source_left, &other)
+                        + function!(vakint::symbols::S.k, 1, source_left)
+                            * function!(vakint::symbols::S.p, 0, &other));
+                let expected = &spectator
+                    * (function!(ETS.metric, &left, &right)
+                        + function!(GS.loop_mom, 1, &left) * function!(GS.emr_mom, 0, &right));
+                let restored = Integrated::restore_numerator(backend, 9);
+                assert_eq!(
+                    restored, expected,
+                    "label={label:?}, represented={represented_left}"
+                );
+                let canonical_backend = Integrated::to_vakint_numerator(&expected)?;
+                assert_eq!(
+                    Integrated::to_vakint_numerator(&restored)?,
+                    canonical_backend
+                );
+                assert_eq!(
+                    Integrated::restore_numerator(canonical_backend, 9),
+                    expected
+                );
+            }
+        }
+        Ok(())
     }
 
     #[test]

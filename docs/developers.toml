@@ -225,7 +225,6 @@ end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> S
 # Reviewed 2026-10-15: Compact import owns dialect dispatch, native rules, explicit
 # fragments, represented half-edge index conversion and source-map metadata.
 # Canonical/finalized literals bypass compact conversion.
-# Draft only: compute the final digest after bridge and prose review.
 digest = "f37eb0bb029fc31b8b0c0b5917cd3e6416802e9e"
 
 [[section.note]]
@@ -319,7 +318,6 @@ end_anchor = "                coefficient = Atom::from(integrand_vakint).replace
 # Reviewed 2026-10-15: Tensor projection precedes completed native dimensional
 # algebra, then scalar Laurent evaluation. This range owns the phase ordering required
 # by evanescent coefficients.
-# Draft only: compute the final digest after bridge and prose review.
 digest = "7e91a1a44ebfff04a113559c853eaa9b876fa079"
 
 [[section.note.scope]]
@@ -330,8 +328,10 @@ end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
 # Reviewed 2026-10-15: Typed projected-numerator restoration, branch-local residual
 # guards and dimension metadata own the bridge. Actual native ports and factorization
 # survive dot and indexed notation.
-# Draft only: compute the final digest after bridge and prose review.
-digest = "d33868ac114a27b97beeb189e35441ca797cd1a1"
+# Reviewed symbolic-label roundtrip: native abstract indices retain source identity;
+# only numeric backend labels acquire the topology chart. Represented ports and
+# powered spectators remain intact. The UV note records this restoration boundary.
+digest = "d2a7344971e95cab9e1a7cb1c94ca6b63d8e8f78"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
@@ -341,7 +341,6 @@ end_anchor = "    /// Optional parent directory for uniquely named external-back
 # Reviewed 2026-10-15: Tensor backend, coefficient-one projection, dot notation and
 # epsilon depth are distinct policies. Complete-numerator mode does not itself select
 # FORM; scalar evaluation has its own policy.
-# Draft only: compute the final digest after bridge and prose review.
 digest = "70d8d2815a16186713fb2b25f84643e27554481e"
 
 [[section.note.scope]]
@@ -352,7 +351,6 @@ end_anchor = "    fn tensor_reduce_form("
 # Reviewed 2026-10-15: Native and AlphaLoop dispatch share topology validation.
 # AlphaLoop distinguishes complete-numerator and coefficient-one FORM projection;
 # scalar evaluation order is independent.
-# Draft only: compute the final digest after bridge and prose review.
 digest = "22a7663f68fb673976a0dcf4d701abed6134db8a"
 
 [[section.note]]
@@ -904,7 +902,6 @@ end_anchor = "#[cfg(test)]"
 # Reviewed 2026-10-15: Complete represented slots and declared projector markers
 # retain actual native incidence. Hidden compound interfaces and loop-dependent native
 # leaves are rejected; ordinary raw loop/external pairs still contract.
-# Draft only: compute the final digest after bridge and prose review.
 digest = "7aad07324120a92b0666e358cf6bde7e996149e3"
 
 [[section.note.scope]]
@@ -916,7 +913,6 @@ end_anchor = "    /// Every coefficient is evaluated at the supplied point befor
 # protection, backend kernels and Laurent guards share this owner. Both scalar modes
 # preserve coefficient factors; whole-FORM protection additionally requires a closed
 # Lorentz interface.
-# Draft only: compute the final digest after bridge and prose review.
 digest = "faee7fa232d9dd355e96826a5a49f66db9de802c"
 
 [[section.note]]
