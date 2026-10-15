@@ -1498,6 +1498,13 @@ The shared Python rendering package is `linnet-render-py`, using Linnest's nativ
 SVG renderer. The graph API remains in `linnet-py`, and both packages retain
 separate Cargo dependency boundaries. Typst authoring assets live under
 `vendor/typst-packages`; their consumers own those source inputs.
+Asset manifests accompany their owning packages in dependency and production
+builds. The `gammaloop-render-data` runtime package copies fonts from the
+Cargo-locked Typst asset release and the checked-in MathML font. Renderers retain
+their compiled hash checks. Only rendering test groups, doctests and documentation
+receive this resource closure; it remains separate from compiled producers.
+The development shell adds it to `SYMBOLICA_DATA_DIRECTORY`, preserving any
+additional directories already configured by the user.
 UFO import tests use the released wheels locked in `nix/ufo-runtime/uv.lock`
 (Symbolica 3.0.0 and ufo-model-loader 1.0.0). This runtime lock is independent
 of the root notebook environment's Community source pin. Native Rust continues

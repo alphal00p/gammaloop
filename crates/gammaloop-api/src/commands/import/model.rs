@@ -6,15 +6,15 @@ use gammalooprs::utils::F;
 #[cfg(feature = "ufo_support")]
 use pyo3::prelude::*;
 
-#[cfg(any(feature = "cli", test))]
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+#[cfg(any(feature = "cli", test))]
+use std::{collections::BTreeMap, sync::OnceLock};
 
 use gammalooprs::model::{InputParamCard, Model, ModelGammaLoopExt};
 use include_dir::{include_dir, Dir, File};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{env, fs, sync::OnceLock};
+use std::{env, fs};
 use tracing::info;
 
 use crate::state::State;
@@ -640,6 +640,7 @@ mod tests {
     use super::*;
     use gammalooprs::model::{ParameterNature, UFOSymbol};
     use spenso::algebra::complex::Complex;
+    #[cfg(feature = "ufo_support")]
     use symbolica::atom::AtomCore;
     use symbolica::domains::float::Complex as NativeComplex;
     #[cfg(feature = "ufo_support")]

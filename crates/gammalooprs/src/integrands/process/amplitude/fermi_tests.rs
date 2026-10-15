@@ -1,4 +1,5 @@
 use crate::model::ModelGammaLoopExt;
+use crate::utils::test_utils::ModelFixtureExt;
 use std::io::Cursor;
 
 use symbolica::state::State;
@@ -770,34 +771,11 @@ fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
 
     test_initialise()?;
     let mut model = load_generic_model("sm");
-    {
-        let mut values: feynkit_model::ParameterCard = model
-            .parameters()
-            .iter()
-            .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-            .collect();
-        for (name, value) in [
-            ("MW", Complex::new_re(F(2.0))),
-            ("muG", Complex::new_re(F(1.0))),
-            ("minus_muG", Complex::new_re(F(-1.0))),
-        ] {
-            values.insert(
-                name.to_owned(),
-                feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-            );
-        }
-        let couplings: std::collections::BTreeMap<_, _> = model
-            .couplings()
-            .iter()
-            .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-            .collect();
-        model.apply_parameter_card_with(&values, &mut |_| {
-            Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                internal_parameters: Default::default(),
-                couplings: couplings.clone(),
-            })
-        })?;
-    }
+    model.set_fixture_values([
+        ("MW", Complex::new_re(F(2.0))),
+        ("muG", Complex::new_re(F(1.0))),
+        ("minus_muG", Complex::new_re(F(-1.0))),
+    ])?;
     let mut amplitude = thermal_amplitude(
         &model,
         "thermal_boson",
@@ -860,65 +838,19 @@ fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
     // Both signs of bosonic saturation and a changed mass must be revalidated
     // from refreshed model slots after loading the compiled integrand.
     for (mass, mu) in [(2.0, 2.0), (2.0, -2.0), (2.0, 3.0), (0.5, 1.0)] {
-        {
-            let mut values: feynkit_model::ParameterCard = model
-                .parameters()
-                .iter()
-                .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-                .collect();
-            for (name, value) in [
-                ("MW", Complex::new_re(F(mass))),
-                ("muG", Complex::new_re(F(mu))),
-                ("minus_muG", Complex::new_re(F(-mu))),
-            ] {
-                values.insert(
-                    name.to_owned(),
-                    feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-                );
-            }
-            let couplings: std::collections::BTreeMap<_, _> = model
-                .couplings()
-                .iter()
-                .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-                .collect();
-            model.apply_parameter_card_with(&values, &mut |_| {
-                Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                    internal_parameters: Default::default(),
-                    couplings: couplings.clone(),
-                })
-            })?;
-        }
+        model.set_fixture_values([
+            ("MW", Complex::new_re(F(mass))),
+            ("muG", Complex::new_re(F(mu))),
+            ("minus_muG", Complex::new_re(F(-mu))),
+        ])?;
         let error = restored.warm_up(&model).unwrap_err();
         assert!(error.to_string().contains("|mu| < m"), "{error}");
     }
-    {
-        let mut values: feynkit_model::ParameterCard = model
-            .parameters()
-            .iter()
-            .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-            .collect();
-        for (name, value) in [
-            ("MW", Complex::new_re(F(2.0))),
-            ("muG", Complex::new_re(F(1.0))),
-            ("minus_muG", Complex::new_re(F(-1.0))),
-        ] {
-            values.insert(
-                name.to_owned(),
-                feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-            );
-        }
-        let couplings: std::collections::BTreeMap<_, _> = model
-            .couplings()
-            .iter()
-            .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-            .collect();
-        model.apply_parameter_card_with(&values, &mut |_| {
-            Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                internal_parameters: Default::default(),
-                couplings: couplings.clone(),
-            })
-        })?;
-    }
+    model.set_fixture_values([
+        ("MW", Complex::new_re(F(2.0))),
+        ("muG", Complex::new_re(F(1.0))),
+        ("minus_muG", Complex::new_re(F(-1.0))),
+    ])?;
     restored.warm_up(&model)?;
     assert_eq!(
         restored
@@ -937,33 +869,10 @@ fn thermal_amplitude_warm_up_rejects_cycle_poles_with_equal_masses() -> Result<(
         Atom::var(crate::model::UFOSymbol::from(model.get_parameter(name).name.as_str()).0)
             .to_canonical_string()
     });
-    {
-        let mut values: feynkit_model::ParameterCard = model
-            .parameters()
-            .iter()
-            .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-            .collect();
-        for (name, value) in [
-            ("MT", Complex::new_re(F(2.0))),
-            ("MW", Complex::new_re(F(3.0))),
-        ] {
-            values.insert(
-                name.to_owned(),
-                feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-            );
-        }
-        let couplings: std::collections::BTreeMap<_, _> = model
-            .couplings()
-            .iter()
-            .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-            .collect();
-        model.apply_parameter_card_with(&values, &mut |_| {
-            Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                internal_parameters: Default::default(),
-                couplings: couplings.clone(),
-            })
-        })?;
-    }
+    model.set_fixture_values([
+        ("MT", Complex::new_re(F(2.0))),
+        ("MW", Complex::new_re(F(3.0))),
+    ])?;
     // Distinct mass parameters generate the cycle as a divided difference.
     let mut amplitude = thermal_amplitude(
         &model,
@@ -991,30 +900,7 @@ fn thermal_amplitude_warm_up_rejects_cycle_poles_with_equal_masses() -> Result<(
         .integrand_result;
     assert!(result.re.0.is_finite() && result.im.0.is_finite());
 
-    {
-        let mut values: feynkit_model::ParameterCard = model
-            .parameters()
-            .iter()
-            .filter_map(|p| p.value.map(|v| (p.name.clone(), v)))
-            .collect();
-        for (name, value) in [("MW", Complex::new_re(F(2.0)))] {
-            values.insert(
-                name.to_owned(),
-                feynkit_model::ComplexValue::new(value.re.0, value.im.0),
-            );
-        }
-        let couplings: std::collections::BTreeMap<_, _> = model
-            .couplings()
-            .iter()
-            .filter_map(|c| c.value.map(|v| (c.name.clone(), v)))
-            .collect();
-        model.apply_parameter_card_with(&values, &mut |_| {
-            Ok::<_, std::convert::Infallible>(feynkit_model::EvaluatedValues {
-                internal_parameters: Default::default(),
-                couplings: couplings.clone(),
-            })
-        })?;
-    }
+    model.set_fixture_values([("MW", Complex::new_re(F(2.0)))])?;
     let error = runtime.warm_up(&model).unwrap_err();
     assert!(
         error

@@ -117,6 +117,7 @@
         clinnet-cli
         gammaloop-python-module
         nextestUfoPython
+        symbolicaRenderData
         nixCiConfiguration
         guppyWorkspaceGraphJson
         linnest-wasm
@@ -211,6 +212,9 @@
             # `typst.withPackages` injects this only into its executable wrapper.
             # The persistent Rust renderer and typst-py need the same package tree directly.
             TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
+            shellHook = ''
+              export SYMBOLICA_DATA_DIRECTORY="${symbolicaRenderData}''${SYMBOLICA_DATA_DIRECTORY:+:$SYMBOLICA_DATA_DIRECTORY}"
+            '';
 
             CC = nixCc;
             CXX = nixCxx;
@@ -245,6 +249,7 @@
           inherit clinnet-cli;
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "gammaloop-ufo-python-runtime" = nextestUfoPython;
+          "gammaloop-render-data" = symbolicaRenderData;
           "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
           "alphal00p-docs-pages" = alphal00pDocsPages;
           "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;

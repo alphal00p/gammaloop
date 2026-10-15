@@ -1350,7 +1350,6 @@ macro_rules! quadratic_energy_graph_test {
     ($name:ident, q1_only: $q1_case:expr) => {
         mod $name {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q1_squared() -> Result<()> {
@@ -1362,7 +1361,6 @@ macro_rules! quadratic_energy_graph_test {
     ($name:ident, q7_only: $q7_case:expr) => {
         mod $name {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q7_squared() -> Result<()> {
@@ -1374,7 +1372,6 @@ macro_rules! quadratic_energy_graph_test {
     ($name:ident, $graph:literal) => {
         mod $name {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q1_squared() -> Result<()> {
@@ -1392,7 +1389,6 @@ macro_rules! quadratic_energy_graph_test {
     ($name:ident, $case:expr) => {
         mod $name {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q1_squared() -> Result<()> {
@@ -1410,7 +1406,6 @@ macro_rules! quadratic_energy_graph_test {
     ($name:ident, q1: $q1_case:expr, q7: $q7_case:expr) => {
         mod $name {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q1_squared() -> Result<()> {
@@ -1431,7 +1426,6 @@ macro_rules! quartic_energy_graph_test {
     ($name:ident, $graph:literal) => {
         mod $name {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q1_quartic() -> Result<()> {
@@ -1443,7 +1437,6 @@ macro_rules! quartic_energy_graph_test {
     ($name:ident, $case:expr) => {
         mod $name {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q1_quartic() -> Result<()> {
@@ -1456,7 +1449,6 @@ macro_rules! quartic_energy_graph_test {
 
 mod default_scalar_3l_cross_section_inspects {
     use super::*;
-    use feynkit_graph::DOD;
 
     scalar_3l_graph_test!(scalar_3l_cross_section_gl00_inspects_match, "GL00");
     scalar_3l_graph_test!(scalar_3l_cross_section_gl02_inspects_match, "GL02");
@@ -1722,11 +1714,9 @@ mod default_scalar_3l_cross_section_inspects {
 
     mod quadratic_energy_numerators {
         use super::*;
-        use feynkit_graph::DOD;
 
         mod scalar_3l_cross_section_gl00_quadratic_energy_inspects_match {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q7_squared() -> Result<()> {
@@ -1741,7 +1731,6 @@ mod default_scalar_3l_cross_section_inspects {
         }
         mod scalar_3l_cross_section_gl16_quadratic_energy_inspects_match {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q7_squared() -> Result<()> {
@@ -1753,11 +1742,9 @@ mod default_scalar_3l_cross_section_inspects {
 
     mod quartic_energy_numerators {
         use super::*;
-        use feynkit_graph::DOD;
 
         mod scalar_3l_cross_section_gl02_quartic_energy_inspects_match {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q1_quartic() -> Result<()> {
@@ -1776,7 +1763,6 @@ mod default_scalar_3l_cross_section_inspects {
 
 mod slow {
     use super::*;
-    use feynkit_graph::DOD;
 
     scalar_3l_graph_test!(
         scalar_3l_cross_section_gl01_inspects_match,
@@ -1966,7 +1952,6 @@ mod slow {
 
     mod quadratic_energy_numerators {
         use super::*;
-        use feynkit_graph::DOD;
 
         quadratic_energy_graph_test!(
             scalar_3l_cross_section_gl00_quadratic_energy_inspects_match,
@@ -2168,7 +2153,6 @@ mod slow {
 
     mod quartic_energy_numerators {
         use super::*;
-        use feynkit_graph::DOD;
 
         // This all-routes rank-four stress remains valuable. Historically its
         // pre-summed orientation-local generation alone exceeded ten minutes;
@@ -2177,7 +2161,6 @@ mod slow {
         // fast exact-residue oracle and keeps GL16 rank two in all three routes.
         mod scalar_3l_cross_section_gl16_quartic_energy_inspects_match {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q7_quartic() -> Result<()> {
@@ -2188,7 +2171,6 @@ mod slow {
 
         mod scalar_3l_cross_section_gl24_quartic_energy_inspects_match {
             use super::*;
-            use feynkit_graph::DOD;
 
             #[test]
             fn q1_quartic() -> Result<()> {

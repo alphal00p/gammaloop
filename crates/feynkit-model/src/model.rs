@@ -713,13 +713,17 @@ impl Model {
                     )
                 })
                 .collect::<Vec<_>>();
-            zero_parameters.extend(parameters.iter().filter_map(|parameter| {
-                (parameter.nature == ParameterNature::Internal
-                    && parameter.expression.as_ref().is_some_and(|expression| {
-                        expression.replace_multiple(&replacements).is_zero()
-                    }))
-                .then(|| parameter.name.clone())
-            }));
+            zero_parameters.extend(
+                parameters
+                    .iter()
+                    .filter(|parameter| {
+                        parameter.nature == ParameterNature::Internal
+                            && parameter.expression.as_ref().is_some_and(|expression| {
+                                expression.replace_multiple(&replacements).is_zero()
+                            })
+                    })
+                    .map(|parameter| parameter.name.clone()),
+            );
             if zero_parameters.len() == previous_len {
                 break;
             }
