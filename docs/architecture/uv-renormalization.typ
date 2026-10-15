@@ -70,13 +70,16 @@ powers, and guarded inverse factors remain opaque. Positive scalar powers share
 their complete base with linear occurrences; a summed base remains one opaque
 factor. Restoring it may expose another linear cancellation, so the same
 protected pass repeats only after a strict expression-size decrease.
-A single bounded collection
-in repeated literal scalar factors can then cancel exact coefficient rows;
-complete scalar sums are admitted only after checking their native scalar
-interface. Unrelated product factors stay outside those rows. The certificate
-accepts only a smaller exact reconstruction, retains the original expression
-when collection is unsupported, and takes no numerical samples. It does not
-form common denominators or distribute a graph numerator.
+Each finite-component pass makes one bounded collection in repeated literal
+scalar factors. Complete scalar sums are admitted only after checking their
+native scalar interface. A retained sum owns its proper additive subsets,
+identified by their direct coefficient-free terms; selecting both would hide
+their linear relation. Unrelated product factors stay outside the exact
+coefficient rows. Recomposition can expose another cancellation, so the same
+deterministic pass repeats only after a strict size decrease, at most eight
+times. Unsupported collection or the pass limit leaves an unproven residual.
+The certificate takes no numerical samples, forms no common denominators, and
+never distributes a graph numerator.
 
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
