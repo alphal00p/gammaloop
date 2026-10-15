@@ -230,7 +230,9 @@ configuration and selects one orientation and LMB channel, with stability
 rotations disabled. Scalar route cases retain the correctness tests' rotation settings
 and sum all orientations and LMB channels at nine-dimensional points.
 `bench` disables event generation for its timed batches; selectors and
-observables are absent. This measures fixed-point integrand evaluation rather
+observables are absent. It resolves the model and warms up the integrand once
+before its warmup samples, so neither the calibration nor any timed batch
+includes that preparation. This measures fixed-point integrand evaluation rather
 than a batch of changing integration points. Large scalar numerators,
 compiled evaluators and isolated cold-load cost remain outside this fast gate.
 The extended scalar correctness suite supplies timing telemetry for the
