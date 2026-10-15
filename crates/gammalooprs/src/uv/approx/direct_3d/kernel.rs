@@ -396,6 +396,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     } else {
         vacuum_integrands = integrands.map_expressions(|atom| {
             ctx.graph.make_thermal_distributions_explicit(
+                ctx.model,
                 atom,
                 MediumMode::Vacuum,
                 ctx.graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge),

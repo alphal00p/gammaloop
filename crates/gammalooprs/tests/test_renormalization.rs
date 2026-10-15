@@ -368,9 +368,9 @@ fn scalar_pole_part() {
 #[test]
 fn finite_part_quark_lo() {
     test_initialise().unwrap();
-    let fixture_model = load_generic_model("sm");
+    let model = load_generic_model("sm");
     let g: Vec<Graph> = include_str!("fixtures/renormalization/quark_lo.dot")
-        .into_finalized_runtime_graph(&fixture_model)
+        .into_finalized_runtime_graph(&model)
         .unwrap();
 
     let mut results = Vec::new();

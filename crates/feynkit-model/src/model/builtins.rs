@@ -208,6 +208,7 @@ impl Model {
                 color: 1,
                 mass: "mass".to_owned(),
                 width: "ZERO".to_owned(),
+                chemical_potential: None,
                 texname: "\\phi".to_owned(),
                 antitexname: "\\phi".to_owned(),
                 typstname: Some("phi".to_owned()),
@@ -523,10 +524,11 @@ mod tests {
     #[test]
     fn builtin_models_validate_and_round_trip() {
         for (model, name, particles, vertices) in [
-            (Model::standard_model(), "sm", 43, 153),
+            // The unrestricted SM retains the light-quark Yukawa interactions.
+            (Model::standard_model(), "sm", 43, 163),
             (Model::qcd(), "qcd", 15, 9),
             (Model::qed(), "qed", 19, 9),
-            (Model::electroweak(), "electroweak", 40, 144),
+            (Model::electroweak(), "electroweak", 40, 154),
             (Model::qcd_qed(), "qcd_qed", 22, 18),
             (Model::yang_mills(), "yang_mills", 3, 3),
             (Model::phi3(), "phi3", 1, 1),

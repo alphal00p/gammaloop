@@ -147,10 +147,6 @@ fn vertex_matrix(
             .replace(Atom::from(UFOSymbol::from(*name)).to_pattern())
             .with(value.clone());
     }
-    let ckm = model.get_parameter("CKM1x3");
-    expression = expression
-        .replace(Atom::from(ckm.name).to_pattern())
-        .with(ckm.expression.as_ref().unwrap().to_pattern());
     for (name, value) in [
         ("ytau", tau_yukawa),
         ("ee", Atom::one()),
@@ -299,8 +295,8 @@ fn generated_sm_quark_higgs_and_neutral_goldstone_vertices_follow_the_action() {
         ("b", "yb", -1),
     ] {
         for scalar in ["H", "G0"] {
-            let graphs = Graph::from_string(
-                format!(
+            let graphs = Graph::import_dot(
+                &format!(
                     r#"
                     digraph decay {{
                         ext [style=invis];
@@ -359,8 +355,8 @@ fn generated_sm_quark_charged_yukawas_satisfy_hermiticity_and_ward_identities() 
             .into_iter()
             .enumerate()
         {
-            let graphs = Graph::from_string(
-                format!(
+            let graphs = Graph::import_dot(
+                &format!(
                     r#"
                     digraph scalar_plus {{
                         ext [style=invis];

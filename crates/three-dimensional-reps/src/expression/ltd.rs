@@ -398,6 +398,7 @@ mod tests {
                     loop_energy_map: vec![numerator_map.clone()],
                     edge_energy_map: vec![numerator_map.clone()],
                     variants: vec![CFFVariant {
+                        thermal_weight: Default::default(),
                         origin: None,
                         prefactor: Rational::one(),
                         half_edges: Vec::new(),
@@ -526,6 +527,7 @@ mod tests {
             edge_energy_map: vec![numerator_map.clone()],
             loop_energy_map: vec![numerator_map],
             variants: vec![CFFVariant {
+                thermal_weight: Default::default(),
                 origin: None,
                 prefactor: Rational::one(),
                 half_edges: Vec::new(),
@@ -629,6 +631,7 @@ mod tests {
             loop_energy_map: vec![numerator_map.clone()],
             edge_energy_map: vec![numerator_map],
             variants: vec![CFFVariant {
+                thermal_weight: Default::default(),
                 origin: None,
                 prefactor: Rational::one(),
                 half_edges: vec![EdgeIndex(0)],

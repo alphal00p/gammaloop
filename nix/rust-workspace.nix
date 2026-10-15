@@ -632,7 +632,6 @@
       "crates/spenso/src/network/test.rs"
       "crates/spenso/src/network/tests.rs"
       "crates/spenso/src/shadowing/tests.rs"
-      "crates/spenso/src/tests.rs"
     ];
   };
 
@@ -1314,7 +1313,9 @@
     pythonPackages.numpy
   ]);
   nextestUfoPython = pkgs.python313.withPackages (pythonPackages: let
-    packages = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/uv.lock"))).package;
+    # UFO tests consume released wheels; notebook development pins the separate
+    # combined Community host in the root Python environment.
+    packages = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/nix/ufo-runtime/uv.lock"))).package;
     symbolica = lib.findFirst (package: package.name == "symbolica") null packages;
     loader = lib.findFirst (package: package.name == "ufo-model-loader") null packages;
     wheelTag = ci.ufoWheelTags.${system} or (throw "The locked Symbolica ${symbolica.version} Python package has no wheel for ${system}; UFO import tests require ${builtins.concatStringsSep " or " (builtins.attrNames ci.ufoWheelTags)}.");

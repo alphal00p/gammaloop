@@ -46,12 +46,12 @@ impl FermiSurfaceProduct {
                 .find(|(_, edge_id, _)| *edge_id == factor.edge_id)
                 .ok_or_else(|| eyre!("Unknown Fermi-surface edge {}", factor.edge_id))?;
             ensure!(
-                pair.is_paired() && edge.data.is_fermion(),
+                pair.is_paired() && edge.data.is_fermion(&graph.model),
                 "Fermi-surface edge {} must be an internal fermion edge",
                 factor.edge_id
             );
             ensure!(
-                edge.data.chemical_potential_atom().is_some(),
+                edge.data.chemical_potential_atom(&graph.model).is_some(),
                 "Fermi-surface edge {} has no chemical potential",
                 factor.edge_id
             );
@@ -95,8 +95,8 @@ impl FermiSurfaceProduct {
                 break;
             }
             if !pair.is_paired()
-                || !edge.data.is_fermion()
-                || edge.data.chemical_potential_atom().is_none()
+                || !edge.data.is_fermion(&graph.model)
+                || edge.data.chemical_potential_atom(&graph.model).is_none()
             {
                 continue;
             }
@@ -172,19 +172,26 @@ impl FermiSurfaceProduct {
 
 #[cfg(test)]
 pub(super) fn test_graph() -> Result<Graph> {
-    use crate::{dot, graph::parse::IntoGraph, initialisation::test_initialise};
+    use crate::initialisation::test_initialise;
 
     test_initialise()?;
-    dot!(digraph shifted_fermi_cycles {
-        node [num=1]
-        edge [num=1 particle="d"]
-        ext [style=invis]
-        A -> B [id=0 lmb_id=0]
-        B -> A [id=1]
-        A -> C [id=2 lmb_id=1]
-        C -> A [id=3]
-        ext -> B [id=4 particle="H"]
-        C -> ext [id=5 particle="H"]
+    crate::graph::Graph::unit_numerator_fixtures(
+        stringify!(digraph shifted_fermi_cycles {
+            node [num=1]
+            edge [num=1 particle="d"]
+            ext [style=invis]
+            A -> B [id=0 lmb_id=0]
+            B -> A [id=1]
+            A -> C [id=2 lmb_id=1]
+            C -> A [id=3]
+            ext -> B [id=4 particle="H"]
+            C -> ext [id=5 particle="H"]
+        }),
+        &crate::utils::load_generic_model("sm"),
+    )
+    .map(|mut graphs| {
+        assert_eq!(graphs.len(), 1);
+        graphs.remove(0)
     })
 }
 
@@ -193,10 +200,7 @@ mod tests {
     use linnet::half_edge::involution::EdgeIndex;
 
     use super::*;
-    use crate::{
-        dot, graph::parse::IntoGraph, initialisation::test_initialise, momentum::ThreeMomentum,
-        utils::F,
-    };
+    use crate::{initialisation::test_initialise, momentum::ThreeMomentum, utils::F};
 
     #[test]
     fn independent_fermi_basis_preserves_affine_routes() -> Result<()> {
@@ -254,14 +258,21 @@ mod tests {
     #[test]
     fn fermi_basis_keeps_the_other_sunset_occupation_independent() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph nonaligned_dotted_sunset {
-            node [num=1]
-            edge [num=1]
-            A -> C [id=0 particle="b"]
-            C -> B [id=1 particle="b"]
-            B -> A [id=2 particle="b" lmb_id=0]
-            A -> D [id=3 particle="H" lmb_id=1]
-            D -> B [id=4 particle="H"]
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph nonaligned_dotted_sunset {
+                node [num=1]
+                edge [num=1]
+                A -> C [id=0 particle="b"]
+                C -> B [id=1 particle="b"]
+                B -> A [id=2 particle="b" lmb_id=0]
+                A -> D [id=3 particle="H" lmb_id=1]
+                D -> B [id=4 particle="H"]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })?;
         let parent = &graph.loop_momentum_basis;
         for edge in [EdgeIndex(0), EdgeIndex(1)] {
@@ -295,19 +306,25 @@ mod tests {
         use three_dimensional_reps::ThermalDistributionCall;
 
         use super::super::FermiSurfaceSector;
-        use crate::model::{ParameterName, UFOSymbol};
 
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph mixed_density_three_loop {
-            node [num=1]
-            edge [num=1]
-            D -> E [id=0 particle="e-" lmb_id=1]
-            E -> D [id=1 particle="e-"]
-            A -> C [id=2 particle="d" lmb_id=0]
-            C -> B [id=3 particle="d"]
-            B -> A [id=4 particle="d"]
-            A -> D [id=5 particle="a" lmb_id=2]
-            E -> B [id=6 particle="a"]
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph mixed_density_three_loop {
+                node [num=1]
+                edge [num=1]
+                D -> E [id=0 particle="e-" lmb_id=1]
+                E -> D [id=1 particle="e-"]
+                A -> C [id=2 particle="d" lmb_id=0]
+                C -> B [id=3 particle="d"]
+                B -> A [id=4 particle="d"]
+                A -> D [id=5 particle="a" lmb_id=2]
+                E -> B [id=6 particle="a"]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })?;
         // Both unstepped lepton edges can fill the remaining loop slots, but
         // doing so makes the quark occupation depend on the localized radius.
@@ -325,12 +342,24 @@ mod tests {
 
         let step = ThermalDistributionCall::atom(4, 0, 0, 1, 1);
         let expression = ThermalDistributionCall::atom(2, 1, 0, 1, 1) * &step;
-        for chemical_potential in [None, Some(ParameterName(UFOSymbol::zero()))] {
+        for chemical_potential in [None, Some("ZERO")] {
             for edge in [EdgeIndex(0), EdgeIndex(1)] {
-                let mut particle = graph[edge].particle().unwrap();
-                std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
-                graph.underlying[edge].particle = particle.into();
-                assert!(graph[edge].chemical_potential_atom().is_none());
+                let particle_name = graph
+                    .model
+                    .particle_by_id(graph[edge].particle().unwrap())
+                    .unwrap()
+                    .name
+                    .clone();
+                let mut definition: serde_json::Value =
+                    serde_json::from_str(&graph.model.to_json()?)?;
+                for particle in definition["particles"].as_array_mut().unwrap() {
+                    if particle["name"] == particle_name {
+                        particle["chemical_potential"] = serde_json::json!(chemical_potential);
+                    }
+                }
+                graph.model =
+                    std::sync::Arc::new(crate::model::Model::from_json(&definition.to_string())?);
+                assert!(graph[edge].chemical_potential_atom(&graph.model).is_none());
             }
             let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
             assert!(bulk.is_zero());
@@ -376,11 +405,18 @@ mod tests {
     #[test]
     fn fermi_product_rejects_malformed_factors_and_accepts_a_tadpole() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph fermi_tadpoles {
-            node [num=1]
-            edge [num=1]
-            A -> A [id=0 particle="d"]
-            A -> A [id=1 particle="g"]
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph fermi_tadpoles {
+                node [num=1]
+                edge [num=1]
+                A -> A [id=0 particle="d"]
+                A -> A [id=1 particle="g"]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })?;
         let factor = ThermalDistributionFactor {
             edge_id: EdgeIndex(0),

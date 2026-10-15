@@ -2,8 +2,8 @@
 use super::*;
 use crate::energy::integration::EnergyGraph;
 use feynkit_cff::generalized::{
-    CffEnergyFactorOwnership, CffGlobalPrefactorSign, Generate3DExpressionOptions, HybridSurfaceID,
-    RepresentationMode, generate_3d_expression,
+    CffGlobalPrefactorSign, Generate3DExpressionOptions, HybridSurfaceID, RepresentationMode,
+    generate_3d_expression,
 };
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
@@ -157,16 +157,8 @@ impl CffKernel {
         let normalization = Atom::num(generated.energy_factor_components.iter().fold(
             1,
             |sign, component| {
-                let frame = match component.ownership {
-                    CffEnergyFactorOwnership::GlobalSourceProduct => {
-                        component.core_global_prefactor_sign
-                    }
-                    CffEnergyFactorOwnership::VariantLocal => {
-                        component.denominator_only_global_prefactor_sign
-                    }
-                };
                 sign * CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
-                    .product(frame)
+                    .product(component.source_frame)
                     .factor()
             },
         ));

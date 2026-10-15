@@ -3682,8 +3682,9 @@ mod tests {
                     }
                 }
                 let mut model = state.model.clone();
-                model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(1.0)));
-                model.recompute_dependents().unwrap();
+                let mut card = model.default_param_card();
+                card.insert("aS".into(), Complex::new_re(F(1.0)));
+                model.apply_param_card(&card).unwrap();
                 params.update_model_values(&model).unwrap();
                 let coupling = model.get_coupling("GC_12");
                 let position = params.pairs.model_parameters.value_range.start
@@ -3692,12 +3693,14 @@ mod tests {
                         .model_parameters
                         .params
                         .iter()
-                        .position(|param| *param == Atom::from(coupling.name))
+                        .position(|param| {
+                            *param == Atom::from(UFOSymbol::from(coupling.name.as_str()))
+                        })
                         .unwrap();
                 for (value_index, values) in params.values.iter().enumerate() {
                     assert_eq!(
                         values[position * (value_index + 1)],
-                        coupling.value.unwrap().map(F)
+                        Complex::new(F(coupling.value.unwrap().re), F(coupling.value.unwrap().im))
                     );
                 }
                 for name in ["G", "orphan_ufo_printer"] {

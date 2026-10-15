@@ -655,7 +655,12 @@ impl SymbolicTensor<PartialStructure> {
                         Self::collection_product(&[coefficient.clone(), spectator.clone()])?;
                     // Symbolica's zero-iteration check keeps unresolved sums
                     // inconclusive. Only exact factor cancellation can prove zero.
-                    match coefficient.expression.collect_factors().zero_test(0, 0.0) {
+                    match coefficient.expression.collect_factors().check_zero_with(
+                        &symbolica::atom::ZeroTestSettings::default()
+                            .finite_field_samples(0)
+                            .numerical_samples(0)
+                            .exact_fallback(false),
+                    ) {
                         ConditionResult::True => {}
                         ConditionResult::False => {
                             proof = ConditionResult::False;

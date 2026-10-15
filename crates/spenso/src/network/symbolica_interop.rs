@@ -429,8 +429,12 @@ where
         iterations: usize,
         tolerance: f64,
     ) -> Self::ContainerData<symbolica::id::ConditionResult> {
+        let settings = symbolica::atom::ZeroTestSettings::default()
+            .finite_field_samples(iterations)
+            .numerical_samples(iterations)
+            .exact_fallback(iterations != 0);
         self.map_ref(
-            |a| a.zero_test(iterations, tolerance),
+            |a| a.check_zero_with(&settings),
             |a| a.zero_test(iterations, tolerance),
         )
     }

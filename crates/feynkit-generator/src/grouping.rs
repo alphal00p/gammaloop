@@ -504,7 +504,15 @@ pub(crate) fn group_diagrams(
                 if let Some(error) = error {
                     return Err(error);
                 }
-                let zero = expression.collect_factors().zero_test(0, 0.0).is_true();
+                let zero = expression
+                    .collect_factors()
+                    .check_zero_with(
+                        &symbolica::atom::ZeroTestSettings::default()
+                            .finite_field_samples(0)
+                            .numerical_samples(0)
+                            .exact_fallback(false),
+                    )
+                    .is_true();
                 (expression, zero)
             };
             // Keep unproved identities: a conservative coefficient proof must not

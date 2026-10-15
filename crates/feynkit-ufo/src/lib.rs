@@ -240,6 +240,14 @@ fn load_model(
             for particle in module.getattr("all_particles")?.try_iter()? {
                 let particle = particle?;
                 let numbers = PyDict::new(py);
+                if particle.hasattr("chemical_potential")?
+                    && !particle.getattr("chemical_potential")?.is_none()
+                {
+                    numbers.set_item(
+                        "chemical_potential",
+                        particle.getattr("chemical_potential")?.getattr("name")?,
+                    )?;
+                }
                 for field in ["typstname", "antitypstname"] {
                     if particle.hasattr(field)? {
                         numbers.set_item(field, particle.getattr(field)?)?;
@@ -294,6 +302,7 @@ fn load_model(
                         "y_charge_right",
                         "typstname",
                         "antitypstname",
+                        "chemical_potential",
                     ] {
                         if let Some(value) = numbers.get(field) {
                             particle[field] = value.clone();
