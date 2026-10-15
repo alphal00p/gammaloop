@@ -488,7 +488,7 @@ requires-dist = [
     { name = "pytest" },
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?branch=community" },
-    { name = "ufo-model-loader", git = "https://github.com/alphal00p/ufo_model_loader.git?rev=70ddee6b416f8c8b340e0d087646d77095c5d24b" },
+    { name = "ufo-model-loader", specifier = ">=1.0.0" },
 ]
 provides-extras = ["notebook-display"]
 
@@ -502,7 +502,7 @@ dev = [
     { name = "pyyaml", specifier = ">=6.0.1,<7" },
     { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?branch=community" },
     { name = "ty", specifier = ">=0.0.75" },
-    { name = "ufo-model-loader", git = "https://github.com/alphal00p/ufo_model_loader.git?rev=70ddee6b416f8c8b340e0d087646d77095c5d24b" },
+    { name = "ufo-model-loader", specifier = ">=1.0.0" },
 ]
 
 [[package]]
@@ -2208,10 +2208,14 @@ wheels = [
 
 [[package]]
 name = "ufo-model-loader"
-version = "0.1.8"
-source = { git = "https://github.com/alphal00p/ufo_model_loader.git?rev=70ddee6b416f8c8b340e0d087646d77095c5d24b#70ddee6b416f8c8b340e0d087646d77095c5d24b" }
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "symbolica" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3c/6f/d7187c08bbf2e81a84767ce47bd17120448eb555e1ee57b0f6051ec3aa0a/ufo_model_loader-1.0.0.tar.gz", hash = "sha256:7051dabaffef0ea0737e8e73d8aab527d8a96192274afd53eb2230540288d332", size = 84606, upload-time = "2026-10-03T23:54:35.692Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/50/97/0d69174a3679a5180cf2cdb77604710ba0ca7d5dc6755d45e425efc9ad68/ufo_model_loader-1.0.0-py3-none-any.whl", hash = "sha256:4e2e807d6a0d16034a525f80f2a80f4fe17689f7955b27b1118b7595bd56a8eb", size = 103519, upload-time = "2026-10-03T23:54:34.148Z" },
 ]
 
 [[package]]

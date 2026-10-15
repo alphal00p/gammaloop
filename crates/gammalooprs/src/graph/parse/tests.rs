@@ -25,6 +25,7 @@ use crate::{
         parse::{IntoFinalizedRuntimeGraph, complete_group_parsing},
     },
     initialisation::test_initialise,
+    model::InputParamCard,
     momentum::sample::LoopIndex,
     processes::DotExportSettings,
     utils::GS,

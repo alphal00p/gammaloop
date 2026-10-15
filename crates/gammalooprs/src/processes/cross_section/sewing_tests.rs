@@ -129,15 +129,19 @@ fn vertex_matrix(
     }
     // The older quark vertices use one layer of I1x--I4x flavor coefficients;
     // retain the Yukawa and CKM inputs for the independent component probes.
-    for parameter in model.parameters.values().filter(|parameter| {
+    for parameter in model.parameters().iter().filter(|parameter| {
         ["I1x", "I2x", "I3x", "I4x"]
             .iter()
-            .any(|prefix| parameter.name.namespaceless_string().starts_with(*prefix))
+            .any(|prefix| parameter.name.as_str().starts_with(*prefix))
     }) {
         expression = expression
-            .replace(Atom::from(parameter.name).to_pattern())
+            .replace(Atom::from(UFOSymbol::from(parameter.name.as_str())).to_pattern())
             .with(parameter.expression.as_ref().unwrap().to_pattern());
     }
+    let ckm = model.get_parameter("CKM1x3");
+    expression = expression
+        .replace(Atom::from(UFOSymbol::from(ckm.name.as_str())).to_pattern())
+        .with(ckm.expression.as_ref().unwrap().to_pattern());
     for (name, value) in parameter_values {
         expression = expression
             .replace(Atom::from(UFOSymbol::from(*name)).to_pattern())
@@ -145,7 +149,7 @@ fn vertex_matrix(
     }
     let ckm = model.get_parameter("CKM1x3");
     expression = expression
-        .replace(Atom::from(UFOSymbol::from(ckm.name.as_str())).to_pattern())
+        .replace(Atom::from(ckm.name).to_pattern())
         .with(ckm.expression.as_ref().unwrap().to_pattern());
     for (name, value) in [
         ("ytau", tau_yukawa),

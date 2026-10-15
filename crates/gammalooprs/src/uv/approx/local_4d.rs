@@ -2726,6 +2726,7 @@ mod tests {
         finalized_runtime_dot,
         graph::{Graph, GraphThreeDSource},
         initialisation::test_initialise,
+        model::InputParamCard,
         numerator::{aind::Aind, energy_degree::EnergyPowerAnalyzer},
         uv::approx::projected_4d::Local4dProjectionContext,
         uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode, uv_graph::UVE},

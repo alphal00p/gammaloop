@@ -294,7 +294,7 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         CutStructure::empty(&graph),
         &graph,
         &graph.model,
-        &generation.uv,
+        &generation,
     )?;
     let soft_components = wood
         .graph

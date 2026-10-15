@@ -78,7 +78,7 @@ impl PhysicalOverlapInput {
             CutStructure::empty(&graph),
             &graph,
             &graph.model,
-            &generation.uv,
+            &generation,
         )?
         .unfold();
         let [(compatible, cutset)] = forests.cuts.as_slice() else {

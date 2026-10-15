@@ -49,6 +49,7 @@ use crate::{
         cuts::CutSet,
         parse::string_utils::{ToOrderedSimple, dot_attr_value},
     },
+    settings::global::GenerationSettings,
     model::Model,
     utils::{GS, W_},
     uv::{
@@ -183,7 +184,7 @@ impl Wood {
         cuts: CutStructure,
         graph: &Graph,
         model: &Model,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<Self> {
         let mut subgraph = graph.full_filter();
         subgraph.subtract_with(&graph.initial_state_cut.left);
@@ -193,7 +194,7 @@ impl Wood {
             let cut_sub = subgraph.subtract(&cut.union);
             spinneys.extend(
                 graph
-                    .classified_spinneys(&cut_sub, model, settings, &graph.loop_momentum_basis)
+                    .classified_spinneys(&cut_sub, model, &settings.uv, &graph.loop_momentum_basis)
                     .wrap_err_with(|| {
                         format!(
                             "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
@@ -202,8 +203,9 @@ impl Wood {
                     })?,
             );
         }
+        graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
 
-        Ok(Self::from_spinneys(spinneys, graph, cuts, settings))
+        Ok(Self::from_spinneys(spinneys, graph, cuts, &settings.uv))
     }
 
     pub(crate) fn from_spinneys<I: IntoIterator<Item = Spinney>>(
@@ -1818,7 +1820,7 @@ mod tests {
                     &orientation_pattern,
                     true,
                 ),
-                &settings,
+                &settings.uv,
             )?;
 
             assert_eq!(forests.compute_store.entries.len(), forests.graph.n_nodes());
@@ -1846,6 +1848,224 @@ mod tests {
             }
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn vacuum_subtraction_prunes_only_full_observable_spinneys() -> Result<()> {
+        use crate::settings::global::MediumMode;
+
+        test_initialise()?;
+        let graphs: Vec<Graph> = dot!(
+            digraph sunrise {
+                edge [particle="scalar_1"];
+                v1 -> v2; v1 -> v2; v1 -> v2;
+            }
+            digraph dumbbell {
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v2;
+                v1 -> v1; v1 -> v1;
+            }
+            digraph sunrise_with_bridge {
+                edge [particle="scalar_1"];
+                ext [style=invis];
+                v1 -> v2; v1 -> v2; v1 -> v2;
+                v2 -> v3;
+                ext -> v3; v3 -> ext;
+            }, "scalars"
+        )?;
+        for graph in graphs {
+            // The counterterm covers the loop part, leaving any bridge untouched.
+            let full = InternalSubGraph::cleaned_filter_pessimist(
+                graph.full_filter().subtract(&graph.tree_edges),
+                graph.as_ref(),
+            );
+            for subtract_uv in [false, true] {
+                let mut settings = GenerationSettings::default();
+                settings.uv.subtract_uv = subtract_uv;
+                let ordinary = Wood::new(CutStructure::empty(&graph), &graph, &settings)?;
+                let all = ordinary
+                    .graph
+                    .iter_nodes()
+                    .map(|(_, _, spinney)| spinney.filter().clone())
+                    .collect::<BTreeSet<_>>();
+                let proper = all
+                    .iter()
+                    .filter(|filter| **filter != full.filter)
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+                assert!(proper.iter().any(|filter| filter.is_empty()));
+                if subtract_uv {
+                    assert!(all.contains(&full.filter), "{}", graph.name);
+                    assert!(proper.len() > 1, "{}", graph.name);
+                }
+                for mode in [
+                    MediumMode::Vacuum,
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    settings.medium.mode = mode;
+                    for vacuum_subtraction in [false, true] {
+                        if mode == MediumMode::Vacuum && vacuum_subtraction {
+                            continue; // Generation validation rejects this combination.
+                        }
+                        settings.medium.vacuum_subtraction = vacuum_subtraction;
+                        let expected = if vacuum_subtraction { &proper } else { &all };
+                        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings)?;
+                        assert_eq!(
+                            &wood
+                                .graph
+                                .iter_nodes()
+                                .map(|(_, _, spinney)| spinney.filter().clone())
+                                .collect::<BTreeSet<_>>(),
+                            expected,
+                            "{}: {mode:?}, subtract_uv={subtract_uv}, vacuum_subtraction={vacuum_subtraction}",
+                            graph.name
+                        );
+                        // The shared filter also supplies the legacy executor.
+                        let mut spinneys = graph.classified_spinneys(
+                            &graph.full_filter(),
+                            &settings.uv,
+                            &graph.loop_momentum_basis,
+                        )?;
+                        graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
+                        assert_eq!(
+                            &spinneys
+                                .iter()
+                                .map(|spinney| spinney.filter().clone())
+                                .collect::<BTreeSet<_>>(),
+                            expected,
+                            "legacy {}: {mode:?}, subtract_uv={subtract_uv}, vacuum_subtraction={vacuum_subtraction}",
+                            graph.name
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn vacuum_subtraction_commutes_with_local_and_integrated_forests() -> Result<()> {
+        use crate::{
+            integrands::process::param_builder::ParamBuilderGraph,
+            numerator::{
+                soft_energy_certificate::{EnergyZeroOutcome, SoftEnergyAlgebra},
+                symbolica_ext::NumeratorAtomExt,
+            },
+            settings::global::MediumMode,
+        };
+        use symbolica::atom::AtomView;
+        use three_dimensional_reps::thermal::OCCUPATION_FORM;
+        test_initialise()?;
+        let graphs: Vec<Graph> = dot!(
+            digraph nested {
+                edge [particle="scalar_1"]; node [num=1];
+                v1 -> v2; v1 -> v2; v1 -> v2;
+                v1 -> v1;
+            }
+            digraph disjoint {
+                edge [particle="scalar_1"]; node [num=1];
+                v1 -> v2; v1 -> v2;
+                v3 -> v4; v3 -> v4;
+                v2 -> v3; v1 -> v4;
+            }, "scalars"
+        )?;
+        for graph in graphs {
+            for medium in [
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                for generate_integrated in [false, true] {
+                    let mut settings = GenerationSettings::default();
+                    settings.medium.mode = medium;
+                    settings.medium.vacuum_subtraction = true;
+                    settings.uv.softct = false;
+                    settings.uv.generate_integrated = generate_integrated;
+                    let mut graph = graph.clone();
+                    let options = graph.production_cff_3d_expression_options(&settings)?;
+                    let contract =
+                        graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
+                    let production = graph
+                        .generate_3d_expression_for_integrand(&contract, &None, &options, None)?;
+                    let mut results = Vec::new();
+                    for early_subtraction in [false, true] {
+                        let projection = OrientationProjection::exact_expression(
+                            &production,
+                            &options,
+                            &settings.orientation_pattern,
+                            true,
+                        )
+                        .with_vacuum_subtraction(early_subtraction);
+                        // Both routes use precisely the same proper forests. Only the
+                        // boundary where the full vacuum projection acts is different.
+                        let mut forests =
+                            Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
+                        forests.compute(
+                            &mut graph,
+                            crate::utils::vakint()?,
+                            projection,
+                            &settings.uv,
+                        )?;
+                        results.push(forests.orientation_parametric_exprs(&graph, &settings.uv)?);
+                    }
+                    assert_eq!(results[0].len(), results[1].len());
+                    for (late, early) in results[0].iter().zip(&results[1]) {
+                        let late = late.integrands.resolved()?;
+                        let early = early.integrands.resolved()?;
+                        assert_eq!(late.iter().count(), early.iter().count());
+                        for ((late_key, raw), (early_key, actual)) in late.iter().zip(early.iter())
+                        {
+                            assert_eq!(late_key, early_key);
+                            let vacuum = graph.make_thermal_distributions_explicit(
+                                raw,
+                                MediumMode::Vacuum,
+                                graph.iter_edges().map(|(_, edge, _)| edge),
+                            )?;
+                            assert!(
+                                raw.is_zero() || raw.contains_symbol(GS.thermal_weight_wrapper)
+                            );
+                            assert!(
+                                actual.is_zero()
+                                    || actual.contains_symbol(GS.thermal_weight_wrapper)
+                            );
+                            // Resolve only this scalar comparison. Final energy factors can
+                            // group as E^-5 or E^-1/P^2, with E^2 = P, after the two routes.
+                            let difference = (actual - (raw - vacuum))
+                                .replace(function!(GS.thermal_weight_wrapper, W_.a_))
+                                .with(W_.a_)
+                                .replace_multiple(&*OCCUPATION_FORM)
+                                .expand();
+                            // Certify each occupation coefficient separately so unrelated
+                            // energy denominators do not multiply the proof's term budget.
+                            let mut occupations = BTreeSet::new();
+                            difference.visitor(&mut |view| {
+                                if let AtomView::Fun(call) = view
+                                    && call.get_symbol() == GS.thermal_distribution
+                                {
+                                    occupations.insert(view.to_owned());
+                                    return false;
+                                }
+                                true
+                            });
+                            let coefficients = difference
+                                .coefficient_list_exact(&occupations.into_iter().collect_vec())
+                                .expect("scalar difference must be polynomial in occupations");
+                            for (occupation, coefficient) in coefficients {
+                                let certificate =
+                                    SoftEnergyAlgebra::default().scalar_zero(&coefficient)?;
+                                assert!(
+                                    matches!(certificate, EnergyZeroOutcome::Zero(_)),
+                                    "{}: {medium:?}, integrated={generate_integrated}, residue={late_key:?}, occupation={occupation}: {certificate:?}: {coefficient}",
+                                    graph.name
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1978,9 +2198,12 @@ mod tests {
         )?;
         // Disable integrated terms so each union equality isolates factorized
         // local 4D composition.
-        let settings = UVgenerationSettings {
-            generate_integrated: false,
-            local_uv_cts_from_expanded_4d_integrands: true,
+        let settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: false,
+                local_uv_cts_from_expanded_4d_integrands: true,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&graph);
@@ -2033,7 +2256,7 @@ mod tests {
                 v1 -> v1 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"];
             },"scalars"
         )?;
-        let settings = UVgenerationSettings::default();
+        let settings = GenerationSettings::default();
         let cut_structure = CutStructure::empty(&graph);
         let cutset = cut_structure
             .cuts
@@ -2116,7 +2339,7 @@ mod tests {
             &mut graph,
             &cutset,
             localizer,
-            &settings,
+            &settings.uv,
             &mut Local4dProjectionContext::default(),
         )?;
         let root_store_marker = symbolica::symbol!("root_store_marker");
@@ -2148,7 +2371,7 @@ mod tests {
             &mut graph,
             &cutset,
             localizer,
-            &settings,
+            &settings.uv,
             &mut Local4dProjectionContext::default(),
         )?;
         assert!(
@@ -2168,7 +2391,7 @@ mod tests {
             &mut graph,
             &cutset,
             localizer,
-            &settings,
+            &settings.uv,
             &mut Local4dProjectionContext::default(),
         )?;
         let replay_states = forests.union_replay_states(dependent_disconnected)?;
@@ -2349,7 +2572,7 @@ mod tests {
             &mut graph,
             &cutset,
             localizer,
-            &settings,
+            &settings.uv,
             &mut Local4dProjectionContext::default(),
         )?;
         let sectors = union_3d
@@ -2434,7 +2657,7 @@ mod tests {
             let mut local = Direct3dCts::root(&graph, localizer)?;
             for (order, edge) in edges.iter().enumerate() {
                 let (current, given) = forests.wood.current_given_pair(*edge, order);
-                local = Direct3dApproximation::new(localizer, &mut graph, &settings)
+                local = Direct3dApproximation::new(localizer, &mut graph, &settings.uv)
                     .run_local(&local, &current, &given, &current, &given)?;
             }
             assert!(local.branches()?.iter_keys().all(|(_, integrands)| {
@@ -2489,12 +2712,15 @@ mod tests {
             },
             "scalars"
         )?;
-        let settings = UVgenerationSettings {
-            softct: false,
-            renormalization_prescription: RenormalizationPrescriptionSettings {
-                log_divergent: ApproximationType::MUV,
-                massive_power_divergent: ApproximationType::PolePart,
-                massless_power_divergent: ApproximationType::PolePart,
+        let settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                softct: false,
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    log_divergent: ApproximationType::MUV,
+                    massive_power_divergent: ApproximationType::PolePart,
+                    massless_power_divergent: ApproximationType::PolePart,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             ..Default::default()
@@ -2575,7 +2801,7 @@ mod tests {
             .replace(GS.m_uv_expansion)
             .with(GS.m_uv_vacuum);
         let actual = forests
-            .renormalization_part_of_ends(&graph, &settings)?
+            .renormalization_part_of_ends(&graph, &settings.uv)?
             .expression;
         assert_eq!(actual.expand(), expected.expand());
 
@@ -3045,7 +3271,7 @@ mod tests {
         )?;
 
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let settings = UVgenerationSettings::default();
+        let settings = GenerationSettings::default();
         let cut_structure = CutStructure::empty(&spectacles);
         let cutset = cut_structure
             .cuts
@@ -3127,7 +3353,7 @@ mod tests {
             &mut spectacles,
             &cutset,
             localizer,
-            &settings,
+            &settings.uv,
             &mut Local4dProjectionContext::default(),
         )?;
         let sectors = computed.local_3d.direct()?.sectors()?;
@@ -3240,14 +3466,15 @@ mod tests {
             .iter()
             .map(|active| active.union(&reduced))
             .collect::<Vec<_>>();
-        let child_local = Direct3dApproximation::new(localizer, &mut spectacles, &settings).run(
-            &union_local,
-            &IntegratedCts::root(),
-            &current,
-            &given,
-            &current,
-            &given,
-        )?;
+        let child_local = Direct3dApproximation::new(localizer, &mut spectacles, &settings.uv)
+            .run(
+                &union_local,
+                &IntegratedCts::root(),
+                &current,
+                &given,
+                &current,
+                &given,
+            )?;
         let actual = child_local.branches()?.materialize(false)?.resolved()?;
         assert_eq!(
             actual.map(|atom| atom.collect_factors()),
@@ -3344,8 +3571,11 @@ mod tests {
             "scalars"
         )?;
 
-        let settings = UVgenerationSettings {
-            generate_integrated: false,
+        let settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: false,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let wood = Wood::new(CutStructure::empty(&graph), &graph, &graph.model, &settings)?;
@@ -3560,8 +3790,11 @@ mod tests {
             "scalars"
         )?;
 
-        let settings = UVgenerationSettings {
-            generate_integrated: false,
+        let settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: false,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let wood = Wood::new(CutStructure::empty(&graph), &graph, &graph.model, &settings)?;
@@ -3862,9 +4095,12 @@ mod tests {
         )?;
 
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let settings = UVgenerationSettings {
-            generate_integrated: false,
-            local_uv_cts_from_expanded_4d_integrands: true,
+        let settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: false,
+                local_uv_cts_from_expanded_4d_integrands: true,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&spectacles);

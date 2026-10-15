@@ -88,7 +88,8 @@ pub struct EvaluatorSettings {
     /// Build one evaluator for the sum of all contributions instead of separate evaluators.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed: bool,
-    /// Represent a summed evaluator through a shared Symbolica function map.
+    /// Sum all orientations, retaining each selected orientation as a separate
+    /// Symbolica function-map alias instead of merging them into one expression.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed_function_map: bool,
     /// Compile the lowered evaluator using the configured generation compilation backend.
@@ -793,6 +794,12 @@ impl ProcessList {
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<GeneratedGraphReport>> {
+        // Reject unsupported settings before any process changes its graphs or history.
+        for process in &self.processes {
+            settings
+                .generation
+                .validate_for_process(process.definition.generation_type)?;
+        }
         let mut reports = Vec::new();
         for process in self.processes.iter_mut() {
             reports.extend(process.preprocess(
@@ -965,6 +972,7 @@ mod tests {
                 &GenerationSettings {
                     compile: GammaloopCompileOptions {
                         compilation_mode: CompilationMode::Cpp,
+                        jit_direct_translation: true,
                         fast_math: false,
                         optimization_level: CompilationOptimizationLevel::O0,
                         unsafe_math: false,

@@ -377,8 +377,6 @@ fn finite_part_quark_lo() {
     for project_integrated_uv_cts_onto_tensor_integrals in [true, false] {
         let mut amp = Amplitude::from_graph_list("bub", g.clone()).unwrap();
 
-        let model = load_generic_model("sm");
-
         // The external color projector closes this fixed-flavor open quark line:
         // Tr(T^a T^a)/N_c = (N_c^2-1)*T_F/N_c = C_F. Restore that basis before
         // the closed-loop RQFT alignment can mistake the projection trace for n_f.

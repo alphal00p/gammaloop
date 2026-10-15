@@ -78,7 +78,7 @@ symbolica-utils = { workspace = true, features = ["native"] }
 # compensated-summation = "0.3.0"
 # serde_with = "3.9.0"
 tabled = { workspace = true, features = ["ansi"] }
-three-dimensional-reps = { workspace = true }
+three-dimensional-reps = { workspace = true, features = ["json_schema"] }
 # gxhash = "3.4.1"
 thiserror = { workspace = true }
 toml = { workspace = true }
@@ -160,7 +160,7 @@ fjcore = []
 higher_loops = []
 pyo3-extension-module = ["pyo3/extension-module"]
 python_abi = ["pyo3?/abi3", "pyo3?/abi3-py37"]
-python_api = ["pyo3"]
+python_api = ["pyo3", "three-dimensional-reps/python"]
 # insta.opt-level = 3
 python_stubgen = ["dep:pyo3-stub-gen", "python_api"]
 

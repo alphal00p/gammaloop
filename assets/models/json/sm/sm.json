@@ -129,7 +129,7 @@
     "orders": [
       ["QED", 1]
     ],
-    "value": [0.0, 0.0]
+    "value": [-0.00729454338257259, 0.0]
   }, {
     "expression": "-1*UFO::{}::I2x23",
     "name": "GC_19",
@@ -164,7 +164,7 @@
     "orders": [
       ["QED", 1]
     ],
-    "value": [0.0, 0.0]
+    "value": [0.00729454338257259, 0.0]
   }, {
     "expression": "UFO::{}::I3x23",
     "name": "GC_24",
@@ -591,14 +591,14 @@
     "orders": [
       ["QED", 1]
     ],
-    "value": [0.0, 0.0]
+    "value": [0.0, -0.005158021091476534]
   }, {
     "expression": "(1/2)^(1/2)*UFO::{}::yc",
     "name": "GC_85",
     "orders": [
       ["QED", 1]
     ],
-    "value": [0.0, 0.0]
+    "value": [0.005158021091476534, 0.0]
   }, {
     "expression": "-1*UFO::{}::ye",
     "name": "GC_86",
@@ -760,6 +760,174 @@
       ["QED", 1]
     ],
     "value": [0.0, 0.46190543474313345]
+  }, {
+    "expression": "(1/2)^(1/2)*-𝑖*UFO::{}::yu",
+    "name": "GC_109",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, -8.935154646652265e-06]
+  }, {
+    "expression": "(1/2)^(1/2)*UFO::{}::yu",
+    "name": "GC_110",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [8.935154646652265e-06, 0.0]
+  }, {
+    "expression": "(1/2)^(1/2)*-𝑖*UFO::{}::yd",
+    "name": "GC_111",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, -1.9088739472393476e-05]
+  }, {
+    "expression": "(1/2)^(1/2)*-1*UFO::{}::yd",
+    "name": "GC_112",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [-1.9088739472393476e-05, 0.0]
+  }, {
+    "expression": "(1/2)^(1/2)*-𝑖*UFO::{}::ys",
+    "name": "GC_113",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, -0.000385836223378166]
+  }, {
+    "expression": "(1/2)^(1/2)*-1*UFO::{}::ys",
+    "name": "GC_114",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [-0.000385836223378166, 0.0]
+  }, {
+    "expression": "UFO::{}::yd*conj(UFO::{}::CKM1x1)",
+    "name": "GC_115",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [2.699555425046549e-05, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::yu*conj(UFO::{}::CKM1x1)",
+    "name": "GC_116",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [-1.2636216883196612e-05, 0.0]
+  }, {
+    "expression": "UFO::{}::CKM1x1*UFO::{}::yu",
+    "name": "GC_117",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [1.2636216883196612e-05, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::CKM1x1*UFO::{}::yd",
+    "name": "GC_118",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [-2.699555425046549e-05, 0.0]
+  }, {
+    "expression": "UFO::{}::ys*conj(UFO::{}::CKM1x2)",
+    "name": "GC_119",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::yu*conj(UFO::{}::CKM1x2)",
+    "name": "GC_120",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::CKM1x2*UFO::{}::yu",
+    "name": "GC_121",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::CKM1x2*UFO::{}::ys",
+    "name": "GC_122",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::yu*conj(UFO::{}::CKM1x3)",
+    "name": "GC_123",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::CKM1x3*UFO::{}::yu",
+    "name": "GC_124",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::yd*conj(UFO::{}::CKM2x1)",
+    "name": "GC_125",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::CKM2x1*UFO::{}::yd",
+    "name": "GC_126",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::ys*conj(UFO::{}::CKM2x2)",
+    "name": "GC_127",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0005456548199562173, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::CKM2x2*UFO::{}::ys",
+    "name": "GC_128",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [-0.0005456548199562173, 0.0]
+  }, {
+    "expression": "UFO::{}::yd*conj(UFO::{}::CKM3x1)",
+    "name": "GC_129",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::CKM3x1*UFO::{}::yd",
+    "name": "GC_130",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::ys*conj(UFO::{}::CKM3x2)",
+    "name": "GC_131",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::CKM3x2*UFO::{}::ys",
+    "name": "GC_132",
+    "orders": [
+      ["QED", 1]
+    ],
+    "value": [0.0, 0.0]
   }],
   "lorentz_structures": [{
     "name": "UUS1",
@@ -868,8 +1036,7 @@
     "texname": "\\text{aEWM1}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [132.507, 0.0],
-    "typstname": "\"aEWM1\""
+    "value": [132.507, 0.0]
   }, {
     "expression": null,
     "lhablock": "SMINPUTS",
@@ -878,8 +1045,7 @@
     "texname": "G_f",
     "nature": "external",
     "parameter_type": "real",
-    "value": [1.16639e-05, 0.0],
-    "typstname": "G_f"
+    "value": [1.16639e-05, 0.0]
   }, {
     "expression": null,
     "lhablock": "SMINPUTS",
@@ -888,8 +1054,7 @@
     "texname": "\\alpha _s",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.118, 0.0],
-    "typstname": "alpha_s"
+    "value": [0.118, 0.0]
   }, {
     "expression": null,
     "lhablock": "Wolfenstein",
@@ -898,8 +1063,7 @@
     "texname": "\\text{lamWS}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"lamWS\""
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "Wolfenstein",
@@ -908,8 +1072,7 @@
     "texname": "\\text{AWS}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"AWS\""
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "Wolfenstein",
@@ -918,8 +1081,7 @@
     "texname": "\\text{rhoWS}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"rhoWS\""
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "Wolfenstein",
@@ -928,8 +1090,7 @@
     "texname": "\\text{etaWS}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"etaWS\""
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -938,8 +1099,7 @@
     "texname": "\\text{ymc}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"ymc\""
+    "value": [1.27, 0.0]
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -948,8 +1108,7 @@
     "texname": "\\text{ymb}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [4.7, 0.0],
-    "typstname": "\"ymb\""
+    "value": [4.7, 0.0]
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -958,8 +1117,7 @@
     "texname": "\\text{ymt}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [173.0, 0.0],
-    "typstname": "\"ymt\""
+    "value": [173.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -968,8 +1126,7 @@
     "texname": "\\text{yme}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"yme\""
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -978,8 +1135,7 @@
     "texname": "\\text{ymm}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"ymm\""
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "YUKAWA",
@@ -988,8 +1144,7 @@
     "texname": "\\text{ymtau}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [1.777, 0.0],
-    "typstname": "\"ymtau\""
+    "value": [1.777, 0.0]
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -998,8 +1153,15 @@
     "texname": "m_Z",
     "nature": "external",
     "parameter_type": "real",
-    "value": [91.188, 0.0],
-    "typstname": "m_Z"
+    "value": [91.188, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "MASS",
+    "lhacode": [3],
+    "name": "MS",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.095, 0.0]
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1008,8 +1170,7 @@
     "texname": "m_c",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "m_c"
+    "value": [1.27, 0.0]
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1018,8 +1179,7 @@
     "texname": "m_t",
     "nature": "external",
     "parameter_type": "real",
-    "value": [173.0, 0.0],
-    "typstname": "m_t"
+    "value": [173.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1028,8 +1188,7 @@
     "texname": "m_b",
     "nature": "external",
     "parameter_type": "real",
-    "value": [4.9, 0.0],
-    "typstname": "m_b"
+    "value": [4.9, 0.0]
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1038,8 +1197,7 @@
     "texname": "m_H",
     "nature": "external",
     "parameter_type": "real",
-    "value": [125.0, 0.0],
-    "typstname": "m_H"
+    "value": [125.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1048,8 +1206,7 @@
     "texname": "m_e",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "m_e"
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1058,8 +1215,7 @@
     "texname": "m_{\\mu}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "m_(mu)"
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "MASS",
@@ -1068,8 +1224,7 @@
     "texname": "m_{\\tau}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [1.777, 0.0],
-    "typstname": "m_(tau)"
+    "value": [1.777, 0.0]
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1078,8 +1233,7 @@
     "texname": "\\text{WZ}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [2.441404, 0.0],
-    "typstname": "\"WZ\""
+    "value": [2.441404, 0.0]
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1088,8 +1242,7 @@
     "texname": "\\text{WW}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [2.0476, 0.0],
-    "typstname": "\"WW\""
+    "value": [2.0476, 0.0]
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1098,8 +1251,7 @@
     "texname": "\\text{WT}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [1.4915, 0.0],
-    "typstname": "\"WT\""
+    "value": [1.4915, 0.0]
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1108,8 +1260,7 @@
     "texname": "\\text{WH}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.00638233934, 0.0],
-    "typstname": "\"WH\""
+    "value": [0.00638233934, 0.0]
   }, {
     "expression": null,
     "lhablock": "DECAY",
@@ -1118,8 +1269,47 @@
     "texname": "\\text{WTau}",
     "nature": "external",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"WTau\""
+    "value": [0.0, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "CHEMICALPOTENTIAL",
+    "lhacode": [1],
+    "name": "muB",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "CHEMICALPOTENTIAL",
+    "lhacode": [2],
+    "name": "muQ",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "CHEMICALPOTENTIAL",
+    "lhacode": [3],
+    "name": "muLe",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "CHEMICALPOTENTIAL",
+    "lhacode": [4],
+    "name": "muLmu",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "CHEMICALPOTENTIAL",
+    "lhacode": [5],
+    "name": "muLtau",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": null,
@@ -1128,8 +1318,7 @@
     "texname": "0",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "0"
+    "value": [0.0, 0.0]
   }, {
     "expression": null,
     "lhablock": null,
@@ -1138,8 +1327,7 @@
     "texname": "\\text{CKM3x3}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [1.0, 0.0],
-    "typstname": "\"CKM3x3\""
+    "value": [1.0, 0.0]
   }, {
     "expression": "-1/2*UFO::{}::lamWS^2+1",
     "lhablock": null,
@@ -1148,8 +1336,7 @@
     "texname": "\\text{CKM1x1}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [1.0, 0.0],
-    "typstname": "\"CKM1x1\""
+    "value": [1.0, 0.0]
   }, {
     "expression": "UFO::{}::lamWS",
     "lhablock": null,
@@ -1158,8 +1345,7 @@
     "texname": "\\text{CKM1x2}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"CKM1x2\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "(-1𝑖*UFO::{}::etaWS+UFO::{}::rhoWS)*UFO::{}::AWS*UFO::{}::lamWS^3",
     "lhablock": null,
@@ -1168,8 +1354,7 @@
     "texname": "\\text{CKM1x3}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"CKM1x3\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "-1*UFO::{}::lamWS",
     "lhablock": null,
@@ -1178,8 +1363,7 @@
     "texname": "\\text{CKM2x1}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"CKM2x1\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "-1/2*UFO::{}::lamWS^2+1",
     "lhablock": null,
@@ -1188,8 +1372,7 @@
     "texname": "\\text{CKM2x2}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [1.0, 0.0],
-    "typstname": "\"CKM2x2\""
+    "value": [1.0, 0.0]
   }, {
     "expression": "UFO::{}::AWS*UFO::{}::lamWS^2",
     "lhablock": null,
@@ -1198,8 +1381,7 @@
     "texname": "\\text{CKM2x3}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"CKM2x3\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "(-1*UFO::{}::rhoWS+-1𝑖*UFO::{}::etaWS+1)*UFO::{}::AWS*UFO::{}::lamWS^3",
     "lhablock": null,
@@ -1208,8 +1390,7 @@
     "texname": "\\text{CKM3x1}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"CKM3x1\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "-1*UFO::{}::AWS*UFO::{}::lamWS^2",
     "lhablock": null,
@@ -1218,8 +1399,7 @@
     "texname": "\\text{CKM3x2}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"CKM3x2\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::aEWM1^(-1)",
     "lhablock": null,
@@ -1228,8 +1408,7 @@
     "texname": "\\alpha _{\\text{EW}}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0075467711139788835, 0.0],
-    "typstname": "alpha_(\"EW\")"
+    "value": [0.0075467711139788835, 0.0]
   }, {
     "expression": "2*UFO::{}::aS^(1/2)*𝜋^(1/2)",
     "lhablock": null,
@@ -1238,8 +1417,7 @@
     "texname": "G",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [1.2177157847767195, 0.0],
-    "typstname": "G"
+    "value": [1.2177157847767195, 0.0]
   }, {
     "expression": "(((1/2)^(1/2)*-1*UFO::{}::Gf^(-1)*UFO::{}::MZ^2*UFO::{}::aEW*𝜋+1/4*UFO::{}::MZ^4)^(1/2)+1/2*UFO::{}::MZ^2)^(1/2)",
     "lhablock": null,
@@ -1248,8 +1426,7 @@
     "texname": "m_W",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [80.41900244575616, 0.0],
-    "typstname": "m_W"
+    "value": [80.41900244575616, 0.0]
   }, {
     "expression": "2*UFO::{}::aEW^(1/2)*𝜋^(1/2)",
     "lhablock": null,
@@ -1258,8 +1435,7 @@
     "texname": "e",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.3079537672443688, 0.0],
-    "typstname": "e"
+    "value": [0.3079537672443688, 0.0]
   }, {
     "expression": "-1*UFO::{}::MW^2*UFO::{}::MZ^(-2)+1",
     "lhablock": null,
@@ -1268,8 +1444,7 @@
     "texname": "\\text{sw2}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.22224648578577766, 0.0],
-    "typstname": "\"sw2\""
+    "value": [0.22224648578577766, 0.0]
   }, {
     "expression": "(-1*UFO::{}::sw2+1)^(1/2)",
     "lhablock": null,
@@ -1278,8 +1453,7 @@
     "texname": "c_w",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.8819033474333922, 0.0],
-    "typstname": "c_w"
+    "value": [0.8819033474333922, 0.0]
   }, {
     "expression": "UFO::{}::sw2^(1/2)",
     "lhablock": null,
@@ -1288,8 +1462,7 @@
     "texname": "s_w",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.4714302554840723, 0.0],
-    "typstname": "s_w"
+    "value": [0.4714302554840723, 0.0]
   }, {
     "expression": "UFO::{}::cw^(-1)*UFO::{}::ee",
     "lhablock": null,
@@ -1298,8 +1471,7 @@
     "texname": "g_1",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.349192196787333, 0.0],
-    "typstname": "g_1"
+    "value": [0.349192196787333, 0.0]
   }, {
     "expression": "UFO::{}::ee*UFO::{}::sw^(-1)",
     "lhablock": null,
@@ -1308,8 +1480,7 @@
     "texname": "g_w",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.6532329303475798, 0.0],
-    "typstname": "g_w"
+    "value": [0.6532329303475798, 0.0]
   }, {
     "expression": "2*UFO::{}::MW*UFO::{}::ee^(-1)*UFO::{}::sw",
     "lhablock": null,
@@ -1318,8 +1489,7 @@
     "texname": "\\text{vev}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [246.2184581018163, 0.0],
-    "typstname": "\"vev\""
+    "value": [246.2184581018163, 0.0]
   }, {
     "expression": "1/2*UFO::{}::MH^2*UFO::{}::vev^(-2)",
     "lhablock": null,
@@ -1328,8 +1498,7 @@
     "texname": "\\text{lam}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.1288691060169027, 0.0],
-    "typstname": "\"lam\""
+    "value": [0.1288691060169027, 0.0]
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymb",
     "lhablock": null,
@@ -1338,8 +1507,7 @@
     "texname": "\\text{yb}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.02699555425046549, 0.0],
-    "typstname": "\"yb\""
+    "value": [0.02699555425046549, 0.0]
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymc",
     "lhablock": null,
@@ -1348,8 +1516,7 @@
     "texname": "\\text{yc}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"yc\""
+    "value": [0.00729454338257259, 0.0]
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::yme",
     "lhablock": null,
@@ -1358,8 +1525,7 @@
     "texname": "\\text{ye}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"ye\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymm",
     "lhablock": null,
@@ -1368,8 +1534,7 @@
     "texname": "\\text{ym}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.0, 0.0],
-    "typstname": "\"ym\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymt",
     "lhablock": null,
@@ -1378,8 +1543,7 @@
     "texname": "\\text{yt}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.9936661458150063, 0.0],
-    "typstname": "\"yt\""
+    "value": [0.9936661458150063, 0.0]
   }, {
     "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymtau",
     "lhablock": null,
@@ -1388,8 +1552,7 @@
     "texname": "\\text{ytau}",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [0.010206617000654717, 0.0],
-    "typstname": "\"ytau\""
+    "value": [0.010206617000654717, 0.0]
   }, {
     "expression": "(UFO::{}::lam*UFO::{}::vev^2)^(1/2)",
     "lhablock": null,
@@ -1398,8 +1561,7 @@
     "texname": "\\mu",
     "nature": "internal",
     "parameter_type": "real",
-    "value": [88.38834764831844, 0.0],
-    "typstname": "mu"
+    "value": [88.38834764831844, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM1x3)*UFO::{}::yb",
     "lhablock": null,
@@ -1408,8 +1570,7 @@
     "texname": "\\text{I1x31}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I1x31\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x3)*UFO::{}::yb",
     "lhablock": null,
@@ -1418,8 +1579,7 @@
     "texname": "\\text{I1x32}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I1x32\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x3)*UFO::{}::yb",
     "lhablock": null,
@@ -1428,8 +1588,7 @@
     "texname": "\\text{I1x33}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.02699555425046549, 0.0],
-    "typstname": "\"I1x33\""
+    "value": [0.02699555425046549, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x1)*UFO::{}::yc",
     "lhablock": null,
@@ -1438,8 +1597,7 @@
     "texname": "\\text{I2x12}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I2x12\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x1)*UFO::{}::yt",
     "lhablock": null,
@@ -1448,8 +1606,7 @@
     "texname": "\\text{I2x13}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I2x13\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x2)*UFO::{}::yc",
     "lhablock": null,
@@ -1458,8 +1615,7 @@
     "texname": "\\text{I2x22}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I2x22\""
+    "value": [0.00729454338257259, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x2)*UFO::{}::yt",
     "lhablock": null,
@@ -1468,8 +1624,7 @@
     "texname": "\\text{I2x23}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I2x23\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x3)*UFO::{}::yc",
     "lhablock": null,
@@ -1478,8 +1633,7 @@
     "texname": "\\text{I2x32}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I2x32\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x3)*UFO::{}::yt",
     "lhablock": null,
@@ -1488,8 +1642,7 @@
     "texname": "\\text{I2x33}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.9936661458150063, 0.0],
-    "typstname": "\"I2x33\""
+    "value": [0.9936661458150063, 0.0]
   }, {
     "expression": "UFO::{}::CKM2x1*UFO::{}::yc",
     "lhablock": null,
@@ -1498,8 +1651,7 @@
     "texname": "\\text{I3x21}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I3x21\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::CKM2x2*UFO::{}::yc",
     "lhablock": null,
@@ -1508,8 +1660,7 @@
     "texname": "\\text{I3x22}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I3x22\""
+    "value": [0.00729454338257259, 0.0]
   }, {
     "expression": "UFO::{}::CKM2x3*UFO::{}::yc",
     "lhablock": null,
@@ -1518,8 +1669,7 @@
     "texname": "\\text{I3x23}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I3x23\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::CKM3x1*UFO::{}::yt",
     "lhablock": null,
@@ -1528,8 +1678,7 @@
     "texname": "\\text{I3x31}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I3x31\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::CKM3x2*UFO::{}::yt",
     "lhablock": null,
@@ -1538,8 +1687,7 @@
     "texname": "\\text{I3x32}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I3x32\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::CKM3x3*UFO::{}::yt",
     "lhablock": null,
@@ -1548,8 +1696,7 @@
     "texname": "\\text{I3x33}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.9936661458150063, 0.0],
-    "typstname": "\"I3x33\""
+    "value": [0.9936661458150063, 0.0]
   }, {
     "expression": "UFO::{}::CKM1x3*UFO::{}::yb",
     "lhablock": null,
@@ -1558,8 +1705,7 @@
     "texname": "\\text{I4x13}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I4x13\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::CKM2x3*UFO::{}::yb",
     "lhablock": null,
@@ -1568,8 +1714,7 @@
     "texname": "\\text{I4x23}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.0, 0.0],
-    "typstname": "\"I4x23\""
+    "value": [0.0, 0.0]
   }, {
     "expression": "UFO::{}::CKM3x3*UFO::{}::yb",
     "lhablock": null,
@@ -1578,13 +1723,333 @@
     "texname": "\\text{I4x33}",
     "nature": "internal",
     "parameter_type": "complex",
-    "value": [0.02699555425046549, 0.0],
-    "typstname": "\"I4x33\""
+    "value": [0.02699555425046549, 0.0]
+  }, {
+    "expression": "UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "muW",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "mughWp",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "mughWm",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::muLe",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "muve",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::muLmu",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "muvm",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::muLtau",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "muvt",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "1/3*UFO::{}::muB+2/3*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "muu",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "1/3*UFO::{}::muB+2/3*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "muc",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "1/3*UFO::{}::muB+2/3*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "mut",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1/3*UFO::{}::muQ+1/3*UFO::{}::muB",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "mud",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1/3*UFO::{}::muQ+1/3*UFO::{}::muB",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "mus",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1/3*UFO::{}::muQ+1/3*UFO::{}::muB",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "mub",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "muG",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muQ+UFO::{}::muLe",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "mue",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muQ+UFO::{}::muLmu",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "mumu",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muQ+UFO::{}::muLtau",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "muta",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_muW",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_mughWp",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_mughWm",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muLe",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_muve",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muLmu",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_muvm",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muLtau",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_muvt",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1/3*UFO::{}::muB+-2/3*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_muu",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1/3*UFO::{}::muB+-2/3*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_muc",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1/3*UFO::{}::muB+-2/3*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_mut",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1/3*UFO::{}::muB+1/3*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_mud",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1/3*UFO::{}::muB+1/3*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_mus",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1/3*UFO::{}::muB+1/3*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_mub",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_muG",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muLe+UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_mue",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muLmu+UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_mumu",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": "-1*UFO::{}::muLtau+UFO::{}::muQ",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "minus_muta",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "YUKAWA",
+    "lhacode": [2],
+    "name": "ymu",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0022, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "YUKAWA",
+    "lhacode": [1],
+    "name": "ymd",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0047, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "YUKAWA",
+    "lhacode": [3],
+    "name": "yms",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.095, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "MASS",
+    "lhacode": [2],
+    "name": "MU",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0022, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "MASS",
+    "lhacode": [1],
+    "name": "MD",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0047, 0.0]
+  }, {
+    "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymu",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "yu",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [1.2636216883196612e-05, 0.0]
+  }, {
+    "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymd",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "yd",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [2.699555425046549e-05, 0.0]
+  }, {
+    "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::yms",
+    "lhablock": null,
+    "lhacode": null,
+    "name": "ys",
+    "nature": "internal",
+    "parameter_type": "real",
+    "value": [0.0005456548199562173, 0.0]
   }],
   "particles": [{
     "antiname": "a",
     "antitexname": "{\\gamma}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1595,12 +2060,12 @@
     "texname": "{\\gamma}",
     "width": "ZERO",
     "y_charge": "0",
-    "typstname": "gamma",
-    "antitypstname": "gamma"
+    "y_charge_right": null
   }, {
     "antiname": "Z",
     "antitexname": "{Z}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1611,12 +2076,12 @@
     "texname": "{Z}",
     "width": "WZ",
     "y_charge": "0",
-    "typstname": "Z",
-    "antitypstname": "Z"
+    "y_charge_right": null
   }, {
     "antiname": "W-",
     "antitexname": "{W^-}",
     "charge": "1",
+    "chemical_potential": "muW",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1627,12 +2092,12 @@
     "texname": "{W^+}",
     "width": "WW",
     "y_charge": "0",
-    "typstname": "W^(+)",
-    "antitypstname": "W^(-)"
+    "y_charge_right": null
   }, {
     "antiname": "W+",
     "antitexname": "{W^+}",
     "charge": "-1",
+    "chemical_potential": "minus_muW",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1643,12 +2108,12 @@
     "texname": "{W^-}",
     "width": "WW",
     "y_charge": "0",
-    "typstname": "W^(-)",
-    "antitypstname": "W^(+)"
+    "y_charge_right": null
   }, {
     "antiname": "g",
     "antitexname": "{g}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 8,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1659,12 +2124,12 @@
     "texname": "{g}",
     "width": "ZERO",
     "y_charge": "0",
-    "typstname": "g",
-    "antitypstname": "g"
+    "y_charge_right": null
   }, {
     "antiname": "ghA~",
     "antitexname": "\\overline{\\tilde{\\gamma}}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1675,12 +2140,12 @@
     "texname": "\\tilde{\\gamma}",
     "width": "ZERO",
     "y_charge": "0",
-    "typstname": "tilde(gamma)",
-    "antitypstname": "overline(tilde(gamma))"
+    "y_charge_right": null
   }, {
     "antiname": "ghA",
     "antitexname": "\\tilde{\\gamma}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1691,12 +2156,12 @@
     "texname": "\\overline{\\tilde{\\gamma}}",
     "width": "ZERO",
     "y_charge": "0",
-    "typstname": "overline(tilde(gamma))",
-    "antitypstname": "tilde(gamma)"
+    "y_charge_right": null
   }, {
     "antiname": "ghZ~",
     "antitexname": "\\bar{\\tilde{Z}}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1707,12 +2172,12 @@
     "texname": "\\tilde{Z}",
     "width": "WZ",
     "y_charge": "0",
-    "typstname": "tilde(Z)",
-    "antitypstname": "overline(tilde(Z))"
+    "y_charge_right": null
   }, {
     "antiname": "ghZ",
     "antitexname": "\\tilde{Z}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1723,12 +2188,12 @@
     "texname": "\\bar{\\tilde{Z}}",
     "width": "WZ",
     "y_charge": "0",
-    "typstname": "overline(tilde(Z))",
-    "antitypstname": "tilde(Z)"
+    "y_charge_right": null
   }, {
     "antiname": "ghWp~",
     "antitexname": "{\\bar{\\tilde{W}}^+}",
     "charge": "1",
+    "chemical_potential": "mughWp",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1739,12 +2204,12 @@
     "texname": "{\\tilde{W}^+}",
     "width": "WW",
     "y_charge": "0",
-    "typstname": "tilde(W)^(+)",
-    "antitypstname": "overline(tilde(W)^(+))"
+    "y_charge_right": null
   }, {
     "antiname": "ghWp",
     "antitexname": "{\\tilde{W}^+}",
     "charge": "-1",
+    "chemical_potential": "minus_mughWp",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1755,12 +2220,12 @@
     "texname": "{\\bar{\\tilde{W}}^+}",
     "width": "WW",
     "y_charge": "0",
-    "typstname": "overline(tilde(W)^(+))",
-    "antitypstname": "tilde(W)^(+)"
+    "y_charge_right": null
   }, {
     "antiname": "ghWm~",
     "antitexname": "{\\bar{\\tilde{W}}^-}",
     "charge": "-1",
+    "chemical_potential": "mughWm",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1771,12 +2236,12 @@
     "texname": "{\\tilde{W}^-}",
     "width": "WW",
     "y_charge": "0",
-    "typstname": "tilde(W)^(-)",
-    "antitypstname": "overline(tilde(W)^(-))"
+    "y_charge_right": null
   }, {
     "antiname": "ghWm",
     "antitexname": "{\\tilde{W}^-}",
     "charge": "1",
+    "chemical_potential": "minus_mughWm",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1787,12 +2252,12 @@
     "texname": "{\\bar{\\tilde{W}}^-}",
     "width": "WW",
     "y_charge": "0",
-    "typstname": "overline(tilde(W)^(-))",
-    "antitypstname": "tilde(W)^(-)"
+    "y_charge_right": null
   }, {
     "antiname": "ghG~",
     "antitexname": "{\\bar{\\tilde{g}}}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 8,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1803,12 +2268,12 @@
     "texname": "{\\tilde{g}}",
     "width": "ZERO",
     "y_charge": "0",
-    "typstname": "tilde(g)",
-    "antitypstname": "overline(tilde(g))"
+    "y_charge_right": null
   }, {
     "antiname": "ghG",
     "antitexname": "{\\tilde{g}}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 8,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1819,12 +2284,12 @@
     "texname": "{\\bar{\\tilde{g}}}",
     "width": "ZERO",
     "y_charge": "0",
-    "typstname": "overline(tilde(g))",
-    "antitypstname": "tilde(g)"
+    "y_charge_right": null
   }, {
     "antiname": "ve~",
     "antitexname": "{\\overline{\\nu}_e}",
     "charge": "0",
+    "chemical_potential": "muve",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1835,13 +2300,12 @@
     "texname": "{\\nu_e}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": null,
-    "typstname": "nu_e",
-    "antitypstname": "overline(nu_e)"
+    "y_charge_right": null
   }, {
     "antiname": "ve",
     "antitexname": "{\\nu_e}",
     "charge": "0",
+    "chemical_potential": "minus_muve",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1852,13 +2316,12 @@
     "texname": "{\\overline{\\nu}_e}",
     "width": "ZERO",
     "y_charge": null,
-    "y_charge_right": "1",
-    "typstname": "overline(nu_e)",
-    "antitypstname": "nu_e"
+    "y_charge_right": "1"
   }, {
     "antiname": "vm~",
     "antitexname": "{\\overline{\\nu}_\\mu}",
     "charge": "0",
+    "chemical_potential": "muvm",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1869,13 +2332,12 @@
     "texname": "{\\nu_\\mu}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": null,
-    "typstname": "nu_mu",
-    "antitypstname": "overline(nu_mu)"
+    "y_charge_right": null
   }, {
     "antiname": "vm",
     "antitexname": "{\\nu_\\mu}",
     "charge": "0",
+    "chemical_potential": "minus_muvm",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1886,13 +2348,12 @@
     "texname": "{\\overline{\\nu}_\\mu}",
     "width": "ZERO",
     "y_charge": null,
-    "y_charge_right": "1",
-    "typstname": "overline(nu_mu)",
-    "antitypstname": "nu_mu"
+    "y_charge_right": "1"
   }, {
     "antiname": "vt~",
     "antitexname": "{\\overline{\\nu}_\\tau}",
     "charge": "0",
+    "chemical_potential": "muvt",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1903,13 +2364,12 @@
     "texname": "{\\nu_\\tau}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": null,
-    "typstname": "nu_tau",
-    "antitypstname": "overline(nu_tau)"
+    "y_charge_right": null
   }, {
     "antiname": "vt",
     "antitexname": "{\\nu_\\tau}",
     "charge": "0",
+    "chemical_potential": "minus_muvt",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1920,47 +2380,44 @@
     "texname": "{\\overline{\\nu}_\\tau}",
     "width": "ZERO",
     "y_charge": null,
-    "y_charge_right": "1",
-    "typstname": "overline(nu_tau)",
-    "antitypstname": "nu_tau"
+    "y_charge_right": "1"
   }, {
     "antiname": "u~",
     "antitexname": "{\\overline{u}}",
     "charge": "2/3",
+    "chemical_potential": "muu",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
-    "mass": "ZERO",
+    "mass": "MU",
     "name": "u",
     "pdg_code": 2,
     "spin": 2,
     "texname": "{u}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "4/3",
-    "typstname": "u",
-    "antitypstname": "overline(u)"
+    "y_charge_right": "4/3"
   }, {
     "antiname": "u",
     "antitexname": "{u}",
     "charge": "-2/3",
+    "chemical_potential": "minus_muu",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
-    "mass": "ZERO",
+    "mass": "MU",
     "name": "u~",
     "pdg_code": -2,
     "spin": 2,
     "texname": "{\\overline{u}}",
     "width": "ZERO",
     "y_charge": "-4/3",
-    "y_charge_right": "-1/3",
-    "typstname": "overline(u)",
-    "antitypstname": "u"
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "c~",
     "antitexname": "{\\overline{c}}",
     "charge": "2/3",
+    "chemical_potential": "muc",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1971,13 +2428,12 @@
     "texname": "{c}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "4/3",
-    "typstname": "c",
-    "antitypstname": "overline(c)"
+    "y_charge_right": "4/3"
   }, {
     "antiname": "c",
     "antitexname": "{c}",
     "charge": "-2/3",
+    "chemical_potential": "minus_muc",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1988,13 +2444,12 @@
     "texname": "{\\overline{c}}",
     "width": "ZERO",
     "y_charge": "-4/3",
-    "y_charge_right": "-1/3",
-    "typstname": "overline(c)",
-    "antitypstname": "c"
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "t~",
     "antitexname": "{\\overline{t}}",
     "charge": "2/3",
+    "chemical_potential": "mut",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -2005,13 +2460,12 @@
     "texname": "{t}",
     "width": "WT",
     "y_charge": "1/3",
-    "y_charge_right": "4/3",
-    "typstname": "t",
-    "antitypstname": "overline(t)"
+    "y_charge_right": "4/3"
   }, {
     "antiname": "t",
     "antitexname": "{t}",
     "charge": "-2/3",
+    "chemical_potential": "minus_mut",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -2022,81 +2476,76 @@
     "texname": "{\\overline{t}}",
     "width": "WT",
     "y_charge": "-4/3",
-    "y_charge_right": "-1/3",
-    "typstname": "overline(t)",
-    "antitypstname": "t"
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "d~",
     "antitexname": "{\\overline{d}}",
     "charge": "-1/3",
+    "chemical_potential": "mud",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
-    "mass": "ZERO",
+    "mass": "MD",
     "name": "d",
     "pdg_code": 1,
     "spin": 2,
     "texname": "{d}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "-2/3",
-    "typstname": "d",
-    "antitypstname": "overline(d)"
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "d",
     "antitexname": "{d}",
     "charge": "1/3",
+    "chemical_potential": "minus_mud",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
-    "mass": "ZERO",
+    "mass": "MD",
     "name": "d~",
     "pdg_code": -1,
     "spin": 2,
     "texname": "{\\overline{d}}",
     "width": "ZERO",
     "y_charge": "2/3",
-    "y_charge_right": "-1/3",
-    "typstname": "overline(d)",
-    "antitypstname": "d"
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "s~",
     "antitexname": "{\\overline{s}}",
     "charge": "-1/3",
+    "chemical_potential": "mus",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
-    "mass": "ZERO",
+    "mass": "MS",
     "name": "s",
     "pdg_code": 3,
     "spin": 2,
     "texname": "{s}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "-2/3",
-    "typstname": "s",
-    "antitypstname": "overline(s)"
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "s",
     "antitexname": "{s}",
     "charge": "1/3",
+    "chemical_potential": "minus_mus",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
-    "mass": "ZERO",
+    "mass": "MS",
     "name": "s~",
     "pdg_code": -3,
     "spin": 2,
     "texname": "{\\overline{s}}",
     "width": "ZERO",
     "y_charge": "2/3",
-    "y_charge_right": "-1/3",
-    "typstname": "overline(s)",
-    "antitypstname": "s"
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "b~",
     "antitexname": "{\\overline{b}}",
     "charge": "-1/3",
+    "chemical_potential": "mub",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -2107,13 +2556,12 @@
     "texname": "{b}",
     "width": "ZERO",
     "y_charge": "1/3",
-    "y_charge_right": "-2/3",
-    "typstname": "b",
-    "antitypstname": "overline(b)"
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "b",
     "antitexname": "{b}",
     "charge": "1/3",
+    "chemical_potential": "minus_mub",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -2124,13 +2572,12 @@
     "texname": "{\\overline{b}}",
     "width": "ZERO",
     "y_charge": "2/3",
-    "y_charge_right": "-1/3",
-    "typstname": "overline(b)",
-    "antitypstname": "b"
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "H",
     "antitexname": "{H}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -2141,16 +2588,16 @@
     "texname": "{H}",
     "width": "WH",
     "y_charge": null,
-    "typstname": "H",
-    "antitypstname": "H"
+    "y_charge_right": null
   }, {
     "antiname": "G0",
     "antitexname": "{G_0}",
     "charge": "0",
+    "chemical_potential": null,
     "color": 1,
     "ghost_number": 0,
-    "lepton_number": 0,
     "goldstone": true,
+    "lepton_number": 0,
     "mass": "MZ",
     "name": "G0",
     "pdg_code": 250,
@@ -2158,16 +2605,16 @@
     "texname": "{G_0}",
     "width": "WZ",
     "y_charge": null,
-    "typstname": "G_0",
-    "antitypstname": "G_0"
+    "y_charge_right": null
   }, {
     "antiname": "G-",
     "antitexname": "{G^-}",
     "charge": "1",
+    "chemical_potential": "muG",
     "color": 1,
     "ghost_number": 0,
-    "lepton_number": 0,
     "goldstone": true,
+    "lepton_number": 0,
     "mass": "MW",
     "name": "G+",
     "pdg_code": 251,
@@ -2175,16 +2622,16 @@
     "texname": "{G^+}",
     "width": "WW",
     "y_charge": "1",
-    "typstname": "G^(+)",
-    "antitypstname": "G^(-)"
+    "y_charge_right": null
   }, {
     "antiname": "G+",
     "antitexname": "{G^+}",
     "charge": "-1",
+    "chemical_potential": "minus_muG",
     "color": 1,
     "ghost_number": 0,
-    "lepton_number": 0,
     "goldstone": true,
+    "lepton_number": 0,
     "mass": "MW",
     "name": "G-",
     "pdg_code": -251,
@@ -2192,12 +2639,12 @@
     "texname": "{G^-}",
     "width": "WW",
     "y_charge": "-1",
-    "typstname": "G^(-)",
-    "antitypstname": "G^(+)"
+    "y_charge_right": null
   }, {
     "antiname": "e+",
     "antitexname": "{e^+}",
     "charge": "-1",
+    "chemical_potential": "mue",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -2208,13 +2655,12 @@
     "texname": "{e^-}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": "-2",
-    "typstname": "e^(-)",
-    "antitypstname": "e^(+)"
+    "y_charge_right": "-2"
   }, {
     "antiname": "e-",
     "antitexname": "{e^-}",
     "charge": "1",
+    "chemical_potential": "minus_mue",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -2225,13 +2671,12 @@
     "texname": "{e^+}",
     "width": "ZERO",
     "y_charge": "2",
-    "y_charge_right": "1",
-    "typstname": "e^(+)",
-    "antitypstname": "e^(-)"
+    "y_charge_right": "1"
   }, {
     "antiname": "mu+",
     "antitexname": "{\\mu^+}",
     "charge": "-1",
+    "chemical_potential": "mumu",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -2242,13 +2687,12 @@
     "texname": "{\\mu^-}",
     "width": "ZERO",
     "y_charge": "-1",
-    "y_charge_right": "-2",
-    "typstname": "mu^(-)",
-    "antitypstname": "mu^(+)"
+    "y_charge_right": "-2"
   }, {
     "antiname": "mu-",
     "antitexname": "{\\mu^-}",
     "charge": "1",
+    "chemical_potential": "minus_mumu",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -2259,13 +2703,12 @@
     "texname": "{\\mu^+}",
     "width": "ZERO",
     "y_charge": "2",
-    "y_charge_right": "1",
-    "typstname": "mu^(+)",
-    "antitypstname": "mu^(-)"
+    "y_charge_right": "1"
   }, {
     "antiname": "ta+",
     "antitexname": "{\\tau^+}",
     "charge": "-1",
+    "chemical_potential": "muta",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -2276,13 +2719,12 @@
     "texname": "{\\tau^-}",
     "width": "WTau",
     "y_charge": "-1",
-    "y_charge_right": "-2",
-    "typstname": "tau^(-)",
-    "antitypstname": "tau^(+)"
+    "y_charge_right": "-2"
   }, {
     "antiname": "ta-",
     "antitexname": "{\\tau^-}",
     "charge": "1",
+    "chemical_potential": "minus_muta",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -2293,9 +2735,7 @@
     "texname": "{\\tau^+}",
     "width": "WTau",
     "y_charge": "2",
-    "y_charge_right": "1",
-    "typstname": "tau^(+)",
-    "antitypstname": "tau^(-)"
+    "y_charge_right": "1"
   }],
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
@@ -2403,14 +2843,14 @@
     "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "vt~"
   }, {
-    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MU^2",
     "name": "u_propFeynman",
-    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MU+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*𝑖",
     "particle": "u"
   }, {
-    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MU^2",
     "name": "u~_propFeynman",
-    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MU)*𝑖",
     "particle": "u~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MC^2",
@@ -2433,24 +2873,24 @@
     "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MT)*1𝑖",
     "particle": "t~"
   }, {
-    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MD^2",
     "name": "d_propFeynman",
-    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MD+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*𝑖",
     "particle": "d"
   }, {
-    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MD^2",
     "name": "d~_propFeynman",
-    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MD)*𝑖",
     "particle": "d~"
   }, {
-    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MS^2",
     "name": "s_propFeynman",
-    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MS+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*1𝑖",
     "particle": "s"
   }, {
-    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MS^2",
     "name": "s~_propFeynman",
-    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MS)*1𝑖",
     "particle": "s~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MB^2",
@@ -3167,41 +3607,41 @@
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_16"]
+      ["GC_16", "GC_125"]
     ],
-    "lorentz_structures": ["FFS3"],
+    "lorentz_structures": ["FFS3", "FFS1"],
     "name": "V_82",
     "particles": ["c~", "d", "G+"]
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_17"]
+      ["GC_17", "GC_129"]
     ],
-    "lorentz_structures": ["FFS3"],
+    "lorentz_structures": ["FFS3", "FFS1"],
     "name": "V_83",
     "particles": ["t~", "d", "G+"]
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_18"]
+      ["GC_18", "GC_127"]
     ],
-    "lorentz_structures": ["FFS3"],
+    "lorentz_structures": ["FFS3", "FFS1"],
     "name": "V_84",
     "particles": ["c~", "s", "G+"]
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_19"]
+      ["GC_19", "GC_131"]
     ],
-    "lorentz_structures": ["FFS3"],
+    "lorentz_structures": ["FFS3", "FFS1"],
     "name": "V_85",
     "particles": ["t~", "s", "G+"]
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_13"]
+      ["GC_13", "GC_123"]
     ],
-    "lorentz_structures": ["FFS1"],
+    "lorentz_structures": ["FFS1", "FFS3"],
     "name": "V_86",
     "particles": ["u~", "b", "G+"]
   }, {
@@ -3439,25 +3879,25 @@
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_28"]
+      ["GC_28", "GC_124"]
     ],
-    "lorentz_structures": ["FFS3"],
+    "lorentz_structures": ["FFS3", "FFS1"],
     "name": "V_116",
     "particles": ["b~", "u", "G-"]
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_22"]
+      ["GC_22", "GC_126"]
     ],
-    "lorentz_structures": ["FFS1"],
+    "lorentz_structures": ["FFS1", "FFS3"],
     "name": "V_117",
     "particles": ["d~", "c", "G-"]
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_23"]
+      ["GC_23", "GC_128"]
     ],
-    "lorentz_structures": ["FFS1"],
+    "lorentz_structures": ["FFS1", "FFS3"],
     "name": "V_118",
     "particles": ["s~", "c", "G-"]
   }, {
@@ -3471,17 +3911,17 @@
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_25"]
+      ["GC_25", "GC_130"]
     ],
-    "lorentz_structures": ["FFS1"],
+    "lorentz_structures": ["FFS1", "FFS3"],
     "name": "V_120",
     "particles": ["d~", "t", "G-"]
   }, {
     "color_structures": ["UFO::{}::Identity(1,2)"],
     "couplings": [
-      ["GC_26"]
+      ["GC_26", "GC_132"]
     ],
-    "lorentz_structures": ["FFS1"],
+    "lorentz_structures": ["FFS1", "FFS3"],
     "name": "V_121",
     "particles": ["s~", "t", "G-"]
   }, {
@@ -3740,5 +4180,85 @@
     "lorentz_structures": ["FFV2"],
     "name": "V_153",
     "particles": ["vt~", "vt", "Z"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_109"]
+    ],
+    "lorentz_structures": ["FFS4"],
+    "name": "V_154",
+    "particles": ["u~", "u", "H"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_110"]
+    ],
+    "lorentz_structures": ["FFS2"],
+    "name": "V_155",
+    "particles": ["u~", "u", "G0"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_111"]
+    ],
+    "lorentz_structures": ["FFS4"],
+    "name": "V_156",
+    "particles": ["d~", "d", "H"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_112"]
+    ],
+    "lorentz_structures": ["FFS2"],
+    "name": "V_157",
+    "particles": ["d~", "d", "G0"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_113"]
+    ],
+    "lorentz_structures": ["FFS4"],
+    "name": "V_158",
+    "particles": ["s~", "s", "H"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_114"]
+    ],
+    "lorentz_structures": ["FFS2"],
+    "name": "V_159",
+    "particles": ["s~", "s", "G0"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_115", "GC_116"]
+    ],
+    "lorentz_structures": ["FFS1", "FFS3"],
+    "name": "V_160",
+    "particles": ["u~", "d", "G+"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_117", "GC_118"]
+    ],
+    "lorentz_structures": ["FFS1", "FFS3"],
+    "name": "V_161",
+    "particles": ["d~", "u", "G-"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_119", "GC_120"]
+    ],
+    "lorentz_structures": ["FFS1", "FFS3"],
+    "name": "V_162",
+    "particles": ["u~", "s", "G+"]
+  }, {
+    "color_structures": ["UFO::{}::Identity(1,2)"],
+    "couplings": [
+      ["GC_121", "GC_122"]
+    ],
+    "lorentz_structures": ["FFS1", "FFS3"],
+    "name": "V_163",
+    "particles": ["s~", "u", "G-"]
   }]
 }

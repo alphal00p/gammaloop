@@ -1342,9 +1342,9 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
         Some("feyngen".to_string()),
         true,
     )?;
-    cli.run_command("import model sm-full.json")?;
+    cli.run_command("import model sm-light_quarks_massless.json")?;
 
-    // Full particle contents
+    // Retain the legacy light-massless flavor content for the statistics checks.
     assert_eq!(evaluate_overall_factor(generate_graphs_and_count(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?.1.as_view()), Atom::num(-1)); //good
     assert_eq!(
         evaluate_overall_factor(
@@ -1813,17 +1813,50 @@ mod failing {
 }
 
 #[test]
+fn unrestricted_sm_light_quarks_preserve_two_loop_inventory() -> Result<()> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("unrestricted_sm_light_quarks_preserve_two_loop_inventory"),
+        Some("feyngen".to_string()),
+        true,
+    )?;
+    cli.run_command("import model sm-full.json")?;
+    cli.run_command("set global kv global.n_cores.feyngen=1")?;
+
+    // Independent connected Wick enumeration gives 599 graphs with weight
+    // 4513/24. Removing the 36 color-zero graphs leaves 563 with weight 2003/12.
+    // Keep this unrestricted-model check separate from the legacy grouping fixture.
+    for (grouping, expected_count, expected_weight) in [
+        ("no_grouping", 599, Atom::num((4513, 24))),
+        ("only_detect_zeroes", 563, Atom::num((2003, 12))),
+    ] {
+        let (count, weight) = generate_graphs_and_count(
+            &mut cli,
+            "amp",
+            &format!(
+                "{{}} > {{}} [{{2}}] --numerator-grouping {grouping} --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1"
+            ),
+            false,
+        )?;
+        assert_eq!(count, expected_count, "{grouping}");
+        assert_eq!(evaluate_overall_factor(weight.as_view()), expected_weight);
+    }
+    Ok(())
+}
+
+#[test]
 #[rustfmt::skip]
 fn test_vacuum_amplitude_generation_full_sm_two_loop() -> Result<()> {
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("test_vacuum_amplitude_generation_full_sm_two_loop"),Some("feyngen".to_string()),true)?;
 
-    // Choose the model to consider
-    cli.run_command("import model sm-full.json")?;
+    // Preserve the historical light-massless grouping fixture while retaining
+    // the other quark/lepton masses, Yukawas and non-diagonal CKM parameters.
+    cli.run_command("import model sm-light_quarks_massless.json")?;
 
     cli.run_command("set global kv global.n_cores.feyngen=1")?;
 
     // Including all graphs
-    // The full-model 513/477 graph inventory gives 1469/12 after
+    // The restricted 513/477 graph inventory gives 1469/12 after
     // closed Grassmann signs and directed self-loop symmetries.
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 --filter-zero-flow-edges false --filter-selfenergies false --filter-tadpoles false --filter-snails false",false)?,@"477 | 1469/12 = 1469/12");
 
@@ -1856,7 +1889,7 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_raw() -> Result<()> {
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("test_vacuum_amplitude_generation_full_sm_three_loop_raw"),Some("feyngen".to_string()),true)?;
 
     // Choose the model to consider
-    cli.run_command("import model sm-full.json")?;
+    cli.run_command("import model sm-light_quarks_massless.json")?;
 
     cli.run_command("set global kv global.n_cores.feyngen=1")?;
 
@@ -1873,7 +1906,7 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_filtered() -> Result<()> 
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("test_vacuum_amplitude_generation_full_sm_three_loop_filtered"),Some("feyngen".to_string()),true)?;
 
     // Choose the model to consider
-    cli.run_command("import model sm-full.json")?;
+    cli.run_command("import model sm-light_quarks_massless.json")?;
 
     cli.run_command("set global kv global.n_cores.feyngen=1")?;
 
@@ -1912,7 +1945,7 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_grouping() -> Result<()> 
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("test_vacuum_amplitude_generation_full_sm_three_loop_grouping"),Some("feyngen".to_string()),true)?;
 
     // Choose the model to consider
-    cli.run_command("import model sm-full.json")?;
+    cli.run_command("import model sm-light_quarks_massless.json")?;
 
     cli.run_command("set global kv global.n_cores.feyngen=1")?;
 
@@ -2020,7 +2053,7 @@ mod slow {
         let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),true)?;
 
         // Choose the model to consider
-        cli.run_command("import model sm-full.json")?;
+        cli.run_command("import model sm-light_quarks_massless.json")?;
 
         cli.run_command("set global kv global.n_cores.feyngen=1")?;
 

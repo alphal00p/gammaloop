@@ -14,15 +14,20 @@ use spenso::{
 };
 // use petgraph::Direction::Outgoing;
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView, Indeterminate},
+    evaluate::{FunctionMap, InliningPolicy},
     function,
     id::Replacement,
+    symbol,
+    transcendental::{coth, csch, sech, tanh},
 };
+use three_dimensional_reps::{MediumMode, ThermalDistributionCall, ThermalDistributionFactor};
 use typed_index_collections::TiVec;
 
 use crate::cff::generation::ShiftRewrite;
 use crate::{
-    integrands::process::param_builder::{ParamBuilderGraph, SplitPolarizations},
+    cff::{generation::ShiftRewrite, surface::HsurfaceID},
+    integrands::process::param_builder::{FnMapEntry, ParamBuilderGraph, SplitPolarizations},
     model::{Model, ParticleId, UFOSymbol, VertexRuleIdGammaLoopExt},
     momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     momentum::signature::{ExternalSignature, SignatureLike},
@@ -33,7 +38,8 @@ use crate::{
 };
 
 use super::{
-    Edge, Graph, HedgeData, LoopMomentumBasis, Vertex, get_cff_inverse_energy_product_impl,
+    Edge, Graph, HedgeData, LoopMomentumBasis, Vertex, edge::PossibleParticle,
+    get_cff_inverse_energy_product_impl,
 };
 
 pub trait FeynmanGraph {
@@ -81,13 +87,271 @@ pub trait FeynmanGraph {
 }
 
 impl Graph {
+    /// Thermal functions are needed only after a process selects a medium.
+    /// Replacing the mode also removes definitions from a previous generation.
+    pub(crate) fn set_medium_mode(&mut self, medium_mode: MediumMode) -> eyre::Result<()> {
+        if self.param_builder.medium_mode == medium_mode {
+            return Ok(());
+        }
+        let mut entries = self.param_builder.reps.iter().filter(|entry| {
+            !matches!(entry.lhs.as_view(), AtomView::Fun(f) if f.get_symbol() == GS.thermal_distribution)
+        }).cloned().collect_vec();
+        if medium_mode != MediumMode::Vacuum {
+            let thermal_sign = symbol!("thermal_sign");
+            let orientation_sign = symbol!("orientation_sign");
+            let thermal_edges = self
+                .iter_loop_edges()
+                .map(|(_, edge, _)| edge)
+                .collect_vec();
+            let max_order = if medium_mode.is_finite_temperature() {
+                // A common-pole cycle of n edges needs order n - 1. This graph-wide
+                // bound also covers chains formed by UV contraction. Keep the
+                // closed-form first two derivatives available for direct calls.
+                thermal_edges.len().saturating_sub(1).max(2)
+            } else {
+                // Positive zero-temperature orders belong to Fermi-surface
+                // extraction, including the vanishing derivatives of bosons and
+                // of particles without a chemical potential.
+                0
+            };
+            let temperature_flag = Atom::num(i64::from(medium_mode.is_finite_temperature()));
+            for edge in thermal_edges {
+                let energy = Indeterminate::try_from(ose_atom_from_index(edge)).unwrap();
+                let mut previous_body: Option<Atom> = None;
+                for derivative_order in 0..=max_order {
+                    let body = if derivative_order > 2 {
+                        // Reuse the preceding order rather than recomputing the
+                        // whole derivative chain for every registered order.
+                        previous_body
+                            .as_ref()
+                            .expect("lower derivative orders were generated")
+                            .derivative(&energy)
+                            .expand()
+                    } else {
+                        self.explicit_thermal_distribution_atom(
+                            edge,
+                            derivative_order,
+                            Atom::var(thermal_sign),
+                            Atom::var(orientation_sign),
+                            medium_mode,
+                        )?
+                    };
+                    // The contour offset is a tag, so each body folds its vacuum
+                    // weight symbolically and the s = -1 body is the bare occupation.
+                    // As a runtime argument, evaluator optimization may add the
+                    // constant to an exponentially small occupation before s.
+                    // Keep all offsets available to direct distribution calls,
+                    // including positive orders not emitted by CFF recursion.
+                    for contour in [-1, 0, 1] {
+                        let lhs = ThermalDistributionCall::atom(
+                            edge.0 as i64,
+                            derivative_order as i64,
+                            temperature_flag.clone(),
+                            contour,
+                            orientation_sign,
+                        );
+                        let AtomView::Fun(call) = lhs.as_view() else {
+                            unreachable!("thermal distribution builder returns a function");
+                        };
+                        // Function-map tags are the call prefix before its one
+                        // runtime argument, the physical orientation.
+                        let tags = call
+                            .iter()
+                            .take(call.get_nargs() - 1)
+                            .map(|arg| arg.to_owned())
+                            .collect();
+                        entries.push(FnMapEntry {
+                            inlining: InliningPolicy::Always,
+                            is_alias: false,
+                            lhs,
+                            rhs: body.replace(thermal_sign).with(Atom::num(contour)),
+                            args: vec![orientation_sign.into()],
+                            tags,
+                        });
+                    }
+                    previous_body = Some(body);
+                }
+            }
+        }
+        let mut function_map = FunctionMap::new();
+        for entry in &entries {
+            entry
+                .register(&mut function_map)
+                .map_err(|error| eyre::eyre!(error))?;
+        }
+        self.param_builder.fn_map = function_map;
+        self.param_builder.reps = entries;
+        self.param_builder.medium_mode = medium_mode;
+        Ok(())
+    }
+
+    /// Check the thermal domain after refreshing model parameter slots, including DOT mass overrides.
+    /// Vacuum graphs do not consume temperature or chemical potentials.
+    pub(crate) fn validate_medium_parameters(
+        &self,
+        model: &Model,
+        inverse_temperature: f64,
+    ) -> eyre::Result<()> {
+        let parameters = &self.param_builder;
+        let mode = parameters.medium_mode;
+        if mode == MediumMode::Vacuum {
+            return Ok(());
+        }
+        if mode.is_finite_temperature()
+            && (!inverse_temperature.is_finite() || inverse_temperature <= 0.0)
+        {
+            return Err(eyre::eyre!(
+                "Thermal graph '{}' requires finite positive runtime.general.inverse_temperature; got {inverse_temperature}",
+                self.name
+            ));
+        }
+        for (_, edge_id, edge) in self.iter_loop_edges() {
+            if edge.data.is_dummy {
+                continue;
+            }
+            let chemical_potential = edge.data.chemical_potential_atom();
+            let mu_value = |potential: Option<&Atom>| -> eyre::Result<Complex<F<f64>>> {
+                let mu = match potential {
+                    Some(atom) => parameters
+                        .pairs
+                        .model_parameters
+                        .params
+                        .iter()
+                        .zip(parameters.model_values())
+                        .find_map(|(parameter, value)| (parameter == atom).then_some(*value))
+                        .ok_or_else(|| {
+                            eyre::eyre!(
+                                "Thermal graph '{}' has no value for chemical potential {atom} on edge {edge_id}",
+                                self.name
+                            )
+                        })?,
+                    None => Complex::new_re(F(0.0)),
+                };
+                if !mu.im.is_zero() || !mu.re.0.is_finite() {
+                    return Err(eyre::eyre!(
+                        "Thermal graph '{}' requires a finite real chemical potential on edge {edge_id}; got {mu}",
+                        self.name
+                    ));
+                }
+                Ok(mu)
+            };
+            let mu = mu_value(chemical_potential.as_ref())?;
+            // Reversing an edge conjugates its label and flips its orientation.
+            // The occupation's E - sigma * mu must describe the same state.
+            if let Some(particle) = edge.data.particle() {
+                if particle.is_self_antiparticle() {
+                    if !mu.re.is_zero() {
+                        return Err(eyre::eyre!(
+                            "Thermal graph '{}' requires zero chemical potential for self-conjugate particle '{}' on edge {edge_id}; got {mu}",
+                            self.name,
+                            particle.name
+                        ));
+                    }
+                } else {
+                    let antiparticle =
+                        PossibleParticle::from(model.try_get_particle(&particle.antiname)?);
+                    let anti_mu = mu_value(antiparticle.chemical_potential_atom().as_ref())?;
+                    if anti_mu.re != -mu.re {
+                        return Err(eyre::eyre!(
+                            "Thermal graph '{}' requires opposite chemical potentials for particle '{}' and antiparticle '{}' on edge {edge_id}; got {mu} and {anti_mu}",
+                            self.name,
+                            particle.name,
+                            particle.antiname
+                        ));
+                    }
+                }
+            }
+            // Finite-temperature occupations and zero-temperature fermion steps,
+            // including any Fermi surface they localize, need a real shell energy.
+            let needs_real_mass = mode.is_finite_temperature() || chemical_potential.is_some();
+            if edge.data.is_fermion() && !needs_real_mass {
+                continue;
+            }
+            let mass = match edge.data.mass_value::<f64>(model, parameters) {
+                Some(mass) => mass,
+                None if edge.data.mass_atom().is_zero() => Complex::new_re(F(0.0)),
+                None => {
+                    return Err(eyre::eyre!(
+                        "Thermal graph '{}' has no value for mass '{}' on edge {edge_id}",
+                        self.name,
+                        edge.data.mass_atom()
+                    ));
+                }
+            };
+            if edge.data.is_fermion() {
+                if !mass.im.is_zero() || !mass.re.0.is_finite() {
+                    return Err(eyre::eyre!(
+                        "Thermal graph '{}' requires a finite real fermion mass for thermal occupations on edge {edge_id}; got {mass}",
+                        self.name
+                    ));
+                }
+                continue;
+            }
+            if !mass.im.is_zero() || !mass.re.0.is_finite() || mass.re.0 < 0.0 {
+                return Err(eyre::eyre!(
+                    "Thermal graph '{}' requires a finite nonnegative real boson mass on edge {edge_id}; got {mass}",
+                    self.name
+                ));
+            }
+            // Massless bosons at zero chemical potential retain their infrared endpoint.
+            // Massive saturation would require condensate support, which is not implemented.
+            if !(mass.re.is_zero() && mu.re.is_zero()) && mu.re.0.abs() >= mass.re.0 {
+                return Err(eyre::eyre!(
+                    "Thermal graph '{}' requires |mu| < m for bosons, except m = mu = 0; edge {edge_id} has mu = {} and m = {} (boson condensation is unsupported)",
+                    self.name,
+                    mu.re,
+                    mass.re
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Reject mixed-sign denominator surfaces that vanish for every loop momentum,
+    /// since they divide by zero at every sample. Generation replaces coinciding poles
+    /// by derivatives only for edges sharing a mass parameter and momentum routing, so
+    /// distinct mass parameters with equal values up to sign, or exceptional external
+    /// momenta, leave such a surface behind. Check after refreshing model parameter slots.
+    pub(crate) fn validate_denominator_hsurfaces(
+        &self,
+        model: &Model,
+        externals: &ExternalFourMomenta<F<f64>>,
+        denominators: &[HsurfaceID],
+    ) -> eyre::Result<()> {
+        let masses = self.new_edgevec(|edge, _, _| {
+            edge.mass_value::<f64>(model, &self.param_builder)
+                .or_else(|| edge.mass_atom().is_zero().then(|| Complex::new_re(F(0.0))))
+        });
+        for &id in denominators {
+            let surface = &self.surface_cache.hsurface_cache[id];
+            if !surface.vanishes_identically(&self.loop_momentum_basis, &masses, externals)? {
+                continue;
+            }
+            let edges = surface
+                .positive_energies
+                .iter()
+                .chain(&surface.negative_energies)
+                .map(|&edge| match masses[edge] {
+                    Some(mass) => format!("{edge}: {} = {mass}", self[edge].mass_atom()),
+                    None => format!("{edge}: {}", self[edge].mass_atom()),
+                })
+                .join(", ");
+            return Err(eyre::eyre!(
+                "Graph '{}' divides by the surface {} ({edges}), which vanishes for every loop momentum at the current masses and external momenta: its on-shell energies cancel between edges of equal mass and spatial momentum up to sign, and its external energy shift is zero. Generation replaces such coinciding poles by derivatives only for edges sharing a mass parameter and momentum routing; give these edges distinct squared masses or external momenta, or regenerate with a shared mass parameter.",
+                self.name,
+                surface.to_atom(&[])
+            ));
+        }
+        Ok(())
+    }
+
     /// LU uses real on-shell energies and stable-particle cuts; width metadata alone
     /// does not turn a real mass into a complex-mass-scheme propagator.
     /// Used UFO denominators must agree with the standard pole reconstructed from the mass.
     pub(crate) fn validate_real_masses(&self, model: &Model) -> eyre::Result<()> {
         // DOT mass expressions use evaluator slots, which may predate a model update.
         let mut parameters = self.param_builder.clone();
-        parameters.update_model_values(model);
+        parameters.update_model_values(model)?;
         for (pair, edge_id, edge) in self.iter_edges() {
             if let Some(mass) = edge.data.mass_value::<f64>(model, &parameters)
                 && !mass.im.is_zero()
@@ -174,6 +438,23 @@ where
         self.1.explicit_ose_atom(edge, model)
     }
 
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        orientation_sign: Atom,
+        limit: MediumMode,
+    ) -> eyre::Result<Atom> {
+        self.1.explicit_thermal_distribution_atom(
+            edge,
+            derivative_order,
+            thermal_sign,
+            orientation_sign,
+            limit,
+        )
+    }
+
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
         lmb.loop_edges
             .iter()
@@ -223,6 +504,96 @@ where
                 * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])));
 
         (dot + mass2).sqrt()
+    }
+
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        orientation_sign: Atom,
+        limit: MediumMode,
+    ) -> eyre::Result<Atom> {
+        if limit == MediumMode::Vacuum {
+            return Ok(ThermalDistributionFactor::vacuum_atom(
+                derivative_order,
+                thermal_sign,
+            ));
+        }
+        let chemical_potential = self[edge].chemical_potential_atom();
+        let shifted_ose = match &chemical_potential {
+            Some(mu) => ose_atom_from_index(edge) - &orientation_sign * mu,
+            None => ose_atom_from_index(edge),
+        };
+        match limit {
+            MediumMode::ThermodynamicEquilibrium => {
+                let beta = Atom::var(GS.inverse_temperature);
+                let arg = beta.clone() * shifted_ose / Atom::num(2);
+                match (self[edge].is_fermion(), derivative_order) {
+                    (is_fermion, 0) => {
+                        // Order zero is (1 + s)/2 - n_F or (1 + s)/2 + n_B. Factoring
+                        // exp(-(a + |a|)) out of n_F = 1/(exp(2a) + 1) and
+                        // n_B = 1/(exp(2a) - 1) leaves nonpositive exponents and a
+                        // remainder free of cancellation, so exponentially small
+                        // occupations are not lost in s + tanh(a) once tanh(a) rounds
+                        // to one. coth keeps n_B accurate in the soft limit.
+                        let abs_arg = arg.abs();
+                        let tail = (-(&arg + &abs_arg)).exp();
+                        let occupation = if is_fermion {
+                            -tail / (Atom::one() + (Atom::num(-2) * &abs_arg).exp())
+                        } else {
+                            tail * (&arg / &abs_arg + coth().call_args([&arg])) / Atom::num(2)
+                        };
+                        Ok((thermal_sign + Atom::one()) / Atom::num(2) + occupation)
+                    }
+                    (true, 1) => Ok(beta * sech().call_args([arg]).pow(2) / Atom::num(4)),
+                    (false, 1) => Ok(-beta * csch().call_args([arg]).pow(2) / Atom::num(4)),
+                    (true, 2) => Ok(-beta.pow(2)
+                        * sech().call_args([&arg]).pow(2)
+                        * tanh().call_args([arg])
+                        / Atom::num(4)),
+                    (false, 2) => Ok(beta.pow(2)
+                        * csch().call_args([&arg]).pow(2)
+                        * coth().call_args([arg])
+                        / Atom::num(4)),
+                    (_, _) => {
+                        let energy = Indeterminate::try_from(ose_atom_from_index(edge)).unwrap();
+                        let mut body = self.explicit_thermal_distribution_atom(
+                            edge,
+                            2,
+                            thermal_sign,
+                            orientation_sign,
+                            limit,
+                        )?;
+                        for _ in 2..derivative_order {
+                            body = body.derivative(&energy).expand();
+                        }
+                        Ok(body)
+                    }
+                }
+            }
+            MediumMode::ZeroTemperatureEquilibrium => {
+                match (chemical_potential, derivative_order) {
+                    // The contour offset may be zero for a symmetric terminal;
+                    // its physical orientation still fixes E - sigma*mu.
+                    (Some(_), 0) => Ok(
+                        (thermal_sign + Atom::one()) / Atom::num(2) - GS.heaviside(-shifted_ose)
+                    ),
+                    (None, _) => Ok(ThermalDistributionFactor::vacuum_atom(
+                        derivative_order,
+                        thermal_sign,
+                    )),
+                    // Zero-temperature derivatives are distributions, consumed by
+                    // production Fermi-surface localization rather than a pointwise map.
+                    _ => Err(eyre::eyre!(
+                        "Thermal distribution for edge {edge}, derivative order {derivative_order}, \
+                         and limit {limit:?} has no pointwise body; zero-temperature derivatives \
+                         require Fermi-surface localization"
+                    )),
+                }
+            }
+            MediumMode::Vacuum => unreachable!("vacuum handled before medium parameters"),
+        }
     }
 
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
@@ -305,6 +676,23 @@ impl ParamBuilderGraph for Graph {
 
     fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom {
         self.underlying.explicit_ose_atom(edge, model)
+    }
+
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        orientation_sign: Atom,
+        limit: MediumMode,
+    ) -> eyre::Result<Atom> {
+        self.underlying.explicit_thermal_distribution_atom(
+            edge,
+            derivative_order,
+            thermal_sign,
+            orientation_sign,
+            limit,
+        )
     }
 
     #[allow(unused_variables)]
@@ -796,8 +1184,383 @@ mod tests {
     use super::*;
     use crate::{
         graph::parse::from_dot::IntoFinalizedRuntimeGraph, initialisation::test_initialise,
-        utils::load_generic_model,
+        utils::{ArbPrec, load_generic_model},
     };
+    use symbolica::{
+        evaluate::{CompileOptions, ExportSettings, FunctionMap, OptimizationSettings},
+        symbol,
+    };
+
+    #[test]
+    fn thermal_parameter_validation_tracks_modes_and_runtime_values() -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let mut graph: Graph = r#"
+            digraph thermal_domain {
+                node [num=1]; edge [num=1];
+                A -> A [id=0 particle="G+" mass=2];
+                A -> A [id=1 particle="d" mass=0];
+                A -> A [id=2 particle="a"];
+            }
+        "#
+        .into_graph(&model)?;
+        // Dense fermions and massless zero-mu bosons are both supported.
+        model.get_parameter_mut("mud")?.value = Some(Complex::new_re(F(3.0)));
+        model.get_parameter_mut("minus_mud")?.value = Some(Complex::new_re(F(-3.0)));
+        for mode in [
+            MediumMode::Vacuum,
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            graph.set_medium_mode(mode)?;
+            graph.param_builder.update_model_values(&model)?;
+            for beta in [1.0, 0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let result = graph.validate_medium_parameters(&model, beta);
+                assert_eq!(result.is_ok(), !mode.is_finite_temperature() || beta == 1.0);
+                if let Err(error) = result {
+                    assert!(error.to_string().contains("inverse_temperature"));
+                }
+            }
+            for mu in [0.0, 1.0, -1.0, 2.0, -2.0, 3.0, f64::NAN, f64::INFINITY] {
+                model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(mu)));
+                model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-mu)));
+                graph.param_builder.update_model_values(&model)?;
+                let result = graph.validate_medium_parameters(&model, 1.0);
+                assert_eq!(result.is_ok(), mode == MediumMode::Vacuum || mu.abs() < 2.0);
+                if let Err(error) = result {
+                    assert!(error.to_string().contains("thermal_domain"));
+                }
+            }
+            model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(0.0)));
+            model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(0.0)));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_boson_validation_uses_mass_overrides_and_rejects_complex_parameters()
+    -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let mass_parameter = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
+        let mut graph: Graph = format!(
+            r#"digraph thermal_mass {{
+                node [num=1]; edge [num=1];
+                A -> A [particle="G+" mass="{mass_parameter}+1"];
+            }}"#
+        )
+        .into_graph(&model)?;
+        graph.set_medium_mode(MediumMode::ThermodynamicEquilibrium)?;
+        for (mass, mu, valid) in [
+            (Complex::new_re(F(2.0)), Complex::new_re(F(2.0)), true),
+            (Complex::new_re(F(1.0)), Complex::new_re(F(2.0)), false),
+            (Complex::new_re(F(-1.0)), Complex::new_re(F(0.0)), true),
+            (Complex::new_re(F(-1.0)), Complex::new_re(F(0.1)), false),
+            (Complex::new_re(F(-2.0)), Complex::new_re(F(0.0)), false),
+            (Complex::new(F(2.0), F(1.0)), Complex::new_re(F(0.0)), false),
+            (Complex::new_re(F(2.0)), Complex::new(F(0.0), F(1.0)), false),
+        ] {
+            model.get_parameter_mut("MT")?.value = Some(mass);
+            model.get_parameter_mut("muG")?.value = Some(mu);
+            model.get_parameter_mut("minus_muG")?.value = Some(-mu);
+            graph.param_builder.update_model_values(&model)?;
+            assert_eq!(
+                graph.validate_medium_parameters(&model, 1.0).is_ok(),
+                valid,
+                "mass override MT+1 with MT={mass}, mu={mu}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_chemical_potentials_validate_conjugation_at_runtime() -> eyre::Result<()> {
+        test_initialise()?;
+        let serialized = serde_json::to_value(load_generic_model("sm").to_serializable())?;
+        for anti_parameter in [Some("muB"), Some("muQ"), None, Some("ZERO")] {
+            let mut input = serialized.clone();
+            for particle in input["particles"].as_array_mut().unwrap() {
+                match particle["name"].as_str().unwrap() {
+                    "G+" => particle["chemical_potential"] = serde_json::json!("muQ"),
+                    "G-" => particle["chemical_potential"] = serde_json::json!(anti_parameter),
+                    _ => {}
+                }
+            }
+            // Import remains independent of the medium. Distinct external parameters
+            // are valid when their current values are opposite, without a symbolic tie.
+            let mut model = Model::from_str(serde_json::to_string(&input)?, "json")?;
+            let mut graphs = ["G+", "G-"]
+                .map(|particle| {
+                    format!(
+                        r#"digraph conjugate_mu {{
+                            node [num=1]; edge [num=1];
+                            A -> A [particle="{particle}" mass=4];
+                        }}"#
+                    )
+                    .into_graph(&model)
+                })
+                .into_iter()
+                .collect::<eyre::Result<Vec<Graph>>>()?;
+            for (mu, other) in [
+                (0.0, 0.0),
+                (1.0, -1.0),
+                (-1.0, 1.0),
+                (1.0, 1.0),
+                (1.0, 0.0),
+                (0.0, 1.0),
+            ] {
+                let mut card = model.default_param_card();
+                card.insert("muQ".into(), Complex::new_re(F(mu)));
+                card.insert("muB".into(), Complex::new_re(F(other)));
+                model.apply_param_card(&card)?;
+                let anti_mu = match anti_parameter {
+                    Some("muB") => other,
+                    Some("muQ") => mu,
+                    _ => 0.0,
+                };
+                for graph in &mut graphs {
+                    for mode in [
+                        MediumMode::Vacuum,
+                        MediumMode::ThermodynamicEquilibrium,
+                        MediumMode::ZeroTemperatureEquilibrium,
+                    ] {
+                        graph.set_medium_mode(mode)?;
+                        graph.param_builder.update_model_values(&model)?;
+                        let result = graph.validate_medium_parameters(&model, 1.0);
+                        assert_eq!(
+                            result.is_ok(),
+                            mode == MediumMode::Vacuum || anti_mu == -mu,
+                            "{mode:?}, mu={mu}, anti_mu={anti_mu}, anti_parameter={anti_parameter:?}"
+                        );
+                        if let Err(error) = result {
+                            assert!(
+                                error.to_string().contains("opposite chemical potentials"),
+                                "{error}"
+                            );
+                        }
+                    }
+                }
+            }
+            if anti_parameter == Some("muB") {
+                // The unused antiparticle label must still have a finite real value.
+                model.get_parameter_mut("muB")?.value = Some(Complex::new(F(0.0), F(0.5)));
+                graphs[0].param_builder.update_model_values(&model)?;
+                let error = graphs[0]
+                    .validate_medium_parameters(&model, 1.0)
+                    .unwrap_err();
+                assert!(
+                    error.to_string().contains("finite real chemical potential"),
+                    "{error}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_self_conjugate_particles_require_zero_chemical_potential() -> eyre::Result<()> {
+        test_initialise()?;
+        let serialized = serde_json::to_value(load_generic_model("sm").to_serializable())?;
+        for parameter in [None, Some("ZERO"), Some("muQ")] {
+            let mut input = serialized.clone();
+            let particle = input["particles"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|particle| particle["name"] == "H")
+                .unwrap();
+            particle["chemical_potential"] = serde_json::json!(parameter);
+            let mut model = Model::from_str(serde_json::to_string(&input)?, "json")?;
+            let mut graph: Graph = r#"digraph self_conjugate_mu {
+                node [num=1]; edge [num=1];
+                A -> A [particle="H" mass=4];
+            }"#
+            .into_graph(&model)?;
+            for mu in [0.0, 1.0, -1.0] {
+                let mut card = model.default_param_card();
+                card.insert("muQ".into(), Complex::new_re(F(mu)));
+                model.apply_param_card(&card)?;
+                for mode in [
+                    MediumMode::Vacuum,
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    graph.set_medium_mode(mode)?;
+                    graph.param_builder.update_model_values(&model)?;
+                    let result = graph.validate_medium_parameters(&model, 1.0);
+                    assert_eq!(
+                        result.is_ok(),
+                        mode == MediumMode::Vacuum || parameter != Some("muQ") || mu == 0.0,
+                        "{mode:?}, mu={mu}, parameter={parameter:?}"
+                    );
+                    if let Err(error) = result {
+                        assert!(
+                            error
+                                .to_string()
+                                .contains("zero chemical potential for self-conjugate"),
+                            "{error}"
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_denominators_reject_poles_that_coincide_at_runtime() -> eyre::Result<()> {
+        use crate::cff::surface::HybridSurfaceID;
+        use crate::momentum::FourMomentum;
+
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let [top, w] = ["MT", "MW"]
+            .map(|name| Atom::var(model.get_parameter(name).name.0).to_canonical_string());
+        let thermal_denominators = |graph: &mut Graph| -> eyre::Result<Vec<HsurfaceID>> {
+            let mut options = graph.denominator_only_cff_3d_expression_options();
+            options.medium_mode = MediumMode::ThermodynamicEquilibrium;
+            let generated =
+                graph.generate_3d_expression_for_integrand(&[], &None, &options, None)?;
+            let denominators = generated
+                .expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| orientation.iter_denominator_nodes())
+                .filter_map(|node| match node.data {
+                    HybridSurfaceID::Hsurface(id) => Some(id),
+                    _ => None,
+                })
+                .sorted()
+                .dedup()
+                .collect_vec();
+            assert!(!denominators.is_empty());
+            Ok(denominators)
+        };
+        let set_masses = |model: &mut Model, graph: &mut Graph, masses: [f64; 2]| {
+            for (name, mass) in ["MT", "MW"].into_iter().zip(masses) {
+                model.get_parameter_mut(name)?.value = Some(Complex::new_re(F(mass)));
+            }
+            graph.param_builder.update_model_values(model)
+        };
+        let degenerate = |result: eyre::Result<()>| {
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("vanishes for every loop momentum")
+        };
+
+        // Distinct mass parameters keep the cycle as a divided difference, including
+        // equal and opposite fermion masses with identical on-shell energies.
+        let no_externals = ExternalFourMomenta::default();
+        for (particle, coincident_mass) in [("G+", 2.0), ("t", -2.0)] {
+            let mut cycle: Graph = format!(
+                r#"digraph thermal_cycle {{
+                    node [num=1]; edge [num=1];
+                    A -> B [particle="{particle}" mass="{top}"];
+                    B -> A [particle="{particle}" mass="{w}"];
+                }}"#
+            )
+            .into_graph(&model)?;
+            cycle.set_medium_mode(MediumMode::ThermodynamicEquilibrium)?;
+            let denominators = thermal_denominators(&mut cycle)?;
+            set_masses(&mut model, &mut cycle, [2.0, 3.0])?;
+            cycle.validate_denominator_hsurfaces(&model, &no_externals, &denominators)?;
+            set_masses(&mut model, &mut cycle, [2.0, coincident_mass])?;
+            cycle.validate_medium_parameters(&model, 1.0)?;
+            assert!(degenerate(cycle.validate_denominator_hsurfaces(
+                &model,
+                &no_externals,
+                &denominators
+            )));
+        }
+
+        // A shared mass parameter on k and k + p degenerates only at p = 0.
+        let mut bubble: Graph = format!(
+            r#"digraph thermal_bubble {{
+                node [num=1]; edge [num=1];
+                incoming [style=invis]; outgoing [style=invis];
+                incoming -> A [particle="H"];
+                B -> outgoing [particle="H"];
+                A -> B [particle="G+" mass="{top}"];
+                B -> A [particle="G+" mass="{top}"];
+            }}"#
+        )
+        .into_graph(&model)?;
+        let denominators = thermal_denominators(&mut bubble)?;
+        set_masses(&mut model, &mut bubble, [2.0, 3.0])?;
+        let externals = |energy: f64, pz: f64| -> ExternalFourMomenta<F<f64>> {
+            let p = FourMomentum::from_args(F(energy), F(0.0), F(0.0), F(pz));
+            [p, p].into_iter().collect()
+        };
+        for moving in [externals(0.5, 0.0), externals(0.0, 0.5)] {
+            bubble.validate_denominator_hsurfaces(&model, &moving, &denominators)?;
+        }
+        assert!(degenerate(bubble.validate_denominator_hsurfaces(
+            &model,
+            &externals(0.0, 0.0),
+            &denominators
+        )));
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_fermion_distributions_require_real_masses() -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let mass_parameter = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
+        let mut graph: Graph = format!(
+            r#"digraph thermal_fermion {{
+                node [num=1]; edge [num=1];
+                A -> A [particle="d" mass="{mass_parameter}"];
+            }}"#
+        )
+        .into_graph(&model)?;
+        let named_mu = graph[EdgeIndex(0)].particle().unwrap().chemical_potential;
+        for (chemical_potential, has_mu) in [
+            (None, false),
+            (Some(crate::model::ParameterName(UFOSymbol::zero())), false),
+            (named_mu, true),
+        ] {
+            let crate::graph::edge::PossibleParticle::MassOverriddenParticle { particle, .. } =
+                &mut graph.underlying[EdgeIndex(0)].particle
+            else {
+                unreachable!("the fixture has a DOT mass override")
+            };
+            std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
+            for (mass, valid) in [
+                (Complex::new_re(F(-2.0)), true),
+                (Complex::new_re(F(0.0)), true),
+                (Complex::new_re(F(2.0)), true),
+                (Complex::new(F(2.0), F(0.5)), false),
+                (Complex::new_re(F(f64::NAN)), false),
+                (Complex::new_re(F(f64::INFINITY)), false),
+            ] {
+                model.get_parameter_mut("MT")?.value = Some(mass);
+                for mode in [
+                    MediumMode::Vacuum,
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    graph.set_medium_mode(mode)?;
+                    graph.param_builder.update_model_values(&model)?;
+                    let result = graph.validate_medium_parameters(&model, 1.0);
+                    // Vacuum has no thermal occupations; absent and literal-zero
+                    // potentials have no zero-temperature occupation step.
+                    assert_eq!(
+                        result.is_ok(),
+                        valid
+                            || mode == MediumMode::Vacuum
+                            || (mode == MediumMode::ZeroTemperatureEquilibrium && !has_mu),
+                        "{mode:?}, MT={mass}, chemical_potential={chemical_potential:?}"
+                    );
+                    if let Err(error) = result {
+                        assert!(error.to_string().contains("real fermion mass"), "{error}");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn cross_section_real_masses_accept_zero_real_and_width_metadata() -> eyre::Result<()> {
@@ -991,5 +1754,482 @@ mod tests {
             graph.validate_real_masses(&model)?;
         }
         Ok(())
+    }
+
+    #[test]
+    fn zero_temperature_treats_literal_zero_chemical_potential_as_absent() {
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph thermal {
+            node [num=1]; edge [num=1 particle="d"];
+            A -> B; B -> A;
+        })
+        .unwrap();
+        let edge = EdgeIndex(0);
+        let mut particle = graph[edge].particle().unwrap();
+        for (chemical_potential, has_mu) in [
+            (None, false),
+            (Some(crate::model::ParameterName(UFOSymbol::zero())), false),
+            (particle.chemical_potential, true),
+        ] {
+            std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
+            graph.underlying[edge].particle = particle.clone().into();
+            assert_eq!(graph[edge].chemical_potential_atom().is_some(), has_mu);
+            for thermal_sign in [-1, 0, 1] {
+                for order in 0..=3 {
+                    let vacuum = graph
+                        .explicit_thermal_distribution_atom(
+                            edge,
+                            order,
+                            Atom::num(thermal_sign),
+                            GS.sign(edge),
+                            MediumMode::Vacuum,
+                        )
+                        .unwrap();
+                    assert_eq!(
+                        vacuum,
+                        if order == 0 {
+                            Atom::num(1 + thermal_sign) / Atom::num(2)
+                        } else {
+                            Atom::Zero
+                        }
+                    );
+                    let zero_temperature = graph.explicit_thermal_distribution_atom(
+                        edge,
+                        order,
+                        Atom::num(thermal_sign),
+                        GS.sign(edge),
+                        MediumMode::ZeroTemperatureEquilibrium,
+                    );
+                    if !has_mu {
+                        assert_eq!(zero_temperature.unwrap(), vacuum);
+                    } else {
+                        assert_eq!(zero_temperature.is_ok(), order == 0);
+                        if order == 0 {
+                            assert!(zero_temperature.unwrap().contains_symbol(GS.heaviside));
+                        } else {
+                            let error = zero_temperature.unwrap_err().to_string();
+                            assert!(error.contains(&format!("edge {edge}")));
+                            assert!(error.contains(&format!("derivative order {order}")));
+                            assert!(error.contains("ZeroTemperatureEquilibrium"));
+                            assert!(error.contains("has no pointwise body"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn symmetric_thermal_distributions_keep_the_chemical_potential_orientation() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph symmetric_thermal {
+            node [num=1]
+            edge [num=1]
+            A -> A [particle="d"]
+            A -> A [particle="G+"]
+        })
+        .unwrap();
+        for edge in graph.iter_edge_ids() {
+            let mu = graph[edge].chemical_potential_atom().unwrap();
+            assert!(!mu.is_zero());
+            for orientation in [-1, 1] {
+                let energy = Atom::num(orientation) * &mu + symbol!("shifted_thermal_energy");
+                for limit in [
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    let bodies = [-1, 0, 1].map(|contour| {
+                        graph
+                            .explicit_thermal_distribution_atom(
+                                edge,
+                                0,
+                                Atom::num(contour),
+                                Atom::num(orientation),
+                                limit,
+                            )
+                            .unwrap()
+                    });
+                    assert!(
+                        ((&bodies[0] + &bodies[2]) / Atom::num(2) - &bodies[1])
+                            .expand()
+                            .is_zero()
+                    );
+                    // With E = sigma*mu + x, the body depends only on x = E - sigma*mu.
+                    let shifted = bodies[1]
+                        .replace(ose_atom_from_index(edge))
+                        .with(energy.clone());
+                    assert!(!shifted.contains(&mu), "{limit:?}: {shifted}");
+                    for order in 1..=3 {
+                        let derivatives = [-1, 0, 1].map(|contour| {
+                            graph
+                                .explicit_thermal_distribution_atom(
+                                    edge,
+                                    order,
+                                    Atom::num(contour),
+                                    Atom::num(orientation),
+                                    limit,
+                                )
+                                .map_err(|error| error.to_string())
+                        });
+                        assert_eq!(derivatives[0], derivatives[1]);
+                        assert_eq!(derivatives[1], derivatives[2]);
+                        assert_eq!(derivatives[1].is_ok(), limit.is_finite_temperature());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_distribution_bodies_are_energy_derivatives() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph thermal {
+            node [num=1]
+            edge [num=1]
+            A -> B [particle="d"]
+            B -> A [particle="d"]
+            A -> B [particle="g"]
+        })
+        .unwrap();
+        let energy = symbol!("thermal_derivative_energy");
+        let thermal_sign = symbol!("thermal_derivative_sign").to_atom();
+        for fermion in [true, false] {
+            let edge = graph
+                .iter_edge_ids()
+                .find(|&edge| graph[edge].is_fermion() == fermion)
+                .unwrap();
+            let mut bodies = [0, 1, 2, 3, 4, 5, 6].map(|order| {
+                graph
+                    .explicit_thermal_distribution_atom(
+                        edge,
+                        order,
+                        thermal_sign.clone(),
+                        GS.sign(edge),
+                        MediumMode::ThermodynamicEquilibrium,
+                    )
+                    .unwrap()
+                    .replace(ose_atom_from_index(edge))
+                    .with(energy)
+            });
+            // Order zero selects its decaying exponential through |E - sigma*mu|, which
+            // has no symbolic derivative. Start from its hyperbolic form instead;
+            // native_thermal_distributions checks that the two agree numerically.
+            let shifted_energy = match graph[edge].chemical_potential_atom() {
+                Some(mu) => Atom::var(energy) - GS.sign(edge) * mu,
+                None => Atom::var(energy),
+            };
+            let argument = Atom::var(GS.inverse_temperature) * shifted_energy / Atom::num(2);
+            let hyperbolic = if fermion { tanh() } else { coth() };
+            bodies[0] = (&thermal_sign + hyperbolic.call_args([argument])) / Atom::num(2);
+            // Temperature, chemical potential, and orientation stay symbolic and fixed.
+            for (order, pair) in bodies.windows(2).enumerate() {
+                assert!(
+                    (pair[0].derivative(energy) - &pair[1]).expand().is_zero(),
+                    "energy derivative of thermal distribution order {order} on edge {edge}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn native_thermal_distributions() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph thermal {
+            node [num=1]
+            edge [num=1]
+            A -> B [particle="d"]
+            B -> A [particle="d"]
+            A -> B [particle="g"]
+        })
+        .unwrap();
+        let directory =
+            std::env::temp_dir().join(format!("gammaloop-native-thermal-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let energy = symbol!("thermal_test_energy").to_atom();
+        let mu = symbol!("thermal_test_mu").to_atom();
+        let orientation = symbol!("thermal_test_orientation").to_atom();
+        let thermal_sign = symbol!("thermal_test_sign").to_atom();
+        for fermion in [true, false] {
+            let edge = graph
+                .iter_edge_ids()
+                .find(|&edge| graph[edge].is_fermion() == fermion)
+                .unwrap();
+            let chemical_potential = graph[edge].chemical_potential_atom();
+            let has_mu = chemical_potential.is_some();
+            assert_eq!(has_mu, fermion);
+            for order in 0..=4 {
+                let mut expression = graph
+                    .explicit_thermal_distribution_atom(
+                        edge,
+                        order,
+                        thermal_sign.clone(),
+                        orientation.clone(),
+                        MediumMode::ThermodynamicEquilibrium,
+                    )
+                    .unwrap()
+                    .replace(ose_atom_from_index(edge))
+                    .with(energy.clone())
+                    .replace(GS.inverse_temperature)
+                    .with(Atom::num(2));
+                if has_mu {
+                    expression = expression
+                        .replace(chemical_potential.clone().unwrap())
+                        .with(mu.clone());
+                }
+                let evaluator = expression
+                    .as_view()
+                    .to_evaluation_tree(
+                        &FunctionMap::new(),
+                        &[
+                            energy.clone(),
+                            mu.clone(),
+                            orientation.clone(),
+                            thermal_sign.clone(),
+                        ],
+                    )
+                    .unwrap()
+                    .linearize(&OptimizationSettings::default());
+                let mut double = evaluator.clone().map_coeff(&|c| F::<f64>::from(&c.re));
+                let mut precise = evaluator.clone().map_coeff(&|c| F::<ArbPrec>::from(&c.re));
+                let path = directory.join(format!("thermal_{}_{}", edge.0, order));
+                let mut compiled = evaluator
+                    .export_cpp::<f64>(path.with_extension("cpp"), "thermal", ExportSettings::new())
+                    .unwrap()
+                    .compile(path.with_extension("so"), CompileOptions::default())
+                    .unwrap()
+                    .load()
+                    .unwrap();
+                for x in [
+                    -1000.0_f64,
+                    -40.0,
+                    -1.0,
+                    -2.0_f64.powi(-26),
+                    0.0,
+                    2.0_f64.powi(-26),
+                    1.0,
+                    40.0,
+                    1000.0,
+                ] {
+                    if !fermion && x == 0.0 {
+                        continue; // The Bose distribution has a pole at zero.
+                    }
+                    let q = (-2.0 * x.abs()).exp();
+                    let denominator = if fermion {
+                        1.0 + q
+                    } else {
+                        -(-2.0 * x.abs()).exp_m1()
+                    };
+                    let hyperbolic = x.signum()
+                        * if fermion {
+                            -(-2.0 * x.abs()).exp_m1() / denominator
+                        } else {
+                            (1.0 + q) / denominator
+                        };
+                    let squared = 4.0 * q / denominator.powi(2);
+                    // n_F = 1/(exp(2x) + 1) and n_B = 1/(exp(2x) - 1) without cancellation.
+                    let occupation = match (fermion, x > 0.0) {
+                        (_, true) => q,
+                        (true, false) => 1.0,
+                        (false, false) => -1.0,
+                    } / denominator;
+                    let signed_occupation = if fermion { -occupation } else { occupation };
+                    for sign in [-1.0, 1.0] {
+                        for chemical_potential in [0.0, 0.5] {
+                            let energy_value = x + if has_mu {
+                                sign * chemical_potential
+                            } else {
+                                0.0
+                            };
+                            let expected = match order {
+                                0 => (sign + 1.0) / 2.0 + signed_occupation,
+                                1 => {
+                                    if fermion {
+                                        squared / 2.0
+                                    } else {
+                                        -squared / 2.0
+                                    }
+                                }
+                                2 => {
+                                    if fermion {
+                                        -squared * hyperbolic
+                                    } else {
+                                        squared * hyperbolic
+                                    }
+                                }
+                                3 => {
+                                    if fermion {
+                                        2.0 * squared * hyperbolic.powi(2) - squared.powi(2)
+                                    } else {
+                                        -2.0 * squared * hyperbolic.powi(2) - squared.powi(2)
+                                    }
+                                }
+                                4 => {
+                                    if fermion {
+                                        -4.0 * squared * hyperbolic.powi(3)
+                                            + 8.0 * squared.powi(2) * hyperbolic
+                                    } else {
+                                        4.0 * squared * hyperbolic.powi(3)
+                                            + 8.0 * squared.powi(2) * hyperbolic
+                                    }
+                                }
+                                _ => unreachable!(),
+                            };
+                            let input = [energy_value, chemical_potential, sign, sign];
+                            let mut output = [0.0];
+                            compiled.evaluate(&input, &mut output);
+                            // Preserve the computed binary64 inputs across backends.
+                            let precise_input = input.map(|v| F(ArbPrec::from_f64_exact_binary(v)));
+                            let results = [
+                                double.evaluate_single(&input.map(F)).0,
+                                precise.evaluate_single(&precise_input).into_ff64().0,
+                                output[0],
+                            ];
+                            for result in results {
+                                // For s = -1 the scale is the occupation itself, so its
+                                // exponential tail is tested relatively.
+                                let tolerance = if order == 0 {
+                                    2e-15 * ((sign + 1.0) / 2.0 + occupation.abs()) + 1e-300
+                                } else {
+                                    2e-13 * expected.abs() + 1e-300
+                                };
+                                assert!(
+                                    (result - expected).abs() <= tolerance,
+                                    "fermion={fermion}, order={order}, x={x}, mu={chemical_potential}, sign={sign}: {result} != {expected}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn zero_temperature_steps_are_exact_outside_the_fermi_sea() {
+        use symbolica::domains::float::Complex as SymComplex;
+
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph zero_temperature_step {
+            node [num=1]
+            edge [num=1]
+            A -> B [particle="d"]
+            B -> A [particle="d"]
+        })
+        .unwrap();
+        graph
+            .set_medium_mode(MediumMode::ZeroTemperatureEquilibrium)
+            .unwrap();
+        let edge = EdgeIndex(0);
+        let chemical_potential = graph[edge].chemical_potential_atom().unwrap();
+        let energy = symbol!("zero_temperature_test_energy").to_atom();
+        let mu = symbol!("zero_temperature_test_mu").to_atom();
+        let mu_value = 0.5;
+        let directory = std::env::temp_dir().join(format!(
+            "gammaloop-zero-temperature-step-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        // Vacuum subtraction relies on exact vacuum weights outside the Fermi sea.
+        // For about a fifth of these full-mantissa energies y*inv(y) != 1 in each
+        // backend, so a step written as theta(E - sigma*mu) would leave one-ulp
+        // residues that survive the subtraction as noise times the vacuum integrand.
+        let shifted_energies =
+            (1..=64).map(|k| 1.0 + 997.0 * (f64::from(k) * 0.618_033_988_749_894_9).fract());
+        for orientation in [-1, 1] {
+            for thermal_sign in [-1, 0, 1] {
+                let expression = graph
+                    .explicit_thermal_distribution_atom(
+                        edge,
+                        0,
+                        Atom::num(thermal_sign),
+                        Atom::num(orientation),
+                        MediumMode::ZeroTemperatureEquilibrium,
+                    )
+                    .unwrap()
+                    .replace(ose_atom_from_index(edge))
+                    .with(energy.clone())
+                    .replace(chemical_potential.clone())
+                    .with(mu.clone());
+                let evaluator = expression
+                    .as_view()
+                    .to_evaluation_tree(&graph.param_builder.fn_map, &[energy.clone(), mu.clone()])
+                    .unwrap()
+                    .linearize(&OptimizationSettings::default());
+                let mut double = evaluator.clone().map_coeff(&|c| F::<f64>::from(&c.re));
+                let mut complex = evaluator
+                    .clone()
+                    .map_coeff(&|c| SymComplex::new(c.re.to_f64(), c.im.to_f64()));
+                let mut precise = evaluator.clone().map_coeff(&|c| F::<ArbPrec>::from(&c.re));
+                let path = directory.join(format!("step_{}_{}", orientation + 1, thermal_sign + 1));
+                let mut compiled = evaluator
+                    .export_cpp::<f64>(path.with_extension("cpp"), "step", ExportSettings::new())
+                    .unwrap()
+                    .compile(path.with_extension("so"), CompileOptions::default())
+                    .unwrap()
+                    .load()
+                    .unwrap();
+                let vacuum = f64::from(1 + thermal_sign) / 2.0;
+                for x in shifted_energies.clone() {
+                    let input = [x + f64::from(orientation) * mu_value, mu_value];
+                    let context = format!("x={x}, orientation={orientation}, s={thermal_sign}");
+                    assert_eq!(double.evaluate_single(&input.map(F)).0, vacuum, "{context}");
+                    let complex_result =
+                        complex.evaluate_single(&input.map(|value| SymComplex::new(value, 0.0)));
+                    assert_eq!(complex_result.re, vacuum, "complex {context}");
+                    assert_eq!(complex_result.im, 0.0, "complex {context}");
+                    let mut output = [0.0];
+                    compiled.evaluate(&input, &mut output);
+                    assert_eq!(output[0], vacuum, "compiled {context}");
+                    // Compare in Arb itself: rounding to f64 would hide a 2^-1000 residue.
+                    let precise_input = input.map(|value| F(ArbPrec::from_f64_exact_binary(value)));
+                    assert!(
+                        precise.evaluate_single(&precise_input)
+                            == F(ArbPrec::from_f64_exact_binary(vacuum)),
+                        "Arb {context}"
+                    );
+                }
+                // Keep E positive for both orientations while probing inside
+                // and exactly on the Fermi surface E = sigma*mu.
+                for x in [-0.25, 0.0] {
+                    let input = [x + mu_value, f64::from(orientation) * mu_value];
+                    let context = format!("x={x}, orientation={orientation}, s={thermal_sign}");
+                    let complex_result =
+                        complex.evaluate_single(&input.map(|value| SymComplex::new(value, 0.0)));
+                    let mut output = [0.0];
+                    compiled.evaluate(&input, &mut output);
+                    let precise_input = input.map(|value| F(ArbPrec::from_f64_exact_binary(value)));
+                    let results = [
+                        ("double", double.evaluate_single(&input.map(F)).0),
+                        ("Arb", precise.evaluate_single(&precise_input).into_ff64().0),
+                        ("compiled", output[0]),
+                    ];
+                    if x == 0.0 {
+                        // The registered theta has no finite boundary value.
+                        for (backend, result) in results {
+                            assert!(result.is_nan(), "{backend} {context}: {result}");
+                        }
+                        assert!(
+                            complex_result.re.is_nan() || complex_result.im.is_nan(),
+                            "complex {context}: {complex_result}"
+                        );
+                    } else {
+                        let expected = vacuum - 1.0;
+                        for (backend, result) in results {
+                            assert!(
+                                (result - expected).abs() <= 2.0 * f64::EPSILON,
+                                "{backend} {context}: {result} != {expected}"
+                            );
+                        }
+                        assert!(
+                            (complex_result.re - expected).abs() <= 2.0 * f64::EPSILON,
+                            "complex {context}: {complex_result} != {expected}"
+                        );
+                        assert_eq!(complex_result.im, 0.0, "complex {context}");
+                    }
+                }
+            }
+        }
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }
