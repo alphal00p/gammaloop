@@ -3164,7 +3164,7 @@ where
         S: Clone + Into<T::Scalar>,
         K: Display + Debug,
         FK: Display + Debug + Clone,
-        LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,
+        LT: Clone + LibraryTensor<WithIndices = T>,
         T: ApplyPendingIndexPermutation<Output = T>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,

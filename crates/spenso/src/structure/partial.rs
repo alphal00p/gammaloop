@@ -2,15 +2,26 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 use super::abstract_index::AbstractIndex;
-use super::representation::LibraryRep;
+use super::representation::{LibraryRep, Representation};
 use super::slot::{AbsInd, DummyAind, IsAbstractSlot, Slot};
-use super::{Canonicalized, OrderedStructure, TensorStructure};
+use super::{Canonicalized, OrderedStructure, StructureError, TensorStructure};
 
 /// An occurrence-local identifier for an unresolved tensor port.
 ///
 /// Open port identifiers are metadata only. They are canonicalized in logical
 /// port order and are never serialized into a Symbolica atom.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 pub struct OpenPortId(pub usize);
 
 impl Display for OpenPortId {
@@ -20,10 +31,31 @@ impl Display for OpenPortId {
 }
 
 /// An explicit abstract index or an unresolved occurrence-local port.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+#[cfg_attr(
+    feature = "shadowing",
+    trait_decode(trait = symbolica::state::HasStateMap),
+)]
 pub enum PartialIndex<A> {
     Explicit(A),
     Open(OpenPortId),
+}
+
+impl From<AbstractIndex> for PartialIndex<AbstractIndex> {
+    fn from(index: AbstractIndex) -> Self {
+        Self::Explicit(index)
+    }
 }
 
 impl<A: Display> Display for PartialIndex<A> {
@@ -41,12 +73,40 @@ pub type PartialSlot = Slot<LibraryRep, PartialIndex<AbstractIndex>>;
 pub type PartialStructure =
     Canonicalized<OrderedStructure<LibraryRep, PartialIndex<AbstractIndex>>>;
 
-/// Operations that preserve the logical order hidden by `OrderedStructure`'s
-/// canonical sorting permutations.
+/// Canonical signature access and operations on the stored logical axis order.
 pub trait PartialStructureExt: Sized {
     fn from_logical_slots(slots: impl IntoIterator<Item = PartialSlot>) -> Self;
     fn logical_slots(&self) -> Vec<PartialSlot>;
+    /// Return all explicitly indexed slots in canonical external-slot order.
+    ///
+    /// Fails at the first unresolved axis, without allocating an index or
+    /// dropping axes. Scalars return an empty vector.
+    fn slots(&self) -> Result<Vec<Slot<LibraryRep, AbstractIndex>>, StructureError>;
+    /// Return all unresolved representations in canonical representation order.
+    ///
+    /// Fails at the first explicitly indexed axis; indices are never discarded.
+    /// Different spaces and dimensions are allowed. Scalars return an empty vector.
+    fn representations(&self) -> Result<Vec<Representation<LibraryRep>>, StructureError>;
     fn canonicalize_open_ports(&self) -> Self;
+    /// Whether any port is unresolved, without reconstructing logical order.
+    ///
+    /// Explicit indices used as internal open-axis markers are already
+    /// materialized and do not count as unresolved ports here.
+    ///
+    /// ```
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+    /// use spenso::structure::representation::{ExtendibleReps, RepName};
+    ///
+    /// let rep = ExtendibleReps::EUCLIDEAN.new_rep(3);
+    /// let open = PartialStructure::from_logical_slots([rep.slot(PartialIndex::open(0))]);
+    /// assert!(open.has_unresolved_ports());
+    /// let stored = PartialStructure::from_logical_slots([
+    ///     rep.slot(PartialIndex::Explicit(AbstractIndex::Open { owner: 7, axis: 0 })),
+    /// ]);
+    /// assert!(!stored.has_unresolved_ports());
+    /// ```
+    fn has_unresolved_ports(&self) -> bool;
     fn open_positions(&self) -> Vec<usize>;
     fn materialize_open_ports(
         &self,
@@ -89,6 +149,12 @@ impl PartialStructureExt for PartialStructure {
 
     fn canonicalize_open_ports(&self) -> Self {
         Self::from_logical_slots(self.logical_slots())
+    }
+
+    fn has_unresolved_ports(&self) -> bool {
+        self.canonical()
+            .external_indices_iter()
+            .any(|index| matches!(index, PartialIndex::Open(_)))
     }
 
     fn open_positions(&self) -> Vec<usize> {

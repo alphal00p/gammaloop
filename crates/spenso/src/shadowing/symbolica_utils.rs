@@ -111,6 +111,8 @@ impl SpensoPrintSettings {
             | ((self.with_dim as usize) << 2)
             | ((self.symbol_scripts as usize) << 3)
             | ((self.index_subscripts as usize) << 4)
+            | ((self.array_components as usize) << 5)
+            | ((self.explicit_invariants as usize) << 6)
     }
 
     /// Resolve Spenso presentation and backend syntax from Symbolica options.
@@ -119,11 +121,11 @@ impl SpensoPrintSettings {
     /// ordinary Symbolica expression containing tensor atoms to render without
     /// callers knowing about Spenso's private custom-print flag.
     pub fn resolve(options: &PrintOptions) -> Option<ResolvedSpensoPrintSettings> {
-        let presentation = match options.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(encoded)) => Self::from_usize(*encoded as usize),
-            _ if options.mode.is_typst() => Self::typst(),
-            _ => return None,
-        };
+        // Text-only callbacks must decline rather than inject plain syntax into MathML.
+        if options.mode.is_mathml() {
+            return None;
+        }
+        let presentation = Self::presentation(options)?;
         let backend = if options.mode.is_typst() {
             SpensoPrintBackend::Typst
         } else if options.mode.is_latex() {
@@ -138,6 +140,14 @@ impl SpensoPrintSettings {
         })
     }
 
+    pub(crate) fn presentation(options: &PrintOptions) -> Option<Self> {
+        match options.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(encoded)) => Some(Self::from_usize(*encoded as usize)),
+            _ if options.mode.is_typst() => Some(Self::typst()),
+            _ => None,
+        }
+    }
+
     pub fn typst() -> Self {
         Self {
             parens: true,
@@ -145,6 +155,8 @@ impl SpensoPrintSettings {
             with_dim: false,
             symbol_scripts: true,
             index_subscripts: true,
+            array_components: false,
+            explicit_invariants: false,
         }
     }
 
@@ -306,20 +318,20 @@ pub fn atomic_expanded_label<I: IntoSymbol>(indices: &[ConcreteIndex], name: I) 
     let id = name.ref_into_symbol();
     atomic_expanded_label_id(indices, id, &[])
 }
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 pub fn atomic_flat_label<I: IntoSymbol>(index: usize, name: I) -> Atom {
     let id = name.ref_into_symbol();
     atomic_flat_label_id(index, id)
 }
 
 #[allow(clippy::cast_possible_wrap)]
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 pub fn atomic_flat_label_id(index: usize, id: Symbol) -> Atom {
     let mut value_builder = FunctionBuilder::new(id);
     value_builder = value_builder.add_arg(Atom::num(index as i64).as_atom_view());
     value_builder.finish()
 }
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 #[allow(clippy::cast_possible_wrap)]
 pub fn atomic_expanded_label_id(indices: &[ConcreteIndex], name: Symbol, args: &[Atom]) -> Atom {
     let mut value_builder = FunctionBuilder::new(name);
@@ -335,14 +347,14 @@ pub fn atomic_expanded_label_id(indices: &[ConcreteIndex], name: Symbol, args: &
     value_builder.add_arg(&indices).finish()
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 pub trait IntoSymbol {
     fn ref_into_symbol(&self) -> Symbol;
 
     fn from_str(s: &str) -> Self;
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 pub trait IntoArgs {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom>;
     fn args(&self) -> Vec<Atom> {
@@ -351,7 +363,7 @@ pub trait IntoArgs {
     fn cooked_name(&self) -> std::string::String;
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl IntoArgs for usize {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         std::iter::once(Atom::num(*self as i64))
@@ -361,7 +373,7 @@ impl IntoArgs for usize {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl IntoArgs for () {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         std::iter::empty()
@@ -380,7 +392,7 @@ impl Display for NoArgs {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl IntoArgs for NoArgs {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         std::iter::empty()
@@ -390,7 +402,7 @@ impl IntoArgs for NoArgs {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl IntoArgs for Atom {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         std::iter::once(self.clone())
@@ -401,7 +413,7 @@ impl IntoArgs for Atom {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl IntoArgs for Vec<Atom> {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         self.iter().cloned()
@@ -414,7 +426,7 @@ impl IntoArgs for Vec<Atom> {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<const N: usize> IntoArgs for [Atom; N] {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         self.iter().cloned()
@@ -427,7 +439,7 @@ impl<const N: usize> IntoArgs for [Atom; N] {
     }
 }
 
-// #[cfg(feature = "symbolica")]
+// #[cfg(feature = "shadowing")]
 // impl IntoSymbol for String {
 //     fn ref_into_symbol(&self) -> Symbol {
 //         symbol!(self)
@@ -438,7 +450,7 @@ impl<const N: usize> IntoArgs for [Atom; N] {
 //     }
 // }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl IntoSymbol for Symbol {
     fn ref_into_symbol(&self) -> Symbol {
         *self
@@ -449,7 +461,7 @@ impl IntoSymbol for Symbol {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl IntoSymbol for SerializableSymbol {
     fn ref_into_symbol(&self) -> Symbol {
         self.symbol
@@ -460,7 +472,7 @@ impl IntoSymbol for SerializableSymbol {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl IntoSymbol for std::string::String {
     fn ref_into_symbol(&self) -> Symbol {
         symbol!(self)
@@ -499,6 +511,17 @@ mod tests {
 
         assert_eq!(resolved.backend, SpensoPrintBackend::Typst);
         assert_eq!(resolved.presentation, SpensoPrintSettings::typst());
+    }
+
+    #[test]
+    fn text_backends_decline_mathml_without_discarding_presentation_settings() {
+        let mut options = PrintOptions::mathml();
+        options.custom_print_mode = SpensoPrintSettings::typst().into();
+        assert!(SpensoPrintSettings::resolve(&options).is_none());
+        assert_eq!(
+            SpensoPrintSettings::presentation(&options),
+            Some(SpensoPrintSettings::typst())
+        );
     }
 
     #[test]

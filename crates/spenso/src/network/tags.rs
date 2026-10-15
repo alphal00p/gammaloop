@@ -5,7 +5,7 @@ use crate::{
     },
     structure::{
         abstract_index::AIND_SYMBOLS,
-        representation::{IndexDisplay, IndexRow, RepresentationClass, RepresentationMetadata},
+        representation::{IndexRow, RepresentationClass, RepresentationMetadata},
     },
 };
 use symbolica::{
@@ -14,9 +14,79 @@ use symbolica::{
         SymbolAttribute, SymbolBuilder,
     },
     coefficient::CoefficientView,
+    domains::SelfRing,
     printer::{PrintOptions, PrintState},
     symbol, tag,
 };
+use symbolica_notation::{IndexDisplay, Notation};
+pub mod mathml;
+
+/// Component labels that identify indexed objects, rather than function arguments.
+pub const COMPONENT_LABELS_SUBSCRIPT_TAG: &str = "spenso::component-labels:subscript";
+
+/// Resolve a process-local head without reading serialized presentation tags.
+pub fn tensor_head_print(symbol: Symbol, backend: SpensoPrintBackend) -> Option<String> {
+    let notation = Notation::lookup(symbol).expect("notation registry must not be poisoned")?;
+    let text = match backend {
+        SpensoPrintBackend::Plain => &notation.text.plain,
+        SpensoPrintBackend::Latex => &notation.text.latex,
+        SpensoPrintBackend::Typst => &notation.text.typst,
+    };
+    text.as_ref()
+        .map(|text| match backend {
+            SpensoPrintBackend::Plain => text.as_str().to_owned(),
+            SpensoPrintBackend::Latex => text.to_latex_source(),
+            SpensoPrintBackend::Typst => text.to_typst_source(),
+        })
+        .or_else(|| {
+            notation.head.as_ref().map(|head| match backend {
+                SpensoPrintBackend::Typst => head.to_typst_source(),
+                SpensoPrintBackend::Plain => head.to_native_string(),
+                SpensoPrintBackend::Latex => head.to_latex_source(),
+            })
+        })
+}
+
+/// Whether a printer owns a complete leaf instead of delegating to Spenso.
+///
+/// Scalar symbols expose this directly through Symbolica's callback API.
+/// Tensor/index callbacks may delegate back into Spenso, so their explicit
+/// process-local ownership flag disambiguates them and prevents re-entry.
+/// See [`tensor_custom_print`] for invocation through this predicate.
+pub fn tensor_has_custom_print(symbol: Symbol) -> bool {
+    Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
+        || (symbol.get_print_function().is_some()
+            && !symbol.has_tag("spenso::tensor")
+            && !symbol.has_tag("spenso::index")
+            && !symbol.has_tag("spenso::representation")
+            && ![
+                SPENSO_TAG.dot,
+                SPENSO_TAG.chain,
+                SPENSO_TAG.trace,
+                SPENSO_TAG.bracket,
+                SPENSO_TAG.tensor_display,
+                AIND_SYMBOLS.dind,
+            ]
+            .contains(&symbol))
+}
+
+/// A callable owns the complete tensor display; `None` defers to tensor notation.
+pub fn tensor_custom_print(
+    atom: AtomView<'_>,
+    options: &PrintOptions,
+    state: &PrintState,
+) -> Option<String> {
+    let symbol = match atom {
+        AtomView::Fun(function) => function.get_symbol(),
+        AtomView::Var(variable) => variable.get_symbol(),
+        _ => return None,
+    };
+    if !tensor_has_custom_print(symbol) {
+        return None;
+    }
+    (symbol.get_print_function()?)(atom, options, state)
+}
+
 pub struct SpensoTags {
     pub broadcast: String,
     /// Marks rank-one tensor symbols whose final argument is the tensor slot.
@@ -43,6 +113,7 @@ pub struct SpensoTags {
     pub index: String,
     pub representation: String,
     pub i_: Symbol,
+    /// Scalar inner product of two compatible rank-one tensors.
     pub dot: Symbol,
     pub rep_: Symbol,
     pub self_dual: String,
@@ -1947,7 +2018,12 @@ impl SpensoTags {
             ),
             pure_scalar: symbol!("pure_scalar"),
             scalar: symbol!("scalar"),
-            dot: symbol!("dot";Symmetric,Linear; print = Self::print_dot),
+            dot: symbol!("dot";Symmetric,Linear,Scalar; print = Self::print_dot,
+            norm = |value, out| {
+                if let Some(result) = crate::network::library::symbolic::MetricNormalization::normalize_fixed_basis(value) {
+                    **out = result;
+                }
+            }),
             tensor_: symbol!("tensor_", tag = tensor, print = tensor_print),
             tensor_display: symbol!(
                 "tensor_display",
@@ -1958,11 +2034,12 @@ impl SpensoTags {
                     if wrapper.get_nargs() != 1 {
                         return None;
                     }
-                    tensor_print(
-                        unwrap_tensor_display(wrapper.iter().next()?),
-                        options,
-                        state,
-                    )
+                    let tensor = unwrap_tensor_display(wrapper.iter().next()?);
+                    tensor_print(tensor, options, state).or_else(|| {
+                        let mut output = String::new();
+                        tensor.format(&mut output, options, *state).ok()?;
+                        Some(output)
+                    })
                 }
             ),
             i_: symbol!("i_", tag = &index),
@@ -2087,11 +2164,12 @@ mod tests {
         printer::{PrintOptions, PrintState},
         symbol, wrap_symbol,
     };
+    use symbolica_notation::{DisplayText, IndexDisplay, Notation, TextOverrides};
 
     use crate::{
         cyclic, dind, lor, mink,
         shadowing::symbolica_utils::SpensoPrintSettings,
-        structure::representation::{IndexDisplay, IndexPalette, IndexRow, LibraryRep},
+        structure::representation::{IndexPalette, IndexRow, LibraryRep},
     };
 
     use super::{

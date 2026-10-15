@@ -367,7 +367,7 @@
 /// Numbers remain ordinary, unannotated Typst math. Generic calls annotate only
 /// their head and retain visible recursive structure; a customized whole call
 /// receives one exact full-call annotation instead.
-#let render-tree(tree, notation: _empty-notation, annotate: none) = {
+#let render-tree(tree, notation: _empty-notation, annotate: none, power-base: false) = {
   let config = merge-notation(notation)
   let envelope-kind = _field(tree, ("kind",), default: none)
   let root = if envelope-kind == "atom-render-tree" {
@@ -382,7 +382,7 @@
     ()
   }
 
-  let render-node(node, exact: true) = {
+  let render-node(node, exact: true, roots: true, power-base: false, followed-by-factor: false) = {
     if type(node) != dictionary { panic("an Atom render-tree node must be a dictionary") }
     let kind = _kind(node)
 
@@ -423,6 +423,8 @@
       head: none,
     ) = (
       kind: semantic-kind,
+      power-base: power-base,
+      followed-by-factor: followed-by-factor,
       node: node,
       symbol: _symbol(node),
       identity: _identity(node),
@@ -645,5 +647,5 @@
     if exact { _annotate(annotate, _atom(node), visual, node) } else { visual }
   }
 
-  render-node(root)
+  render-node(root, power-base: power-base)
 }

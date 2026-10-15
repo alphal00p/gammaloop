@@ -5717,6 +5717,7 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
@@ -5961,6 +5962,15 @@ dependencies = [
  "tracing-subscriber",
  "wide 1.7.0",
  "xmlparser",
+]
+
+[[package]]
+name = "symbolica-notation"
+version = "0.1.0"
+dependencies = [
+ "roxmltree 0.21.1",
+ "symbolica",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

@@ -519,8 +519,6 @@ dependencies = [
 [[package]]
 name = "dot-parser"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cce83b336cd8d9b2718f4e8228a185de6e7a1cfe34f237e8c4acaf1c4141630"
 dependencies = [
  "either",
  "pest",
@@ -765,6 +763,7 @@ dependencies = [
  "spenso",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "thiserror",
  "tracing",
@@ -1400,6 +1399,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "roxmltree"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1964b10c76125c36f8afe190065a4bf9a87bf324842c05701330bba9f1cacbb"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "rug"
 version = "1.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1608,7 +1616,8 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-notation",
+ "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
  "thiserror",
@@ -1665,7 +1674,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "symbolica-typst-atom-payload"
+name = "symbolica-notation"
+version = "0.1.0"
+dependencies = [
+ "roxmltree",
+ "symbolica",
+ "thiserror",
+]
+
+[[package]]
+name = "symbolica-typst-plugin"
 version = "0.1.0"
 source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=57b7455b37c30f4f87353c0073e49f5225e937ab#57b7455b37c30f4f87353c0073e49f5225e937ab"
 dependencies = [
@@ -1880,7 +1898,8 @@ dependencies = [
  "idenso",
  "spenso",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-notation",
+ "symbolica-typst-plugin",
  "wasm-minimal-protocol",
 ]
 

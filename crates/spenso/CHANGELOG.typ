@@ -87,7 +87,7 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 === Fixed
 
-- fix gamma algebra≈
+- fix gamma algebra
 
 === Other
 

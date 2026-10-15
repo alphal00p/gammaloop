@@ -866,7 +866,7 @@ fn scalar_sums_accept_closed_lazy_tensors_in_either_order() {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 #[test]
 fn tensor_powers_preserve_exponents_for_every_leaf_kind() {
     use symbolica::{

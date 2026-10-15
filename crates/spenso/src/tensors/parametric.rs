@@ -2284,7 +2284,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<I, const MIN_BYTE_SIZE: usize>
     crate::network::AtomComponentOptimizable<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>>
     for ParamTensor<I>
@@ -2301,7 +2301,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<C, I, const MIN_BYTE_SIZE: usize>
     crate::network::AtomComponentOptimizable<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>>
     for ParamOrConcrete<C, I>
