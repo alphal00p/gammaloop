@@ -2,7 +2,10 @@
 //! Shared by the overlap and on-shell test certificates. Neither
 //! scalar nor tensor-valued graph numerators are polynomial-expanded here.
 
-use std::{collections::HashMap, ops::Deref};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+};
 
 use color_eyre::{Result, eyre::ensure};
 use spenso::{
@@ -216,6 +219,7 @@ impl NumeratorJetCache {
                     // only a strictly smaller completed result can enter another
                     // pass. No alternative groupings or key orders are attempted.
                     let mut occurrences = HashMap::<AtomView<'_>, usize>::new();
+                    let mut powered_bases = HashSet::new();
                     value.visitor(&mut |part| {
                         match part {
                             AtomView::Fun(_) => {
@@ -230,6 +234,7 @@ impl NumeratorJetCache {
                                     )
                                 {
                                     *occurrences.entry(power.get_base()).or_default() += 1;
+                                    powered_bases.insert(power.get_base());
                                 }
                                 return false;
                             }
@@ -244,6 +249,33 @@ impl NumeratorJetCache {
                         .into_iter()
                         .filter_map(|(factor, count)| (count > 1).then_some(factor))
                         .collect::<Vec<_>>();
+                    // Distinct sums with the same direct term support, such as
+                    // a+b and a-b, must not both hide their scalar constituents.
+                    // Let those constituents participate in the one bounded
+                    // collection instead. A positive power still owns its whole
+                    // base, including when that base occurs only once.
+                    let mut support_groups = HashMap::<Vec<Atom>, Vec<AtomView<'_>>>::new();
+                    for factor in &factors {
+                        if let AtomView::Add(sum) = factor {
+                            let mut support = sum
+                                .iter()
+                                .map(|term| Self::split_number(term.to_owned()).1)
+                                .collect::<Vec<_>>();
+                            support.sort();
+                            support_groups.entry(support).or_default().push(*factor);
+                        }
+                    }
+                    let dependent_sums = support_groups
+                        .into_values()
+                        .filter(|group| group.len() > 1)
+                        .flatten()
+                        .collect::<HashSet<_>>();
+                    factors.retain(|factor| {
+                        (!dependent_sums.contains(factor) || powered_bases.contains(factor))
+                            && !powered_bases
+                                .iter()
+                                .any(|base| base != factor && base.contains(*factor))
+                    });
                     factors.sort_by(|left, right| {
                         right
                             .get_byte_size()
@@ -544,6 +576,52 @@ mod tests {
         assert!(
             normalized.contains(&parse_lit!(p1 - p2)) || normalized.contains(&parse_lit!(-p1 + p2))
         );
+    }
+
+    #[test]
+    fn dependent_binomial_components_cancel_without_opening_powered_spectators() {
+        test_initialise().unwrap();
+        // The first remaining finite component of a three-loop forest identity.
+        // The four signed binomials are related scalar factors, not four
+        // independent indeterminates. Keep their products and spectators intact.
+        let [a, b, c, d] = [(2, 0), (2, 3), (4, 0), (4, 3)]
+            .map(|(edge, component)| GS.emr_mom(EdgeIndex(edge), GS.cind(component)));
+        let difference: Atom = (&a - &b) * (&c - &d)
+            + (&a - &b) * (&c + &d)
+            + (&a + &b) * (&c - &d)
+            + (&a + &b) * (&c + &d)
+            - 4 * &a * &c;
+        let spectator = parse_lit!((x + y) ^ 11 * opaque(u + 2 * (v + w)) / (s + t));
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &difference))
+                .unwrap()
+                .is_zero
+        );
+        let nonzero = cache
+            .canonicalize(&(&spectator * (&difference + 1)))
+            .unwrap();
+        assert_eq!(nonzero, cache.canonicalize(&spectator).unwrap());
+        for factor in [
+            parse_lit!((x + y) ^ 11),
+            parse_lit!(opaque(u + 2 * (v + w))),
+            parse_lit!((s + t) ^ -1),
+        ] {
+            assert!(nonzero.key.contains(&factor));
+        }
+
+        // Even related repeated sums remain opaque when a positive power owns
+        // their base. A certificate may decline to prove an identity; it must
+        // never distribute that powered numerator to obtain a proof.
+        let plus = &a + &b;
+        let minus = &a - &b;
+        let powered = plus.pow(11);
+        let retained = &powered * (&plus * &c + &minus * &d + &minus * &c);
+        let certificate = cache.canonicalize(&retained).unwrap();
+        assert!(!certificate.is_zero);
+        assert!(certificate.key.contains(&powered));
     }
 
     #[test]
