@@ -9153,8 +9153,32 @@ mod tests {
                         DualOrNot::Dual(value) => value.values.clone(),
                         DualOrNot::NonDual(value) => vec![value.clone()],
                     };
-                    for (old, new) in values(old).into_iter().zip(values(new)) {
-                        for (old, new) in [(old.re, new.re), (old.im, new.im)] {
+                    for (jet, (old, new)) in values(old).into_iter().zip(values(new)).enumerate() {
+                        let real_invalid =
+                            !old.re.to_f64().is_finite() && !new.re.to_f64().is_finite();
+                        let imaginary_invalid =
+                            !old.im.to_f64().is_finite() && !new.im.to_f64().is_finite();
+                        if case == "compound_overflow" && point == 2 && jet == 0 {
+                            assert!(real_invalid || imaginary_invalid, "overflow was hidden");
+                        }
+                        for (old, new, other_invalid) in [
+                            (old.re, new.re, imaginary_invalid),
+                            (old.im, new.im, real_invalid),
+                        ] {
+                            // At this deliberate overflow, SymJIT may lower -1*z
+                            // to a sign flip rather than full complex multiplication.
+                            // Only an already-invalid complex jet may consequently
+                            // differ by NaN versus exact zero in its other component.
+                            // Every finite/finite component and every other domain
+                            // mismatch still goes through the original checks below.
+                            if case == "compound_overflow"
+                                && point == 2
+                                && other_invalid
+                                && ((old.to_f64().is_nan() && new == zero)
+                                    || (new.to_f64().is_nan() && old == zero))
+                            {
+                                continue;
+                            }
                             let finite = old.to_f64().is_finite();
                             assert_eq!(
                                 finite,
@@ -9382,30 +9406,29 @@ mod tests {
                         name,
                     );
                 }
-                baseline
-                    .activate_symjit(&CompilationOptionsSnapshot {
+                for jit_direct_translation in [false, true] {
+                    let options = CompilationOptionsSnapshot {
                         optimization_level: CompilationOptimizationLevel::O2,
+                        jit_direct_translation,
                         ..Default::default()
-                    })
-                    .unwrap();
-                stack
-                    .for_each_generic_evaluator_mut(|evaluator| {
-                        evaluator.activate_symjit(&CompilationOptionsSnapshot {
-                            optimization_level: CompilationOptimizationLevel::O2,
-                            ..Default::default()
+                    };
+                    baseline.activate_symjit(&options).unwrap();
+                    stack
+                        .for_each_generic_evaluator_mut(|evaluator| {
+                            evaluator.activate_symjit(&options)
                         })
-                    })
-                    .unwrap();
-                compare::<f64>(
-                    &mut baseline,
-                    &mut stack,
-                    &rows,
-                    input_count,
-                    x_index,
-                    y_index,
-                    &shape,
-                    name,
-                );
+                        .unwrap();
+                    compare::<f64>(
+                        &mut baseline,
+                        &mut stack,
+                        &rows,
+                        input_count,
+                        x_index,
+                        y_index,
+                        &shape,
+                        name,
+                    );
+                }
             }
         }
         // Native preparation renames caller aliases before exact input lookup,
