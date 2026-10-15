@@ -680,6 +680,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "factor_cache={:?}",
             vakint.rustred_application_factor_cache_statistics()?
         );
+        println!(
+            "witness_cache={:?}",
+            vakint.rustred_application_witness_cache_statistics()?
+        );
         println!("nonzero_condition_count={}", first.nonzero_conditions.len());
         let output = first.value.to_canonical_string();
         println!("output_bytes={}", output.len());
@@ -742,6 +746,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("a warm cache bypassed changed application options".into());
         }
         vakint.clear_rustred_application_cache()?;
+        if vakint
+            .rustred_application_witness_cache_statistics()?
+            .retained_entries
+            != 0
+        {
+            return Err("clearing the application left frontend witnesses cached".into());
+        }
         if vakint
             .rustred_application_factor_cache_statistics()?
             .cached_factors

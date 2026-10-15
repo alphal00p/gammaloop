@@ -41,6 +41,11 @@ use crate::{
 
 static PARENTS: LazyLock<Vec<ParentDescriptor>> = LazyLock::new(descriptors);
 
+#[path = "five_loop/witness_cache.rs"]
+mod witness_cache;
+pub use witness_cache::RustRedWitnessCacheStatistics;
+use witness_cache::{Policy as WitnessPolicy, WitnessCache};
+
 #[cfg(test)]
 #[path = "five_loop/admission_census_tests.rs"]
 mod admission_census_tests;
@@ -76,6 +81,7 @@ pub(crate) struct SavedApplication {
     products: SavedApplicationProductStatistics,
     product_charts: SavedApplicationProductChartStatistics,
     product_reducer: Mutex<VacuumProductReducer<ShippedFactorProvider>>,
+    witnesses: Mutex<WitnessCache>,
 }
 
 #[derive(Debug)]
@@ -126,6 +132,58 @@ pub(super) fn supports(topology: &Topology) -> bool {
 
 impl Vakint {
     pub(crate) fn match_rustred_input(
+        &self,
+        settings: &VakintSettings,
+        integral: AtomView,
+        numerator: AtomView,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
+        // Select and validate the active immutable package before any memo hit.
+        // The ordinary no-package matching path retains its previous behavior.
+        let Some(_) = settings.rustred_artifact_path else {
+            return self.match_rustred_input_uncached(settings, integral, numerator);
+        };
+        let application = self.saved_application(settings)?;
+        // Loading also installs the catalogue in a clone created before load.
+        let registry = self.topologies.registry_identity();
+        let policy = WitnessPolicy::from(settings);
+        let cached = application
+            .witnesses
+            .lock()
+            .ok()
+            .and_then(|mut cache| cache.get(&registry, &policy, integral, numerator));
+        if let Some(cached) = cached {
+            // The memo lock is released before native lowering/package locking.
+            // Typed policy errors propagate; a scope miss invalidates the entry.
+            match self.rustred_matched_input_key(settings, numerator, &cached.witness)? {
+                Some(key) if key == cached.accepted => {
+                    log::debug!(target: "vakint::saved_application", "phase=frontend_witness_memo_hit");
+                    return Ok(Some(cached.witness.clone()));
+                }
+                _ => {
+                    if let Ok(mut cache) = application.witnesses.lock() {
+                        cache.invalidate(&cached);
+                    }
+                }
+            }
+        }
+        let matched = self.match_rustred_input_uncached(settings, integral, numerator)?;
+        if let Some(witness) = &matched {
+            // The unchanged matcher may return a non-admitted fallback to
+            // preserve its precise error. Such a fallback is never memoized.
+            if matches!(witness.canonical_topology, Topology::FiveLoop(_)) {
+                if let Some(accepted) =
+                    self.rustred_matched_input_key(settings, numerator, witness)?
+                {
+                    if let Ok(mut cache) = application.witnesses.lock() {
+                        cache.insert(registry, policy, integral, numerator, witness, accepted);
+                    }
+                }
+            }
+        }
+        Ok(matched)
+    }
+
+    fn match_rustred_input_uncached(
         &self,
         settings: &VakintSettings,
         integral: AtomView,
@@ -290,7 +348,23 @@ impl Vakint {
             .map_err(failure)?
             .clear_cache()
             .map_err(failure)?;
+        if let Ok(mut cache) = application.witnesses.lock() {
+            cache.clear();
+        }
         Ok(())
+    }
+
+    /// Observe the optional frontend witness memo, not the IBP coefficient cache.
+    /// A poisoned memo is bypassed during matching and reported as unavailable.
+    pub fn rustred_application_witness_cache_statistics(
+        &self,
+    ) -> Result<RustRedWitnessCacheStatistics, VakintError> {
+        Ok(self
+            .loaded_application()?
+            .witnesses
+            .lock()
+            .map_err(failure)?
+            .statistics())
     }
 
     pub fn rustred_application_cache_statistics(
@@ -475,6 +549,7 @@ impl SavedApplication {
             products,
             product_charts,
             product_reducer: Mutex::new(product_reducer),
+            witnesses: Mutex::new(WitnessCache::default()),
         })
     }
 

@@ -31,7 +31,29 @@ pub enum TopologyContractions {
 }
 
 #[derive(Debug, Clone)]
-pub struct Topologies(Vec<Topology>, OnceLock<Arc<FiveLoopCatalogue>>);
+pub struct Topologies(Vec<Topology>, OnceLock<Arc<FiveLoopCatalogue>>, Arc<()>);
+
+/// A retained incarnation, not a graph hash or an allocation-address integer.
+/// Clones share the immutable base registry; replacing the public registry
+/// gives a different identity. The optional catalogue is installed separately.
+#[derive(Debug, Clone)]
+pub(crate) struct RegistryIdentity {
+    base: Arc<()>,
+    catalogue: Option<Arc<FiveLoopCatalogue>>,
+}
+
+impl PartialEq for RegistryIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.base, &other.base)
+            && match (&self.catalogue, &other.catalogue) {
+                (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+                (None, None) => true,
+                _ => false,
+            }
+    }
+}
+
+impl Eq for RegistryIdentity {}
 
 impl fmt::Display for Topologies {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -48,6 +70,13 @@ impl fmt::Display for Topologies {
 }
 
 impl Topologies {
+    pub(crate) fn registry_identity(&self) -> RegistryIdentity {
+        RegistryIdentity {
+            base: Arc::clone(&self.2),
+            catalogue: self.1.get().cloned(),
+        }
+    }
+
     /// Construct the ordinary one-through-four-loop registry. The saved
     /// five-loop catalogue is installed only by successful artifact loading.
     pub fn generate_topologies() -> Result<Self, VakintError> {
@@ -65,6 +94,7 @@ impl Topologies {
                 .into(),
             ],
             OnceLock::new(),
+            Arc::new(()),
         );
         // ==
         // Two-loop topologies
@@ -308,7 +338,7 @@ impl Topologies {
                 applicable_evaluation_methods.clone(),
             )?);
         }
-        Ok(Topologies(topologies, OnceLock::new()))
+        Ok(Topologies(topologies, OnceLock::new(), Arc::new(())))
     }
 
     /// Match the currently available base/custom and explicitly loaded data.

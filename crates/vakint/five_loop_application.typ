@@ -61,6 +61,23 @@ or closure failure; large admitted workloads can require a larger allowance.
 A different path or different options reloads
 the application, so an older cache cannot bypass tightened allowances.
 
+The loaded package also owns a separate bounded frontend witness memo. It
+retains the exact witness selected by the unchanged minimum-key matcher, keyed
+by the full integral and scalar numerator, relevant lowering/matching settings,
+and the actual immutable registry/catalogue incarnation. Package selection and
+settings validation precede lookup; a hit reruns native admission and compares
+the accepted key before use. Unsupported fallbacks and errors are not cached.
+The coefficient cache's LRU/LFU policy and numerical results are unchanged.
+
+This metadata memo has at most 32 entries and 16MiB of tracked encoded Atom
+payload. The byte counter is not a total RSS estimate: graph, pattern, container,
+index-vector and shared-symbol overhead are excluded. Oversized entries are
+skipped, and old entries are evicted; optional memo pressure does not fail a
+reduction. `rustred_application_witness_cache_statistics()` reports its distinct
+hit/miss, invalidation, eviction and payload counters. The existing
+`clear_rustred_application_cache()` also clears retained witnesses. A poisoned
+optional memo is bypassed, while failures from actual native admission propagate.
+
 For a byte-governed cache in Rust, set `max_cached_coefficient_bytes` on the
 options' `reduction_limits`, and set `max_cached_coefficient_terms` to
 `usize::MAX`. In Python, `rustred_cache_bytes` selects that behavior;
@@ -317,6 +334,33 @@ memoization works; repeated frontend witness selection dominates this DOT
 control's warm time. These are separate runs, not a controlled speed comparison.
 This one R0/D9 connected control does not cover the full R6 scope, all graph
 classes, the complete D10 boundary or the physical numerator ladder.
+
+The subsequent prepared-witness-memo gate passed five focused tests, an external
+exact minimum-versus-uncached test (including clone/registry/policy mutation,
+stale-key revalidation and optional-mutex poisoning), the existing 4MiB-LRU
+regression, and this same public DOT example. Its observed whole-frontend warm
+time was 0.032923s instead of 44.808307s; hit witness selection took 0.003011s and
+cached IBP application 0.001266s. Four witness hits and two misses retained two
+entries, with 4,767 tracked Atom bytes. Exact results, guards and all example
+invariance checks passed; the IBP work remained 3,753 rules.
+
+This is a repeated-input benefit, not a first-use or general throughput claim.
+The first application was 64.196s versus 53.832s before, and an uncached rerouted
+witness search was 109.639s versus 46.879s, despite identical printed inputs.
+The source of that cold-time variation is not established. The whole public
+example took 250.845s versus 353.045s on the same CPU set, in single shared-host
+runs; these are observations rather than a confidence-bounded speedup estimate.
+The native package and its coverage were unchanged.
+
+A subsequent frozen new-then-old repeat passed all comparisons again. First
+application was 78.078s new versus 78.374s old; warm application was 0.022868s
+versus 76.409812s. The uncached rerouted search was 83.088s versus 113.597s, so a
+consistent new-only cold regression was not reproduced. Every full search still
+visited 721 graph mappings, 23,040 orientations and 1,440 verified witnesses; memo
+reuse reduced the number of full searches from six to two. The complete example
+took 238.774s new versus 625.756s old, with byte-identical canonical final output.
+Shared-host load and cold-time variability remain qualifications; neither this
+control nor its warm ratio establishes general five-loop throughput or closure.
 
 The Python `examples/five_loop_saved_application.py` uses the installed native
 HepKit DOT reader, family constructor and Vakint ingress. Its optional `--powers`
