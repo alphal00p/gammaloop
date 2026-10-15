@@ -1663,7 +1663,7 @@
           "type": "boolean"
         },
         "summed_function_map": {
-          "description": "Represent a summed evaluator through a shared Symbolica function map.",
+          "description": "Sum all orientations, retaining each selected orientation as a separate\nSymbolica function-map alias instead of merging them into one expression.",
           "type": "boolean"
         },
         "tensor_network_contraction_order": {
@@ -4432,7 +4432,7 @@
           "$ref": "#/$defs/GeneralSettings"
         },
         "h_function": {
-          "description": "Damping profile shared by Local Unitarity threshold terms.",
+          "description": "Damping profile shared by Local Unitarity threshold terms; it also localizes\nzero-temperature Fermi-surface distributions.",
           "$ref": "#/$defs/HFunctionSettings"
         },
         "integrator": {

@@ -835,7 +835,12 @@ impl AmplitudeGraphTerm {
         )?);
 
         for (index, (_, sector)) in self.fermi_surfaces.iter_mut().enumerate() {
+            let started = Instant::now();
             sector.compile(format!("fermi_surface_{index}"), &graph_path, frozen_mode)?;
+            let elapsed = started.elapsed();
+            let mode_stats = stats.representation_mut(RepresentationMode::Cff);
+            mode_stats.total_time += elapsed;
+            mode_stats.evaluator_compile_time += elapsed;
         }
 
         stats.timings.total_time = compile_started.elapsed();

@@ -57,7 +57,7 @@ belong to the orchestrator because their traversal models differ.
 
 Generation supplies all requested three-dimensional representations in
 their configured order to one orchestrator call. Each backend unfolds its
-forest once and computes the local four-dimensional Taylor terms and
+forest once and computes the requested local four-dimensional Taylor terms and
 integrated Vakint counterterms during the first representation pass.
 Subsequent passes reuse those values and rebuild the cut-dependent 3D
 projection and final integrand for the selected representation. Each

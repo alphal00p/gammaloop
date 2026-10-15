@@ -772,6 +772,10 @@ mod tests {
     #[test]
     fn ltd_matches_current_cff_for_simple_and_repeated_sources() {
         let mut forward_bubble = test_graphs::initial_state_cut_line_graph(1);
+        // This fixture has two vertices, unlike the one-vertex terminal source.
+        // Restore the physical cut incidence before adding its two loop lines.
+        forward_bubble.node_name_to_internal.insert("v1".into(), 1);
+        forward_bubble.internal_edges[0].head = 1;
         forward_bubble.internal_edges[1].tail = 1;
         forward_bubble.internal_edges[1].head = 0;
         let mut second = forward_bubble.internal_edges[1].clone();

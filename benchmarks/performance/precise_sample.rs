@@ -34,6 +34,7 @@ fn paper_real_zero_certificate(
     use gammalooprs::{
         graph::edge::PossibleParticle,
         model::CouplingName,
+        settings::global::MediumMode,
         uv::settings::{FinalIntegrandDimension, RenormalizationPrescriptionSettings},
     };
     use symbolica::{atom::Atom, parse};
@@ -200,6 +201,8 @@ fn paper_real_zero_certificate(
     let generated = serde_json::to_value(generation)?;
     ensure!(
         uv.softct
+            && generation.medium.mode == MediumMode::Vacuum
+            && !generation.medium.vacuum_subtraction
             && uv.subtract_uv
             && uv.local_uv_cts_from_expanded_4d_integrands
             && uv.final_integrand == FinalIntegrandDimension::ThreeD
@@ -213,7 +216,7 @@ fn paper_real_zero_certificate(
             && generated
                 .get("three_dimensional_representations")
                 .is_none_or(|value| value == &json!(["cff"])),
-        "paper phase certificate requires the original complete local-only CFF/from4D H sum"
+        "paper phase certificate requires the original complete local-only vacuum CFF/from4D H sum"
     );
     ensure!(
         settings.kinematics.e_cm == 300.0
@@ -549,13 +552,22 @@ mod tests {
                 "source alteration {change}"
             );
         }
-        for change in 0..4 {
+        for change in 0..7 {
             let mut altered = generation.clone();
             match change {
                 0 => altered.uv.generate_integrated = true,
                 1 => altered.threshold_subtraction.enable_thresholds = true,
                 2 => altered.uv.add_marker = true,
-                _ => altered.uv.local_uv_cts_from_expanded_4d_integrands = false,
+                3 => altered.uv.local_uv_cts_from_expanded_4d_integrands = false,
+                4 => {
+                    altered.medium.mode =
+                        gammalooprs::settings::global::MediumMode::ThermodynamicEquilibrium
+                }
+                5 => {
+                    altered.medium.mode =
+                        gammalooprs::settings::global::MediumMode::ZeroTemperatureEquilibrium
+                }
+                _ => altered.medium.vacuum_subtraction = true,
             }
             assert!(
                 paper_real_zero_certificate(&graph, &model, &altered, &settings).is_err(),
