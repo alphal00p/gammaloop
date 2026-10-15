@@ -24,7 +24,7 @@ eggs/
 .eggs/
 lib/
 # Retain CeTZ's vendored Typst libraries.
-!crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/src/lib/
+!crates/linnet-render-py/vendor/typst-packages/preview/cetz/0.5.1/src/lib/
 lib64/
 parts/
 sdist/

@@ -44,6 +44,7 @@ itertools = "0.14"
 json5 = "0.4.1"
 linnest = { path = "crates/linnest/" }
 linnet = { path = "crates/linnet/", default-features = false }
+linnet-render-py = { path = "crates/linnet-render-py/", default-features = false }
 momtrop = "0.3.0"
 ndarray = "0.17.2"
 notify = "8.2.0"

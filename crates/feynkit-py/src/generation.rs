@@ -1,11 +1,13 @@
-use linnet_py::PyDiagramRender;
+#[cfg(feature = "linnet-python")]
 use linnet_py::PyGraph;
-use linnet_py::PyRenderSettings;
+use linnet_render_py::PyDiagramRender;
+use linnet_render_py::PyRenderSettings;
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+#[cfg(feature = "linnet-python")]
 use symbolica::atom::Atom;
 
 use feynkit_generator::{
@@ -978,7 +980,8 @@ impl PyProcess {
     ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
     ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
     ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
+    ///     using Symbolica's Python Graph API. Requires the ``linnet-python``
+    ///     Cargo feature; display-only Community builds accept only None.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
@@ -1188,7 +1191,8 @@ impl PyProcess {
     ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
     ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
     ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
+    ///     using Symbolica's Python Graph API. Requires the ``linnet-python``
+    ///     Cargo feature; display-only Community builds accept only None.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
@@ -1407,7 +1411,8 @@ impl PyProcess {
     ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
     ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
     ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
+    ///     using Symbolica's Python Graph API. Requires the ``linnet-python``
+    ///     Cargo feature; display-only Community builds accept only None.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
@@ -2841,6 +2846,12 @@ fn run_generation(
             }));
         }
     }
+    #[cfg(not(feature = "linnet-python"))]
+    if filter.is_some() {
+        return Err(PyValueError::new_err(
+            "partial-topology filters require the linnet-python Cargo feature",
+        ));
+    }
     let marimo_progress = if automatic {
         MarimoProgress::detect(py, "Generating diagrams", "Starting generation")?
             .map(|display| Arc::new(Mutex::new(display)))
@@ -2955,38 +2966,50 @@ fn run_generation(
         });
     }
     let has_filter = filter.is_some();
+    #[cfg(feature = "linnet-python")]
     let pdgs: Vec<_> = model.particles().iter().map(|p| p.pdg_code).collect();
     let apply_filter =
-        move |graph: &Graph<NodeColor, EdgeColor>, completed_vertices| -> PyResult<bool> {
-            Python::attach(|py| {
-                let mut snapshot = Graph::new();
-                for node in graph.nodes() {
-                    let label = node.data.external.as_ref().map_or(0, |external| {
-                        let index = external.index as i64 + 1;
-                        match external.state {
-                            feynkit_graph::ExternalState::Incoming => -index,
-                            feynkit_graph::ExternalState::Outgoing => index,
-                        }
-                    });
-                    snapshot.add_node(Atom::num(label));
-                }
-                for edge in graph.edges() {
-                    snapshot
-                        .add_edge(
-                            edge.vertices.0,
-                            edge.vertices.1,
-                            edge.directed,
-                            Atom::num(pdgs[edge.data.particle.index()]),
-                        )
-                        .map_err(pyo3::exceptions::PyValueError::new_err)?;
-                }
-                let snapshot = PyGraph::from_symbolica(py, &snapshot)?;
-                filter
-                    .as_ref()
-                    .unwrap()
-                    .call1(py, (snapshot, completed_vertices))?
-                    .extract(py)
-            })
+        move |_graph: &Graph<NodeColor, EdgeColor>, _completed_vertices| -> PyResult<bool> {
+            #[cfg(feature = "linnet-python")]
+            {
+                let graph = _graph;
+                let completed_vertices = _completed_vertices;
+                Python::attach(|py| {
+                    let mut snapshot = Graph::new();
+                    for node in graph.nodes() {
+                        let label = node.data.external.as_ref().map_or(0, |external| {
+                            let index = external.index as i64 + 1;
+                            match external.state {
+                                feynkit_graph::ExternalState::Incoming => -index,
+                                feynkit_graph::ExternalState::Outgoing => index,
+                            }
+                        });
+                        snapshot.add_node(Atom::num(label));
+                    }
+                    for edge in graph.edges() {
+                        snapshot
+                            .add_edge(
+                                edge.vertices.0,
+                                edge.vertices.1,
+                                edge.directed,
+                                Atom::num(pdgs[edge.data.particle.index()]),
+                            )
+                            .map_err(pyo3::exceptions::PyValueError::new_err)?;
+                    }
+                    let snapshot = PyGraph::from_symbolica(py, &snapshot)?;
+                    filter
+                        .as_ref()
+                        .unwrap()
+                        .call1(py, (snapshot, completed_vertices))?
+                        .extract(py)
+                })
+            }
+            #[cfg(not(feature = "linnet-python"))]
+            {
+                Err(PyValueError::new_err(
+                    "partial-topology filters require the linnet-python Cargo feature",
+                ))
+            }
         };
     #[cfg(not(target_arch = "wasm32"))]
     let result = {
@@ -3143,6 +3166,9 @@ mod tests {
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
             locals
+                .set_item("LINNET_PYTHON", cfg!(feature = "linnet-python"))
+                .unwrap();
+            locals
                 .set_item(
                     "MODEL_JSON",
                     include_str!("../tests/fixtures/scalars_2p_3p.json"),
@@ -3221,12 +3247,16 @@ for via_model in (True, False):
         assert all("elapsed" in call.args[-1] for call in indicator.update.call_args_list)
         assert any(" / " in call.args[-1] for call in indicator.update.call_args_list)
 
-        context.reset_mock()
-        empty = generate(progress="auto", filter=lambda graph, n: False)
-        assert len(empty) == 0
-        assert indicator.update.call_args.args[-1].startswith("0 diagrams retained")
-        context.__exit__.assert_called_with(None, None, None)
-        assert context.__exit__.call_count == context.__enter__.call_count
+        empty_requests = [{"veto_diagrams": baseline.diagrams}]
+        if LINNET_PYTHON:
+            empty_requests.append({"filter": lambda graph, n: False})
+        for request in empty_requests:
+            context.reset_mock()
+            empty = generate(progress="auto", **request)
+            assert len(empty) == 0
+            assert indicator.update.call_args.args[-1].startswith("0 diagrams retained")
+            context.__exit__.assert_called_with(None, None, None)
+            assert context.__exit__.call_count == context.__enter__.call_count
 
         context.reset_mock()
         token = fk.CancellationToken()
@@ -3237,19 +3267,29 @@ for via_model in (True, False):
         context.__exit__.assert_called_with(None, None, None)
         assert context.__exit__.call_count == context.__enter__.call_count
 
-        for exception in (RuntimeError("filter failed"), KeyboardInterrupt()):
+        if LINNET_PYTHON:
+            for exception in (RuntimeError("filter failed"), KeyboardInterrupt()):
+                context.reset_mock()
+                def fail(*args):
+                    raise exception
+                try:
+                    generate(filter=fail)
+                except BaseException as caught:
+                    assert caught is exception
+                else:
+                    raise AssertionError("generation exception was lost")
+                assert context.__exit__.call_count == context.__enter__.call_count
+                assert context.__exit__.call_args.args[:2] == (type(exception), exception)
+                assert indicator.update.call_args.args[-2] == "Diagram generation stopped"
+        else:
             context.reset_mock()
-            def fail(*args):
-                raise exception
             try:
-                generate(filter=fail)
-            except BaseException as caught:
-                assert caught is exception
+                generate(filter=lambda graph, n: True)
+            except ValueError as caught:
+                assert "linnet-python" in str(caught)
             else:
-                raise AssertionError("generation exception was lost")
-            assert context.__exit__.call_count == context.__enter__.call_count
-            assert context.__exit__.call_args.args[:2] == (type(exception), exception)
-            assert indicator.update.call_args.args[-2] == "Diagram generation stopped"
+                raise AssertionError("generic filter was accepted without its feature")
+            context.__enter__.assert_not_called()
 
         context.reset_mock()
         exception = RuntimeError("spinner failed")
@@ -3352,6 +3392,58 @@ for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk
         });
     }
 
+    #[cfg(not(feature = "linnet-python"))]
+    #[test]
+    fn display_only_generation_keeps_progress_and_native_regions() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
+            crate::initialize_feynkit(&module).unwrap();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            locals
+                .set_item(
+                    "MODEL_JSON",
+                    include_str!("../tests/fixtures/scalars_2p_3p.json"),
+                )
+                .unwrap();
+            let code = CString::new(
+                r#"
+import threading
+
+model = fk.Model.from_json(MODEL_JSON)
+process = model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"])
+caller = threading.get_ident()
+updates = []
+
+def report(progress):
+    assert threading.get_ident() == caller
+    updates.append(progress)
+
+result = process.generate_diagrams(loops=0, max_vertices=1, progress=report)
+assert result.report.completed and len(result) > 0
+assert updates and updates[-1].stage == "complete"
+diagram = result.diagrams[0]
+assert not hasattr(diagram, "to_graph")
+assert not hasattr(diagram, "linnet_selection")
+region = diagram.subgraph(edges=[diagram.edges[0].id])
+assert region.n_half_edges > 0
+assert region.original.id == diagram.id
+assert diagram.subgraph(region).n_half_edges == region.n_half_edges
+try:
+    process.generate_diagrams(loops=0, max_vertices=1, progress=None, filter=lambda graph, n: True)
+except ValueError as error:
+    assert "linnet-python" in str(error)
+else:
+    raise AssertionError("a generic graph filter was accepted without the feature")
+"#,
+            )
+            .unwrap();
+            py.run(&code, Some(&locals), Some(&locals)).unwrap();
+        });
+    }
+
+    #[cfg(feature = "linnet-python")]
     #[test]
     fn progress_and_partial_filters_use_the_calling_python_thread() {
         Python::initialize();

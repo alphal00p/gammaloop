@@ -1,5 +1,5 @@
-use linnet_py::PyDiagramRender;
-use linnet_py::PyRenderSettings;
+use linnet_render_py::PyDiagramRender;
+use linnet_render_py::PyRenderSettings;
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -44,7 +44,6 @@ use crate::{
     cff::{PyCffRepresentation, PyCutPropagator},
     display::escape_html,
     error,
-    graph_interop::LinnetCache,
     integrals::PyIntegralFamily,
     kinematics::{PyFourMomentum, PyKinematics, PyThreeMomentum},
     ltd::PyLtdRepresentation,
@@ -52,6 +51,9 @@ use crate::{
     render_settings::PyDiagramStyle,
     tensor::PyTensorReducer,
 };
+
+#[cfg(feature = "linnet-python")]
+use crate::graph_interop::LinnetCache;
 
 pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression, String> {
     Atom::parse_with_default_namespace(wrap_input!(value), ParseSettings::default())
@@ -386,6 +388,7 @@ impl PyDiagramEdge {
         }
         let region = PyFeynmanDiagram {
             inner: Arc::clone(&self.diagram),
+            #[cfg(feature = "linnet-python")]
             linnet: LinnetCache::default(),
             owner: Arc::clone(&self.owner),
             selected_region: Some(DiagramSelection {
@@ -2024,6 +2027,7 @@ submit! {
 #[derive(Clone)]
 pub struct PyFeynmanDiagram {
     pub(crate) inner: Arc<FeynmanDiagram>,
+    #[cfg(feature = "linnet-python")]
     linnet: LinnetCache,
     owner: Arc<()>,
     selected_region: Option<DiagramSelection>,
@@ -2033,6 +2037,7 @@ impl From<FeynmanDiagram> for PyFeynmanDiagram {
     fn from(inner: FeynmanDiagram) -> Self {
         Self {
             inner: Arc::new(inner),
+            #[cfg(feature = "linnet-python")]
             linnet: LinnetCache::default(),
             owner: Arc::new(()),
             selected_region: None,
@@ -2157,11 +2162,13 @@ impl PyCutPartition {
         self.diagram.subgraph_view(py, self.boundary_right.clone())
     }
 
+    #[cfg(feature = "linnet-python")]
     #[gen_stub(skip)]
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         self.diagram.linnet.traverse(visit)
     }
 
+    #[cfg(feature = "linnet-python")]
     #[gen_stub(skip)]
     fn __clear__(&self) {
         self.diagram.linnet.clear();
@@ -2371,11 +2378,13 @@ impl PyTraversalTree {
             .transpose()
     }
 
+    #[cfg(feature = "linnet-python")]
     #[gen_stub(skip)]
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         self.diagram.linnet.traverse(visit)
     }
 
+    #[cfg(feature = "linnet-python")]
     #[gen_stub(skip)]
     fn __clear__(&self) {
         self.diagram.linnet.clear();
@@ -2475,14 +2484,24 @@ impl PyFeynmanDiagram {
                 isolated: diagram.isolated_nodes(),
             });
         }
-        Ok(DiagramSelection {
-            hedges: self.linnet.selection(py, self, Some(value))?,
-            isolated: value
-                .call_method0("isolated_node_indices")?
-                .extract::<Vec<usize>>()?
-                .into_iter()
-                .collect(),
-        })
+        #[cfg(feature = "linnet-python")]
+        {
+            Ok(DiagramSelection {
+                hedges: self.linnet.selection(py, self, Some(value))?,
+                isolated: value
+                    .call_method0("isolated_node_indices")?
+                    .extract::<Vec<usize>>()?
+                    .into_iter()
+                    .collect(),
+            })
+        }
+        #[cfg(not(feature = "linnet-python"))]
+        {
+            let _ = py;
+            Err(PyTypeError::new_err(
+                "subgraph must be a FeynmanDiagram or its Subgraph",
+            ))
+        }
     }
 
     pub(crate) fn selection_argument(
@@ -2643,6 +2662,7 @@ impl PyFeynmanDiagram {
     }
 }
 
+#[cfg(feature = "linnet-python")]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[spenso_macros::track_usage(crate::record_usage)]
@@ -2689,8 +2709,14 @@ impl PyFeynmanDiagram {
     fn __clear__(&self) {
         self.linnet.clear();
     }
+}
 
-    /// Select graph elements using native diagram IDs, or import a graph-bound selection.
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
+#[pymethods]
+impl PyFeynmanDiagram {
+    /// Select graph elements using native diagram IDs or an existing physics region.
     /// Nested selections intersect this region and retain its immutable original diagram.
     ///
     /// Examples
@@ -2702,8 +2728,9 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// selection : Subgraph or symbolica.community.graph.Subgraph or None, optional
+    /// selection : Subgraph or None, optional
     ///     Existing selection from the same original diagram; exclusive with element IDs.
+    ///     Generic Linnet selections additionally require the ``linnet-python`` Cargo feature.
     /// nodes : list[int] or None, optional
     ///     Diagram vertex IDs to include, with all incident half-edges.
     /// edges : list[int] or None, optional
@@ -2714,8 +2741,9 @@ impl PyFeynmanDiagram {
     fn subgraph(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
-        selection: Option<&Bound<'_, PyAny>>,
+        #[gen_stub(override_type(type_repr = "Subgraph | None"))] selection: Option<
+            &Bound<'_, PyAny>,
+        >,
         nodes: Option<Vec<usize>>,
         edges: Option<Vec<usize>>,
         half_edges: Option<Vec<usize>>,
@@ -3447,7 +3475,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// without : Subgraph or symbolica.community.graph.Subgraph or None, optional
+    /// without : Subgraph or None, optional
     ///     Ignored region, using GammaLoop boundary and local-factor selection semantics.
     /// in_lmb : bool, optional
     ///     Express edge momenta in the diagram's stored loop-momentum basis.
@@ -3458,8 +3486,9 @@ impl PyFeynmanDiagram {
     fn numerator_expression(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
-        without: Option<&Bound<'_, PyAny>>,
+        #[gen_stub(override_type(type_repr = "Subgraph | None"))] without: Option<
+            &Bound<'_, PyAny>,
+        >,
         in_lmb: bool,
         lmb: Option<&PyLoopMomentumBasis>,
     ) -> PyResult<Py<TensorExpression>> {
@@ -3959,14 +3988,13 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// contracted : Subgraph or symbolica.community.graph.Subgraph
+    /// contracted : Subgraph
     ///     Complete internal edges to contract, selected from this diagram.
     #[pyo3(signature = (contracted))]
     fn contracted_momentum_basis(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph", imports=("symbolica.community.graph")))]
-        contracted: &Bound<'_, PyAny>,
+        #[gen_stub(override_type(type_repr = "Subgraph"))] contracted: &Bound<'_, PyAny>,
     ) -> PyResult<PyLoopMomentumBasis> {
         let selected = self.selection();
         let contracted = self.selection_argument(py, contracted)?;
@@ -4326,7 +4354,7 @@ impl PyFeynmanDiagram {
     ///     Draw momentum arrows and labels in the stored basis.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Routing from this diagram; also enables momentum display.
-    /// highlight : Subgraph or symbolica.community.graph.Subgraph or None, optional
+    /// highlight : Subgraph or None, optional
     ///     Region to highlight in the complete diagram.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
     fn to_linnest(
@@ -4336,8 +4364,9 @@ impl PyFeynmanDiagram {
         style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
-        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
-        highlight: Option<&Bound<'_, PyAny>>,
+        #[gen_stub(override_type(type_repr = "Subgraph | None"))] highlight: Option<
+            &Bound<'_, PyAny>,
+        >,
     ) -> PyResult<String> {
         Ok(typst_renderer::Document::svg_source(
             &self.render_svg(py, config, style, momenta, lmb, highlight)?,
@@ -4377,7 +4406,7 @@ impl PyFeynmanDiagram {
     /// lmb : LoopMomentumBasis or None, optional
     ///     Explicit routing from this diagram; also enables momentum display.
     ///     Rendering never changes the diagram's stored loop-momentum basis.
-    /// highlight : Subgraph or symbolica.community.graph.Subgraph or None, optional
+    /// highlight : Subgraph or None, optional
     ///     Highlight a region while preserving the full diagram as muted context.
     ///     A Subgraph highlights its own region by default.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
@@ -4388,8 +4417,9 @@ impl PyFeynmanDiagram {
         style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
-        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
-        highlight: Option<&Bound<'_, PyAny>>,
+        #[gen_stub(override_type(type_repr = "Subgraph | None"))] highlight: Option<
+            &Bound<'_, PyAny>,
+        >,
     ) -> PyResult<PyDiagramRender> {
         let drawing = self.render_drawing(py, config, style, momenta, lmb, highlight)?;
         let html =
@@ -4416,7 +4446,7 @@ impl PyFeynmanDiagram {
     ///     Draw momentum arrows and labels in the stored basis.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Routing from this diagram; also enables momentum display.
-    /// highlight : Subgraph or symbolica.community.graph.Subgraph or None, optional
+    /// highlight : Subgraph or None, optional
     ///     Region to highlight in the complete diagram.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
     fn to_html(
@@ -4426,8 +4456,9 @@ impl PyFeynmanDiagram {
         style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
-        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
-        highlight: Option<&Bound<'_, PyAny>>,
+        #[gen_stub(override_type(type_repr = "Subgraph | None"))] highlight: Option<
+            &Bound<'_, PyAny>,
+        >,
     ) -> PyResult<String> {
         self.render(py, config, style, momenta, lmb, highlight)?
             .to_html()

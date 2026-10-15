@@ -5,9 +5,7 @@ use pyo3::exceptions::{PyReferenceError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyDictMethods};
 
-use crate::graph::PyGraph;
-
-pub(crate) const NODE_FIELDS: &[&str] = &[
+pub const NODE_FIELDS: &[&str] = &[
     "label",
     "placement",
     "shift",
@@ -18,7 +16,7 @@ pub(crate) const NODE_FIELDS: &[&str] = &[
     "label_style",
 ];
 
-pub(crate) const EDGE_FIELDS: &[&str] = &[
+pub const EDGE_FIELDS: &[&str] = &[
     "label",
     "placement",
     "label_position",
@@ -33,7 +31,7 @@ pub(crate) const EDGE_FIELDS: &[&str] = &[
     "decoration",
 ];
 
-pub(crate) const HEDGE_FIELDS: &[&str] = &[
+pub const HEDGE_FIELDS: &[&str] = &[
     "label",
     "statement",
     "port_label",
@@ -45,14 +43,14 @@ pub(crate) const HEDGE_FIELDS: &[&str] = &[
 ];
 
 #[derive(Clone, Copy)]
-pub(crate) enum DrawingKind {
+pub enum DrawingKind {
     Node,
     Edge,
     HalfEdge,
 }
 
 impl DrawingKind {
-    pub(crate) fn name(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Node => "node",
             Self::Edge => "edge",
@@ -60,7 +58,7 @@ impl DrawingKind {
         }
     }
 
-    pub(crate) fn transport_key(self, key: &str) -> &str {
+    pub fn transport_key(self, key: &str) -> &str {
         match (self, key) {
             (Self::Node | Self::Edge, "placement") => "pos",
             (Self::Node, "minimum_size") => "minimum-size",
@@ -91,19 +89,10 @@ fn drawing_kind(fields: &[&str]) -> DrawingKind {
     }
 }
 
-pub(crate) struct DrawingGuard {
-    graph: Py<PyGraph>,
-    revision: u64,
-}
-
-impl DrawingGuard {
-    pub(crate) fn new(graph: Py<PyGraph>, revision: u64) -> Self {
-        Self { graph, revision }
-    }
-
-    fn check(&self, py: Python<'_>) -> PyResult<()> {
-        self.graph.borrow(py).check_revision(self.revision)
-    }
+/// Validates a live drawing view against its owning graph without owning graph bindings.
+pub trait DrawingGuard {
+    fn check(&self, py: Python<'_>) -> PyResult<()>;
+    fn traverse(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError>;
 }
 
 fn validate_extensions(extensions: &Bound<'_, PyDict>, fields: &[&str]) -> PyResult<()> {
@@ -141,7 +130,7 @@ fn copy_extensions(py: Python<'_>, extensions: &Bound<'_, PyDict>) -> PyResult<P
     Ok(copied.unbind())
 }
 
-pub(crate) fn drawing_dict(
+pub fn drawing_dict(
     py: Python<'_>,
     fields: &[&str],
     values: Option<&Bound<'_, PyDict>>,
@@ -173,7 +162,7 @@ pub(crate) fn drawing_dict(
     Ok(output.unbind())
 }
 
-pub(crate) fn copy_drawing(py: Python<'_>, values: &Py<PyDict>) -> PyResult<Py<PyDict>> {
+pub fn copy_drawing(py: Python<'_>, values: &Py<PyDict>) -> PyResult<Py<PyDict>> {
     let copied = PyDict::new(py);
     for (key, value) in values.bind(py).iter() {
         copied.set_item(key, crate::typst::copy_native(py, &value.unbind())?)?;
@@ -195,30 +184,29 @@ macro_rules! drawing_class {
         #[pyclass(module = "symbolica.community.graph", unsendable, name = $python)]
         pub struct $rust {
             values: Option<Py<PyDict>>,
-            guard: Option<DrawingGuard>,
+            guard: Option<Box<dyn DrawingGuard>>,
         }
 
         impl $rust {
-            pub(crate) fn live(
+            pub fn live(
                 py: Python<'_>,
                 values: &Py<PyDict>,
-                graph: Py<PyGraph>,
-                revision: u64,
+                guard: Box<dyn DrawingGuard>,
             ) -> Self {
                 Self {
                     values: Some(values.clone_ref(py)),
-                    guard: Some(DrawingGuard::new(graph, revision)),
+                    guard: Some(guard),
                 }
             }
 
-            pub(crate) fn detached(py: Python<'_>, values: &Py<PyDict>) -> Self {
+            pub fn detached(py: Python<'_>, values: &Py<PyDict>) -> Self {
                 Self {
                     values: Some(values.clone_ref(py)),
                     guard: None,
                 }
             }
 
-            pub(crate) fn values<'py>(&self, py: Python<'py>) -> PyResult<&Bound<'py, PyDict>> {
+            pub fn values<'py>(&self, py: Python<'py>) -> PyResult<&Bound<'py, PyDict>> {
                 self.check(py)?;
                 self.values
                     .as_ref()
@@ -255,7 +243,7 @@ macro_rules! drawing_class {
                     .set_item(name, crate::typst::copy_native(py, &value.clone().unbind())?)
             }
 
-            pub(crate) fn clone_values(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+            pub fn clone_values(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
                 copy_drawing(py, self.values(py)?.as_unbound())
             }
         }
@@ -325,7 +313,7 @@ macro_rules! drawing_class {
             fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
                 visit.call(&self.values)?;
                 if let Some(guard) = &self.guard {
-                    visit.call(&guard.graph)?;
+                    guard.traverse(visit)?;
                 }
                 Ok(())
             }
@@ -427,9 +415,34 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyNodeDrawing>()?;
     module.add_class::<PyEdgeDrawing>()?;
     module.add_class::<PyHalfEdgeDrawing>()?;
     Ok(())
+}
+
+pub fn element_drawing<'py>(
+    py: Python<'py>,
+    source: &Bound<'py, PyDict>,
+    kind: DrawingKind,
+) -> PyResult<Bound<'py, PyDict>> {
+    let output = PyDict::new(py);
+    for (key, value) in source.iter() {
+        let key = key.extract::<String>()?;
+        if key == "extensions" {
+            let extensions = value.cast::<PyDict>()?;
+            for (extension, value) in extensions.iter() {
+                output.set_item(extension, crate::typst::copy_native(py, &value.unbind())?)?;
+            }
+        } else {
+            let value = if key == "placement" {
+                crate::typst::normalize_placement(py, &value)?
+            } else {
+                crate::typst::copy_native(py, &value.unbind())?
+            };
+            output.set_item(kind.transport_key(&key), value)?;
+        }
+    }
+    Ok(output)
 }

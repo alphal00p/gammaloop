@@ -19,26 +19,16 @@ symbolica = { workspace = true, features = ["python_export"] }
 ciborium = "0.2.2"
 dot-parser = { workspace = true }
 linnet = { workspace = true, features = ["nodestore-vec", "serde"] }
+linnet-render-py = { workspace = true, default-features = false }
 linnest = { workspace = true, features = ["svg"] }
-# Maturin follows path dependencies into sdists; render.rs embeds Kurvst's Typst assets.
-kurvst = { path = "../kurvst" }
 pyo3 = { workspace = true, features = ["multiple-pymethods"] }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true, default-features = false }
-rust-embed = { version = "8.4", features = ["debug-embed", "include-exclude", "interpolate-folder-path"] }
-roxmltree = "0.21.1"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tempfile = "3.8"
-typst-renderer = { path = "../typst-renderer", features = ["full"] }
-walkdir = { workspace = true }
-
-[build-dependencies]
-pyo3-build-config = { workspace = true }
-walkdir = { workspace = true }
 
 [features]
 default = ["native"]
-native = ["symbolica/integer-gmp", "symbolica/float-mpfr"]
-wasm = ["symbolica/wasm"]
-python_stubgen = ["dep:pyo3-stub-gen", "symbolica/python_stubgen"]
+native = ["symbolica/integer-gmp", "symbolica/float-mpfr", "linnet-render-py/native"]
+wasm = ["symbolica/wasm", "linnet-render-py/wasm"]
+python_stubgen = ["dep:pyo3-stub-gen", "symbolica/python_stubgen", "linnet-render-py/python_stubgen"]

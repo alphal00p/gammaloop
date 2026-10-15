@@ -1441,6 +1441,7 @@ dependencies = [
  "linnest",
  "linnet",
  "linnet-py",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen-derive",
  "serde_json",
@@ -1625,6 +1626,8 @@ dependencies = [
  "num-integer",
  "num-traits",
  "numerica",
+ "proc-macro2",
+ "quote",
  "rand 0.8.6",
  "regex",
  "regex-automata",
@@ -2658,6 +2661,20 @@ version = "0.1.0"
 dependencies = [
  "ciborium",
  "dot-parser",
+ "linnest",
+ "linnet",
+ "linnet-render-py",
+ "pyo3",
+ "pyo3-stub-gen-derive",
+ "serde",
+ "serde_json",
+ "symbolica",
+]
+
+[[package]]
+name = "linnet-render-py"
+version = "0.1.0"
+dependencies = [
  "kurvst",
  "linnest",
  "linnet",
@@ -4496,7 +4513,7 @@ dependencies = [
  "itertools 0.14.0",
  "linnest",
  "linnet",
- "linnet-py",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
@@ -4505,6 +4522,7 @@ dependencies = [
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
+ "symbolica-data",
  "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
@@ -4638,6 +4656,15 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wide 1.7.0",
+]
+
+[[package]]
+name = "symbolica-data"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -5294,7 +5321,6 @@ dependencies = [
  "rustc-hash 2.1.2",
  "serde",
  "serde_json",
- "typst-assets",
  "typst-library",
  "typst-syntax",
  "typst-timing",
@@ -5491,8 +5517,11 @@ name = "typst-renderer"
 version = "0.1.0"
 dependencies = [
  "comemo",
+ "serde_json",
+ "symbolica-data",
  "tempfile",
  "typst",
+ "typst-assets",
  "typst-html",
  "typst-kit",
  "typst-layout",
