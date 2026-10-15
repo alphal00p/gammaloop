@@ -221,6 +221,62 @@ restore stale indices. The bridge requires no such duplicate representation. Vak
 evaluate spin algebra. Numerator and normalization poles increase the required epsilon order;
 positive powers do not reduce the conservative depth. Opaque epsilon-dependent functions error.
 
+After tensor reduction, both projection policies share `ScalarTerms` for
+analytic scalar evaluation. It validates polynomial loop scalar products,
+isolates the complete loop-independent coefficients and supplies one synthetic
+kernel to the selected backend. Coefficients are restored before the final
+Laurent projection, retaining their factors and complex-function branches.
+Numerator and normalization poles increase the required backend depth; regular
+or evanescent coefficients never reduce the conservative depth. The supported
+Laurent-function and integer-power guards apply in either policy.
+
+The same coefficient-protection owner also shields unrelated factors during
+AlphaLoop's complete tensor-numerator FORM reduction. At that earlier stage,
+protection requires both loop independence and a closed Lorentz interface.
+Open native ports remain visible to metric contraction and index transport;
+unselected function payloads are atomic. This preserves products and powers of
+scalar graph factors while allowing FORM to reduce the connected loop-tensor
+polynomial. Coefficient symbols are collision-checked against the input and
+restored at the owning boundary.
+
+The scalar-evaluation boundary uses the same Lorentz-incidence parser for raw
+momentum factors and registered native tensor leaves. Incidence keys are complete
+represented Minkowski slots, so equal written labels in different tensor
+representations remain independent. Declared `tensor_index` markers from the
+universal projector also count as direct ports until native restoration. A
+closed external contraction such as a gamma leaf times its matching external
+vector is scalar with respect to loop integration while retaining its spinor
+interface. Metrics relabel complete slots on the actual leaf, and ordinary raw
+loop/external momentum pairs still become scalar products. Scalar spectators
+stay factorized. Hidden compound Lorentz slots or projector markers require
+materialization by their tensor owner; loop-dependent native leaves require
+tensor reduction before this scalar boundary. Vakint does not infer spin or
+color identities from those interfaces.
+
+The native FeynKit projector accepts compact fixed vectors as well as indexed
+vector factors. The GammaLoop bridge normalizes scalar weights in compact dots
+through the shared notation owner. It removes compact representation arguments
+only from Vakint's own loop and external momentum syntax; a native fixed vector
+retains its actual port. AlphaLoop's compact angular-input syntax expects
+elementary external `p` vectors. Cross-backend checks of native fixed vectors
+therefore materialize just the compact dot arguments into indexed factors
+before invoking AlphaLoop, without distributing the surrounding numerator.
+Both projection policies and both output dot-notation settings retain the same
+dimensional-algebra boundary; arbitrary native fixed vectors inside compact
+Vakint dots are not an AlphaLoop input contract.
+
+After projection, GammaLoop restores the shared native interface before scalar
+dot conversion or epsilon expansion. It first identifies regulated Lorentz-slot
+metadata with the source's symbolic dimension, leaving scalar evanescent
+coefficients untouched. Fresh projected dummy slots are then checked against
+the existing complete source slots in that unified frame. Allocating before
+this metadata normalization could identify a fresh slot with an already
+reserved source index. Raw indexed momenta and projected metrics use the same
+topology-local chart; compact fixed vectors keep their native leaves. Only after
+completed dimensional tensor algebra and residual-contraction checks does the
+bridge replace scalar dimension dependence for Laurent expansion. A retained
+external basis keeps its representation metadata.
+
 The Python adapter accepts complex mass/numerator substitutions as `numerical_parameters`; the
 PySecDec boundary requires real pole masses and external momenta, with complex numerator coefficients
 allowed. Physical PySecDec integration tests remain explicit manual checks. The commands and detailed
