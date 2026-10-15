@@ -74,6 +74,21 @@ discrete_dim = [0, 0]
 inputs = ["benchmarks/performance/gluon-self-energy-gl1.dot"]
 points = [[0.3684805278343727, 0.20242350926484026, 0.48242524836619227, 0.3919994435419629, 0.14345675651437087, 0.47075342347077187], [0.23, 0.31, 0.41, 0.53, 0.67, 0.79]]
 
+[thermal]
+card = "gluon-self-energy-thermal.toml"
+bench_duration_seconds = 0.75
+evaluator_methods = ["SingleParametric", "SummedFunctionMap"]
+reference_method = "SingleParametric"
+required_metrics = ["generation_seconds", "evaluator_build_seconds", "warm_runtime_seconds_per_sample", "generation_peak_ram_bytes"]
+
+[thermal.corpus]
+process_id = 0
+integrand = "2L"
+continuous_dimension = 6
+discrete_dim = [0, 0]
+inputs = ["benchmarks/performance/gluon-self-energy-gl1.dot"]
+points = [[0.3684805278343727, 0.20242350926484026, 0.48242524836619227, 0.3919994435419629, 0.14345675651437087, 0.47075342347077187], [0.23, 0.31, 0.41, 0.53, 0.67, 0.79]]
+
 [routes.orientation-3d]
 explicit_orientation_sum_only = false
 summed = true
@@ -128,5 +143,10 @@ graph_name = "GL16"
 
 [workloads.gl1-evaluator-guards]
 family = "evaluator-guards"
+process = "double_triangle"
+graph_name = "GL1"
+
+[workloads.gl1-thermal]
+family = "thermal"
 process = "double_triangle"
 graph_name = "GL1"

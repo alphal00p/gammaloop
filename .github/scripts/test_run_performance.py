@@ -517,7 +517,9 @@ class ProducerTests(unittest.TestCase):
             for route in ("orientation-3d", "explicit-3d", "projected-4d")
         }
         self.assertEqual(
-            cases.keys(), expected | {"gl16-evaluator-aliases", "gl1-evaluator-guards"}
+            cases.keys(),
+            expected
+            | {"gl16-evaluator-aliases", "gl1-evaluator-guards", "gl1-thermal"},
         )
         for name in expected:
             with self.subTest(case=name):
@@ -610,6 +612,28 @@ class ProducerTests(unittest.TestCase):
                 self.assertNotEqual(
                     fixture.hashes["fixture_sha256"], changed.hashes["fixture_sha256"]
                 )
+
+    def test_thermal_probe_keeps_nested_qcd_uv_forests(self):
+        fixture = producer.Fixture.from_suite(
+            self.suite, "gl1-thermal", self.repository
+        )
+        card = producer.tomllib.loads(fixture.card)
+        generation = card["cli_settings"]["global"]["generation"]
+        # Vacuum subtraction would drop the two-loop forest nesting both
+        # one-loop counterterms of this QCD graph.
+        self.assertEqual(
+            generation["medium"],
+            {"mode": "thermodynamic_equilibrium", "vacuum_subtraction": False},
+        )
+        self.assertIs(generation["uv"]["subtract_uv"], True)
+        self.assertGreater(
+            card["default_runtime_settings"]["general"]["inverse_temperature"], 0
+        )
+        self.assertIn(
+            "benchmarks/performance/gluon-self-energy-gl1.dot", fixture.corpus["inputs"]
+        )
+        self.assertEqual(fixture.methods, ["SingleParametric", "SummedFunctionMap"])
+        self.assertEqual(fixture.config["reference_method"], "SingleParametric")
 
     def test_suite_finishes_all_cases_and_propagates_any_failure(self):
         names = list(producer.Fixture.cases(self.suite))
