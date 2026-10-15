@@ -2,9 +2,13 @@
 
 use std::collections::BTreeMap;
 
+use spenso::{
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    structure::representation::{BaseRepName, Minkowski},
+};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 
-use crate::{VakintError, symbols::S};
+use crate::{VakintError, VakintTerm, symbols::S};
 
 /// Index multiplicities describe the original expression, before contraction.
 /// Keeping consumed indices prevents a power or metric trace from hiding an
@@ -109,6 +113,62 @@ impl LorentzTensor {
                 Ok(Self {
                     expression: view.to_owned(),
                     indices: BTreeMap::from([(function.get(1).to_owned(), 1)]),
+                })
+            }
+            AtomView::Fun(function)
+                if function.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                    && ![S.k, S.p].contains(&function.get_symbol()) =>
+            {
+                if view.contains_symbol(S.k) {
+                    return Err(VakintError::InvalidNumerator(
+                        "loop-dependent native tensor leaves require tensor reduction before scalar evaluation".into(),
+                    ));
+                }
+                let mut indices = BTreeMap::new();
+                for argument in function.iter() {
+                    if VakintTerm::spenso_minkowski_slot_parts(argument).is_some()
+                        || matches!(argument, AtomView::Fun(index) if index.get_symbol() == S.tensor_index)
+                    {
+                        // Universal projectors replace complete source slots
+                        // by their declared marker until the caller restores
+                        // native representations. It remains the same port.
+                        *indices.entry(argument.to_owned()).or_insert(0_u8) += 1;
+                    } else if argument.contains_symbol(Minkowski::selfless_symbol())
+                        || argument.contains_symbol(S.tensor_index)
+                    {
+                        // A compact vector is consumed by a native tensor leaf.
+                        // Bindings hidden inside compound chain/trace bodies
+                        // require their owning tensor algebra before this scalar
+                        // boundary; do not guess that they have no open ports.
+                        let compact_vector = matches!(argument, AtomView::Fun(vector)
+                            if (vector.get_symbol().has_tag(&SPENSO_TAG.rank1)
+                                || vector.get_symbol() == S.p)
+                                && vector.iter().any(VakintTerm::is_compact_spenso_minkowski_representation)
+                                && !vector.iter().any(|argument| VakintTerm::spenso_minkowski_slot_parts(argument).is_some()));
+                        if !compact_vector {
+                            return Err(VakintError::InvalidNumerator(
+                                "compound native tensor interfaces must be materialized before scalar evaluation".into(),
+                            ));
+                        }
+                    }
+                }
+                if function.get_symbol() == ETS.metric && !indices.is_empty() {
+                    return Self::parse(
+                        FunctionBuilder::new(S.g)
+                            .add_args(function.iter())
+                            .finish()
+                            .as_view(),
+                        dimension,
+                    );
+                }
+                if indices.values().any(|count| *count > 2) {
+                    return Err(VakintError::InvalidNumerator(
+                        "a native Lorentz index is contracted more than once".into(),
+                    ));
+                }
+                Ok(Self {
+                    expression: view.to_owned(),
+                    indices,
                 })
             }
             AtomView::Fun(function) => {
@@ -233,8 +293,14 @@ impl LorentzTensor {
                 indices,
             });
         }
-        if self.expression.get_all_symbols(true).contains(&S.tensor)
-            || other.expression.get_all_symbols(true).contains(&S.tensor)
+        if [&self.expression, &other.expression]
+            .iter()
+            .any(|expression| {
+                expression.get_all_symbols(true).contains(&S.tensor)
+                    || matches!(expression.as_view(), AtomView::Fun(leaf)
+                    if leaf.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                        && ![S.k, S.p].contains(&leaf.get_symbol()))
+            })
         {
             // A declared tensor's algebra belongs to its caller. Only metrics
             // rename its complete Lorentz slots; other contractions retain the
@@ -351,6 +417,95 @@ impl LorentzTensor {
 mod tests {
     use super::*;
     use crate::utils::vakint_macros::vk_parse;
+
+    #[test]
+    fn native_projector_markers_remain_lorentz_ports() {
+        use spenso::structure::representation::RepName;
+        use symbolica::{function, symbol};
+        let _ = &*S;
+        let dimension = Atom::num(4);
+        let mu = Minkowski {}
+            .new_rep(4)
+            .to_symbolic([Atom::var(symbol!("native_marker_mu"))]);
+        let marker = function!(S.tensor_index, symbol!("native_marker_family"), 1, 0);
+        let gamma = spenso::tensor_symbol!("native_marker_gamma");
+        let source = function!(gamma, &mu) * function!(S.g, &mu, &marker);
+        let marked = LorentzTensor::parse(source.as_view(), &dimension).unwrap();
+        assert_eq!(marked.expression, function!(gamma, &marker));
+        assert!(
+            !marked.is_scalar(),
+            "the projected gamma retains its declared open Lorentz port"
+        );
+        let closed = &marked.expression * function!(S.p, 0, &marker) + Atom::one();
+        assert!(
+            LorentzTensor::parse(closed.as_view(), &dimension)
+                .unwrap()
+                .is_scalar()
+        );
+        let hidden = function!(SPENSO_TAG.chain, marked.expression);
+        assert!(LorentzTensor::parse(hidden.as_view(), &dimension).is_err());
+    }
+
+    #[test]
+    fn native_tensor_coefficients_keep_their_connected_lorentz_interface() {
+        use spenso::structure::representation::RepName;
+        use symbolica::{function, symbol};
+
+        let _ = &*S;
+        let dimension_symbol = symbol!("native_coefficient_dimension");
+        let dimension = Atom::var(dimension_symbol);
+        let mink = Minkowski {}.new_rep(dimension_symbol);
+        let mu = mink.to_symbolic([Atom::var(symbol!("native_coefficient_mu"))]);
+        let nu = mink.to_symbolic([Atom::var(symbol!("native_loop_nu"))]);
+        let gamma = spenso::tensor_symbol!("native_coefficient_gamma");
+        let identity = spenso::tensor_symbol!("native_coefficient_identity");
+        let spin = function!(gamma, &mu) * function!(S.p, 0, &mu)
+            + Atom::var(symbol!("native_coefficient_mass")) * function!(identity);
+        let spectator = vk_parse!("(a+b)*(c+d)^11").unwrap();
+        let loop_dot = S.dot(function!(S.k, 1), function!(S.p, 1));
+        let expected = &spectator * &spin * &loop_dot;
+        for scalar_loop in [loop_dot, function!(S.k, 1, &nu) * function!(S.p, 1, &nu)] {
+            let input = &spectator * &spin * scalar_loop;
+            let parsed = LorentzTensor::parse(input.as_view(), &dimension).unwrap();
+            assert!(parsed.is_scalar());
+            assert_eq!(parsed.expression, expected);
+            let terms = crate::projection::ScalarTerms::parse(parsed.expression.as_view()).unwrap();
+            assert_eq!(terms.expression(), expected);
+        }
+        // A native scalar coefficient in an additive index component must
+        // not prevent the attached raw k-p pair from becoming one loop dot.
+        let connected = (&spin * function!(S.k, 1, &nu)
+            + function!(identity) * function!(S.k, 1, &nu))
+            * function!(S.p, 1, &nu);
+        let connected = LorentzTensor::parse(connected.as_view(), &dimension).unwrap();
+        assert_eq!(
+            crate::projection::ScalarTerms::parse(connected.expression.as_view())
+                .unwrap()
+                .expression(),
+            (&spin + function!(identity)) * S.dot(function!(S.k, 1), function!(S.p, 1))
+        );
+        let compact_slash = function!(gamma, function!(S.p, 0, mink.to_symbolic([])));
+        assert!(
+            LorentzTensor::parse(compact_slash.as_view(), &dimension)
+                .unwrap()
+                .is_scalar()
+        );
+        for invalid in [
+            function!(gamma, function!(S.k, 1, mink.to_symbolic([]))),
+            function!(SPENSO_TAG.chain, function!(gamma, &mu)),
+            function!(gamma, &mu) + function!(gamma, &nu),
+        ] {
+            assert!(LorentzTensor::parse(invalid.as_view(), &dimension).is_err());
+        }
+        for unresolved_loop in [
+            function!(gamma, &mu) * function!(S.k, 1, &mu),
+            function!(S.k, 1, &mu),
+            S.dot(function!(S.k, 1), function!(S.k, 1)).pow(-1),
+        ] {
+            let parsed = LorentzTensor::parse(unresolved_loop.as_view(), &dimension).unwrap();
+            assert!(crate::projection::ScalarTerms::parse(parsed.expression.as_view()).is_err());
+        }
+    }
 
     #[test]
     fn opaque_tensor_slots_validate_factorized_production_sums() {
