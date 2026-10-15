@@ -1219,18 +1219,18 @@ fn tensor_sample_library(
 
     let mut external_legs = diagram
         .edges()
-        .filter_map(|(_, _, edge)| {
+        .filter_map(|(_, endpoints, edge)| {
             edge.external
                 .as_ref()
-                .map(|leg| (leg.clone(), edge.particle))
+                .map(|leg| (leg.clone(), edge.particle, endpoints))
         })
         .collect::<Vec<_>>();
-    external_legs.sort_by_key(|(external, particle)| {
+    external_legs.sort_by_key(|(external, particle, _)| {
         (external.connection, external.state, particle.index())
     });
 
     let mut inserted_momenta = BTreeSet::new();
-    for (external, particle_id) in external_legs {
+    for (external, particle_id, endpoints) in external_legs {
         if inserted_momenta.insert(external.connection) {
             insert_sample_vector(
                 &mut library,
@@ -1244,29 +1244,44 @@ fn tensor_sample_library(
         }
 
         let particle = diagram.model().particle_by_id(particle_id)?;
-        let head = match (particle.spin, external.state, particle.is_antiparticle()) {
-            (2, ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
-            (2, ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
-            (2, ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
-            (2, ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
-            (3, ExternalState::Incoming, _) => feynkit_graph::symbols::epsilon(),
-            (3, ExternalState::Outgoing, _) => feynkit_graph::symbols::epsilonbar(),
-            _ => continue,
-        };
-        let label = if options.symmetric_polarizations {
-            format!("polarization:{}", external.connection)
-        } else {
-            format!("polarization:{head}:{}", external.connection)
-        };
-        insert_sample_wavefunction(
-            &mut library,
-            head,
-            symbol!("FeynKit::ExternalMomentum").call(external.connection as i64),
-            &label,
-            particle.spin,
-            options,
-            sample,
-        )?;
+        // A sewn carrier owns both endpoint wavefunctions, just as in the
+        // finalized projector; an unsewn leg retains its declared state.
+        for (vertex, state) in [
+            (endpoints.source, ExternalState::Outgoing),
+            (endpoints.target, ExternalState::Incoming),
+        ] {
+            if vertex.is_none() {
+                continue;
+            }
+            let state = if endpoints.source.is_some() && endpoints.target.is_some() {
+                state
+            } else {
+                external.state
+            };
+            let head = match (particle.spin, state, particle.is_antiparticle()) {
+                (2, ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
+                (2, ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
+                (2, ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
+                (2, ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
+                (3, ExternalState::Incoming, _) => feynkit_graph::symbols::epsilon(),
+                (3, ExternalState::Outgoing, _) => feynkit_graph::symbols::epsilonbar(),
+                _ => continue,
+            };
+            let label = if options.symmetric_polarizations {
+                format!("polarization:{}", external.connection)
+            } else {
+                format!("polarization:{head}:{}", external.connection)
+            };
+            insert_sample_wavefunction(
+                &mut library,
+                head,
+                symbol!("FeynKit::ExternalMomentum").call(external.connection as i64),
+                &label,
+                particle.spin,
+                options,
+                sample,
+            )?;
+        }
     }
     Ok(library)
 }
@@ -2128,6 +2143,367 @@ mod tests {
             evaluate_tensor_sample(&numerator, &diagram, &options, 0).unwrap(),
             Atom::num(-4) * (m + n).pow(30),
         );
+    }
+
+    #[test]
+    fn tensor_sample_library_covers_every_finalized_external_endpoint() {
+        use crate::FeynmanDiagramRulesExt;
+        use spenso::iterators::IteratableTensor;
+
+        let model = Arc::new(
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
+        );
+        let heads = [
+            feynkit_graph::symbols::epsilon(),
+            feynkit_graph::symbols::epsilonbar(),
+            feynkit_graph::symbols::u(),
+            feynkit_graph::symbols::ubar(),
+            feynkit_graph::symbols::v(),
+            feynkit_graph::symbols::vbar(),
+        ];
+        let spectator = test_atom("(UFO::MT+UFO::MH)^11");
+        for pdg in [22, 6, -6] {
+            for paired in [false, true] {
+                for state in [ExternalState::Incoming, ExternalState::Outgoing] {
+                    for reverse_storage in [false, true] {
+                        for connection in [0, 3] {
+                            let mut builder =
+                                FeynmanDiagram::builder(model.clone(), "sample-endpoints");
+                            let vertices = ["left", "right"].map(|name| {
+                                builder.add_vertex(DiagramVertex {
+                                    name: name.into(),
+                                    interaction: None,
+                                    numerator: Atom::one(),
+                                })
+                            });
+                            let mut edge = DiagramEdge::new(particle(&model, pdg), pdg != 22);
+                            let endpoints = if paired {
+                                edge.external = Some(ExternalLeg {
+                                    name: "paired".into(),
+                                    index: 0,
+                                    state,
+                                    connection,
+                                });
+                                (vertices[0], vertices[1])
+                            } else {
+                                let external = builder
+                                    .add_generation_external("external", 0, state, connection);
+                                let partner = builder.add_generation_external(
+                                    "spectator",
+                                    1,
+                                    ExternalState::Outgoing,
+                                    connection + 17,
+                                );
+                                builder
+                                    .add_edge(
+                                        vertices[1],
+                                        partner,
+                                        DiagramEdge::new(particle(&model, 25), false),
+                                    )
+                                    .unwrap();
+                                (external, vertices[0])
+                            };
+                            let (source, target) = if reverse_storage {
+                                (endpoints.1, endpoints.0)
+                            } else {
+                                endpoints
+                            };
+                            builder.add_edge(source, target, edge).unwrap();
+                            builder
+                                .add_edge(
+                                    vertices[0],
+                                    vertices[1],
+                                    DiagramEdge::new(particle(&model, 25), false),
+                                )
+                                .unwrap();
+                            let diagram = builder.build().unwrap();
+                            if paired && state == ExternalState::Outgoing {
+                                assert!(matches!(
+                                    diagram.validate(),
+                                    Err(DiagramError::Invariant {
+                                        operation: "validating sewn external flow",
+                                        ..
+                                    })
+                                ));
+                                continue;
+                            }
+                            let diagram = if paired {
+                                let (left, right) = diagram.half_edges().partition(|half_edge| {
+                                    let node = diagram
+                                        .underlying()
+                                        .node_id(diagram.half_edge_id(*half_edge).unwrap());
+                                    VertexId(node.0) == vertices[0]
+                                });
+                                diagram.with_cut_partitions(vec![(left, right)]).unwrap()
+                            } else {
+                                diagram
+                            };
+                            diagram.validate().unwrap();
+                            // This independent producer owns endpoint semantics.
+                            let projector = diagram.external_state_projector().unwrap();
+                            let expected_heads = heads
+                                .into_iter()
+                                .filter(|head| projector.contains_symbol(*head))
+                                .collect::<Vec<_>>();
+                            assert_eq!(expected_heads.len(), if paired { 2 } else { 1 });
+                            for symmetric_polarizations in [false, true] {
+                                let options = GraphGroupingOptions {
+                                    symmetric_polarizations,
+                                    ..GraphGroupingOptions::default()
+                                };
+                                let library = tensor_sample_library(&diagram, &options, 0).unwrap();
+                                let mut values = Vec::new();
+                                for head in heads {
+                                    let representation = if heads[..2].contains(&head) {
+                                        Minkowski {}.new_rep(4).cast::<LibraryRep>()
+                                    } else {
+                                        Bispinor {}.new_rep(4).cast::<LibraryRep>()
+                                    };
+                                    let key = ExplicitKey::from_iter(
+                                        [representation],
+                                        head,
+                                        Some(vec![
+                                            symbol!("FeynKit::ExternalMomentum")
+                                                .call(connection as i64),
+                                        ]),
+                                    );
+                                    let tensor = library.get_storage(key.canonical());
+                                    assert_eq!(
+                                        tensor.is_ok(),
+                                        expected_heads.contains(&head),
+                                        "pdg={pdg}, paired={paired}, state={state:?}, reverse={reverse_storage}, head={head}"
+                                    );
+                                    if let Ok(tensor) = tensor {
+                                        let actual = tensor
+                                            .iter_flat()
+                                            .map(|(_, value)| value.to_owned())
+                                            .collect::<Vec<Atom>>();
+                                        let label = if symmetric_polarizations {
+                                            format!("polarization:{connection}")
+                                        } else {
+                                            format!("polarization:{head}:{connection}")
+                                        };
+                                        let expected = (0..4)
+                                            .map(|component| {
+                                                complex_sample_value(
+                                                    &format!("{label}:{component}"),
+                                                    options.numerical_sample_seed,
+                                                    0,
+                                                )
+                                            })
+                                            .collect::<Vec<_>>();
+                                        assert_eq!(actual, expected);
+                                        values.push(actual);
+                                    }
+                                    let foreign = ExplicitKey::from_iter(
+                                        [representation],
+                                        head,
+                                        Some(vec![
+                                            symbol!("FeynKit::ExternalMomentum")
+                                                .call((connection + 1) as i64),
+                                        ]),
+                                    );
+                                    assert!(library.get(foreign.canonical()).is_err());
+                                }
+                                if paired {
+                                    if symmetric_polarizations {
+                                        assert_eq!(values[0], values[1]);
+                                    } else {
+                                        assert_ne!(values[0], values[1]);
+                                        assert_ne!(
+                                            values[0],
+                                            values[1]
+                                                .iter()
+                                                .map(AtomCore::conj)
+                                                .collect::<Vec<_>>()
+                                        );
+                                    }
+                                    let mut ports = Vec::new();
+                                    projector.visitor(&mut |atom| {
+                                        if let AtomView::Fun(function) = atom
+                                            && expected_heads.contains(&function.get_symbol())
+                                        {
+                                            ports.push(function.get(1).to_owned());
+                                            false
+                                        } else {
+                                            true
+                                        }
+                                    });
+                                    assert_eq!(ports.len(), 2);
+                                    let numerator =
+                                        &spectator * &projector * spenso::g!(&ports[0], &ports[1]);
+                                    let routed = normalize_momentum_routing(&diagram, numerator);
+                                    let scalar = Atom::add_many((0..4).map(|i| {
+                                        let product = &values[0][i] * &values[1][i];
+                                        if pdg == 22 && i != 0 {
+                                            -product
+                                        } else {
+                                            product
+                                        }
+                                    }));
+                                    assert_eq!(
+                                        evaluate_tensor_sample(&routed, &diagram, &options, 0)
+                                            .unwrap(),
+                                        &scalar * &spectator,
+                                    );
+                                    let numeric_options = GraphGroupingOptions {
+                                        fully_numerical_substitution: true,
+                                        ..options
+                                    };
+                                    let mt = complex_sample_value(
+                                        "model:UFO::MT",
+                                        options.numerical_sample_seed,
+                                        0,
+                                    );
+                                    let mh = complex_sample_value(
+                                        "model:UFO::MH",
+                                        options.numerical_sample_seed,
+                                        0,
+                                    );
+                                    assert_eq!(
+                                        evaluate_tensor_sample(
+                                            &routed,
+                                            &diagram,
+                                            &numeric_options,
+                                            0
+                                        )
+                                        .unwrap(),
+                                        scalar * (mt + mh).pow(11),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn charge_conjugate_sewn_self_energy_samples_bind_both_endpoints() {
+        use spenso::structure::TensorStructure;
+
+        let _ = AGS.gamma;
+        let model = Arc::new(
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
+        );
+        // Actual pre-UV native inputs for the two massive-quark self-energy
+        // supergraphs in gamma* -> t tbar. Preserve their matrix products.
+        let sources = [
+            test_atom(include_str!(
+                "../tests/fixtures/sewn_top_self_energy_cc_left.atom"
+            )),
+            test_atom(include_str!(
+                "../tests/fixtures/sewn_top_self_energy_cc_right.atom"
+            )),
+        ];
+        let conjugate = |input: &Atom| {
+            input.replace_map(|atom, _, output| {
+                if let AtomView::Fun(function) = atom
+                    && function.get_symbol() == AGS.gamma
+                {
+                    assert_eq!(function.get_nargs(), 3);
+                    **output = -FunctionBuilder::new(AGS.gamma)
+                        .add_args([function.get(1), function.get(0), function.get(2)])
+                        .finish();
+                }
+            })
+        };
+        // C gamma^T C^-1=-gamma, so a closed spinor circuit is unchanged by
+        // transposing every matrix and inserting these signs. This exact
+        // certificate is independent of the numerical grouping decision.
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        for source in &sources {
+            let tensor =
+                SymbolicTensor::infer(cooking.try_cook(source.as_view()).unwrap()).unwrap();
+            assert_eq!(
+                tensor
+                    .structure()
+                    .canonical()
+                    .external_structure_iter()
+                    .count(),
+                0
+            );
+        }
+        assert_eq!(conjugate(&sources[0]), sources[1]);
+        assert_eq!(conjugate(&conjugate(&sources[0])), sources[0]);
+
+        let diagrams = sources
+            .into_iter()
+            .enumerate()
+            .map(|(index, numerator)| {
+                let mut builder =
+                    FeynmanDiagram::builder(model.clone(), format!("self_energy_{index}"));
+                let vertices = ["qcd0", "qcd1", "photon0", "photon1"].map(|name| {
+                    builder.add_vertex(DiagramVertex {
+                        name: name.into(),
+                        interaction: None,
+                        numerator: Atom::one(),
+                    })
+                });
+                let mut external = DiagramEdge::new(particle(&model, 22), false);
+                external.external = Some(ExternalLeg {
+                    name: "ext0".into(),
+                    index: 0,
+                    state: ExternalState::Incoming,
+                    connection: 0,
+                });
+                builder
+                    .add_edge(vertices[3], vertices[2], external)
+                    .unwrap();
+                let sign = if index == 0 { -1 } else { 1 };
+                for (source, target, pdg) in [
+                    (0, 1, sign * 6),
+                    (0, 1, 21),
+                    (0, 3, -sign * 6),
+                    (1, 2, sign * 6),
+                    (2, 3, sign * 6),
+                ] {
+                    builder
+                        .add_edge(
+                            vertices[source],
+                            vertices[target],
+                            DiagramEdge::new(particle(&model, pdg), pdg != 21),
+                        )
+                        .unwrap();
+                }
+                let diagram = builder.build().unwrap();
+                let (left, right) = diagram.half_edges().partition(|half_edge| {
+                    let node = diagram
+                        .underlying()
+                        .node_id(diagram.half_edge_id(*half_edge).unwrap());
+                    VertexId(node.0) == vertices[2]
+                });
+                let diagram = diagram.with_cut_partitions(vec![(left, right)]).unwrap();
+                // Replay the recorded grouping input without claiming its
+                // replacement fragment is a local Feynman-rule numerator.
+                let diagram = diagram.with_numerator(numerator).unwrap();
+                diagram.validate().unwrap();
+                diagram
+            })
+            .collect::<Vec<_>>();
+        let options = GraphGroupingOptions::default();
+        assert!(scalar_names(&model).contains("MT"));
+        assert_eq!(
+            diagrams[0].loop_momentum_basis(),
+            diagrams[1].loop_momentum_basis()
+        );
+        assert_eq!(
+            canonical_topology(&diagrams[0], &model, &options, true)
+                .unwrap()
+                .key,
+            canonical_topology(&diagrams[1], &model, &options, true)
+                .unwrap()
+                .key,
+        );
+        for diagram in &diagrams {
+            let samples = numerical_tensor_samples(diagram.numerator(), diagram, &options).unwrap();
+            for value in samples {
+                assert!(!value.contains_symbol(feynkit_graph::symbols::epsilon()));
+                assert!(!value.contains_symbol(feynkit_graph::symbols::epsilonbar()));
+                assert!(value.contains_symbol(symbol!("UFO::MT")));
+            }
+        }
     }
 
     #[test]
