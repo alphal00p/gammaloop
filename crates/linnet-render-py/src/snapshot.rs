@@ -31,6 +31,10 @@ pub struct PyDiagramRender {
     diagrams: Vec<PyDiagramRender>,
 }
 impl PyDiagramRender {
+    pub fn with_source(mut self, source: String) -> Self {
+        self.source = Some(source);
+        self
+    }
     pub fn new(svg: String, html: String) -> Self {
         Self {
             project: None,
@@ -56,7 +60,7 @@ impl PyDiagramRender {
             diagrams,
         })
     }
-    pub(crate) fn prepared(project: PreparedRender) -> Self {
+    pub fn prepared(project: PreparedRender) -> Self {
         Self {
             project: Some(Arc::new(project)),
             source: None,

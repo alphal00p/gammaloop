@@ -1,4 +1,4 @@
-use linnet_py::{PyDiagramRender, PyRenderSettings};
+use linnet_render_py::{PyDiagramRender, PyRenderSettings};
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 pub(crate) mod execution;

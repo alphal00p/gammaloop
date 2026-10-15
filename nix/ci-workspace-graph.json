@@ -99,6 +99,7 @@
       "linnest",
       "linnet",
       "linnet-py",
+      "linnet-render-py",
       "spenso-macros",
       "spynso3",
       "typst-renderer"
@@ -179,6 +180,11 @@
       "symbolica-utils"
     ],
     "linnet-py": [
+      "linnest",
+      "linnet",
+      "linnet-render-py"
+    ],
+    "linnet-render-py": [
       "kurvst",
       "linnest",
       "linnet",
@@ -200,7 +206,7 @@
       "idenso",
       "linnest",
       "linnet",
-      "linnet-py",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -374,6 +380,7 @@
       ],
       "linnet": [],
       "linnet-py": [],
+      "linnet-render-py": [],
       "spenso-macros": [],
       "spynso3": [],
       "typst-renderer": []
@@ -509,7 +516,6 @@
       "symbolica-utils": []
     },
     "linnet-py": {
-      "kurvst": [],
       "linnest": [
         "svg"
       ],
@@ -517,6 +523,14 @@
         "nodestore-vec",
         "serde"
       ],
+      "linnet-render-py": []
+    },
+    "linnet-render-py": {
+      "kurvst": [],
+      "linnest": [
+        "svg"
+      ],
+      "linnet": [],
       "typst-renderer": [
         "full"
       ]
@@ -545,7 +559,7 @@
         "svg"
       ],
       "linnet": [],
-      "linnet-py": [],
+      "linnet-render-py": [],
       "spenso": [
         "portable-payload",
         "python",
@@ -603,6 +617,7 @@
     "linnest": "crates/linnest",
     "linnet": "crates/linnet",
     "linnet-py": "crates/linnet-py",
+    "linnet-render-py": "crates/linnet-render-py",
     "spenso": "crates/spenso",
     "spenso-hep-lib": "crates/spenso-hep-lib",
     "spenso-macros": "crates/spenso-macros",
@@ -642,6 +657,7 @@
     "linnest",
     "linnet",
     "linnet-py",
+    "linnet-render-py",
     "spenso",
     "spenso-hep-lib",
     "spenso-macros",
@@ -778,7 +794,7 @@
       "kurvst",
       "linnest",
       "linnet",
-      "linnet-py",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -897,6 +913,14 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-render-py",
+      "symbolica-data",
+      "typst-renderer"
+    ],
+    "linnet-render-py": [
+      "kurvst",
+      "linnest",
+      "linnet",
       "symbolica-data",
       "typst-renderer"
     ],
@@ -921,7 +945,7 @@
       "kurvst",
       "linnest",
       "linnet",
-      "linnet-py",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1079,7 +1103,7 @@
       "kurvst",
       "linnest",
       "linnet",
-      "linnet-py",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1198,6 +1222,14 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-render-py",
+      "symbolica-data",
+      "typst-renderer"
+    ],
+    "linnet-render-py": [
+      "kurvst",
+      "linnest",
+      "linnet",
       "symbolica-data",
       "typst-renderer"
     ],
@@ -1222,7 +1254,7 @@
       "kurvst",
       "linnest",
       "linnet",
-      "linnet-py",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1272,6 +1304,7 @@
     "idenso",
     "linnet",
     "linnet-py",
+    "linnet-render-py",
     "spenso",
     "spenso-hep-lib",
     "spynso3",
@@ -1299,6 +1332,7 @@
     "idenso",
     "linnet",
     "linnet-py",
+    "linnet-render-py",
     "spenso",
     "spenso-hep-lib",
     "spynso3",
@@ -1409,6 +1443,7 @@
       "linnest",
       "linnet",
       "linnet-py",
+      "linnet-render-py",
       "spenso-macros",
       "spynso3",
       "typst-renderer"
@@ -1491,6 +1526,11 @@
       "symbolica-utils"
     ],
     "linnet-py": [
+      "linnest",
+      "linnet",
+      "linnet-render-py"
+    ],
+    "linnet-render-py": [
       "kurvst",
       "linnest",
       "linnet",
@@ -1512,7 +1552,7 @@
       "idenso",
       "linnest",
       "linnet",
-      "linnet-py",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1689,6 +1729,7 @@
       ],
       "linnet": [],
       "linnet-py": [],
+      "linnet-render-py": [],
       "spenso-macros": [],
       "spynso3": [],
       "typst-renderer": []
@@ -1830,7 +1871,6 @@
       "symbolica-utils": []
     },
     "linnet-py": {
-      "kurvst": [],
       "linnest": [
         "svg"
       ],
@@ -1838,6 +1878,14 @@
         "nodestore-vec",
         "serde"
       ],
+      "linnet-render-py": []
+    },
+    "linnet-render-py": {
+      "kurvst": [],
+      "linnest": [
+        "svg"
+      ],
+      "linnet": [],
       "typst-renderer": [
         "full"
       ]
@@ -1868,7 +1916,7 @@
         "svg"
       ],
       "linnet": [],
-      "linnet-py": [],
+      "linnet-render-py": [],
       "spenso": [
         "portable-payload",
         "python",

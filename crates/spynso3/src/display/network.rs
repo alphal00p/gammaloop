@@ -384,8 +384,8 @@ impl SpensoNet {
     pub(crate) fn render_graph(
         &self,
         py: Python<'_>,
-        config: Option<&linnet_py::PyRenderSettings>,
-    ) -> PyResult<linnet_py::PyDiagramRender> {
+        config: Option<&linnet_render_py::PyRenderSettings>,
+    ) -> PyResult<linnet_render_py::PyDiagramRender> {
         let json = py.import("json")?;
         let snapshot: Value = serde_json::from_str(
             &json
@@ -395,7 +395,7 @@ impl SpensoNet {
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let runtime = pyo3::exceptions::PyRuntimeError::new_err;
         let scene = Self::network_scene(&snapshot).map_err(runtime)?;
-        linnet_py::PyDiagramRender::from_scene(py, scene, config)
+        linnet_render_py::PyDiagramRender::from_scene(py, scene, config)
     }
 
     fn network_scene(snapshot: &Value) -> Result<Scene, String> {

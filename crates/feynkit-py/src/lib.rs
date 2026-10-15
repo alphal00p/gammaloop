@@ -7,6 +7,7 @@ mod energy;
 mod error;
 mod generation;
 mod graph;
+#[cfg(feature = "linnet-python")]
 mod graph_interop;
 mod integrals;
 mod kinematics;
@@ -66,8 +67,13 @@ impl FeynkitModule {
     pub fn stub_source(module: &pyo3_stub_gen::generate::Module) -> String {
         // Jedi only collects adjacent overloads with the bare decorator name;
         // `@typing.overload` silently exposes just the last CFF/LTD signature.
-        module
-            .to_string()
+        let source = module.to_string();
+        #[cfg(not(feature = "linnet-python"))]
+        let source = source.replace(
+            "collections.abc.Callable[[symbolica.community.graph.Graph, int], bool] | None",
+            "None",
+        );
+        source
             .replace(
                 "import typing\n",
                 "import typing\nfrom typing import overload\n",

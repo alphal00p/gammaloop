@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 linnet-py = { path = "../../../crates/linnet-py", default-features = false }
-feynkit-py = { path = "../../../crates/feynkit-py", default-features = false, features = ["ufo"] }
+feynkit-py = { path = "../../../crates/feynkit-py", default-features = false, features = ["ufo", "linnet-python"] }
 spynso3 = { path = "../../../crates/spynso3", default-features = false }
 symbolica = { version = "=3.0.1", default-features = false, features = ["python_export"] }
 pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"] }

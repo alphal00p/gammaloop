@@ -3,6 +3,10 @@ use std::ffi::CString;
 use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram};
 use feynkit_model::Model;
 use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
+#[cfg(feature = "linnet-python")]
+use linnet_py::GraphModule;
+#[cfg(not(feature = "linnet-python"))]
+use linnet_render_py::GraphModule;
 use pyo3::{
     prelude::*,
     types::{PyCFunction, PyDict, PyList, PyModule},
@@ -15,8 +19,12 @@ use symbolica::{
 };
 
 const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/hepkit/__init__.py");
+#[cfg(feature = "linnet-python")]
 const GRAPH_WRAPPER: &str =
     include_str!("../../linnet-py/python/symbolica/community/graph/__init__.py");
+#[cfg(not(feature = "linnet-python"))]
+const GRAPH_WRAPPER: &str =
+    include_str!("../../linnet-render-py/python/symbolica/community/graph/__init__.py");
 const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
 const SPENSO_WRAPPER: &str = "from ..tensor_native import *\n\ninitialize_module()\n";
 
@@ -33,7 +41,7 @@ fn shared_numeric_external_states_in_installed_host() {
         symbolica.add("core", &core)?;
         let community = install_package(py, "symbolica.community")?;
         symbolica.add("community", &community)?;
-        register_native::<linnet_py::GraphModule>(&core)?;
+        register_native::<GraphModule>(&core)?;
         register_native::<FeynkitModule>(&core)?;
         import_wrapper(
             py,
@@ -61,10 +69,20 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
         symbolica.add("core", &core)?;
         let community = install_package(py, "symbolica.community")?;
         symbolica.add("community", &community)?;
-        register_native::<linnet_py::GraphModule>(&core)?;
+        register_native::<GraphModule>(&core)?;
         register_native::<FeynkitModule>(&core)?;
         register_native::<SpensoModule>(&core)?;
         import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;
+        #[cfg(not(feature = "linnet-python"))]
+        {
+            let graph = py.import("symbolica.community.graph")?;
+            for name in ["DiagramRender", "RenderSettings", "LayoutSettings", "Stroke"] {
+                assert!(graph.hasattr(name)?, "missing shared display class {name}");
+            }
+            for name in ["Graph", "Subgraph", "node", "edge", "build"] {
+                assert!(!graph.hasattr(name)?, "unexpected generic graph API {name}");
+            }
+        }
         import_wrapper(
             py,
             &community,
@@ -82,12 +100,15 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
         py.run(&network_tests, Some(&locals), Some(&locals))?;
         py.run(c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(NetworkDisplayTests)).wasSuccessful()", Some(&locals), Some(&locals))?;
         symbolica.add("E", core.getattr("E")?)?;
+        #[cfg(feature = "linnet-python")]
+        {
         let rendering_tests = CString::new(include_str!(
             "../../linnet-py/tests/test_community_rendering.py"
         )).unwrap();
         locals.set_item("__name__", "community_rendering_tests")?;
         py.run(&rendering_tests, Some(&locals), Some(&locals))?;
         py.run(c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(CommunityRenderingTests)).wasSuccessful()", Some(&locals), Some(&locals))?;
+        }
         for name in ["network", "diagram"] {
             let source = locals.get_item(name)?.unwrap().call_method0("to_linnest")?.extract::<String>()?;
             let files = std::collections::BTreeMap::from([("main.typ".into(), source.into_bytes())]);
@@ -193,7 +214,7 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
 
         let community = install_package(py, "symbolica.community")?;
         symbolica.add("community", &community)?;
-        register_native::<linnet_py::GraphModule>(&core)?;
+        register_native::<GraphModule>(&core)?;
         register_native::<FeynkitModule>(&core)?;
         register_native::<SpensoModule>(&core)?;
         import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;

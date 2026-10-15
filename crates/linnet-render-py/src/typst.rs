@@ -91,7 +91,7 @@ fn package_specification(value: &str) -> PyResult<String> {
     Ok(value.to_owned())
 }
 
-pub(crate) fn typst_string(value: &str) -> String {
+pub fn typst_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len() + 2);
     output.push('"');
     for character in value.chars() {
@@ -123,16 +123,16 @@ fn typst_float(value: f64) -> String {
 /// Renderer-owned module dependency collected from typed native values.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "kebab-case")]
-pub(crate) enum TypstModuleSource {
+pub enum TypstModuleSource {
     File(PathBuf),
     Package(String),
 }
 
 /// One deterministic import required by a serialized Typst expression.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct TypstImport {
-    pub(crate) alias: String,
-    pub(crate) source: TypstModuleSource,
+pub struct TypstImport {
+    pub alias: String,
+    pub source: TypstModuleSource,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2669,11 +2669,11 @@ impl SelectorSettings {
 
 /// Python callbacks evaluated against live graph element views before Typst serialization.
 #[derive(Debug)]
-pub(crate) struct SelectorCallbacks {
-    pub(crate) node: Option<Py<PyAny>>,
-    pub(crate) edge: Option<Py<PyAny>>,
-    pub(crate) source: Option<Py<PyAny>>,
-    pub(crate) sink: Option<Py<PyAny>>,
+pub struct SelectorCallbacks {
+    pub node: Option<Py<PyAny>>,
+    pub edge: Option<Py<PyAny>>,
+    pub source: Option<Py<PyAny>>,
+    pub sink: Option<Py<PyAny>>,
 }
 
 /// Per-render Python callbacks returning typed drawing patches.
@@ -3825,13 +3825,13 @@ impl PyRenderSettings {
 
 /// Resolved renderer transport plus its closed native Typst configuration.
 #[derive(Debug)]
-pub(crate) struct RenderSettingsTransport {
+pub struct RenderSettingsTransport {
     native: NativeValue,
-    pub(crate) config_source: String,
-    pub(crate) imports: Vec<TypstImport>,
-    pub(crate) template: Option<PathBuf>,
-    pub(crate) source_root: Option<PathBuf>,
-    pub(crate) selectors: SelectorCallbacks,
+    pub config_source: String,
+    pub imports: Vec<TypstImport>,
+    pub template: Option<PathBuf>,
+    pub source_root: Option<PathBuf>,
+    pub selectors: SelectorCallbacks,
 }
 
 impl NativeValue {
@@ -4221,11 +4221,11 @@ fn inherit_singleton(py: Python<'_>) -> Py<PyInherit> {
 }
 
 /// Return the shared INHERIT sentinel for graph-owned option dictionaries.
-pub(crate) fn inherit(py: Python<'_>) -> Py<PyAny> {
+pub fn inherit(py: Python<'_>) -> Py<PyAny> {
     inherit_singleton(py).into_any()
 }
 
-pub(crate) fn is_inherit(value: &Bound<'_, PyAny>) -> bool {
+pub fn is_inherit(value: &Bound<'_, PyAny>) -> bool {
     value.extract::<PyRef<'_, PyInherit>>().is_ok()
 }
 
@@ -4285,7 +4285,7 @@ fn drawing_field_spec(kind: &str, field: &str) -> Option<FieldSpec> {
 }
 
 /// Validate that a Python value belongs to the closed native Typst model.
-pub(crate) fn validate_native(value: &Bound<'_, PyAny>) -> PyResult<()> {
+pub fn validate_native(value: &Bound<'_, PyAny>) -> PyResult<()> {
     native_from_py(value, 0)?.validate(0)
 }
 
@@ -4467,11 +4467,7 @@ fn validate_nested_drawing_enums(value: &NativeValue) -> PyResult<()> {
 }
 
 /// Validate finite drawing fields without treating escaped strings as enum values.
-pub(crate) fn validate_drawing_field(
-    kind: &str,
-    field: &str,
-    value: &Bound<'_, PyAny>,
-) -> PyResult<()> {
+pub fn validate_drawing_field(kind: &str, field: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
     if !matches!(
         kind,
         "node" | "NodeDrawing" | "edge" | "EdgeDrawing" | "half-edge" | "HalfEdgeDrawing"
@@ -4495,7 +4491,7 @@ pub(crate) fn validate_drawing_field(
 }
 
 /// Convert a placement mode shorthand to the graph's native placement dictionary.
-pub(crate) fn normalize_placement(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+pub fn normalize_placement(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let value = native_from_py(value, 0)?;
     let value = match value {
         NativeValue::Enum(mode) if mode.kind() == EnumKind::Placement => NativeValue::Dict(
@@ -4507,14 +4503,14 @@ pub(crate) fn normalize_placement(py: Python<'_>, value: &Bound<'_, PyAny>) -> P
 }
 
 /// Recursively snapshot a supported native value without retaining mutable aliases.
-pub(crate) fn copy_native(py: Python<'_>, value: &Py<PyAny>) -> PyResult<Py<PyAny>> {
+pub fn copy_native(py: Python<'_>, value: &Py<PyAny>) -> PyResult<Py<PyAny>> {
     let value = native_from_py(value.bind(py), 0)?;
     value.validate(0)?;
     native_to_py(py, &value)
 }
 
 /// Convert a typed Compass value to its DOT keyword.
-pub(crate) fn compass_keyword(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+pub fn compass_keyword(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if value.is_none() || value.extract::<PyRef<'_, PyInherit>>().is_ok() {
         return Ok(None);
     }
@@ -4525,7 +4521,7 @@ pub(crate) fn compass_keyword(value: &Bound<'_, PyAny>) -> PyResult<Option<Strin
 }
 
 /// Convert one validated DOT compass keyword to its typed Compass value.
-pub(crate) fn compass_value(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
+pub fn compass_value(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
     let value = match value {
         "n" => PyCompass::N,
         "ne" => PyCompass::NE,
@@ -4547,7 +4543,7 @@ pub(crate) fn compass_value(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> 
 }
 
 /// Encode one closed native value for a reserved DOT drawing attribute.
-pub(crate) fn encode_dot_native(_py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<String> {
+pub fn encode_dot_native(_py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<String> {
     let value = native_from_py(value, 0)?;
     value.validate(0)?;
     value.reject_dot_module_references()?;
@@ -4560,7 +4556,7 @@ pub(crate) fn encode_dot_native(_py: Python<'_>, value: &Bound<'_, PyAny>) -> Py
 }
 
 /// Decode a reserved DOT drawing attribute into a closed native Python value.
-pub(crate) fn decode_dot_native(py: Python<'_>, text: &str) -> PyResult<Py<PyAny>> {
+pub fn decode_dot_native(py: Python<'_>, text: &str) -> PyResult<Py<PyAny>> {
     let envelope: DotNativeEnvelope = serde_json::from_str(text)
         .map_err(|error| PyValueError::new_err(format!("invalid encoded Typst value: {error}")))?;
     if envelope.schema != DOT_NATIVE_SCHEMA || envelope.version != DOT_NATIVE_VERSION {
@@ -4575,12 +4571,12 @@ pub(crate) fn decode_dot_native(py: Python<'_>, text: &str) -> PyResult<Py<PyAny
 }
 
 /// Create the sparse default configuration owned by every Python graph.
-pub(crate) fn default_render_config(py: Python<'_>) -> PyResult<Py<PyAny>> {
+pub fn default_render_config(py: Python<'_>) -> PyResult<Py<PyAny>> {
     Ok(Py::new(py, PyRenderSettings::default())?.into_any())
 }
 
 /// Reject non-RenderSettings graph defaults at the assignment boundary.
-pub(crate) fn validate_render_config(py: Python<'_>, config: &Py<PyAny>) -> PyResult<()> {
+pub fn validate_render_config(py: Python<'_>, config: &Py<PyAny>) -> PyResult<()> {
     config
         .bind(py)
         .extract::<PyRef<'_, PyRenderSettings>>()
@@ -4589,7 +4585,7 @@ pub(crate) fn validate_render_config(py: Python<'_>, config: &Py<PyAny>) -> PyRe
 }
 
 /// Snapshot a RenderSettings and reject all other objects.
-pub(crate) fn render_config_copy(py: Python<'_>, config: &Py<PyAny>) -> PyResult<Py<PyAny>> {
+pub fn render_config_copy(py: Python<'_>, config: &Py<PyAny>) -> PyResult<Py<PyAny>> {
     let config = config
         .bind(py)
         .extract::<PyRef<'_, PyRenderSettings>>()
@@ -4618,7 +4614,7 @@ fn effective_render_config(
 }
 
 /// Resolve renderer settings and serialize a base/overlay configuration.
-pub(crate) fn render_config_transport(
+pub fn render_config_transport(
     py: Python<'_>,
     base: &Py<PyAny>,
     overlay: Option<&Bound<'_, PyAny>>,
@@ -4640,7 +4636,7 @@ pub(crate) fn render_config_transport(
 }
 
 /// Evaluate one explicit selector and snapshot its closed native result.
-pub(crate) fn evaluate_selector(
+pub fn evaluate_selector(
     py: Python<'_>,
     selector: &Py<PyAny>,
     element: &Bound<'_, PyAny>,
@@ -4679,7 +4675,7 @@ pub(crate) fn evaluate_selector(
 }
 
 /// Register the typed Typst surface and its two singleton sentinels.
-pub(crate) fn register_typst_api(module: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn register_typst_api(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyAuto>()?;
     module.add_class::<PyInherit>()?;
     module.add_class::<PyLayoutAlgorithm>()?;
@@ -4831,10 +4827,10 @@ impl PyRenderSettings {
 }
 
 /// References into a snapshotted domain label module retain typed content semantics.
-pub(crate) fn label_reference(py: Python<'_>, path: PathBuf, name: &str) -> PyResult<Py<PyAny>> {
+pub fn label_reference(py: Python<'_>, path: PathBuf, name: &str) -> PyResult<Py<PyAny>> {
     Ok(Py::new(py, PyTypstModule::file(path).content(name)?)?.into_any())
 }
-pub(crate) fn point_length(py: Python<'_>, value: f64) -> PyResult<Py<PyAny>> {
+pub fn point_length(py: Python<'_>, value: f64) -> PyResult<Py<PyAny>> {
     Ok(Py::new(
         py,
         PyLength {
@@ -4847,7 +4843,7 @@ pub(crate) fn point_length(py: Python<'_>, value: f64) -> PyResult<Py<PyAny>> {
 
 /// Domain defaults participate in the same overlay model as user settings.
 impl PyRenderSettings {
-    pub(crate) fn scene_style(
+    pub fn scene_style(
         &self,
         py: Python<'_>,
         module: PathBuf,
@@ -4871,7 +4867,7 @@ impl PyRenderSettings {
         Ok(Py::new(py, PyTypstBind { expression })?.into_any())
     }
 
-    pub(crate) fn with_scene_defaults(
+    pub fn with_scene_defaults(
         &self,
         py: Python<'_>,
         scene: &linnest::svg::Scene,
@@ -4945,7 +4941,7 @@ impl PyRenderSettings {
         Ok(result)
     }
 }
-pub(crate) fn scene_color(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
+pub fn scene_color(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
     if value == "none" {
         Ok(py.None())
     } else {
@@ -4953,6 +4949,16 @@ pub(crate) fn scene_color(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
     }
 }
 
-pub(crate) fn scene_hatch(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
+pub fn scene_hatch(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
     Ok(Py::new(py, PyTypstModule::file(path).value("hatch")?)?.into_any())
+}
+
+impl PyRenderSettings {
+    pub fn has_selectors(&self, py: Python<'_>) -> bool {
+        let selectors = self.selectors.resolved(py);
+        selectors.node.is_some()
+            || selectors.edge.is_some()
+            || selectors.source.is_some()
+            || selectors.sink.is_some()
+    }
 }

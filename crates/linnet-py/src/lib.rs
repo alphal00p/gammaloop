@@ -3,30 +3,23 @@
 use pyo3::prelude::*;
 
 mod dot;
-mod drawing;
 mod graph;
 mod mutations;
 mod native_graph;
 mod render;
-pub use snapshot::PyDiagramRender;
-mod scene;
-mod snapshot;
 pub use graph::PyGraph;
+pub use linnet_render_py::{drawing, typst, PyDiagramRender, PyRenderSettings};
 pub use topology::PySubgraph;
-pub use typst::PyRenderSettings;
 pub use typst::{PyAuto as Auto, PyRenderSettings as RenderSettings};
 mod streaming;
-mod svg;
 mod topology;
-mod typst;
 
 pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     graph::register(module)?;
     topology::register(module)?;
-    drawing::register(module)?;
+    linnet_render_py::register(module)?;
+    linnet_render_py::register_scene_selectors(render::scene_selectors);
     dot::register(module)?;
-    typst::register_typst_api(module)?;
-    module.add_class::<PyDiagramRender>()?;
     streaming::register(module)?;
     Ok(())
 }

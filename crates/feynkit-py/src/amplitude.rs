@@ -1,4 +1,4 @@
-use linnet_py::PyDiagramRender;
+use linnet_render_py::PyDiagramRender;
 use std::{collections::BTreeMap, sync::Arc};
 
 use feynkit_amplitude::{Amplitude, AmplitudeLeg, AmplitudeOptions, SquaredAmplitude};
@@ -398,7 +398,7 @@ impl PyAmplitude {
     fn render(
         &self,
         py: Python<'_>,
-        config: Option<&linnet_py::PyRenderSettings>,
+        config: Option<&linnet_render_py::PyRenderSettings>,
         style: Option<&crate::render_settings::PyDiagramStyle>,
         max_diagrams: Option<usize>,
         term_settings: Option<&spynso3::display::DisplaySettings>,

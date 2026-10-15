@@ -111,8 +111,9 @@
     (workspaceRoot + "/crates/linnest/typst/src")
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
-    (workspaceRoot + "/crates/linnet-py/typst")
-    (workspaceRoot + "/crates/linnet-py/vendor")
+    (workspaceRoot + "/crates/linnet-py/typst/subgraph.css")
+    (workspaceRoot + "/crates/linnet-render-py/typst")
+    (workspaceRoot + "/crates/linnet-render-py/vendor")
     # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
     # adding its source directory does not change the documentation cache boundaries.
     (workspaceRoot + "/crates/spynso3/typst")
@@ -469,7 +470,10 @@
     "linnet-py" = [
       "crates/linnet-py/LICENSE"
       "crates/linnet-py/README.md"
-      "crates/linnet-py/typst"
+      "crates/linnet-py/typst/subgraph.css"
+    ];
+    "linnet-render-py" = [
+      "crates/linnet-render-py/typst"
       "crates/kurvst/typst/LICENSE"
       "crates/kurvst/typst/kurvst.wasm"
       "crates/kurvst/typst/src"
@@ -481,7 +485,7 @@
       "crates/linnest/typst/LICENSE"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
-      "crates/linnet-py/vendor"
+      "crates/linnet-render-py/vendor"
     ];
     spynso3 = ["crates/spynso3/typst"];
     "typst-renderer" = ["crates/typst-renderer/fonts"];
@@ -512,6 +516,7 @@
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"
       "crates/linnet-py/python/symbolica/community/graph/__init__.py"
+      "crates/linnet-render-py/python/symbolica/community/graph/__init__.py"
     ];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = ["crates/linnet-py/python/symbolica/community/graph/__init__.pyi" "docs/api/python"];

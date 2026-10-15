@@ -60,9 +60,13 @@ calling `set_license_key`. Keep expression-valued constants as static methods. A
 the native host, run `python crates/feynkit-py/tests/installed_import.py` against that installation
 to check that importing `E` and `hepkit` defers the license banner until the first operation.
 Notebook figures use embedded Rust SVG rendering and Typst labels; no Python
-Linnet or Typst dependency is needed. Register `linnet_py::GraphModule` to install the shared
-`symbolica.community.graph_native` module from `linnet-py`. Package
-`crates/linnet-py/python/symbolica/community/graph` alongside HepKit so
+Linnet or Typst dependency is needed. The host supplies the verified font resources
+listed in `crates/typst-renderer/data.json` and `crates/spynso3/data.json` through
+`SYMBOLICA_DATA_DIRECTORY` before rendering. This directory contains the extracted
+`render/fonts/` assets; the renderer checks their compiled hashes.
+Register `linnet_render_py::GraphModule` to install the shared
+`symbolica.community.graph_native` module from `linnet-render-py`. Package
+`crates/linnet-render-py/python/symbolica/community/graph` alongside HepKit so
 `symbolica.community.graph` exposes its shared settings, snapshots, and type information. Include the UFO loader revision documented in the #link("guides/showcases/ufo/")[UFO import example]
 when offering raw UFO import. Install it with `--no-deps` into the existing host environment:
 the host supplies the single Symbolica extension. The checkout's `uv.lock` instead installs a
@@ -72,7 +76,12 @@ community host containing its own native extension.
 == Export the documented Python surface
 
 Forward `feynkit-py/python_stubgen` from the host's stub-generation feature, alongside its other
-community modules. The documentation exporter updates both the package stub and the reference
+community modules. Generic graph conversion, graph-valued topology callbacks, and Linnet selection
+interoperability additionally require `feynkit-py/linnet-python` and registration
+of `linnet_py::GraphModule` in place of the display-only module. Leave that
+feature off in a display-only Community host. Python drawing selectors also
+require the generic module, since their callbacks receive live graph views.
+The documentation exporter updates both the package stub and the reference
 input from the same native module:
 
 // docs-example: syntax
@@ -83,12 +92,11 @@ cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- \
   feynkit-community docs/api/python/feynkit-community.pyi --check
 ```
 
-Export the shared rendering module with the same tool:
+Export the display-only rendering stub:
 
 // docs-example: syntax
 ```sh
-cargo run --locked -p alphal00p-docs-python-exporter --features render -- \
-  linnet-render docs/api/python/linnet-render.pyi
+cargo run --locked -p linnet-render-py --features python_stubgen --bin linnet-render-stubgen
 ```
 
 The public stub is generated from native signatures and docstrings. Its documentation audit

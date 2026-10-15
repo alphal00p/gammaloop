@@ -45,6 +45,7 @@ itertools = "0.14"
 json5 = "0.4.1"
 linnest = { path = "crates/linnest/" }
 linnet = { path = "crates/linnet/", default-features = false }
+linnet-render-py = { path = "crates/linnet-render-py/", default-features = false }
 momtrop = { git = "https://github.com/alphal00p/momtrop", rev = "2c80fae4dfb0f136ee07f750efd225d84feff072", default-features = false }
 ndarray = "0.17.2"
 notify = "8.2.0"

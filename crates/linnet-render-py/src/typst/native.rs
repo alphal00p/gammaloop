@@ -65,7 +65,7 @@ fn apply_style(
 }
 
 impl RenderSettingsTransport {
-    pub(crate) fn native_scene(
+    pub fn native_scene(
         &self,
         graph: TypstGraphSpec,
         selection: Option<&(Vec<bool>, Vec<usize>)>,
