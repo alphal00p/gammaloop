@@ -6,6 +6,7 @@ impl FeynmanDiagram {
     /// Resolve compact physics DOT and retain the exact source-to-final map
     /// used by finalization. Consumers can transport graph-local metadata
     /// without reconstructing ownership from momentum or particle labels.
+    /// `final_state` lists comma-separated particles; `|` joins allowed alternatives.
     pub fn from_compact_dot(
         model: Arc<Model>,
         parsed: DotGraph,
@@ -353,12 +354,18 @@ impl FeynmanDiagram {
                         target: "compact cross-section graph".into(),
                         attribute: "final_state",
                     })?;
-            let mut particles = final_state
-                .split(',')
-                .map(str::trim)
-                .map(|name| model.particle_id(name))
-                .collect::<Result<Vec<_>, _>>()?;
-            particles.sort();
+            let final_states = final_state
+                .split('|')
+                .map(|alternative| {
+                    let mut particles = alternative
+                        .split(',')
+                        .map(str::trim)
+                        .map(|name| model.particle_id(name))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    particles.sort();
+                    Ok::<_, ModelError>(particles)
+                })
+                .collect::<Result<BTreeSet<_>, _>>()?;
             let mut left_nodes = BTreeSet::new();
             let mut right_nodes = BTreeSet::new();
             for (_, endpoints, edge) in diagram.edges() {
@@ -415,7 +422,7 @@ impl FeynmanDiagram {
                 )?;
                 let mut content = diagram.cut_particles(&cut)?;
                 content.sort();
-                if content == particles {
+                if final_states.contains(&content) {
                     cuts.push(cut.clone());
                 }
                 if cut.cut.len() >= 2 {
@@ -447,6 +454,60 @@ impl FeynmanDiagram {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compact_final_state_alternatives_preserve_the_union_of_physical_cuts() {
+        let model = Arc::new(
+            Model::from_json(include_str!(
+                "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+            ))
+            .unwrap(),
+        );
+        let input = r#"digraph alternatives {
+            final_state="FINAL_STATE";
+            ext_in [style=invis]; ext_out [style=invis];
+            ext_in -> a [id=0 particle=scalar_1 is_cut=7];
+            a -> b [id=1 particle=scalar_1];
+            a -> d [id=2 particle=scalar_1];
+            b -> c [id=3 particle=scalar_1];
+            b -> c [id=4 particle=scalar_2];
+            c -> d [id=5 particle=scalar_1];
+            d -> ext_out [id=6 particle=scalar_1 is_cut=7];
+        }"#;
+        let load = |states: &str| {
+            FeynmanDiagram::from_compact_dot(
+                Arc::clone(&model),
+                DotGraph::from_string(input.replace("FINAL_STATE", states)).unwrap(),
+            )
+            .map(|(diagram, _)| diagram)
+        };
+        let two = load("scalar_1,scalar_1").unwrap();
+        let three = load("scalar_1,scalar_1,scalar_2").unwrap();
+        let both =
+            load("scalar_1,scalar_1 | scalar_1,scalar_2,scalar_1 | scalar_1,scalar_1").unwrap();
+        assert_eq!(two.cuts().len(), 2);
+        assert_eq!(three.cuts().len(), 1);
+        assert_eq!(
+            both.cuts().iter().cloned().collect::<BTreeSet<_>>(),
+            two.cuts()
+                .iter()
+                .chain(three.cuts())
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+        );
+        assert_eq!(both.loop_momentum_basis(), two.loop_momentum_basis());
+        assert_eq!(both.loop_momentum_basis(), three.loop_momentum_basis());
+        assert_eq!(
+            both.topology_threshold_candidates(),
+            two.topology_threshold_candidates()
+        );
+        assert_eq!(
+            both.topology_threshold_candidates(),
+            three.topology_threshold_candidates()
+        );
+        assert_eq!(both.numerator(), two.numerator());
+        assert!(load("scalar_1,scalar_1|").is_err());
+    }
 
     #[test]
     fn compact_dot_source_map_records_sewing_and_loop_ownership() {

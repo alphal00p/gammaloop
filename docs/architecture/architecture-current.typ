@@ -264,9 +264,9 @@ Typst head resolver display them as $q$ with the edge identifier and tensor inde
 FeynKit graph figures and GammaLoop drawings share the canonical particle-to-style
 mapping and Typst physics callbacks. Line patterns and labels derive from model
 metadata; the Python host embeds those same styles for standalone notebook rendering.
-FeynKit passes its generated Typst sources to `linnet-py::PreparedRender`, which owns
-asset staging, bundled packages, font configuration, and SVG compilation for both
-graph APIs.
+The Python graph APIs share `linnet-render-py`, which renders native SVG through
+Linnest and loads verified font resources supplied by the host. The application
+retains its separate Typst drawing workflow.
 
 GammaLoop's DOT importer selects one explicit source boundary: a canonical
 FeynKit diagram, a finalized GammaLoop runtime artifact, or compact model DOT.
@@ -275,6 +275,10 @@ parser. Compact model input instantiates missing model rules and the default
 external-state projector while retaining explicitly supplied local factors,
 including literal zero or one. Native topology parsing alone does not apply
 Feynman rules; rule construction belongs to the generator's explicit extension.
+Compact cross sections pair incoming/outgoing dangling legs using `is_cut` tags.
+Their `final_state` attribute lists comma-separated particles, with `|` between
+allowed alternatives; physical cuts are the deduplicated union, while topology
+threshold candidates and the declared loop basis are independent of this filter.
 
 Compact GammaLoop expressions enter the native index frame before finalization.
 Only represented half-edge local index labels change from zero-based to
@@ -284,6 +288,10 @@ the runtime graph. Canonical and finalized artifact expressions already have
 their declared frame and do not receive that compact-input conversion. Runtime
 graph operations resolve particle and rule identifiers through the supplied
 canonical model rather than retaining a second model representation.
+Process-level projector owners are external-leg labels. The generator resolves
+them to each topology's edge and attached half-edge before finalization, while
+the GammaLoop CLI applies the same local-slot conversion used by compact input.
+They must not be interpreted as provisional internal-edge identifiers.
 
 GammaLoop converts each finalized diagram once into its
 evaluator-oriented runtime graph. That conversion translates identifiers

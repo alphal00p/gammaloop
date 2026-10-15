@@ -1213,6 +1213,8 @@ pub enum ParseError {
     UnknownCoupling { name: String, choices: String },
     #[error("invalid lmb specification: {0}")]
     InvalidLmbSpec(ParseIntError),
+    #[error("invalid external-state projector: {0}")]
+    InvalidProjector(String),
 }
 
 pub fn parse_spec_with_model(
@@ -1331,7 +1333,9 @@ pub fn parse_spec_with_model(
         }
     }
     if let Some(projector) = &args.global_prefactor_projector {
-        options = options.projector(parse!(projector));
+        let projector = gammalooprs::numerator::aind::Aind::native_hedge_slots(&parse!(projector))
+            .map_err(|error| ParseError::InvalidProjector(error.to_string()))?;
+        options = options.projector(projector);
     }
     if let Some(numerator) = &args.global_prefactor_num {
         options = options.numerator_prefactor(parse!(numerator));
@@ -2452,6 +2456,32 @@ mod tests {
         let model = &load_generic_model("sm");
         let a = base_args(s);
         parse_spec_with_model(&a, GenerationType::CrossSection, model).unwrap()
+    }
+
+    #[test]
+    fn supplied_projector_preserves_external_owners_and_converts_only_local_slots() {
+        let model = load_generic_model("sm");
+        let mut args = base_args("a > d d~");
+        args.global_prefactor_projector = Some(
+            "gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0))) * \
+             spenso::g(spenso::cof(3,gammalooprs::hedge(1)),spenso::cof(3,gammalooprs::hedge(2)))"
+                .into(),
+        );
+        let spec = parse_spec_with_model(&args, GenerationType::Amplitude, &model).unwrap();
+        let options = serde_json::to_value(&spec.process_definition.generation_options).unwrap();
+        assert_eq!(
+            parse!(options["projector"].as_str().unwrap()),
+            parse!(
+                "gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0,1))) * \
+                 spenso::g(spenso::cof(3,gammalooprs::hedge(1,1)),spenso::cof(3,gammalooprs::hedge(2,1)))"
+            ),
+        );
+        args.global_prefactor_projector =
+            Some("spenso::mink(4,gammalooprs::hedge(0,65535))".into());
+        assert!(matches!(
+            parse_spec_with_model(&args, GenerationType::Amplitude, &model),
+            Err(ParseError::InvalidProjector(_))
+        ));
     }
 
     #[test]

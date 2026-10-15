@@ -234,8 +234,17 @@ vacuum graphs keep nested forests with vacuum subtraction, but each takes
 minutes and over 1 GB to generate on one worker.
 
 Generation uses Hyperfine 2.0.0 to measure the complete import, generation and state-save CLI process. Its raw export is retained and verified against the numeric metric; this scope supersedes the earlier Python-controller clock.
-For scalar cases, graph enumeration is outside this timing because the graph
-is supplied as a fixed DOT input. GL15 also runs graph enumeration.
+Graph enumeration is outside this timing because every workload imports a fixed
+DOT input. GL15 retains the original top-pentagon topology, projector, loop basis
+and numerical corpus independently of generator numbering. Its import and
+integrand construction are still measured on both revisions.
+The companion `benchmarks/performance/gg-hhh-topology.toml` card supports a
+separate local topology-generation comparison. It enumerates the complete
+ungrouped gg → hhh process with the same explicit projector. Compare fresh CLI
+processes in five alternating baseline/candidate pairs, and verify the exported
+particle/vertex topology multiset with fixed external labels and overall factors
+outside the timed process. This diagnostic is separate from the thirteen-case
+CI gate and does not certify symbolic numerator equivalence by topology alone.
 Numeric metadata retains the native per-graph total and the Spenso, Symbolica
 and compilation durations from `generation_summary.json`. The native total
 excludes CLI initialization, import and state saving. Probe cases also gate

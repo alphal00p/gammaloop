@@ -182,7 +182,8 @@ anchor = "pub fn generate("
 # Reviewed 2026-10-15: The spin/statistics diagnostic clears physical gauge-quartet declarations
 # after changing ghost spin; production generation and its documented ownership
 # are unchanged. The endpoint-sampling convention is documented separately.
-digest = "2e2d7d15ff14e009f18cdcb3ee84993157a10bdd"
+# Reviewed 2026-10-16: Process projector owners are resolved from external-leg labels before native finalization; the boundary and unchanged native local-slot convention are documented in the current architecture.
+digest = "dde7950a806b4d150bb88699dae76f9ddfb3be68"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -251,7 +252,8 @@ end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> S
 # Canonical/finalized literals bypass compact conversion.
 # Reviewed 2026-10-15: Canonical graph ownership is unchanged; model-parameter
 # construction errors propagate through every finalized import path.
-digest = "3fab07858377157d1938b09240c1cb42bf280c5c"
+# Reviewed 2026-10-16: Compact half-edge slot conversion now belongs to Aind and is shared with CLI projector input; the documented compact/native frames and ownership remain unchanged.
+digest = "475de272950b5351855d085321658b9e3e91937b"
 
 [[section.note]]
 id = "integration-dashboard"

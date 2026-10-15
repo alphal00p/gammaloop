@@ -1360,10 +1360,10 @@ fn graph_set_import_enforces_the_q3_convention_without_tensor_closure() {
             digraph q3_graph_set_validation {{
                 {numerator}
                 edge [pdg=1000]
-                ext [style=invis]
-                ext -> v4
-                ext -> v5
-                v6 -> ext
+                ext [style=invis num=1]
+                ext -> v4 [num=1]
+                ext -> v5 [num=1]
+                v6 -> ext [num=1]
                 v5 -> v4 [lmb_id=0]
                 v6 -> v5
                 v4 -> v6
@@ -1419,17 +1419,24 @@ fn hedge_payload_does_not_require_dod() {
 #[test]
 fn initial_state_cut_permutation_preserves_specified_loop_edges() {
     test_initialise().unwrap();
-    let graph: Graph = crate::finalized_runtime_dot!(digraph cut_lmb_permutation {
- graph [projector=1]
-        edge [num=1 mass=2]
-        node [num=1]
-        a -> b [id=0 name=first_loop lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-        a -> b [id=1 name=second_loop lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-        a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-        b -> a [id=3 is_cut=0 source="{ufo_order:3}" sink="{ufo_order:3}"]
-        b -> a [id=4 is_cut=1 source="{ufo_order:4}" sink="{ufo_order:4}"]
-    }, &crate::utils::load_generic_model("sm"))
-    .unwrap();
+    let graph = Graph::import_dot(
+        stringify!(digraph cut_lmb_permutation {
+            graph [projector=1 final_state="scalar_1,scalar_1,scalar_1"]
+            edge [num=1 particle=scalar_1]
+            node [num=1]
+            a -> b [id=0 name=first_loop lmb_id=0]
+            a -> b [id=1 name=second_loop lmb_id=1]
+            a -> b [id=2]
+            ext [style=invis]
+            ext -> a [id=3 is_cut=0]
+            b -> ext [id=4 is_cut=0]
+            ext -> a [id=5 is_cut=1]
+            b -> ext [id=6 is_cut=1]
+        }),
+        &crate::utils::load_generic_model("scalars"),
+    )
+    .unwrap()
+    .remove(0);
 
     assert_eq!(
         graph.loop_momentum_basis.ext_edges.raw,
@@ -1501,7 +1508,10 @@ fn vacuum_loop_edges_must_leave_a_spanning_forest() {
     let error = graph
         .err()
         .expect("an overcomplete loop basis must be rejected");
-    assert!(format!("{error:?}").contains("loop edges specified are not actual loop edges"));
+    assert!(
+        format!("{error:?}").contains("must label exactly 1 loop edges"),
+        "unexpected basis-validation error: {error:?}"
+    );
 }
 
 #[test]
