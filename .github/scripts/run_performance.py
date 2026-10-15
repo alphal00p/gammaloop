@@ -14,10 +14,10 @@ import statistics
 import subprocess
 import sys
 import time
-from decimal import Decimal, Underflow, localcontext
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from decimal import Decimal, Underflow, localcontext
 from pathlib import Path
 from string import Template
 from typing import ClassVar
@@ -1172,6 +1172,7 @@ def run_case(args, suite, name):
             "corpus": fixture.corpus,
             "config": fixture.config,
             "representation_hashes": representation_hashes,
+            "certified_imaginary_zero": fixture.certified_imaginary_zero,
         },
     )
     shutil.copyfile(__file__, prepared / "adapter.py")
@@ -1348,7 +1349,11 @@ def run_case(args, suite, name):
         "reference_group": fixture.config["reference_method"],
         "metric_families": list(MODE_METRICS),
         "correctness_tolerance": fixture.config["correctness_tolerance"],
-        **({"budget_class": "slow"} if fixture.precise else {}),
+        **(
+            {"budget_class": "slow", "confirm_on_correctness_failure": True}
+            if fixture.precise
+            else {}
+        ),
         **fixture.qualification_policy(),
     }
     write_json(prepared / "suite.json", definition)
@@ -1400,16 +1405,22 @@ def sample_main():
         if (
             fixture.hashes["fixture_sha256"]
             != value["representation_hashes"][representation]
-            or fixture.hashes["fixture_sha256"]
-            != Fixture.GL04_REPRESENTATION_HASHES[representation]
-            or any(
-                fixture.hashes[k] != expected
-                for k, expected in Fixture.GL04_SOURCE_HASHES.items()
-            )
         ):
             raise ValueError("Prepared LTD/CFF physical fixture identity changed")
         fixture.representation = representation
-        fixture.certified_imaginary_zero = Fixture.GL04_IMAGINARY_ZERO.copy()
+        certificate = value.get("certified_imaginary_zero")
+        if certificate is not None:
+            if (
+                certificate != Fixture.GL04_IMAGINARY_ZERO
+                or fixture.hashes["fixture_sha256"]
+                != Fixture.GL04_REPRESENTATION_HASHES[representation]
+                or any(
+                    fixture.hashes[k] != expected
+                    for k, expected in Fixture.GL04_SOURCE_HASHES.items()
+                )
+            ):
+                raise ValueError("Prepared source-zero certificate identity changed")
+            fixture.certified_imaginary_zero = certificate
     # Gammabench creates private/phase/repeat/role. This cache belongs only to
     # the current fresh capture and shares each expensive precise preparation
     # across its five native samples and any independent confirmation.

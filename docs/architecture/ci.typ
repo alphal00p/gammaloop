@@ -354,14 +354,29 @@ timing confirmation. The same 15% plus one-microsecond runtime policy applies.
 
 The slow gate preserves both native decimal components and the strict 10⁻⁵
 relative comparison as diagnostic evidence. The fixture-specific source predicate
-in `precise_sample.rs` certifies only the real component as analytically zero;
+certifies only the real component as analytically zero;
 when both producers pass that predicate, each real remainder must independently
 satisfy `abs(Re) ≤ sqrt(2⁻⁹⁹⁹) E_cm⁻⁷`, following the existing dimensioned scalar
 zero policy. The imaginary comparison retains the original relative tolerance
 with no absolute allowance. No binary64 conversion or other component's scale
 enters these comparisons. Raw strict mismatch counts remain in the report.
 A numerical mismatch remains a failure while timing measurements and required
-confirmation continue; a timeout remains incomplete evidence.
+confirmation continue; a timeout remains incomplete evidence. Only this precise
+case sets `confirm_on_correctness_failure = true`; the fast cases retain the
+framework's default confirmation behavior.
+
+These two certified-zero cases use gammabench's explicit `certified_zero`
+contract: a certificate with an `id` and `sha256`, and component-specific
+`index` and `absolute_bound` entries. Each adapter result must carry the exact
+declared certificate. GammaLoop's `GLFixture` owns the physical proof and
+dimensioned bounds; the framework verifies certificate identity and applies
+only the declared component allowances. It retains raw values and strict
+mismatch diagnostics alongside the qualified result. The slow case selects
+`correctness_format = "decimal"` so this comparison never rounds through
+binary64, and `budget_class = "slow"` for its 7200-second deadline. Ordinary
+cases retain the 240-second default. Each role prepares its state once inside
+its first trial, sharing that deadline with all paired samples and any
+confirmation. This preparation is not a paired generation metric.
 
 Use an adequately provisioned host such as `itphlies`: exact-main generation
 has exceeded 21 GB, whereas the
