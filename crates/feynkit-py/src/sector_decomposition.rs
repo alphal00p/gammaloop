@@ -49,7 +49,17 @@ impl PyFeynmanDiagram {
     /// --------
     /// With a complete diagram, an admitted numerical point and regulator ``eps``:
     ///
-    /// >>> generated = diagram.sector_decompose(regulator=eps, kinematics=kinematics)
+    /// >>> from symbolica import E, S
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> model = hep.Model.phi3()
+    /// >>> diagram = model.process(["phi"], ["phi"]).generate_diagrams(loops=1, max_vertices=2, maximum_bridges=0, progress=None).diagrams[0]
+    /// >>> from symbolica.community.hepkit.sector_decomposition import with_diagram_expressions
+    /// >>> diagram = with_diagram_expressions(diagram, overall_factor=diagram.overall_factor_expression(evaluate=True))
+    /// >>> eps, D = S("eps", "D")
+    /// >>> P = hep.Kinematics.external_momentum()
+    /// >>> point = hep.Kinematics(D, momenta=[P(0)]).with_scalar_product(P(0), P(0), E("-1"))
+    /// >>> values = {model.particle("phi").mass: E("1"), model.parameter("g").symbol: E("1")}
+    /// >>> generated = diagram.sector_decompose(regulator=eps, kinematics=point, scalar_values=values, progress=None)
     /// >>> kernels = generated.compile()
     ///
     /// Parameters
@@ -80,7 +90,12 @@ impl PyIntegralFamily {
     /// --------
     /// For a family with numerical external kinematics and regulator ``eps``:
     ///
-    /// >>> generated = family.sector_decompose(regulator=eps, powers=[1, 1], numerator=E("1"))
+    /// >>> from symbolica import E, S
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> eps, D, k = S("eps", "D", "k")
+    /// >>> point = hep.Kinematics(D, momenta=[k])
+    /// >>> family = hep.IntegralFamily([k], [], [point.scalar_product(k, k) - 1], kinematics=point)
+    /// >>> generated = family.sector_decompose(regulator=eps, powers=[2], numerator=E("1"), progress=None)
     /// >>> kernels = generated.compile()
     ///
     /// Parameters
@@ -126,7 +141,17 @@ pyo3_stub_gen::inventory::submit! {
                 --------
                 With a complete diagram and admitted numerical kinematics:
 
-                >>> generated = diagram.sector_decompose(regulator=eps, kinematics=kinematics)
+                >>> from symbolica import E, S
+                >>> from symbolica.community import hepkit as hep
+                >>> model = hep.Model.phi3()
+                >>> diagram = model.process(["phi"], ["phi"]).generate_diagrams(loops=1, max_vertices=2, maximum_bridges=0, progress=None).diagrams[0]
+                >>> from symbolica.community.hepkit.sector_decomposition import with_diagram_expressions
+                >>> diagram = with_diagram_expressions(diagram, overall_factor=diagram.overall_factor_expression(evaluate=True))
+                >>> eps, D = S("eps", "D")
+                >>> P = hep.Kinematics.external_momentum()
+                >>> point = hep.Kinematics(D, momenta=[P(0)]).with_scalar_product(P(0), P(0), E("-1"))
+                >>> values = {model.particle("phi").mass: E("1"), model.parameter("g").symbol: E("1")}
+                >>> generated = diagram.sector_decompose(regulator=eps, kinematics=point, scalar_values=values, progress=None)
                 >>> kernels = generated.compile()
 
                 Parameters
@@ -189,7 +214,12 @@ pyo3_stub_gen::inventory::submit! {
                 --------
                 For a numerical family, with powers in native denominator order:
 
-                >>> generated = family.sector_decompose(regulator=eps, powers=[1, 1], numerator=E("1"))
+                >>> from symbolica import E, S
+                >>> from symbolica.community import hepkit as hep
+                >>> eps, D, k = S("eps", "D", "k")
+                >>> point = hep.Kinematics(D, momenta=[k])
+                >>> family = hep.IntegralFamily([k], [], [point.scalar_product(k, k) - 1], kinematics=point)
+                >>> generated = family.sector_decompose(regulator=eps, powers=[2], numerator=E("1"), progress=None)
                 >>> kernels = generated.compile()
 
                 Parameters

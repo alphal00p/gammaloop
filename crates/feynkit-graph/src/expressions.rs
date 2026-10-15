@@ -150,6 +150,12 @@ pub struct PropagatorSymbols {
 }
 
 impl PropagatorSymbols {
+    /// The scalar energy component of a physical edge before momentum routing.
+    pub fn energy(&self, edge: EdgeIndex) -> Atom {
+        use spenso::structure::abstract_index::AIND_SYMBOLS;
+        function!(self.momentum, edge.0, function!(AIND_SYMBOLS.cind, 0))
+    }
+
     /// The uncontracted Minkowski vector carried by an edge.
     pub fn momentum(&self, edge: EdgeIndex, dimension: Dimension) -> Atom {
         let representation = Minkowski {}.new_rep(dimension).to_symbolic([]);
