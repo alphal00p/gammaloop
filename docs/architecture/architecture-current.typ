@@ -787,13 +787,17 @@ all prefactors before tensor-network parsing. Indexed printers use ordinary
 function notation for malformed calls, so validation can report the error.
 
 Numerator-comparison samples use incoming and outgoing wavefunction keys with
-the same flow convention as amplitude generation. Each sampled scalar has a
-lazy exact polynomial cache. A Lorentz-zero test stops at the first certified
-nonzero sample; candidate ratio comparisons reuse the caches and retain the
-configured sample count. Each color term caches its canonical form at the
-first sample's ordinary evaluation point. Later samples reuse it while retaining
-their own Lorentz contractions and scalar substitutions. Graph numerators remain
-factorized throughout.
+the same flow convention as amplitude generation. A sewn external edge has two
+occupied endpoints and therefore samples both wavefunction heads; an unsewn leg
+samples only its declared external state. Each head keeps its connection-local
+sample label. Only the explicit symmetric-polarization option shares those
+labels; sampling does not impose complex conjugation between the heads.
+Model scalars remain symbolic unless full numerical substitution is requested.
+The configured tensor samples retain their own Lorentz contractions and scalar
+substitutions. Exact comparison uses typed coefficient proofs; rescaling may
+cancel existing common factors but does not expand a graph numerator to prove
+a polynomial identity. An inconclusive comparison keeps separate graph groups.
+Graph numerators remain factorized throughout.
 After grouping, the scalar symmetry weights are combined over a common
 denominator before testing whether the class vanishes. This also removes zeros hidden
 behind polynomial denominators in the member ratios; stored provenance and
