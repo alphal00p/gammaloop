@@ -1994,7 +1994,12 @@ impl SpensoTags {
             ),
             pure_scalar: symbol!("pure_scalar"),
             scalar: symbol!("scalar"),
-            dot: symbol!("dot";Symmetric,Linear,Scalar; print = Self::print_dot),
+            dot: symbol!("dot";Symmetric,Linear,Scalar; print = Self::print_dot,
+            norm = |value, out| {
+                if let Some(result) = crate::network::library::symbolic::MetricNormalization::normalize_fixed_basis(value) {
+                    **out = result;
+                }
+            }),
             tensor_: symbol!("tensor_", tag = tensor, print = tensor_print),
             tensor_display: symbol!(
                 "tensor_display",

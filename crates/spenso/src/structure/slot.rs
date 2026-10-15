@@ -506,6 +506,42 @@ impl SlotMatcher {
         })
     }
 
+    /// Read a fixed coordinate vector `δ(cind(i), rep(d))` with a valid basis
+    /// coordinate. Concrete dimensions prove their own bounds. A symbolic
+    /// Minkowski space retains the physical four-dimensional subspace used by
+    /// dimensional regularization; coordinates outside that subspace stay
+    /// unresolved until its dimension is concrete. No symbolic dimension is
+    /// replaced by four.
+    pub fn fixed_basis_vector<'a>(
+        &mut self,
+        value: AtomView<'a>,
+    ) -> Option<(usize, RepresentationView<'a>)> {
+        let AtomView::Fun(vector) = value else {
+            return None;
+        };
+        if vector.get_symbol() != crate::network::library::symbolic::ETS.delta
+            || vector.get_nargs() != 2
+        {
+            return None;
+        }
+        let component = vector.get(0);
+        if !matches!(component, AtomView::Fun(marker) if marker.get_symbol() == AIND_SYMBOLS.cind) {
+            return None;
+        }
+        let component = self.concrete_component(component)?.ok()?;
+        let representation = self.compact_representation(vector.get(1))?;
+        let dimension = representation.dimension();
+        let in_bounds = if matches!(dimension, AtomView::Num(_)) {
+            usize::try_from(dimension).is_ok_and(|dimension| component < dimension)
+        } else {
+            representation.is_self_dual()
+                && representation.head()
+                    == LibraryRep::from(super::representation::Minkowski {}).symbol()
+                && component < 4
+        };
+        in_bounds.then_some((component, representation))
+    }
+
     /// Validate a recognized slot using the requested representation and index types.
     /// Use [`SlotView::index`] when exact symbolic index identity must be preserved.
     pub fn parse<T: RepName, Aind: ParseableAind>(

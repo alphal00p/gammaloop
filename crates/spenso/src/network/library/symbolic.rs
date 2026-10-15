@@ -30,7 +30,7 @@ pub type LibraryKey<Aind> = Canonicalized<ExplicitKey<Aind>>;
 /// Intrinsic identities of one metric application, independent of surrounding
 /// products or contraction settings. Symbolica calls this after its arguments
 /// have normalized, so traces also compose correctly inside scalar powers.
-struct MetricNormalization;
+pub(crate) struct MetricNormalization;
 
 impl MetricNormalization {
     fn normalize(value: AtomView<'_>, literal: bool) -> Option<Atom> {
@@ -44,6 +44,11 @@ impl MetricNormalization {
         let first = arguments.next().unwrap();
         let second = arguments.next().unwrap();
         let mut slots = SlotMatcher::default();
+        if let Some(result) = Self::basis_product(first, second, &mut slots)
+            && (literal || !Self::has_wildcard(value))
+        {
+            return Some(result);
+        }
         match (slots.classify(first), slots.classify(second)) {
             (SlotMatch::Explicit(first_slot), SlotMatch::Explicit(second_slot)) => {
                 if first_slot.index() == second_slot.index()
@@ -66,6 +71,43 @@ impl MetricNormalization {
             }
             _ => None,
         }
+    }
+
+    /// The scalar `dot` spelling shares the metric's fixed-coordinate identity,
+    /// while retaining its own rank-one admission and other notation rules.
+    pub(crate) fn normalize_fixed_basis(value: AtomView<'_>) -> Option<Atom> {
+        let AtomView::Fun(function) = value else {
+            return None;
+        };
+        if function.get_nargs() != 2 {
+            return None;
+        }
+        let result = Self::basis_product(
+            function.get(0),
+            function.get(1),
+            &mut SlotMatcher::default(),
+        )?;
+        (!Self::has_wildcard(value)).then_some(result)
+    }
+
+    fn basis_product(
+        first: AtomView<'_>,
+        second: AtomView<'_>,
+        slots: &mut SlotMatcher,
+    ) -> Option<Atom> {
+        let (left, left_representation) = slots.fixed_basis_vector(first)?;
+        let (right, right_representation) = slots.fixed_basis_vector(second)?;
+        if !left_representation.matches(right_representation) {
+            return None;
+        }
+        let (representation, _) = slots.port_representation(first)?;
+        Some(Atom::num(if left != right {
+            0
+        } else if representation.is_neg(left) {
+            -1
+        } else {
+            1
+        }))
     }
 
     fn compact_vector(
@@ -954,6 +996,147 @@ mod metric_normalization_tests {
             if function.get_symbol() == ETS.metric),
             "{value}"
         );
+    }
+
+    #[test]
+    fn fixed_minkowski_basis_products_preserve_dimension_and_factorization() {
+        use crate::structure::representation::Minkowski;
+
+        initialize();
+        let dimension = Atom::var(symbol!("fixed_metric_basis::d"));
+        let basis = |component: usize, dimension: &Atom| {
+            function!(
+                ETS.delta,
+                function!(AIND_SYMBOLS.cind, component),
+                Minkowski {}.to_symbolic([dimension])
+            )
+        };
+        let spectator = (&dimension - Atom::num(2))
+            * (Atom::var(symbol!("fixed_metric_basis::x"))
+                + Atom::var(symbol!("fixed_metric_basis::y")))
+            .pow(9);
+        for space_dimension in [dimension.clone(), Atom::num(4)] {
+            for left in 0..4 {
+                for right in 0..4 {
+                    let sign = if left != right {
+                        0
+                    } else if left == 0 {
+                        1
+                    } else {
+                        -1
+                    };
+                    for head in [ETS.metric, SPENSO_TAG.dot] {
+                        let product = function!(
+                            head,
+                            basis(left, &space_dimension),
+                            basis(right, &space_dimension)
+                        );
+                        assert_eq!(product, Atom::num(sign));
+                        assert_eq!(&spectator * &product, Atom::num(sign) * &spectator);
+                        assert_eq!(
+                            (&spectator * product).pow(2),
+                            Atom::num(sign * sign) * spectator.pow(2)
+                        );
+                    }
+                }
+            }
+        }
+        // A known larger space proves bounds beyond the physical 0..3 axes.
+        for head in [ETS.metric, SPENSO_TAG.dot] {
+            assert_eq!(
+                function!(head, basis(4, &Atom::num(6)), basis(4, &Atom::num(6))),
+                Atom::num(-1)
+            );
+            // Rebuilding after a dimension substitution invokes the same
+            // intrinsic rule; no whole-expression normalization is needed.
+            let unresolved = function!(head, basis(4, &dimension), basis(4, &dimension));
+            assert_eq!(
+                unresolved
+                    .replace(dimension.to_pattern())
+                    .with(Atom::num(6)),
+                Atom::num(-1)
+            );
+            assert_eq!(
+                function!(head, basis(0, &dimension), basis(0, &dimension)).pow(3),
+                Atom::one()
+            );
+        }
+    }
+
+    #[test]
+    fn fixed_basis_products_reject_unproven_or_incompatible_components() {
+        use crate::structure::representation::{Euclidean, Minkowski};
+
+        initialize();
+        let dimension = Atom::var(symbol!("fixed_metric_bounds::d"));
+        let other_dimension = Atom::var(symbol!("fixed_metric_bounds::e"));
+        let mink = |dimension: &Atom| Minkowski {}.to_symbolic([dimension]);
+        let basis =
+            |component: Atom, representation: Atom| function!(ETS.delta, component, representation);
+        let fixed = |component: i32, dimension: &Atom| {
+            basis(function!(AIND_SYMBOLS.cind, component), mink(dimension))
+        };
+        let valid = fixed(1, &dimension);
+        let unknown_vector = function!(
+            SPENSO_TAG.rank_one_tensor_symbol("fixed_metric_bounds::p"),
+            mink(&dimension)
+        );
+        let invalid_vectors = [
+            fixed(-1, &dimension),
+            basis(
+                function!(AIND_SYMBOLS.cind, Atom::num((1, 2))),
+                mink(&dimension),
+            ),
+            basis(
+                function!(AIND_SYMBOLS.cind, Atom::num(1), Atom::num(2)),
+                mink(&dimension),
+            ),
+            basis(function!(AIND_SYMBOLS.find, Atom::num(1)), mink(&dimension)),
+            basis(Atom::num(1), mink(&dimension)),
+            basis(
+                function!(AIND_SYMBOLS.cind, Atom::num(1)),
+                Minkowski {}.to_symbolic([&dimension, &Atom::num(7)]),
+            ),
+            fixed(4, &dimension),
+            fixed(4, &Atom::num(4)),
+            fixed(1, &Atom::num(0)),
+            fixed(1, &Atom::num(-1)),
+            fixed(1, &Atom::num((3, 2))),
+            unknown_vector,
+        ];
+        for head in [ETS.metric, SPENSO_TAG.dot] {
+            for invalid in &invalid_vectors {
+                let product = function!(head, invalid, invalid);
+                assert!(
+                    matches!(product.as_view(), AtomView::Fun(function) if function.get_symbol() == head),
+                    "{product}"
+                );
+            }
+            for incompatible in [
+                fixed(1, &other_dimension),
+                fixed(1, &Atom::num(4)),
+                basis(
+                    function!(AIND_SYMBOLS.cind, Atom::num(1)),
+                    Euclidean {}.to_symbolic([&dimension]),
+                ),
+            ] {
+                let product = function!(head, &valid, incompatible);
+                assert!(
+                    matches!(product.as_view(), AtomView::Fun(function) if function.get_symbol() == head),
+                    "{product}"
+                );
+            }
+            let wildcard = Atom::var(symbol!("fixed_metric_bounds::d_"));
+            let product = function!(head, fixed(1, &wildcard), fixed(1, &wildcard));
+            assert!(
+                matches!(product.as_view(), AtomView::Fun(function) if function.get_symbol() == head)
+            );
+            let euclidean = basis(
+                function!(AIND_SYMBOLS.cind, Atom::num(1)),
+                Euclidean {}.to_symbolic([Atom::num(3)]),
+            );
+            assert_eq!(function!(head, &euclidean, &euclidean), Atom::one());
+        }
     }
 
     #[test]
