@@ -1,8 +1,9 @@
-//! Regression reference captured from unchanged GammaLoop before shared graph
-//! finalization. It covers scalar and vector loops, fermions and antifermions,
-//! amplitude dangling edges and sewn cross-section initial states. Every native
-//! coordinate and symbolic fragment is compared without importing or rewriting
-//! the reference through the new shared implementation.
+//! Regression snapshot for the finalized FeynKit/GammaLoop graph boundary.
+//! It covers scalar and vector loops, fermions and antifermions, amplitude
+//! dangling edges and sewn cross-section initial states. The reference includes
+//! current main's Standard Model corrections and the native initial-state and
+//! ghost-loop conventions. Every coordinate and symbolic fragment is compared
+//! exactly, without reimporting or rewriting the stored reference.
 
 use crate::{graph::Graph, uv::UltravioletGraph};
 use feynkit_generator::{GenerationOptions, GenerationType, Process};

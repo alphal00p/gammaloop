@@ -379,26 +379,7 @@ impl Graph {
             // canonical expression to FeynKit. Only represented half-edge
             // indices change chart; momentum and other owner tags stay literal.
             let atom: Atom = value.strip_parse()?;
-            let mut overflow = false;
-            let atom = atom.replace_map(|part, _, output| {
-                if let std::result::Result::Ok(slot) =
-                    spenso::structure::representation::LibrarySlot::<Aind>::try_from(part)
-                    && let Aind::Hedge(hedge, local) = slot.aind
-                {
-                    if let Some(local) = local.checked_add(1) {
-                        **output = slot
-                            .rep()
-                            .slot::<Aind, _>(Aind::Hedge(hedge, local))
-                            .to_atom();
-                    } else {
-                        overflow = true;
-                    }
-                }
-            });
-            eyre::ensure!(
-                !overflow,
-                "compact half-edge index exceeds the native UFO index range"
-            );
+            let atom = Aind::native_hedge_slots(&atom)?;
             *value = atom.to_canonical_string();
             Ok(())
         };

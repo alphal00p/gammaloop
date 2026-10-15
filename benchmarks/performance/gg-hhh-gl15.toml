@@ -1,20 +1,11 @@
-# Physical threshold-subtracted GL15 fixture shared with test_runs/utils.rs.
-# Both revisions receive this exact card and save their own generated state.
-# The builtin SM lets each revision read its own model format.
+# Physical GL15 frozen from current main, independent of generator numbering.
+# Measures integrand construction and runtime; topology generation is checked separately.
 commands = [
   "import model sm-default",
   "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
   "set global kv global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=true",
   "remove processes",
-  '''generate amp g g > h h h / u d c s b QED==3 [{1}]
-      --only-diagrams
-      --numerator-grouping only_detect_zeroes
-      --select-graphs GL15
-      --loop-momentum-bases GL15=8
-      --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
-                                     * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
-                                     * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
-      -p gg_hhh -i 1L''',
+  "import graphs benchmarks/performance/gg-hhh-gl15.dot --process-spec 'g g > h h h / u d c s b QED==3 [{1}]' -p gg_hhh -i 1L",
   "generate",
   "set model MT=173.0",
   "set model WT=0.0",

@@ -5,11 +5,14 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Hedge},
 };
 use spenso::{
-    structure::slot::{AbsInd, DummyAind, ParseableAind, SlotError},
+    structure::{
+        representation::LibrarySlot,
+        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotError},
+    },
     utils::{to_subscript, to_superscript},
 };
 use symbolica::{
-    atom::{Atom, AtomView, Symbol, representation::FunView},
+    atom::{Atom, AtomCore, AtomView, Symbol, representation::FunView},
     coefficient::CoefficientView,
     function, symbol,
 };
@@ -42,6 +45,33 @@ pub enum Aind {
     UVTerm(u16, u16),
     Symbol(Symbol),
     Dummy(usize),
+}
+
+impl Aind {
+    /// Transport represented GammaLoop half-edge slots into the native UFO frame.
+    /// Scalar literals, momentum owners and other index kinds retain their meaning.
+    pub fn native_hedge_slots(expression: &Atom) -> eyre::Result<Atom> {
+        let mut overflow = false;
+        let result = expression.replace_map(|part, _, output| {
+            if let Ok(slot) = LibrarySlot::<Self>::try_from(part)
+                && let Self::Hedge(hedge, local) = slot.aind
+            {
+                if let Some(local) = local.checked_add(1) {
+                    **output = slot
+                        .rep()
+                        .slot::<Self, _>(Self::Hedge(hedge, local))
+                        .to_atom();
+                } else {
+                    overflow = true;
+                }
+            }
+        });
+        eyre::ensure!(
+            !overflow,
+            "compact half-edge index exceeds the native UFO index range"
+        );
+        Ok(result)
+    }
 }
 
 pub trait NewAind {

@@ -894,6 +894,8 @@ impl GenerationOptions {
     ///
     /// Passing `1` explicitly disables external wavefunctions; leaving the
     /// option unset generates the physical wavefunction for every external leg.
+    /// Wavefunction, momentum and represented index owners refer to process
+    /// external-leg labels; local tensor slots use the native one-based UFO frame.
     pub fn projector(mut self, projector: Atom) -> Self {
         self.projector = Some(projector);
         self

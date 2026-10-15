@@ -111,6 +111,8 @@ pub enum GenerationError {
     MissingExternalEdge { node: usize },
     #[error("external leg {index} has no resolved particle")]
     MissingExternalParticle { index: usize },
+    #[error("projector refers to unknown process external leg {index}")]
+    UnknownProjectorExternalIndex { index: usize },
     #[error("external fermion flow must have exactly two legs, found {legs:?}")]
     InvalidExternalFermionLegCount { legs: Vec<usize> },
     #[error(
@@ -2887,10 +2889,8 @@ impl Generator {
                 )
             })
             .count();
-        let projector = match &options.projector {
-            Some(projector) => projector.clone(),
-            None => self.external_state_projector(&topology.graph)?,
-        };
+        let projector =
+            self.external_state_projector(&topology.graph, options.projector.as_ref())?;
         let mut builder = FeynmanDiagram::builder(Arc::clone(&self.model), name)
             .canonical_loop_momentum_basis()
             .symmetry_factor(topology.symmetry)
@@ -3029,8 +3029,10 @@ impl Generator {
     fn external_state_projector(
         &self,
         graph: &Graph<ColoredNode, EdgeColor>,
+        supplied: Option<&Atom>,
     ) -> Result<Atom, GenerationError> {
         let mut projector = Atom::one();
+        let mut external_indices = BTreeMap::new();
         for (vertex, node) in graph.nodes().iter().enumerate() {
             let ColoredNode::External(external) = &node.data else {
                 continue;
@@ -3051,8 +3053,61 @@ impl Generator {
                 .ok_or(GenerationError::ArithmeticOverflow(
                     "an external half-edge identifier",
                 ))?;
-            projector *=
-                self.external_wavefunction(external.state, external.particle, edge_id, hedge)?;
+            if supplied.is_some() {
+                external_indices.insert(external.index, (edge_id, hedge));
+            } else {
+                projector *=
+                    self.external_wavefunction(external.state, external.particle, edge_id, hedge)?;
+            }
+        }
+        let Some(supplied) = supplied else {
+            return Ok(projector);
+        };
+        // Process-level expressions cannot know a topology's provisional IDs.
+        // Resolve their external-leg owners before the finalizer transports the
+        // resulting edge/half-edge chart. Native local UFO slots are unchanged.
+        let hedge_head = feynkit_graph::symbols::hedge_index();
+        let edge_head = feynkit_graph::symbols::edge_index();
+        let carriers = [
+            momentum_symbol(),
+            feynkit_graph::symbols::u(),
+            feynkit_graph::symbols::ubar(),
+            feynkit_graph::symbols::v(),
+            feynkit_graph::symbols::vbar(),
+            feynkit_graph::symbols::epsilon(),
+            feynkit_graph::symbols::epsilonbar(),
+        ];
+        projector = supplied.clone();
+        for carrier_pass in [false, true] {
+            let mut unknown = None;
+            projector = projector.replace_map(|part, _, output| {
+                let AtomView::Fun(function) = part else {
+                    return;
+                };
+                let head = function.get_symbol();
+                let is_index = head == hedge_head || head == edge_head;
+                if (carrier_pass && !carriers.contains(&head)) || (!carrier_pass && !is_index) {
+                    return;
+                }
+                let Some(index) = function
+                    .iter()
+                    .next()
+                    .and_then(|arg| usize::try_from(arg).ok())
+                else {
+                    return;
+                };
+                let Some(&(edge, hedge)) = external_indices.get(&index) else {
+                    unknown = Some(index);
+                    return;
+                };
+                **output = FunctionBuilder::new(head)
+                    .add_arg(if head == hedge_head { hedge } else { edge })
+                    .add_args(function.iter().skip(1))
+                    .finish();
+            });
+            if let Some(index) = unknown {
+                return Err(GenerationError::UnknownProjectorExternalIndex { index });
+            }
         }
         Ok(projector)
     }
@@ -5118,6 +5173,35 @@ mod tests {
             );
         }
 
+        let supplied = Atom::mul_many(
+            [
+                (1, ExternalState::Incoming),
+                (-1, ExternalState::Incoming),
+                (1, ExternalState::Outgoing),
+                (-1, ExternalState::Outgoing),
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(index, (pdg, state))| {
+                generator
+                    .external_wavefunction(state, particle(&generator.model, pdg), index, index)
+                    .unwrap()
+            }),
+        );
+        let overridden = generator
+            .generate(
+                &process,
+                &options.clone().projector(supplied),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert_eq!(overridden.diagrams.len(), generated.diagrams.len());
+        for (automatic, supplied) in generated.diagrams.iter().zip(&overridden.diagrams) {
+            assert_eq!(automatic.id(), supplied.id());
+            assert_eq!(automatic.projector(), supplied.projector());
+            assert_eq!(automatic.numerator(), supplied.numerator());
+        }
+
         let explicit = generator
             .generate(
                 &process,
@@ -5507,6 +5591,52 @@ mod tests {
     }
 
     #[test]
+    fn supplied_vector_projector_uses_external_labels_before_topology_finalization() {
+        let generator = Generator::new(fermion_model());
+        for reversed in [false, true] {
+            let mut graph = Graph::new();
+            let left = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
+            let right = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
+            graph
+                .add_edge(left, right, false, edge(&generator.model, 22))
+                .unwrap();
+            let mut supplied = Atom::one();
+            for (index, state, attached) in [
+                (7, ExternalState::Incoming, left),
+                (3, ExternalState::Outgoing, right),
+            ] {
+                let external = graph.add_node(ColoredNode::External(ExternalNode {
+                    index,
+                    state,
+                    particle: particle(&generator.model, 22),
+                }));
+                let (source, target) = if reversed {
+                    (attached, external)
+                } else {
+                    (external, attached)
+                };
+                graph
+                    .add_edge(source, target, false, edge(&generator.model, 22))
+                    .unwrap();
+                supplied *= generator
+                    .external_wavefunction(state, particle(&generator.model, 22), index, index)
+                    .unwrap();
+            }
+            assert_eq!(
+                generator
+                    .external_state_projector(&graph, Some(&supplied))
+                    .unwrap(),
+                generator.external_state_projector(&graph, None).unwrap(),
+            );
+            let invalid = feynkit_graph::symbols::epsilon().call(999usize);
+            assert!(matches!(
+                generator.external_state_projector(&graph, Some(&invalid)),
+                Err(GenerationError::UnknownProjectorExternalIndex { index: 999 })
+            ));
+        }
+    }
+
+    #[test]
     fn finalizes_vector_projectors_and_leaves_scalar_states_trivial() {
         let generator = Generator::new(fermion_model());
         let mut vector_graph = Graph::new();
@@ -5528,7 +5658,9 @@ mod tests {
         vector_graph
             .add_edge(right, outgoing, false, edge(&generator.model, 22))
             .unwrap();
-        let vector_projector = generator.external_state_projector(&vector_graph).unwrap();
+        let vector_projector = generator
+            .external_state_projector(&vector_graph, None)
+            .unwrap();
         assert_eq!(
             function_count(&vector_projector, feynkit_graph::symbols::epsilon()),
             1
@@ -5554,7 +5686,9 @@ mod tests {
             .add_edge(scalar, internal, false, edge(&generator.model, 25))
             .unwrap();
         assert_eq!(
-            generator.external_state_projector(&scalar_graph).unwrap(),
+            generator
+                .external_state_projector(&scalar_graph, None)
+                .unwrap(),
             Atom::one()
         );
     }
