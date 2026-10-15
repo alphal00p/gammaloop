@@ -448,9 +448,8 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gammalooprs::{
-        graph::parse::from_dot::IntoGraph, model::CouplingName, utils::load_generic_model,
-    };
+    use gammaloop_api::commands::import::model::ImportModel;
+    use gammalooprs::{graph::parse::from_dot::IntoGraph, model::CouplingName};
     use std::sync::Arc;
     use symbolica::atom::Atom;
 
@@ -458,7 +457,14 @@ mod tests {
     fn paper_phase_certificate_checks_source_and_ignores_unrelated_model_parameters() -> Result<()>
     {
         gammalooprs::initialisation::initialise()?;
-        let model = load_generic_model("sm");
+        let mut state = State::new_test();
+        // Match the benchmark's restricted model, including massless propagators.
+        ImportModel {
+            path: "sm-default".into(),
+            simplify_model: true,
+        }
+        .run(&mut state)?;
+        let model = state.model;
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let graph: gammalooprs::graph::Graph = fs::read_to_string(
             root.join("tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot"),
