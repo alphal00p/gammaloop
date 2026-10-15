@@ -1,0 +1,16 @@
+name: Performance main
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+# Each push is measured independently. Do not coalesce main captures.
+jobs:
+  measure:
+    uses: ./.github/workflows/performance.yml
+    with:
+      candidate: ${{ github.sha }}
+      baseline: ${{ github.event.before }}
+    secrets:
+      SYMBOLICA_LICENSE_SIGNED: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
+      NIXCI_NETRC: ${{ secrets.NIXCI_NETRC }}

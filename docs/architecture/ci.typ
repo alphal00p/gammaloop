@@ -149,6 +149,12 @@ entering a shell installs no global upload hook.
 
 == Performance measurements
 
+GammaLoop's adapter in `.github/scripts/run_performance.py` prepares one suite per
+manifest case and delegates paired execution, numerical qualification, regression
+screening and sealed evidence to the commit-pinned gammabench framework.
+The fixture manifest and native measurement semantics remain in this repository.
+`benchmarks/performance/gammabench.rev` pins the framework by complete commit.
+
 `.github/scripts/run_performance.py` compares two normal CLI packages on one
 worker, outside cached Nix check derivations. Build each revision once; every
 measurement generates a fresh state and uses that revision's own serialized
@@ -227,7 +233,7 @@ all orientations summed and stability rotations disabled. Three-loop QCD
 vacuum graphs keep nested forests with vacuum subtraction, but each takes
 minutes and over 1 GB to generate on one worker.
 
-Generation measures the complete import, generation and state-save command.
+Generation uses Hyperfine 2.0.0 to measure the complete import, generation and state-save CLI process. Its raw export is retained and verified against the numeric metric; this scope supersedes the earlier Python-controller clock.
 For scalar cases, graph enumeration is outside this timing because the graph
 is supplied as a fixed DOT input. GL15 also runs graph enumeration.
 Numeric metadata retains the native per-graph total and the Spenso, Symbolica
@@ -304,8 +310,7 @@ Automatic paired benchmarks run for non-draft, same-repository PRs marked
 or calculation inputs, dependencies, build settings or the benchmark itself.
 Documentation-only and integration-test-body changes skip the measurement.
 Merge-group commits apply the same relevance test using the queue's head/base
-SHAs. Main pushes explicitly skip paired benchmarks: their full correctness
-suite and timing uploads continue independently. Ordinary feature-branch pushes
+SHAs. The separate `Performance main` workflow measures every main push, including documentation-only merges, against the previous main SHA. These captures run independently of PR and merge-group gates. Ordinary feature-branch pushes
 do not trigger this workflow. Manual benchmark dispatch remains available.
 
 A relevant new commit while `final-review` remains set must rerun the gate.
@@ -322,6 +327,31 @@ invalidate that compiled dependency. Runtime tools come from the pinned Nixpkgs
 input without building the full development shell.
 The signed license is scoped to the measurement step, and uploads contain
 only numeric evidence and revision/workload metadata.
+
+=== Sealed results and premerge previews
+
+Each case retains discovery and any confirmation as separate immutable snapshots.
+The five-pair confirmation begins in the opposite order and shares the original
+240-second case budget. Numeric evidence includes the complete source commits,
+Nix package identities, fixture hashes, output vectors, native metrics and
+Hyperfine exports. Private states and logs are never part of the upload.
+
+`Publish performance results` runs from the default branch after the measurement
+workflow completes. It verifies the source run, PR identity and artifact before
+using `GAMMABENCH_PUBLISH_TOKEN`, a fine-grained token restricted to gammabench
+Contents read/write. Candidate code is not executed in that publisher.
+Main captures append to gammabench main; PR captures append to its separate
+`pr-results` branch. One Pages deployment combines main history with
+#link("https://alphal00p.github.io/gammabench/previews/")[PR previews].
+Each PR has a stable landing page and permanent links for each measured SHA,
+run and attempt. PR evidence never becomes a main-history point on merge.
+
+Failed and inconclusive measurements are published too. Publication errors are
+separate from the numerical gate. To retry publication without rerunning the
+benchmark, manually dispatch `Publish performance results` with the original
+Actions run ID and attempt while its 14-day artifact is available. Identical
+redeliveries are no-ops; conflicting evidence is rejected. Results committed to
+gammabench have no automatic expiration.
 
 == Final-review readiness
 

@@ -42,7 +42,21 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
+      - id: framework
+        name: Read the pinned gammabench revision
+        run: |
+          revision=$(cat benchmarks/performance/gammabench.rev)
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: alphal00p/gammabench
+          ref: ${{ steps.framework.outputs.revision }}
+          path: .gammabench-framework
+          persist-credentials: false
       - name: Test the CI timing and comparison tools
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.gammabench-framework/src
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 
       - uses: NixOS/nix-installer-action@main
@@ -68,7 +82,7 @@ jobs:
           echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
           if [ "$EVENT" = push ]; then
             # Main runs the full correctness suite and uploads its timings.
-            # Do not repeat the paired performance run after merging.
+            # Performance main records every merged SHA independently.
             echo 'run-performance=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
