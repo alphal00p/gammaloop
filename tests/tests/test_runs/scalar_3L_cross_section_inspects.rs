@@ -522,8 +522,11 @@ fn generate_graph_command(
     graph: &str,
     final_states: &str,
 ) -> String {
+    // Numerical probes and owned edge numerators refer to the original edge
+    // and loop frame. The separate native inventory test compares all 49
+    // topologies, local factors, weights and physical/threshold cuts exactly.
     format!(
-        "generate xs scalar_1 > {final_states} | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p {process} -i {integrand} -o --select-graphs {graph}"
+        "import graphs tests/resources/graphs/scalar_3l_reference/{graph}.dot --process-spec 'scalar_1 > {final_states} | scalar_0 scalar_1 [{{{{3}}}}]' -p {process} -i {integrand}"
     )
 }
 

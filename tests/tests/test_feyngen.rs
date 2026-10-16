@@ -665,11 +665,13 @@ fn feyngen_str(
                 .include_namespace(false)
                 .include_attributes(false),
         ),
-        evaluate_overall_factor(overall_factor_sum.as_view()).to_canonically_ordered_string(
-            CanonicalOrderingSettings::new()
-                .include_namespace(false)
-                .include_attributes(false),
-        )
+        evaluate_overall_factor(overall_factor_sum.as_view())
+            .expand()
+            .to_canonically_ordered_string(
+                CanonicalOrderingSettings::new()
+                    .include_namespace(false)
+                    .include_attributes(false),
+            )
     ))
 }
 
@@ -691,7 +693,7 @@ fn closed_ghost_loops_preserve_statistics_weights() -> Result<()> {
     );
     assert_snapshot!(
         feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign", false)?,
-        @"9 | -11/2+Group(0,1,1)+Group(7,1,1) = -7/2"
+        @"9 | -11/2+Group(5,1,1)+Group(9,1,1) = -7/2"
     );
     // Each ghost-bubble supergraph has a closed ghost loop and a closed
     // quark loop, so their two Grassmann signs multiply to +1.
@@ -1330,7 +1332,7 @@ fn cp_fix_from_symbolica()->Result<()>{
 
     // Group IDs here use the explicitly requested CP canonicalization;
     // default forward-side generation has a different label assignment.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-9*G^2*Nc*ee^(-2)+9*G^2*Nc^(-1)*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
 
@@ -1472,7 +1474,7 @@ fn test_generate_sm_a_ddx() -> Result<()> {
     // Test the validity of multiple final-state specifications for cross-section generation
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > {d d~, g g} [{{1}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");//good
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --symmetrize-left-right-states true",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --symmetrize-left-right-states true",false)?,@"2 | -1+Group(1,1,-1)+Group(2,1,-1) = -3");//good
     // A physical Z request requires its complete covariant cut multiplet.
     let incomplete_z = feyngen_str(&mut cli, "xs", "a > d d~ z [{{2}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false).unwrap_err().to_string();
     assert!(incomplete_z.contains("covariant cut multiplet of physical PDG 23"));
@@ -1484,13 +1486,13 @@ fn test_generate_sm_a_ddx() -> Result<()> {
     // Full particle contents
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"1 | -1 = -1");//good
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"12 | -9+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//not same (12 vs 10)
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"12 | -9+Group(10,12*G^2*ee^(-2),-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,12*G^2*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-36*G^2*ee^(-2)");//not same (12 vs 10)
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"10 | -7+Group(10,12*G^2*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,12*G^2*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-36*G^2*ee^(-2)");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"12 | -9+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(8,1,-1)+Group(9,1,-1) = -15");//not same (12 vs 10)
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,12*G^2*ee^(-2),-1)+Group(6,12*G^2*ee^(-2),-1)+Group(7,12*G^2*ee^(-2),-1)+Group(9,1,-1) = -12+-36*G^2*ee^(-2)");// symmetric canonical and sampled comparisons agree
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,12*G^2*ee^(-2),-1)+Group(6,12*G^2*ee^(-2),-1)+Group(7,12*G^2*ee^(-2),-1)+Group(9,1,-1) = -12+-36*G^2*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"12 | -9+Group(10,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(9,1,-1) = -15");//not same (12 vs 10)
 
     // Only 1-flavour pure QCD corrections
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{1}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"1 | -1 = -1");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{2}} QCD=1] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{2}} QCD=1] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"2 | -1+Group(1,1,-1)+Group(2,1,-1) = -3");//good
     // Each of the three ghost-bubble graphs has one closed ghost loop and
     // one closed quark loop: their two Grassmann signs multiply to +1.
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"16 | -3/2+Group(0,1,1)+Group(1,1,1)+Group(10,1,-2)+Group(11,1,-2)+Group(12,1,-1)+Group(13,1,-1)+Group(14,1,-1)+Group(15,1,-1)+Group(16,1,-1)+Group(17,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(23,1,-1)+Group(24,1,-1)+Group(3,1,-1)+Group(4,1,1)+Group(5,1,1)+Group(6,1,-1)+Group(8,1,-1/2)+Group(9,1,-1/2) = -29/2");//good
@@ -1827,14 +1829,22 @@ fn unrestricted_sm_light_quarks_preserve_two_loop_inventory() -> Result<()> {
     // 4513/24. Removing the 36 color-zero graphs leaves 563 with weight 2003/12.
     // Keep this unrestricted-model check separate from the legacy grouping fixture.
     for (grouping, expected_count, expected_weight) in [
-        ("no_grouping", 599, Atom::num((4513, 24))),
-        ("only_detect_zeroes", 563, Atom::num((2003, 12))),
+        (
+            "--numerator-grouping no_grouping",
+            599,
+            Atom::num((4513, 24)),
+        ),
+        (
+            "--numerator-grouping no_grouping --filter-zero-color",
+            563,
+            Atom::num((2003, 12)),
+        ),
     ] {
         let (count, weight) = generate_graphs_and_count(
             &mut cli,
             "amp",
             &format!(
-                "{{}} > {{}} [{{2}}] --numerator-grouping {grouping} --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1"
+                "{{}} > {{}} [{{2}}] {grouping} --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1"
             ),
             false,
         )?;
@@ -1913,7 +1923,29 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_filtered() -> Result<()> 
     // Only non-factorizable ones
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"3150 | -9861/16 = -9861/16");
 
-    // These selected diagrams have vanishing Lorentz numerators.
+    // Select the original two muon/G0/photon/charged-Goldstone/W graphs by
+    // their interaction inventory. GL0061/GL0062 no longer name them in the
+    // native generator. Each closed muon trace has gamma5 and fewer than four
+    // ordinary gamma matrices, so its Lorentz numerator must vanish.
+    let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection
+        else { panic!("the vacuum fixture must be an amplitude") };
+    let mut zero_graphs = amplitudes.values().flat_map(|amplitude| &amplitude.graphs)
+        .filter_map(|amplitude_graph| {
+            let graph = &amplitude_graph.graph;
+            let mut rules = graph.underlying.iter_nodes().map(|(_, _, vertex)| {
+                vertex.vertex_rule.and_then(|rule| cli.state.model.vertex_rule_by_id(rule).ok())
+                    .map(|rule| rule.name.as_str())
+            }).collect::<Option<Vec<_>>>()?;
+            rules.sort_unstable();
+            [
+                ["V_102", "V_41", "V_46", "V_99"],
+                ["V_102", "V_40", "V_47", "V_99"],
+            ].iter().any(|expected| rules == expected.as_slice())
+                .then(|| graph.name.clone())
+        }).collect::<Vec<_>>();
+    zero_graphs.sort();
+    assert_eq!(zero_graphs.len(), 2, "the Lorentz-zero check must receive both original physical graphs");
+
 
     // digraph GL0061{
     //   num = "1";
@@ -1932,7 +1964,7 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_filtered() -> Result<()> 
     //   2:8   -> 3:9   [id=4 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod=-2  lmb_id=2 lmb_rep="K(2,a___)" name=e4 num="1" particle="G-"];
     //   2:10  -> 3:11  [id=5 dir=none source="{ufo_order:0}" sink="{ufo_order:1}"  dod=0  lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*K(2,a___)" name=e5 num="-1*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))+Q(5,spenso::mink(4,hedge(10)))*Q(5,spenso::mink(4,hedge(11)))*UFO::MW^(-2)" particle="W+"];
     // }
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1 --numerical-samples-seed 3 --select-graphs GL0061 GL0062 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3",false)?,@"0 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", &format!("{{}} > {{}} [{{3}}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1 --numerical-samples-seed 3 --select-graphs {} --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3", zero_graphs.join(" ")),false)?,@"0 | 0 = 0");
 
 
     Ok(())
@@ -2062,4 +2094,155 @@ mod slow {
 
         Ok(())
     }
+}
+
+#[test]
+fn scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory() -> color_eyre::Result<()>
+{
+    use feynkit_graph::expressions::evaluate_overall_factor;
+    use gammalooprs::{
+        graph::{FinalizedCut, FinalizedTopologyThresholdCandidate, Graph},
+        uv::uv_graph::UVE,
+    };
+    use linnet::half_edge::involution::{Flow, HedgePair};
+    use std::collections::BTreeMap;
+    use symbolica::graph::Graph as ColoredGraph;
+
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let test_name = "scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory";
+    let mut cli = gammaloop_integration_tests::get_test_cli(
+        None,
+        gammaloop_integration_tests::get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.run_command("import model scalars-default.json")?;
+    cli.run_command("generate xs scalar_1 > {scalar_0 scalar_0, scalar_0 scalar_0 scalar_1} | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p inventory -i all --only-diagrams")?;
+    let gammalooprs::processes::ProcessCollection::CrossSections(cross_sections) =
+        &cli.state.process_list.processes[0].collection
+    else {
+        panic!("expected a cross section")
+    };
+    let generated = &cross_sections["all"].supergraphs;
+    assert_eq!(generated.len(), 49);
+
+    // Scalar rule legs are interchangeable. Compare the colored physics graph,
+    // its local factors, both sides of every initial/physical/threshold cut and its
+    // overall coefficient; omit only labels, routing coordinates and UFO slots.
+    let key = |graph: &Graph,
+               cuts: &[FinalizedCut],
+               thresholds: &[FinalizedTopologyThresholdCandidate]| {
+        let mut colored = ColoredGraph::new();
+        let nodes = graph
+            .underlying
+            .iter_nodes()
+            .map(|(node, _, data)| {
+                let color = format!(
+                    "vertex:{:?}:{}:{}",
+                    data.vertex_rule,
+                    data.num.value.to_plain_string(),
+                    data.dod.value
+                );
+                (node, colored.add_node(color))
+            })
+            .collect::<BTreeMap<_, _>>();
+        for (pair, _, edge) in graph.underlying.iter_edges() {
+            let color = format!(
+                "edge:{:?}:{}:{}:{}",
+                edge.data.particle_pdg_code(&graph.model),
+                edge.data.num.value.to_plain_string(),
+                edge.data.dod.value,
+                edge.data.is_dummy
+            );
+            let (source, target) = match pair {
+                HedgePair::Paired { source, sink } => (
+                    nodes[&graph.underlying.node_id(source)],
+                    nodes[&graph.underlying.node_id(sink)],
+                ),
+                HedgePair::Unpaired { hedge, flow } => {
+                    let external = colored.add_node(format!("external:{flow:?}"));
+                    let internal = nodes[&graph.underlying.node_id(hedge)];
+                    if flow == Flow::Sink {
+                        (external, internal)
+                    } else {
+                        (internal, external)
+                    }
+                }
+                _ => unreachable!("whole-graph edges cannot be split"),
+            };
+            colored.add_edge(source, target, false, color).unwrap();
+        }
+        for (kind, left, right) in cuts
+            .iter()
+            .map(|c| ("physical", &c.left, &c.right))
+            .chain(thresholds.iter().map(|c| ("threshold", &c.left, &c.right)))
+            .chain(std::iter::once((
+                "initial",
+                &graph.initial_state_cut.left,
+                &graph.initial_state_cut.right,
+            )))
+        {
+            let left_node = colored.add_node(format!("{kind}:left"));
+            let right_node = colored.add_node(format!("{kind}:right"));
+            colored
+                .add_edge(left_node, right_node, false, "cut-pair".to_string())
+                .unwrap();
+            for (side, filter) in [(left_node, left), (right_node, right)] {
+                for (node, _, _) in graph.underlying.iter_nodes_of(filter) {
+                    colored
+                        .add_edge(side, nodes[&node], false, "cut-membership".to_string())
+                        .unwrap();
+                }
+            }
+        }
+        let canonical = colored.canonize().graph;
+        (
+            canonical
+                .nodes()
+                .iter()
+                .map(|node| node.data.clone())
+                .collect::<Vec<_>>(),
+            canonical
+                .edges()
+                .iter()
+                .map(|edge| (edge.vertices, edge.directed, edge.data.clone()))
+                .collect::<Vec<_>>(),
+            evaluate_overall_factor(graph.overall_factor.as_view()),
+            graph.global_prefactor.num.clone(),
+            graph.global_prefactor.projector.clone(),
+        )
+    };
+    let mut actual = BTreeMap::new();
+    for graph in generated {
+        *actual
+            .entry(key(
+                &graph.graph,
+                &graph.cuts.raw,
+                &graph.topology_threshold_candidates,
+            ))
+            .or_insert(0usize) += 1;
+    }
+    let mut expected = BTreeMap::new();
+    for index in 0..49 {
+        let path = format!("tests/resources/graphs/scalar_3l_reference/GL{index:02}.dot");
+        let graphs = Graph::import_dot(&std::fs::read_to_string(path)?, &cli.state.model)?;
+        let [graph] = graphs.as_slice() else {
+            panic!("each fixed input contains exactly one graph")
+        };
+        assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 3);
+        assert!(!graph.finalized_cuts.is_empty());
+        *expected
+            .entry(key(
+                graph,
+                &graph.finalized_cuts,
+                &graph.finalized_topology_threshold_candidates,
+            ))
+            .or_insert(0usize) += 1;
+    }
+    assert_eq!(
+        actual, expected,
+        "native generation must preserve every fixed physical graph, weight and cut"
+    );
+    gammaloop_integration_tests::clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }

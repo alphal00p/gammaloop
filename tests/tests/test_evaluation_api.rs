@@ -673,6 +673,34 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
             .map(|graph| graph.name.as_str()),
         Some(selected_master.as_str()),
     );
+    let native_channel_bases = group
+        .loop_momentum_bases
+        .iter()
+        .filter(|basis| basis.channel_id.is_some())
+        .map(|basis| basis.edge_ids.clone())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(native_channel_bases.len(), 4);
+
+    // The event oracle owns a directed edge and loop frame. Native grouping
+    // can choose the reversed closed-fermion-loop representative, whose local
+    // absorptive contributions differ at this fixed point. Retain the native
+    // topology and channel checks above, then evaluate the original frame.
+    cli.run_command("remove processes")?;
+    cli.run_command(
+        "import graphs tests/resources/graphs/epem_tth_gl20_reference.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD=1]' -p epem_a_tth -i NLO",
+    )?;
+    cli.run_command("generate existing -p epem_a_tth -i NLO")?;
+    let info = cli.state.get_integrand_info(None, None)?;
+    assert_eq!(info.graph_groups.len(), 1);
+    let group = &info.graph_groups[0];
+    assert_eq!(
+        group
+            .graphs
+            .iter()
+            .find(|graph| graph.is_master)
+            .map(|graph| graph.name.as_str()),
+        Some("GL38"),
+    );
     let active_channel_bases = group
         .loop_momentum_bases
         .iter()
@@ -751,7 +779,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
 
     assert_eq!(
         represented_channels, active_channel_bases,
-        "the snapshot must include events from every active native-master LMB channel"
+        "the snapshot must include events from every active reference-frame LMB channel"
     );
     assert_eq!(
         metadata.generated_event_count,
