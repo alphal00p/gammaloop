@@ -656,11 +656,11 @@ mod tests {
     #[test]
     fn projected_rows_retain_one_ordinary_numerator_and_scalar_arguments() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph projected_parametric_numerator {
+        let mut graph: Graph = finalized_runtime_dot!(digraph projected_parametric_numerator { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let common = symbol!("projected_parametric_test::common"; Scalar);
         let numerator = Atom::var(common)
@@ -881,17 +881,17 @@ mod tests {
     #[test]
     fn nested_banana_quotient_powered_component_has_the_analytic_one_energy_sign() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph nested_banana_quotient_sign {
+        let mut graph: Graph = finalized_runtime_dot!(digraph nested_banana_quotient_sign { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2 lmb_id=1]
-            a -> b [id=3]
-            b -> outgoing [id=4]
+            incoming -> a [id=0 sink="{ufo_order:3}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=2 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            b -> outgoing [id=4 source="{ufo_order:3}"]
         })?;
         let inner_filter = graph
             .get_edge_subgraph(EdgeIndex(1))
@@ -1104,11 +1104,11 @@ mod tests {
     fn typed_taylor_wave_batches_genuine_owner_relabelled_terms() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = finalized_runtime_dot!(
-            digraph G {
-                edge [particle="scalar_1"];
+            digraph G { graph [projector=1]
+                edge [particle="scalar_1" num="1𝑖"];
                 node [num=1];
-                a -> b [id=0];
-                a -> b [id=1];
+                a -> b [id=0 source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0];
+                a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
             },
             "scalars"
         )?;
@@ -1246,12 +1246,12 @@ mod tests {
     #[test]
     fn typed_taylor_next_component_reuses_one_topology_for_prior_residue_states() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph typed_taylor_component_waves {
-            edge [particle="scalar_1"];
+        let mut graph: Graph = finalized_runtime_dot!(digraph typed_taylor_component_waves { graph [projector=1]
+            edge [particle="scalar_1" num="1𝑖"];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1 lmb_id=1];
-            a -> b [id=2];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"];
         }, "scalars")?;
         let inner_filter = graph
             .get_edge_subgraph(EdgeIndex(0))

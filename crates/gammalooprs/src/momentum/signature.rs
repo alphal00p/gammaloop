@@ -842,7 +842,7 @@ mod tests {
             node [num=1]
             ext -> a [id=0 sink="{ufo_order:0}"]
             a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            b -> c [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            b -> c [id=2 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
             c -> a [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
             ext -> c [id=4 sink="{ufo_order:2}"]
         })

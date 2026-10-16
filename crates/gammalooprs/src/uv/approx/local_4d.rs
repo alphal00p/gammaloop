@@ -2941,11 +2941,11 @@ mod tests {
             ext [style=invis];
             ext -> A:0 [id=0 sink="{ufo_order:0}"];
             B:1 -> ext [id=1 source="{ufo_order:0}"];
-            A -> B [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            A -> B [id=2 source="{ufo_order:1}" sink="{ufo_order:1}" lmb_id=0];
             A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
             ext -> C:8 [id=4 sink="{ufo_order:0}"];
             D:9 -> ext [id=5 source="{ufo_order:0}"];
-            C -> D [id=6 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            C -> D [id=6 source="{ufo_order:1}" sink="{ufo_order:1}" lmb_id=1];
             C -> D [id=7 source="{ufo_order:2}" sink="{ufo_order:2}"];
         })
         .unwrap()
@@ -5493,7 +5493,7 @@ mod tests {
             node [num=1]
             ext [style=invis]
             ext -> a [id=0 sink="{ufo_order:0}"]
-            a -> a [id=1 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            a -> a [id=1 source="{ufo_order:1}" sink="{ufo_order:2}" lmb_id=0]
             a -> ext [id=2 source="{ufo_order:3}"]
         })?;
         let physical_mass = graph[EdgeIndex(1)].mass_atom(&graph.model);
@@ -8550,12 +8550,12 @@ mod tests {
     #[test]
     fn projection_sector_grouping_preserves_frozen_domains_and_recursion() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph canonical_sector_triangle {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_sector_triangle { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            c -> a [id=2 sink="{ufo_order:1}" source="{ufo_order:1}"]
         })?;
         let owners = graph.full_filter();
         let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
@@ -8607,11 +8607,11 @@ mod tests {
         };
 
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph cancelling_projection_sectors {
+        let mut graph: Graph = finalized_runtime_dot!(digraph cancelling_projection_sectors { graph [projector=1]
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let owners = graph.full_filter();
         let current = OwnedForestNode {
@@ -9001,19 +9001,17 @@ mod tests {
     fn uv_taylor_provenance_erasure_matches_plain_child_lmb_expansion() -> Result<()> {
         test_initialise()?;
         let graph: Graph = finalized_runtime_dot!(
-            digraph uv_taylor_provenance_oracle {
+            digraph uv_taylor_provenance_oracle { graph [projector=1]
                 num = 1
                 edge [particle="scalar_1" num=1]
                 node [num=1]
 
-                ext0 [style=invis is_cut=0]
-                v2 -> ext0 [id=0]
-                ext0 -> v3
-                v0 -> v1 [id=1 lmb_id=0 num="Q(1,spenso::mink(4,1))"]
-                v0 -> v1 [id=2]
-                v3 -> v0 [id=3 lmb_id=1 num="Q(3,spenso::mink(4,1))"]
-                v1 -> v2 [id=4]
-                v2 -> v3 [id=5]
+                v2 -> v3 [id=0 is_cut=0 initial_state_connection=true source="{ufo_order:1}" sink="{ufo_order:0}"]
+                v0 -> v1 [id=1 lmb_id=0 num="Q(1,spenso::mink(4,1))" source="{ufo_order:0}" sink="{ufo_order:0}"]
+                v0 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                v3 -> v0 [id=3 lmb_id=1 num="Q(3,spenso::mink(4,1))" sink="{ufo_order:2}" source="{ufo_order:2}"]
+                v1 -> v2 [id=4 source="{ufo_order:2}" sink="{ufo_order:0}"]
+                v2 -> v3 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
             },
             "scalars"
         )?;
@@ -9232,22 +9230,22 @@ mod tests {
         // collected common denominator below stresses ownership while each
         // numerator stays factorized; production keeps Taylor topologies separate.
         let graph: Graph = finalized_runtime_dot!(
-            digraph gl24_dod_two_taylor {
+            digraph gl24_dod_two_taylor { graph [projector=1]
                 edge [particle="scalar_0" num=1]
                 node [num=1]
                 incoming [style=invis]
                 outgoing [style=invis]
 
-                incoming -> v1 [id=0 particle="scalar_1"]
-                v0 -> v3 [id=1 lmb_id=0 particle="scalar_1" num="Q(1,spenso::mink(4,1))^2*Q(1,spenso::mink(4,2))^2"]
-                v0 -> v5 [id=2 particle="scalar_2"]
-                v1 -> v2 [id=3 lmb_id=1]
-                v1 -> v3 [id=4]
-                v2 -> v4 [id=5 lmb_id=2]
-                v2 -> v4 [id=6]
-                v3 -> v5 [id=7 particle="scalar_1"]
-                v4 -> v5 [id=8 particle="scalar_1"]
-                v0 -> outgoing [id=9 particle="scalar_1"]
+                incoming -> v1 [id=0 particle="scalar_1" sink="{ufo_order:0}"]
+                v0 -> v3 [id=1 lmb_id=0 particle="scalar_1" num="Q(1,spenso::mink(4,1))^2*Q(1,spenso::mink(4,2))^2" source="{ufo_order:1}" sink="{ufo_order:0}"]
+                v0 -> v5 [id=2 particle="scalar_2" source="{ufo_order:2}" sink="{ufo_order:0}"]
+                v1 -> v2 [id=3 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                v1 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                v2 -> v4 [id=5 lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                v2 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                v3 -> v5 [id=7 particle="scalar_1" source="{ufo_order:2}" sink="{ufo_order:1}"]
+                v4 -> v5 [id=8 particle="scalar_1" source="{ufo_order:2}" sink="{ufo_order:2}"]
+                v0 -> outgoing [id=9 particle="scalar_1" source="{ufo_order:0}"]
             },
             "scalars"
         )?;
@@ -9637,21 +9635,21 @@ mod tests {
     #[test]
     fn dod_one_triangle_keeps_separate_denominator_topologies() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_triangle_taylor {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_triangle_taylor { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v5 [id=0]
-            v0 -> v2 [id=1 lmb_id=0]
-            v3 -> v0 [id=2]
-            v0 -> v5 [id=3]
-            v2 -> v1 [id=4]
-            v1 -> v3 [id=5 lmb_id=1]
-            v1 -> v4 [id=6]
-            v2 -> v3 [id=7]
-            v4 -> outgoing [id=8]
+            incoming -> v5 [id=0 sink="{ufo_order:0}"]
+            v0 -> v2 [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            v3 -> v0 [id=2 sink="{ufo_order:2}" source="{ufo_order:2}"]
+            v0 -> v5 [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            v2 -> v1 [id=4 sink="{ufo_order:2}" source="{ufo_order:1}"]
+            v1 -> v3 [id=5 lmb_id=1 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            v1 -> v4 [id=6 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v2 -> v3 [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v4 -> outgoing [id=8 source="{ufo_order:1}"]
         })?;
         let owners = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
         let uv_filter = owners
@@ -9815,11 +9813,11 @@ mod tests {
     fn factorized_product_separates_active_and_completed_sectors() -> Result<()> {
         test_initialise()?;
         let graph: Graph = finalized_runtime_dot!(
-            digraph G {
-                edge [particle="scalar_1"];
+            digraph G { graph [projector=1]
+                edge [particle="scalar_1" num="1𝑖"];
                 node [num=1];
-                a -> a [id=0];
-                b -> b [id=1];
+                a -> a [id=0 source="{ufo_order:0}" sink="{ufo_order:1}" lmb_id=0];
+                b -> b [id=1 source="{ufo_order:0}" sink="{ufo_order:1}" lmb_id=1];
             },
             "scalars"
         )?;
@@ -9910,16 +9908,16 @@ mod tests {
     #[test]
     fn affine_uv_rescaling_preserves_enclosing_chart_and_owner() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph affine_enclosing_taylor_chart {
+        let graph: Graph = finalized_runtime_dot!(digraph affine_enclosing_taylor_chart { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            a -> b [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2 lmb_id=1]
-            incoming -> a [id=3]
-            b -> outgoing [id=4]
+            a -> b [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            incoming -> a [id=3 sink="{ufo_order:3}"]
+            b -> outgoing [id=4 source="{ufo_order:3}"]
         })?;
         let filter = (0..3)
             .map(|edge| graph.get_edge_subgraph(EdgeIndex(edge)))

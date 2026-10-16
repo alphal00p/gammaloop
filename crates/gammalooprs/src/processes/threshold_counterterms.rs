@@ -856,10 +856,10 @@ mod tests {
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext -> v1:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
             v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
             v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            ext -> v2:1 [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            ext -> v2:1 [id=3 sink="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let all_lmbs = ti_vec![graph.loop_momentum_basis.clone()];
@@ -970,12 +970,12 @@ mod tests {
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext -> v1:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
             v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
             v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
             v2 -> v3 [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
             v3 -> v2 [id=4 source="{ufo_order:1}" sink="{ufo_order:3}"]
-            ext -> v3:1 [id=5 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            ext -> v3:1 [id=5 sink="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
             .unwrap();
         let all_lmbs = graph.generate_loop_momentum_bases();
@@ -1144,10 +1144,10 @@ mod tests {
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext -> v1:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
             v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
             v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            ext -> v2:1 [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            ext -> v2:1 [id=3 sink="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let all_lmbs = ti_vec![graph.loop_momentum_basis.clone()];

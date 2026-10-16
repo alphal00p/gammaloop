@@ -1418,6 +1418,21 @@ anchor = "ci-checks-and-upload:"
 digest = "0f8a76ea61d80a7847d9e8d16756e9914e245ae2"
 
 [[section.note]]
+id = "feynkit-merge-readiness"
+title = "FeynKit merge readiness and performance"
+summary = "Measured reconciliation regressions, shared algebra repairs, unchanged validation contracts and before/after performance evidence."
+source = "docs/architecture/feynkit-merge-readiness.typ"
+kind = "Engineering investigation"
+status = "Repairs in progress"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-10-16"
+review_ref = "d3b91d31461e50d91dce4702d68c45294faca350"
+products = ["gammaloop", "feynkit", "idenso", "spenso"]
+topics = ["performance", "testing", "tensor-network", "ci"]
+review_triggers = ["benchmarks/performance/**", "crates/gammalooprs/src/integrands/process/evaluators.rs", "crates/idenso/src/dirac/simplify.rs", "crates/spenso/src/network/parsing/**"]
+
+[[section.note]]
 id = "nix-crane-cache-reuse"
 title = "Nix and Crane artifact reuse"
 summary = "Historical Rust CI cache experiments and the maintained documentation producer and live-watcher cache contract; current Rust CI guidance is recorded separately."

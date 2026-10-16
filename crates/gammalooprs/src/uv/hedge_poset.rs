@@ -2210,14 +2210,21 @@ mod tests {
     #[test]
     fn union_terms_project_factorized_typed_4d_values() -> Result<()> {
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(
-            digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v2 -> v2;
-                v1 -> v1;v1 -> v1;
-            },"scalars"
-        )?;
+        let graph: Graph = finalized_runtime_dot!(digraph G {
+          projector = "1";
+          edge	 [
+        num = "1𝑖", particle = "scalar_1"]
+          node	 [
+        num = "UFO::SCALAR_COUPLING"]
+          v1;
+          v2;
+
+          v1:0	-> v1:1	 [id=0 source="{ufo_order:0}" sink="{ufo_order:1}"  lmb_id="0"];
+          v1:2	-> v1:3	 [id=1 source="{ufo_order:2}" sink="{ufo_order:3}"  lmb_id="1"];
+          v1:4	-> v2:5	 [id=2 source="{ufo_order:4}" sink="{ufo_order:0}" ];
+          v2:6	-> v2:7	 [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"  lmb_id="2"];
+        },"scalars"
+                )?;
         // Disable integrated terms so each union equality isolates factorized
         // local 4D composition.
         let settings = GenerationSettings {
@@ -3583,15 +3590,15 @@ mod tests {
         // power counting, but the triangle is not a UV region on its own.
         // Componentwise classification therefore retains only the bubble.
         let graph: Graph = finalized_runtime_dot!(
-            digraph G {
+            digraph G { graph [projector=1]
                 node [num = "1"];
-                edge [particle = "scalar_1"];
-                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))"];
-                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))"];
-                a1 -> b0 [id = 2];
-                b0 -> b1 [id = 3];
-                b1 -> b2 [id = 4];
-                b2 -> b0 [id = 5];
+                edge [particle = "scalar_1" num="1𝑖"];
+                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))" source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0];
+                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))" source="{ufo_order:1}" sink="{ufo_order:1}"];
+                a1 -> b0 [id = 2 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                b0 -> b1 [id = 3 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=1];
+                b1 -> b2 [id = 4 source="{ufo_order:1}" sink="{ufo_order:0}"];
+                b2 -> b0 [id = 5 sink="{ufo_order:2}" source="{ufo_order:1}"];
             },
             "scalars"
         )?;
@@ -3799,18 +3806,18 @@ mod tests {
         // their complete Taylor cancellation permits omitting the collective
         // transition rather than classifying the triangle as a UV factor.
         let graph: Graph = finalized_runtime_dot!(
-            digraph G {
+            digraph G { graph [projector=1]
                 node [num = "1"];
-                edge [particle = "scalar_1"];
-                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))"];
-                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))"];
-                a1 -> b0 [id = 2];
-                b0 -> b1 [id = 3, dod = "-1", num = "gammalooprs::Q(3,spenso::mink(4,1))"];
-                b0 -> b1 [id = 4, dod = "-1", num = "gammalooprs::Q(4,spenso::mink(4,1))"];
-                b1 -> c0 [id = 5];
-                c0 -> c1 [id = 6];
-                c1 -> c2 [id = 7];
-                c2 -> c0 [id = 8];
+                edge [particle = "scalar_1" num="1𝑖"];
+                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))" source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0];
+                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))" source="{ufo_order:1}" sink="{ufo_order:1}"];
+                a1 -> b0 [id = 2 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                b0 -> b1 [id = 3, dod = "-1", num = "gammalooprs::Q(3,spenso::mink(4,1))" source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=1];
+                b0 -> b1 [id = 4, dod = "-1", num = "gammalooprs::Q(4,spenso::mink(4,1))" source="{ufo_order:2}" sink="{ufo_order:1}"];
+                b1 -> c0 [id = 5 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                c0 -> c1 [id = 6 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=2];
+                c1 -> c2 [id = 7 source="{ufo_order:1}" sink="{ufo_order:0}"];
+                c2 -> c0 [id = 8 sink="{ufo_order:2}" source="{ufo_order:1}"];
             },
             "scalars"
         )?;
@@ -4105,19 +4112,25 @@ mod tests {
     fn spectacles_typed_4d_local_construction_matches_uv_limit() -> Result<()> {
         test_initialise().unwrap();
 
-        let spectacles: Graph = finalized_runtime_dot!(
-            digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v1 -> v2;
+        let spectacles: Graph = finalized_runtime_dot!(digraph G {
+          projector = "1";
+          edge	 [
+        num = "1𝑖", particle = "scalar_1"]
+          node	 [
+        num = "UFO::SCALAR_COUPLING"]
+          v1;
+          v2;
+          v3;
+          v4;
 
-                v3 -> v4;
-                v3 -> v4;
-
-                v2 -> v3;
-                v1 -> v4;
-            },"scalars"
-        )?;
+          v1:0	-> v2:1	 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"  lmb_id="0"];
+          v1:2	-> v2:3	 [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"  lmb_id="1"];
+          v1:4	-> v4:5	 [id=2 source="{ufo_order:2}" sink="{ufo_order:0}" ];
+          v2:6	-> v3:7	 [id=3 source="{ufo_order:2}" sink="{ufo_order:0}" ];
+          v3:8	-> v4:9	 [id=4 source="{ufo_order:1}" sink="{ufo_order:1}"  lmb_id="2"];
+          v3:10	-> v4:11	 [id=5 source="{ufo_order:2}" sink="{ufo_order:2}" ];
+        },"scalars"
+                )?;
 
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
         let settings = GenerationSettings {

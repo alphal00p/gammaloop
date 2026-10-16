@@ -693,7 +693,7 @@ mod tests {
                 ext [style=invis]
                 node [num=1]
                 ext -> A [sink="{ufo_order:0}"]
-                A -> A [source="{ufo_order:1}" sink="{ufo_order:2}"]
+                A -> A [source="{ufo_order:1}" sink="{ufo_order:2}" lmb_id=0]
                 A -> ext [source="{ufo_order:3}"]
             }, SM_MODEL.get_or_init(|| crate::utils::load_generic_model("sm")))
             .unwrap();
@@ -939,7 +939,7 @@ mod tests {
                 ext [style=invis]
                 node [num=1]
                 ext -> A [sink="{ufo_order:0}"]
-                A -> A [source="{ufo_order:1}" sink="{ufo_order:2}"]
+                A -> A [source="{ufo_order:1}" sink="{ufo_order:2}" lmb_id=0]
                 A -> ext [source="{ufo_order:3}"]
             }, SM_MODEL.get_or_init(|| crate::utils::load_generic_model("sm")))
             .unwrap();
@@ -1049,10 +1049,13 @@ mod tests {
                     for _ in 0..multiplicity {
                         source.push_str("left -> right [particle=scalar_0];");
                     }
-                    source.push('}');
+                    source.push_str(&format!(
+                        "final_state={:?};}}",
+                        vec!["scalar_0"; multiplicity].join(",")
+                    ));
                     (GenerationType::CrossSection, source)
                 };
-                let graphs = Graph::from_finalized_runtime_string(&source, &model)?;
+                let graphs = Graph::import_dot(&source, &model)?;
                 let definition = ProcessDefinition::from_graph_list(&graphs, kind, &model)?;
                 let mut process = Process::from_graph_list(
                     "export_phase".into(),
@@ -1193,11 +1196,11 @@ mod tests {
     fn computed_export_retains_nonempty_forests_in_all_routes_and_orchestrators()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph computed_direct_forest {
+        let mut graph: Graph = finalized_runtime_dot!(digraph computed_direct_forest { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let mut generation = GenerationSettings::default();
         assert!(generation.uv.subtract_uv);

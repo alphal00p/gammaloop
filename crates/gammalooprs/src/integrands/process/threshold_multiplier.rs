@@ -1991,10 +1991,10 @@ mod tests {
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext -> v1 [id=0 sink="{ufo_order:0}"]
             v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
             v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v2 -> ext [id=3 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v2 -> ext [id=3 source="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let layout = ThresholdMultiplierLayout::from_graph_esurfaces(&graph, Vec::new()).unwrap();
@@ -2217,10 +2217,10 @@ mod tests {
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext -> v1 [id=0 sink="{ufo_order:0}"]
             v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
             v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v2 -> ext [id=3 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v2 -> ext [id=3 source="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let energy_edge = graph.loop_momentum_basis.loop_edges.raw[0];
@@ -2428,10 +2428,10 @@ mod tests {
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext -> v1 [id=0 sink="{ufo_order:0}"]
             v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
             v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v2 -> ext [id=3 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v2 -> ext [id=3 source="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
             .unwrap();
         let layout = ThresholdMultiplierLayout::new(
@@ -2565,11 +2565,11 @@ mod tests {
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext -> v1 [id=0 sink="{ufo_order:0}"]
             v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
             v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
             v1 -> v2 [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
-            v2 -> ext [id=4 source="{ufo_order:3}" sink="{ufo_order:1}"]
+            v2 -> ext [id=4 source="{ufo_order:3}"]
         }, &crate::utils::load_generic_model("sm"))
             .unwrap();
         assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 2);

@@ -3444,7 +3444,7 @@ mod sampling_tests {
             CompiledSamplingMap, ProcessIntegrand, SamplingMapAffine, SamplingSupport,
         },
         processes::Amplitude,
-        utils::load_generic_model,
+        utils::{load_generic_model, test_utils::ModelFixtureExt},
     };
     use linnet::half_edge::involution::EdgeIndex;
 
@@ -3456,7 +3456,7 @@ mod sampling_tests {
 
         test_initialise()?;
         let model = load_generic_model("scalars");
-        let graphs = Graph::import_dot(
+        let graphs = Graph::unit_numerator_fixtures(
             r#"digraph vacuum_cube {
                 node [num=1]; edge [num=1 particle=scalar_1];
                 A -> B [id=0 lmb_id=0 mass=2];
@@ -3812,10 +3812,7 @@ parent_lmb = [4]
             });
             term.warm_up(&tropical, &model)?;
             let mut complex_model = model.clone();
-            complex_model.apply_parameter_card(&feynkit_model::ParameterCard::from_iter([(
-                "mass_scalar_1".to_owned(),
-                feynkit_model::ComplexValue::new(1.0, 0.1),
-            )]))?;
+            complex_model.set_fixture_values([("mass_scalar_1", Complex::new(F(1.0), F(0.1)))])?;
             let error = term.warm_up(&tropical, &complex_model).unwrap_err();
             assert!(
                 error.to_string().contains("tropical sampling")
@@ -5756,10 +5753,7 @@ parent_lmb = [4,6]
             }
         }
         let externals = [[5.0, 0.0, 0.0, 0.0]; 2];
-        model.apply_parameter_card(&feynkit_model::ParameterCard::from_iter([(
-            "mass_scalar_1".to_owned(),
-            feynkit_model::ComplexValue::new(2.0, 0.0),
-        )]))?;
+        model.set_fixture_values([("mass_scalar_1", Complex::new(F(2.0), F(0.0)))])?;
         term.warm_up(&settings, &model)?;
         let bridge =
             term.compile_sampling_bridge(&parameterization, &settings, &externals, None)?;
@@ -5767,10 +5761,7 @@ parent_lmb = [4,6]
             matches!(bridge.channels()[0].map, CompiledSamplingMap::Surface(_)),
             "rewarming after a mass update must invalidate the old physical surface"
         );
-        model.apply_parameter_card(&feynkit_model::ParameterCard::from_iter([(
-            "mass_scalar_1".to_owned(),
-            feynkit_model::ComplexValue::new(1.0, 0.0),
-        )]))?;
+        model.set_fixture_values([("mass_scalar_1", Complex::new(F(1.0), F(0.0)))])?;
         term.warm_up(&settings, &model)?;
 
         for (momenta, diagnostic) in [
@@ -6095,10 +6086,7 @@ parent_lmb = [4,6]
             };
             use symbolica::prelude::SingleFloat;
             let mut heavy_model = model.clone();
-            heavy_model.apply_parameter_card(&feynkit_model::ParameterCard::from_iter([(
-                "mass_scalar_1".to_owned(),
-                feynkit_model::ComplexValue::new(1.0e60, 0.0),
-            )]))?;
+            heavy_model.set_fixture_values([("mass_scalar_1", Complex::new(F(1.0e60), F(0.0)))])?;
             runtime_for_rescue.get_mut_settings().stability.levels =
                 vec![StabilityLevelSetting::default_arb()];
             runtime_for_rescue.warm_up(&heavy_model)?;

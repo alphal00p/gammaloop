@@ -435,14 +435,15 @@ mod tests {
         THETA_GRAPH
             .get_or_init(|| {
                 test_initialise().unwrap();
-                let mut graph: Graph = finalized_runtime_dot!(digraph theta_profile {
-                    edge [num=1 mass=0]
-                    node [num=1]
-                    A -> B [id=0]
-                    A -> B [id=1]
-                    A -> B [id=2]
-                })
-                .unwrap();
+                let mut graph: Graph =
+                    finalized_runtime_dot!(digraph theta_profile { graph [projector=1]
+                        edge [num=1 mass=0]
+                        node [num=1]
+                        A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0]
+                        A -> B [id=1 source="{ufo_order:1}" sink="{ufo_order:1}" lmb_id=1]
+                        A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                    })
+                    .unwrap();
                 let lmbs = graph.generate_loop_momentum_bases();
                 graph.loop_momentum_basis = lmbs[LmbIndex::from(0)].clone();
                 (graph, lmbs)
@@ -475,10 +476,10 @@ mod tests {
     #[test]
     fn cycle_union_uses_lmb_signatures_for_a_self_loop() {
         let _ = theta_graph();
-        let graph: Graph = finalized_runtime_dot!(digraph tadpole_profile {
+        let graph: Graph = finalized_runtime_dot!(digraph tadpole_profile { graph [projector=1]
             edge [num=1 mass=0]
             node [num=1]
-            A -> A [id=0]
+            A -> A [id=0 source="{ufo_order:0}" sink="{ufo_order:1}" lmb_id=0]
         })
         .unwrap();
         assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 1);
@@ -492,14 +493,15 @@ mod tests {
     #[test]
     fn only_divergent_targets_stay_inside_the_production_uv_domain() {
         let _ = theta_graph();
-        let mut graph: Graph = finalized_runtime_dot!(digraph theta_profile_domain {
-            edge [num=1 mass=0]
-            node [num=1]
-            A -> B [id=0]
-            A -> B [id=1]
-            A -> B [id=2 is_dummy=true]
-        })
-        .unwrap();
+        let mut graph: Graph =
+            finalized_runtime_dot!(digraph theta_profile_domain { graph [projector=1]
+                edge [num=1 mass=0]
+                node [num=1]
+                A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0]
+                A -> B [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                A -> B [id=2 is_dummy=true source="{ufo_order:2}" sink="{ufo_order:2}"]
+            })
+            .unwrap();
         let lmbs = graph.generate_loop_momentum_bases();
         graph.loop_momentum_basis = lmbs[LmbIndex::from(0)].clone();
         let selected = UVLimitSelection::OnlyDivergent

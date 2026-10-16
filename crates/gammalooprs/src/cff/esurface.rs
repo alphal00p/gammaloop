@@ -2792,8 +2792,8 @@ mod tests {
             ext_out [style=invis]
             node [num=1]
             edge [num=1 mass=1]
-            ext_in -> A:0 [id=0 mass=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            C:1 -> ext_out [id=1 mass=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext_in -> A:0 [id=0 mass=0 sink="{ufo_order:0}"]
+            C:1 -> ext_out [id=1 mass=0 source="{ufo_order:0}"]
             A -> B [id=2 mass=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
             B -> C [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
             C -> D [id=4 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
@@ -2947,16 +2947,16 @@ mod tests {
             beam_b [style=invis]
             node [num=1]
             edge [num=1 mass=1]
-            ext_in -> A:0 [id=0 mass=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            C:1 -> ext_out [id=1 mass=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext_in -> A:0 [id=0 mass=0 sink="{ufo_order:0}"]
+            C:1 -> ext_out [id=1 mass=0 source="{ufo_order:0}"]
             A -> B [id=2 mass=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
             B -> C [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
             C -> D [id=4 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
             D -> A [id=5 mass=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
             B -> E [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
             D -> E [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            beam_a -> E [id=8 mass=0 source="{ufo_order:0}" sink="{ufo_order:2}"]
-            beam_b -> E [id=9 mass=0 source="{ufo_order:0}" sink="{ufo_order:3}"]
+            beam_a -> E [id=8 mass=0 sink="{ufo_order:2}"]
+            beam_b -> E [id=9 mass=0 sink="{ufo_order:3}"]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         fn check<T: FloatLike>(graph: &Graph) {
@@ -3455,11 +3455,11 @@ mod tests {
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext -> a:0 [id=0 sink="{ufo_order:0}"]
             a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
             a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"]
             a -> b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
-            b:1 -> ext [id=4 source="{ufo_order:3}" sink="{ufo_order:1}"]
+            b:1 -> ext [id=4 source="{ufo_order:3}"]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
@@ -4291,11 +4291,11 @@ mod tests {
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            ext -> a:0 [id=0 sink="{ufo_order:0}"]
             a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
             a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"]
             a -> b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
-            b:1 -> ext [id=4 source="{ufo_order:3}" sink="{ufo_order:1}"]
+            b:1 -> ext [id=4 source="{ufo_order:3}"]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let lmb = graph.loop_momentum_basis.clone();

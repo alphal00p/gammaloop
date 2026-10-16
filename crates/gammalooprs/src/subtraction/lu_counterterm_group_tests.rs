@@ -22,9 +22,9 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
         edge [num=1 mass=0]
         node [num=1]
         ext->a:0 [id=0 sink="{ufo_order:0}"]
-        a->b [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+        a->b [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
         b->a [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-        a->b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
+        a->b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}" lmb_id=1]
         ext->b:1 [id=4 sink="{ufo_order:3}"]
     })
     .unwrap();
