@@ -1033,8 +1033,8 @@ The earlier OS functionality stack was replayed onto the exact review snapshot
 shared algebra repairs were included in that base. The replay retained its
 explicit CT-history arguments, native tensor reductions before Taylor
 operations, and medium/vacuum CFF options. Each implementation prefix compiled.
-Fresh runtime validation was required on that base; the temporal-trace results
-below remained evidence for their original revision only.
+Its later runtime validation is recorded in the historical subsection below;
+the temporal-trace results retain their original revision only.
 
 The historical combined state manifest version 19 joined that repaired
 FeynKit layout with generated fixed OS frame metadata; both earlier
@@ -1062,6 +1062,69 @@ twenty-seven ungrouped comparisons are distinguished above; the grouped test
 does not separately evaluate an actual GL2 master. Declared grouping metadata
 and numerical density agreement do not establish a symbolic identity of the
 grouped graphs or supply the observed weight as an expected-value multiplier.
+
+=== Historical validation on the repaired review
+
+The following qualification belongs only to the frozen `faad517b` source and
+its original shared repairs. It does not certify the retained-tensor port's
+current source, state21 or deferred runtime inventories.
+
+The separately named shared repair `feynkit-nested-vector-admission`
+(`e2d55fbfaef7db3d6f699c10a360bb280a4bfb96`) precedes all thirteen replayed
+OS changes. Nested-vector Schoonschip such as
+`δ(cind(0),Q(metadata,mink(d)))` is a valid contraction. The typed entry point
+now uses its existing dot normalizer before power and interface inference.
+This narrow pass preserves explicit notation, opaque scalar payloads and
+callback boundaries; full validation still follows normalization. Independent
+regressions cover symbolic and concrete dimensions, all four metric signs,
+powers, open spectator ports and factorization. The reproducing case failed
+before the fix; both new tests and all 992 ordinary Idenso tests pass afterward.
+The existing 24 exclusions remain unchanged. Strict Idenso Clippy, formatting,
+the documentation checker and the architecture-note render pass.
+
+The frozen runtime candidate is `faad517b089022402dbdc1e01c43dfd39fb73274`.
+It passes all 80 bounded OS/core checks in
+`52cb8e0e-7307-47ff-9009-47a170ca07e4` (241.969 seconds total; 62.241 seconds
+for the longest case under the unchanged 240-second per-test cap). The earlier
+mixed soft-gluon/OS-quark component-jet admission failure is included and passes.
+Five core boundary controls, six Idenso controls and four state controls also
+pass with their exact inventories. These tests distinguish exact algebraic
+certificates, local limits and integrated scheme conditions.
+
+The primitive three-route CLI test passes in
+`71122de6-9aa6-4cfa-8d35-839960e0b89c`; the boosted integrated comparison
+and fixed-velocity state reload pass in
+`d988082e-9c40-4b14-9153-f31f1fcc3328`. The three small physical checks and
+localization-kernel jet check pass. All 18 grouped finite-density comparisons
+retain their original tolerance; the largest relative arbitrary-precision
+difference is $1.315 times 10^(-298)$. Runtime evidence, private test reports,
+and the 2117-file source guard are retained under
+`target/os-feynkit/rebased-review-e3adefb1/nested-vector-refresh/`.
+All nine large core checks pass in
+`f1b971ab-3e3a-4028-ac2d-a23bb8b6b021` (1340.726 seconds total; longest
+case 374.878 seconds under the unchanged full-main limit). These include complete
+nested radial soft controls, live cographs, generic and correlated three-loop
+hard limits, independent component jets and exact finite coefficients.
+The four two-loop CLI cases pass in
+`e818ea89-13c8-4290-9770-8ca0197822b6`, retaining the three-route comparison
+for quark-in-gluon, nested-quark, soft-gluon-in-quark and disjoint components.
+The three-loop CLI comparison also passes in
+`643c3576-817b-45eb-906a-51746d99661f` (2516.170 seconds), completing all
+eight fresh CLI checks. All three routes agree at both maintained nonzero
+control points. All guarded source, binary, configuration and metadata
+identities remain unchanged.
+
+The full physical acceptance run passes in
+`7fb5f4f7-9639-40c6-8ae3-63bb2d592e95` (2144.550 seconds). It retains
+nine NLO cases of 320,000 samples, the 10,000-sample LO control, seeds 1337
+through 1345, ten workers and the 7200-second cap. The maximum reference,
+auxiliary-scale and cross-route deviations are respectively 1.399, 1.272 and
+1.453 reported standard errors, using combined errors for the latter two.
+All imaginary-part and uncertainty assertions pass. There are 8323 Quad
+samples, no arbitrary-precision samples and no unstable samples. All ten
+original checkpoints are retained, including 110 files and 22 compiled objects;
+their hashes, source guard and binary identity pass final verification.
+Concurrent correctness timings do not supply isolated performance measurements.
 
 === Historical frozen temporal-trace stack
 
@@ -1152,10 +1215,11 @@ isolated measurements at `91ab7745` are historical observations; they are not
 relabelled as temporal-trace or consolidated-rebase results. At the time of
 this historical record, the exhaustive UV inventory of 259 limits per control
 and 39 isolated replays was prepared with its existing reference, seed,
-precision, timeout and performance-gate policies. Final measurements awaited
-the consolidated FeynKit repairs, including component factor collection and
-the restored antighost derivative. No full three-loop radial soft matrix was
-supplied by those two-loop checks.
+precision, timeout and performance-gate policies. After the repaired-review
+correctness runs, those measurements were still pending on that base, which
+already included component factor collection and the restored antighost
+derivative. No full three-loop radial soft matrix was supplied by those
+two-loop checks.
 
 === Earlier rebased records
 
