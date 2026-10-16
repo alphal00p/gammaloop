@@ -1295,87 +1295,96 @@ mod tests {
 
     #[test]
     fn compact_factors_keep_deep_weighted_scalar_circuits_factorized() {
-        use symbolica::atom::AtomView;
+        // Keep the depth-512 stress case independent of the test harness's
+        // default stack size, as in the existing deep tensor/UV regressions.
+        std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                use symbolica::atom::AtomView;
 
-        test_initialise().unwrap();
-        let head = symbol!("compact_nested_scalar::leaf");
-        let depth = 512;
-        let mut core = function!(head, 0);
-        for index in 1..=depth {
-            core = function!(head, 2 * index) * (function!(head, 2 * index + 1) - core);
-        }
-        let protected = [
-            parse_lit!((u + v) ^ 11),
-            parse_lit!(1 / (w + 2 * (x + y))),
-            parse_lit!(opaque(a + 2 * (b + c))),
-            parse_lit!((r + 2 * (s + t)) ^ (1 / 2)),
-        ];
-        let source = core * Atom::mul_many(&protected);
-        let normalized = source.collect_compact_factors();
-        assert!(!normalized.is_zero());
-        assert_eq!(normalized.collect_compact_factors(), normalized);
-        for factor in &protected {
-            assert!(normalized.contains(factor));
-        }
-        let mut leaves = 0;
-        normalized.visitor(&mut |part| {
-            if let AtomView::Fun(function) = part {
-                leaves += usize::from(function.get_symbol() == head);
-                return false;
-            }
-            true
-        });
-        assert_eq!(leaves, 2 * depth + 1);
+                test_initialise().unwrap();
+                let head = symbol!("compact_nested_scalar::leaf");
+                let depth = 512;
+                let mut core = function!(head, 0);
+                for index in 1..=depth {
+                    core = function!(head, 2 * index) * (function!(head, 2 * index + 1) - core);
+                }
+                let protected = [
+                    parse_lit!((u + v) ^ 11),
+                    parse_lit!(1 / (w + 2 * (x + y))),
+                    parse_lit!(opaque(a + 2 * (b + c))),
+                    parse_lit!((r + 2 * (s + t)) ^ (1 / 2)),
+                ];
+                let source = core * Atom::mul_many(&protected);
+                let normalized = source.collect_compact_factors();
+                assert!(!normalized.is_zero());
+                assert_eq!(normalized.collect_compact_factors(), normalized);
+                for factor in &protected {
+                    assert!(normalized.contains(factor));
+                }
+                let mut leaves = 0;
+                normalized.visitor(&mut |part| {
+                    if let AtomView::Fun(function) = part {
+                        leaves += usize::from(function.get_symbol() == head);
+                        return false;
+                    }
+                    true
+                });
+                assert_eq!(leaves, 2 * depth + 1);
 
-        // Supplement the symbolic boundary checks with independent exact
-        // recurrence values. These valuations do not expand the scalar circuit.
-        for shift in [0, 1] {
-            let value = |index: usize| {
-                if index == 0 {
-                    Atom::num((1 + shift, 7))
-                } else if index.is_multiple_of(2) {
-                    Atom::num((
-                        if (index / 2).is_multiple_of(2) {
-                            2 + shift
+                // Supplement the symbolic boundary checks with independent exact
+                // recurrence values. These valuations do not expand the scalar circuit.
+                for shift in [0, 1] {
+                    let value = |index: usize| {
+                        if index == 0 {
+                            Atom::num((1 + shift, 7))
+                        } else if index.is_multiple_of(2) {
+                            Atom::num((
+                                if (index / 2).is_multiple_of(2) {
+                                    2 + shift
+                                } else {
+                                    -2 - shift
+                                },
+                                3,
+                            ))
                         } else {
-                            -2 - shift
-                        },
-                        3,
-                    ))
-                } else {
-                    Atom::num((((index / 2) % 7) as i64 - 3 + shift, 5))
+                            Atom::num((((index / 2) % 7) as i64 - 3 + shift, 5))
+                        }
+                    };
+                    let mut expected = value(0);
+                    for index in 1..=depth {
+                        expected = value(2 * index) * (value(2 * index + 1) - expected);
+                    }
+                    let evaluated = normalized.replace_map(|part, _, output| {
+                        if let AtomView::Fun(function) = part
+                            && function.get_symbol() == head
+                        {
+                            **output = value(usize::try_from(function.get(0)).unwrap());
+                        }
+                    });
+                    assert_eq!(
+                        evaluated.collect_compact_factors(),
+                        (expected * Atom::mul_many(&protected)).collect_compact_factors()
+                    );
                 }
-            };
-            let mut expected = value(0);
-            for index in 1..=depth {
-                expected = value(2 * index) * (value(2 * index + 1) - expected);
-            }
-            let evaluated = normalized.replace_map(|part, _, output| {
-                if let AtomView::Fun(function) = part
-                    && function.get_symbol() == head
-                {
-                    **output = value(usize::try_from(function.get(0)).unwrap());
-                }
-            });
-            assert_eq!(
-                evaluated.collect_compact_factors(),
-                (expected * Atom::mul_many(&protected)).collect_compact_factors()
-            );
-        }
 
-        // The same pass must still close scalar linear cancellation, with the
-        // complete deep numerator retained as its surrounding factor.
-        let k = parse_lit!(k);
-        let p = parse_lit!(p);
-        assert_eq!(
-            (&source * (&k - (&k - &p))).collect_compact_factors(),
-            (&normalized * &p).collect_compact_factors()
-        );
-        assert!(
-            (&source * (&k - (&k - &p) - &p))
-                .collect_compact_factors()
-                .is_zero()
-        );
+                // The same pass must still close scalar linear cancellation, with the
+                // complete deep numerator retained as its surrounding factor.
+                let k = parse_lit!(k);
+                let p = parse_lit!(p);
+                assert_eq!(
+                    (&source * (&k - (&k - &p))).collect_compact_factors(),
+                    (&normalized * &p).collect_compact_factors()
+                );
+                assert!(
+                    (&source * (&k - (&k - &p) - &p))
+                        .collect_compact_factors()
+                        .is_zero()
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     #[test]
