@@ -17,11 +17,31 @@ and figures 10–11 motivate the nested tests. The calculations below give an
 independent one-loop oracle in the repository conventions.
 
 The comparison requirements below are maintained test contracts. Historical
-pass records and measurements are identified as results of the original OS
-stack ending at `ce58d97de847`, before its rebase onto FeynKit. They do not
-certify the rebased implementation. Current validation records must identify
-the tested revision, test selection and run; exact reconstruction, local limits
-and integrated renormalization remain separate claims.
+pass records and measurements belong to their stated source revisions,
+including the original OS stack ending at `ce58d97de847` and the earlier
+FeynKit rebases recorded below. They do not certify the retained-tensor port.
+Current validation records must identify the tested revision, test selection
+and run; exact reconstruction, local limits and integrated renormalization
+remain separate claims.
+
+At retained-tensor source `bb4ee859bb121796015db6ba3e4a9faa40089cff`, the
+finite-density case passed in run `a9ef128e-92bc-4870-b449-b0eb9aac73a0`
+(25.472 seconds): eighteen grouped-master comparisons retain both charge-mate
+source weights, their independent Born sum and both vertex spectator charts.
+The density fixture explicitly selects its authored input bases before grouping:
+GL0 uses edges $(1,2)$ and both raw self-energy sources GL1/GL2 use $(1,4)$.
+The retained grouping, signed-routing and exact basis assertions remain in force.
+
+The expanded route-map sampling, published absolute MS-bar acceptance and its
+independent reference anchor passed in run `925d775b-4c03-4248-938f-bbcaad9995e2`
+(42.737 seconds). The sampling matrix contains two configurations, three points
+and three routes with the complete native role/channel inventory. All four
+cases use the unchanged ordinary 240-second per-case limit. Their source,
+binary and exact comparison records are retained under
+`target/os-feynkit/retained-tensor-os-rebase/08-finite-reinsertion/all-source-chart/`.
+The nine-case inclusive OS workload remains deferred to the existing full-main
+gate; these ordinary checks and the earlier source/run identities below do
+not qualify that workload on this port.
 
 The rebased boosted implementation at `5dc4d91fa9ea` passed 34 focused cases
 in nextest run `1ccd928f-3bdf-4c13-a511-c9d377138076`. These cover the independent
@@ -32,7 +52,9 @@ cover a proper child with a nonaxial point and unrelated live external momenta;
 these pointwise comparisons supplement the exact certificates. The slowest
 case, the nonaxial complete rainbow, took 69.7 seconds under the ordinary
 240-second limit. This record does not certify the physical inclusive-rate or
-large performance and scaling workloads on the rebased stack.
+large performance and scaling workloads on the rebased stack. The later
+public-generation and performance records below identify their own revision
+and measurement scopes.
 
 == Ordered component operation
 
@@ -375,6 +397,50 @@ addback are integrated and combined. It need not cancel pointwise in an
 individual local term or CFF orientation. The physical scale $m$ remains in
 the OS mass relation.
 
+=== Independent finite addback in the photon forward graph
+
+At NLO there is no enclosing UV pole in the selected physical cuts, so this
+reference uses the finite coefficient at $epsilon^0$. Write
+$a_C=a C_F=C_F alpha_s/(4 pi)$ and $L_M=ln(M^2/mu^2)$. The native quark
+propagator is $S=i(slash(p)+m)/(p^2-m^2+i 0)$. The field insertion has coefficient
+$-i a_C(1+L_M)(slash(p)-m)$. Its numerator identity yields the causal pinch
+$S(slash(p)-m)S=i S$, so each self-energy contributes
+$a_C(1+L_M)$ times its Born cograph. Its two adjacent virtual cuts are one
+raised-residue group and do not supply an extra multiplicity.
+This equality is taken in the causal limit; the exact numerator identity
+contains $p^2-m^2$ and does not cancel a finite nonzero $i 0$.
+
+The independent vertex average is
+$ gamma_mu slash(q) gamma^nu slash(q) gamma^mu
+  arrow.r (d-2)^2/d q^2 gamma^nu. $
+The scalar vacuum integral with numerator $q^2$ and three equal denominators
+has expansion $i/(16 pi^2)(1/epsilon-L_M-1/2)$, while
+$(d-2)^2/d=1-3epsilon/2+O(epsilon^2)$. With the actual propagator phase
+$i^2(-i)=i$ and quark-gluon coupling $i g_s$, each vertex therefore contributes
+$-a_C(2+L_M)$ times its Born cograph. The two vertex components and two
+self-energy components have the same external averaging and closed-loop
+factor as the Born graph. Their complete finite addback integrates to
+
+$ [2a_C(1+L_M)-2a_C(2+L_M)] "Born"=-2a_C "Born". $
+
+For $m=mu=173$ and $E_("cm")=400$, this is $-0.0347455650616886$ in the
+acceptance test's normalization. The OS mass contribution remains in the local
+on-shell branch and is not included a second time in this finite reference.
+Before integration, the density has an extra child-loop factor
+$t_*^3 rho_L(t_* q)$ relative to the Born LU measure. The vertex graph has
+two distinct Born momentum charts; they must both be included. The integral
+of this factor is one, independently of $L$.
+
+The grouped-density fixture checks both retained self-energy source weights
+before comparison. Its independent reference sums the Born densities at $-p$
+and $p$ with a nonzero parity control, rather than multiplying by an observed grouped
+weight. Both vertex spectator charts remain separate. The test makes eighteen
+grouped-master density comparisons at three points and three scale pairs,
+retaining both self-energy source weights and both vertex charts. The historical
+twenty-seven-comparison record below used three ungrouped masters. These are
+the maintained test's coverage requirements; their retained-tensor
+qualification is recorded separately.
+
 == Fixed boosts and the rainbow soft condition
 
 The one-loop integrated condition is independent of the chosen fixed velocity.
@@ -595,11 +661,22 @@ are recorded separately.
 
 // Draw the actual fixture incidence. Splitting the invisible external node is
 // a presentation-only transformation; internal vertices and edge IDs survive.
-#let show-fixture(path) = {
+#let show-fixture(path, native-sm: false) = {
   let input = read(path)
     .replace("ext [style=invis]", "ext_in [style=invis]; ext_out [style=invis]")
     .replace("ext ->", "ext_in ->")
     .replace("-> ext [", "-> ext_out [")
+  // Native runtime DOT stores model-local IDs rather than display names.
+  // These two fixtures use sm-default: 0=photon, 4=gluon, 25=top.
+  // Add presentation metadata only; incidence, arrows and source slots survive.
+  if native-sm {
+    for (id, particle) in (("0", "a"), ("4", "g"), ("25", "t")) {
+      input = input.replace(
+        "particle_id=\"" + id + "\"",
+        "particle_id=\"" + id + "\" particle=\"" + particle + "\"",
+      )
+    }
+  }
   context draw-graphs(input, columns: 1, unit: 1,
     amplitude-mode: true,
     edge-style-options: (momentum-arrows: false, show-edge-index: true,
@@ -613,6 +690,19 @@ are recorded separately.
   The open fermion line has physical mass $m$; the loop contains one quark and
   one massless gluon. The independent oracle uses the equivalent routing
   $k$ for the gluon and $k+p$ for the quark.])
+
+#figure(show-fixture("../../tests/resources/graphs/local_os_native_gl1_self_energy.dot",
+    native-sm: true),
+  caption: [Actual native GL1 self-energy contribution to the photon forward
+  graph. The OS component comprises edges 1–2; its matrix ports are hedges
+  5 and 8, and incoming momentum belongs to edge 4. The runtime DOT retains
+  the generated Feynman factors and local UFO port ordering.])
+
+#figure(show-fixture("../../tests/resources/graphs/local_os_native_gl2_self_energy.dot",
+    native-sm: true),
+  caption: [Actual native GL2 charge-conjugate contribution. Its OS component
+  again comprises edges 1–2; its matrix ports are hedges 7 and 6, with incoming
+  momentum on edge 3. Each component uses its own directed fermion chart.])
 
 #figure(show-fixture("../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"),
   caption: [Existing nested validation topology from
@@ -913,6 +1003,359 @@ selector truth tables, same-key sums, factorization and idempotence. The
 primitive comparison checks both direct constructions per production host,
 then all three routes after summing hosts. These checks establish the grouping
 transformation independently of large public generation and route comparisons.
+
+== Rebased FeynKit validation and measurements
+
+At source revision `1121da7ae5f2f68312bff6e4341175de084e1f45`, the fresh native
+$gamma^* arrow.r t overline(t)$ capture has the same complete topology inventory
+as before the paired-wavefunction sampling fix, identically in all three
+routes. GL0 is the vertex with four physical cuts; GL1 and GL2 are self-energy
+masters with three cuts each. The conservative numerator comparison retains
+both self-energy representatives. The acceptance classifies these as two
+physical roles, retaining every native master, group member and physical cut.
+MS-bar reference rows select all masters of their role through the existing
+normalized runtime subset owner; no manual multiplicity is introduced. OS
+acceptance retains the fully inclusive graph sum. The capture and comparison
+are in `target/os-feynkit/physical-topology-after-sampling/topology-summary.json`.
+
+Eight small public checks passed in 119.452 seconds, run
+`17bb38eb-c91a-48f3-b056-2a44382b4ea6`: the independent published-reference
+anchors, primitive projected dispatch, rest and boosted integrated three-route
+generation, boosted state reload, primitive orientation UV controls, and both
+appendix-B1 dispatch checks. The all-master physical x-space probe passed in
+17.674 seconds, run `ee74544c-c29a-4de7-a06a-499e224ff933`. It compares the
+three routes at three fixed points and checks that all native master
+contributions sum to the complete weighted value. These numerical boundary
+checks supplement the exact certificates; they do not establish the inclusive
+integrated OS reference or auxiliary-scale independence.
+
+The native component/CFF and physical localization jet regressions are
+preserved in change `1bcacabc9743c5c2bc07b1899b2d2ef723ba82da`. They passed
+together in run `dc8847e1-cb83-489f-87ac-2a04e8fb4a8a` (two cases, 3.734
+seconds), against the same production code. Their source hashes begin
+`e42c2c3c4141` and `2d796c3ad592`. The component test
+certifies the symbolic-dimensional numerator and both rest/nonaxial signed
+OS and vacuum expressions, then the analytic field pole and finite addback.
+It uses the exact boundary signatures to distinguish a point's edge owner
+from its momentum coordinate. The adjacent native propagator numerators
+satisfy $N(p) F(p) N(p)=i(p^2-m^2)N(p)$ with their actual spin/color interfaces;
+the additional integrated coefficient supplies the second factor of $i$.
+This numerator identity does not cancel a denominator's nonzero causal
+prescription as an ordinary rational function.
+
+Both the raised native cograph and its independent pinched source pass general
+numerator and denominator reconstruction certificates in a compatible parent
+chart. Pinching removes one original basis carrier, so the replacement chart
+is certified against every active signed source signature before either
+quotient is constructed. Each native graph produces eight raised source maps
+and two pinched maps. Their complete CFF orientation sums agree at two exact
+rational component points, giving four exact specializations. These supplement
+the general source certificates; they are not a proof of a general symbolic
+identity between the final CFF sums. Core Clippy passes with warnings denied.
+
+The separate runtime test executes the existing parameter binding, dual loop
+rescaling and LU measure on a small raised-cut scalar cograph. At two values
+of $t$ and four independent UV/localization scale pairs it checks the zeroth
+and first jets of $t^3 rho_L(t q)$, including the kernel derivative and the
+measure derivative. The UV and localization scales remain constant under this
+physical rescaling. This small runtime check does not certify the complete
+photon graph's integrated rate.
+
+The six isolated performance tests passed in 221.243 seconds, run
+`19d2c848-1924-4bd9-beba-79e9ce68c1c5`, under the ordinary 240-second per-test
+limit. Each route has a distinct process, one generation measurement and ten
+evaluation repeats: two nonsingular momentum points, five repeats each, twenty
+batches per repeat. The primitive scope includes local and integrated terms;
+the quark-in-gluon scope is local only. The table reports generation wall time
+without stage logging and evaluator construction in seconds, followed by the
+mean and sample standard deviation of the ten repeat means in µs per sample.
+The total includes the benchmark wrapper; the evaluator column measures its
+kernel category. Compiled evaluator construction is zero in these runs.
+
+#table(
+  columns: (1.45fr, 0.8fr, 0.9fr, 1.2fr, 1.2fr),
+  table.header([Fixture / route], [Generate (s)], [Evaluator build (s)],
+    [Evaluator (µs)], [Total (µs)]),
+  [Primitive / projected], [0.243], [0.0222], [1.500 ± 0.005], [28.661 ± 0.259],
+  [Primitive / explicit], [0.236], [0.0255], [1.338 ± 0.010], [28.485 ± 0.617],
+  [Primitive / orientation], [0.243], [0.0310], [2.511 ± 0.103], [34.439 ± 2.814],
+  [Quark in gluon / projected], [5.490], [1.838], [42.277 ± 0.446], [83.242 ± 5.819],
+  [Quark in gluon / explicit], [98.389], [93.481], [91.279 ± 0.919], [130.361 ± 1.368],
+  [Quark in gluon / orientation], [96.151], [92.512], [222.738 ± 2.489], [276.861 ± 8.350],
+)
+
+Generation RSS is sampled process memory, not incremental allocations or the
+whole test's lifetime peak. Separate Linux `VmHWM` readings, which include
+model import, remain in the artifacts. Stored sizes count the factorized
+pre-evaluator root and retained definitions without unfolding them.
+
+#table(
+  columns: (1.45fr, 0.85fr, 1fr, 1.4fr),
+  table.header([Fixture / route], [Sampled RSS (MiB)], [Root bytes],
+    [Definition bytes / count]),
+  [Primitive / projected], [55.32], [1,554], [6,733 / 7],
+  [Primitive / explicit], [56.34], [4,025], [6,493 / 11],
+  [Primitive / orientation], [56.48], [4,165], [6,493 / 11],
+  [Quark in gluon / projected], [283.00], [180,809], [76,473 / 28],
+  [Quark in gluon / explicit], [2,681.79], [1,005,151], [94,145 / 75],
+  [Quark in gluon / orientation], [2,693.15], [1,094,096], [94,145 / 75],
+)
+
+The baseline has no stage logfile. Separate generation-only replays enable
+module-scoped profiling and reproduce the same factorized expression sizes.
+Their times below are not substituted into the baseline wall measurements.
+The forest timer includes traversal, completed local operations, analytic
+integration when enabled, projection and assembly. Its remainder subtracts
+only the profiled CFF work inside that boundary; it still includes surface
+conversion and unprofiled CFF-related work, so it is not pure Taylor time.
+CFF totals include routing, source preparation and assignment selection,
+including rejected proposals once. Native engine time is a subset. The
+production root CFF lies outside the forest timer. These columns are
+overlapping measurements and must not be added to the inclusive forest time.
+
+#table(
+  columns: (1.45fr, 1.6fr, 1.4fr),
+  table.header([Fixture / route], [Forest inclusive / remainder (ms)],
+    [CFF total / native (ms)]),
+  [Primitive / projected], [193.078 / 175.333], [18.045 / 0.902],
+  [Primitive / explicit], [185.022 / 184.832], [0.534 / 0.292],
+  [Primitive / orientation], [179.146 / 178.973], [0.462 / 0.254],
+  [Quark in gluon / projected], [3,618.258 / 2,939.564], [680.060 / 47.461],
+  [Quark in gluon / explicit], [4,884.653 / 4,873.615], [12.418 / 1.727],
+  [Quark in gluon / orientation], [3,676.512 / 3,665.832], [12.034 / 1.700],
+)
+
+The extraction requires one matched forest interval, matching outer-routing
+boundaries, and one numerator-template record per admitted exact assignment.
+Nested preparation and raw proposals are not charged again within their
+enclosing records; negative remainders are rejected. Component-operation and
+inclusive projection timers remain separate diagnostics in the artifacts.
+
+The requested two seconds per repeat calibrates a fixed workload from ten
+warmup samples; it is not a minimum measured duration. The six baseline cases
+execute 1,833–4,667 samples per repeat, with actual batch-wall totals of about
+0.12–0.78 seconds per repeat. Repeat spread is not independent-run uncertainty,
+and a single generation has no measured generation-time spread. Source hashes,
+per-point results, exact counts and stage records are retained in
+`target/os-feynkit/performance-review/six-route-summary.json` and
+`complete-phase-summary.json` in the same directory. The accounting recipe is
+`complete-phase-methodology.typ` there.
+
+A separate three-process primitive replay disables integrated terms to match
+the UV scaling workload. Its evaluator and total columns retain the same
+repeat-mean convention; construction times are milliseconds. The final column
+gives sampled generation RSS and stored root-plus-definition bytes. Its
+standalone-process RSS baseline must not be compared directly with the earlier
+integration-test executable's absolute RSS.
+
+#table(
+  columns: (1.15fr, 1fr, 1.15fr, 1.15fr, 1.2fr),
+  table.header([Local-only route], [Generate / build (ms)], [Evaluator (µs)],
+    [Total (µs)], [RSS (MiB) / bytes]),
+  [Projected 4D], [150.54 / 20.19], [1.263 ± 0.008], [29.336 ± 2.264], [75.61 / 7,663],
+  [Explicit direct], [125.82 / 24.42], [1.060 ± 0.033], [31.395 ± 2.728], [81.79 / 9,895],
+  [Orientation direct], [127.78 / 28.58], [2.377 ± 0.007], [32.285 ± 2.575], [80.45 / 10,043],
+)
+
+This matched replay supports retaining explicit direct for the bounded primitive
+scan: its observed generation is smallest and its evaluator is faster at both
+points. Total wrapper means overlap in repeat spread and favour projected 4D
+in their point estimates. The quark-in-gluon measurements strongly favour
+projected 4D for construction, memory and evaluation. Neither comparison
+establishes a universal fastest route for the other forests. The local-only
+record is `target/os-feynkit/performance-review/primitive-local-only-summary.json`.
+
+The inclusive run `be16f780-3c24-488c-a161-520ed7b59c75` completed all nine
+320,000-sample integrations in 597.153 seconds, then failed the unchanged
+reference assertion for orientation-direct at doubled UV mass:
+$0.42349060 plus.minus 0.00294377$ versus $0.43283009$ (3.17 standard errors).
+An offline check also finds the orientation-direct localization case 3.05
+standard errors below the reference. These are failed validation results,
+not evidence of an algebraic mismatch. The final assertion loop stopped at
+the first miss; unexecuted scale and route assertions are not counted as passes.
+The existing integrator initializes iteration $j$ with seed $s+j$, so the
+consecutive requested seeds also reuse RNG streams across runs. Their claimed
+statistical independence is therefore not established.
+
+The retained-extrema control evaluates eight original inputs in all
+three routes, using production precision and forced arbitrary precision.
+All 48 cold versus full-warm values agree exactly; the largest relative
+between-route difference in forced arbitrary precision is $2.02 times 10^(-296)$.
+The largest Double-versus-Arb difference is $3.05 times 10^(-11)$. These are
+unit-weight API values including their physical parameterization Jacobian;
+the original Monte Carlo extrema also include a Vegas weight and are not
+equated to these values. The control excludes a percent-level route or warm-up
+discrepancy at the tested inputs, but neither proves a general identity nor
+establishes the cause of the failed integrations.
+
+The original Vegas-weight boundary was checked separately against all eight
+retained extrema. Each stored extremum is reproduced bitwise using the native
+physical value, its accumulation precision and its original sample weight.
+All 96 weighted replay comparisons satisfy the requested Double tolerance.
+No weight from the final adapted grid replaces an original sample's weight.
+
+Fresh 1,280,000-sample diagnostics retain the two failing orientation-direct
+seeds and settings, increasing only the diagnostic sample budget. The doubled
+UV-mass result is $0.42520132 plus.minus 0.00167351$ (4.56 standard errors below
+the reference); the doubled-localization result is
+$0.42484646 plus.minus 0.00240693$ (3.32 standard errors below). Their first
+300,000 samples share the original trajectories, so these are not independent
+replications. The committed acceptance bounds, seeds and budgets are unchanged.
+
+A separate probe uses 20,000 predetermined common samples from the original
+baseline's frozen grid, on a distinct native RNG stream. Subtracting settings
+per sample gives a doubled-UV-mass difference of
+$+0.00095338 plus.minus 0.00375058$, and a doubled-localization difference of
+$-0.00653574 plus.minus 0.00092152$. Seventeen of twenty fixed blocks have
+negative localization differences. Its
+largest contribution supplies 34.7% of the centered second moment and its ten
+largest supply 64.6%. Thus the reported localization discrepancy is a
+statistical observation, not an exact normalization defect. Every sample is
+retained; none is clipped or replaced. The complete records are under
+`target/os-feynkit/physical-mc-triage/`, in `statistics-fresh/`,
+`vegas-weight-replay/` and `paired-scale-corrected-run/`.
+
+Subsequent checks identify an infinite-variance tail in that sampling setup.
+For a gluon/spectator channel $(k,p)$, relative spherical coordinates sample
+$(k+p)/2$ and $k-p$ independently. At fixed spectator momentum and large
+$abs(k)=R$, the linear radial maps give proposal density $O(R^(-8))$, whereas
+the localized field density falls as $R^(-4)$. The native self-energy graphs
+each have one such channel. The vertex graph's alternative channel has
+density $O(R^(-4))$ in the same physical region; its map-density partition
+suppresses the poorly matched contribution and cannot cancel the
+self-energy estimator's leading $R^4$ growth. Its nonzero coefficient follows
+from the field/Born identity above. The resulting second moment contains
+$integral^infinity R^2 dif R$ and diverges. A finite Vegas histogram changes
+the prefactor, not that asymptotic power.
+
+Seven complete x-space probes confirm the noncancellation and the approach to
+the predicted fourth power, with all graph/channel contributions retained.
+Consequently, the quoted standard-error multiples from this proposal are not
+calibrated Gaussian significances. Increasing its sample count does not repair
+that variance defect. The derivation and native maps are retained in
+`sampling-tail-derivation.typ` and `localization-complete-tail/` under the
+triage directory. The recorded baseline and doubled-localization complete
+values also approach the fourth power on this ray; other individual settings
+are not certified by that observation.
+
+The replacement uses ordinary spherical coordinates with the existing
+`auto:lmb` catalogue: eight native channels for GL0 and seven for each
+self-energy. In 122 controlled evaluations, both fermion and gluon soft
+directions have sufficient proposal density, and the hard-child body and
+proposal fall as $q^(-4)$. The complete baseline, doubled-localization and
+contrast weights approach constants on the UV sequence. These checks cover
+the identified regions, not every possible singular region. The retained
+record is `spherical-atlas-generic-rays/` under the same triage directory.
+
+The finite physics coefficient was checked independently of that sampler.
+At three momenta and three UV/localization scale pairs, all 27 differences
+between integrated-enabled and integrated-disabled generation agree with the
+field and vertex Born-density references above. The largest relative residual
+is $1.32 times 10^(-298)$ using the stored model coupling; the separate
+$alpha_s$ reference differs by $3.79 times 10^(-16)$ from that coupling's stored
+rounding. These are pointwise runtime controls, alongside the exact native
+field identity, not a numerical proof of an integrated equality. Their record
+is `finite-addback-reference/` in the same triage directory.
+
+The maintained finite-density test, the three-route sampler comparison and
+the published-reference anchors passed in run
+`862d2f07-5a4c-451e-80f0-3dbd6d2e91c2` at source
+`9768730e262343a55e74c0ddc66db99f558c8687`. Total runtime was 46.118 seconds;
+the two generation cases took 23.317 and 22.786 seconds. The sampler comparison
+retains both old and replacement configurations, every native master and the
+complete graph sum. It also requires a full-rank native channel exposing each
+OS child edge with an independent cograph carrier. Recorded Arb diagnostic
+maps use exact binary64 input promotion and are distinguished from the
+evaluator's fixed proposal precision. Integration-test Clippy and the
+documentation registry check pass.
+
+The maintained inclusive acceptance then passed all nine route/scale cases in
+run `4ff2a464-957b-4529-b6e6-05026b2b389f`, with the replacement proposal and
+unchanged references, tolerances, seeds, learning rates and 320,000 samples per
+case. The launch revision record identifies `ee8e27131e80`; the acceptance
+source SHA-256 is
+`f6430735a93065d5d5811a9c2eef1d47a45df6193829cbdf41b07bb3e35cb485`.
+The retained binary and full run manifest identify the executable independently
+of later documentation edits. At the analytic reference $0.432830086776986$:
+
+#table(
+  columns: (1.1fr, 1fr, 1fr, 1fr),
+  table.header([Route], [$(M,L)=(173,173)$], [$(346,173)$], [$(173,346)$]),
+  [Projected 4D], [$0.432276 plus.minus 0.002624$],
+    [$0.433514 plus.minus 0.002703$], [$0.434514 plus.minus 0.002675$],
+  [Explicit direct], [$0.436554 plus.minus 0.002623$],
+    [$0.433403 plus.minus 0.002702$], [$0.433117 plus.minus 0.002666$],
+  [Orientation direct], [$0.430494 plus.minus 0.002619$],
+    [$0.430878 plus.minus 0.002695$], [$0.428544 plus.minus 0.002652$],
+)
+
+Every reference, imaginary-part, auxiliary-scale and cross-route assertion
+passed. The largest reference distance is 1.616 reported standard errors;
+the largest maintained combined-error comparison is 0.919 for auxiliary scales
+and 1.585 against the projected route. These reproduce the test's existing
+comparisons; the adjacent seed offsets still do not establish independent
+RNG streams. The LO check also passed. The complete test took 3029.939 seconds
+under the existing full-main deadline; concurrent validation workloads mean this is
+validation timing, not a new performance benchmark.
+
+The exact results, JUnit, tested source and binary, and hash manifests are in
+`target/os-feynkit/spherical-physical-acceptance-run/`. The normal successful
+test cleanup removed its original state directory. Review copies retain the LO
+and first eight NLO checkpoints, all 31 compiled shared objects, and the on-disk
+model state; the final case's central result survives but its checkpoint was
+removed before copying. The generated process collection was not serialized,
+so these copies are not a self-contained resumable state. Replay requires the
+maintained generation inputs and original paths, with fingerprint guards intact.
+
+This pass establishes the inclusive reference and auxiliary-scale checks for
+this rest-frame physical calculation. It does not turn the numerical proposal
+ray checks into a proof of global finite variance, or replace exact algebraic
+reconstruction and local-limit certificates. The earlier failed proposal and
+all diagnostic samples remain preserved rather than being relabelled as passes.
+
+A separate nine-case large-core run,
+`3a4a2f9d-44ee-4374-abf3-b368806c4f9f`, passed eight cases in 1323.896 seconds:
+both outstanding OS-in-OS and OS-in-IR radial soft controls, all three proper
+two-loop live-cograph comparisons, the generic and correlated three-loop hard
+limits, and the open-spinor finite-coefficient certificate. The independent
+three-loop component-jet comparison initially failed after 193.880 seconds,
+at class 16 of the final nested outer operation. Logs and unchanged-source
+identities are in `target/os-feynkit/large-algebra-soft-validation/`.
+
+Each of the twelve captured finite entries contains the following zero factor:
+$ (a+b)(c+d)+(a+b)(c-d)+(a-b)(c+d)+(a-b)(c-d)-4 a c = 0 $
+Pairwise factor collection proves this identity while the graph spectator
+remains untouched. The test certificate had selected the related signed
+binomials as independent opaque keys, hiding their relation. Shared commit
+`3d166ca1105a7e4d32980ec1b3ade67710da72d2` changes only that test-certificate
+selection: distinct summed keys with equal coefficient-free term support
+leave their atomic constituents available to the existing bounded exact
+collector. Positive-power bases remain protected, as do function bodies and
+inverse denominators. No production operator or normalizer changes.
+
+The native momentum-component regression fails with the old certificate and
+passes with the correction, including nonzero and retained-factor controls.
+All fifteen certificate tests pass in canonical run
+`c2c26211-903c-438a-9095-dd8f55b08a0e` (0.945 seconds), and all twelve captured
+entries independently replay to zero. The complete original three-loop
+assertion then passes unchanged in run
+`7324cfbb-3d2f-4961-bbdf-debb764cc1b1` (194.950 seconds), with its input hashes
+unchanged during the run. These are exact certificates, separate from the
+hard-limit and physical integration results. The full rerun is retained in
+`target/os-feynkit/three-loop-identity-fixed/`.
+All twenty-six bounded consumers then pass in run
+`3f780ba2-8fb7-42d0-b317-d2a13607f767`: one-loop and native-component identities,
+small nested forests, integrated boosted poles, complete rainbow soft limits,
+primitive direct-route controls and overlap-proof guards. The serial total is
+225.193 seconds; the longest case takes 61.710 seconds under the unchanged
+240-second per-case limit. Strict Clippy and workspace formatting also pass.
+
+The remaining CLI route comparisons and their extensive numerical UV matrices
+are still open. No full-three-loop radial soft matrix is supplied by the
+two-loop controls. The following historical
+results do not discharge those obligations for this revision. Performance-gate
+triggers and the ordinary four-minute versus full-main test policy remain
+unchanged.
 
 == Original OS baseline measurements and route selection
 
