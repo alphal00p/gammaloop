@@ -266,6 +266,23 @@ fn dot_conversion_preserves_existing_indices() {
 }
 
 #[test]
+fn dot_conversion_retains_independent_scopes_in_factored_products() {
+    use symbolica::atom::AtomCore;
+    use vakint::Vakint;
+
+    let _ = vakint::symbols::S.dot;
+    let spectator = vakint_parse!("(alpha+beta)^11").unwrap();
+    let source = &spectator * vakint_parse!(
+        "(dot(k(1),p(1))+dot(k(1),p(2)))^3*(dot(k(2),p(1))+dot(k(2),p(2)))^2"
+    ).unwrap();
+    let converted = Vakint::convert_from_dot_notation(source.as_view());
+    assert!(converted.contains(&spectator));
+    assert_eq!(Vakint::convert_from_dot_notation(converted.as_view()), converted);
+    let restored = Vakint::convert_to_dot_notation(&VakintSettings::default(), converted.as_view()).unwrap();
+    assert_eq!(restored, source);
+}
+
+#[test]
 fn dot_conversion_preserves_reciprocal_powers() {
     use symbolica::atom::AtomCore;
     use vakint::Vakint;
