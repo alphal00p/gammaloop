@@ -66,6 +66,7 @@ pub(crate) struct DotNormalizer {
     metrics: bool,
     rank_one_powers: bool,
     representations: Option<Vec<spenso::structure::representation::LibraryRep>>,
+    admission_only: bool,
 }
 
 /// An odd tensor power exposes a factor which a subsequent contraction
@@ -95,6 +96,13 @@ impl DotNormalizer {
         Self::metric_shorthand_to_dot(compact.as_view())
     }
 
+    /// Nested rank-one notation denotes a contraction before its interface or
+    /// scalar powers can be read. Preserve every already explicit spelling;
+    /// full admission still validates the result and its metadata.
+    pub(crate) fn nested_vectors(view: AtomView<'_>) -> Atom {
+        Self::normalize_mode(view, Default::default(), true).expression
+    }
+
     pub(crate) fn with_settings(
         view: AtomView<'_>,
         settings: crate::tensor::ContractSettings<'_>,
@@ -111,6 +119,14 @@ impl DotNormalizer {
         view: AtomView<'_>,
         settings: crate::tensor::ContractSettings<'_>,
     ) -> DotNormalization {
+        Self::normalize_mode(view, settings, false)
+    }
+
+    fn normalize_mode(
+        view: AtomView<'_>,
+        settings: crate::tensor::ContractSettings<'_>,
+        admission_only: bool,
+    ) -> DotNormalization {
         #[cfg(feature = "reference-cases")]
         let _phase = crate::reference_cases::timing::scope(
             crate::reference_cases::timing::Phase::OutputNormalization,
@@ -123,6 +139,7 @@ impl DotNormalizer {
             metrics: settings.metrics,
             rank_one_powers: settings.rank_one,
             representations: settings.representations.map(<[_]>::to_vec),
+            admission_only,
         };
         let expression = normalizer.apply(view);
         DotNormalization {
@@ -186,6 +203,17 @@ impl DotNormalizer {
     }
 
     fn normalize_node(&mut self, atom: AtomView<'_>) -> DotRewrite {
+        if self.admission_only
+            && let AtomView::Fun(function) = atom
+            && function.get_symbol() != ETS.delta
+            && !crate::tensor::inference::InterfaceInference::intrinsic_normalization_head(
+                function.get_symbol(),
+            )
+        {
+            // Rewriting a child would rebuild this ancestor and replay its
+            // callback before the established constructor/validation boundary.
+            return DotRewrite::Opaque;
+        }
         // Metric construction owns traces and compact-vector substitution.
         // Only nested vectors and powers need this expression walk. Canonical
         // vectors have one final argument carrying their tensor structure;
@@ -194,10 +222,16 @@ impl DotNormalizer {
             AtomView::Fun(function)
                 if function.get_symbol() == T.dot || function.get_symbol() == self.metric =>
             {
+                if self.admission_only {
+                    return DotRewrite::Descend;
+                }
                 self.normalize_weighted_dot(function)
                     .map_or(DotRewrite::Descend, DotRewrite::Rewritten)
             }
             AtomView::Pow(power) => {
+                if self.admission_only {
+                    return DotRewrite::Descend;
+                }
                 let (base, exponent) = power.get_base_exp();
                 self.normalize_power(base, exponent)
                     .map_or(DotRewrite::Descend, DotRewrite::Rewritten)
@@ -269,6 +303,27 @@ impl DotNormalizer {
         let representation = self.slots.compact_representation(compact)?;
         if !representation.is_base() {
             return None;
+        }
+        if self.admission_only {
+            let mut intrinsic = true;
+            function.as_view().visitor(&mut |value| {
+                if let AtomView::Fun(function) = value {
+                    let symbol = function.get_symbol();
+                    intrinsic &= if symbol == ETS.delta {
+                        // This builtin only compares literal fixed components.
+                        // This local exception grants no interface certificate.
+                        symbol.get_evaluation_info().is_none()
+                    } else {
+                        crate::tensor::inference::InterfaceInference::intrinsic_normalization_head(
+                            symbol,
+                        )
+                    };
+                }
+                intrinsic
+            });
+            if !intrinsic {
+                return None;
+            }
         }
         // The compact final argument identifies even an untagged inner vector;
         // the outer function must have the rank-one tag checked by the caller.
