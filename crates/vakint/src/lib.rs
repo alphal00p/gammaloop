@@ -3039,7 +3039,6 @@ impl VakintTerm {
         }
         if !settings.use_dot_product_notation {
             reduced = Vakint::convert_from_dot_notation(reduced.as_view());
-            reduced = Self::repair_expanded_spenso_vector_slots(reduced.as_view());
         }
         self.numerator = reduced;
         Ok(())
@@ -3496,10 +3495,15 @@ impl VakintTerm {
             if let AtomView::Fun(function) = expression {
                 if function.get_symbol() == Minkowski::selfless_symbol()
                     || function.get_symbol() == ETS.metric
-                    || function.get_symbol().has_tag(&SPENSO_TAG.rank1)
+                    || (function.get_symbol().has_tag(&SPENSO_TAG.rank1)
+                        && ![S.k, S.p].contains(&function.get_symbol()))
                 {
                     return;
                 }
+                // Explicit source slots on integrated and external momenta
+                // retain their original representation, like opaque tensor
+                // ports. Otherwise a surviving numeric source label becomes
+                // indistinguishable from a raw backend dummy on restoration.
                 for argument in function.iter() {
                     if let Some((_dimension, index)) =
                         VakintTerm::spenso_minkowski_slot_parts(argument)
@@ -5825,7 +5829,8 @@ Evaluated (n_loops=1, mu_r=1) :
     pub fn convert_from_dot_notation(atom: AtomView) -> Atom {
         let dummy_pat = function!(S.dot_dummy_ind, S.a_).to_pattern();
 
-        atom.replace(S.dot(S.a_, S.b_).pow(Atom::var(S.c_)))
+        let indexed = atom
+            .replace(S.dot(S.a_, S.b_).pow(Atom::var(S.c_)))
             .with(S.dot_pow(S.a_, S.b_, S.c_))
             .replace(S.dot(S.a_, S.b_))
             .with(S.dot_pow(S.a_, S.b_, 1))
@@ -5922,7 +5927,11 @@ Evaluated (n_loops=1, mu_r=1) :
                     }
                     **out = product.pow(exponent.signum());
                 })
-            })
+            });
+        // Both tensor reduction and scalar integration can request indexed
+        // output. A native vector already declares its compact representation;
+        // bind the generated index there instead of leaving an extra raw port.
+        VakintTerm::repair_expanded_spenso_vector_slots(indexed.as_view())
     }
 
     pub fn convert_to_dot_notation(
