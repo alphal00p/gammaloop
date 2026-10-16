@@ -753,6 +753,13 @@ impl DomainObservations {
                 }
             }
         }
+        // The initial walk can encounter the same immutable subtree in many
+        // branches. Keep its observation once, just as replacement walks do.
+        // Every occurrence was still scanned and contributes its own counts to
+        // its parent; only the completed, context-free inventory is shared.
+        if let Some(previous) = scopes.get(value.as_view().get_data()) {
+            observed = Arc::clone(previous);
+        }
         if let Some((_, _, parent, aggregate)) = stack.last_mut() {
             let aggregate = Arc::make_mut(aggregate);
             let degree = if matches!(parent.as_view(), AtomView::Add(_)) {
@@ -1164,10 +1171,10 @@ mod tests {
                 retained_leaves += region.leaves.len();
                 pending.extend(region.leaf_children.iter().map(AsRef::as_ref));
             }
-            // Every function occurrence is stored once, even though each one
-            // lies below many retained arithmetic scopes. Flattening child sets
-            // at every ancestor made this quadratic in the nesting depth.
-            assert_eq!(retained_leaves, 2 * (depth + 1) + 2);
+            // The two branches share the complete repeated subtree. Retain
+            // each distinct function once while counting both occurrences in
+            // the parent; neither nesting nor repetition duplicates inventories.
+            assert_eq!(retained_leaves, depth + 3);
 
             let mut selected = HashSet::new();
             assert_eq!(
