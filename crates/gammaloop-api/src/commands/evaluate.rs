@@ -26,7 +26,7 @@ use crate::{
 };
 
 #[cfg_attr(
-    feature = "python",
+    feature = "python_api",
     pyo3::pyclass(from_py_object, unsendable, name = "EvaluationSettings")
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -238,8 +238,10 @@ mod tests {
                 source: None,
                 inline_dot: Some(
                     r#"digraph thermal_tadpole {
+                        num=1; overall_factor=1; overall_factor_evaluated=1; projector=1;
                         node [num=1];
-                        a -> a [particle="scalar_1" num=1 id=0 lmb_id=0];
+                        a:0 -> a:1 [particle="scalar_1" num=1 id=0 lmb_id=0,
+                            lmb_rep="K(0,a___)", source="{ufo_order:0}", sink="{ufo_order:1}"];
                     }"#
                     .to_string(),
                 ),

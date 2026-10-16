@@ -174,9 +174,11 @@ impl Direct3dCts {
             ));
         }
 
-        let four_d_denominators = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let four_d_denominators = GS.wrap_tree_denoms(graph.denominator(
+            &graph.tree_edges.subtract(&graph.initial_state_cut),
+            &graph.model,
+            |_| -1,
+        ));
         Ok(Self::Root(DirectResidueBranches::from_keyed(
             branches.into_iter().map(|(id, integrands)| {
                 (
@@ -357,7 +359,7 @@ impl<'a> Direct3dApproximation<'a> {
                 "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
             );
         }
-        let ctx = UVCtx::new(self.graph, self.settings);
+        let ctx = UVCtx::new(self.graph, &self.graph.model, self.settings);
         let reduced_subgraph = current.reduced_subgraph(given);
         let sectors = match local {
             Direct3dCts::Root(branches) => vec![(
@@ -475,7 +477,7 @@ impl<'a> Direct3dApproximation<'a> {
                         .with(function!(GS.m_uv_vacuum, component.subgraph().symbol()));
                     let mut masses = Vec::new();
                     for (pair, _, edge) in self.graph.iter_edges_of(component.subgraph()) {
-                        let mass = edge.data.mass_atom();
+                        let mass = edge.data.mass_atom(&self.graph.model);
                         if pair.is_paired() && !mass.is_zero() && !masses.contains(&mass) {
                             // The soft jet holds scalar mass logarithms fixed.
                             // Only algebraic mass factors carry the effective
@@ -491,7 +493,7 @@ impl<'a> Direct3dApproximation<'a> {
                 });
         let (active, frozen_integrands) =
             self.localize_integrated(&finite_counterterm, integrated_node)?;
-        let ctx = UVCtx::new(self.graph, self.settings);
+        let ctx = UVCtx::new(self.graph, &self.graph.model, self.settings);
         let active_subgraph = current.reduced_subgraph(given);
         let (canonical_lmb, coordinate_lmb) =
             coordinate_lmb(&ctx, current, given, None, &[], &active_subgraph)?;

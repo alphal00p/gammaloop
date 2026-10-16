@@ -26,9 +26,7 @@ use crate::{
     },
 };
 
-#[path = "overlap_numerators.rs"]
-mod numerators;
-use numerators::NumeratorJetCache;
+use crate::uv::overlap_numerators::NumeratorJetCache;
 
 const LAST_FORBIDDEN_POWER: i64 = -2;
 const MAX_GROUPS: usize = 32768;
@@ -69,7 +67,7 @@ impl PhysicalSoftMap {
             .map(|(_, edge, data)| {
                 Replacement::new(
                     GS.ose(edge).to_pattern(),
-                    GS.ose_full(edge, 0.into(), data.data.mass_atom(), None),
+                    GS.ose_full(edge, 0.into(), data.data.mass_atom(&graph.model), None),
                 )
             })
             .collect();

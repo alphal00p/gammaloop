@@ -305,7 +305,10 @@ from the rendered PDF.
 
 == Repository Map
 
-- `crates/gammalooprs/src/` holds the core Rust implementation.
+- `crates/feynkit/` and `crates/feynkit-*/` hold the standalone model, graph,
+  generation, CFF, kinematics, tensor-reduction, UFO, and Python-binding toolkits.
+- `crates/gammalooprs/src/` holds GammaLoop-specific runtime, evaluation, and
+  application integration code.
 - `crates/gammaloop-api/` is the workspace member for the Rust API and Python
   bindings (`crates/gammaloop-api/src` and
   `crates/gammaloop-api/python/gammaloop`).
@@ -508,6 +511,69 @@ belongs to the intended commit before reporting success or investigating failure
 
 == Version Control Workflow
 
+=== Agent Workspaces
+<agent-workspaces>
+
+Agents perform task edits, builds, tests, and experiments in a dedicated feature
+workspace beside `main`. Keep `main`'s checked-out files read-only for
+implementation; inspection and workspace creation are allowed. Creating a
+workspace may update shared version-control metadata.
+
+- Resolve the directory containing `main` before setup. From that directory,
+  the destination is `<feature-name>/`; from `main`, it is
+  `../<feature-name>`. Keep this location fixed when changing command directories.
+- Read `main/AGENTS.md` and `main/CONTRIBUTING.typ` before setup. After creating or
+  resuming the feature workspace, explicitly read its `AGENTS.md`,
+  `CONTRIBUTING.typ`, and applicable local guidance before implementation. Do not
+  assume changing command directories automatically reloads instructions.
+- Choose descriptive workspace and branch names without an agent prefix. Only
+  use `codex/` when explicitly requested. If the destination belongs to another
+  task or contributor, choose a distinct name; never overwrite or adopt it.
+- Resume an existing workspace only when it belongs to the same task and its
+  current state is understood. Continue there when a chat already starts in that
+  task's feature workspace; do not create nested or duplicate workspaces.
+- For a new task, select the intended committed base without resetting, moving,
+  or absorbing existing user changes. Prefer Jujutsu when `.jj` metadata is
+  present. From `main`, create a described working-copy change with:
+  ```bash
+  jj workspace add --name <feature-name> -r <base-revision> \
+    -m "<plan>" ../<feature-name>
+  ```
+  For a Git-only checkout, use a sibling Git worktree with a descriptive branch.
+- Run task commands with the feature workspace as their explicit working
+  directory. Give delegated agents the workspace path and applicable guidance;
+  independent tasks need their own workspaces.
+- When a chat starts in the parent directory, its `AGENTS.md` supplies setup
+  guidance. Keep this rule in the repository's `AGENTS.md` too, because chats
+  started inside a workspace may not discover instructions above its repository
+  root. Instruction files do not grant filesystem permissions: obtain the
+  required write access before creating or editing a feature workspace.
+
+=== Ongoing Agent Cleanup
+<agent-cleanup>
+
+Clean up as work progresses, after each experiment or implementation step,
+rather than leaving all cleanup until the final handoff.
+
+- Remove temporary files, generated scratch outputs, and abandoned experimental
+  edits you created once they are no longer needed. Keep scratch artifacts in a
+  task-owned location so their ownership is clear.
+- Review the diff regularly. Remove superseded code, unused imports, and obsolete
+  call sites introduced by the task while preserving useful comments and tests.
+- Stop local background processes you started when they are no longer needed.
+  Keep active checks and uploads running when their results are still required.
+- Delete only resources known to belong to your task. Preserve other
+  contributors' files and changes, shared build caches, reproducible states,
+  required logs, and artifacts still needed for debugging, CI, or review. Leave
+  resources with uncertain ownership alone; avoid broad cleanup commands.
+- Before removing your workspace, preserve the final changes under a durable
+  named reference, such as a Jujutsu bookmark or Git branch, and retain required
+  CI commit/run identities and logs. Remove it only when no unfinished work,
+  active process, review, or continuation still needs it. Use the version-control
+  tool to unregister the workspace or worktree before removing its directory.
+- At handoff, report the workspace path, preserved change or reference, and any
+  task-owned artifacts or processes intentionally retained with their purpose.
+
 === jj
 
 - If the repo is colocated with jj metadata, prefer `jj` over `git`.
@@ -649,15 +715,15 @@ preferences; they protect behavior that has been easy to regress.
 - `gammaloop-api` defaults to `cli`, which owns the executable, interactive
   editor, and shell completion generators. Python packaging disables default
   features; reusable state loading and command sessions remain available.
-- `ufo-import` enables Python embedding for UFO model imports; JSON model
+- `ufo_support` enables Python embedding for UFO model imports; JSON model
   imports remain available without it.
-- `python` enables the Python API and implies `ufo-import`. `python-stubs`
-  adds stub metadata and implies `python`.
-- `extension-module` enables importable-extension linking and implies `python`.
+- `python_api` enables the Python API and implies `ufo_support`. `python_stubgen`
+  adds stub metadata and implies `python_api`.
+- `pyo3-extension-module` enables importable-extension linking and implies `python_api`.
   Keep this mode separate from CLI and Rust test builds that embed Python.
-- `abi3` selects the stable Python ABI without activating Python support.
-  Use `ufo-import,abi3` for a compatible embedding CLI or
-  `extension-module,abi3` for a distribution extension. Stable-ABI builds may
+- `python_abi` selects the stable Python ABI without activating Python support.
+  Use `ufo_support,python_abi` for a compatible embedding CLI or
+  `pyo3-extension-module,python_abi` for a distribution extension. Stable-ABI builds may
   have more overhead than version-specific builds.
 - The Rust API has precise endpoints `evaluate_sample_precise` and
   `evaluate_samples_precise`; the Python API intentionally stays `f64`-only.

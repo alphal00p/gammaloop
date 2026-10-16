@@ -9721,10 +9721,39 @@
           "defaults": [],
           "possible_values": [
             "no_grouping",
-            "only_detect_zeroes",
             "group_identical_graphs_up_to_sign",
             "group_identical_graphs_up_to_scalar_rescaling"
           ]
+        },
+        {
+          "id": "filter_zero_color",
+          "long": "filter-zero-color",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Remove diagrams whose numerators vanish under color algebra before grouping",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
         },
         {
           "id": "numerical_samples_seed",
@@ -10096,38 +10125,6 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
-          "possible_values": []
-        },
-        {
-          "id": "max_multiplicity_for_fast_cut_filter",
-          "long": "max-multiplicity-for-fast-cut-filter",
-          "short": "M",
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "MAX_MULTIPLICITY_FOR_FAST_CUT_FILTER"
-          ],
-          "help": "Fast cut filter switch multiplicity",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [
-            "6"
-          ],
           "possible_values": []
         },
         {
@@ -11272,10 +11269,39 @@
           "defaults": [],
           "possible_values": [
             "no_grouping",
-            "only_detect_zeroes",
             "group_identical_graphs_up_to_sign",
             "group_identical_graphs_up_to_scalar_rescaling"
           ]
+        },
+        {
+          "id": "filter_zero_color",
+          "long": "filter-zero-color",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Remove diagrams whose numerators vanish under color algebra before grouping",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
         },
         {
           "id": "numerical_samples_seed",
@@ -11647,38 +11673,6 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
-          "possible_values": []
-        },
-        {
-          "id": "max_multiplicity_for_fast_cut_filter",
-          "long": "max-multiplicity-for-fast-cut-filter",
-          "short": "M",
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "MAX_MULTIPLICITY_FOR_FAST_CUT_FILTER"
-          ],
-          "help": "Fast cut filter switch multiplicity",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [
-            "6"
-          ],
           "possible_values": []
         },
         {
@@ -16019,7 +16013,7 @@
       "path": "gammaLoop 3Drep build",
       "name": "build",
       "usage": "Usage: gammaLoop 3Drep build [OPTIONS] --graph <GRAPH>",
-      "about": "Construct and export the selected graph's oriented CFF expression",
+      "about": "Construct and export the selected graph's CFF or LTD expression",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -16137,7 +16131,7 @@
           "value_names": [
             "REPRESENTATION"
           ],
-          "help": "Three-dimensional representation to build. LTD is reserved but not implemented yet",
+          "help": "Three-dimensional representation to build",
           "required": false,
           "positional": false,
           "index": null,
@@ -16470,7 +16464,7 @@
       "path": "gammaLoop 3Drep help build",
       "name": "build",
       "usage": "Usage: gammaLoop 3Drep help build",
-      "about": "Construct and export the selected graph's oriented CFF expression",
+      "about": "Construct and export the selected graph's CFF or LTD expression",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -17674,7 +17668,7 @@
       "path": "gammaLoop help 3Drep build",
       "name": "build",
       "usage": "Usage: gammaLoop help 3Drep build",
-      "about": "Construct and export the selected graph's oriented CFF expression",
+      "about": "Construct and export the selected graph's CFF or LTD expression",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -18435,6 +18429,17 @@
       "required": false,
       "default": null,
       "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.uv.vakint.tensor_reduction_method",
+      "value_type": "string",
+      "description": "Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.",
+      "required": false,
+      "default": "feynkit",
+      "possible_values": [
+        "alphaloop",
+        "feynkit"
+      ]
     },
     {
       "path": "cli.global.generation.vector_polarization_sum_gauge",

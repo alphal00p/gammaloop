@@ -1,3 +1,4 @@
+use feynkit_generator::GenerationType;
 use std::fmt;
 
 use bincode_trait_derive::{Decode, Encode};
@@ -11,7 +12,6 @@ pub use three_dimensional_reps::MediumMode;
 use crate::{
     GammaLoopContext,
     cff::{expression::OrientationSelector, orientations::GraphOrientation},
-    feyngen::GenerationType,
     processes::EvaluatorSettings,
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
@@ -24,7 +24,10 @@ use crate::{
     uv::UVgenerationSettings,
 };
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -264,7 +267,10 @@ mod generation_settings_tests {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -310,7 +316,7 @@ impl Default for ThresholdSubtractionSettings {
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
 )]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum VectorPolarizationSumGauge {
     #[serde(rename = "Feynman", alias = "feynman")]
     Feynman,
@@ -322,7 +328,7 @@ pub enum VectorPolarizationSumGauge {
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
 )]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(rename_all = "snake_case")]
 pub enum UniformNumeratorSamplingScale {
     #[default]
@@ -332,7 +338,7 @@ pub enum UniformNumeratorSamplingScale {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, Copy, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 #[derive(Default)]
 pub enum CompilationOptimizationLevel {
@@ -388,7 +394,10 @@ pub fn is_default_external_compiler(compiler: &str) -> bool {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Default)]
 pub enum CompilationMode {
     #[serde(rename = "c++", alias = "cpp")]
@@ -411,7 +420,10 @@ impl fmt::Display for CompilationMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct CompilationOptionsSnapshot {
     /// Optimization level for the evaluator compiler. Indirect JIT translation caps it
@@ -536,7 +548,10 @@ impl fmt::Display for FrozenCompilationMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct GammaloopCompileOptions {
     /// Evaluator backend: Symbolica JIT, generated C++, or generated assembly.
@@ -629,7 +644,10 @@ impl GammaloopCompileOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 #[derive(Default)]
 pub struct FeyGenSettings {
@@ -639,7 +657,10 @@ pub struct FeyGenSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct TropicalSubgraphTableSettings {
     /// Abort generation instead of reporting and skipping a failed tropical table construction.
@@ -665,7 +686,7 @@ impl Default for TropicalSubgraphTableSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct OrientationPattern {
     /// Symbolica pattern matched against serialized causal orientations.
@@ -879,8 +900,8 @@ mod orientation_pattern_tests {
         assert_eq!(wrapped, tuple_only);
         assert_eq!(wrapped, bare_args);
         assert_eq!(
-            wrapped.pat.as_ref().unwrap().to_string(),
-            "orientation_delta(1,-1,0)"
+            wrapped.pat.as_ref().unwrap().0.to_plain_string(),
+            "gammalooprs::orientation_delta(1,-1,0)"
         );
         assert!(wrapped.filter(&edgevec([1, -1, 0])));
         assert!(!wrapped.filter(&edgevec([1, 1, 0])));
@@ -909,7 +930,10 @@ mod orientation_pattern_tests {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct Parallelisation {
     /// Worker threads used by Feynman-graph generation.
@@ -937,7 +961,10 @@ impl Default for Parallelisation {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]

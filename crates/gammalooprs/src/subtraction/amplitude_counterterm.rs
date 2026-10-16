@@ -1,5 +1,8 @@
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 
+use crate::cff::{
+    Esurface, EsurfaceID, OrientationID, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId,
+};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{Context, eyre};
@@ -13,11 +16,9 @@ use crate::{
     cff::{
         CutCFFIndex,
         esurface::{
-            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
-            ExistingThresholds, GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceGroup,
-            RaisedEsurfaceId, esurface_value_is_strictly_inside,
+            EsurfaceCollection, ExistingEsurfaceId, ExistingEsurfaces, ExistingThresholds,
+            GroupEsurfaceId, esurface_value_is_strictly_inside,
         },
-        expression::OrientationID,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis},
     integrands::{
@@ -689,10 +690,7 @@ impl AmplitudeCountertermData {
             threshold_multipliers: None,
             metadata_registry: None,
             lmbs: TiVec::new(),
-            raised_data: RaisedEsurfaceData {
-                raised_groups: TiVec::new(),
-                pass_two_evaluator: None,
-            },
+            raised_data: RaisedEsurfaceData::default(),
             esurface_map: TiVec::new(),
             local_esurface_exists: TiVec::new(),
             own_group_position,
@@ -3204,9 +3202,8 @@ mod tests {
         append_amplitude_component_evaluations, combine_completed_threshold_pieces,
     };
     use crate::{
-        cff::{CutCFFIndex, esurface::RaisedEsurfaceId},
-        dot,
-        graph::{Graph, GraphGroupPosition, parse::from_dot::IntoGraph},
+        cff::{CutCFFIndex, RaisedEsurfaceId},
+        graph::{Graph, GraphGroupPosition},
         initialisation::test_initialise,
         integrands::{
             evaluation::EvaluationMetaData,
@@ -3304,16 +3301,17 @@ mod tests {
         test_initialise().unwrap();
         // Diagnostic geometry: A encloses disjoint balls B and C. Their owners are three
         // graph-group members; only A's owner will evaluate its CT at either center.
-        let graph: Graph = dot!(digraph shared_threshold_geometry {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph shared_threshold_geometry {
+            graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a [id=0]
-            ext -> b [id=1]
-            ext -> c [id=2]
-            a -> b [id=3]
-            b -> c [id=4]
-            c -> a [id=5 lmb_id=0]
+            ext -> a [id=0 sink="{ufo_order:0}"]
+            ext -> b [id=1 sink="{ufo_order:0}"]
+            ext -> c [id=2 sink="{ufo_order:0}"]
+            a -> b [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            b -> c [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            c -> a [id=5 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
         })
         .unwrap();
         let model = load_generic_model("scalars");
@@ -3482,17 +3480,18 @@ mod tests {
 
         // A native implicit member can have edges absent from the master. Its additional
         // ball must remain in the shared geometry without changing explicit members' routing.
-        let native: Graph = dot!(digraph native_implicit_member {
+        let native: Graph = crate::finalized_runtime_dot!(digraph native_implicit_member {
+            graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a [id=0]
-            ext -> b [id=1]
-            ext -> c [id=2]
-            a -> b [id=3]
-            b -> c [id=4]
-            c -> d [id=5]
-            d -> a [id=6 lmb_id=0 mass=1]
+            ext -> a [id=0 sink="{ufo_order:0}"]
+            ext -> b [id=1 sink="{ufo_order:0}"]
+            ext -> c [id=2 sink="{ufo_order:0}"]
+            a -> b [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            b -> c [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            c -> d [id=5 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            d -> a [id=6 lmb_id=0 mass=1 source="{ufo_order:1}" sink="{ufo_order:2}"]
         })
         .unwrap();
         let mut mixed = catalogue.clone();
@@ -3587,15 +3586,16 @@ mod tests {
     #[test]
     fn generalized_multiplier_uses_component_contexts_after_helper_evaluation() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph amplitude_multiplier_contexts {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph amplitude_multiplier_contexts {
+            graph [projector=1]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0]
-            v1 -> v2 [id=1]
-            v1 -> v2 [id=2]
-            v2 -> ext [id=3]
+            ext -> v1 [id=0 sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v2 -> ext [id=3 source="{ufo_order:2}"]
         })
         .unwrap();
         let edge = graph.loop_momentum_basis.loop_edges.raw[0];

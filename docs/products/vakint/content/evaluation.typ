@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, source-link
+#import "../../shared.typ": callout, boundary, source-link, product-link
 
 #let evaluation = [
 = Topology matching, reduction, and evaluation
@@ -34,14 +34,16 @@ expressions rather than input spelling when testing equivalence.
 
 Tensor numerators are reduced to scalar integrals before analytic evaluation where required.
 Reduction depends on the topology, Lorentz rank, dimension convention, and scalar-product
-normalization. Tensor reduction requires FORM. When diagnosing a mismatch, keep the FORM input
-and Vakint temporary directory so that the failing reduction can be inspected.
+normalization. The default #product-link("feynkit", page: "guides/tensor-reduction/", label: "FeynKit projector")
+works without FORM. Select the AlphaLoop tensor backend explicitly to use the legacy FORM
+projector; retaining its input and temporary directory helps diagnose a reduction failure.
+The #link("#tensor-reduction-backends")[backend examples below] show both selectors.
 
-Tensor reduction validates Lorentz index domains before vacuum projection. It passes universal loop-momentum tensor kernels to FORM while retaining graph coefficients as factorized expressions. Analytic integration uses temporary coefficient symbols and restores their values afterward; numerical integration combines the scalar sectors into one estimator. Numerator and loop-normalization poles in epsilon increase the required integral order. Positive epsilon prefactors never reduce the conservative requested depth. Rational dependence and scalar log/exp/sin/cos series are supported; retained Laurent coefficients must be epsilon-independent. Opaque epsilon-dependent functions produce an error.
+Tensor reduction validates Lorentz index domains before vacuum projection. Native FeynKit is the default tensor reducer; AlphaLoop uses FORM. Universal-kernel projection keeps graph coefficients factorized while reducing loop-momentum tensor kernels. Analytic integration uses temporary coefficient symbols and restores their values afterward; numerical integration combines the scalar sectors into one estimator. Numerator and loop-normalization poles in epsilon increase the required integral order. Positive epsilon prefactors never reduce the conservative requested depth. Rational dependence and scalar log/exp/sin/cos series are supported; retained Laurent coefficients must be epsilon-independent. Opaque epsilon-dependent functions produce an error.
 
-Callers with additional spin tensors declare their Lorentz slots using `vakint::tensor(body, slot, ...)`. The loop-independent body stays opaque; metrics rename complete slots without modifying spin or color indices. Projection can introduce `vakint::tensor_index(family, loop, ordinal)` dummy slots, which callers translate to their own index representation before unwrapping tensor bodies. GammaLoop performs both conversions automatically and completes any new d-dimensional Dirac contractions before scalar backend evaluation truncates epsilon. Vakint does not evaluate opaque spin algebra.
+Registered native Spenso tensor leaves carry their complete represented Lorentz slots directly. Vakint validates their index incidence and renames metric-connected slots while retaining the actual spin and color factors. Compound native chain or trace bodies must first expose their tensor interfaces, and active loop momenta inside native tensor arguments require tensor reduction. Callers with unregistered opaque spin factors can declare their Lorentz slots using `vakint::tensor(body, slot, ...)`. Projection can introduce `vakint::tensor_index(family, loop, ordinal)` dummy slots, which callers translate to their own index representation. GammaLoop restores native slots and completes any new d-dimensional Dirac contractions before scalar backend evaluation truncates epsilon. Vakint does not evaluate opaque spin algebra.
 
-`VakintSettings.project_onto_tensor_integrals` defaults to `true`. Setting it to `false` sends each complete numerator through FORM tensor reduction and the scalar backend, instead of using universal tensor kernels and coefficient aliases. Distinct denominator topologies remain separate in both modes. GammaLoop exposes this choice as `global.generation.uv.project_integrated_uv_cts_onto_tensor_integrals`; both choices share its d-dimensional algebra and gamma5 checks.
+`VakintSettings.project_onto_tensor_integrals` defaults to `true`. With AlphaLoop tensor reduction, setting it to `false` sends the complete tensor numerator through FORM instead of using universal tensor kernels; the native FeynKit backend uses its tensor reducer in either mode. Whole-numerator FORM reduction protects loop-independent Lorentz-scalar factors while retaining open tensor ports. Once tensor reduction is complete, both modes use the same scalar integration boundary: loop-independent coefficients remain factorized outside the analytic backend, and their epsilon dependence is restored before the final Laurent projection. Distinct denominator topologies remain separate in both modes. GammaLoop exposes this choice as `global.generation.uv.project_integrated_uv_cts_onto_tensor_integrals`; both choices share its d-dimensional algebra and gamma5 checks.
 
 `PySecDecOptions.numerical_parameters` stores mass and numerator parameters as complex values. Real external momentum components retain their signs. This adapter requires real pole masses and real external momenta; complex numerator coefficients are supported. Physical PySecDec integration tests are manual only: they are ignored and excluded from automatic local/CI test selection. Missing opt-in or missing PySecDec causes an explicit manual invocation to fail instead of reporting an unevaluated test as passed. Pure Rust adapter tests remain in the normal suite because they do not launch PySecDec.
 
@@ -75,7 +77,8 @@ For reproducible comparisons record:
 
 This program makes normalization, precision, and backend order explicit before reducing a
 rank-two one-loop numerator. It compiles without running external tools in the documentation
-harness; running it requires a supported FORM installation for the AlphaLoop path.
+harness; running its final AlphaLoop integral-evaluation step requires a supported FORM
+installation. The preceding default tensor-reduction step uses native FeynKit.
 
 // docs-example: compile vakint-backend-policy
 ```rust
@@ -163,7 +166,7 @@ prevents a partially substituted expression from being mistaken for a fully nume
 ])
 
 #boundary("Python is an embedded community module", [
-  `symbolica.community.vakint` is registered into a Symbolica installation; it is not a
+  `symbolica.community.hepkit.vakint` is registered into a Symbolica installation; it is not a
   standalone PyPI package. Constructing its `Vakint` class validates the configured backends.
   Pass an empty evaluation order for pure matching work on machines without FORM/pySecDec.
 ])
@@ -173,6 +176,12 @@ versions available here. Their Rust definitions begin in
 #source-link("crates/vakint/src/topologies.rs", label: "Vakint's topology module").
 
 == Methods and software to cite
+
+`symbolica.get_citations()` credits Vakint's authors after Vakint is used and adds
+backend papers once their evaluation path is used. Usage is cumulative across all Vakint instances
+in the process, including Rust calls and reused pySecDec output; constructing settings or
+checking backend availability does not add backend citations. Importing the module alone
+does not add the package citation.
 
 Vakint combines distinct methods rather than treating every backend as interchangeable. Cite the
 software version and the method actually selected for the reported result:
@@ -187,4 +196,41 @@ software version and the method actually selected for the reported result:
 Vakint also uses #link("https://symbolica.io/")[Symbolica] for expression manipulation. Record the
 Vakint revision, normalization, epsilon depth, precision, selected backend and dependency
 versions with the result; a generic citation to the package does not encode those choices.
+
+== Tensor-reduction backends
+<tensor-reduction-backends>
+Numerator tensor reduction has two backends. `"feynkit"` is the default:
+it uses the native FeynKit projector, supports ranks through 20, and
+does not need FORM for the tensor-reduction step. `"alphaloop"`
+explicitly selects the historical FORM implementation, whose bundled
+projector tables cover ranks through 10:
+
+// docs-example: compile
+```python
+from symbolica import E
+from symbolica.community.hepkit.vakint import Vakint
+
+vakint = Vakint()
+integral = E(
+    "k(1,mu)*k(1,nu)*p(1,mu)*p(1,nu)"
+    "*topo(prop(1,edge(1,1),k(1),muvsq,1))",
+    default_namespace="vakint",
+)
+reduced = vakint.tensor_reduce(integral)
+```
+
+The Rust API uses the same default through `VakintSettings`. Set
+`TensorReductionMethod::AlphaLoop` explicitly to request the legacy FORM
+projector:
+
+// docs-example: compile
+```rust
+use vakint::{TensorReductionMethod, VakintSettings};
+
+let settings = VakintSettings {
+    tensor_reduction_method: TensorReductionMethod::AlphaLoop,
+    ..VakintSettings::default()
+};
+```
+
 ]

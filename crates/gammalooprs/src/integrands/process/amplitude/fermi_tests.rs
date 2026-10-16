@@ -1,3 +1,5 @@
+use crate::model::ModelGammaLoopExt;
+use crate::utils::test_utils::ModelFixtureExt;
 use std::io::Cursor;
 
 use symbolica::state::State;
@@ -113,7 +115,7 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
     card.insert("MB".into(), Complex::new_re(F(mass)));
     card.insert("muB".into(), Complex::new_re(F(3.0 * chemical_potential)));
     model.apply_param_card(&card)?;
-    let graphs = Graph::from_string(
+    let graphs = Graph::unit_numerator_fixtures(
         r#"digraph fermi_vacuum_cycle {
             node [num=1]; edge [num=1 particle="b"];
             A -> B [id=0 lmb_id=0]; B -> A [id=1];
@@ -324,7 +326,7 @@ fn production_fermi_orientations_preserve_filters_and_mc_weights() -> Result<()>
     card.insert("MB".into(), Complex::new_re(F(3.0)));
     card.insert("muB".into(), Complex::new_re(F(15.0)));
     model.apply_param_card(&card)?;
-    let graphs = Graph::from_string(
+    let graphs = Graph::unit_numerator_fixtures(
         r#"digraph filtered_fermi_cycle {
             node [num=1]; edge [num=1 particle="b"];
             A -> B [id=0 lmb_id=0]; B -> A [id=1];
@@ -547,7 +549,7 @@ fn production_fermi_products_localize_independent_surfaces() -> Result<()> {
     model.apply_param_card(&card)?;
     // Two doubled fermion cycles meet at one vertex, so each orientation of
     // the product carries both Fermi deltas.
-    let graphs = Graph::from_string(
+    let graphs = Graph::unit_numerator_fixtures(
         r#"digraph fermi_figure_eight {
             node [num=1]; edge [num=1 particle="b"];
             A -> B [id=0 lmb_id=0]; B -> A [id=1];
@@ -637,14 +639,13 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
     // the first sample (a degenerate massless onset).
     let (model, _, mut global, settings) = cold_dense_setup()?;
     let adjustable_model = load_generic_model("sm");
-    let mut literal_zero_model = adjustable_model.clone();
-    for particle in &mut literal_zero_model.particles {
-        if matches!(particle.name.as_str(), "e-" | "e+") {
-            std::sync::Arc::make_mut(&mut particle.0).chemical_potential =
-                Some(crate::model::ParameterName(crate::model::UFOSymbol::zero()));
+    let mut definition: serde_json::Value = serde_json::from_str(&adjustable_model.to_json()?)?;
+    for particle in definition["particles"].as_array_mut().unwrap() {
+        if matches!(particle["name"].as_str(), Some("e-" | "e+")) {
+            particle["chemical_potential"] = serde_json::json!("ZERO");
         }
     }
-    let literal_zero_model = Model::from_serializable_model(literal_zero_model.to_serializable());
+    let literal_zero_model = Model::from_json(&definition.to_string())?;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(1)
         .stack_size(256 * 1024 * 1024)
@@ -665,8 +666,8 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
         (&adjustable_model, "e-", true),
         (&literal_zero_model, "e-", false),
     ] {
-        let graphs = Graph::from_string(
-            format!(
+        let graphs = Graph::unit_numerator_fixtures(
+            &format!(
                 r#"digraph zero_mu_cycle {{
                     node [num=1]; edge [num=1 particle="{particle}"];
                     A -> B [id=0 lmb_id=0]; B -> A [id=1];
@@ -717,7 +718,7 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
 /// The finite-temperature amplitude of `dot`, with interpreted evaluators and
 /// neither UV nor threshold subtraction, built for `inverse_temperature = 1`.
 fn thermal_amplitude(model: &Model, name: &str, dot: &str) -> Result<Amplitude> {
-    let graphs = Graph::from_string(dot, model)?;
+    let graphs = Graph::unit_numerator_fixtures(dot, model)?;
     let global: GlobalSettings = toml::from_str(
         r#"
 [generation.medium]
@@ -770,9 +771,11 @@ fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
 
     test_initialise()?;
     let mut model = load_generic_model("sm");
-    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
-    model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(1.0)));
-    model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-1.0)));
+    model.set_fixture_values([
+        ("MW", Complex::new_re(F(2.0))),
+        ("muG", Complex::new_re(F(1.0))),
+        ("minus_muG", Complex::new_re(F(-1.0))),
+    ])?;
     let mut amplitude = thermal_amplitude(
         &model,
         "thermal_boson",
@@ -835,15 +838,19 @@ fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
     // Both signs of bosonic saturation and a changed mass must be revalidated
     // from refreshed model slots after loading the compiled integrand.
     for (mass, mu) in [(2.0, 2.0), (2.0, -2.0), (2.0, 3.0), (0.5, 1.0)] {
-        model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(mass)));
-        model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(mu)));
-        model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-mu)));
+        model.set_fixture_values([
+            ("MW", Complex::new_re(F(mass))),
+            ("muG", Complex::new_re(F(mu))),
+            ("minus_muG", Complex::new_re(F(-mu))),
+        ])?;
         let error = restored.warm_up(&model).unwrap_err();
         assert!(error.to_string().contains("|mu| < m"), "{error}");
     }
-    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
-    model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(1.0)));
-    model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-1.0)));
+    model.set_fixture_values([
+        ("MW", Complex::new_re(F(2.0))),
+        ("muG", Complex::new_re(F(1.0))),
+        ("minus_muG", Complex::new_re(F(-1.0))),
+    ])?;
     restored.warm_up(&model)?;
     assert_eq!(
         restored
@@ -858,10 +865,14 @@ fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
 fn thermal_amplitude_warm_up_rejects_cycle_poles_with_equal_masses() -> Result<()> {
     test_initialise()?;
     let mut model = load_generic_model("sm");
-    let [top, w] =
-        ["MT", "MW"].map(|name| Atom::var(model.get_parameter(name).name.0).to_canonical_string());
-    model.get_parameter_mut("MT")?.value = Some(Complex::new_re(F(2.0)));
-    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(3.0)));
+    let [top, w] = ["MT", "MW"].map(|name| {
+        Atom::var(crate::model::UFOSymbol::from(model.get_parameter(name).name.as_str()).0)
+            .to_canonical_string()
+    });
+    model.set_fixture_values([
+        ("MT", Complex::new_re(F(2.0))),
+        ("MW", Complex::new_re(F(3.0))),
+    ])?;
     // Distinct mass parameters generate the cycle as a divided difference.
     let mut amplitude = thermal_amplitude(
         &model,
@@ -889,7 +900,7 @@ fn thermal_amplitude_warm_up_rejects_cycle_poles_with_equal_masses() -> Result<(
         .integrand_result;
     assert!(result.re.0.is_finite() && result.im.0.is_finite());
 
-    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
+    model.set_fixture_values([("MW", Complex::new_re(F(2.0)))])?;
     let error = runtime.warm_up(&model).unwrap_err();
     assert!(
         error

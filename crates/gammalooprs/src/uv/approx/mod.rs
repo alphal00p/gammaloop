@@ -11,6 +11,7 @@ use crate::{
     },
     debug_tags,
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
+    model::Model,
     momentum::Sign,
     settings::global::OrientationPattern,
     utils::GS,
@@ -79,12 +80,21 @@ pub trait ForestNodeLike: LogMessage {
 
 pub struct UVCtx<'a> {
     pub graph: &'a Graph,
+    pub model: &'a crate::model::Model,
     pub settings: &'a UVgenerationSettings,
 }
 
 impl<'a> UVCtx<'a> {
-    pub fn new(graph: &'a Graph, settings: &'a UVgenerationSettings) -> Self {
-        Self { graph, settings }
+    pub fn new(
+        graph: &'a Graph,
+        model: &'a crate::model::Model,
+        settings: &'a UVgenerationSettings,
+    ) -> Self {
+        Self {
+            graph,
+            model,
+            settings,
+        }
     }
 }
 
@@ -467,11 +477,16 @@ impl Approximation {
     pub(crate) fn compute_4d(
         &mut self,
         graph: &Graph,
+        model: &Model,
         vakint: (&Vakint, &vakint::VakintSettings),
         dependent: &Self,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        let ctx = UVCtx { graph, settings };
+        let ctx = UVCtx {
+            graph,
+            model,
+            settings,
+        };
         debug_tags!(#generation,#uv,#fourd;
             simple = %self.simple_display(graph),
             "Computing 4D",
@@ -544,8 +559,8 @@ mod tests {
     use super::*;
     use crate::{
         cff::CutCFFIndex,
-        dot,
-        graph::{FeynmanGraph, cuts::LuCutSelection, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{FeynmanGraph, cuts::LuCutSelection},
         initialisation::test_initialise,
         integrands::{
             evaluation::EvaluationMetaData,
@@ -567,7 +582,10 @@ mod tests {
         },
         uv::UltravioletGraph,
     };
-    use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
+    use idenso::{
+        CookMode, CookSettings,
+        tensor::{ContractSettings, SymbolicTensor},
+    };
     use linnet::half_edge::subgraph::subset::SubSet;
     use spenso::{
         algebra::{algebraic_traits::IsZero, complex::Complex},
@@ -587,7 +605,7 @@ mod tests {
     #[test]
     fn expanded_4d_setting_does_not_change_the_empty_forest_root() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph root_identity {
+        let mut graph: Graph = finalized_runtime_dot!(digraph root_identity {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -643,7 +661,7 @@ mod tests {
     #[test]
     fn selected_raised_lu_projection_preserves_quadratic_contact_family() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph raised_lu_contact_family {
+        let mut graph: Graph = finalized_runtime_dot!(digraph raised_lu_contact_family {
             num = 1
             edge [particle="scalar_1" num=1]
             node [num=1]
@@ -810,7 +828,7 @@ mod tests {
             for edge in 0..graph.underlying.n_edges() {
                 let edge = EdgeIndex(edge);
                 expression = expression
-                    .replace(graph.underlying[edge].particle.mass_atom())
+                    .replace(graph.underlying[edge].particle.mass_atom(&graph.model))
                     .with(Atom::one())
                     .replace(GS.ose(edge))
                     .with(Atom::num(Rational::from((5, 4))))
@@ -867,7 +885,7 @@ mod tests {
     #[test]
     fn gl24_direct_3d_modes_preserve_orientation_selector_contracts() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph gl24_selector_contract {
+        let mut graph: Graph = finalized_runtime_dot!(digraph gl24_selector_contract {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -964,6 +982,7 @@ mod tests {
             let vakint_settings = vakint::VakintSettings::default();
             child.compute_4d(
                 &route_graph,
+                &graph.model,
                 (crate::utils::vakint()?, &vakint_settings),
                 &root,
                 &settings,
@@ -1029,7 +1048,7 @@ mod tests {
     #[test]
     fn nested_scalar_bubble_direct_3d_modes_match_without_a_cut() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(
+        let mut graph: Graph = finalized_runtime_dot!(
             digraph nested_scalar_bubble_selector_contract {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -1084,6 +1103,7 @@ mod tests {
             );
             child.compute_4d(
                 &route_graph,
+                &graph.model,
                 (crate::utils::vakint()?, &vakint::VakintSettings::default()),
                 &root,
                 &settings,
@@ -1257,7 +1277,7 @@ mod tests {
     #[test]
     fn factorized_owned_dot_child_cff_matches_direct_3d_for_uncut_self_energy() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph factorized_child_cff {
+        let mut graph: Graph = finalized_runtime_dot!(digraph factorized_child_cff {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -1327,6 +1347,7 @@ mod tests {
             let vakint_settings = vakint::VakintSettings::default();
             child.compute_4d(
                 &route_graph,
+                &graph.model,
                 (crate::utils::vakint()?, &vakint_settings),
                 &root,
                 &settings,
@@ -1420,7 +1441,7 @@ mod tests {
         // Component expansion is confined to these test copies. Production
         // keeps the owned-dot numerator factorized throughout construction.
         let normalize = |expression: Atom| {
-            expression
+            let expression = expression
                 .replace(GS.dim)
                 .with(4)
                 .replace(GS.dim_epsilon)
@@ -1436,9 +1457,25 @@ mod tests {
                 .replace(function!(GS.ose, W_.mass_, W_.prop_))
                 .with(W_.prop_)
                 .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
-                .with(Atom::var(W_.prop_).pow((1, 2)))
-                .expand_dots()
-                .expect("test-only component expansion must succeed")
+                .with(Atom::var(W_.prop_).pow((1, 2)));
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let value = SymbolicTensor::infer(
+                cooking
+                    .try_cook(expression.as_view())
+                    .expect("test-only index admission must succeed"),
+            )
+            .expect("test-only tensor admission must succeed")
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .expect("test-only contraction must succeed")
+            .expand_dots()
+            .expect("test-only component expansion must succeed");
+            cooking.uncook(value.as_view())
         };
         let expressions = vec![
             normalize(direct_expression),
@@ -1551,7 +1588,7 @@ mod tests {
         test_initialise()?;
         for depth in [2, 3] {
             let mut graph: Graph = if depth == 2 {
-                dot!(digraph nested_scalar_banana {
+                finalized_runtime_dot!(digraph nested_scalar_banana {
                     edge [num=1 mass=1]
                     node [num=1]
                     incoming [style=invis]
@@ -1564,7 +1601,7 @@ mod tests {
                     b -> outgoing [id=4]
                 })?
             } else {
-                dot!(digraph depth_three_scalar_banana {
+                finalized_runtime_dot!(digraph depth_three_scalar_banana {
                     edge [num=1 mass=1]
                     node [num=1]
                     incoming [style=invis]
@@ -1637,6 +1674,7 @@ mod tests {
                     );
                     current.compute_4d(
                         &route_graph,
+                        &graph.model,
                         (crate::utils::vakint()?, &vakint_settings),
                         &parent,
                         &settings,
@@ -1697,7 +1735,7 @@ mod tests {
             // expressions evaluable by one Arb stack. Production keeps all
             // numerator factors intact throughout CFF and UV construction.
             let normalize = |expression: Atom| {
-                expression
+                let expression = expression
                     .replace(global_marker)
                     .with(1)
                     .replace(GS.dim)
@@ -1715,9 +1753,25 @@ mod tests {
                     .replace(function!(GS.ose, W_.mass_, W_.prop_))
                     .with(W_.prop_)
                     .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
-                    .with(Atom::var(W_.prop_).pow((1, 2)))
-                    .expand_dots()
-                    .expect("test-only component expansion must succeed")
+                    .with(Atom::var(W_.prop_).pow((1, 2)));
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let value = SymbolicTensor::infer(
+                    cooking
+                        .try_cook(expression.as_view())
+                        .expect("test-only index admission must succeed"),
+                )
+                .expect("test-only tensor admission must succeed")
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .expect("test-only contraction must succeed")
+                .expand_dots()
+                .expect("test-only component expansion must succeed");
+                cooking.uncook(value.as_view())
             };
             let expressions = direct
                 .into_iter()
@@ -1836,7 +1890,7 @@ mod tests {
     #[test]
     fn complete_self_energy_taylor_sum_matches_direct_3d_for_raised_lu_jets() -> Result<()> {
         test_initialise()?;
-        let base_graph: Graph = dot!(
+        let base_graph: Graph = finalized_runtime_dot!(
             digraph complete_self_energy_taylor_sum {
                 num = 1
                 edge [particle="scalar_1" num=1]
@@ -1978,6 +2032,7 @@ mod tests {
                 let vakint_settings = vakint::VakintSettings::default();
                 child.compute_4d(
                     &route_graph,
+                    &graph.model,
                     (crate::utils::vakint()?, &vakint_settings),
                     &root,
                     &settings,
@@ -1990,7 +2045,7 @@ mod tests {
                     .to_d_dim(GS.dim)
                     .get_single_atom()
                     .expect("the scalar child numerator is available")
-                    / route_graph.denominator(&reduced, |_| 1);
+                    / route_graph.denominator(&reduced, &graph.model, |_| 1);
                 let explicit_taylor_sum = route_graph
                     .uv_rescaled(
                         &reduced,
@@ -2003,10 +2058,20 @@ mod tests {
                     .expect("the scalar child Taylor series exists")
                     .to_atom()
                     .replace(GS.rescale)
-                    .with(Atom::one())
-                    .simplify_metrics()
-                    .to_dots()
-                    .normalize_dots();
+                    .with(Atom::one());
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let explicit_taylor_sum =
+                    SymbolicTensor::infer(cooking.try_cook(explicit_taylor_sum.as_view())?)?
+                        .contract(ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })?
+                        .to_dots()?;
+                let explicit_taylor_sum =
+                    cooking.uncook(explicit_taylor_sum.expression().as_view());
                 let local_atom = child.local(&route_graph)?.atom();
                 assert!(
                     (local_atom.collect_factors() + explicit_taylor_sum.collect_factors())
@@ -2088,13 +2153,18 @@ mod tests {
                 })
             };
             let rescale_expression = |mut expression: Atom| -> Result<Atom> {
-                expression = expression
-                    .replace(GS.dim)
-                    .with(4)
-                    .simplify_metrics()
-                    .to_dots()
-                    .normalize_dots()
+                expression = expression.replace(GS.dim).with(4);
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let value = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                    .contract(ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
                     .expand_dots()?;
+                expression = cooking.uncook(value.as_view());
                 let rescale = Atom::var(GS.rescale);
                 let compact_minkowski = parse_lit!(spenso::mink(4));
                 let time_direction =
@@ -2151,7 +2221,7 @@ mod tests {
                 for edge in 0..graph.underlying.n_edges() {
                     let edge = EdgeIndex(edge);
                     expression = expression
-                        .replace(graph.underlying[edge].particle.mass_atom())
+                        .replace(graph.underlying[edge].particle.mass_atom(&graph.model))
                         .with(mass_squared.clone().sqrt());
                     if external_edges.contains(&edge) {
                         expression = expression
@@ -2324,11 +2394,6 @@ mod tests {
                 expression = expression
                     .replace(GS.dim)
                     .with(4)
-                    // Scalarize the independent test oracle while retaining the same
-                    // factorization as the production numerator and EvaluatorStack input.
-                    .simplify_metrics()
-                    .to_dots()
-                    .normalize_dots()
                     .replace(GS.dim_epsilon)
                     .with(0)
                     .replace(GS.m_uv_expansion)
@@ -2342,8 +2407,19 @@ mod tests {
                     .replace(function!(GS.ose, W_.mass_, W_.prop_))
                     .with(W_.prop_)
                     .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
-                    .with(Atom::var(W_.prop_).pow((1, 2)))
+                    .with(Atom::var(W_.prop_).pow((1, 2)));
+                // Realize finite components without distributing the numerator.
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let value = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                    .contract(ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
                     .expand_dots()?;
+                expression = cooking.uncook(value.as_view());
                 expression = scalarize(expression)?;
                 let t = Atom::var(GS.rescale);
                 let loop_components = (0..3)

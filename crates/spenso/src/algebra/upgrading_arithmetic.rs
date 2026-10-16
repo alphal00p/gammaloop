@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use ref_ops::{RefAdd, RefMul, RefSub};
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica::{
     atom::Atom,
     domains::{
@@ -758,7 +758,7 @@ pub trait TrySmallestUpgrade<T> {
 //     }
 // }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<O: Real, U: Real, T: Real> TrySmallestUpgrade<SymbolicaComplex<T>> for SymbolicaComplex<U>
 where
     U: TrySmallestUpgrade<T, LCM = O>,
@@ -927,7 +927,7 @@ macro_rules! impl_identity_upgrade {
 
 impl_identity_upgrade!(i8, i16, i32, f64);
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl_identity_upgrade!(Atom, Integer, Complex<Integer>, Rational, Complex<Rational>);
 
 macro_rules! impl_numeric_upgrade {
@@ -972,7 +972,7 @@ impl_numeric_upgrade!(f32 => f64, i32 => f64);
 //     }
 // }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl TrySmallestUpgrade<Atom> for f64 {
     type LCM = Atom;
 
@@ -983,7 +983,7 @@ impl TrySmallestUpgrade<Atom> for f64 {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl TrySmallestUpgrade<Atom> for i32 {
     type LCM = Atom;
 
@@ -994,7 +994,7 @@ impl TrySmallestUpgrade<Atom> for i32 {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 macro_rules! impl_atom_upgrade {
     ($($ty:ty),* $(,)?) => {
         $(
@@ -1012,7 +1012,7 @@ macro_rules! impl_atom_upgrade {
     };
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl_atom_upgrade!(f64, i32);
 
 impl TrySmallestUpgrade<f64> for Complex<f64> {
@@ -1140,13 +1140,13 @@ where
 
 #[cfg(test)]
 mod test {
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     use ahash::{HashMap, HashMapExt};
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     use symbolica::{atom::Atom, parse};
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     use crate::algebra::complex::Complex;
 
     use super::*;
@@ -1166,7 +1166,7 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn test_fallible_mul() {
         use symbolica::atom::AtomCore;
 

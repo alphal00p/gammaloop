@@ -11,10 +11,10 @@ use super::super::branches::DirectResidueKey;
 use super::*;
 use crate::{
     cff::expression::OrientationID,
-    graph::{FeynmanGraph, Graph, parse::IntoGraph},
+    graph::{FeynmanGraph, Graph},
     initialisation::test_initialise,
     integrands::process::param_builder::FnMapEntry,
-    model::InputParamCard,
+    model::{InputParamCard, ModelGammaLoopExt},
     numerator::pole_certificate::{ScalarPoleCertificate, ScalarPoleFailure},
     settings::global::{GenerationSettings, ThresholdSubtractionSettings},
     uv::{
@@ -197,17 +197,23 @@ pub(crate) fn physical_full_h_fixture() -> Result<(Graph, GenerationSettings)> {
     test_initialise()?;
     // Match `import model sm-default`: apply the restriction before deriving
     // propagator masses and Feynman rules, keeping nonzero parameters symbolic.
-    let mut model = crate::utils::load_generic_model("sm");
-    model.restriction = Some("default".into());
+    let mut model =
+        crate::utils::load_generic_model("sm").with_restriction(Some("default".into()))?;
     let mut parameters = InputParamCard::from_str(
         include_str!("../../../../../../assets/models/json/sm/restrict_default.json").to_owned(),
         "json",
     )?;
     model.simplify(&mut parameters)?;
-    let graph: Graph = include_str!(
-        "../../../../../../tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot"
+    let graph: Graph = Graph::import_dot(
+        include_str!(
+            "../../../../../../tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot"
+        ),
+        &model,
     )
-    .into_graph(&model)?;
+    .map(|mut graphs| {
+        assert_eq!(graphs.len(), 1, "one fixture graph expected");
+        graphs.remove(0)
+    })?;
     assert_eq!(graph.name, "paper_figure_b1_double_triangle_soft_ir");
     assert_eq!(
         graph
@@ -222,7 +228,7 @@ pub(crate) fn physical_full_h_fixture() -> Result<(Graph, GenerationSettings)> {
     for (pair, _, edge) in graph.iter_edges_of(&graph.full_filter()) {
         if pair.is_paired() {
             assert!(
-                edge.data.mass_atom().is_zero(),
+                edge.data.mass_atom(&graph.model).is_zero(),
                 "every internal quark/gluon must be massless"
             );
         }
@@ -284,7 +290,12 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         &generation.orientation_pattern,
         true,
     );
-    let wood = Wood::new(CutStructure::empty(&graph), &graph, &generation)?;
+    let wood = Wood::new(
+        CutStructure::empty(&graph),
+        &graph,
+        &graph.model,
+        &generation,
+    )?;
     let soft_components = wood
         .graph
         .iter_nodes()
@@ -312,8 +323,10 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         "Generate physical FullH inputs; no evaluator or certificate work"
     );
     let guard = RecordingGuard::start(&graph.name);
+    let model = graph.model.clone();
     forests.compute(
         &mut graph,
+        &model,
         crate::utils::vakint()?,
         orientation,
         &generation.uv,

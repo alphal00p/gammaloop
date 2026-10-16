@@ -1,11 +1,12 @@
 use super::utils::*;
 use super::*;
+use feynkit_graph::DOD;
 use gammaloop_api::commands::evaluate_samples::{EvaluateSamplesPrecise, evaluate_sample_precise};
 use gammalooprs::{
     graph::Autogen,
     integrands::evaluation::PreciseEvaluationResultOutput,
     processes::ProcessCollection,
-    utils::{ArbPrec, FloatLike, symbolica_ext::DOD},
+    utils::{ArbPrec, FloatLike},
 };
 use ndarray::Array2;
 use spenso::algebra::algebraic_traits::IsZero;
@@ -493,7 +494,7 @@ helicities = [0]
                 })?;
             let edge = &mut supergraph.graph.underlying[edge_id];
             let edge_numerator = &edge.num.value * factor;
-            let edge_dod = edge_numerator.edge_dod(edge_id) - 2;
+            let edge_dod = edge_numerator.edge_dod(gammalooprs::utils::GS.emr_mom, edge_id.0)? - 2;
             edge.num = Autogen::explicit(edge_numerator);
             edge.dod = Autogen::explicit(edge_dod);
         }
@@ -677,7 +678,7 @@ fn run_scalar_3l_cross_section_case_impl(
             || [GS.emr_mom, GS.loop_mom, GS.external_mom]
                 .into_iter()
                 .any(|momentum| coefficient.contains_symbol(momentum))
-            || !graph.underlying[edge].mass_atom().is_zero()
+            || !graph.underlying[edge].mass_atom(&graph.model).is_zero()
         {
             return Ok(false);
         }

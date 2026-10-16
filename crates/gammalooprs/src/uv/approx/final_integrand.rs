@@ -23,8 +23,9 @@ use crate::{
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
-    color::{ColorSimplifier, ColorSimplifySettings},
-    shorthands::metric::MetricSimplifier,
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::{
@@ -108,12 +109,19 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let resnum = graph
             .numerator(&reduced, current.subgraph())
             .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
+            .expect("graph numerator should be available");
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?.simplify_algebra(
+            &idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings {
+                    ..Default::default()
+                }),
                 ..Default::default()
-            })
-            * global_num;
+            },
+        )?;
+        let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
             graph = %graph.name,
@@ -195,12 +203,19 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let resnum = graph
             .numerator(&reduced, current.subgraph())
             .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
+            .expect("graph numerator should be available");
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?.simplify_algebra(
+            &idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings {
+                    ..Default::default()
+                }),
                 ..Default::default()
-            })
-            * global_num;
+            },
+        )?;
+        let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
         let localizer = self.localizer.with_independent_source_sum();
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
@@ -223,9 +238,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // contracts its loop-energy dependence.  The exact DDx GL0 UV ray
         // verifies that this is the full production tree, including the
         // carrier shared with the factorized self-energy coefficient.
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+            &graph.tree_edges.subtract(&graph.initial_state_cut),
+            &graph.model,
+            |_| -1,
+        ));
         let allowed_zero: Integrands = localizer
             .cutset
             .residue_selector
@@ -503,7 +520,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             // attached to their tensor network throughout normalization.
             // Preserve the sum of CFF denominators after residue mapping, just
             // as the Taylor stage preserves its separate propagator topologies.
-            atom = atom.replace(GS.dim).with(4).simplify_metrics();
+            atom = atom.replace(GS.dim).with(4);
             debug_tags!(#generation, #profile, #uv, #numerator, #dump;
                 stage = "final_integrand_before_color",
                 graph = %graph.name,
@@ -511,15 +528,21 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 file.atom = %atom.to_canonical_string(),
                 "Mapped factorized integrand before final color simplification"
             );
-            atom = atom
-                .simplify_color_with(
-                    ColorSimplifySettings {
-                        simplify_non_color: false,
-                        ..Default::default()
-                    }
-                    .with_cof_dimension_invariants(),
-                )
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    ..Default::default()
+                })?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .expand_dots()?;
+            atom = cooking.uncook(reduced.as_view());
 
             // Exact production branches have already mapped every owned
             // numerator fragment. The former coarse export sign replacement
@@ -538,8 +561,8 @@ mod tests {
     use super::*;
     use crate::{
         cff::{esurface::RaisedEsurfaceGroup, expression::OrientationID},
-        dot,
-        graph::{cuts::CutSet, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::cuts::CutSet,
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         uv::{
@@ -557,16 +580,16 @@ mod tests {
         network::tags::SPENSO_TAG,
         structure::representation::{Minkowski, RepName},
     };
-    use symbolica::{atom::AtomView, parse, symbol};
+    use symbolica::{parse, symbol};
 
     #[test]
     fn final_energy_copy_coalesces_owners_and_even_powers_after_taylor() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph final_energy {
+        let graph: Graph = finalized_runtime_dot!(digraph final_energy { graph [projector=1]
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
         let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
@@ -600,11 +623,12 @@ mod tests {
     #[test]
     fn final_integrand_collects_tensor_factors_without_merging_denominators() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph factorized_final {
+        let graph: Graph = finalized_runtime_dot!(digraph factorized_final {
+            projector=1;
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
         let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
@@ -867,11 +891,12 @@ mod tests {
     #[test]
     fn projected_zero_sectors_preserve_cut_orders_without_energy_maps() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph projected_zero {
+        let mut graph: Graph = finalized_runtime_dot!(digraph projected_zero {
+            projector=1;
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let current = OwnedForestNode {
             spinney: Spinney::new(
@@ -932,7 +957,7 @@ mod tests {
         };
         let zero_local = uv_limit(
             &zero_prefix,
-            &UVCtx::new(&graph, &settings),
+            &UVCtx::new(&graph, &graph.model, &settings),
             &current,
             &given,
             &current,
@@ -982,11 +1007,11 @@ mod tests {
     #[test]
     fn branch_normalization_preserves_selectors_and_cut_support() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph normalization {
+        let graph: Graph = finalized_runtime_dot!(digraph normalization { graph [projector=1]
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
         let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
@@ -1054,30 +1079,31 @@ mod tests {
         let x = Atom::var(symbol!("final_integrand_normalization_x"));
         let y = Atom::var(symbol!("final_integrand_normalization_y"));
         let input =
-            &color * (&q0_dot_q1 / (&x + 1) + &q0_squared / (&y + 2)) + q1_squared / (&x + &y + 3);
+            &color * (&q0_dot_q1 / (&x + 1) + &q0_squared / (&y + 2)) + &q1_squared / (&x + &y + 3);
         let color_settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
 
-        let legacy = input
-            .collect_factors()
-            .simplify_metrics()
-            .simplify_color_with(color_settings)
-            .expand_dots()?;
-        let color_simplified = input.simplify_metrics().expand_color().into_iter().fold(
-            Atom::Zero,
-            |result, (color, coefficient)| {
-                result + color.simplify_color_with(color_settings) * coefficient
-            },
-        );
-        let termwise = match color_simplified.as_view() {
-            AtomView::Add(terms) => terms
-                .iter()
-                .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
-                    Ok(sum + term.expand_dots()?)
-                })?,
-            term => term.expand_dots()?,
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let normalize = |atom: &Atom| -> Result<Atom> {
+            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(color_settings),
+                    ..Default::default()
+                })?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .expand_dots()?;
+            Ok(cooking.uncook(reduced.as_view()))
         };
-
-        let difference = (legacy - termwise).together().cancel().expand();
+        let factored = normalize(&input)?;
+        // Compare separately supplied linear branches, without distributing any
+        // numerator product in the diagnostic copy.
+        let termwise = normalize(&(&color * &q0_dot_q1 / (&x + 1)))?
+            + normalize(&(&color * &q0_squared / (&y + 2)))?
+            + normalize(&(q1_squared / (&x + &y + 3)))?;
+        let difference = (factored - termwise).together().cancel().expand();
         assert!(
             difference.is_zero(),
             "termwise color/dot normalization changed the exact expression: {difference}"

@@ -1,0 +1,87 @@
+"""UFO LaTeX labels survive import and render without changing symbolic identities."""
+
+import json
+import sys
+import unicodedata
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+from symbolica import E, S
+from symbolica.community.hepkit import Model, UfoLoader
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
+
+
+def visible_math(html: str) -> str:
+    math = html[html.index("<math") : html.index("</math>") + len("</math>")]
+    return unicodedata.normalize("NFKC", "".join(ET.fromstring(math).itertext()))
+
+
+# Display labels must work even if notebook code created the symbols first.
+ee, mass, alpha = S("UFO::ee", "UFO::Me", "UFO::aS")
+# Choose labels in the fixture so rendering coverage is independent of the
+# bundled model's presentation choices.
+definition = json.loads(Model.standard_model().to_json())
+labels = {"ee": "e", "Me": r"\text{testmass}", "aS": r"\alpha_s"}
+typst_labels = {"ee": "e", "Me": '"testmass"', "aS": "alpha_s"}
+for parameter in definition["parameters"]:
+    if parameter["name"] in labels:
+        parameter["texname"] = labels[parameter["name"]]
+        parameter["typstname"] = typst_labels[parameter["name"]]
+model = Model.from_json(json.dumps(definition))
+reloaded = Model.from_json(model.to_json())
+assert [p.texname for p in reloaded.parameters] == [p.texname for p in model.parameters]
+
+expression = TensorExpression(ee**2 * mass + alpha)
+before = expression.to_expression()
+source = expression.to_typst()
+assert "mitex" not in source
+assert "alpha_s" in source
+assert labels["Me"] in expression.to_latex()
+assert "ee" not in expression.to_latex()
+assert expression.to_latex(max_line_length=1).startswith(r"$$\begin{gathered}")
+visible = visible_math(expression.to_html())
+assert (
+    "ee" not in visible and "e" in visible and "testmass" in visible and "α" in visible
+)
+assert "<msub" in expression.to_html()
+assert "testmass" in visible_math(model.parameter("Me")._repr_html_())
+ET.fromstring(expression.to_svg())
+assert "testmass" in source
+assert expression.to_expression() == before
+assert "ee" in str(expression)
+
+vector = TensorName("parameter_label_test::p")(Representation.mink(4))
+tensor = vector(E("gammalooprs::hedge(2,1)")) * ee
+assert tensor.rank == 1
+visible = visible_math(tensor.to_html())
+assert "e" in visible and "μ" in visible and "hedge" not in visible
+
+# Two different parameters may legitimately have the same visual label.
+custom = json.loads(Model.phi3().to_json())
+for parameter in custom["parameters"]:
+    parameter["texname"] = r"\alpha_s"
+    parameter["typstname"] = "alpha_s"
+custom_model = Model.from_json(json.dumps(custom))
+g, m = S("UFO::g", "UFO::mass")
+same_labels = TensorExpression(g + m)
+assert same_labels.to_typst().count("alpha_s") == 2
+assert visible_math(same_labels.to_html()).count("α") == 2
+assert same_labels.to_expression() == g + m
+for parameter in custom["parameters"]:
+    parameter.pop("texname")
+    parameter.pop("typstname")
+unlabelled = Model.from_json(json.dumps(custom))
+assert all(p.texname is None for p in unlabelled.parameters)
+assert "mitex" not in same_labels.to_typst()
+
+root = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(root / "assets/models/ufo"))
+import sm
+
+imported = UfoLoader(simplify_model=False).load(root / "assets/models/ufo/sm").model
+source_labels = {p.name: p.texname for p in sm.all_parameters}
+for parameter in imported.parameters:
+    assert parameter.texname == source_labels[parameter.name]
+print(
+    "Parameter labels: JSON/UFO metadata, native Typst MathML/SVG/source, tensor indices and exact algebra passed"
+)

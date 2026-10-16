@@ -1,4 +1,7 @@
 use brotli::CompressorWriter;
+use feynkit_generator::{
+    GenerationFilter, GenerationOptions, NumeratorGrouping, Process, VertexSelector,
+};
 use idenso::{dirac::GammaSimplifier, representations::Bispinor};
 use insta::assert_snapshot;
 use linnet::half_edge::involution::Orientation;
@@ -20,6 +23,7 @@ use std::{
     fs::File,
     io::BufWriter,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -29,7 +33,7 @@ use symbolica::{
 
 use crate::{
     cross_section::Amplitude,
-    feyngen::diagram_generator::{EdgeColor, NodeColorWithVertexRule},
+    feyngen::feynkit::FeynmanDiagramGammaLoopExt,
     graph::{BareGraph, Graph},
     initialize_reps,
     model::Model,
@@ -64,7 +68,7 @@ fn hhgghh() {
 fn compare_poly_to_direct(graph: &BareGraph, prefactor: &GlobalPrefactor) -> bool {
     let color_simplified = Numerator::default()
         .from_graph(graph, prefactor)
-        .color_simplify();
+        .color_simplify().unwrap();
 
     let poly = color_simplified
         .clone()
@@ -92,7 +96,7 @@ fn compare_poly_to_direct(graph: &BareGraph, prefactor: &GlobalPrefactor) -> boo
 pub(crate) fn save_expr(graph: &BareGraph, prefactor: &GlobalPrefactor, name: &str) {
     let color_simplified = Numerator::default()
         .from_graph(graph, prefactor)
-        .color_simplify();
+        .color_simplify().unwrap();
     let direct = color_simplified
         .parse()
         .unwrap()
@@ -276,8 +280,8 @@ fn tree_ta_ta_1() {
                 &graph.bare_graph,
                 &test_export_settings.numerator_settings.global_prefactor
             )
-            .color_simplify()
-            .gamma_simplify()
+            .color_simplify().unwrap()
+            .gamma_simplify().unwrap()
             .export()
     );
 }
@@ -298,7 +302,7 @@ pub(crate) fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
 
     let mut num_nogamma = num
         .clone()
-        .color_simplify()
+        .color_simplify().unwrap()
         // .gamma_symplify()
         .parse()
         .unwrap()
@@ -316,8 +320,8 @@ pub(crate) fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
         );
     let mut num_gamma = num
         .clone()
-        .color_simplify()
-        .gamma_simplify()
+        .color_simplify().unwrap()
+        .gamma_simplify().unwrap()
         .parse()
         .unwrap()
         .contract::<Rational>(ContractionSettings::<Rational>::Normal)
@@ -607,7 +611,7 @@ fn tree_h_ttxaah_0() {
     };
 
     num.from_global(expr, &prefactor)
-        .color_simplify()
+        .color_simplify().unwrap()
         // .color_project()
         // .gamma_symplify()
         .parse()
@@ -619,7 +623,7 @@ fn tree_h_ttxaah_0() {
 
 #[test]
 fn color() {
-    insta::assert_snapshot!("Single color string",Numerator::default().from_global(parse!("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))"), &GlobalPrefactor::default()).color_simplify().export());
+    insta::assert_snapshot!("Single color string",Numerator::default().from_global(parse!("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))"), &GlobalPrefactor::default()).color_simplify().unwrap().export());
 }
 
 #[test]
@@ -788,7 +792,7 @@ fn one_loop_lbl() {
 
     println!(
         "canonized with color:{:+}",
-        feyn.color_simplify()
+        feyn.color_simplify().unwrap()
             .canonize_lorentz()
             .unwrap()
             .get_single_atom()
@@ -799,8 +803,8 @@ fn one_loop_lbl() {
 #[test]
 
 fn bug_check() {
-    let a = parse!("-1/9*𝑖*ee^2*G^2*(-TR+TR*Nc^2)*(P(0,mink(4,25))+K(1,mink(4,25)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,2),mink(4,4))*id(mink(4,3),mink(4,5))*γ(mink(4,0),bis(4,9),bis(4,6))*γ(mink(4,1),bis(4,8),bis(4,7))*γ(mink(4,4),bis(4,5),bis(4,4))*γ(mink(4,5),bis(4,3),bis(4,2))*γ(mink(4,25),bis(4,4),bis(4,3))*γ(mink(4,27),bis(4,7),bis(4,9))*γ(mink(4,28),bis(4,6),bis(4,5))*γ(mink(4,29),bis(4,2),bis(4,8))*K(0,mink(4,27))*K(1,mink(4,28))*K(1,mink(4,29))");
-    //let b = parse!("-1/9*𝑖*ee^2*G^2*(-TR+TR*Nc^2)*(P(0,mink(4,25))+K(1,mink(4,25)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,2),mink(4,4))*id(mink(4,3),mink(4,5))*γ(mink(4,0),bis(4,9),bis(4,6))*γ(mink(4,1),bis(4,8),bis(4,7))*γ(mink(4,4),bis(4,5),bis(4,4))*γ(mink(4,5),bis(4,3),bis(4,2))*γ(mink(4,25),bis(4,4),bis(4,3))*γ(mink(4,27),bis(4,7),bis(4,9))*γ(mink(4,28),bis(4,6),bis(4,5))*γ(mink(4,29),bis(4,2),bis(4,8))*K(0,mink(4,27))*K(1,mink(4,28))*K(1,mink(4,29))").unwrap();
+    let a = parse!("-1/9*𝑖*ee^2*G^2*(-spenso::idx(2,spenso::cof(3))+spenso::idx(2,spenso::cof(3))*Nc^2)*(P(0,mink(4,25))+K(1,mink(4,25)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,2),mink(4,4))*id(mink(4,3),mink(4,5))*γ(mink(4,0),bis(4,9),bis(4,6))*γ(mink(4,1),bis(4,8),bis(4,7))*γ(mink(4,4),bis(4,5),bis(4,4))*γ(mink(4,5),bis(4,3),bis(4,2))*γ(mink(4,25),bis(4,4),bis(4,3))*γ(mink(4,27),bis(4,7),bis(4,9))*γ(mink(4,28),bis(4,6),bis(4,5))*γ(mink(4,29),bis(4,2),bis(4,8))*K(0,mink(4,27))*K(1,mink(4,28))*K(1,mink(4,29))");
+    //let b = parse!("-1/9*𝑖*ee^2*G^2*(-spenso::idx(2,spenso::cof(3))+spenso::idx(2,spenso::cof(3))*Nc^2)*(P(0,mink(4,25))+K(1,mink(4,25)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,2),mink(4,4))*id(mink(4,3),mink(4,5))*γ(mink(4,0),bis(4,9),bis(4,6))*γ(mink(4,1),bis(4,8),bis(4,7))*γ(mink(4,4),bis(4,5),bis(4,4))*γ(mink(4,5),bis(4,3),bis(4,2))*γ(mink(4,25),bis(4,4),bis(4,3))*γ(mink(4,27),bis(4,7),bis(4,9))*γ(mink(4,28),bis(4,6),bis(4,5))*γ(mink(4,29),bis(4,2),bis(4,8))*K(0,mink(4,27))*K(1,mink(4,28))*K(1,mink(4,29))").unwrap();
     let b = a.clone() * -1;
     println!("a/b={}  TT", a / b);
 }
@@ -881,7 +885,7 @@ fn one_loop_lbl_concretize() {
 
     let feyn = Numerator::default()
         .from_graph(&graph.bare_graph, &GlobalPrefactor::default())
-        .color_simplify()
+        .color_simplify().unwrap()
         .parse();
 
     // let reps = feyn.random_concretize_reps(None, true);
@@ -915,36 +919,42 @@ fn one_loop_lbl_concretize() {
 #[test]
 fn dumb_four_gluon() {
     let model = load_generic_model("sm");
-
-    let gggg = NodeColorWithVertexRule {
-        external_tag: 0,
-        vertex_rule: model.get_vertex_rule("V_37"),
-    };
-    let mut four_gluon = symbolica::graph::Graph::new();
-    let v = four_gluon.add_node(gggg);
-    let g = EdgeColor::from_particle(model.get_particle("g"));
-
-    four_gluon.add_edge(v, v, false, g).unwrap();
-    four_gluon.add_edge(v, v, false, g).unwrap();
-
-    let graph = BareGraph::from_symbolica_graph(
-        &model,
-        "gggg".into(),
-        &four_gluon,
-        Atom::num(1),
-        vec![],
-        None,
-    )
-    .unwrap();
+    let process = Process::new(Vec::<i64>::new(), Vec::<i64>::new());
+    let options = GenerationOptions::default().with_loop_count(2, 2)
+        .unwrap()
+        .allow_self_loops(true)
+        .max_vertices(1)
+        .numerator_grouping(NumeratorGrouping::None)
+        .with_graph_filter(GenerationFilter::VertexAllow(vec![VertexSelector::Name(
+            "V_37".to_owned(),
+        )]));
+    let generated = process.generate_diagrams(Arc::new(model.clone()), &options)
+        .unwrap();
+    let diagram = generated
+        .diagrams
+        .into_iter()
+        .find(|diagram| {
+            diagram.vertices().count() == 1
+                && diagram.edges().count() == 2
+                && diagram.vertices().all(|(_, vertex)| {
+                    vertex.interaction.is_some_and(|rule| {
+                        model.vertex_rule_by_id(rule).unwrap().name == "V_37"
+                    })
+                })
+        })
+        .expect("canonical generation should produce the two-loop four-gluon vacuum graph");
+    let graph = diagram
+        .to_gamma_loop_graph(None, true)
+        .unwrap();
 
     let num = Numerator::default().from_graph(&graph, &GlobalPrefactor::default());
     // println!("{}", num.state.color);
     // println!("{}", num.state.colorless);
 
-    let colorsimp = num.color_simplify();
+    let colorsimp = num.color_simplify().unwrap();
     // println!("{}", colorsimp.state.color);
 
-    let gamma = colorsimp.clone().gamma_simplify();
+    let gamma = colorsimp.clone().gamma_simplify().unwrap();
     // println!("{}", gamma.state.colorless);
 
     let gammasingle = gamma.get_single_atom().unwrap();

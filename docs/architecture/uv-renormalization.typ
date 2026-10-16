@@ -26,13 +26,15 @@ The covariant `Local4dCts` representation retains symbolic Lorentz dimension `d`
 
 GammaLoop owns the Dirac algebra. Vakint sees the Lorentz slots of opaque spin tensors and performs vacuum tensor projection in `d = 4 - 2 epsilon`. Projection can create new contractions between those slots. GammaLoop must restore and simplify the projected tensors in symbolic `d`, expose their scalar dimension dependence, and only then let Vakint select scalar backend orders and form Laurent coefficients. Merely collecting the resulting gamma chains does not evaluate their contractions. No hidden dimension-dependent trace may be deferred to final four-dimensional numerical assembly. The completed analytic result is expanded before its Laurent coefficients are stored and reinserted into the cograph, so equivalent scalar-master groupings produce the same counterterm. This normalization never expands the cograph.
 
+Restoration reattaches the Minkowski representation to numeric backend labels and symbolic native labels. Only numeric labels acquire the topology-local index chart; native abstract labels retain their source identity. Already represented slots keep their complete interface.
+
 Unresolved closed spin/Lorentz traces and internal contractions between open spin chains must report unsupported dimensional algebra. Retained free tensor slots remain a valid external basis. This avoids implicitly assigning a four-dimensional value to an evanescent operator; Sigma tensors also require a symbolic dimensional implementation before analytic UV use.
 
 The required backend depth includes epsilon poles in numerator coefficients and loop-normalization factors. Positive epsilon orders needed by enclosing UV operations are retained using the forest's loop-order bound. A backend that cannot supply the required depth must report an error instead of silently returning a shallower expansion. The Laurent-series boundary also verifies integer powers and epsilon-independent coefficients. Supported scalar mathematical functions are expanded there; unresolved opaque epsilon dependence produces an error.
 
 When integrated counterterms are enabled, the shared UV entry checks the raw edge and vertex numerators of the current UV subgraph before simplification. Gamma5 and chiral projectors are rejected with graph, subgraph and source context, including gamma5 pairs that could subsequently cancel. A dimensional gamma5 prescription is not implemented. Gamma5 belonging only to the cograph or an external-state projector is outside this check.
 
-The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defaults to `true`. It selects Vakint's universal tensor kernels and isolated scalar coefficients. With `false`, each complete numerator follows the base branch's full FORM reduction and scalar-backend input path. Distinct denominator topologies remain separate; both modes use the same GammaLoop dimensional-algebra boundaries and conservative forest epsilon depth. Positive epsilon prefactors do not reduce that depth, and final truncation removes any excess orders.
+The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defaults to `true`. It selects Vakint's universal tensor kernels and isolated scalar coefficients; `false` supplies the complete numerator to the selected tensor backend. This choice is independent of backend selection: the native FeynKit tensor reducer is the default, while AlphaLoop uses FORM. Scalar-master evaluation has its own backend policy. After tensor reduction, both projection modes use the same scalar coefficient kernel, retaining loop-independent factors outside the analytic backend and restoring them before final Laurent projection. Distinct denominator topologies remain separate; both projection modes use the same GammaLoop dimensional-algebra boundaries and conservative forest epsilon depth. Positive epsilon prefactors do not reduce that depth, and final truncation removes any excess orders.
 
 == Orchestrators
 <orchestrators>
@@ -52,6 +54,57 @@ modes:
 The backends share analytic operations and result types. Scheduling,
 dependency lookup, caching, and disconnected-component composition
 belong to the orchestrator because their traversal models differ.
+
+Comparison normalization sets the Lorentz dimension to four, reversibly cooks
+index syntax for checked `SymbolicTensor` admission, reduces colour identities,
+and contracts metrics and vector connections with chain and trace collection
+disabled. It then converts scalar-product notation and restores the original
+index encoding. Admission and normalization errors
+propagate to the comparison caller. No Dirac or epsilon identity is enabled by
+this normalization, and coefficient factorization is retained.
+
+Exact finite-component certificates keep the tensor's external interface while
+contracting its finite entries. Scalar normalization extracts numeric content
+from integer powers before protecting their bodies. Functions, fractional
+powers, and guarded inverse factors remain opaque. Positive scalar powers share
+their complete base with linear occurrences; a summed base remains one opaque
+factor. Restoring it may expose another linear cancellation, so the same
+protected pass repeats only after a strict expression-size decrease.
+Literal numeric content uses the real rational GCD of all real and imaginary
+coefficient coordinates, including implicit units. The first coefficient in
+coefficient-free body order chooses a phase in `{1, -1, i, -i}` so its remaining
+real part is positive and its imaginary part is nonnegative. This preserves
+opposite and quarter-turned power owners without invoking Gaussian-integer GCD
+or changing any symbolic factor boundary.
+Numerical weights are distributed once at each current product/sum boundary,
+from the bottom up. Other multiplicative factors remain intact; rewritten
+scalar subtrees are not recursively revisited. This avoids repeated copying
+of deep signed sums in the scalar evaluator while preserving function,
+inverse-power and guarded boundaries. Common numeric content is then
+extracted by the same exact rule. Both enclosing normalization loops require
+strictly smaller expressions before another pass.
+
+Each finite-component pass makes one bounded collection in repeated literal
+scalar factors. Complete scalar sums are admitted only after checking their
+native scalar interface. A retained sum owns its proper additive subsets,
+identified by their direct coefficient-free terms; selecting both would hide
+their linear relation. Distinct summed candidates with the same
+coefficient-free support also leave their constituents available to the
+collector; complete positive-power bases remain opaque. Unrelated product
+factors stay outside the exact coefficient rows. Recomposition can expose another cancellation, so the same
+deterministic pass repeats only after a strict size decrease, at most eight
+times. Unsupported collection or the pass limit leaves an unproven residual.
+The certificate takes no numerical samples, forms no common denominators, and
+never distributes a graph numerator.
+
+Compact scalar collection also canonicalizes the precision metadata of an
+exactly zero component in a complex floating coefficient to its nonzero
+partner's precision. The nonzero component's value and precision bytes remain
+unchanged. This permits exact reconstruction of expressions containing the
+same numerical master coefficients without a tolerance or finite-value
+rounding; it does not establish the analytic accuracy of those coefficients.
+Source-frame certificates compare the independently normalized operands;
+subtracting them first can itself recreate differing zero metadata.
 
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
@@ -176,6 +229,8 @@ Vacuum masses carry hard weight within the component on which a Taylor operation
 
 A localized integrated contribution keeps its finite coefficient in the active expression. Its mass dependence scales when the current Taylor subgraph contains the coefficient's integrated owner, and stays fixed when the owner is disjoint. A later enclosing Taylor operation can therefore scale a coefficient that an earlier disjoint operation left fixed. Only the separate normalized localization kernel remains frozen outside all later Taylor operations.
 
+The finite coefficient is stored as a shared numerator definition, using the existing residue-key owner to apply its component momentum map exactly once. Scalar CFF branch weights and the frozen kernel remain separate. A later cograph numerator is another shared factor; it does not absorb or remap the integrated tensor vertex. This permits open spinor coefficients to be added to local counterterms without asking scalar branch assembly to combine incompatible tensor interfaces. The localization regression checks both the scalar affine substitution and the exact product of separate finite and cograph matrices.
+
 The direct route retains this distinction with a transient one-argument `mUV(owner)` application of the existing vacuum-mass symbol. Each connected integrated coefficient is tagged before coefficients are multiplied. The owner uses the existing subgraph encoding: Taylor expansion scales the entire mass application for a contained owner, leaves a disjoint owner unchanged, and rejects partial overlaps. `DirectSector::combine` restores physical `mUV` on output copies; stored sectors retain their owners for further forest steps. This introduces no helper, type or symbol. Four-dimensional disconnected composition already applies the Taylor operations to their own components, so its runtime and `IntegratedCts` are unchanged.
 
 Consumed loop measures are recorded separately. Writing `s = uvIntegratedLoopScale`, `IntegratedCts` projects a coefficient `C` whose integration consumed `r` loops as `C(mUV) * s^(4*r)`. The enclosing four-dimensional Taylor operation transforms `s -> s*t`, supplying `t^(4*r)` to compensate consumed loop measures without cancelling the coefficient's mass rescaling. Integration and physical projection set `s = 1`. The active denominator rewrite introduces the unscaled vacuum mass for the enclosing propagator basis.
@@ -193,8 +248,9 @@ component counterterms.
 
 === Integrated terms
 <integrated-terms>
-Integrated counterterms are scalars and factorize over connected
-components. The stored disconnected value provides the product of
+Integrated coefficients have no remaining loop dependence from their
+integrated components, but can retain open tensor indices. They factorize
+over disjoint connected components. The stored disconnected value provides the product of
 component pole projections and the product of component
 finite-counterterm projections.
 

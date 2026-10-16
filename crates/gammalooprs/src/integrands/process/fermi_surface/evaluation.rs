@@ -78,10 +78,10 @@ impl FermiSurfaceEvaluator {
                 .flat_map(|(factor, orientation)| {
                     let edge = &graph[factor.edge_id];
                     [
-                        edge.mass_atom(),
+                        edge.mass_atom(&graph.model),
                         Atom::num(*orientation)
                             * edge
-                                .chemical_potential_atom()
+                                .chemical_potential_atom(&graph.model)
                                 .expect("validated Fermi edge has a chemical potential"),
                     ]
                 }),
@@ -229,8 +229,6 @@ mod tests {
 
     use super::*;
     use crate::{
-        dot,
-        graph::parse::IntoGraph,
         initialisation::test_initialise,
         integrands::process::sampling::maps::SamplingEvaluationError,
         momentum::{ThreeMomentum, sample::BareMomentumSample},
@@ -244,11 +242,18 @@ mod tests {
     #[test]
     fn compiled_fermi_sector_uses_fixed_orientation_and_projected_energy_jets() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph fermi_runtime_cycle {
-            node [num=1]
-            edge [num=1 particle="b"]
-            A -> B [id=0 lmb_id=0]
-            B -> A [id=1]
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph fermi_runtime_cycle {
+                node [num=1]
+                edge [num=1 particle="b"]
+                A -> B [id=0 lmb_id=0]
+                B -> A [id=1]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })?;
         let sample = MomentumSample {
             sample: BareMomentumSample {
@@ -307,8 +312,13 @@ mod tests {
                 }
                 for mu in [-5.0, 5.0] {
                     for (atom, value) in [
-                        (graph[EdgeIndex(0)].mass_atom(), 3.0),
-                        (graph[EdgeIndex(0)].chemical_potential_atom().unwrap(), mu),
+                        (graph[EdgeIndex(0)].mass_atom(&graph.model), 3.0),
+                        (
+                            graph[EdgeIndex(0)]
+                                .chemical_potential_atom(&graph.model)
+                                .unwrap(),
+                            mu,
+                        ),
                     ] {
                         let position = builder
                             .pairs

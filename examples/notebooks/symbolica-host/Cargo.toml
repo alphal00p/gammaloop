@@ -1,0 +1,41 @@
+[package]
+name = "alphal00p-notebook-host"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+name = "core"
+crate-type = ["cdylib"]
+
+[dependencies]
+linnet-py = { path = "../../../crates/linnet-py", default-features = false }
+feynkit-py = { path = "../../../crates/feynkit-py", default-features = false, features = ["ufo", "linnet-python"] }
+spynso3 = { path = "../../../crates/spynso3", default-features = false }
+symbolica = { version = "=3.0.1", default-features = false, features = ["python_export"] }
+pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"] }
+
+[features]
+default = ["native"]
+native = ["linnet-py/native", "feynkit-py/native", "spynso3/native"]
+wasm = ["linnet-py/wasm", "feynkit-py/wasm", "spynso3/wasm"]
+
+[patch.crates-io]
+# Optional notebook compiler components; see vendor/typst.typ.
+typst-library = { path = "../../../vendor/typst-library" }
+typst-svg = { path = "../../../vendor/typst-svg" }
+# Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
+
+[profile.dev]
+debug = 0
+
+# Match the workspace documentation profile for hermetic installed-wheel checks.
+[profile.docs]
+inherits = "dev"
+debug = false

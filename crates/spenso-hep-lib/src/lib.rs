@@ -1,6 +1,11 @@
 use std::{ops::Neg, sync::LazyLock};
 
-use idenso::{IndexTooling, color::CS, dirac::AGS, representations::initialize};
+use idenso::{
+    IndexTooling,
+    color::CS,
+    dirac::{AGS, spinor_matrix_structure},
+    representations::initialize,
+};
 
 use spenso::{
     algebra::complex::Complex,
@@ -28,6 +33,10 @@ use symbolica::{
     atom::{Atom, Symbol},
     parse_lit,
 };
+
+/// Nonzero Weyl-basis entries of the UFO charge-conjugation matrix C = -i γ² γ⁰.
+pub const CHARGE_CONJUGATION_WEYL_COMPONENTS: [([usize; 2], i8); 4] =
+    [([0, 1], -1), ([1, 0], 1), ([2, 3], 1), ([3, 2], -1)];
 
 struct LogicalSparseInput<T, N> {
     layout: TensorDataLayout,
@@ -671,6 +680,21 @@ where
         .map_canonical(Into::into);
     weyl.insert_explicit(projp_key);
 
+    let charge_conjugation = sparse_from_logical(
+        spinor_matrix_structure::<Aind>(AGS.charge_conjugation, 4),
+        Complex::new(zero.clone(), zero.clone()),
+        |tensor| {
+            for (indices, sign) in CHARGE_CONJUGATION_WEYL_COMPONENTS {
+                let value = if sign < 0 { -one.clone() } else { one.clone() };
+                tensor
+                    .set(&indices, Complex::new(value, zero.clone()))
+                    .unwrap();
+            }
+        },
+    )
+    .map_canonical(Into::into);
+    weyl.insert_explicit(charge_conjugation);
+
     weyl
 }
 
@@ -702,7 +726,7 @@ where
 {
     let mut weyl = TensorLibrary::new();
     initialize();
-    weyl.update_ids();
+    weyl.update_ids_from::<ParamTensor<ExplicitKey<Aind>>>();
 
     let one = Atom::one();
     let zero = Atom::Zero;
@@ -752,6 +776,18 @@ where
         });
     weyl.insert_explicit(projp_key);
 
+    let charge_conjugation = sparse_from_logical(
+        spinor_matrix_structure::<Aind>(AGS.charge_conjugation, 4),
+        Atom::Zero,
+        |tensor| {
+            for (indices, sign) in CHARGE_CONJUGATION_WEYL_COMPONENTS {
+                tensor.set(&indices, Atom::num(sign)).unwrap();
+            }
+        },
+    )
+    .map_canonical(|tensor| ParamTensor::param(tensor.into()).into());
+    weyl.insert_explicit(charge_conjugation);
+
     let color_t_key = su3_generator_data_atom(CS.t_strct::<Aind>(3, 8))
         .map_canonical(|tensor| ParamTensor::param(tensor.into()).into());
     weyl.insert_explicit(color_t_key);
@@ -770,7 +806,7 @@ pub type HepNet<Aind> =
 
 pub static HEP_LIB: LazyLock<
     TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>,
-> = LazyLock::new(hep_lib_su3);
+> = LazyLock::new(hep_lib_atom);
 
 pub static FUN_LIB: LazyLock<
     SymbolLib<RealOrComplexTensor<f64, ShadowedStructure<AbstractIndex>>, PanicMissingConcrete>,
@@ -787,15 +823,22 @@ pub static FUN_LIB: LazyLock<
 #[cfg(test)]
 mod tests {
 
+    use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental};
     use spenso::{
         network::{
-            ExecutionResult, Network, Sequential, SingleSmallestDegree, SmallestDegree,
-            SmallestDegreeIter, Steps,
+            ExecutionResult, MinIntermediateCost, Network, Sequential, SingleSmallestDegree,
+            SmallestDegree, SmallestDegreeIter, Steps,
+            library::symbolic::ETS,
             parsing::{ParseSettings, ShadowedStructure, StrictTensorFilter},
             store::NetworkStore,
+            tags::SPENSO_TAG,
         },
-        structure::{HasStructure, abstract_index::AbstractIndex},
-        tensors::data::GetTensorData,
+        structure::{
+            HasStructure,
+            abstract_index::AbstractIndex,
+            representation::{Minkowski, RepName},
+        },
+        tensors::data::{DenseTensor, GetTensorData, SparseOrDense},
     };
     use symbolica::{
         atom::{Atom, Symbol},
@@ -803,6 +846,145 @@ mod tests {
     };
 
     use super::*;
+
+    fn exact_default_scalar(expression: Atom) -> Atom {
+        let mut network = HepNet::<AbstractIndex>::try_from_view(
+            expression.as_view(),
+            &*HEP_LIB,
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
+        .unwrap();
+        network
+            .execute::<Sequential, MinIntermediateCost, _, _, _>(&*HEP_LIB, &*FUN_LIB)
+            .unwrap();
+        match network.result_tensor(&*HEP_LIB).unwrap() {
+            ExecutionResult::One => Atom::one(),
+            ExecutionResult::Zero => Atom::zero(),
+            ExecutionResult::Val(value) => value.into_owned().scalar().unwrap().into(),
+        }
+    }
+
+    #[test]
+    fn default_library_keeps_generic_metrics_exact() {
+        // Dimensions deliberately differ from the explicit four-dimensional HEP
+        // entries: exactness belongs to the generic metric factories.
+        let mink = Minkowski {}.new_rep(7);
+        let bis = Bispinor {}.new_rep(6);
+        let coad = ColorAdjoint {}.new_rep(11);
+        let cof = ColorFundamental {}.new_rep(5);
+        for (representations, dimension, lorentzian) in [
+            ([mink.to_lib(); 2], 7, true),
+            ([bis.to_lib(); 2], 6, false),
+            ([coad.to_lib(); 2], 11, false),
+            ([cof.to_lib(), cof.dual().to_lib()], 5, false),
+        ] {
+            let key = ExplicitKey::from_iter(representations, ETS.metric, None);
+            let metric = HEP_LIB
+                .get_storage(key.canonical())
+                .unwrap()
+                .into_owned()
+                .try_into_parametric()
+                .expect("exact default metric components")
+                .to_dense();
+            for row in 0..dimension {
+                for column in 0..dimension {
+                    let expected = if row != column {
+                        0
+                    } else if lorentzian && row > 0 {
+                        -1
+                    } else {
+                        1
+                    };
+                    assert_eq!(
+                        metric.get_owned([row, column]).unwrap(),
+                        Atom::num(expected)
+                    );
+                }
+            }
+        }
+        let numeric = hep_lib_su3::<AbstractIndex>();
+        let key = ExplicitKey::from_iter([mink.to_lib(); 2], ETS.metric, None);
+        assert!(
+            numeric
+                .get_storage(key.canonical())
+                .unwrap()
+                .into_owned()
+                .try_into_concrete()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn default_component_contractions_preserve_exact_symbolic_coefficients() {
+        initialize();
+        let color = parse!(
+            "x/7*f(coad(8,a),coad(8,b),coad(8,c))^2",
+            default_namespace = "spenso"
+        );
+        assert_eq!(
+            exact_default_scalar(color),
+            parse!("24*x/7", default_namespace = "spenso")
+        );
+        let trace = parse!(
+            "x/7*spenso::gamma(bis(4,i),bis(4,j),mink(4,mu))*spenso::gamma(bis(4,j),bis(4,i),mink(4,mu))",
+            default_namespace = "spenso"
+        );
+        assert_eq!(
+            exact_default_scalar(trace),
+            parse!("16*x/7", default_namespace = "spenso")
+        );
+
+        let mut library =
+            hep_lib_atom::<AbstractIndex, MixedTensor<f64, ExplicitKey<AbstractIndex>>>();
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("exact_default_momentum");
+        let key = ExplicitKey::from_iter([Minkowski {}.new_rep(4).to_lib()], vector, None);
+        library.insert_explicit(key.map_canonical(|structure| {
+            MixedTensor::Param(ParamTensor::param(
+                DenseTensor::from_storage_data(
+                    vec![
+                        parse!("x/3", default_namespace = "spenso"),
+                        parse!("1/5"),
+                        parse!("-2/7"),
+                        parse!("3/11"),
+                    ],
+                    structure,
+                )
+                .unwrap()
+                .into(),
+            ))
+        }));
+        let source = parse!(
+            "g(mink(4,a),mink(4,b))*exact_default_momentum(mink(4,a))*exact_default_momentum(mink(4,b))",
+            default_namespace = "spenso"
+        );
+        let mut network =
+            HepNet::try_from_view(source.as_view(), &library, &ParseSettings::default()).unwrap();
+        network
+            .execute::<Sequential, MinIntermediateCost, _, _, _>(&library, &*FUN_LIB)
+            .unwrap();
+        let ExecutionResult::Val(value) = network.result_tensor(&library).unwrap() else {
+            panic!("nonzero momentum norm")
+        };
+        let value: Atom = value.into_owned().scalar().unwrap().into();
+        assert_eq!(
+            value,
+            parse!("x^2/9-1/25-4/49-9/121", default_namespace = "spenso")
+        );
+    }
+
+    #[test]
+    fn default_components_annihilate_an_odd_color_network_exactly() {
+        initialize();
+        // K3,3 is odd under exchanging its first two left vertices: the three
+        // right f tensors each exchange two ports. This proves zero without
+        // using color-reduction formulas or the component contraction itself.
+        let source = parse!(
+            "g(coad(8,a),coad(8,j))*f(coad(8,j),coad(8,b),coad(8,c))*f(coad(8,d),coad(8,e),coad(8,f))*f(coad(8,g),coad(8,h),coad(8,i))*f(coad(8,a),coad(8,d),coad(8,g))*f(coad(8,b),coad(8,e),coad(8,h))*f(coad(8,c),coad(8,f),coad(8,i))",
+            default_namespace = "spenso"
+        );
+        assert!(!source.is_zero());
+        assert_eq!(exact_default_scalar(source), Atom::zero());
+    }
 
     #[test]
     fn su3_color_traces_are_independent_of_contraction_order() {
@@ -827,6 +1009,12 @@ mod tests {
             (
                 "1/8*(2+g(coad(8,a),coad(8,b))*g(coad(8,c),coad(8,d))*trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out))))",
                 parse!("2/3"),
+            ),
+            // sum_d T_d X T_d = Tr(X) I/2 - X/6 and
+            // f_abc Tr(T_a T_b T_c) = 6i independently give -i.
+            (
+                "f(coad(8,a),coad(8,b),coad(8,c))*t(coad(8,a),cof(3,i0),dind(cof(3,i1)))*t(coad(8,d),cof(3,i1),dind(cof(3,i2)))*t(coad(8,b),cof(3,i2),dind(cof(3,i3)))*t(coad(8,c),cof(3,i3),dind(cof(3,i4)))*t(coad(8,d),cof(3,i4),dind(cof(3,i0)))",
+                parse!("-1i"),
             ),
         ] {
             let expression = parse!(expression, default_namespace = "spenso");
@@ -888,6 +1076,79 @@ mod tests {
         assert_eq!(*gamma.get_ref([1, 1, 0]).unwrap(), Complex::new(1, 0));
         assert_eq!(*gamma.get_ref([2, 2, 0]).unwrap(), Complex::new(-1, 0));
         assert_eq!(*gamma.get_ref([3, 3, 0]).unwrap(), Complex::new(-1, 0));
+    }
+
+    #[test]
+    fn charge_conjugation_weyl_components_and_clifford_identities() {
+        initialize();
+        let key = spinor_matrix_structure::<AbstractIndex>(AGS.charge_conjugation, 4);
+        let concrete_library = hep_lib::<AbstractIndex, i32>(1, 0);
+        let concrete = concrete_library
+            .get_storage(key.canonical())
+            .unwrap()
+            .into_owned()
+            .try_into_concrete()
+            .unwrap();
+        let RealOrComplexTensor::Complex(charge_conjugation) = concrete else {
+            panic!("the Weyl library stores complex matrix components");
+        };
+        let charge_conjugation = charge_conjugation.to_dense();
+        let atom_library =
+            hep_lib_atom::<AbstractIndex, MixedTensor<i32, ExplicitKey<AbstractIndex>>>();
+        let atom_matrix = atom_library
+            .get_storage(key.canonical())
+            .unwrap()
+            .into_owned()
+            .try_into_parametric()
+            .unwrap()
+            .to_dense();
+        let gamma = gamma_data_weyl(AGS.gamma_strct::<AbstractIndex>(4), 1, 0)
+            .into_canonical()
+            .to_dense();
+
+        for row in 0..4 {
+            for column in 0..4 {
+                let value = charge_conjugation.get_owned([row, column]).unwrap();
+                // Derive the matrix independently from the shared Weyl gammas.
+                let definition = (0..4).fold(Complex::new(0, 0), |sum, inner| {
+                    sum + Complex::new(0, -1)
+                        * gamma.get_owned([row, inner, 2]).unwrap()
+                        * gamma.get_owned([inner, column, 0]).unwrap()
+                });
+                assert_eq!(value, definition);
+                assert_eq!(value.conj(), value);
+                assert_eq!(value, -charge_conjugation.get_owned([column, row]).unwrap());
+                assert_eq!(
+                    atom_matrix.get_owned([row, column]).unwrap(),
+                    Atom::num(value.re)
+                );
+
+                let square = (0..4).fold(Complex::new(0, 0), |sum, inner| {
+                    sum + charge_conjugation.get_owned([row, inner]).unwrap()
+                        * charge_conjugation.get_owned([inner, column]).unwrap()
+                });
+                assert_eq!(square, Complex::new(-i32::from(row == column), 0));
+                for mu in 0..4 {
+                    let mut sandwich = Complex::new(0, 0);
+                    let mut transposed_sandwich = Complex::new(0, 0);
+                    for first in 0..4 {
+                        for second in 0..4 {
+                            let left = charge_conjugation.get_owned([row, first]).unwrap();
+                            let right = charge_conjugation.get_owned([second, column]).unwrap();
+                            sandwich +=
+                                left * gamma.get_owned([first, second, mu]).unwrap() * right;
+                            transposed_sandwich +=
+                                left * gamma.get_owned([second, first, mu]).unwrap() * right;
+                        }
+                    }
+                    assert_eq!(sandwich, gamma.get_owned([column, row, mu]).unwrap());
+                    assert_eq!(
+                        transposed_sandwich,
+                        gamma.get_owned([row, column, mu]).unwrap()
+                    );
+                }
+            }
+        }
     }
 
     #[test]

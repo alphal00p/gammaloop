@@ -1,0 +1,29 @@
+digraph feynkit {
+  graph [feynkit_name="triple_box", model_fingerprint="689643feeeabf56ef2d10e64280f15c7bccc788252a59363144829d7a884fc66", symmetry_factor=1, overall_factor="1", numerator="1", numerator_prefactor="1", projector="1", loop_momentum_edges="3,5,7", loop_momentum_basis="{\"tree_edges\":[0,1,2,4,8,11,12],\"loop_edges\":[3,5,7],\"external_edges\":[6,9,10,13],\"dependent_externals\":[13],\"edge_signatures\":{\"0\":{\"loops\":[1,1,1],\"external\":[1,0,0,0]},\"1\":{\"loops\":[-1,-1,-1],\"external\":[-1,1,0,0]},\"2\":{\"loops\":[0,1,1],\"external\":[1,0,0,0]},\"3\":{\"loops\":[1,0,0],\"external\":[0,0,0,0]},\"4\":{\"loops\":[0,0,1],\"external\":[1,0,0,0]},\"5\":{\"loops\":[0,1,0],\"external\":[0,0,0,0]},\"6\":{\"loops\":[0,0,0],\"external\":[1,0,0,0]},\"7\":{\"loops\":[0,0,1],\"external\":[0,0,0,0]},\"8\":{\"loops\":[-1,-1,-1],\"external\":[-1,1,1,0]},\"9\":{\"loops\":[0,0,0],\"external\":[0,1,0,0]},\"10\":{\"loops\":[0,0,0],\"external\":[0,0,1,0]},\"11\":{\"loops\":[0,-1,-1],\"external\":[-1,1,1,0]},\"12\":{\"loops\":[0,0,-1],\"external\":[-1,1,1,0]},\"13\":{\"loops\":[0,0,0],\"external\":[-1,1,1,0]}}}", half_edge_order="[{\"edge\":0,\"endpoint\":\"source\"},{\"edge\":0,\"endpoint\":\"target\"},{\"edge\":1,\"endpoint\":\"source\"},{\"edge\":1,\"endpoint\":\"target\"},{\"edge\":2,\"endpoint\":\"source\"},{\"edge\":2,\"endpoint\":\"target\"},{\"edge\":3,\"endpoint\":\"source\"},{\"edge\":3,\"endpoint\":\"target\"},{\"edge\":4,\"endpoint\":\"source\"},{\"edge\":4,\"endpoint\":\"target\"},{\"edge\":5,\"endpoint\":\"source\"},{\"edge\":5,\"endpoint\":\"target\"},{\"edge\":6,\"endpoint\":\"source\"},{\"edge\":7,\"endpoint\":\"source\"},{\"edge\":7,\"endpoint\":\"target\"},{\"edge\":8,\"endpoint\":\"source\"},{\"edge\":8,\"endpoint\":\"target\"},{\"edge\":9,\"endpoint\":\"target\"},{\"edge\":10,\"endpoint\":\"target\"},{\"edge\":11,\"endpoint\":\"source\"},{\"edge\":11,\"endpoint\":\"target\"},{\"edge\":12,\"endpoint\":\"source\"},{\"edge\":12,\"endpoint\":\"target\"},{\"edge\":13,\"endpoint\":\"source\"}]", cuts="[]", topology_threshold_candidates="[]"];
+  v0 [id=0, feynkit_name="a", interaction_id=0, interaction="V_SCALAR", numerator="1"];
+  v1 [id=1, feynkit_name="b", interaction_id=0, interaction="V_SCALAR", numerator="1"];
+  v2 [id=2, feynkit_name="c", interaction_id=0, interaction="V_SCALAR", numerator="1"];
+  v3 [id=3, feynkit_name="d", interaction_id=0, interaction="V_SCALAR", numerator="1"];
+  v4 [id=4, feynkit_name="e", interaction_id=0, interaction="V_SCALAR", numerator="1"];
+  v5 [id=5, feynkit_name="f", interaction_id=0, interaction="V_SCALAR", numerator="1"];
+  v6 [id=6, feynkit_name="g", interaction_id=0, interaction="V_SCALAR", numerator="1"];
+  v7 [id=7, feynkit_name="h", interaction_id=0, interaction="V_SCALAR", numerator="1"];
+  v0 -> v1 [id=0, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=0, target_slot=0, dir=none, external="null", is_dummy=false, numerator="1"];
+  v0 -> v4 [id=1, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=1, target_slot=0, dir=none, external="null", is_dummy=false, numerator="1"];
+  v1 -> v2 [id=2, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=1, target_slot=0, dir=none, external="null", is_dummy=false, numerator="1"];
+  v1 -> v5 [id=3, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=2, target_slot=0, dir=none, external="null", is_dummy=false, numerator="1"];
+  v2 -> v3 [id=4, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=1, target_slot=0, dir=none, external="null", is_dummy=false, numerator="1"];
+  v2 -> v6 [id=5, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=2, target_slot=0, dir=none, external="null", is_dummy=false, numerator="1"];
+  ext6 [style=invis];
+  v3 -> ext6 [id=6, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=1, target_slot=0, dir=none, external="{\"name\":\"ext0\",\"index\":0,\"state\":\"outgoing\",\"connection\":0}", is_dummy=false, numerator="1"];
+  v3 -> v7 [id=7, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=2, target_slot=0, dir=none, external="null", is_dummy=false, numerator="1"];
+  v4 -> v5 [id=8, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=1, target_slot=1, dir=none, external="null", is_dummy=false, numerator="1"];
+  ext9 [style=invis];
+  ext9 -> v0 [id=9, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=0, target_slot=2, dir=none, external="{\"name\":\"ext1\",\"index\":1,\"state\":\"incoming\",\"connection\":1}", is_dummy=false, numerator="1"];
+  ext10 [style=invis];
+  ext10 -> v4 [id=10, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=0, target_slot=2, dir=none, external="{\"name\":\"ext2\",\"index\":2,\"state\":\"incoming\",\"connection\":2}", is_dummy=false, numerator="1"];
+  v5 -> v6 [id=11, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=2, target_slot=1, dir=none, external="null", is_dummy=false, numerator="1"];
+  v6 -> v7 [id=12, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=2, target_slot=1, dir=none, external="null", is_dummy=false, numerator="1"];
+  ext13 [style=invis];
+  v7 -> ext13 [id=13, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=2, target_slot=0, dir=none, external="{\"name\":\"ext3\",\"index\":3,\"state\":\"outgoing\",\"connection\":3}", is_dummy=false, numerator="1"];
+}

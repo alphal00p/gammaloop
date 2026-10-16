@@ -1,10 +1,6 @@
 use std::{ops::Deref, sync::Arc};
 
 use color_eyre::eyre::{bail, ensure};
-use idenso::{
-    color::{CS, ColorSimplifier},
-    representations::{ColorAdjoint, ColorFundamental},
-};
 use spenso::{
     network::parsing::{
         AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShorthandParsing,
@@ -15,7 +11,7 @@ use spenso::{
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomType, AtomView, Symbol},
-    coefficient::CoefficientView,
+    coefficient::{Coefficient, CoefficientView},
     domains::atom::AtomField,
     function,
     poly::{polynomial::MultivariatePolynomial, series::SeriesDepth},
@@ -40,7 +36,8 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 
 pub trait NumeratorAtomExt {
     /// Collect a bounded Laurent polynomial in literal, independent keys using
-    /// exact zero tests. Key-independent subtrees remain opaque coefficients.
+    /// exact zero tests. Complete scalar sums are admitted as indivisible keys;
+    /// their bodies and key-independent subtrees remain opaque coefficients.
     /// Return None for unsupported dependence or an exceeded algebra budget.
     fn coefficient_list_exact(&self, keys: &[Atom]) -> Option<Vec<(Atom, Atom)>>;
 
@@ -71,10 +68,6 @@ pub trait NumeratorAtomExt {
         depth: i64,
         numerator_family_keys: &[Atom],
     ) -> color_eyre::Result<Atom>;
-
-    fn to_param_color(&self) -> Atom;
-    // fn wrap_color(&self, symbol: Symbol) -> Atom;
-    fn kill_color(&self) -> Atom;
 
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom;
 
@@ -112,19 +105,9 @@ impl NumeratorAtomExt for Atom {
         )
     }
 
-    fn to_param_color(&self) -> Atom {
-        self.as_view().to_param_color()
-    }
-    fn kill_color(&self) -> Atom {
-        self.wrap_color(GS.killing_func)
-    }
-
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.as_view().map_mink_dim(dim)
     }
-    // fn wrap_color(&self, symbol: Symbol) -> Atom {
-    //     self.as_view().wrap_color(symbol)
-    // }
 
     fn unwrap_function(&self, symbol: Symbol) -> Atom {
         self.as_view().unwrap_function(symbol)
@@ -316,7 +299,34 @@ impl NumeratorAtomExt for AtomView<'_> {
         if self.get_byte_size() > 1024 * 1024
             || keys.len() > 128
             || keys.iter().enumerate().any(|(index, key)| {
-                !matches!(key.as_view(), AtomView::Var(_) | AtomView::Fun(_))
+                let admitted = match key.as_view() {
+                    AtomView::Var(_) | AtomView::Fun(_) => true,
+                    AtomView::Add(_) => {
+                        // A literal sum can be a scalar coefficient owner, but
+                        // cannot hide free tensor ports or a lazy branch guard.
+                        // Inspect its native interface without simplifying or
+                        // rewriting the key used by the arithmetic below.
+                        let guarded = [
+                            Symbol::IF,
+                            OrientationID::symbol(),
+                            GS.theta,
+                            GS.orientation_delta,
+                        ]
+                        .into_iter()
+                        .any(|head| key.contains_symbol(head));
+                        !guarded
+                            && idenso::CookSettings::indices()
+                                .with_mode(idenso::CookMode::ReversibleEncoding)
+                                .try_cook(key.as_view())
+                                .ok()
+                                .and_then(|cooked| {
+                                    idenso::tensor::SymbolicTensor::infer(cooked).ok()
+                                })
+                                .is_some_and(|tensor| tensor.is_scalar())
+                    }
+                    _ => false,
+                };
+                !admitted
                     || keys[..index]
                         .iter()
                         .any(|other| key.contains(other) || other.contains(key))
@@ -338,12 +348,12 @@ impl NumeratorAtomExt for AtomView<'_> {
             statistical_zero_test: false,
             ..AtomField::new()
         };
-        let variables = keys
-            .iter()
-            .cloned()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, _>>()
-            .ok()?;
+        // These columns are internal arithmetic handles, not symbolic aliases.
+        // A composite key is not a native polynomial indeterminate; reconstruct
+        // every output monomial from the original immutable keys below.
+        let variables = (0..keys.len())
+            .map(symbolica::poly::PolyVariable::Temporary)
+            .collect::<Vec<_>>();
         let template = Polynomial::new(&field, None, Arc::new(variables));
         let polynomial = collect(*self, keys, &template)?;
         Some(
@@ -475,10 +485,37 @@ impl NumeratorAtomExt for AtomView<'_> {
     }
 
     fn collect_compact_factors(&self) -> Atom {
+        // A complex float serializes the precision of its zero component too.
+        // Equal finite coefficients can otherwise become unequal literal keys
+        // inside a function. Canonicalize only that exact zero's metadata;
+        // neither the nonzero component nor its precision is rounded.
+        let mut atom = self.replace_map(|view, _, output| {
+            let AtomView::Num(number) = view else {
+                return;
+            };
+            let CoefficientView::Float(real, imaginary) = number.get_coeff_view() else {
+                return;
+            };
+            let real_zero = real.is_zero();
+            let imaginary_zero = imaginary.is_zero();
+            if real_zero && imaginary_zero {
+                **output = Atom::Zero;
+            } else if real_zero || imaginary_zero {
+                let mut real = real.to_float();
+                let mut imaginary = imaginary.to_float();
+                if real.prec() != imaginary.prec() {
+                    if real_zero {
+                        real = symbolica::domains::float::Float::new(imaginary.prec());
+                    } else {
+                        imaginary = symbolica::domains::float::Float::new(real.prec());
+                    }
+                    **output = Atom::num(symbolica::domains::float::Complex::new(real, imaginary));
+                }
+            }
+        });
         // Energy powers retain their owner through enclosing Taylor operations.
         // Replacing E(owner, P)^2 by P here would discard the mass-rearrangement
         // boundary needed by an outer U operation.
-        let atom = self;
         // This call is one collection scope. A residue can still contain inner
         // selectors: only share scalar inverses when the entire scope is free
         // of guards, so a finite inactive branch cannot become 0 * infinity.
@@ -490,77 +527,260 @@ impl NumeratorAtomExt for AtomView<'_> {
         ]
         .into_iter()
         .any(|head| atom.contains_symbol(head));
-        // Collect only complete factors after Taylor and residue mapping.
-        // Opaque powers keep distinct inverse denominators, their owners,
-        // and numerator powers intact; functions keep their arguments intact.
-        // Wrap original functions too so an input using the temporary head
-        // is restored verbatim by the single outer unwrapping pass.
-        let opaque = symbol!("gammalooprs::uv::opaque_factor");
-        let mut occurrence = 0usize;
-        let mut protected = atom.replace_map(|view, context, out| {
-            // Sharing a summed vector across contractions can distribute a
-            // vanishing contracted factor across separately evaluated terms.
-            // Keep these tensor sums local to their original occurrences.
-            let tensor_sum = matches!(view, AtomView::Add(_))
-                && context.parent_type == Some(AtomType::Mul)
-                && view.is_tensorial(StrictTensorFilter::ContainsReps);
-            if tensor_sum || matches!(view, AtomView::Pow(_) | AtomView::Fun(_)) {
-                let mut branch_local = tensor_sum;
-                let protect_inverse =
-                    guarded || view.is_tensorial(StrictTensorFilter::ContainsReps);
-                view.visitor(&mut |part| {
-                    branch_local |= match part {
-                        AtomView::Pow(power) => {
-                            protect_inverse
-                                && !i64::try_from(power.get_base_exp().1)
-                                    .is_ok_and(|exponent| exponent >= 0)
-                        }
-                        AtomView::Fun(fun) => [
-                            OrientationID::symbol(),
-                            GS.theta,
-                            GS.orientation_delta,
-                            Symbol::IF,
-                            symbol!("gammalooprs::uv::numerator_family"),
-                        ]
-                        .contains(&fun.get_symbol()),
-                        _ => false,
-                    };
-                    !branch_local
-                });
-                // Guarded inverses remain occurrence-local, including inverses
-                // nested in functions or powers. Numerator families and tensor
-                // sums must still form independent contraction networks even
-                // when their scalar denominators can share a factor.
-                **out = if branch_local {
-                    occurrence += 1;
-                    function!(opaque, view, occurrence)
-                } else {
-                    function!(opaque, view)
+        // Extract only direct numeric content. In particular, implicit unit
+        // coefficients participate in the GCD, and term bodies stay literal.
+        // Ordering by those bodies makes opposite sums choose the same owner.
+        let numeric_content = |value: AtomView<'_>| {
+            let AtomView::Add(sum) = value else {
+                return value.to_owned();
+            };
+            let mut terms = Vec::with_capacity(sum.get_nargs());
+            for term in sum.iter() {
+                let number = match term {
+                    AtomView::Num(number) => number.get_coeff_view().to_owned(),
+                    AtomView::Mul(product) => match product.get_coefficient() {
+                        Some(AtomView::Num(number)) => number.get_coeff_view().to_owned(),
+                        _ => Coefficient::one(),
+                    },
+                    _ => Coefficient::one(),
                 };
+                let Coefficient::Complex(exact) = &number else {
+                    return value.to_owned();
+                };
+                terms.push((term / Atom::num(&number).as_view(), exact.clone()));
             }
-        });
+            terms.sort_by(|left, right| left.0.cmp(&right.0));
+            let first = &terms[0].1;
+            // Only real rational GCDs are needed for literal content. The
+            // upstream Gaussian GCD can cycle, e.g. on 2+i and 2-i; never call
+            // it even for a small, exact complex coefficient.
+            let mut content = first.re.gcd(&first.im);
+            for (_, number) in &terms[1..] {
+                content = content.gcd(&number.re).gcd(&number.im);
+            }
+            // Choose a unit so the first coefficient has positive real part
+            // and nonnegative imaginary part. This preserves real/imaginary
+            // content and gives opposite or quarter-turned sums one owner.
+            let unit = if first.re > 0 && first.im >= 0 {
+                Atom::one()
+            } else if first.re <= 0 && first.im > 0 {
+                Atom::i()
+            } else if first.re < 0 && first.im <= 0 {
+                -Atom::one()
+            } else {
+                -Atom::i()
+            };
+            let content = Atom::num(content) * unit;
+            if content.is_one() {
+                return value.to_owned();
+            }
+            &content * Atom::add_many(sum.iter().map(|term| term / content.as_view()))
+        };
+        let split_number = |value: &Atom| {
+            let number = match value.as_view() {
+                AtomView::Mul(product) => product
+                    .get_coefficient()
+                    .map(|number| number.to_owned())
+                    .unwrap_or_else(Atom::one),
+                _ => Atom::one(),
+            };
+            let body = value / &number;
+            (number, body)
+        };
         loop {
-            let collected = protected.collect_horner::<Symbol>(None).collect_factors();
-            // Strictly decreasing size bounds the iteration and prevents two
-            // equivalent factor orders from alternating indefinitely.
-            if collected == protected
-                || collected.as_view().get_byte_size() >= protected.as_view().get_byte_size()
-            {
-                break;
+            // Collect only complete factors after Taylor and residue mapping.
+            // Opaque powers keep distinct inverse denominators, their owners,
+            // and numerator powers intact; functions keep their arguments intact.
+            // Wrap original functions too so an input using the temporary head
+            // is restored verbatim by the single outer unwrapping pass.
+            let opaque = symbol!("gammalooprs::uv::opaque_factor");
+            // A positive scalar power and its linear base share one factor owner.
+            // The complete summed base stays opaque, so no polynomial expansion of
+            // a graph numerator is needed to use A*A^n = A^(n+1).
+            let mut powered_sums = Vec::new();
+            let share_positive_powers =
+                !guarded && !atom.contains_symbol(symbol!("gammalooprs::uv::numerator_family"));
+            if share_positive_powers {
+                atom.visitor(&mut |part| match part {
+                    AtomView::Fun(_) => false,
+                    AtomView::Pow(power) => {
+                        if i64::try_from(power.get_exp()).is_ok_and(|exponent| exponent > 0)
+                            && !part.is_tensorial(StrictTensorFilter::ContainsReps)
+                        {
+                            let (_, base) = split_number(&numeric_content(power.get_base()));
+                            if matches!(base.as_view(), AtomView::Add(_))
+                                && !powered_sums.contains(&base)
+                            {
+                                powered_sums.push(base);
+                            }
+                        }
+                        false
+                    }
+                    _ => true,
+                });
             }
-            protected = collected;
+            let mut occurrence = 0usize;
+            let mut protected = atom.replace_map(|view, context, out| {
+                // Sharing a summed vector across contractions can distribute a
+                // vanishing contracted factor across separately evaluated terms.
+                // Keep these tensor sums local to their original occurrences.
+                let tensor_sum = matches!(view, AtomView::Add(_))
+                    && context.parent_type == Some(AtomType::Mul)
+                    && view.is_tensorial(StrictTensorFilter::ContainsReps);
+                if share_positive_powers
+                    && !tensor_sum
+                    && !view.is_tensorial(StrictTensorFilter::ContainsReps)
+                {
+                    if let AtomView::Pow(power) = view
+                        && i64::try_from(power.get_exp()).is_ok_and(|exponent| exponent > 0)
+                    {
+                        let (number, base) = split_number(&numeric_content(power.get_base()));
+                        if powered_sums.contains(&base) {
+                            **out = (number * function!(opaque, base)).pow(power.get_exp());
+                            return;
+                        }
+                        // Traversal still wraps function bases. Atomic scalar
+                        // powers retain their native relationship to linear terms.
+                        if matches!(power.get_base(), AtomView::Var(_) | AtomView::Fun(_)) {
+                            return;
+                        }
+                    } else if matches!(view, AtomView::Add(_)) {
+                        let (number, base) = split_number(&numeric_content(view));
+                        if powered_sums.contains(&base) {
+                            **out = number * function!(opaque, base);
+                            return;
+                        }
+                    }
+                }
+                if tensor_sum || matches!(view, AtomView::Pow(_) | AtomView::Fun(_)) {
+                    let mut branch_local = tensor_sum;
+                    let protect_inverse =
+                        guarded || view.is_tensorial(StrictTensorFilter::ContainsReps);
+                    view.visitor(&mut |part| {
+                        branch_local |= match part {
+                            AtomView::Pow(power) => {
+                                protect_inverse
+                                    && !i64::try_from(power.get_base_exp().1)
+                                        .is_ok_and(|exponent| exponent >= 0)
+                            }
+                            AtomView::Fun(fun) => [
+                                OrientationID::symbol(),
+                                GS.theta,
+                                GS.orientation_delta,
+                                Symbol::IF,
+                                symbol!("gammalooprs::uv::numerator_family"),
+                            ]
+                            .contains(&fun.get_symbol()),
+                            _ => false,
+                        };
+                        !branch_local
+                    });
+                    // Guarded inverses remain occurrence-local, including inverses
+                    // nested in functions or powers. Numerator families and tensor
+                    // sums must still form independent contraction networks even
+                    // when their scalar denominators can share a factor.
+                    // Normalize a scalar integer power before it becomes opaque:
+                    // (-2*A)^2 and 4*A^2 have the same complete power owner. Only
+                    // its literal numeric prefactor leaves that owner. Inverses
+                    // remain opaque to subsequent common-factor collection.
+                    let normalized = if let AtomView::Pow(power) = view
+                        && !branch_local
+                        && !view.is_tensorial(StrictTensorFilter::ContainsReps)
+                        && let Ok(exponent) = i64::try_from(power.get_exp())
+                    {
+                        numeric_content(power.get_base()).pow(exponent)
+                    } else {
+                        view.to_owned()
+                    };
+                    let (number, body) = split_number(&normalized);
+                    **out = number
+                        * if branch_local {
+                            occurrence += 1;
+                            function!(opaque, body, occurrence)
+                        } else {
+                            function!(opaque, body)
+                        };
+                }
+            });
+            // Original functions and powers are opaque before numeric distribution.
+            // This pass can cancel k - (k-p), but cannot enter a denominator or a
+            // fractional-power body. The same boundary restores canonical signs
+            // after Horner collection introduces new scalar sums.
+            let normalize = |value: Atom| {
+                if guarded {
+                    return value;
+                }
+                value
+                    .replace_map_bottom_up(|view, context, out| {
+                        if context.function_level != 0 {
+                            return;
+                        }
+                        let AtomView::Mul(product) = view else {
+                            return;
+                        };
+                        let Some(number) = product.get_coefficient() else {
+                            return;
+                        };
+                        let Some((position, sum)) = product.iter().enumerate().find_map(
+                            |(position, factor)| match factor {
+                                AtomView::Add(sum) => Some((position, sum)),
+                                _ => None,
+                            },
+                        ) else {
+                            return;
+                        };
+                        // Children are already visited. Distribute only this
+                        // product's number into its first sum, without walking
+                        // the rebuilt subtree again or opening other factors.
+                        let mut factors = product
+                            .iter()
+                            .enumerate()
+                            .filter(|(index, factor)| {
+                                *index != position && !matches!(factor, AtomView::Num(_))
+                            })
+                            .map(|(_, factor)| factor.to_owned())
+                            .collect::<Vec<_>>();
+                        factors.push(Atom::add_many(sum.iter().map(|term| term * number)));
+                        **out = Atom::mul_many(factors);
+                    })
+                    .replace_map_bottom_up(|view, context, out| {
+                        if context.function_level == 0 && matches!(view, AtomView::Add(_)) {
+                            **out = numeric_content(view);
+                        }
+                    })
+            };
+            protected = normalize(protected);
+            loop {
+                let collected =
+                    normalize(protected.collect_horner::<Symbol>(None).collect_factors());
+                // Strictly decreasing size bounds the iteration and prevents two
+                // equivalent factor orders from alternating indefinitely.
+                if collected == protected
+                    || collected.as_view().get_byte_size() >= protected.as_view().get_byte_size()
+                {
+                    break;
+                }
+                protected = collected;
+            }
+            let result = protected.replace_map(|view, _, out| {
+                if let AtomView::Fun(fun) = view
+                    && fun.get_symbol() == opaque
+                {
+                    out.set_from_view(
+                        &fun.iter()
+                            .next()
+                            .expect("opaque factor has an expression argument"),
+                    );
+                }
+            });
+            // Restoring a factored base can expose a new linear cancellation.
+            // Re-enter the same protected scope only after a strict size decrease;
+            // no alternative variable orders or grouping searches are attempted.
+            if result.as_view().get_byte_size() >= atom.as_view().get_byte_size() {
+                return result;
+            }
+            atom = result;
         }
-        protected.replace_map(|view, _, out| {
-            if let AtomView::Fun(fun) = view
-                && fun.get_symbol() == opaque
-            {
-                out.set_from_view(
-                    &fun.iter()
-                        .next()
-                        .expect("opaque factor has an expression argument"),
-                );
-            }
-        })
     }
 
     fn series_preserving_factors(
@@ -662,27 +882,10 @@ impl NumeratorAtomExt for AtomView<'_> {
         Ok((independent * grouped).collect_compact_factors())
     }
 
-    fn kill_color(&self) -> Atom {
-        self.wrap_color(GS.killing_func)
-    }
-
-    fn to_param_color(&self) -> Atom {
-        let adj = ColorAdjoint {};
-        let fund = ColorFundamental {};
-        self.replace(adj.to_symbolic([W_.d_, W_.a_]))
-            .with(adj.to_symbolic([CS.nc * CS.nc - 1, Atom::var(W_.a_)]))
-            .replace(fund.to_symbolic([W_.d_, W_.a_]))
-            .with(fund.to_symbolic([CS.nc, W_.a_]))
-    }
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.replace(Minkowski {}.to_symbolic([W_.d_, W_.a___]))
             .with(Minkowski {}.to_symbolic([dim.into().into_owned(), Atom::var(W_.a___)]))
     }
-    // fn wrap_color(&self, symbol: Symbol) -> Atom {
-    //     self.expand_color()
-    //         .into_iter()
-    //         .fold(Atom::Zero, |a, (c, s)| a + function!(symbol, c) * s)
-    // }
 
     fn unwrap_function(&self, symbol: Symbol) -> Atom {
         self.replace(function!(symbol, W_.a___)).with(W_.a___)
@@ -720,6 +923,8 @@ impl NumeratorAtomExt for AtomView<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use idenso::IndexTooling;
     use linnet::half_edge::involution::EdgeIndex;
     use spenso::{
@@ -734,16 +939,495 @@ mod tests {
         function, parse_lit, symbol,
     };
 
-    use crate::{
-        dot,
-        graph::{FeynmanGraph, Graph, parse::IntoGraph},
-        initialisation::test_initialise,
-        numerator::aind::Aind,
-        utils::GS,
-        uv::UltravioletGraph,
-    };
+    use crate::{initialisation::test_initialise, numerator::aind::Aind, utils::GS};
 
     use super::NumeratorAtomExt;
+
+    #[test]
+    fn compact_factors_canonicalize_only_literal_zero_precision_metadata() {
+        use symbolica::{
+            atom::AtomView,
+            coefficient::CoefficientView,
+            domains::float::{Complex, Float},
+        };
+
+        test_initialise().unwrap();
+        let opaque = symbol!("compact_zero_precision::opaque");
+        let spectator = parse_lit!((x + y) ^ 11 * (z + w) ^ (-3));
+        let tiny = Atom::num((1, 2)).pow(120);
+        for imaginary_nonzero in [false, true] {
+            let nonzero = Float::with_val(128, 5);
+            let expected = if imaginary_nonzero {
+                Atom::num(Complex::new(Float::new(128), nonzero.clone()))
+            } else {
+                Atom::num(Complex::new(nonzero.clone(), Float::new(128)))
+            };
+            for zero_precision in [53, 96, 256] {
+                let coefficient = if imaginary_nonzero {
+                    Atom::num(Complex::new(Float::new(zero_precision), nonzero.clone()))
+                } else {
+                    Atom::num(Complex::new(nonzero.clone(), Float::new(zero_precision)))
+                };
+                assert_ne!(coefficient, expected);
+                assert_eq!(
+                    coefficient.to_canonical_string(),
+                    expected.to_canonical_string()
+                );
+                let normalized = coefficient.collect_compact_factors();
+                assert_eq!(normalized, expected);
+                assert_eq!(normalized.collect_compact_factors(), normalized);
+                let (AtomView::Num(before), AtomView::Num(after)) =
+                    (coefficient.as_view(), normalized.as_view())
+                else {
+                    panic!("literal coefficient")
+                };
+                let (
+                    CoefficientView::Float(before_re, before_im),
+                    CoefficientView::Float(after_re, after_im),
+                ) = (before.get_coeff_view(), after.get_coeff_view())
+                else {
+                    panic!("floating coefficient")
+                };
+                assert_eq!(
+                    if imaginary_nonzero {
+                        before_im.0
+                    } else {
+                        before_re.0
+                    },
+                    if imaginary_nonzero {
+                        after_im.0
+                    } else {
+                        after_re.0
+                    },
+                    "all nonzero value and precision bytes must survive unchanged"
+                );
+                let source =
+                    &spectator * (function!(opaque, &coefficient) - function!(opaque, &expected));
+                assert!(!source.is_zero());
+                assert!(source.collect_compact_factors().is_zero());
+                assert_eq!(
+                    (&spectator * function!(opaque, &coefficient)).collect_compact_factors(),
+                    &spectator * function!(opaque, &expected),
+                    "powers and inverse spectators retain their factorization"
+                );
+            }
+            let direction = if imaginary_nonzero {
+                Atom::i()
+            } else {
+                Atom::one()
+            };
+            let distinct = &expected + &tiny * direction;
+            assert_ne!(distinct, expected, "the finite perturbation is represented");
+            let normalized_distinct = distinct.collect_compact_factors();
+            assert_ne!(normalized_distinct, expected);
+            let (AtomView::Num(before), AtomView::Num(after)) =
+                (distinct.as_view(), normalized_distinct.as_view())
+            else {
+                panic!("literal perturbed coefficient")
+            };
+            let (
+                CoefficientView::Float(before_re, before_im),
+                CoefficientView::Float(after_re, after_im),
+            ) = (before.get_coeff_view(), after.get_coeff_view())
+            else {
+                panic!("floating perturbed coefficient")
+            };
+            assert_eq!(
+                if imaginary_nonzero {
+                    before_im.0
+                } else {
+                    before_re.0
+                },
+                if imaginary_nonzero {
+                    after_im.0
+                } else {
+                    after_re.0
+                },
+                "the small finite perturbation remains bit-exact"
+            );
+            assert!(
+                !(&spectator * (function!(opaque, &distinct) - function!(opaque, &expected)))
+                    .collect_compact_factors()
+                    .is_zero(),
+                "normalization must not erase a nonzero difference"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_scalar_sum_keys_regroup_nested_coefficients_without_opening_binomials() {
+        test_initialise().unwrap();
+        let [a, b, c, d, e, f, g] = [
+            parse_lit!(p1 - p2),
+            parse_lit!(p1 + p2),
+            parse_lit!(k0 + k3),
+            parse_lit!(k1 + k2),
+            parse_lit!(p0 + p3),
+            parse_lit!(k1 - k2),
+            parse_lit!(-k0 + k3),
+        ];
+        let source: Atom = 4 * &a * (&b * &c - &d * &e)
+            + 4 * &b * (&f * &e - &a * &c)
+            + 4 * &e * (&g * &e + &a * &d)
+            - 4 * &e * (&g * &e + &b * &f);
+        assert!(
+            !source.is_zero(),
+            "the input retains its nested factorization"
+        );
+        let spectator = parse_lit!((x + y) ^ 11) * idenso::color_cas!(2, idenso::cof!(3));
+        for value in [source.clone(), &spectator * &source] {
+            let before = value.clone();
+            assert!(
+                value
+                    .coefficient_list_exact(std::slice::from_ref(&e))
+                    .unwrap()
+                    .is_empty()
+            );
+            assert_eq!(value, before);
+        }
+        // A nearby nonzero expression must retain the complete binomial and
+        // spectator. No polynomial identity of their bodies is requested.
+        let retained = &source + &spectator * &a * &e;
+        assert_eq!(
+            retained
+                .coefficient_list_exact(std::slice::from_ref(&e))
+                .unwrap(),
+            vec![(e, spectator * a)]
+        );
+    }
+
+    #[test]
+    fn exact_scalar_sum_keys_preserve_signed_powers_and_closed_dummy_scopes() {
+        test_initialise().unwrap();
+        let slot = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+        let key = Atom::one() + GS.emr_mom(EdgeIndex(1), &slot) * GS.emr_mom(EdgeIndex(2), &slot);
+        let spectator = parse_lit!((x + y) ^ 11)
+            * function!(
+                symbol!("literal_scalar_factor::opaque"),
+                parse_lit!((z + w) ^ 9)
+            );
+        let source: Atom = &spectator * (key.pow(-2) + 3 * key.pow(3));
+        let before = source.clone();
+        let rows = source
+            .coefficient_list_exact(std::slice::from_ref(&key))
+            .unwrap();
+        let coefficients = rows
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(coefficients.len(), 2);
+        assert_eq!(coefficients.get(&key.pow(-2)), Some(&spectator));
+        assert_eq!(coefficients.get(&key.pow(3)), Some(&(3 * &spectator)));
+        let reconstructed = Atom::add_many(
+            rows.iter()
+                .map(|(factor, coefficient)| factor * coefficient),
+        );
+        assert!(
+            (&reconstructed - &source)
+                .coefficient_list_exact(std::slice::from_ref(&key))
+                .unwrap()
+                .is_empty(),
+            "the literal-key rows exactly reconstruct the original coefficient"
+        );
+        assert_eq!(source, before);
+        for exponent in [-2, -1, 2, 3, 11] {
+            let value = key.pow(exponent);
+            assert_eq!(
+                value
+                    .coefficient_list_exact(std::slice::from_ref(&key))
+                    .unwrap(),
+                vec![(value, Atom::one())]
+            );
+        }
+    }
+
+    #[test]
+    fn exact_scalar_sum_keys_reject_open_ports_guards_and_non_laurent_dependence() {
+        test_initialise().unwrap();
+        let slot = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+        let open = GS.emr_mom(EdgeIndex(1), &slot) + GS.emr_mom(EdgeIndex(2), &slot);
+        assert!(
+            open.coefficient_list_exact(std::slice::from_ref(&open))
+                .is_none()
+        );
+        let key = parse_lit!(literal_scalar_factor::a + literal_scalar_factor::b);
+        let extra = parse_lit!(literal_scalar_factor::c);
+        for source in [
+            (&key * &extra + 1).pow(-1),
+            (&key * &extra + 1).pow(2),
+            key.pow(Atom::num((1, 2))),
+            key.pow(Atom::num((-1, 2))),
+            function!(symbol!("literal_scalar_factor::hidden"), &key),
+        ] {
+            assert!(
+                source
+                    .coefficient_list_exact(std::slice::from_ref(&key))
+                    .is_none(),
+                "unsupported selected dependence must remain unproven: {source}"
+            );
+        }
+        for guard in [
+            crate::cff::expression::OrientationID(3).atom(),
+            function!(GS.theta, &extra),
+            function!(GS.orientation_delta, &extra, 1),
+            function!(symbolica::atom::Symbol::IF, &extra, 1, 0),
+        ] {
+            let guarded = &key + guard;
+            assert!(
+                guarded
+                    .coefficient_list_exact(std::slice::from_ref(&guarded))
+                    .is_none()
+            );
+        }
+        assert!(
+            key.coefficient_list_exact(&[key.clone(), parse_lit!(literal_scalar_factor::a)])
+                .is_none(),
+            "overlapping keys cannot become independent polynomial columns"
+        );
+    }
+
+    #[test]
+    fn compact_factors_normalize_numeric_content_before_integer_power_ownership() {
+        test_initialise().unwrap();
+        let base = parse_lit!(p0 * k0 - p1 * k1 - p2 * k2 - p3 * k3);
+        let spectator = parse_lit!((a + b) ^ 11 * (c + d));
+        for coefficient in [Atom::one(), Atom::i() * Atom::num((4, 3))] {
+            let difference = &coefficient
+                * (-Atom::num(2) * base.pow(2)
+                    + Atom::num((1, 2)) * (-Atom::num(2) * &base).expand_num().pow(2));
+            assert!(
+                (&spectator * difference)
+                    .collect_compact_factors()
+                    .is_zero()
+            );
+        }
+        let opposite = (-&base).expand_num();
+        assert!(
+            (base.pow(2) * opposite + base.pow(3))
+                .collect_compact_factors()
+                .is_zero()
+        );
+        let retained = (&spectator * base.pow(3)).collect_compact_factors();
+        assert!(retained.contains(&parse_lit!((a + b) ^ 11)));
+        assert!(retained.contains(&parse_lit!(c + d)));
+    }
+
+    #[test]
+    fn compact_factors_keep_mixed_complex_content_bounded_and_exact() {
+        test_initialise().unwrap();
+        let a = Atom::var(symbol!("mixed_content::a"));
+        let b = Atom::var(symbol!("mixed_content::b"));
+        // Native Gaussian GCD alternates these coefficients indefinitely.
+        let mixed = (Atom::num(2) + Atom::i()) * &a + (Atom::num(2) - Atom::i()) * &b;
+        let normalized = mixed.collect_compact_factors();
+        assert!(!normalized.is_zero());
+        assert_eq!(normalized.collect_compact_factors(), normalized);
+        let coefficients = normalized
+            .coefficient_list_exact(&[a.clone(), b.clone()])
+            .expect("the exact linear coefficient remains collectible")
+            .into_iter()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(
+            coefficients,
+            std::collections::BTreeMap::from([
+                (a, Atom::num(2) + Atom::i()),
+                (b, Atom::num(2) - Atom::i()),
+            ])
+        );
+    }
+
+    #[test]
+    fn compact_factors_preserve_complex_unit_power_owners_and_opaque_scopes() {
+        test_initialise().unwrap();
+        let a = Atom::var(symbol!("complex_power::a"));
+        let b = Atom::var(symbol!("complex_power::b"));
+        let mixed = (Atom::num(2) + Atom::i()) * &a + (Atom::num(2) - Atom::i()) * &b;
+        let spectator = parse_lit!((x + y) ^ 11 * opaque(z + 2 * (u + v)));
+        for unit in [Atom::one(), -Atom::one(), Atom::i(), -Atom::i()] {
+            // Form the rotated Add explicitly: a numeric prefactor outside a
+            // power would already normalize before reaching the compact owner.
+            let rotated = (&unit * (Atom::num(2) + Atom::i())) * &a
+                + (&unit * (Atom::num(2) - Atom::i())) * &b;
+            for exponent in [-2, -1, 2, 3, 11] {
+                let normalized = rotated.pow(exponent).collect_compact_factors();
+                assert_eq!(
+                    normalized,
+                    (unit.pow(exponent) * mixed.pow(exponent)).collect_compact_factors(),
+                    "integer power {exponent} must keep the complete complex base"
+                );
+                assert_eq!(normalized.collect_compact_factors(), normalized);
+            }
+            let difference = rotated.pow(2) - unit.pow(2) * mixed.pow(2);
+            assert!(
+                (&spectator * &difference)
+                    .collect_compact_factors()
+                    .is_zero()
+            );
+            assert_eq!(
+                (&spectator * (difference + Atom::one())).collect_compact_factors(),
+                spectator
+            );
+        }
+        let fractional = mixed.sqrt();
+        let opaque = function!(symbol!("complex_power::opaque"), &mixed);
+        assert_eq!(fractional.collect_compact_factors(), fractional);
+        assert_eq!(opaque.collect_compact_factors(), opaque);
+        let inverse = mixed.pow(-1);
+        let guard = function!(symbolica::atom::Symbol::IF, &a, &b, 0);
+        let guarded = &guard * &a * &inverse + &b * &inverse;
+        assert_eq!(guarded.collect_compact_factors(), guarded);
+    }
+
+    #[test]
+    fn compact_factors_preserve_real_and_imaginary_rational_content() {
+        test_initialise().unwrap();
+        let a = Atom::var(symbol!("rational_content::a"));
+        let b = Atom::var(symbol!("rational_content::b"));
+        let base = Atom::num(2) * &a + Atom::num(3) * &b;
+        for unit in [Atom::one(), -Atom::one(), Atom::i(), -Atom::i()] {
+            let content = unit * Atom::num((3, 7));
+            let source = (&content * Atom::num(2)) * &a + (&content * Atom::num(3)) * &b;
+            let normalized = source.collect_compact_factors();
+            assert_eq!(normalized, &content * &base);
+            assert_eq!(normalized.collect_compact_factors(), normalized);
+        }
+    }
+
+    #[test]
+    fn compact_factors_keep_deep_weighted_scalar_circuits_factorized() {
+        // Keep the depth-512 stress case independent of the test harness's
+        // default stack size, as in the existing deep tensor/UV regressions.
+        std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                use symbolica::atom::AtomView;
+
+                test_initialise().unwrap();
+                let head = symbol!("compact_nested_scalar::leaf");
+                let depth = 512;
+                let mut core = function!(head, 0);
+                for index in 1..=depth {
+                    core = function!(head, 2 * index) * (function!(head, 2 * index + 1) - core);
+                }
+                let protected = [
+                    parse_lit!((u + v) ^ 11),
+                    parse_lit!(1 / (w + 2 * (x + y))),
+                    parse_lit!(opaque(a + 2 * (b + c))),
+                    parse_lit!((r + 2 * (s + t)) ^ (1 / 2)),
+                ];
+                let source = core * Atom::mul_many(&protected);
+                let normalized = source.collect_compact_factors();
+                assert!(!normalized.is_zero());
+                assert_eq!(normalized.collect_compact_factors(), normalized);
+                for factor in &protected {
+                    assert!(normalized.contains(factor));
+                }
+                let mut leaves = 0;
+                normalized.visitor(&mut |part| {
+                    if let AtomView::Fun(function) = part {
+                        leaves += usize::from(function.get_symbol() == head);
+                        return false;
+                    }
+                    true
+                });
+                assert_eq!(leaves, 2 * depth + 1);
+
+                // Supplement the symbolic boundary checks with independent exact
+                // recurrence values. These valuations do not expand the scalar circuit.
+                for shift in [0, 1] {
+                    let value = |index: usize| {
+                        if index == 0 {
+                            Atom::num((1 + shift, 7))
+                        } else if index.is_multiple_of(2) {
+                            Atom::num((
+                                if (index / 2).is_multiple_of(2) {
+                                    2 + shift
+                                } else {
+                                    -2 - shift
+                                },
+                                3,
+                            ))
+                        } else {
+                            Atom::num((((index / 2) % 7) as i64 - 3 + shift, 5))
+                        }
+                    };
+                    let mut expected = value(0);
+                    for index in 1..=depth {
+                        expected = value(2 * index) * (value(2 * index + 1) - expected);
+                    }
+                    let evaluated = normalized.replace_map(|part, _, output| {
+                        if let AtomView::Fun(function) = part
+                            && function.get_symbol() == head
+                        {
+                            **output = value(usize::try_from(function.get(0)).unwrap());
+                        }
+                    });
+                    assert_eq!(
+                        evaluated.collect_compact_factors(),
+                        (expected * Atom::mul_many(&protected)).collect_compact_factors()
+                    );
+                }
+
+                // The same pass must still close scalar linear cancellation, with the
+                // complete deep numerator retained as its surrounding factor.
+                let k = parse_lit!(k);
+                let p = parse_lit!(p);
+                assert_eq!(
+                    (&source * (&k - (&k - &p))).collect_compact_factors(),
+                    (&normalized * &p).collect_compact_factors()
+                );
+                assert!(
+                    (&source * (&k - (&k - &p) - &p))
+                        .collect_compact_factors()
+                        .is_zero()
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn compact_factors_keep_signed_integer_and_fractional_power_domains_distinct() {
+        test_initialise().unwrap();
+        let base = parse_lit!(a - b);
+        let opposite = parse_lit!(-a + b);
+        for exponent in [-2, -1, 2, 3, 11] {
+            let left = base.pow(exponent);
+            let right = Atom::num(if exponent % 2 == 0 { 1 } else { -1 }) * opposite.pow(exponent);
+            let normalized = left.collect_compact_factors();
+            assert_eq!(
+                normalized,
+                right.collect_compact_factors(),
+                "power {exponent}"
+            );
+            assert_eq!(normalized.collect_compact_factors(), normalized);
+        }
+        let fractional = parse_lit!((-a + b) ^ (1 / 2));
+        assert_eq!(fractional.collect_compact_factors(), fractional);
+        let separate_denominators = parse_lit!(x / (a + b) + y / (c + d));
+        assert_eq!(
+            separate_denominators.collect_compact_factors(),
+            separate_denominators
+        );
+    }
+
+    #[test]
+    fn compact_factors_preserve_atomic_mass_power_relations() {
+        test_initialise().unwrap();
+        let difference =
+            parse_lit!(m * (v - m ^ 2) - m * (m ^ 2 - k2) - m * (v - m ^ 2 + k2) + m ^ 3);
+        let spectator = parse_lit!((a + b) ^ 11 * opaque(c + 2 * (d + e)) / (x + y));
+        assert!(
+            (&spectator * &difference)
+                .collect_compact_factors()
+                .is_zero()
+        );
+        assert_eq!(
+            (&spectator * (&difference + 1)).collect_compact_factors(),
+            spectator
+        );
+    }
 
     #[test]
     fn compact_factors_share_scalar_inverses_only_without_guards() {
@@ -857,13 +1541,41 @@ mod tests {
         let result = source
             .series_preserving_factors(t, Atom::num(2).as_view(), 1, &[])
             .unwrap();
-        assert_eq!(
-            result,
-            parse_lit!(
-                g * ((a + 2 * b) * (c + 2 * d)
-                    + (series_t - 2) * (b * (c + 2 * d) + d * (a + 2 * b)))
-            )
-        );
+        let delta = Atom::var(symbol!("nonzero_series_center_delta"));
+        let expected = BTreeMap::from([
+            (Atom::one(), parse_lit!(g * (a + 2 * b) * (c + 2 * d))),
+            (
+                delta.clone(),
+                parse_lit!(g * (b * (c + 2 * d) + d * (a + 2 * b))),
+            ),
+        ]);
+        for (label, expression) in [
+            ("factor-preserving series", result),
+            (
+                "native series",
+                source.series(t, Atom::num(2), 1).unwrap().to_atom(),
+            ),
+        ] {
+            let centered = expression.replace(t).with(&delta + 2);
+            let coefficients = centered
+                .coefficient_list_exact(std::slice::from_ref(&delta))
+                .expect("the recentered Taylor polynomial has exact scalar coefficients")
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(
+                coefficients.keys().collect::<Vec<_>>(),
+                expected.keys().collect::<Vec<_>>(),
+                "{label}: complete Taylor degree inventory"
+            );
+            for (power, coefficient) in coefficients {
+                assert!(
+                    (coefficient - &expected[&power])
+                        .collect_compact_factors()
+                        .is_zero(),
+                    "{label}: Taylor coefficient of {power}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -955,17 +1667,65 @@ mod tests {
         let result = source
             .series_preserving_factors(t, Atom::num(2).as_view(), 0, &keys)
             .unwrap();
-        assert_eq!(
-            result,
-            n0 * (parse_lit!(a) / shift.pow(2) + parse_lit!(b) / &shift)
-                + n1 * (parse_lit!(a) / &shift + parse_lit!(b))
-                + n2 * parse_lit!(a)
-        );
-        assert!(
-            (result - source.series(t, Atom::num(2), 0).unwrap().to_atom())
-                .expand()
-                .is_zero()
-        );
+        let delta = Atom::var(symbol!("owned_series_center_delta"));
+        let expected = BTreeMap::from([
+            (delta.pow(-2), parse_lit!(a) * n0),
+            (delta.pow(-1), parse_lit!(b) * n0 + parse_lit!(a) * n1),
+            (Atom::one(), parse_lit!(b) * n1 + parse_lit!(a) * n2),
+        ]);
+        for (label, expression) in [
+            ("factor-preserving series", result),
+            (
+                "native series",
+                source.series(t, Atom::num(2), 0).unwrap().to_atom(),
+            ),
+        ] {
+            let centered = expression.replace(t).with(&delta + 2);
+            // Recentring can leave a pole base as 2-(2+delta). Certify that
+            // affine base independently before retaining its original power;
+            // no denominator clearing or numerator distribution is needed.
+            let centered = centered.replace_map_bottom_up(|part, context, output| {
+                if context.function_level != 0 {
+                    return;
+                }
+                if let symbolica::atom::AtomView::Pow(power) = part
+                    && power.get_base().contains(&delta)
+                {
+                    let exponent = i64::try_from(power.get_exp())
+                        .expect("the recentered denominator has an integer power");
+                    assert!(
+                        exponent < 0,
+                        "only Laurent poles require base reconstruction"
+                    );
+                    let rows = power
+                        .get_base()
+                        .coefficient_list_exact(std::slice::from_ref(&delta))
+                        .expect("the denominator base is affine in the center displacement");
+                    assert_eq!(rows.len(), 1);
+                    assert_eq!(rows[0].0, delta);
+                    assert!(rows[0].1 == Atom::one() || rows[0].1 == -Atom::one());
+                    **output = (&rows[0].1 * &delta).pow(exponent);
+                }
+            });
+            let coefficients = centered
+                .coefficient_list_exact(std::slice::from_ref(&delta))
+                .expect("the recentered Laurent polynomial keeps exact family coefficients")
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(
+                coefficients.keys().collect::<Vec<_>>(),
+                expected.keys().collect::<Vec<_>>(),
+                "{label}: complete Laurent pole/degree inventory"
+            );
+            for (power, coefficient) in coefficients {
+                assert!(
+                    (coefficient - &expected[&power])
+                        .collect_compact_factors()
+                        .is_zero(),
+                    "{label}: Laurent coefficient of {power}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -1109,64 +1869,6 @@ mod tests {
         let net = a.parse_into_net().unwrap();
 
         println!("{}", net.dot_pretty())
-    }
-
-    #[test]
-    fn canonize_color() {
-        test_initialise().unwrap();
-        let gls: Vec<Graph> = dot!(
-            digraph{
-            num = "1";
-
-            ext0 [style=invis];
-            2:0-> ext0 [id=0 dir=none is_cut=0  particle="a"];
-            ext1 [style=invis];
-            ext1-> 3:1 [id=1 dir=none is_cut=0  particle="a"];
-            0:2-> 1:3 [id=2   particle="d"];
-            0:4-> 1:5 [id=3 dir=none   particle="g"];
-            3:6-> 0:7 [id=4   particle="d"];
-            1:8-> 2:9 [id=5   particle="d"];
-            2:10-> 3:11 [id=6   particle="d"];
-        }
-
-        digraph GL8{
-            num = 1;
-        0[int_id=V_74];
-        1[int_id=V_74];
-        2[int_id=V_71];
-        3[int_id=V_71];
-        ext0 [style=invis];
-        2:0-> ext0 [id=0 dir=none is_cut=0  particle=a];
-        ext1 [style=invis];
-        ext1-> 3:1 [id=1 dir=none is_cut=0  particle=a];
-        0:2-> 1:3 [id=2   particle=d];
-        0:4-> 1:5 [id=3 dir=none   particle=g];
-        0:6-> 3:7 [id=4 dir=back   particle="d~"];
-        1:8-> 2:9 [id=5   particle=d];
-        2:10-> 3:11 [id=6   particle=d];
-        }
-
-        )
-        .unwrap();
-
-        for g in gls {
-            let mut numerator = g.numerator(&g.no_dummy(), &g.empty_subgraph());
-
-            // TODO Check if we include overall factor in main
-            numerator.state.expr *= &g.global_prefactor.num * &g.global_prefactor.projector; // * &gl5.overall_factor;
-            // numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
-
-            let numerator_color_simplified = numerator
-                .clone()
-                .color_simplify()
-                .get_single_atom()
-                .unwrap()
-                .canonize(Aind::Dummy)
-                .expect("test expression should canonicalize");
-
-            println!("numerator_color_simplified:{numerator_color_simplified}");
-            println!("numerator:{}", numerator.state.expr);
-        }
     }
 
     #[test]

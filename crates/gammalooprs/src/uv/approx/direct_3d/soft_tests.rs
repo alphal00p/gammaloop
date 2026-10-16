@@ -2,8 +2,7 @@ use super::super::branches::{DirectResidueBranches, DirectResidueKey};
 use super::*;
 use crate::cff::expression::OrientationID;
 use crate::{
-    dot,
-    graph::parse::IntoGraph,
+    finalized_runtime_dot,
     graph::{FeynmanGraph, Graph, cuts::CutSet},
     initialisation::test_initialise,
     settings::global::OrientationPattern,
@@ -21,7 +20,7 @@ use crate::{
     },
 };
 use gammaloop_tracing_filter::LogMessage;
-use idenso::shorthands::metric::MetricSimplifier;
+use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
 use linnet::half_edge::{
     involution::EdgeIndex,
     subgraph::{ModifySubSet, SubSetOps},
@@ -100,17 +99,15 @@ impl ForestNodeLike for TestNode {
 }
 
 fn scalar_two_point_graph() -> Graph {
-    dot!(
-        digraph scalar_self_energy {
-            edge [particle="H" num=1];
-            node [num=1];
-            ext [style=invis];
-            ext -> A:0 [id=0];
-            B:1 -> ext [id=1];
-            A -> B [id=2];
-            A -> B [id=3];
-        }
-    )
+    finalized_runtime_dot!(digraph scalar_self_energy { graph [projector=1]
+        edge [particle="H" num=1];
+        node [num=1];
+        ext [style=invis];
+        ext -> A:0 [id=0 sink="{ufo_order:0}"];
+        B:1 -> ext [id=1 source="{ufo_order:0}"];
+        A -> B [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+        A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
+    })
     .unwrap()
 }
 
@@ -229,7 +226,7 @@ fn one_orientation_cff_hard_charts_match_direct_external_jets() -> Result<()> {
     );
     let oriented_cff = residue_integrands.iter().next().unwrap().1;
     let settings = UVgenerationSettings::default();
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
     let active_started = start(
         &ctx,
         &current,
@@ -263,20 +260,26 @@ fn one_orientation_cff_hard_charts_match_direct_external_jets() -> Result<()> {
         .expect("the scalar bubble has an internal propagator")
         .2
         .data
-        .mass_atom()
+        .mass_atom(&graph.model)
         * &mass_scope;
     let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
     let loop_momentum = GS.emr_vec(loop_edge, minkowski.clone());
     let homogeneous_numerator = physical_mass.pow(2)
         - function!(SPENSO_TAG.dot, loop_momentum.clone(), loop_momentum.clone());
-    let tree_denominator = GS.wrap_tree_denoms(
-        graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-    );
+    let tree_denominator = GS.wrap_tree_denoms(graph.denominator(
+        &graph.tree_edges.subtract(&graph.initial_state_cut),
+        &graph.model,
+        |_| -1,
+    ));
     // Expand the bilinear dot shorthand before asking Symbolica for the
     // independent direct jet.  Otherwise it treats `dot` as an opaque
     // function and leaves formally equivalent derivatives in different
     // normal forms in the direct and hard charts.
-    let active_with_numerator = (&active_started * &homogeneous_numerator).expand_dots()?;
+    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+    let active_with_numerator = &active_started * &homogeneous_numerator;
+    let expanded =
+        SymbolicTensor::infer(cooking.try_cook(active_with_numerator.as_view())?)?.expand_dots()?;
+    let active_with_numerator = cooking.uncook(expanded.as_view());
     let started = &active_with_numerator * &tree_denominator;
 
     let reduced = current.reduced_subgraph(&root);
@@ -358,7 +361,7 @@ fn soft_hard_laurent_projection_matches_external_jets_and_keeps_mass() -> Result
     let graph = scalar_two_point_graph();
     let root = root_node(&graph);
     let settings = UVgenerationSettings::default();
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
 
     for dod in 0..=2 {
         let current = two_point_node(&graph, dod);
@@ -378,7 +381,7 @@ fn soft_hard_laurent_projection_matches_external_jets_and_keeps_mass() -> Result
             .expect("the scalar bubble has an internal propagator")
             .2
             .data
-            .mass_atom();
+            .mass_atom(&graph.model);
         let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
         let mass_scope = function!(*LOCAL_3D_MASS_SCOPE, usize::from(loop_edge) as i64);
         let scoped_mass = &physical_mass * &mass_scope;
@@ -477,18 +480,16 @@ fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> 
     // the same mass/log structure as the finite massive-fermion self-energy.
     // Its enclosing scalar bubble isolates m/(k^2-m^2)^2, whose degree-one
     // soft completion is the complete physical-mass zero-external-momentum jet.
-    let mut graph: Graph = dot!(
-        digraph integrated_mass_vertex {
-            edge [particle="H" num=1];
-            node [num=1];
-            ext [style=invis];
-            ext -> A:0 [id=0];
-            B:1 -> ext [id=1];
-            A -> B [id=2 lmb_index=0];
-            A -> B [id=3];
-            A -> A [id=4 lmb_index=1];
-        }
-    )?;
+    let mut graph: Graph = finalized_runtime_dot!(digraph integrated_mass_vertex { graph [projector=1]
+        edge [particle="H" num=1];
+        node [num=1];
+        ext [style=invis];
+        ext -> A:0 [id=0 sink="{ufo_order:0}"];
+        B:1 -> ext [id=1 source="{ufo_order:0}"];
+        A -> B [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+        A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
+        A -> A [id=4 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:4}"];
+    })?;
     let current = two_point_node(&graph, 1);
     let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
     child_subgraph.add(graph[&EdgeIndex(4)].1);
@@ -504,7 +505,7 @@ fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> 
         .expect("the integrated source is the massive tadpole")
         .2
         .data
-        .mass_atom();
+        .mass_atom(&graph.model);
     let coefficient = &physical_mass
         * (Atom::one() + Atom::num(2) * function!(Symbol::LOG, GS.mu_r_sq)
             - Atom::num(4) * function!(Symbol::LOG, physical_mass.clone()));
@@ -528,7 +529,7 @@ fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> 
     let unprojected = localizer.localize(&coefficient, &mut graph, &child)?;
     let active_subgraph = current.reduced_subgraph(&child);
     let expected = {
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let (_, lmb) = coordinate_lmb(&ctx, &current, &child, None, &[], &active_subgraph)?;
         let started = DirectResidueBranches::from_transient(&unprojected.active)?.fallible_map(
             |_, atom| {
@@ -603,20 +604,18 @@ fn disconnected_finite_mass_vertex_keeps_its_sibling_mass_inert() -> Result<()> 
     // the bubble parent, while the second is outside it and has the same mass.
     // Giving the sibling a squared mass makes accidental co-scaling retain a
     // spurious quadratic external-soft term even after orientation summation.
-    let mut graph: Graph = dot!(
-        digraph disconnected_finite_mass_vertices {
-            edge [particle="H" num=1];
-            node [num=1];
-            ext [style=invis];
-            ext -> A:0 [id=0];
-            C:1 -> ext [id=1];
-            A -> B [id=2 lmb_index=0];
-            A -> B [id=3];
-            A -> A [id=4 lmb_index=1];
-            C -> C [id=5 lmb_index=2];
-            B -> C [id=6];
-        }
-    )?;
+    let mut graph: Graph = finalized_runtime_dot!(digraph disconnected_finite_mass_vertices { graph [projector=1]
+        edge [particle="H" num=1];
+        node [num=1];
+        ext [style=invis];
+        ext -> A:0 [id=0 sink="{ufo_order:0}"];
+        C:1 -> ext [id=1 source="{ufo_order:0}"];
+        A -> B [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"];
+        A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:1}"];
+        A -> A [id=4 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:4}"];
+        C -> C [id=5 lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:2}"];
+        B -> C [id=6 source="{ufo_order:2}" sink="{ufo_order:3}"];
+    })?;
     let mut inside_subgraph = graph.empty_subgraph::<SuBitGraph>();
     inside_subgraph.add(graph[&EdgeIndex(4)].1);
     let inside = TestNode {
@@ -650,8 +649,8 @@ fn disconnected_finite_mass_vertex_keeps_its_sibling_mass_inert() -> Result<()> 
         dod: 0,
         scheme: ApproximationType::MUV,
     };
-    let mass = graph[&EdgeIndex(4)].0.mass_atom();
-    assert_eq!(mass, graph[&EdgeIndex(5)].0.mass_atom());
+    let mass = graph[&EdgeIndex(4)].0.mass_atom(&graph.model);
+    assert_eq!(mass, graph[&EdgeIndex(5)].0.mass_atom(&graph.model));
     let sibling_coefficient = mass.pow(2);
     let one = Atom::one();
     let settings = UVgenerationSettings {
@@ -877,7 +876,7 @@ fn soft_hard_chart_coscales_free_and_terminal_uv_mass_from_inner_u() -> Result<(
     let mut outer = two_point_node(&graph, 2);
     outer.scheme = ApproximationType::IR;
     let settings = UVgenerationSettings::default();
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
 
     let loop_edge = *inner
         .lmb
@@ -891,7 +890,7 @@ fn soft_hard_chart_coscales_free_and_terminal_uv_mass_from_inner_u() -> Result<(
         .expect("the scalar bubble has an internal propagator")
         .2
         .data
-        .mass_atom()
+        .mass_atom(&graph.model)
         * &scope;
     let uv_expansion_mass = Atom::var(GS.m_uv_expansion) * &scope;
     let uv_vacuum_mass = Atom::var(GS.m_uv_vacuum) * &scope;
@@ -965,7 +964,7 @@ fn soft_laurent_projection_expands_materialized_internal_energy() -> Result<()> 
     let graph = scalar_two_point_graph();
     let root = root_node(&graph);
     let settings = UVgenerationSettings::default();
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
     let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
 
     for dod in 1..=2 {
@@ -986,7 +985,7 @@ fn soft_laurent_projection_expands_materialized_internal_energy() -> Result<()> 
             .expect("the scalar bubble has an internal propagator")
             .2
             .data
-            .mass_atom();
+            .mass_atom(&graph.model);
         let mass_scope = function!(*LOCAL_3D_MASS_SCOPE, usize::from(loop_edge) as i64);
         let mass = physical_mass * mass_scope;
         let loop_momentum = GS.emr_vec(loop_edge, minkowski.clone());
@@ -1012,7 +1011,11 @@ fn soft_laurent_projection_expands_materialized_internal_energy() -> Result<()> 
         } else {
             Atom::one() / &base + loop_external / base.pow(3)
         };
-        let difference = (actual - expected).expand_dots()?.expand();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let difference = actual - expected;
+        let expanded =
+            SymbolicTensor::infer(cooking.try_cook(difference.as_view())?)?.expand_dots()?;
+        let difference = cooking.uncook(expanded.as_view()).expand();
         assert!(
             difference.is_zero(),
             "unexpected degree-{dod} materialized internal-energy soft projection: {difference}"
@@ -1029,7 +1032,7 @@ fn soft_projection_holds_cograph_tree_denominators() -> Result<()> {
     let root = root_node(&graph);
     let current = two_point_node(&graph, 1);
     let settings = UVgenerationSettings::default();
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
     let external_edge = *current
         .lmb
         .ext_edges
@@ -1042,7 +1045,7 @@ fn soft_projection_holds_cograph_tree_denominators() -> Result<()> {
         .expect("the scalar bubble has an internal propagator")
         .2
         .data
-        .mass_atom();
+        .mass_atom(&graph.model);
     let loop_edge = *current
         .lmb
         .loop_edges
@@ -1067,9 +1070,14 @@ fn soft_projection_holds_cograph_tree_denominators() -> Result<()> {
 #[test]
 fn nested_soft_projection_scales_only_the_component_boundary_after_routing() -> Result<()> {
     test_initialise().unwrap();
-    let graph: Graph =
-        include_str!("../../../../../../tests/resources/graphs/gamma_star_ddbar_top_bubble.dot")
-            .into_graph(&crate::utils::load_generic_model("sm"))?;
+    let graph: Graph = Graph::import_dot(
+        include_str!("../../../../../../tests/resources/graphs/gamma_star_ddbar_top_bubble.dot"),
+        &crate::utils::load_generic_model("sm"),
+    )
+    .map(|mut graphs| {
+        assert_eq!(graphs.len(), 1, "one fixture graph expected");
+        graphs.remove(0)
+    })?;
     let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
     for edge in [EdgeIndex(7), EdgeIndex(8)] {
         child_subgraph.add(graph[&edge].1);
@@ -1095,7 +1103,7 @@ fn nested_soft_projection_scales_only_the_component_boundary_after_routing() -> 
     )?;
     let root = root_node(&graph);
     let settings = UVgenerationSettings::default();
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
 
     assert_eq!(
         graph.loop_momentum_basis.loop_edges.raw,
@@ -1119,7 +1127,7 @@ fn nested_soft_projection_scales_only_the_component_boundary_after_routing() -> 
         .loop_edges
         .first()
         .expect("the nested child has a loop carrier");
-    let mass = graph[EdgeIndex(7)].mass_atom()
+    let mass = graph[EdgeIndex(7)].mass_atom(&graph.model)
         * function!(*LOCAL_3D_MASS_SCOPE, usize::from(loop_edge) as i64);
     let graph_external_spectator = GS.emr_mom(EdgeIndex(0), GS.cind(0));
     let boundary_energy_shift = GS.emr_mom(EdgeIndex(5), GS.cind(0));
@@ -1143,10 +1151,9 @@ fn nested_soft_projection_scales_only_the_component_boundary_after_routing() -> 
 #[test]
 fn appendix_b1_nested_routes_keep_the_graph_canonical_enclosing_chart() -> Result<()> {
     test_initialise()?;
-    let graph: Graph = include_str!(
+    let graph: Graph = Graph::import_dot(include_str!(
         "../../../../../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"
-    )
-    .into_graph(&crate::utils::load_generic_model("sm"))?;
+    ), &crate::utils::load_generic_model("sm")).map(|mut graphs| { assert_eq!(graphs.len(), 1, "one fixture graph expected"); graphs.remove(0) })?;
     let mut parent_subgraph = graph.empty_subgraph::<SuBitGraph>();
     for edge in [2, 3, 4, 5, 6].map(EdgeIndex) {
         parent_subgraph.add(graph[&edge].1);
@@ -1162,7 +1169,7 @@ fn appendix_b1_nested_routes_keep_the_graph_canonical_enclosing_chart() -> Resul
         scheme: ApproximationType::IR,
     };
     let settings = UVgenerationSettings::default();
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
 
     for (child_edges, expected_child_route) in [
         (&[3, 4][..], vec![EdgeIndex(3)]),
@@ -1208,20 +1215,17 @@ fn appendix_b1_nested_routes_keep_the_graph_canonical_enclosing_chart() -> Resul
 #[test]
 fn nested_banana_retains_quotient_carriers_after_an_integrated_prefix() -> Result<()> {
     test_initialise()?;
-    let graph: Graph = dot!(
-        digraph banana {
+    let graph: Graph = finalized_runtime_dot!(digraph banana { graph [projector=1]
             edge [particle=scalar_1 num=1]
             node [num=1]
             ext [style=invis]
-            ext -> a:0 [id=5]
-            b:1 -> ext [id=4]
-            a -> b [id=1]
-            a -> b [id=2]
-            a -> b [id=3]
-            a -> b [id=0]
-        },
-        "scalars"
-    )?;
+            ext -> a:0 [id=5 sink="{ufo_order:0}"]
+            b:1 -> ext [id=4 source="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            a -> b [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
+            a -> b [id=0 source="{ufo_order:4}" sink="{ufo_order:4}"]
+        }, "scalars")?;
     let subgraph = |edges: &[usize]| {
         let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
         for edge in edges.iter().copied().map(EdgeIndex) {
@@ -1242,7 +1246,7 @@ fn nested_banana_retains_quotient_carriers_after_an_integrated_prefix() -> Resul
     let child = node(&[0, 1, 2]);
     let parent = node(&[0, 1, 2, 3]);
     let settings = UVgenerationSettings::default();
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
     let child_active = child.reduced_subgraph(&integrated);
     let (_, child_lmb) = coordinate_lmb(&ctx, &child, &integrated, None, &[], &child_active)?;
     assert_eq!(child_lmb.loop_edges.raw, vec![EdgeIndex(0)]);
@@ -1307,22 +1311,19 @@ fn nested_banana_retains_quotient_carriers_after_an_integrated_prefix() -> Resul
 #[test]
 fn nested_route_rejects_a_retained_affine_graph_external_carrier() -> Result<()> {
     test_initialise()?;
-    let graph: Graph = dot!(
-        digraph nested_soft_affine_routing {
+    let graph: Graph = finalized_runtime_dot!(digraph nested_soft_affine_routing { graph [projector=1]
             edge [particle=scalar_1 num=1]
             node [num=1]
             ext [style=invis]
-            ext -> v1:0 [id=0]
-            v4:1 -> ext [id=1]
-            v1 -> v2 [id=2]
-            v2 -> v3 [id=3 lmb_id=0]
-            v2 -> v3 [id=4]
-            v3 -> v4 [id=5]
-            v1 -> v4 [id=6 lmb_id=1]
-            v2 -> v2 [id=7 lmb_id=2]
-        },
-        "scalars"
-    )?;
+            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
+            v4:1 -> ext [id=1 source="{ufo_order:0}"]
+            v1 -> v2 [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v2 -> v3 [id=3 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v2 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v3 -> v4 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v1 -> v4 [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            v2 -> v2 [id=7 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"]
+        }, "scalars")?;
     let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
     for edge in [2, 3, 5, 6].map(EdgeIndex) {
         child_subgraph.add(graph[&edge].1);
@@ -1359,7 +1360,7 @@ fn nested_route_rejects_a_retained_affine_graph_external_carrier() -> Result<()>
         lmb: affine_lmb,
     };
     let settings = UVgenerationSettings::default();
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
     // Integrating an unrelated tadpole does not change this carrier's affine
     // routing. A nonempty inactive prefix must not switch off the guard.
     let mut tadpole = graph.empty_subgraph::<SuBitGraph>();
@@ -1412,7 +1413,7 @@ fn production_ir_dispatch_composes_h_for_d0_d1_d2() -> Result<()> {
     let orientation =
         OrientationProjection::exact_expression(&production, &options, &orientation_pattern, false);
     let key = DirectResidueKey::production(OrientationID(0));
-    let ctx = UVCtx::new(&graph, &settings);
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
 
     for dod in 0..=2 {
         let ir = two_point_node(&graph, dod);
@@ -1434,7 +1435,7 @@ fn production_ir_dispatch_composes_h_for_d0_d1_d2() -> Result<()> {
             .expect("the scalar bubble has an internal propagator")
             .2
             .data
-            .mass_atom()
+            .mass_atom(&graph.model)
             * &scope;
         let physical_energy = GS.ose_full(loop_edge, loop_edge, physical_mass.clone(), None);
         let integrand = Atom::one() / physical_energy.pow(3 - dod as i64);
@@ -1637,7 +1638,7 @@ fn one_orientation_ir_dispatch_stores_one_combined_h_atom_per_residue() -> Resul
     };
     let active_subgraph = current.reduced_subgraph(&root);
     let expected = {
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let started = start(
             &ctx,
             &current,

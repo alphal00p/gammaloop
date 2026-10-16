@@ -7,8 +7,9 @@ use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
+    CookMode, CookSettings,
     dirac::AGS,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    tensor::{ContractSettings, SymbolicTensor},
 };
 
 #[cfg(test)]
@@ -215,55 +216,73 @@ impl CanonicalUvDenominatorClass {
         // This invertible coordinate change acts only on the denominator
         // polynomial. It recovers one formal H even when D(H) was expanded in
         // physical loop coordinates, without splitting a numerator factor.
-        let polynomial = self
-            .full_expr
-            .replace_map(|view, _, output| {
-                let AtomView::Fun(momentum) = view else {
-                    return;
-                };
-                if momentum.get_symbol() != GS.emr_mom
-                    || momentum.get_nargs() == 0
-                    || usize::try_from(momentum.get(0)).ok() != Some(carrier)
-                {
-                    return;
-                }
-                let indices = momentum
-                    .iter()
-                    .skip(1)
-                    .map(|index| index.to_owned())
-                    .collect::<Vec<_>>();
-                let mut reference =
-                    FunctionBuilder::new(GS.emr_mom).add_arg(GS.uv_class_ref(self.id));
-                for index in &indices {
-                    reference = reference.add_arg(index);
-                }
-                **output = (reference.finish() - GS.indexed_momentum(&remainder, &indices))
-                    / Atom::num(*coefficient);
-            })
-            .normalize_dots()
-            .expand();
+        let polynomial = self.full_expr.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != GS.emr_mom
+                || momentum.get_nargs() == 0
+                || usize::try_from(momentum.get(0)).ok() != Some(carrier)
+            {
+                return;
+            }
+            let indices = momentum
+                .iter()
+                .skip(1)
+                .map(|index| index.to_owned())
+                .collect::<Vec<_>>();
+            let mut reference = FunctionBuilder::new(GS.emr_mom).add_arg(GS.uv_class_ref(self.id));
+            for index in &indices {
+                reference = reference.add_arg(index);
+            }
+            **output = (reference.finish() - GS.indexed_momentum(&remainder, &indices))
+                / Atom::num(*coefficient);
+        });
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let polynomial = SymbolicTensor::infer(cooking.try_cook(polynomial.as_view())?)?.contract(
+            ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            },
+        )?;
+        let polynomial = cooking.uncook(polynomial.expression().as_view());
+        let polynomial = polynomial.expand();
         let mut residual = false;
-        let collapsed = polynomial
-            .replace_map(|view, _, output| {
-                let AtomView::Fun(momentum) = view else {
-                    return;
-                };
-                if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
-                    return;
-                }
-                if GS.uv_class_data(momentum.get(0)) != Some(self.id) {
-                    residual = true;
-                    return;
-                }
-                let indices = momentum
-                    .iter()
-                    .skip(1)
-                    .map(|index| index.to_owned())
-                    .collect::<Vec<_>>();
-                **output = self.momentum_with_indices(&indices);
-            })
-            .normalize_dots()
-            .expand();
+        let collapsed = polynomial.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
+                return;
+            }
+            if GS.uv_class_data(momentum.get(0)) != Some(self.id) {
+                residual = true;
+                return;
+            }
+            let indices = momentum
+                .iter()
+                .skip(1)
+                .map(|index| index.to_owned())
+                .collect::<Vec<_>>();
+            **output = self.momentum_with_indices(&indices);
+        });
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let collapsed = SymbolicTensor::infer(cooking.try_cook(collapsed.as_view())?)?.contract(
+            ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            },
+        )?;
+        let collapsed = cooking.uncook(collapsed.expression().as_view());
+        let collapsed = collapsed.expand();
         if residual || collapsed != self.full_expr {
             return Err(eyre!(
                 "positive denominator for UV class {} is not a polynomial solely in its certified momentum channel",
@@ -468,11 +487,11 @@ impl FourDSector {
             let projected_neutral = canonical.neutral_numerator(&term.numerator, graph)?;
             // A signed linear momentum can acquire a factored minus sign at
             // this boundary. Normalize each operand independently only when
-            // their structural forms differ. Distribute numeric coefficients
-            // only; products and powers of graph numerators remain factorized.
+            // their structural forms differ. The shared compact owner also
+            // canonicalizes exact-zero float metadata without rounding finite
+            // coefficients or opening numerator products and powers.
             if projected_neutral != neutral
-                && projected_neutral.expand_num().collect_factors()
-                    != neutral.expand_num().collect_factors()
+                && projected_neutral.collect_compact_factors() != neutral.collect_compact_factors()
             {
                 crate::debug_tags!(#generation, #uv, #local, #four_d, #trace;
                     file.source_numerator = %neutral,
@@ -490,8 +509,7 @@ impl FourDSector {
             let projected_neutral = canonical.neutral_numerator(&term.numerator, graph)?;
             let neutral = canonical.neutral_numerator(&term.source_numerator, graph)?;
             if projected_neutral != neutral
-                && projected_neutral.expand_num().collect_factors()
-                    != neutral.expand_num().collect_factors()
+                && projected_neutral.collect_compact_factors() != neutral.collect_compact_factors()
             {
                 return Err(eyre!(
                     "merged canonical UV numerator does not reproduce its source bucket"
@@ -1035,7 +1053,7 @@ impl Full4dCts {
         graph: &Graph,
         cograph: &S,
     ) -> Self {
-        let cograph = graph.denominator(cograph, |_| -1);
+        let cograph = graph.denominator(cograph, &graph.model, |_| -1);
         let active = local
             .0
             .active
@@ -1064,7 +1082,7 @@ impl Full4dCts {
         cograph: &S,
     ) -> Self {
         Self(FourDSectors::active_atom(
-            coefficient * graph.denominator(cograph, |_| -1),
+            coefficient * graph.denominator(cograph, &graph.model, |_| -1),
         ))
     }
 
@@ -1394,7 +1412,19 @@ impl FourDDenominator {
         }
         // Only the small denominator polynomial is expanded. Graph numerator
         // sums and products never pass through this denominator certificate.
-        Ok(normalized.normalize_dots().expand())
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let normalized = SymbolicTensor::infer(cooking.try_cook(normalized.as_view())?)?.contract(
+            ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            },
+        )?;
+        let normalized = cooking.uncook(normalized.expression().as_view());
+        Ok(normalized.expand())
     }
 
     fn from_view(view: AtomView<'_>) -> Result<Option<Self>> {
@@ -1795,7 +1825,7 @@ fn grow<S: super::ForestNodeLike>(
     given: &S,
 ) -> Result<Atom> {
     let factor = grow_factor(ctx, current, given)?;
-    let integrand = (&integrand.0.atom * factor).simplify_metrics();
+    let integrand = finalize(&integrand.0.atom * factor)?;
 
     debug_tags!(#uv, #integrated, #algebra, #start; log.integrand = integrand, reduced = %current.reduced_subgraph(given).string_label());
 
@@ -1811,10 +1841,11 @@ fn grow_factor<S: super::ForestNodeLike>(ctx: &UVCtx<'_>, current: &S, given: &S
         .numerator(&reduced, given.subgraph())
         .to_d_dim(GS.dim)
         .color_simplify()
+        .unwrap()
         .get_single_atom()
         .unwrap();
 
-    t_arg /= graph.denominator(&reduced, |_| 1);
+    t_arg /= graph.denominator(&reduced, ctx.model, |_| 1);
     Ok(t_arg)
 }
 
@@ -1882,7 +1913,7 @@ fn t<S: super::ForestNodeLike>(
     debug_tags!(#uv,#integrated,#series;log.res = evalutated, "Evaluated at t = 1");
 
     let byte_size = evalutated.as_view().get_byte_size();
-    Ok((finalize(evalutated), lmb.clone(), byte_size))
+    Ok((finalize(evalutated)?, lmb.clone(), byte_size))
 }
 
 #[debug_instrument(
@@ -2317,13 +2348,23 @@ fn hat_t_raw_with_provenance<S: ForestNodeLike>(
     ))
 }
 
-fn finalize(raw: Atom) -> Atom {
+fn finalize(raw: Atom) -> Result<Atom> {
     // Keep the local Taylor numerator factorized through exact CFF projection.
     // Analytic integration owns its Dirac algebra in integrated::simplify;
     // numerical evaluation contracts the retained tensors after residue mapping.
     // Keep each Taylor term's propagator powers. Collecting factors across the
     // sum clears denominators and manufactures higher-rank numerator factors.
-    raw.simplify_metrics()
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let contracted =
+        SymbolicTensor::infer(cooking.try_cook(raw.as_view())?)?.contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?;
+    Ok(cooking.uncook(contracted.expression().as_view()))
 }
 
 fn component_provenance<S: ForestNodeLike>(
@@ -2438,7 +2479,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     ));
                 }
                 let co_graph = grow_factor(ctx, current, given)?;
-                let grown = (&sector.atom * &co_graph).simplify_metrics();
+                let grown = finalize(&sector.atom * &co_graph)?;
                 let soft_route = scheme == ApproximationType::IR || sector.has_soft_ancestry;
                 let mut retained_loop_edges = sector
                     .active_components
@@ -2520,7 +2561,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                             ],
                         )
                     };
-                    (finalize(raw), lmb, provenance_branches)
+                    (finalize(raw)?, lmb, provenance_branches)
                 } else {
                     let (result, lmb, byte_size) = t(
                         &grown,
@@ -2681,18 +2722,18 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 mod tests {
     use super::*;
     use crate::{
-        dot,
-        graph::{GraphThreeDSource, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{Graph, GraphThreeDSource},
         initialisation::test_initialise,
-        model::InputParamCard,
+        model::{InputParamCard, ModelGammaLoopExt},
         numerator::{aind::Aind, energy_degree::EnergyPowerAnalyzer},
         uv::approx::projected_4d::Local4dProjectionContext,
         uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode, uv_graph::UVE},
     };
     use gammaloop_tracing_filter::LogMessage;
     use idenso::{
-        color::ColorSimplifier,
-        dirac::GammaSimplifier,
+        color::ColorSimplifySettings,
+        dirac::GammaSimplifySettings,
         representations::{Bispinor, ColorAdjoint},
     };
     use linnet::half_edge::{
@@ -2700,10 +2741,7 @@ mod tests {
         subgraph::{InternalSubGraph, ModifySubSet, SubSetOps},
     };
     use spenso::{
-        network::{
-            parsing::{AtomStructureExt, StrictTensorFilter},
-            tags::SPENSO_TAG,
-        },
+        network::tags::SPENSO_TAG,
         shadowing::{IntoAtom, symbolica_utils::LogPrint},
         structure::representation::{LibraryRep, Minkowski, RepName},
     };
@@ -2770,17 +2808,15 @@ mod tests {
     }
 
     fn scalar_two_point_graph() -> Graph {
-        dot!(
-            digraph scalar_self_energy {
-                edge [particle="H" num=1];
-                node [num=1];
-                ext [style=invis];
-                ext -> A:0 [id=0];
-                B:1 -> ext [id=1];
-                A -> B [id=2];
-                A -> B [id=3];
-            }
-        )
+        finalized_runtime_dot!(digraph scalar_self_energy { graph [projector=1]
+            edge [particle="H" num=1];
+            node [num=1];
+            ext [style=invis];
+            ext -> A:0 [id=0 sink="{ufo_order:0}"];
+            B:1 -> ext [id=1 source="{ufo_order:0}"];
+            A -> B [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
+        })
         .unwrap()
     }
 
@@ -2877,7 +2913,7 @@ mod tests {
             **output = image;
         });
         for (_, edge, _) in graph.iter_edges_of(parent_subgraph) {
-            let mass = graph[edge].mass_atom();
+            let mass = graph[edge].mass_atom(&graph.model);
             if !mass.is_zero() {
                 scaled = scaled
                     .replace(mass)
@@ -2899,29 +2935,26 @@ mod tests {
     }
 
     fn padded_two_point_graph() -> Graph {
-        dot!(
-            digraph padded_scalar_self_energies {
-                edge [particle="H" num=1];
-                node [num=1];
-                ext [style=invis];
-                ext -> A:0 [id=0];
-                B:1 -> ext [id=1];
-                A -> B [id=2];
-                A -> B [id=3];
-                ext -> C:8 [id=4];
-                D:9 -> ext [id=5];
-                C -> D [id=6];
-                C -> D [id=7];
-            }
-        )
+        finalized_runtime_dot!(digraph padded_scalar_self_energies { graph [projector=1]
+            edge [particle="H" num=1];
+            node [num=1];
+            ext [style=invis];
+            ext -> A:0 [id=0 sink="{ufo_order:0}"];
+            B:1 -> ext [id=1 source="{ufo_order:0}"];
+            A -> B [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
+            ext -> C:8 [id=4 sink="{ufo_order:0}"];
+            D:9 -> ext [id=5 source="{ufo_order:0}"];
+            C -> D [id=6 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            C -> D [id=7 source="{ufo_order:2}" sink="{ufo_order:2}"];
+        })
         .unwrap()
     }
 
     fn paper_appendix_b1_graph() -> Graph {
-        include_str!(
+        Graph::import_dot(include_str!(
             "../../../../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"
-        )
-        .into_graph(&crate::utils::load_generic_model("sm"))
+        ), &crate::utils::load_generic_model("sm")).map(|mut graphs| { assert_eq!(graphs.len(), 1, "one fixture graph expected"); graphs.remove(0) })
         .unwrap()
     }
 
@@ -2933,15 +2966,13 @@ mod tests {
         )
         .unwrap();
         model.simplify(&mut parameters).unwrap();
-        include_str!(
+        Graph::import_dot(&(include_str!(
             "../../../../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"
         )
         // Keep the checked-in GammaLoop route p=GL e2, k=GL e3 used to
         // realize the loop coordinates of B.1 and B.15, changing only the
-        // fermion species for B.10-B.16. Apply the massless restriction before
-        // constructing both propagator numerators and poles.
-        .replace("particle=t", "particle=d")
-        .into_graph(&model)
+        // fermion species for B.10-B.16.
+        .replace("particle=t", "particle=d")), &model).map(|mut graphs| { assert_eq!(graphs.len(), 1, "one fixture graph expected"); graphs.remove(0) })
         .unwrap()
     }
 
@@ -3001,8 +3032,8 @@ mod tests {
                         .map(|(_, edge, _)| usize::from(edge))
                         .collect::<Vec<_>>(),
                     graph.compute_dod(&spinney.filter),
-                    graph.boundary_pdg_set(&spinney.filter),
-                    graph.internal_pdg_set(&spinney.filter),
+                    graph.boundary_pdg_set(&spinney.filter, &graph.model),
+                    graph.internal_pdg_set(&spinney.filter, &graph.model),
                 )
             })
             .collect::<Vec<_>>();
@@ -3061,7 +3092,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
 
         let from_canonical =
             compatible_lmb(&ctx, &canonical_current, &root, &Full4dCts::root()).unwrap();
@@ -3111,7 +3142,7 @@ mod tests {
                     generate_integrated: false,
                     ..Default::default()
                 };
-                let ctx = UVCtx::new(&graph, &settings);
+                let ctx = UVCtx::new(&graph, &graph.model, &settings);
 
                 let child_ct = uv_limit(
                     &Full4dCts::root(),
@@ -3149,11 +3180,11 @@ mod tests {
                 )
                 .unwrap();
                 assert!(
-                    !finalize(child_family.clone()).is_zero(),
+                    !finalize(child_family.clone()).unwrap().is_zero(),
                     "the B.20-consistent child forest family must be nonzero before cancellation"
                 );
                 assert!(
-                    !finalize(nested_family.atom().clone()).is_zero(),
+                    !finalize(nested_family.atom().clone()).unwrap().is_zero(),
                     "the B.20-consistent nested forest family must be nonzero before cancellation"
                 );
 
@@ -3184,34 +3215,36 @@ mod tests {
         // The child numerator is linear in its e2 boundary carrier so a real
         // completed H atom, rather than fabricated provenance, fixes the
         // coordinate that the middle and outer operations must preserve.
-        dot!(
-            digraph three_level_nested_scalar {
+        finalized_runtime_dot!(digraph three_level_nested_scalar { graph [projector=1]
                 edge [particle=scalar_1 num=1]
                 node [num=1]
                 ext [style=invis]
-                ext -> A:0 [id=0]
-                F:1 -> ext [id=1]
-                A:2 -> B:3 [id=2 lmb_id=1]
-                B:4 -> C:5 [id=3 lmb_id=0 num="Q(2,spenso::cind(0))"]
-                B:6 -> C:7 [id=4]
-                C:8 -> D:9 [id=5]
-                A:10 -> D:11 [id=6]
-                D:12 -> E:13 [id=7]
-                E:14 -> F:15 [id=8]
-                A:16 -> F:17 [id=9 lmb_id=2]
-            },
-            "scalars"
-        )
+                ext -> A:0 [id=0 sink="{ufo_order:0}"]
+                F:1 -> ext [id=1 source="{ufo_order:0}"]
+                A:2 -> B:3 [id=2 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                B:4 -> C:5 [id=3 lmb_id=0 num="Q(2,spenso::cind(0))" source="{ufo_order:1}" sink="{ufo_order:0}"]
+                B:6 -> C:7 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                C:8 -> D:9 [id=5 source="{ufo_order:2}" sink="{ufo_order:0}"]
+                A:10 -> D:11 [id=6 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                D:12 -> E:13 [id=7 source="{ufo_order:2}" sink="{ufo_order:0}"]
+                E:14 -> F:15 [id=8 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                A:16 -> F:17 [id=9 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:2}"]
+            }, "scalars")
         .unwrap()
     }
 
     #[test]
     fn top_bubble_boundary_carrier_uses_the_graph_canonical_parent_route() {
         test_initialise().unwrap();
-        let graph: Graph =
-            include_str!("../../../../../tests/resources/graphs/gamma_star_ddbar_top_bubble.dot")
-                .into_graph(&crate::utils::load_generic_model("sm"))
-                .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../../tests/resources/graphs/gamma_star_ddbar_top_bubble.dot"),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
+        .unwrap();
         let component = |edges: std::ops::RangeInclusive<usize>| {
             let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
             for edge in edges {
@@ -3271,7 +3304,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let root = root_node(&graph);
         let direct = compatible_lmb(&ctx, &parent, &root, &Full4dCts::root()).unwrap();
         let mut completed_child = Full4dCts::root();
@@ -3365,10 +3398,9 @@ mod tests {
             .stack_size(64 * 1024 * 1024)
             .spawn(|| {
                 test_initialise().unwrap();
-                let graph: Graph = include_str!(
+                let graph: Graph = Graph::import_dot(include_str!(
                     "../../../../../tests/resources/graphs/gamma_star_ddbar_top_bubble.dot"
-                )
-                .into_graph(&crate::utils::load_generic_model("sm"))
+                ), &crate::utils::load_generic_model("sm")).map(|mut graphs| { assert_eq!(graphs.len(), 1, "one fixture graph expected"); graphs.remove(0) })
                 .unwrap();
                 let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
                 for edge in [EdgeIndex(7), EdgeIndex(8)] {
@@ -3391,7 +3423,7 @@ mod tests {
                     generate_integrated: false,
                     ..Default::default()
                 };
-                let ctx = UVCtx::new(&graph, &settings);
+                let ctx = UVCtx::new(&graph, &graph.model, &settings);
                 let lmb = compatible_lmb(&ctx, &child, &given, &Full4dCts::root()).unwrap();
                 let bubble = grow(&Full4dCts::root(), &ctx, &child, &given).unwrap();
                 let ordinary = t_raw(&bubble, &ctx, &child, &given, &lmb).unwrap();
@@ -3428,7 +3460,7 @@ mod tests {
                         let coefficient = series
                             .coefficient(Rational::from(order))
                             .expect("requested coefficient is within series precision");
-                        finalize(coefficient.replace(GS.dim).with(Atom::num(4)))
+                        finalize(coefficient.replace(GS.dim).with(Atom::num(4))).unwrap()
                             .collect_factors()
                     })
                 };
@@ -3454,10 +3486,15 @@ mod tests {
     #[test]
     fn nested_soft_boundary_does_not_constrain_the_parent_loop_basis() {
         test_initialise().unwrap();
-        let graph: Graph =
-            include_str!("../../../../../tests/resources/graphs/dgse_local_ir_offshell.dot")
-                .into_graph(&crate::utils::load_generic_model("sm"))
-                .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../../tests/resources/graphs/dgse_local_ir_offshell.dot"),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
+        .unwrap();
         let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
         for edge in [EdgeIndex(5), EdgeIndex(6)] {
             child_subgraph.add(graph[&edge].1);
@@ -3480,7 +3517,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let given = root_node(&graph);
         let grown = grow(&Full4dCts::root(), &ctx, &child, &given).unwrap();
         let completed = hat_t_raw(&grown, &ctx, &child, &given, child.lmb()).unwrap();
@@ -3532,10 +3569,15 @@ mod tests {
     #[test]
     fn nested_ordinary_u_boundary_does_not_constrain_the_h_parent_loop_basis() {
         test_initialise().unwrap();
-        let graph: Graph =
-            include_str!("../../../../../tests/resources/graphs/dgse_local_ir_offshell.dot")
-                .into_graph(&crate::utils::load_generic_model("sm"))
-                .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../../tests/resources/graphs/dgse_local_ir_offshell.dot"),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
+        .unwrap();
         let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
         for edge in [EdgeIndex(5), EdgeIndex(6)] {
             child_subgraph.add(graph[&edge].1);
@@ -3558,7 +3600,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let given = root_node(&graph);
         let grown = grow(&Full4dCts::root(), &ctx, &child, &given).unwrap();
         let completed = t_raw(&grown, &ctx, &child, &given, child.lmb()).unwrap();
@@ -3603,19 +3645,16 @@ mod tests {
     #[test]
     fn numerator_only_nested_carrier_is_preserved_from_the_completed_atom() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(
-            digraph nested_numerator_only_tadpole {
+        let graph: Graph = finalized_runtime_dot!(digraph nested_numerator_only_tadpole { graph [projector=1]
                 edge [particle=scalar_1 num=1]
                 node [num=1]
                 ext [style=invis]
-                ext -> A:0 [id=0]
-                A:1 -> ext [id=1]
-                A:2 -> B:3 [id=2]
-                B:4 -> B:5 [id=3 lmb_id=0 num="Q(4,spenso::cind(0))"]
-                B:6 -> A:7 [id=4 lmb_id=1]
-            },
-            "scalars"
-        )
+                ext -> A:0 [id=0 sink="{ufo_order:0}"]
+                A:1 -> ext [id=1 source="{ufo_order:1}"]
+                A:2 -> B:3 [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"]
+                B:4 -> B:5 [id=3 lmb_id=0 num="Q(4,spenso::cind(0))" source="{ufo_order:1}" sink="{ufo_order:2}"]
+                B:6 -> A:7 [id=4 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:3}"]
+            }, "scalars")
         .unwrap();
         let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
         child_subgraph.add(graph[&EdgeIndex(3)].1);
@@ -3655,7 +3694,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let grown = grow(&Full4dCts::root(), &ctx, &child, &given).unwrap();
         let completed = hat_t_raw(&grown, &ctx, &child, &given, child.lmb()).unwrap();
         assert!(paper_has_pattern(
@@ -3676,9 +3715,15 @@ mod tests {
     #[test]
     fn degree_zero_ir_reuses_ordinary_t_basis_metadata() {
         test_initialise().unwrap();
-        let graph: Graph = include_str!("../../../../../tests/resources/graphs/dgse.dot")
-            .into_graph(&crate::utils::load_generic_model("sm"))
-            .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../../tests/resources/graphs/dgse.dot"),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
+        .unwrap();
         let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
         for edge in [EdgeIndex(5), EdgeIndex(6)] {
             subgraph.add(graph[&edge].1);
@@ -3700,7 +3745,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
 
         let ir_ct = uv_limit(&Full4dCts::root(), &ctx, &ir, &given, &ir, &given).unwrap();
         let ordinary_ct = uv_limit(
@@ -3766,7 +3811,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let given = root_node(&graph);
         let child_local =
             uv_limit(&Full4dCts::root(), &ctx, &child, &given, &child, &given).unwrap();
@@ -3860,22 +3905,20 @@ mod tests {
             "affine finite jets must exhibit the predicted noncommutator"
         );
 
-        let graph: Graph = dot!(
-            digraph nested_soft_affine_routing {
+        let graph: Graph =
+            finalized_runtime_dot!(digraph nested_soft_affine_routing { graph [projector=1]
                 edge [particle=scalar_1 num=1]
                 node [num=1]
                 ext [style=invis]
-                ext -> v1:0 [id=0]
-                v4:1 -> ext [id=1]
-                v1 -> v2 [id=2]
-                v2 -> v3 [id=3 lmb_id=0]
-                v2 -> v3 [id=4]
-                v3 -> v4 [id=5]
-                v1 -> v4 [id=6 lmb_id=1]
-            },
-            "scalars"
-        )
-        .unwrap();
+                ext -> v1:0 [id=0 sink="{ufo_order:0}"]
+                v4:1 -> ext [id=1 source="{ufo_order:0}"]
+                v1 -> v2 [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                v2 -> v3 [id=3 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                v2 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                v3 -> v4 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                v1 -> v4 [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            }, "scalars")
+            .unwrap();
         let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
         for edge in [EdgeIndex(3), EdgeIndex(4)] {
             child_subgraph.add(graph[&edge].1);
@@ -3917,7 +3960,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let root = root_node(&graph);
         let selected = compatible_lmb(&ctx, &affine_parent, &root, &Full4dCts::root()).unwrap();
         assert!(
@@ -4001,7 +4044,9 @@ mod tests {
                 "../../../../../examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL256.dot"
             ),
         ] {
-            let graph: Graph = source.into_graph(&model).unwrap();
+            let mut graphs = Graph::import_dot(source, &model).unwrap();
+            assert_eq!(graphs.len(), 1);
+            let graph = graphs.remove(0);
             assert_eq!(
                 graph.loop_momentum_basis.loop_edges.raw,
                 vec![EdgeIndex(4), EdgeIndex(9), EdgeIndex(12)]
@@ -4033,7 +4078,7 @@ mod tests {
                 generate_integrated: false,
                 ..Default::default()
             };
-            let ctx = UVCtx::new(&graph, &settings);
+            let ctx = UVCtx::new(&graph, &graph.model, &settings);
             let child_local =
                 uv_limit(&Full4dCts::root(), &ctx, &child, &root, &child, &root).unwrap();
             let completed_child = Full4dCts::from_factorized_local(&child_local);
@@ -4149,7 +4194,7 @@ mod tests {
 
         let projected = tilde_t_raw(
             &(&active_momentum + &padded_momentum),
-            &UVCtx::new(&graph, &settings),
+            &UVCtx::new(&graph, &graph.model, &settings),
             &current,
             &given,
             current.lmb(),
@@ -4179,7 +4224,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let root = Full4dCts::root();
         let selected = compatible_lmb(&ctx, &current, &given, &root).unwrap();
         let local = uv_limit(&root, &ctx, &current, &given, &current, &given).unwrap();
@@ -4258,8 +4303,8 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
-        let physical_mass = graph[EdgeIndex(2)].mass_atom();
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let physical_mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
         assert!(!physical_mass.is_zero());
 
         for degree in 0..=2 {
@@ -4329,21 +4374,18 @@ mod tests {
             .stack_size(64 * 1024 * 1024)
             .spawn(|| {
                 test_initialise().unwrap();
-                let graph: Graph = dot!(
-                    digraph nested_scalar_scheme_matrix {
+                let graph: Graph = finalized_runtime_dot!(digraph nested_scalar_scheme_matrix { graph [projector=1]
                         edge [particle=scalar_1 num=1]
                         node [num=1]
                         ext [style=invis]
-                        ext -> v1:0 [id=0]
-                        v4:1 -> ext [id=1]
-                        v1 -> v2 [id=2 lmb_id=1 num="Q(2,spenso::cind(0))^2"]
-                        v2 -> v3 [id=3 lmb_id=0 num="Q(3,spenso::cind(0))"]
-                        v2 -> v3 [id=4]
-                        v3 -> v4 [id=5]
-                        v1 -> v4 [id=6]
-                    },
-                    "scalars"
-                )
+                        ext -> v1:0 [id=0 sink="{ufo_order:0}"]
+                        v4:1 -> ext [id=1 source="{ufo_order:0}"]
+                        v1 -> v2 [id=2 lmb_id=1 num="Q(2,spenso::cind(0))^2" source="{ufo_order:1}" sink="{ufo_order:0}"]
+                        v2 -> v3 [id=3 lmb_id=0 num="Q(3,spenso::cind(0))" source="{ufo_order:1}" sink="{ufo_order:0}"]
+                        v2 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                        v3 -> v4 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                        v1 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                    }, "scalars")
                 .unwrap();
                 let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
                 for edge in [EdgeIndex(3), EdgeIndex(4)] {
@@ -4399,7 +4441,7 @@ mod tests {
                     generate_integrated: false,
                     ..Default::default()
                 };
-                let ctx = UVCtx::new(&graph, &settings);
+                let ctx = UVCtx::new(&graph, &graph.model, &settings);
                 let seed = Full4dCts::root();
                 let zero = Rational::from(0);
 
@@ -4531,7 +4573,7 @@ mod tests {
                                 &route,
                                 &[W_.x___],
                             ));
-                        finalize(routed)
+                        finalize(routed).unwrap()
                             .replace(function!(GS.den, W_.a_, W_.mom_, W_.mass_, W_.prop_))
                             .with(Atom::var(W_.prop_))
                             .replace(GS.dim)
@@ -4586,7 +4628,7 @@ mod tests {
                         .0,
                         _ => unreachable!(),
                     };
-                    let direct_refinement = normalize(&-finalize(direct_refinement));
+                    let direct_refinement = normalize(&-finalize(direct_refinement).unwrap());
                     let production_refinement =
                         normalize(f_nested.atom()) - normalize(f_nested_reference.atom());
                     let full_parent_difference =
@@ -5020,7 +5062,7 @@ mod tests {
                         generate_integrated: false,
                         ..Default::default()
                     };
-                    let ctx = UVCtx::new(&graph, &settings);
+                    let ctx = UVCtx::new(&graph, &graph.model, &settings);
                     let seed = Full4dCts::root();
                     let child_h = TestNode {
                         subgraph: child_subgraph.clone(),
@@ -5076,7 +5118,7 @@ mod tests {
                                 &route,
                                 &[W_.x___],
                             ));
-                        finalize(routed)
+                        finalize(routed).unwrap()
                             .replace(function!(GS.den, W_.a_, W_.mom_, W_.mass_, W_.prop_))
                             .with(Atom::var(W_.prop_))
                             .replace(GS.dim)
@@ -5144,7 +5186,7 @@ mod tests {
                                 &route,
                             )
                             .unwrap(),
-                        ),
+                        ).unwrap(),
                     );
                     paper_assert_normalized_zero(
                         &format!("{case}: U_parent acts fully on the complete (H-U)_child"),
@@ -5235,41 +5277,35 @@ mod tests {
                 };
                 run(
                     "U0",
-                    dot!(
-                        digraph nested_dod2_child_dod0_parent {
+                    finalized_runtime_dot!(digraph nested_dod2_child_dod0_parent { graph [projector=1]
                             edge [particle=scalar_1 num=1]
                             node [num=1]
                             ext [style=invis]
-                            ext -> v1:0 [id=0]
-                            v4:1 -> ext [id=1]
-                            v1 -> v2 [id=2 lmb_id=1]
-                            v2 -> v3 [id=3 lmb_id=0 num="Q(3,spenso::cind(0))^2"]
-                            v2 -> v3 [id=4]
-                            v3 -> v4 [id=5]
-                            v1 -> v4 [id=6]
-                        },
-                        "scalars"
-                    )
+                            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
+                            v4:1 -> ext [id=1 source="{ufo_order:0}"]
+                            v1 -> v2 [id=2 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                            v2 -> v3 [id=3 lmb_id=0 num="Q(3,spenso::cind(0))^2" source="{ufo_order:1}" sink="{ufo_order:0}"]
+                            v2 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                            v3 -> v4 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                            v1 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                        }, "scalars")
                     .unwrap(),
                     0,
                 );
                 run(
                     "U1",
-                    dot!(
-                        digraph nested_dod2_child_dod1_parent {
+                    finalized_runtime_dot!(digraph nested_dod2_child_dod1_parent { graph [projector=1]
                             edge [particle=scalar_1 num=1]
                             node [num=1]
                             ext [style=invis]
-                            ext -> v1:0 [id=0]
-                            v4:1 -> ext [id=1]
-                            v1 -> v2 [id=2 lmb_id=1 num="Q(2,spenso::cind(0))"]
-                            v2 -> v3 [id=3 lmb_id=0 num="Q(3,spenso::cind(0))^2"]
-                            v2 -> v3 [id=4]
-                            v3 -> v4 [id=5]
-                            v1 -> v4 [id=6]
-                        },
-                        "scalars"
-                    )
+                            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
+                            v4:1 -> ext [id=1 source="{ufo_order:0}"]
+                            v1 -> v2 [id=2 lmb_id=1 num="Q(2,spenso::cind(0))" source="{ufo_order:1}" sink="{ufo_order:0}"]
+                            v2 -> v3 [id=3 lmb_id=0 num="Q(3,spenso::cind(0))^2" source="{ufo_order:1}" sink="{ufo_order:0}"]
+                            v2 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                            v3 -> v4 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                            v1 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                        }, "scalars")
                     .unwrap(),
                     1,
                 );
@@ -5291,12 +5327,12 @@ mod tests {
             keep_marker: true,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let root = Full4dCts::root();
         let lmb = compatible_lmb(&ctx, &current, &given, &root).unwrap();
         let grown = grow(&root, &ctx, &current, &given).unwrap();
         let raw_hat = hat_t_raw(&grown, &ctx, &current, &given, &lmb).unwrap();
-        let expected_unmarked = -finalize(raw_hat);
+        let expected_unmarked = -finalize(raw_hat).unwrap();
         let actual = uv_limit(&root, &ctx, &current, &given, &current, &given).unwrap();
         let stripped = actual
             .atom()
@@ -5339,7 +5375,7 @@ mod tests {
             };
             uv_limit(
                 &Full4dCts::root(),
-                &UVCtx::new(&graph, &settings),
+                &UVCtx::new(&graph, &graph.model, &settings),
                 &current,
                 &given,
                 &current,
@@ -5355,17 +5391,21 @@ mod tests {
     #[test]
     fn integrated_massless_gauge_soft_jet_vanishes_but_completed_hat_does_not() -> Result<()> {
         test_initialise()?;
-        // Match the run card's sm-default import: the full model retains MD.
         let mut model = crate::utils::load_generic_model("sm");
         let mut parameters = InputParamCard::from_str(
             include_str!("../../../../../assets/models/json/sm/restrict_default.json").to_owned(),
             "json",
         )?;
         model.simplify(&mut parameters)?;
-        let graph: Graph =
-            include_str!("../../../../../tests/resources/graphs/local_ir_gluon_self_energy.dot")
-                .into_graph(&model)?;
-        assert!(graph[EdgeIndex(2)].mass_atom().is_zero());
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../../tests/resources/graphs/local_ir_gluon_self_energy.dot"),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })?;
+        assert!(graph[EdgeIndex(2)].mass_atom(&graph.model).is_zero());
         let mut current = two_point_node(&graph, ApproximationType::IR);
         current.dod = 2;
         let given = root_node(&graph);
@@ -5373,7 +5413,7 @@ mod tests {
             generate_integrated: true,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let root = Full4dCts::root();
         let lmb = compatible_lmb(&ctx, &current, &given, &root)?;
         let grown = grow(&root, &ctx, &current, &given)?;
@@ -5391,7 +5431,7 @@ mod tests {
         );
         let integrate_branch = |raw: Atom| -> Result<IntegratedCts> {
             let mut sector = local.active_sectors()[0].clone();
-            sector.atom = -finalize(raw);
+            sector.atom = -finalize(raw).unwrap();
             integrator.run(
                 &Local4dCts(FourDSectors::new(vec![sector], Vec::new())),
                 &ctx,
@@ -5448,15 +5488,15 @@ mod tests {
     #[test]
     fn integrated_massive_scalar_soft_jet_retains_nonzero_physical_mass() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph massive_scalar_soft_tadpole {
+        let graph: Graph = finalized_runtime_dot!(digraph massive_scalar_soft_tadpole { graph [projector=1]
             edge [particle=H num=1]
             node [num=1]
             ext [style=invis]
-            ext -> a [id=0]
-            a -> a [id=1]
-            a -> ext [id=2]
+            ext -> a [id=0 sink="{ufo_order:0}"]
+            a -> a [id=1 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            a -> ext [id=2 source="{ufo_order:3}"]
         })?;
-        let physical_mass = graph[EdgeIndex(1)].mass_atom();
+        let physical_mass = graph[EdgeIndex(1)].mass_atom(&graph.model);
         assert!(!physical_mass.is_zero());
         assert_ne!(physical_mass, Atom::var(GS.m_uv_vacuum));
         let mut current = two_point_node(&graph, ApproximationType::IR);
@@ -5466,14 +5506,14 @@ mod tests {
             generate_integrated: true,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let root = Full4dCts::root();
         let lmb = compatible_lmb(&ctx, &current, &given, &root)?;
         let grown = grow(&root, &ctx, &current, &given)?;
         let soft = tilde_t_raw(&grown, &ctx, &current, &given, &lmb)?;
         let soft = Local4dCts(FourDSectors::new(
             vec![FourDSector::new(
-                -finalize(soft),
+                -finalize(soft).unwrap(),
                 vec![(current.subgraph.clone(), current.subgraph.clone(), lmb)],
                 Vec::new(),
             )],
@@ -5511,17 +5551,17 @@ mod tests {
     #[test]
     fn integrated_mixed_mass_soft_bubble_matches_massive_tadpoles() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph mixed_mass_scalar_soft_bubble {
+        let graph: Graph = finalized_runtime_dot!(digraph mixed_mass_scalar_soft_bubble { graph [projector=1]
             edge [particle=H num=1]
             node [num=1]
             ext [style=invis]
-            ext -> a:0 [id=0]
-            b:1 -> ext [id=1]
-            a -> b [id=2 mass=0]
-            a -> b [id=3]
+            ext -> a:0 [id=0 sink="{ufo_order:0}"]
+            b:1 -> ext [id=1 source="{ufo_order:0}"]
+            a -> b [id=2 mass=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"]
         })?;
-        let physical_mass = graph[EdgeIndex(3)].mass_atom();
-        assert!(graph[EdgeIndex(2)].mass_atom().is_zero());
+        let physical_mass = graph[EdgeIndex(3)].mass_atom(&graph.model);
+        assert!(graph[EdgeIndex(2)].mass_atom(&graph.model).is_zero());
         assert!(!physical_mass.is_zero());
         assert_ne!(physical_mass, Atom::var(GS.m_uv_vacuum));
         let mass_squared = physical_mass.pow(2);
@@ -5531,7 +5571,7 @@ mod tests {
             generate_integrated: true,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let momentum = function!(
             GS.emr_mom,
             usize::from(current.lmb.loop_edges[LoopIndex(0)])
@@ -5621,19 +5661,19 @@ mod tests {
     #[test]
     fn integrated_serial_mixed_mass_sunset_matches_contracted_topologies() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph serial_mixed_mass_sunset {
+        let graph: Graph = finalized_runtime_dot!(digraph serial_mixed_mass_sunset { graph [projector=1]
             edge [particle=H num=1]
             node [num=1]
             ext [style=invis]
-            ext -> a:0 [id=0]
-            a:1 -> ext [id=1]
-            a -> c [id=2 mass=0]
-            c -> b [id=3 lmb_id=0]
-            b -> a [id=4 lmb_id=1]
-            b -> a [id=5 mass=0]
+            ext -> a:0 [id=0 sink="{ufo_order:0}"]
+            a:1 -> ext [id=1 source="{ufo_order:1}"]
+            a -> c [id=2 mass=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            c -> b [id=3 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            b -> a [id=4 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:3}"]
+            b -> a [id=5 mass=0 source="{ufo_order:2}" sink="{ufo_order:4}"]
         })?;
-        let physical_mass = graph[EdgeIndex(3)].mass_atom();
-        assert_eq!(physical_mass, graph[EdgeIndex(4)].mass_atom());
+        let physical_mass = graph[EdgeIndex(3)].mass_atom(&graph.model);
+        assert_eq!(physical_mass, graph[EdgeIndex(4)].mass_atom(&graph.model));
         assert!(!physical_mass.is_zero());
         assert_ne!(physical_mass, Atom::var(GS.m_uv_vacuum));
         let mass_squared = physical_mass.pow(2);
@@ -5644,7 +5684,7 @@ mod tests {
             generate_integrated: true,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let mut vakint_settings = settings.vakint.true_settings();
         vakint_settings.number_of_terms_in_epsilon_expansion = 3;
         let integrator = crate::uv::approx::integrated::Integrated::new(
@@ -5731,14 +5771,14 @@ mod tests {
     #[test]
     fn integrated_independent_mixed_mass_tensors_keep_laurent_cross_terms() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph independent_mixed_mass_tensors {
+        let graph: Graph = finalized_runtime_dot!(digraph independent_mixed_mass_tensors { graph [projector=1]
             edge [particle=H num=1]
             node [num=1]
             ext [style=invis]
-            ext -> a:0 [id=0]
-            a:1 -> ext [id=1]
-            a -> a [id=2 lmb_id=0 mass=2]
-            a -> a [id=3 lmb_id=1 mass=3]
+            ext -> a:0 [id=0 sink="{ufo_order:0}"]
+            a:1 -> ext [id=1 source="{ufo_order:1}"]
+            a -> a [id=2 lmb_id=0 mass=2 source="{ufo_order:2}" sink="{ufo_order:3}"]
+            a -> a [id=3 lmb_id=1 mass=3 source="{ufo_order:4}" sink="{ufo_order:5}"]
         })?;
         let current = two_point_node(&graph, ApproximationType::IR);
         assert_eq!(current.lmb.loop_edges.len(), 2);
@@ -5755,7 +5795,7 @@ mod tests {
                 GS.den,
                 edge,
                 function!(GS.emr_mom, edge),
-                graph[EdgeIndex(edge)].mass_atom().pow(2)
+                graph[EdgeIndex(edge)].mass_atom(&graph.model).pow(2)
             )
         });
         // This diagnostic integration input couples loop vectors directly;
@@ -5770,7 +5810,7 @@ mod tests {
                 project_integrated_uv_cts_onto_tensor_integrals: project_onto_tensor_integrals,
                 ..Default::default()
             };
-            let ctx = UVCtx::new(&graph, &settings);
+            let ctx = UVCtx::new(&graph, &graph.model, &settings);
             let mut vakint_settings = settings.vakint.true_settings();
             vakint_settings.project_onto_tensor_integrals = project_onto_tensor_integrals;
             // Three terms retain the two-loop finite coefficient and the one-loop
@@ -5903,7 +5943,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let _ = uv_limit(&Full4dCts::root(), &ctx, &current, &given, &current, &given);
     }
 
@@ -5936,6 +5976,7 @@ mod tests {
                 .replace(GS.dim)
                 .with(Atom::num(4)),
         )
+        .unwrap()
         .replace_map(|view, _, output| {
             if let AtomView::Pow(power) = view {
                 let (base, exponent) = power.get_base_exp();
@@ -5945,16 +5986,68 @@ mod tests {
                     **output = base.factor().pow(exponent);
                 }
             }
-        })
-        .collect_factors()
-        // Resolve numeric signs such as A-B-(A-B) and cancel exact rational
-        // factors without distributing products of graph numerator factors.
-        .expand_num()
-        .cancel()
-        // Scalar regrouping can expose metric contractions that were hidden
-        // inside separate additive factors at the first normalization pass.
-        .simplify_metrics();
-        assert!(normalized.is_zero(), "{label}: {normalized}");
+        });
+        // Cancel literal signed families before tensor reduction. Only numeric
+        // factors distribute; propagator inverses and numerator products stay
+        // intact, including the diagnostic copy.
+        let normalized = normalized.expand_num().collect_compact_factors();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let reduced = SymbolicTensor::infer(cooking.try_cook(normalized.as_view()).unwrap())
+            .unwrap()
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::canonical()),
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .to_dots()
+            .unwrap();
+        // Coefficient-zero testing deliberately does not reduce identities.
+        // Compare only after the shared owner has closed metrics and equivalent
+        // Dirac/color words, including contractions exposed inside tensor sums.
+        let normalized = reduced
+            .into_expression()
+            .expand_num()
+            .replace_map_bottom_up(|view, context, output| {
+                // Match opposite additive factors by their numeric weight,
+                // including inside a scalar coefficient's nested products.
+                // Function payloads stay opaque and powers remain compressed;
+                // no inverse is opened or denominator moved across a sum.
+                if context.function_level > 0
+                    || context.parent_type == Some(symbolica::atom::AtomType::Pow)
+                {
+                    return;
+                }
+                let AtomView::Add(sum) = view else { return };
+                let (_, weight) = sum
+                    .iter()
+                    .map(|term| {
+                        let weight = match term {
+                            AtomView::Mul(product) => product
+                                .get_coefficient()
+                                .map(|coefficient| coefficient.to_owned())
+                                .unwrap_or_else(Atom::one),
+                            AtomView::Num(_) => term.to_owned(),
+                            _ => Atom::one(),
+                        };
+                        (term / weight.as_view(), weight)
+                    })
+                    .min_by(|(left, _), (right, _)| left.cmp(right))
+                    .expect("a sum has a term");
+                if !weight.is_one() {
+                    **output =
+                        &weight * Atom::add_many(sum.iter().map(|term| term / weight.as_view()));
+                }
+            });
+        let normalized_tensor = SymbolicTensor::infer(normalized.clone()).unwrap();
+        assert_eq!(
+            normalized_tensor
+                .coefficients_are_zero(spenso::shadowing::TensorCollectFilter::<0>::Tensors)
+                .unwrap(),
+            symbolica::id::ConditionResult::True,
+            "{label}: {}",
+            cooking.uncook(normalized.as_view())
+        );
     }
 
     fn paper_dot(left: Atom, right: Atom) -> Atom {
@@ -6018,7 +6111,7 @@ mod tests {
             graph,
             routing_subgraph,
             lmb,
-            &graph.denominator(&single_edge, |_| 1),
+            &graph.denominator(&single_edge, &graph.model, |_| 1),
             physical_masses,
             uv_denominator,
         )
@@ -6210,6 +6303,7 @@ mod tests {
                     .replace(GS.dim)
                     .with(Atom::num(4)),
         )
+        .unwrap()
         .collect_factors()
         .expand_num()
         .cancel();
@@ -6394,7 +6488,7 @@ mod tests {
                     generate_integrated: false,
                     ..Default::default()
                 };
-                let ctx = UVCtx::new(&graph, &settings);
+                let ctx = UVCtx::new(&graph, &graph.model, &settings);
                 let seed = Full4dCts::root();
                 let grown = grow(&seed, &ctx, &gamma, &root).unwrap();
                 let lmb = compatible_lmb(&ctx, &gamma, &root, &seed).unwrap();
@@ -6413,7 +6507,7 @@ mod tests {
                 // and introducing M in every quadratic denominator.  Direct
                 // differentiation is intentionally used here instead of any
                 // production Taylor helper.
-                let mass = graph[EdgeIndex(2)].mass_atom();
+                let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
                 let external_edges = component_external_edges(&ctx, &gamma, &lmb);
                 assert_eq!(
                     external_edges,
@@ -6425,6 +6519,7 @@ mod tests {
                     .numerator(gamma.subgraph(), root.subgraph())
                     .to_d_dim(GS.dim)
                     .color_simplify()
+                    .unwrap()
                     .get_single_atom()
                     .unwrap()
                     .replace_multiple(graph.uv_wrapped_replacement(
@@ -6669,7 +6764,10 @@ mod tests {
                     "the constant and linear physical-mass part of Eq. B.7 must survive"
                 );
                 assert!(
-                    paper_has_pattern(&physical_low_orders, graph[EdgeIndex(2)].mass_atom()),
+                    paper_has_pattern(
+                        &physical_low_orders,
+                        graph[EdgeIndex(2)].mass_atom(&graph.model)
+                    ),
                     "the S1 part of Eq. B.7 must retain the physical top mass"
                 );
                 assert!(
@@ -6695,7 +6793,7 @@ mod tests {
                     .atom()
                     .replace(function!(GS.ct_marker, W_.a_))
                     .with(Atom::one());
-                let expected_signed = -finalize(actual);
+                let expected_signed = -finalize(actual).unwrap();
                 paper_assert_normalized_zero(
                     "Appendix B.7 F_Gamma is minus the finalized independent H2 match",
                     stripped - expected_signed,
@@ -6720,10 +6818,10 @@ mod tests {
                     generate_integrated: false,
                     ..Default::default()
                 };
-                let ctx = UVCtx::new(&graph, &settings);
+                let ctx = UVCtx::new(&graph, &graph.model, &settings);
                 let seed = Full4dCts::root();
                 assert!(
-                    graph[EdgeIndex(3)].mass_atom().is_zero(),
+                    graph[EdgeIndex(3)].mass_atom(&graph.model).is_zero(),
                     "the B.10-B.12 IR specialization must use a massless fermion"
                 );
 
@@ -6766,6 +6864,7 @@ mod tests {
                     .numerator(gamma_one.subgraph(), root.subgraph())
                     .to_d_dim(GS.dim)
                     .color_simplify()
+                    .unwrap()
                     .get_single_atom()
                     .unwrap()
                     .replace_multiple(graph.uv_wrapped_replacement(
@@ -6955,7 +7054,7 @@ mod tests {
                     .with(Atom::one());
                 paper_assert_normalized_zero(
                     "Appendix B.10-B.12 F_gamma is minus the finalized independent H1 match",
-                    child_stripped + finalize(child_h.clone()),
+                    child_stripped + finalize(child_h.clone()).unwrap(),
                 );
                 let completed_child = Full4dCts::from_factorized_local(&child_local);
                 let nested_grown = grow(&completed_child, &ctx, &gamma, &gamma_one).unwrap();
@@ -7012,6 +7111,7 @@ mod tests {
                     .numerator(&reduced, gamma_one.subgraph())
                     .to_d_dim(GS.dim)
                     .color_simplify()
+                    .unwrap()
                     .get_single_atom()
                     .unwrap()
                     .replace_multiple(graph.uv_wrapped_replacement(
@@ -7186,7 +7286,7 @@ mod tests {
                 );
                 assert_eq!(
                     nested_grown,
-                    (child_local.atom() * &co_graph).simplify_metrics(),
+                    finalize(child_local.atom() * &co_graph).unwrap(),
                     "Appendix B.10-B.12 F_gamma must be the signed child forest atom times its co-graph",
                 );
                 let expected_co_graph_physical = (&co_graph_numerator[0] + &co_graph_numerator[1])
@@ -7207,13 +7307,12 @@ mod tests {
                 // open source/sink labels are graph boundary identities, not
                 // dummy indices which an independently finalized expression
                 // may rename before its co-graph is attached.
-                let verified_child_h = finalize(child_h.clone());
-                let verified_child_outer_u = finalize(child_u.clone());
+                let verified_child_h = finalize(child_h.clone()).unwrap();
+                let verified_child_outer_u = finalize(child_u.clone()).unwrap();
                 let expected_b_16_physical =
-                    (&verified_child_h * &expected_co_graph_physical).simplify_metrics();
+                    finalize(&verified_child_h * &expected_co_graph_physical).unwrap();
                 let expected_b_16_uv =
-                    (&verified_child_outer_u * &expected_co_graph_uv_quadratic)
-                        .simplify_metrics();
+                    finalize(&verified_child_outer_u * &expected_co_graph_uv_quadratic).unwrap();
                 let expected_b_16 = &expected_b_16_physical + &expected_b_16_uv;
 
                 // B.15 identifies T(T(gamma_1)*(Gamma\\gamma_1)) as the first
@@ -7246,103 +7345,29 @@ mod tests {
                 let co_graph_side_boundary = Atom::from(Aind::Hedge(9, 0));
                 let assert_b_16_rhs = |label: &str, actual: Atom, expected: Atom| {
                     paper_assert_denominator_provenance(label, &actual, &denominator_mappings);
+                    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
                     let prepare = |atom: Atom| {
-                        finalize(
-                            GS.erase_uv_momentum_provenance(&paper_atomic_denominators(
-                                atom,
-                                &denominator_mappings,
-                            ))
-                                .replace(function!(GS.ct_marker, W_.a_))
-                                .with(Atom::one())
-                                .replace(GS.dim)
-                                .with(Atom::num(4)),
-                        )
-                        .replace(child_side_boundary.clone())
-                        .with(co_graph_side_boundary.clone())
-                        // Closing the child/co-graph boundary can turn an open
-                        // color chain and metric into a trace on either side.
-                        .simplify_color()
-                        // Finish finite index contractions across the joined
-                        // tensor sums; scalar numerator factors stay factored.
-                        .schoonschip_with_net_full::<Aind>()
-                        .expect("finite tensor contractions succeed")
-                        .to_dots()
-                        .normalize_dots()
+                        let atom = GS.erase_uv_momentum_provenance(&paper_atomic_denominators(atom, &denominator_mappings))
+                            .replace(function!(GS.ct_marker, W_.a_)).with(Atom::one())
+                            .replace(GS.dim).with(Atom::num(4))
+                            .replace(child_side_boundary.clone()).with(co_graph_side_boundary.clone());
+                        // Closing the boundary can expose color traces and finite
+                        // tensor contractions. The typed owner preserves common
+                        // numerator factors while normalizing those domains.
+                        SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap()).unwrap()
+                            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                                color: Some(ColorSimplifySettings::default()),
+                                ..Default::default()
+                            }).unwrap()
+                            .contract(ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap()
+                            .to_dots().unwrap()
                     };
-                    // Compare physical momenta after provenance has served its
-                    // routing purpose, preserving every graph numerator factor.
-                    let mut difference = prepare(actual) - prepare(expected);
-                    for _ in 0..8 {
-                        let contracted = difference
-                            .collect_factors()
-                            .expand_num()
-                            .schoonschip_with_net_full::<Aind>()
-                            .expect("finite tensor contractions succeed")
-                            .to_dots()
-                            .normalize_dots();
-                        // Scalar regrouping can expose another finite contraction.
-                        // Keep complete tensor calls (including their momentum
-                        // arguments and common numerator spectators) opaque, and
-                        // normalize only their scalar Taylor/denominator coefficients.
-                        let mut tensors = Vec::new();
-                        contracted.visitor(&mut |view| {
-                            if let AtomView::Fun(fun) = view {
-                                if fun.get_symbol() != SPENSO_TAG.dot
-                                    && view.is_tensorial(StrictTensorFilter::ContainsReps)
-                                    && !tensors.iter().any(|atom: &Atom| atom.as_view() == view)
-                                {
-                                    tensors.push(view.to_owned());
-                                }
-                                return false;
-                            }
-                            true
-                        });
-                        // A finite linear tensor jet may have opaque tensor
-                        // spectators, but never multiply two numerator sums.
-                        let literal_tensor = |view: AtomView<'_>| {
-                            tensors.iter().any(|tensor| tensor.as_view() == view)
-                        };
-                        contracted.visitor(&mut |view| {
-                            if matches!(view, AtomView::Fun(_)) {
-                                return false;
-                            }
-                            if let AtomView::Mul(product) = view {
-                                let summed_factors = product
-                                    .iter()
-                                    .filter(|factor| {
-                                        tensors.iter().any(|tensor| factor.contains(tensor))
-                                            && !literal_tensor(*factor)
-                                            && !matches!(factor, AtomView::Pow(power)
-                                                if literal_tensor(power.get_base())
-                                                    && i64::try_from(power.get_exp()).is_ok())
-                                    })
-                                    .count();
-                                assert!(
-                                    summed_factors <= 1,
-                                    "{label}: tensor coefficient collection would distribute numerator products"
-                                );
-                            }
-                            true
-                        });
-                        let coefficients = contracted
-                            .coefficient_list_exact(&tensors)
-                            .expect("the finite B.16 tensor polynomial stays within its bound");
-                        let next = Atom::add_many(coefficients.into_iter().map(|(tensor, scalar)| {
-                            tensor * scalar.together().cancel()
-                        }))
-                        .collect_factors();
-                        if next == difference {
-                            break;
-                        }
-                        difference = next;
-                        if difference.is_zero() {
-                            break;
-                        }
-                    }
-                    assert!(
-                        difference.is_zero(),
-                        "{label}: {}",
-                        difference.log_print(Some(400))
+                    let actual = prepare(actual);
+                    let expected = prepare(expected);
+                    assert_eq!(
+                        actual.coefficients_equal(&expected, spenso::shadowing::TensorCollectFilter::<0>::Tensors).unwrap(),
+                        symbolica::id::ConditionResult::True,
+                        "{label}"
                     );
                 };
                 assert_b_16_rhs(
@@ -7391,7 +7416,7 @@ mod tests {
                     .with(Atom::one());
                 paper_assert_normalized_zero(
                     "Appendix B.16 F_gamma;Gamma is minus the finalized local B.16 match",
-                    nested_stripped + finalize(outer_h),
+                    nested_stripped + finalize(outer_h).unwrap(),
                 );
             })
             .unwrap()
@@ -7402,22 +7427,21 @@ mod tests {
     #[test]
     fn production_dod2_massive_denominator_has_the_paper_mass_coefficient() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(
-            digraph massive_scalar_tadpole {
+        let graph: Graph =
+            finalized_runtime_dot!(digraph massive_scalar_tadpole { graph [projector=1]
                 edge [particle="H" num=1];
                 node [num=1];
                 ext [style=invis];
-                ext -> A:0 [id=0];
-                A:1 -> ext [id=1];
-                A:2 -> A:3 [id=2 lmb_id=0];
-            }
-        )
-        .unwrap();
+                ext -> A:0 [id=0 sink="{ufo_order:0}"];
+                A:1 -> ext [id=1 source="{ufo_order:1}"];
+                A:2 -> A:3 [id=2 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:3}"];
+            })
+            .unwrap();
         let external: SuBitGraph = graph.external_filter();
         let subgraph = graph.full_filter().subtract(&external);
         let lmb = graph.lmb_of(&subgraph);
-        let mass = graph[EdgeIndex(2)].mass_atom();
-        let integrand = Atom::one() / graph.denominator(&subgraph, |_| 1);
+        let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
+        let integrand = Atom::one() / graph.denominator(&subgraph, &graph.model, |_| 1);
         let n_loops = graph.n_loops(&subgraph);
         assert_eq!(n_loops, 1);
         let rescaled = graph.uv_rescaled(&subgraph, n_loops, &lmb, &lmb, &integrand);
@@ -7441,26 +7465,32 @@ mod tests {
     #[test]
     fn production_outer_u_grades_a_free_fermion_mass_but_keeps_muv_fixed() {
         test_initialise().unwrap();
-        let graph: Graph =
-            include_str!("../../../../../tests/resources/graphs/local_os_top_self_energy.dot")
-                .into_graph(&crate::utils::load_generic_model("sm"))
-                .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../../tests/resources/graphs/local_os_top_self_energy.dot"),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
+        .unwrap();
         let given = root_node(&graph);
         let current = two_point_node(&graph, ApproximationType::MUV);
         let settings = UVgenerationSettings {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let reduced = current.reduced_subgraph(&given);
         let numerator = graph
             .numerator(&reduced, given.subgraph())
             .to_d_dim(GS.dim)
             .color_simplify()
+            .unwrap()
             .get_single_atom()
             .unwrap();
-        let denominator = graph.denominator(&reduced, |_| 1);
-        let physical_mass = graph[EdgeIndex(2)].mass_atom();
+        let denominator = graph.denominator(&reduced, &graph.model, |_| 1);
+        let physical_mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
         let massless_numerator = numerator.replace(physical_mass.clone()).with(Atom::Zero);
         let fermion_mass_numerator = &numerator - massless_numerator;
         assert!(
@@ -7473,7 +7503,7 @@ mod tests {
         let grown = grow(&Full4dCts::root(), &ctx, &current, &given).unwrap();
         paper_assert_normalized_zero(
             "production grow uses the numerator whose fermion-mass term is tested",
-            &grown - (numerator / &denominator).simplify_metrics(),
+            &grown - finalize(numerator / &denominator).unwrap(),
         );
 
         let n_loops = graph.n_loops(current.subgraph());
@@ -7597,7 +7627,7 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let reduced = current.reduced_subgraph(&given);
         let local_muv = Atom::var(GS.m_uv_expansion);
         let grown = grow(&Full4dCts::root(), &ctx, &current, &given).unwrap();
@@ -7680,20 +7710,17 @@ mod tests {
     #[test]
     fn production_nested_toy_forest_terms_match_the_explicit_derivation() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(
-            digraph nested_soft_toy_production {
+        let graph: Graph = finalized_runtime_dot!(digraph nested_soft_toy_production { graph [projector=1]
                 edge [particle=scalar_1 num=1]
                 node [num=1]
                 ext [style=invis]
-                ext -> C:0 [id=0]
-                A:1 -> ext [id=1]
-                C:9 -> A:2 [id=2]
-                B:3 -> C:4 [id=3 lmb_id=0 num="Q(3,spenso::cind(0))+UFO::mass_scalar_1"]
-                B:5 -> C:6 [id=4]
-                A:7 -> B:8 [id=5 lmb_id=1 num="Q(5,spenso::cind(0))"]
-            },
-            "scalars"
-        )
+                ext -> C:0 [id=0 sink="{ufo_order:0}"]
+                A:1 -> ext [id=1 source="{ufo_order:0}"]
+                C:9 -> A:2 [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                B:3 -> C:4 [id=3 lmb_id=0 num="Q(3,spenso::cind(0))+UFO::mass_scalar_1" source="{ufo_order:0}" sink="{ufo_order:2}"]
+                B:5 -> C:6 [id=4 source="{ufo_order:1}" sink="{ufo_order:3}"]
+                A:7 -> B:8 [id=5 lmb_id=1 num="Q(5,spenso::cind(0))" source="{ufo_order:2}" sink="{ufo_order:2}"]
+            }, "scalars")
         .unwrap();
         let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
         for edge in [EdgeIndex(3), EdgeIndex(4)] {
@@ -7730,7 +7757,7 @@ mod tests {
             keep_marker: true,
             ..Default::default()
         };
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let seed = Full4dCts::root();
 
         let f_empty = grow(&seed, &ctx, &parent, &root).unwrap();
@@ -7836,9 +7863,10 @@ mod tests {
                 .with(Atom::one())
                 .replace_multiple(&parent_route);
             let indexed = finalize(routed)
+                .unwrap()
                 .replace(function!(GS.den, W_.a_, W_.mom_, W_.mass_, W_.prop_))
                 .with(Atom::var(W_.prop_))
-                .replace(graph[child_loop].mass_atom())
+                .replace(graph[child_loop].mass_atom(&graph.model))
                 .with(mass.clone())
                 .replace(GS.m_uv_expansion)
                 .with(m_uv.clone())
@@ -8240,12 +8268,13 @@ mod tests {
     #[test]
     fn canonical_uv_classes_certify_signed_aliases_and_preserve_raw_sectors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_signed_triangle {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_signed_triangle {
+            projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            c -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let owners = graph.full_filter();
         let hard = |owner| function!(GS.emr_mom, owner);
@@ -8319,93 +8348,108 @@ mod tests {
     #[test]
     fn canonical_uv_signed_multiloop_carriers_preserve_factorized_numerators() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_signed_sunset {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_signed_sunset {
+            projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1 lmb_id=1]
-            a -> b [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
         })?;
-        let hard = -function!(GS.emr_mom, 0) - function!(GS.emr_mom, 1);
-        let component = GS.indexed_momentum(&hard, &[GS.cind(0)]);
-        let opaque =
-            (Atom::var(symbol!("signed_multiloop::a")) + symbol!("signed_multiloop::b")).pow(5);
-        let tagged = |sign| {
-            function!(
-                GS.emr_mom,
-                GS.uv_momentum_provenance_tag(
-                    2,
-                    UvMomentumProvenanceRole::TaylorFixed,
-                    Atom::num(sign) * &hard,
-                ),
-                GS.cind(0)
-            )
-        };
-        let positive = GS.den(2, &hard, 1, component.pow(2) - 1);
-        let negative = GS.den(2, -&hard, 1, (-&component).pow(2) - 1);
-        let atom = tagged(1) * &opaque / positive.pow(2) - tagged(-1) * &opaque / negative.pow(2);
-        let owners = graph.full_filter();
-        let sector = FourDSector::new(
-            atom,
-            vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())],
-            vec![],
-        );
-        let canonical = sector.canonical_projection(&graph)?;
-        let reconstructed =
-            canonical
-                .terms
-                .iter()
-                .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
-                    let denominator = term
-                        .powers
-                        .iter()
-                        .fold(Atom::one(), |product, (id, power)| {
-                            product * canonical.class(*id).full_expr.pow(*power)
-                        });
-                    Ok(sum + canonical.neutral_numerator(&term.numerator, &graph)? / denominator)
-                })?;
-        let expected = Atom::num(2) * &component * opaque / (component.pow(2).expand() - 1).pow(2);
-        assert_eq!(
-            reconstructed.collect_factors(),
-            canonical
-                .neutral_numerator(&expected, &graph)?
-                .collect_factors()
-        );
-        let base = Atom::var(symbol!("signed_multiloop::a")) - symbol!("signed_multiloop::b");
-        let factor =
-            (Atom::var(symbol!("signed_multiloop::c")) + symbol!("signed_multiloop::d")).pow(5);
-        let left = Atom::num(2) * &factor * &base + Atom::num(3) * &factor;
-        let right = -Atom::num(2) * &factor * (-&base).expand_num() + Atom::num(3) * &factor;
-        let normalized = canonical.neutral_numerator(&left, &graph)?;
-        assert_eq!(normalized, canonical.neutral_numerator(&right, &graph)?);
-        assert_eq!(
-            normalized,
-            canonical.neutral_numerator(&normalized, &graph)?
-        );
-        for exponent in [-3_i64, 2, 3, 500_000] {
-            let first = canonical.neutral_numerator(&base.pow(exponent), &graph)?;
-            let opposite = Atom::num(if exponent % 2 == 0 { 1 } else { -1 })
-                * (-&base).expand_num().pow(exponent);
-            assert_eq!(first, canonical.neutral_numerator(&opposite, &graph)?);
-            assert_eq!(first, canonical.neutral_numerator(&first, &graph)?);
+        // Include a finite analytic phase whose literal-zero companion has
+        // different precision. The exact source certificate must retain its
+        // nonzero value while normalizing the harmless zero metadata.
+        let phase = Atom::num(symbolica::domains::float::Complex::new(
+            symbolica::domains::float::Float::new(53),
+            symbolica::domains::float::Float::with_val(128, 5),
+        ));
+        for phase in [Atom::one(), phase] {
+            let hard = -function!(GS.emr_mom, 0) - function!(GS.emr_mom, 1);
+            let component = GS.indexed_momentum(&hard, &[GS.cind(0)]);
+            let opaque =
+                (Atom::var(symbol!("signed_multiloop::a")) + symbol!("signed_multiloop::b")).pow(5)
+                    * phase;
+            let tagged = |sign| {
+                function!(
+                    GS.emr_mom,
+                    GS.uv_momentum_provenance_tag(
+                        2,
+                        UvMomentumProvenanceRole::TaylorFixed,
+                        Atom::num(sign) * &hard,
+                    ),
+                    GS.cind(0)
+                )
+            };
+            let positive = GS.den(2, &hard, 1, component.pow(2) - 1);
+            let negative = GS.den(2, -&hard, 1, (-&component).pow(2) - 1);
+            let atom =
+                tagged(1) * &opaque / positive.pow(2) - tagged(-1) * &opaque / negative.pow(2);
+            let owners = graph.full_filter();
+            let sector = FourDSector::new(
+                atom,
+                vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())],
+                vec![],
+            );
+            let canonical = sector.canonical_projection(&graph)?;
+            let reconstructed =
+                canonical
+                    .terms
+                    .iter()
+                    .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
+                        let denominator =
+                            term.powers
+                                .iter()
+                                .fold(Atom::one(), |product, (id, power)| {
+                                    product * canonical.class(*id).full_expr.pow(*power)
+                                });
+                        Ok(sum
+                            + canonical.neutral_numerator(&term.numerator, &graph)? / denominator)
+                    })?;
+            let expected =
+                Atom::num(2) * &component * opaque / (component.pow(2).expand() - 1).pow(2);
+            assert_eq!(
+                reconstructed.collect_compact_factors(),
+                canonical
+                    .neutral_numerator(&expected, &graph)?
+                    .collect_compact_factors()
+            );
+            let base = Atom::var(symbol!("signed_multiloop::a")) - symbol!("signed_multiloop::b");
+            let factor =
+                (Atom::var(symbol!("signed_multiloop::c")) + symbol!("signed_multiloop::d")).pow(5);
+            let left = Atom::num(2) * &factor * &base + Atom::num(3) * &factor;
+            let right = -Atom::num(2) * &factor * (-&base).expand_num() + Atom::num(3) * &factor;
+            let normalized = canonical.neutral_numerator(&left, &graph)?;
+            assert_eq!(normalized, canonical.neutral_numerator(&right, &graph)?);
+            assert_eq!(
+                normalized,
+                canonical.neutral_numerator(&normalized, &graph)?
+            );
+            for exponent in [-3_i64, 2, 3, 500_000] {
+                let first = canonical.neutral_numerator(&base.pow(exponent), &graph)?;
+                let opposite = Atom::num(if exponent % 2 == 0 { 1 } else { -1 })
+                    * (-&base).expand_num().pow(exponent);
+                assert_eq!(first, canonical.neutral_numerator(&opposite, &graph)?);
+                assert_eq!(first, canonical.neutral_numerator(&first, &graph)?);
+            }
+            let fractional = base.pow(Atom::num(1) / Atom::num(2));
+            assert_eq!(
+                fractional,
+                canonical.neutral_numerator(&fractional, &graph)?
+            );
         }
-        let fractional = base.pow(Atom::num(1) / Atom::num(2));
-        assert_eq!(
-            fractional,
-            canonical.neutral_numerator(&fractional, &graph)?
-        );
         Ok(())
     }
 
     #[test]
     fn canonical_uv_positive_blocks_and_absent_poles_keep_their_roles() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_positive_triangle {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_positive_triangle {
+            projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            c -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let owners = graph.full_filter();
         let den = |owner| {
@@ -8452,12 +8496,13 @@ mod tests {
     #[test]
     fn canonical_positive_denominator_recovers_one_class_from_expanded_coordinates() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_positive_sunset {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_positive_sunset {
+            projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1 lmb_id=1]
-            a -> b [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
         })?;
         let owners = graph.full_filter();
         let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
@@ -8505,7 +8550,7 @@ mod tests {
     #[test]
     fn projection_sector_grouping_preserves_frozen_domains_and_recursion() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph canonical_sector_triangle {
+        let graph: Graph = finalized_runtime_dot!(digraph canonical_sector_triangle {
             edge [num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
@@ -8562,7 +8607,7 @@ mod tests {
         };
 
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph cancelling_projection_sectors {
+        let mut graph: Graph = finalized_runtime_dot!(digraph cancelling_projection_sectors {
             edge [num=1 mass=1];
             node [num=1];
             a -> b [id=0 lmb_id=0];
@@ -8580,7 +8625,7 @@ mod tests {
             topo_order: 1,
         };
         let coefficient = (GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one())
-            / graph.denominator(&owners, |_| 1);
+            / graph.denominator(&owners, &graph.model, |_| 1);
         let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
         let cancelled = Local4dCts(FourDSectors::new(
             vec![
@@ -8633,18 +8678,19 @@ mod tests {
     #[test]
     fn analytic_uv_rejects_gamma5_before_simplification_with_subgraph_scope() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph gamma5_uv_scope {
+        let mut graph: Graph = finalized_runtime_dot!(digraph gamma5_uv_scope {
+            projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0]
-            a -> b [id=1 lmb_id=0]
-            b -> a [id=2]
-            b -> c [id=3]
-            c -> d [id=4 lmb_id=1]
-            d -> c [id=5]
-            d -> outgoing [id=6]
+            incoming -> a [id=0 sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            b -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            b -> c [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            c -> d [id=4 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            d -> c [id=5 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            d -> outgoing [id=6 source="{ufo_order:2}"]
         })?;
         let filter = graph
             .get_edge_subgraph(EdgeIndex(1))
@@ -8675,7 +8721,7 @@ mod tests {
         let run = |graph: &Graph, current: &OwnedForestNode, settings: &UVgenerationSettings| {
             uv_limit(
                 &input,
-                &UVCtx::new(graph, settings),
+                &UVCtx::new(graph, &graph.model, settings),
                 current,
                 &given,
                 current,
@@ -8687,7 +8733,21 @@ mod tests {
         let open = idenso::gamma5!(&start, &end);
         let closed = spenso::trace!(Bispinor {}.new_rep(4).to_symbolic([]), idenso::gamma5!());
         let pair = spenso::chain!(&start, &end, idenso::gamma5!(), idenso::gamma5!());
-        assert!(!pair.simplify_gamma().contains_symbol(AGS.gamma5));
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let simplified_pair = SymbolicTensor::infer(cooking.try_cook(pair.as_view())?)?
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+        assert!(!simplified_pair.expression().contains_symbol(AGS.gamma5));
         let cases = [
             ("open", open.clone()),
             ("closed", closed),
@@ -8767,7 +8827,7 @@ mod tests {
         assert!(
             uv_limit(
                 &zero,
-                &UVCtx::new(&graph, &UVgenerationSettings::default()),
+                &UVCtx::new(&graph, &graph.model, &UVgenerationSettings::default()),
                 &current,
                 &given,
                 &current,
@@ -8829,13 +8889,14 @@ mod tests {
     #[test]
     fn nested_uv_rescaling_keeps_child_momentum_provenance_immutable() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph nested_provenance_rescaling {
+        let graph: Graph = finalized_runtime_dot!(digraph nested_provenance_rescaling {
+            graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            c -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let filter = (0..3)
             .map(|edge| graph.get_edge_subgraph(EdgeIndex(edge)))
@@ -8939,7 +9000,7 @@ mod tests {
     #[test]
     fn uv_taylor_provenance_erasure_matches_plain_child_lmb_expansion() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph uv_taylor_provenance_oracle {
                 num = 1
                 edge [particle="scalar_1" num=1]
@@ -8984,7 +9045,7 @@ mod tests {
             .to_d_dim(GS.dim)
             .get_single_atom()
             .unwrap();
-        input /= graph.denominator(&reduced, |_| 1);
+        input /= graph.denominator(&reduced, &graph.model, |_| 1);
 
         let first_hard = current
             .lmb()
@@ -9006,14 +9067,23 @@ mod tests {
         );
 
         let taylor = |rescaled: Atom| -> Result<Atom> {
-            Ok(rescaled
+            let rescaled = rescaled
                 .series(GS.rescale, Atom::Zero, 0)?
                 .to_atom()
                 .replace(GS.rescale)
-                .with(Atom::one())
-                .simplify_metrics()
-                .to_dots()
-                .normalize_dots())
+                .with(Atom::one());
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let rescaled = SymbolicTensor::infer(cooking.try_cook(rescaled.as_view())?)?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .to_dots()?;
+            let rescaled = cooking.uncook(rescaled.expression().as_view());
+            Ok(rescaled)
         };
         let tagged = taylor(graph.uv_rescaled(
             current.subgraph(),
@@ -9161,7 +9231,7 @@ mod tests {
         // acceptance test. The quartic factor is local to e1. The deliberately
         // collected common denominator below stresses ownership while each
         // numerator stays factorized; production keeps Taylor topologies separate.
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph gl24_dod_two_taylor {
                 edge [particle="scalar_0" num=1]
                 node [num=1]
@@ -9201,7 +9271,7 @@ mod tests {
         let q1_first = GS.emr_mom(owners[0], minkowski.to_symbolic([Atom::num(1)]));
         let q1_second = GS.emr_mom(owners[0], minkowski.to_symbolic([Atom::num(2)]));
         let numerator = q1_first.pow(2) * q1_second.pow(2);
-        let integrand = &numerator / graph.denominator(&uv_filter, |_| 1);
+        let integrand = &numerator / graph.denominator(&uv_filter, &graph.model, |_| 1);
         // DOD two starts at t^-2, so the t^0 Laurent coefficient is exactly
         // the second-order Taylor layer, without its leading and linear peers.
         let expanded = graph
@@ -9214,10 +9284,18 @@ mod tests {
             )
             .series(GS.rescale, Atom::Zero, 0)?
             .coefficient(Rational::from(0))
-            .expect("requested coefficient is within series precision")
-            .simplify_metrics()
-            .to_dots()
-            .normalize_dots();
+            .expect("requested coefficient is within series precision");
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let expanded = SymbolicTensor::infer(cooking.try_cook(expanded.as_view())?)?
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
+            .to_dots()?;
+        let expanded = cooking.uncook(expanded.expression().as_view());
 
         let natural_terms = FourDTerm::from_view(expanded.as_view())?;
         // Typed denominator kinematics erase hard-momentum tags. A positive
@@ -9413,7 +9491,7 @@ mod tests {
         let settings = UVgenerationSettings::default();
         let (production, _, _) = t(
             &integrand,
-            &UVCtx::new(&graph, &settings),
+            &UVCtx::new(&graph, &graph.model, &settings),
             &current,
             &given,
             &[],
@@ -9430,10 +9508,19 @@ mod tests {
             .series(GS.rescale, Atom::Zero, 0)?
             .to_atom()
             .replace(GS.rescale)
-            .with(Atom::one())
-            .simplify_metrics()
-            .to_dots()
-            .normalize_dots();
+            .with(Atom::one());
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let scalar_series_oracle =
+            SymbolicTensor::infer(cooking.try_cook(scalar_series_oracle.as_view())?)?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .to_dots()?;
+        let scalar_series_oracle = cooking.uncook(scalar_series_oracle.expression().as_view());
         // Compare coefficients of the unchanged quartic numerator: production
         // keeps it outside the Laurent-layer sum, while the scalar oracle
         // repeats it in each layer. Neither numerator needs to be expanded.
@@ -9502,7 +9589,7 @@ mod tests {
             let mut constant_leaf = [1, 1, 1];
             constant_leaf[position] += 1;
             let coefficient = &reduced_numerators[&constant_leaf];
-            let physical_mass = graph.underlying[owner].particle.mass_atom();
+            let physical_mass = graph.underlying[owner].particle.mass_atom(&graph.model);
             let AtomView::Var(physical_mass_variable) = physical_mass.as_view() else {
                 panic!("the mass-sensitive GL24 fixture must use symbolic owner masses");
             };
@@ -9532,7 +9619,12 @@ mod tests {
         let vacuum_mass_squared = Atom::var(GS.m_uv_vacuum).pow(2);
         for coefficient in [expansion_mass_squared, vacuum_mass_squared]
             .into_iter()
-            .chain(owners.map(|edge| graph.underlying[edge].particle.mass_atom().pow(2)))
+            .chain(owners.map(|edge| {
+                graph.underlying[edge]
+                    .particle
+                    .mass_atom(&graph.model)
+                    .pow(2)
+            }))
         {
             assert!(
                 analyzer.analyze_atom(&coefficient)?.is_empty(),
@@ -9545,7 +9637,7 @@ mod tests {
     #[test]
     fn dod_one_triangle_keeps_separate_denominator_topologies() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_uv_triangle_taylor {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_triangle_taylor {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -9588,11 +9680,11 @@ mod tests {
         let numerator = owners.into_iter().fold(Atom::one(), |product, edge| {
             product * GS.emr_mom(edge, GS.cind(0))
         });
-        let integrand = numerator / graph.denominator(&uv_filter, |_| 1);
+        let integrand = numerator / graph.denominator(&uv_filter, &graph.model, |_| 1);
         let settings = UVgenerationSettings::default();
         let (expanded, _, _) = t(
             &integrand,
-            &UVCtx::new(&graph, &settings),
+            &UVCtx::new(&graph, &graph.model, &settings),
             &current,
             &given,
             &[],
@@ -9636,10 +9728,18 @@ mod tests {
             .series(GS.rescale, Atom::Zero, 0)?
             .to_atom()
             .replace(GS.rescale)
-            .with(Atom::one())
-            .simplify_metrics()
-            .to_dots()
-            .normalize_dots();
+            .with(Atom::one());
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let independent = SymbolicTensor::infer(cooking.try_cook(independent.as_view())?)?
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
+            .to_dots()?;
+        let independent = cooking.uncook(independent.expression().as_view());
         assert!((expanded.collect_factors() - independent.collect_factors()).is_zero());
 
         let options = graph.denominator_only_cff_3d_expression_options();
@@ -9714,7 +9814,7 @@ mod tests {
     #[test]
     fn factorized_product_separates_active_and_completed_sectors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -9810,7 +9910,7 @@ mod tests {
     #[test]
     fn affine_uv_rescaling_preserves_enclosing_chart_and_owner() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph affine_enclosing_taylor_chart {
+        let graph: Graph = finalized_runtime_dot!(digraph affine_enclosing_taylor_chart {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
@@ -10008,13 +10108,14 @@ mod tests {
     #[test]
     fn early_color_simplification_preserves_open_and_nested_numerator_boundaries() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph nested_open_color_bubble {
+        let mut graph: Graph = finalized_runtime_dot!(digraph nested_open_color_bubble {
+            projector=1
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
-            b -> c [id=2 lmb_id=1]
-            c -> a [id=3]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            b -> c [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            c -> a [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
         })?;
         let [a, b, c, d, u, v]: [Atom; 6] =
             std::array::from_fn(|i| idenso::coad!(8, Atom::from(Aind::Normal(80 + i))));
@@ -10047,7 +10148,7 @@ mod tests {
             topo_order: 0,
         };
         let settings = UVgenerationSettings::default();
-        let ctx = UVCtx::new(&graph, &settings);
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
         let raw_inner = graph
             .numerator(inner.subgraph(), empty.subgraph())
             .get_single_atom()?;
@@ -10058,11 +10159,12 @@ mod tests {
         let prepared_inner = graph
             .numerator(inner.subgraph(), empty.subgraph())
             .color_simplify()
+            .unwrap()
             .get_single_atom()?;
         assert_eq!(prepared_inner, expected_inner);
         let grown_inner = grow(&Full4dCts::root(), &ctx, inner, &empty)?;
         assert_eq!(
-            &grown_inner * graph.denominator(inner.subgraph(), |_| 1),
+            &grown_inner * graph.denominator(inner.subgraph(), &graph.model, |_| 1),
             expected_inner
         );
 
@@ -10074,17 +10176,45 @@ mod tests {
             .get_single_atom()?;
         assert_eq!(&raw_inner * &raw_remainder, raw_full);
         let inner_input = Full4dCts(FourDSectors::active_atom(grown_inner));
-        let nested =
-            grow(&inner_input, &ctx, outer, inner)? * graph.denominator(outer.subgraph(), |_| 1);
-        let late = raw_full.simplify_color().simplify_metrics();
+        let nested = grow(&inner_input, &ctx, outer, inner)?
+            * graph.denominator(outer.subgraph(), &graph.model, |_| 1);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let simplify_color = |expression: &Atom| -> Result<Atom> {
+            let simplified = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?;
+            Ok(cooking.uncook(simplified.expression().as_view()))
+        };
+        let late = simplify_color(&raw_full)?;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let late = SymbolicTensor::infer(cooking.try_cook(late.as_view())?)?.contract(
+            ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            },
+        )?;
+        let late = cooking.uncook(late.expression().as_view());
         assert_eq!(nested, late);
         assert_eq!(nested, casimir * spenso::g!(&c, &d) * &spectator);
         // Closing the remaining boundary commutes with both preparations;
         // the factorized momentum spectator is never distributed.
         let closure = spenso::g!(&c, &d);
         assert_eq!(
-            (&nested * &closure).simplify_color(),
-            (raw_full * closure).simplify_color()
+            simplify_color(&(&nested * &closure))?,
+            simplify_color(&(raw_full * closure))?
         );
         assert_eq!(
             graph
@@ -10098,15 +10228,16 @@ mod tests {
     #[test]
     fn local_taylor_retains_dirac_traces_with_or_without_analytic_addbacks() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph factorized_local_spin {
+        let mut graph: Graph = finalized_runtime_dot!(digraph factorized_local_spin {
+            projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0]
-            a -> b [id=1 lmb_id=0]
-            b -> a [id=2]
-            b -> outgoing [id=3]
+            incoming -> a [id=0 sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            b -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            b -> outgoing [id=3 source="{ufo_order:2}"]
         })?;
         let filter = graph
             .get_edge_subgraph(EdgeIndex(1))
@@ -10149,7 +10280,7 @@ mod tests {
             };
             let local = uv_limit(
                 &input,
-                &UVCtx::new(&graph, &settings),
+                &UVCtx::new(&graph, &graph.model, &settings),
                 &current,
                 &given,
                 &current,

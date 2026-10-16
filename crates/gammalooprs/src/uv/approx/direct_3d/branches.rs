@@ -1172,8 +1172,8 @@ mod tests {
             CutCFFIndex,
             expression::{OrientationData, OrientationExpression},
         },
-        dot,
-        graph::{Graph, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::Graph,
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         utils::GS,
@@ -1384,7 +1384,12 @@ mod tests {
                         let actual = integrands.resolved()?;
                         assert!(
                             (actual.iter().next().unwrap().1 - &expected)
-                                .expand()
+                                .cancel_scalar_poles(&[
+                                    apply(a, c),
+                                    apply(a, d),
+                                    apply(b, c),
+                                    apply(b, d)
+                                ])
                                 .is_zero(),
                             "multilinear owner {head}, center {center}, row [{sign}, {node}]"
                         );
@@ -1531,13 +1536,24 @@ mod tests {
                     expected_coefficients,
                     "independent tensor sums must remain factored in every shared coefficient",
                 );
-                let expected = (&body / delta.pow(2))
-                    .series(variable, &center, SeriesDepth::absolute(0))?
-                    .to_atom();
-                let actual = integrands.resolved()?;
+                // Compare the scalar Laurent weights while the tensor sums
+                // stay in their independently checked shared bodies above.
+                let expected = Atom::add_many(integrands.numerators().iter().map(|entry| {
+                    let order = [&g * &a * &c, &g * (&a * &d + &b * &c), &g * &b * &d]
+                        .iter()
+                        .position(|coefficient| *coefficient == entry.rhs)
+                        .expect("each body is an explicit polynomial coefficient");
+                    &entry.lhs * delta.pow(order as i64 - 2)
+                }));
+                let keys = integrands
+                    .numerators()
+                    .iter()
+                    .map(|entry| entry.lhs.clone())
+                    .collect::<Vec<_>>();
+                let actual = integrands.resolved_scalars()?;
                 assert!(
                     (actual.iter().next().unwrap().1 - &expected)
-                        .expand()
+                        .cancel_scalar_poles(&keys)
                         .is_zero()
                 );
                 if round == 0 {
@@ -1668,11 +1684,13 @@ mod tests {
                             .series(variable, &center, SeriesDepth::absolute(depth))?
                             .to_atom())
                     })?;
-                    let difference = actual
-                        .resolved()?
-                        .checked_zip(&oracle, |_, actual, expected| {
-                            Ok((actual - expected).expand())
-                        })?;
+                    let difference =
+                        actual
+                            .resolved()?
+                            .checked_zip(&oracle, |_, actual, expected| {
+                                // These fixtures contain only scalar rational functions.
+                                Ok((actual - expected).together())
+                            })?;
                     assert!(
                         difference.iter().all(|(_, atom)| atom.is_zero()),
                         "center {center}, depth {depth}: {difference:?}"
@@ -1756,9 +1774,11 @@ mod tests {
         let expected = ((Atom::one() + &t + t.pow(2)) / (t.pow(2) * (Atom::one() + &t).pow(3)))
             .series(variable, Atom::Zero, SeriesDepth::absolute(0))?
             .to_atom();
-        assert_eq!(
-            expanded.0[0].1.resolved()?.iter().next().unwrap().1,
-            &expected
+        let resolved = expanded.0[0].1.resolved()?;
+        assert!(
+            (resolved.iter().next().unwrap().1 - &expected)
+                .together()
+                .is_zero()
         );
         Ok(())
     }
@@ -1861,7 +1881,7 @@ mod tests {
             assert!(!actual.is_zero());
             // This small scalar oracle uses the explicit geometric coefficients;
             // neither the oracle nor the tested path uses native series.
-            assert!((actual - &expected).cancel().is_zero());
+            assert!((actual - &expected).together().is_zero());
             assert!(
                 branches
                     .series_preserving_numerators_exact(
@@ -1977,12 +1997,13 @@ mod tests {
     #[test]
     fn prepared_numerator_keeps_full_affine_rows_and_independent_sampling_nodes() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G {
-                edge [particle="scalar_1"];
+                projector=1;
+                edge [particle="scalar_1" num=1];
                 node [num=1];
-                a -> b [id=0];
-                a -> b [id=1];
+                a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
             },
             "scalars"
         )?;
@@ -2117,14 +2138,15 @@ mod tests {
     #[test]
     fn prepared_numerator_reuses_vector_loop_and_external_mapping_rules() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph G {
+        let graph: Graph = finalized_runtime_dot!(digraph G {
+            projector=1;
             edge [num=1 mass=0]
             node [num=1]
             ext [style=invis]
-            ext -> a [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2]
-            b -> ext [id=3]
+            ext -> a:0 [id=0 sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            b:1 -> ext [id=3 source="{ufo_order:2}"]
         })?;
         let production = vec![OrientationExpression {
             data: OrientationData::new(EdgeVec::from_iter([
@@ -2181,12 +2203,13 @@ mod tests {
     #[test]
     fn one_source_residue_map_is_a_homomorphism_for_all_factorized_factors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph G {
-                edge [particle="scalar_1"];
+                projector=1;
+                edge [particle="scalar_1" num=1];
                 node [num=1];
-                a -> b [id=0];
-                a -> b [id=1];
+                a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
             },
             "scalars"
         )?;
@@ -2338,10 +2361,14 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/tests/resources/uv_parametric_numerator/gl1-source140-pre-taylor.json"
         )))?;
-        let graph: Graph = fixture["graph"]
-            .as_str()
-            .unwrap()
-            .into_graph(&crate::utils::load_generic_model("sm"))?;
+        // The historical graph records model vertices rather than finalized
+        // numerator/port metadata. Import it through that source's owner.
+        let graph = Graph::import_dot(
+            fixture["graph"].as_str().unwrap(),
+            &crate::utils::load_generic_model("sm"),
+        )?
+        .pop()
+        .expect("the captured source contains one graph");
         let mut internal_edges = graph
             .underlying
             .iter_edges()

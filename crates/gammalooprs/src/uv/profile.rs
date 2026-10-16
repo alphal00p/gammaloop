@@ -371,8 +371,8 @@ mod tests {
     };
     use typed_index_collections::TiVec;
 
-    use crate::dot;
-    use crate::graph::parse::from_dot::IntoGraph;
+    use crate::finalized_runtime_dot;
+
     use crate::graph::{FeynmanGraph, Graph, LMBext, LmbIndex, LoopMomentumBasis};
     use crate::initialisation::test_initialise;
     use crate::integrands::evaluation::{EvaluationMetaData, GenericEvaluationResult};
@@ -435,7 +435,7 @@ mod tests {
         THETA_GRAPH
             .get_or_init(|| {
                 test_initialise().unwrap();
-                let mut graph: Graph = dot!(digraph theta_profile {
+                let mut graph: Graph = finalized_runtime_dot!(digraph theta_profile {
                     edge [num=1 mass=0]
                     node [num=1]
                     A -> B [id=0]
@@ -475,7 +475,7 @@ mod tests {
     #[test]
     fn cycle_union_uses_lmb_signatures_for_a_self_loop() {
         let _ = theta_graph();
-        let graph: Graph = dot!(digraph tadpole_profile {
+        let graph: Graph = finalized_runtime_dot!(digraph tadpole_profile {
             edge [num=1 mass=0]
             node [num=1]
             A -> A [id=0]
@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn only_divergent_targets_stay_inside_the_production_uv_domain() {
         let _ = theta_graph();
-        let mut graph: Graph = dot!(digraph theta_profile_domain {
+        let mut graph: Graph = finalized_runtime_dot!(digraph theta_profile_domain {
             edge [num=1 mass=0]
             node [num=1]
             A -> B [id=0]
@@ -1584,10 +1584,16 @@ mod tests {
     #[test]
     fn nested_soft_fixed_e3_is_a_direct_candidate_coordinate() {
         test_initialise().unwrap();
-        let graph: Graph = include_str!(
-            "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+        let graph: Graph = Graph::import_dot(
+            include_str!(
+                "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+            ),
+            &load_generic_model("sm"),
         )
-        .into_graph(&load_generic_model("sm"))
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
         .unwrap();
         let candidate = graph
             .generate_loop_momentum_bases()
@@ -1619,10 +1625,16 @@ mod tests {
     #[test]
     fn candidate_lmb_affine_shift_is_applied_after_precision_cast() {
         test_initialise().unwrap();
-        let graph: Graph = include_str!(
-            "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+        let graph: Graph = Graph::import_dot(
+            include_str!(
+                "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+            ),
+            &load_generic_model("sm"),
         )
-        .into_graph(&load_generic_model("sm"))
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
         .unwrap();
         let candidate = graph
             .generate_loop_momentum_bases()
@@ -2935,7 +2947,13 @@ impl<'a> UVProfileRunner<'a> {
                     .par_iter()
                     .map(|(orientation, integrand)| {
                         g.graph
-                            .all_limits(&g.graph.full_filter(), integrand, symbol!("lambd"), lmb)
+                            .all_limits(
+                                self.model,
+                                &g.graph.full_filter(),
+                                integrand,
+                                symbol!("lambd"),
+                                lmb,
+                            )
                             .into_iter()
                             .map(|(limit, value)| (limit, orientation.clone(), value))
                             .collect::<Vec<_>>()

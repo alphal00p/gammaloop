@@ -19,8 +19,12 @@ use crate::graph::{EdgeRecord, GraphState, HalfEdgeRecord, NodeRecord, PyGraph};
 use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 
 /// DOT graph metadata kept separate from arbitrary Python element data.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "GlobalData")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    name = "GlobalData"
+)]
 #[derive(Clone, Debug)]
 pub struct PyGlobalData {
     pub(crate) inner: GlobalData,
@@ -34,8 +38,8 @@ impl Default for PyGlobalData {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGlobalData {
     #[new]
@@ -114,15 +118,19 @@ impl PyGlobalData {
 }
 
 /// The DOT-representable record exchanged for one node by a `DotCodec`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "DotVertexData")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    name = "DotVertexData"
+)]
 #[derive(Clone, Debug)]
 pub struct PyDotVertexData {
     pub(crate) inner: DotVertexData,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDotVertexData {
     #[new]
@@ -165,15 +173,19 @@ impl PyDotVertexData {
 }
 
 /// The DOT-representable record exchanged for one edge by a `DotCodec`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "DotEdgeData")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    name = "DotEdgeData"
+)]
 #[derive(Clone, Debug)]
 pub struct PyDotEdgeData {
     pub(crate) inner: DotEdgeData,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDotEdgeData {
     #[new]
@@ -251,15 +263,19 @@ fn compass_name(value: CompassPt) -> &'static str {
 }
 
 /// The DOT-representable record exchanged for one half-edge by a `DotCodec`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "DotHalfEdgeData")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    name = "DotHalfEdgeData"
+)]
 #[derive(Clone, Debug)]
 pub struct PyDotHalfEdgeData {
     pub(crate) inner: DotHedgeData,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDotHalfEdgeData {
     #[new]
@@ -311,8 +327,8 @@ impl PyDotHalfEdgeData {
 macro_rules! value_class {
     ($doc:literal, $rust:ident, $python:literal, $drawing:ident, $fields:ident) => {
         #[doc = $doc]
-        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(unsendable, name = $python)]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+        #[pyclass(module = "symbolica.community.graph", unsendable, name = $python)]
         pub struct $rust {
             pub(crate) data: Option<Py<PyAny>>,
             pub(crate) drawing: Option<Py<PyDict>>,
@@ -331,8 +347,8 @@ macro_rules! value_class {
             }
         }
 
-        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-        #[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
         #[pymethods]
         impl $rust {
             #[new]
@@ -425,14 +441,14 @@ enum CodecKind {
 }
 
 /// An explicit mapping between graph values and DOT-representable records.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "DotCodec")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "symbolica.community.graph", unsendable, name = "DotCodec")]
 pub struct PyDotCodec {
     kind: Option<CodecKind>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDotCodec {
     #[new]

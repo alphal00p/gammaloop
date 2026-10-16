@@ -1,5 +1,5 @@
 #import "../../../../assets/embedded/drawing/templates/physics-edge-style.typ": (
-  coil, dashed, dotted, fermion-arrow-mark, massive, massless, mi, sink-stroke,
+  coil, dashed, dotted, fermion-arrow-mark, massive, massless, sink-stroke,
   source-stroke, style, wave, zigzag,
 )
 #import "../theme.typ": palette
@@ -66,240 +66,240 @@
   "a": (
     source: source-stroke(c: palette.ink, thickness: massless) + wave,
     sink: sink-stroke(c: palette.ink, thickness: massless) + wave,
-    label: mi(`{\gamma}`),
+    label: $gamma$,
   ),
   "Z": (
     source: source-stroke(c: palette.ink, thickness: massive) + wave,
     sink: sink-stroke(c: palette.ink, thickness: massive) + wave,
-    label: mi(`{Z}`),
+    label: $Z$,
   ),
   "W+": (
     source: source-stroke(c: palette.accent, thickness: massive) + zigzag,
     sink: sink-stroke(c: palette.accent, thickness: massive) + zigzag,
-    label: mi(`{W^+}`),
+    label: $W^+$,
   ),
   "W-": (
     source: source-stroke(c: palette.accent, thickness: massive) + zigzag,
     sink: sink-stroke(c: palette.accent, thickness: massive) + zigzag,
-    label: mi(`{W^-}`),
+    label: $W^-$,
   ),
   "g": (
     source: source-stroke(c: palette.ink, thickness: massless) + coil,
     sink: sink-stroke(c: palette.ink, thickness: massless) + coil,
-    label: mi(`{g}`),
+    label: $g$,
   ),
   "ghA": (
     source: source-stroke(c: palette.ink, thickness: massless, dash: dotted),
     sink: sink-stroke(c: palette.ink, thickness: massless, dash: dotted),
-    label: mi(`\tilde{\gamma}`),
+    label: $tilde(gamma)$,
   ),
   "ghA~": (
     source: source-stroke(c: palette.ink, thickness: massless, dash: dotted),
     sink: sink-stroke(c: palette.ink, thickness: massless, dash: dotted),
-    label: mi(`\overline{\tilde{\gamma}}`),
+    label: $overline(tilde(gamma))$,
   ),
   "ghZ": (
     source: source-stroke(c: palette.ink, thickness: massive, dash: dotted),
     sink: sink-stroke(c: palette.ink, thickness: massive, dash: dotted),
-    label: mi(`\tilde{Z}`),
+    label: $tilde(Z)$,
   ),
   "ghZ~": (
     source: source-stroke(c: palette.ink, thickness: massive, dash: dotted),
     sink: sink-stroke(c: palette.ink, thickness: massive, dash: dotted),
-    label: mi(`\bar{\tilde{Z}}`),
+    label: $overline(tilde(Z))$,
   ),
   "ghWp": (
     source: source-stroke(c: palette.accent, thickness: massive, dash: dotted),
     sink: sink-stroke(c: palette.accent, thickness: massive, dash: dotted),
-    label: mi(`{\tilde{W}^+}`),
+    label: $tilde(W)^+$,
   ),
   "ghWp~": (
     source: source-stroke(c: palette.accent, thickness: massive, dash: dotted),
     sink: sink-stroke(c: palette.accent, thickness: massive, dash: dotted),
-    label: mi(`{\bar{\tilde{W}}^+}`),
+    label: $overline(tilde(W))^+$,
   ),
   "ghWm": (
     source: source-stroke(c: palette.accent, thickness: massive, dash: dotted),
     sink: sink-stroke(c: palette.accent, thickness: massive, dash: dotted),
-    label: mi(`{\tilde{W}^-}`),
+    label: $tilde(W)^-$,
   ),
   "ghWm~": (
     source: source-stroke(c: palette.accent, thickness: massive, dash: dotted),
     sink: sink-stroke(c: palette.accent, thickness: massive, dash: dotted),
-    label: mi(`{\bar{\tilde{W}}^-}`),
+    label: $overline(tilde(W))^-$,
   ),
   "ghG": (
     source: source-stroke(c: palette.ink, thickness: massless, dash: dotted),
     sink: sink-stroke(c: palette.ink, thickness: massless, dash: dotted),
-    label: mi(`{\tilde{g}}`),
+    label: $tilde(g)$,
   ),
   "ghG~": (
     source: source-stroke(c: palette.ink, thickness: massless, dash: dotted),
     sink: sink-stroke(c: palette.ink, thickness: massless, dash: dotted),
-    label: mi(`{\bar{\tilde{g}}}`),
+    label: $overline(tilde(g))$,
   ),
   "ve": (
     source: source-stroke(c: palette.ink, thickness: massless),
     sink: sink-stroke(c: palette.ink, thickness: massless),
-    label: mi(`{\nu_e}`),
+    label: $nu_e$,
   )
     + particle-flow,
   "ve~": (
     source: source-stroke(c: palette.ink, thickness: massless),
     sink: sink-stroke(c: palette.ink, thickness: massless),
-    label: mi(`{\overline{\nu}_e}`),
+    label: $overline(nu)_e$,
   )
     + particle-flow,
   "vm": (
     source: source-stroke(c: palette.ink, thickness: massless),
     sink: sink-stroke(c: palette.ink, thickness: massless),
-    label: mi(`{\nu_\mu}`),
+    label: $nu_mu$,
   )
     + particle-flow,
   "vm~": (
     source: source-stroke(c: palette.ink, thickness: massless),
     sink: sink-stroke(c: palette.ink, thickness: massless),
-    label: mi(`{\overline{\nu}_\mu}`),
+    label: $overline(nu)_mu$,
   )
     + particle-flow,
   "vt": (
     source: source-stroke(c: palette.ink, thickness: massless),
     sink: sink-stroke(c: palette.ink, thickness: massless),
-    label: mi(`{\nu_\tau}`),
+    label: $nu_tau$,
   )
     + particle-flow,
   "vt~": (
     source: source-stroke(c: palette.ink, thickness: massless),
     sink: sink-stroke(c: palette.ink, thickness: massless),
-    label: mi(`{\overline{\nu}_\tau}`),
+    label: $overline(nu)_tau$,
   )
     + particle-flow,
   "u": (
     source: source-stroke(c: palette.accent, thickness: massless),
     sink: sink-stroke(c: palette.accent, thickness: massless),
-    label: mi(`{u}`),
+    label: $u$,
   )
     + particle-flow,
   "u~": (
     source: source-stroke(c: palette.accent, thickness: massless),
     sink: sink-stroke(c: palette.accent, thickness: massless),
-    label: mi(`{\overline{u}}`),
+    label: $overline(u)$,
   )
     + particle-flow,
   "c": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{c}`),
+    label: $c$,
   )
     + particle-flow,
   "c~": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{\overline{c}}`),
+    label: $overline(c)$,
   )
     + particle-flow,
   "t": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{t}`),
+    label: $t$,
   )
     + particle-flow,
   "t~": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{\overline{t}}`),
+    label: $overline(t)$,
   )
     + particle-flow,
   "d": (
     source: source-stroke(c: palette.accent, thickness: massless),
     sink: sink-stroke(c: palette.accent, thickness: massless),
-    label: mi(`{d}`),
+    label: $d$,
   )
     + particle-flow,
   "d~": (
     source: source-stroke(c: palette.accent, thickness: massless),
     sink: sink-stroke(c: palette.accent, thickness: massless),
-    label: mi(`{\overline{d}}`),
+    label: $overline(d)$,
   )
     + particle-flow,
   "s": (
     source: source-stroke(c: palette.accent, thickness: massless),
     sink: sink-stroke(c: palette.accent, thickness: massless),
-    label: mi(`{s}`),
+    label: $s$,
   )
     + particle-flow,
   "s~": (
     source: source-stroke(c: palette.accent, thickness: massless),
     sink: sink-stroke(c: palette.accent, thickness: massless),
-    label: mi(`{\overline{s}}`),
+    label: $overline(s)$,
   )
     + particle-flow,
   "b": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{b}`),
+    label: $b$,
   )
     + particle-flow,
   "b~": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{\overline{b}}`),
+    label: $overline(b)$,
   )
     + particle-flow,
   "H": (
     source: source-stroke(c: palette.ink, thickness: massive, dash: dashed),
     sink: sink-stroke(c: palette.ink, thickness: massive, dash: dashed),
-    label: mi(`{H}`),
+    label: $H$,
   ),
   "G0": (
     source: source-stroke(c: palette.ink, thickness: massive, dash: dashed),
     sink: sink-stroke(c: palette.ink, thickness: massive, dash: dashed),
-    label: mi(`{G_0}`),
+    label: $G_0$,
   ),
   "G+": (
     source: source-stroke(c: palette.accent, thickness: massive, dash: dashed),
     sink: sink-stroke(c: palette.accent, thickness: massive, dash: dashed),
-    label: mi(`{G^+}`),
+    label: $G^+$,
   ),
   "G-": (
     source: source-stroke(c: palette.accent, thickness: massive, dash: dashed),
     sink: sink-stroke(c: palette.accent, thickness: massive, dash: dashed),
-    label: mi(`{G^-}`),
+    label: $G^-$,
   ),
   "e-": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{e^-}`),
+    label: $e^-$,
   )
     + particle-flow,
   "e+": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{e^+}`),
+    label: $e^+$,
   )
     + particle-flow,
   "mu-": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{\mu^-}`),
+    label: $mu^-$,
   )
     + particle-flow,
   "mu+": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{\mu^+}`),
+    label: $mu^+$,
   )
     + particle-flow,
   "ta-": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{\tau^-}`),
+    label: $tau^-$,
   )
     + particle-flow,
   "ta+": (
     source: source-stroke(c: palette.accent, thickness: massive),
     sink: sink-stroke(c: palette.accent, thickness: massive),
-    label: mi(`{\tau^+}`),
+    label: $tau^+$,
   )
     + particle-flow,
 )

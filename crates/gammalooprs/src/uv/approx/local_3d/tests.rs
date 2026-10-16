@@ -8,8 +8,8 @@ use crate::{
         orientations::GraphOrientation,
         surface::LinearEnergyExpr,
     },
-    dot,
-    graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet, parse::IntoGraph},
+    finalized_runtime_dot,
+    graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet},
     initialisation::test_initialise,
     settings::global::OrientationPattern,
     utils::GS,
@@ -72,12 +72,13 @@ fn two_edge_graph() -> Result<Graph> {
     Ok(TWO_EDGE_GRAPH
         .get_or_init(|| {
             test_initialise().expect("test model initialization succeeds");
-            dot!(
+            finalized_runtime_dot!(
                 digraph G {
-                    edge [particle="scalar_1"];
+                    projector=1;
+                    edge [particle="scalar_1" num=1];
                     node [num=1];
-                    a -> b [id=0];
-                    a -> b [id=1];
+                    a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                    a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
                 },
                 "scalars"
             )
@@ -149,13 +150,14 @@ fn soft_dispatch_preserves_the_complete_quartic_contour() -> Result<()> {
     use three_dimensional_reps::{Generate3DExpressionOptions, NumeratorSamplingScaleMode};
 
     test_initialise()?;
-    let mut graph: Graph = dot!(digraph soft_count_triangle {
+    let mut graph: Graph = finalized_runtime_dot!(digraph soft_count_triangle {
+        projector=1;
         edge [num=1 mass=2]
         node [num=1]
-        a -> b [id=0 lmb_id=0]
-        b -> c [id=1]
-        c -> a [id=2]
-        a -> a [id=3 lmb_id=1]
+        a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+        b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+        c -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
+        a -> a [id=3 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:3}"]
     })?;
     let active = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
     let temporal = active.map(|edge| GS.emr_mom(edge, GS.cind(0)));
@@ -268,7 +270,10 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
         );
     }
     let on_shell_energy_squared = (1..=3).fold(
-        graph.underlying[edge].particle.mass_atom().pow(2),
+        graph.underlying[edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2),
         |norm_squared, spatial_index| {
             norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
         },
@@ -334,7 +339,10 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
     let momentum = FunctionBuilder::new(GS.emr_mom)
         .add_arg(usize::from(edge))
         .finish();
-    let mass_squared = graph.underlying[edge].particle.mass_atom().pow(2);
+    let mass_squared = graph.underlying[edge]
+        .particle
+        .mass_atom(&graph.model)
+        .pow(2);
     let denominators = [
         FourDDenominator {
             source_edge: edge,
@@ -345,7 +353,10 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
         FourDDenominator {
             source_edge: EdgeIndex(1),
             momentum: -momentum,
-            mass_squared: graph.underlying[EdgeIndex(1)].particle.mass_atom().pow(2),
+            mass_squared: graph.underlying[EdgeIndex(1)]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2),
             full_expr: Atom::var(symbolica::symbol!("local_3d_test::second")),
         },
     ];
@@ -382,7 +393,7 @@ fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
         .map(|orientation| orientation.expression.clone())
         .sum::<Atom>()
         * Atom::num(exact_lower.production_prefactor_factor());
-    let mass = graph.underlying[edge].particle.mass_atom();
+    let mass = graph.underlying[edge].particle.mass_atom(&graph.model);
     for expression in [
         &mut explicit_sum,
         &mut regenerated_sum,
@@ -424,7 +435,10 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
     let mut graph = two_edge_graph()?;
     let edge = EdgeIndex(0);
     let on_shell_energy_squared = (1..=3).fold(
-        graph.underlying[edge].particle.mass_atom().pow(2),
+        graph.underlying[edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2),
         |norm_squared, spatial_index| {
             norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
         },
@@ -442,9 +456,11 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
     let cutset = CutSet::empty(graph.n_hedges());
     let raw_root = graph.cff_from_production_expression(&production, &cutset, &pattern)?;
     let production_prefactor = Atom::num(raw_root.production_prefactor_factor());
-    let fourddenoms = GS.wrap_tree_denoms(
-        graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-    );
+    let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+        &graph.tree_edges.subtract(&graph.initial_state_cut),
+        &graph.model,
+        |_| -1,
+    ));
 
     // The direct root is the stored production CFF itself. A generalized
     // numerator sample may leave an edge undirected, but that is part of
@@ -887,7 +903,10 @@ fn nested_powered_contact_keeps_loop_lift_as_provenance_only() -> Result<()> {
     let mut graph = two_edge_graph()?;
     let powered_edge = EdgeIndex(0);
     let on_shell_energy_squared = (1..=3).fold(
-        graph.underlying[powered_edge].particle.mass_atom().pow(2),
+        graph.underlying[powered_edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2),
         |norm_squared, spatial_index| {
             norm_squared + GS.emr_mom(powered_edge, GS.cind(spatial_index)).pow(2)
         },
@@ -912,7 +931,10 @@ fn nested_powered_contact_keeps_loop_lift_as_provenance_only() -> Result<()> {
         momentum: FunctionBuilder::new(GS.emr_mom)
             .add_arg(usize::from(powered_edge))
             .finish(),
-        mass_squared: graph.underlying[powered_edge].particle.mass_atom().pow(2),
+        mass_squared: graph.underlying[powered_edge]
+            .particle
+            .mass_atom(&graph.model)
+            .pow(2),
         full_expr: Atom::one(),
     };
     let denominators = [source_denominator(), source_denominator()];
@@ -1513,12 +1535,13 @@ fn denominator_only_cff_has_no_localizer_fallback() -> Result<()> {
 fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = dot!(
+    let mut graph: Graph = finalized_runtime_dot!(
         digraph replaced_spinney_numerator {
+            projector=1;
             edge [pdg=1000 num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 num="1/(Q(0,spenso::cind(0))+1)"]
-            a -> b [id=1]
+            a -> b [id=0 lmb_id=0 num="1/(Q(0,spenso::cind(0))+1)" source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
         },
         "scalars"
     )?;
@@ -1559,16 +1582,17 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
 fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = dot!(
+    let mut graph: Graph = finalized_runtime_dot!(
         digraph finite_ct_map {
-            edge [particle="scalar_1"];
+            projector=1;
+            edge [particle="scalar_1" num=1];
             node [num=1];
             external [style=invis];
-            external -> A:0 [id=3];
-            C:1 -> external [id=4];
-            A -> B [id=0];
-            A -> B [id=1];
-            B -> C [id=2];
+            external -> A:0 [id=3 sink="{ufo_order:0}"];
+            C:1 -> external [id=4 source="{ufo_order:1}"];
+            A -> B [id=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"];
+            A -> B [id=1 source="{ufo_order:2}" sink="{ufo_order:1}"];
+            B -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"];
         },
         "scalars"
     )?;
@@ -1623,6 +1647,7 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
 
     let baseline = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
     let localized = localizer.localize(&finite_ct, &mut graph, &integrated_node)?;
+    let frozen_kernel = baseline.frozen_integrands.clone();
     let baseline = baseline
         .active
         .iter_orientations()
@@ -1634,8 +1659,56 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         .find_map(|(id, _, integrands)| (id == orientation_id).then_some(integrands))
         .expect("the selected production map has a finite-CT branch");
 
-    assert_eq!(localized, &baseline.map(|atom| atom * &mapped_finite_ct));
-    assert_ne!(localized, &baseline.map(|atom| atom * &finite_ct));
+    let localized = localized.resolved()?;
+    assert_eq!(localized, baseline.map(|atom| atom * &mapped_finite_ct));
+    assert_ne!(localized, baseline.map(|atom| atom * &finite_ct));
+
+    // A nontrivial finite matrix and a later cograph matrix must keep separate
+    // numerator definitions while their scalar CFF weights are assembled.
+    // This fixture is independent of a renormalization prescription.
+    let left = idenso::bis!(4, finite_left);
+    let middle = idenso::bis!(4, finite_middle);
+    let right = idenso::bis!(4, finite_right);
+    let tensor_ct =
+        &finite_ct * spenso::g!(&left, &middle) + Atom::num(3) * idenso::gamma0!(&left, &middle);
+    let cograph = (&finite_ct + Atom::one()) * idenso::gamma0!(&middle, &right);
+    let tensor_localized = localizer.localize(&tensor_ct, &mut graph, &integrated_node)?;
+    assert_eq!(tensor_localized.frozen_integrands, frozen_kernel);
+    let completed = DirectResidueBranches::from_transient(&tensor_localized.active)?
+        .multiply_key_mapped(
+            localizer.orientation,
+            &graph,
+            &cograph,
+            DirectResidueBranches::numerator_scope(),
+        )?;
+    let baseline_all = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
+    for (key, integrands) in completed.iter_keys() {
+        assert!(
+            integrands.numerators().len() >= 2,
+            "finite and cograph matrices keep their shared owners"
+        );
+        for (_, scalar) in integrands.iter() {
+            assert!(
+                idenso::tensor::SymbolicTensor::infer(scalar.clone())?.is_scalar(),
+                "the CFF weight must not contain an inline finite tensor"
+            );
+        }
+        let baseline = baseline_all
+            .active
+            .iter_orientations()
+            .find_map(|(host, source_map, body)| {
+                (host == key.selector_host && source_map == key.source_edge_energy_map())
+                    .then_some(body)
+            })
+            .expect("the source map is unchanged by a numerator insertion");
+        let finite = key.map_numerator(localizer.orientation, &graph, &tensor_ct)?;
+        let outside = key.map_numerator(localizer.orientation, &graph, &cograph)?;
+        assert_eq!(
+            integrands.resolved()?,
+            baseline.map(|body| body * &finite * &outside),
+            "finite and cograph numerators are each mapped once with the same source key"
+        );
+    }
     Ok(())
 }
 

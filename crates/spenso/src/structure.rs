@@ -12,9 +12,9 @@ use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::swap::Swap;
 use thiserror::Error;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::structure::slot::ParseableAind;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::{
     tensors::data::DenseTensor,
     tensors::parametric::{ExpandedCoefficent, FlatCoefficent, TensorCoefficient},
@@ -27,9 +27,9 @@ use slot::DualSlotTo;
 use slot::IsAbstractSlot;
 use slot::SlotError;
 use std::fmt::Debug;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use crate::iterators::TensorStructureIndexIterator;
@@ -82,6 +82,14 @@ pub trait HasStructure {
     fn structure(&self) -> &Self::Structure;
     fn mut_structure(&mut self) -> &mut Self::Structure;
     fn scalar(self) -> Option<Self::Scalar>;
+
+    /// Extract a scalar while preserving contraction boundaries under powers.
+    fn scalar_power_base(self) -> Option<Self::Scalar>
+    where
+        Self: Sized,
+    {
+        self.scalar()
+    }
     fn scalar_ref(&self) -> Option<Self::ScalarRef<'_>>;
     fn map_same_structure(self, f: impl FnOnce(Self::Structure) -> Self::Structure) -> Self;
 
@@ -113,7 +121,7 @@ pub trait CastStructure<O: HasStructure<Structure: From<Self::Structure>>>: HasS
     fn cast_structure(self) -> O;
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T> ToSymbolic for Canonicalized<T>
 where
     T: TensorStructure + ToSymbolic,
@@ -196,7 +204,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T: HasName> ToSymbolic for T
 where
     T: TensorStructure,
@@ -274,7 +282,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 pub trait ToSymbolic {
     fn concrete_atom(&self, id: FlatIndex) -> ExpandedCoefficent<()>;
     // {
@@ -409,7 +417,7 @@ pub trait TensorStructure {
     fn external_indices_iter(&self) -> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
 
     /// Returns the symbolic arguments for external tensor ports in storage order.
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn symbolic_external_args(&self) -> Vec<Atom>
     where
         <Self::Slot as IsAbstractSlot>::Aind: ParseableAind,
@@ -854,6 +862,10 @@ pub enum StructureError {
     EmptyStructure(SlotError),
     #[error("wrong number of arguments {0}, expected {1}")]
     WrongNumberOfArguments(usize, usize),
+    #[error("axis {axis} is unresolved; slots() requires an explicit index on every axis")]
+    ExpectedExplicitSlot { axis: usize },
+    #[error("axis {axis} has an explicit index; representations() requires unresolved axes")]
+    ExpectedRepresentation { axis: usize },
     #[error("invalid pending index permutation: {0}")]
     InvalidIndexPermutation(String),
     // #[error("Non traced out indices before merger {0}")]
@@ -878,7 +890,7 @@ pub trait HasName {
     fn args(&self) -> Option<Self::Args>;
     fn set_name(&mut self, name: Self::Name);
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn expanded_coef(&self, id: FlatIndex) -> ExpandedCoefficent<Self::Args>
     where
         Self: TensorStructure,
@@ -891,7 +903,7 @@ pub trait HasName {
             args: self.args(),
         }
     }
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn flat_coef(&self, id: FlatIndex) -> FlatCoefficent<Self::Args>
     where
         Self: TensorStructure,
@@ -1099,5 +1111,5 @@ mod tests {
 }
 
 #[cfg(test)]
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 mod shadowing_tests {}

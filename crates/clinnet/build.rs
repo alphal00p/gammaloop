@@ -15,6 +15,10 @@ fn main() -> std::io::Result<()> {
         &manifest.join("templates"),
         |_| true,
     )?;
-    build_assets::embed_typst_packages(&mut output, &manifest.join(".."), &[])?;
+    build_assets::embed_typst_packages(
+        &mut output,
+        &manifest.join(".."),
+        &["ec-layout.wasm", "LICENSE.ec-layout", "LICENSE.clarabel"],
+    )?;
     Ok(())
 }

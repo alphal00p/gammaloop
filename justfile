@@ -34,7 +34,7 @@ _sync-drawing-assets:
 
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import --profile dev-optim
+    cargo build -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim
 
 # Build gammaloop CLI without Python (no pyo3)
 build-cli-no-pyo3: _sync-drawing-assets
@@ -42,47 +42,47 @@ build-cli-no-pyo3: _sync-drawing-assets
 
 # Build gammaloop Python CLI with UFO support and stable ABI (dev-optim profile)
 build-cli-abi: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import,abi3 --profile dev-optim
+    cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --profile dev-optim
 
 # Build gammaloop Python CLI in release mode
 build-cli-release: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import --release
+    cargo build -p gammaloop-api --bin gammaloop --features ufo_support --release
 
 # Build gammaloop Python CLI in release mode with stable ABI
 build-cli-release-abi: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import,abi3 --release
+    cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --release
 
 # Build gammaloop Python API with UFO support and dev-optim profile
 build-api: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=dev-optim
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
 build-api-abi: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=dev-optim
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module,python_abi --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and dev-optim profile
 build-api-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=dev-optim
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
 build-api-abi-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=dev-optim
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module,python_abi --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and release profile
 build-api-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=release
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module --profile=release
 
 # Build gammaloop Python API with UFO support and stable ABI (release profile)
 build-api-abi-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=release
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module,python_abi --profile=release
 
 # Build gammaloop Python API wheel with UFO support and release profile
 build-api-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=release
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module --profile=release
 
 # Build gammaloop Python API wheel with UFO support and stable ABI (release profile)
 build-api-abi-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=release
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module,python_abi --profile=release
 
 # Build all workspace packages
 build-all:
@@ -108,14 +108,19 @@ check-symbolica-feature-isolation:
         exit 1
       fi
     done
-    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock"; do
-      for specification in symbolica:3.0.1 numerica:3.0.1 graphica:3.0.0; do
-        package="${specification%:*}"
-        version="${specification#*:}"
-        expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$version")"
+    symbolica_source="$(sed -n '/^name = "symbolica"$/,/^\[\[package\]\]/s/^source = "\(.*\)"$/\1/p' "$root/Cargo.lock")"
+    if ! [[ "$symbolica_source" =~ ^git\+https://github\.com/symbolica-dev/symbolica\?branch=community#[0-9a-f]{40}$ ]]; then
+      echo "the root lock must select one Symbolica revision from the official community branch" >&2
+      exit 1
+    fi
+    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock" "$root/examples/notebooks/symbolica-host/Cargo.lock"; do
+      for package in symbolica numerica graphica; do
+        source="$symbolica_source"
+        version="3.0.1"
+        expected="$(printf 'version = "%s"\nsource = "%s"\n' "$version" "$source")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
         if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one crates.io $package at $version; found ${resolved:-none}" >&2
+          echo "$lock must resolve exactly one $package at $version from $source; found ${resolved:-none}" >&2
           exit 1
         fi
       done
@@ -163,24 +168,28 @@ docs-svg-assets-check:
 
     scripts/render-docs-svg-assets.sh "$check_root"
     checked_assets=(
+        docs/assets/about-*.svg
+        docs/assets/gammaloop-construction-*.svg
         docs/assets/graphs/portal-*.svg
         docs/assets/local-unitarity-*.svg
         docs/assets/spensologo.svg
         assets/gammalooplogo*.svg
     )
     generated_assets=(
+        "$check_root"/docs/assets/about-*.svg
+        "$check_root"/docs/assets/gammaloop-construction-*.svg
         "$check_root"/docs/assets/graphs/portal-*.svg
         "$check_root"/docs/assets/local-unitarity-*.svg
         "$check_root"/docs/assets/spensologo.svg
         "$check_root"/assets/gammalooplogo*.svg
     )
-    [ "${#checked_assets[@]}" -eq 28 ]
-    [ "${#generated_assets[@]}" -eq 28 ]
+    [ "${#checked_assets[@]}" -eq 34 ]
+    [ "${#generated_assets[@]}" -eq 34 ]
     for checked in "${checked_assets[@]}"; do
         cmp "$checked" "$check_root/$checked"
     done
 
-# Build one product documentation site, or all five sites.
+# Build one product documentation site, or all registered sites.
 docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00p-docs":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -218,43 +227,77 @@ docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00
     just docs-check
     cargo run --locked -p alphal00p-docs-builder -- "${args[@]}"
 
-# Add executable cells to a product in a previously built documentation site.
-docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="target/alphal00p-docs":
+# Generate executable cells consumed by docs-site and docs-watch, or a chosen site output.
+docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="docs/generated/notebooks" DEPENDENCY_WHEEL="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    args=()
+    dependency_wheel={{ quote(DEPENDENCY_WHEEL) }}
+    if [ -n "$dependency_wheel" ]; then
+        args+=(--dependency-wheel "$dependency_wheel")
+    fi
     uv run --no-project --with marimo==0.24.0 python \
         crates/linnet-py/examples/export_wasm.py --docs {{ quote(PRODUCT) }} \
         --wheel {{ quote(WHEEL) }} \
-        --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }}
+        --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }} \
+        "${args[@]}"
 
-# Validate the five-product documentation registry and generated inputs.
+# Edit a community showcase with an installed combined Symbolica host.
+notebook NAME="spenso_idenso_display" PYTHON="python":
+    {{ quote(PYTHON) }} -m marimo edit {{ quote("examples/notebooks/" + NAME + ".py") }}
+
+# Build the Symbolica-3-compatible UFO loader until that revision is released.
+notebook-ufo-wheel OUTPUT="target/notebook-ufo-wheel":
+    uv tool run --from pip pip wheel --no-deps \
+        'ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b' \
+        --wheel-dir {{ quote(OUTPUT) }}
+
+# Build the shared Symbolica/FeynKit/Spenso/Idenso wheel for browser showcases.
+notebook-wheel OUTPUT="target/notebook-wheels":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    notebook_toolchain=$(nix build --no-link --print-out-paths .#notebook-wasm-toolchain)
+    export PATH="$notebook_toolchain/bin:$PATH"
+    export RUSTC="$notebook_toolchain/bin/rustc"
+    export CARGO="$notebook_toolchain/bin/cargo"
+    if [ -n "${NIX_SSL_CERT_FILE:-}" ]; then
+        export SSL_CERT_FILE="${SSL_CERT_FILE:-$NIX_SSL_CERT_FILE}"
+    fi
+    CIBW_BUILD=cp314-pyodide_wasm32 uv run --no-project --with cibuildwheel==4.2.0 python \
+        -m cibuildwheel examples/notebooks/symbolica-host --platform pyodide \
+        --output-dir {{ quote(OUTPUT) }}
+
+# Validate the documentation registry and generated inputs.
 docs-check:
+    cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo run --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
     cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-    cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+    cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-    cargo run --locked -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo test --locked -p alphal00p-docs-python-exporter
     cargo test --locked -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+    cargo test --locked -p alphal00p-docs-python-exporter --features linnet linnet_package_and_docs_share_the_typed_stub_info_surface
     cargo test --locked -p alphal00p-docs-examples
     cargo run --locked -p alphal00p-docs-builder -- check
     just docs-svg-assets-check
-    just docs-linnet-python-check
+    just docs-linnet-graph-check
 
 # Render the front-page tour to target/showcase/ (needs Node, Playwright's Chromium, and ffmpeg).
 showcase-video *ARGS:
     node scripts/render-showcase-video.mjs {{ ARGS }}
 
 # Build Linnet's extension and compare its real import surface with the checked-in stub.
-docs-linnet-python-check:
+docs-linnet-graph-check:
     #!/usr/bin/env bash
     set -euo pipefail
 
     temp_base=${TMPDIR:-/tmp}
-    test_root=$(mktemp -d "$temp_base/alphal00p-docs-linnet-python.XXXXXX")
+    test_root=$(mktemp -d "$temp_base/alphal00p-docs-linnet-graph.XXXXXX")
     cleanup() {
         case "$test_root" in
-            "$temp_base"/alphal00p-docs-linnet-python.*)
+            "$temp_base"/alphal00p-docs-linnet-graph.*)
                 rm -rf -- "$test_root"
                 ;;
         esac
@@ -263,11 +306,9 @@ docs-linnet-python-check:
 
     python_bin=${PYTHON_BIN_PATH:-python3}
     uv venv "$test_root/venv" --python "$python_bin"
-    VIRTUAL_ENV="$test_root/venv" maturin develop --uv --locked --manifest-path crates/linnet-py/Cargo.toml --features extension-module,abi3
-    "$test_root/venv/bin/python" -m unittest \
-      crates/linnet-py/tests/test_basic.py \
-      crates/linnet-py/tests/test_wasm.py \
-      crates/linnet-py/tests/test_streaming.py
+    maturin build --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml --out "$test_root/wheels"
+    uv pip install --python "$test_root/venv/bin/python" --no-deps "$test_root"/wheels/*.whl
+    "$test_root/venv/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
 
 # Regenerate source-backed CLI/settings and topology/dependency snapshots.
 docs-generated:
@@ -323,4 +364,4 @@ dev-release: build-release-all
 
 # Run gammaloop
 run *ARGS:
-    cargo run -p gammaloop-api --bin gammaloop --features ufo-import --profile dev-optim -- {{ ARGS }}
+    cargo run -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim -- {{ ARGS }}

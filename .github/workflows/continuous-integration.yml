@@ -80,7 +80,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: symbolica-dev/symbolica-typst-plugin
-          ref: b96c1f3ebd1c2563bf91079a0dd6dc5ec82191c0
+          ref: 57b7455b37c30f4f87353c0073e49f5225e937ab
           path: tymbolica-pinned
 
       - uses: NixOS/nix-installer-action@main
@@ -290,7 +290,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [clippy, fmt, doc]
+        check: [boundaries, clippy, fmt, doc, stubs]
     steps:
       - uses: actions/checkout@v4
 
@@ -325,6 +325,12 @@ jobs:
         if: matrix.check == 'clippy'
         run: just --unstable clippy --keep-going -- -D warnings
 
+      - name: Check FeynKit dependency boundaries
+        if: matrix.check == 'boundaries'
+        run: |
+          python3 .github/scripts/check-feynkit-boundaries.py --self-test
+          python3 .github/scripts/check-feynkit-boundaries.py
+
       - name: Run fmt
         if: matrix.check == 'fmt'
         run: just --unstable fmt -- --check
@@ -332,6 +338,12 @@ jobs:
       - name: Run doc
         if: matrix.check == 'doc'
         run: just --unstable doc
+
+      - name: Check FeynKit Python stubs
+        if: matrix.check == 'stubs'
+        run: |
+          cargo run --locked -p feynkit-py --features python_stubgen --bin feynkit-stubgen
+          test -z "$(git status --porcelain -- crates/feynkit-py/python/symbolica)"
 
   checks:
     name: Checks

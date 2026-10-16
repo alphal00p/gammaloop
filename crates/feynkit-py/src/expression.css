@@ -1,0 +1,311 @@
+.feynkit-expression {
+  --hs-bg: light-dark(#fff, #1c1e20);
+  --hs-fg: light-dark(#252a2e, #ebedef);
+  --hs-muted: light-dark(#657179, #a4b0b9);
+  --hs-rule: light-dark(#e1e6e8, #3c4247);
+  --hs-active: light-dark(#14786e, #83d5c7);
+  --hs-tint: light-dark(#e1f1ec, #28463f);
+  /* Tol qualitative hues (https://sronpersonalpages.nl/~pault/), with lighter
+     dark-mode variants. Reserve gray for the graph rather than a surface. */
+  --hs-1: light-dark(#0077bb, #77bbee);
+  --hs-2: light-dark(#ee7733, #ffaa66);
+  --hs-3: light-dark(#009988, #44ccbb);
+  --hs-4: light-dark(#ee3377, #ff77aa);
+  --hs-5: light-dark(#33bbee, #66ddff);
+  --hs-6: light-dark(#cc3311, #ff8866);
+  --hs-7: light-dark(#aa3377, #cc88cc);
+  font:
+    13px/1.5 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  color: var(--hs-fg);
+  background: transparent;
+  padding: 0;
+}
+.feynkit-expression * {
+  box-sizing: border-box;
+}
+.feynkit-expression .hs-sum-label {
+  font-size: 11px;
+  letter-spacing: 0.045em;
+  color: var(--hs-muted);
+  margin-bottom: 4px;
+}
+.feynkit-expression .hs-sum-math {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  font:
+    20px/1.7 var(--spenso-math-font);
+}
+.feynkit-expression .hs-sum-math > span {
+  white-space: nowrap;
+}
+.feynkit-expression .hs-sum-term,
+.feynkit-expression .hs-sum-current {
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.feynkit-expression .hs-sum-term:hover {
+  border-color: var(--hs-rule);
+  background: var(--hs-tint);
+}
+.feynkit-expression .hs-sum-current {
+  display: inline-block;
+  font: inherit;
+  color: var(--hs-fg);
+  background: var(--hs-tint);
+  cursor: text;
+}
+.feynkit-expression .hs-sum-current input {
+  min-width: 2ch;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dotted var(--hs-active);
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  font:
+    16px var(--spenso-math-font);
+  text-align: center;
+}
+.feynkit-expression .hs-orientation-sum {
+  padding: 6px 0;
+}
+.feynkit-expression .hs-factored-equation,
+.feynkit-expression .hs-factor-node,
+.feynkit-expression .hs-factored-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  /* Nested products and sums share compact math spacing: a full UI-sized gap
+     at every level needlessly pushes otherwise short expressions onto rows. */
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+.feynkit-expression .hs-factored-equation {
+  font:
+    19px/1.4 var(--spenso-math-font);
+  margin: 3px 0;
+  gap: 3px;
+}
+.feynkit-expression .hs-factored-equation > .hs-factor-node {
+  display: contents;
+}
+.feynkit-expression .hs-factored-lhs {
+  white-space: nowrap;
+}
+.feynkit-expression .hs-factored-fraction {
+  font-family: var(--spenso-math-font);
+  font-size: 1em;
+  math-style: normal;
+  text-align: center;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--hs-muted);
+}
+.feynkit-expression .hs-factored-fraction > mfrac > mtext {
+  font-family: var(--spenso-math-font);
+  /* Fractions remain full-size; subscripts still use native math sizing. */
+  math-depth: 0;
+}
+.feynkit-expression .hs-factored-fraction[data-path-active="true"] {
+  color: var(--hs-fg);
+  background: var(--hs-tint);
+  border-radius: 4px;
+}
+.feynkit-expression .hs-factored-denominator {
+  display: inline-flex;
+  flex-wrap: wrap;
+  /* WebKit's intrinsic MathML sizing otherwise keeps the entire denominator
+     unbroken. Leave room for the fraction's side bearings at the display edge. */
+  max-width: calc(100cqi - 1em);
+  justify-content: center;
+  align-items: baseline;
+  gap: 0;
+}
+.feynkit-expression .hs-energy {
+  white-space: nowrap;
+}
+.feynkit-expression .hs-factored-factor {
+  display: inline-block;
+  padding: 2px 1px;
+  font: inherit;
+  white-space: nowrap;
+}
+.feynkit-expression .hs-factored-factor .hs-swatch {
+  margin-top: 2px;
+}
+.feynkit-expression .hs-factored-factor[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--hs-color) 16%, var(--hs-bg));
+  border-color: var(--hs-color);
+}
+.feynkit-expression .hs-factored-factor:not(button) {
+  border: 1px solid transparent;
+}
+.feynkit-expression .hs-factor-spacer {
+  display: block;
+  height: 3px;
+  margin-top: 2px;
+}
+.feynkit-expression .hs-factored-bracket {
+  /* An explicit track avoids WebKit shrinking a nested wrapping sum
+     before it lays out its terms, despite spare room inside the brackets. */
+  display: grid;
+  align-items: baseline;
+  grid-template-columns: minmax(0, 1fr);
+  position: relative;
+  padding-inline: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.feynkit-expression .hs-bracket-edge {
+  /* Decorative fences must not supply the grid's text baseline. */
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 2px;
+  border-block: 1px solid var(--hs-muted);
+  border-left: 1px solid var(--hs-muted);
+}
+.feynkit-expression .hs-bracket-edge:last-child {
+  left: auto;
+  right: 0;
+  border-left: 0;
+  border-right: 1px solid var(--hs-muted);
+}
+.feynkit-expression .hs-factored-sum {
+  padding: 7px 0;
+}
+.feynkit-expression .hs-factor-summand {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+.feynkit-expression .hs-factor-leaf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+.feynkit-expression .hs-leaf-label {
+  font:
+    11px/1.4 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  color: var(--hs-muted);
+}
+.feynkit-expression .hs-leaf-label[data-path-active="true"] {
+  color: var(--hs-fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.feynkit-expression button {
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+.feynkit-expression label {
+  display: grid;
+  gap: 5px;
+  color: var(--hs-muted);
+  font-size: 12px;
+}
+.feynkit-expression .hs-swatch {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  background: var(--hs-color);
+  border-radius: 2px;
+}
+.feynkit-expression sub,
+.feynkit-expression sup {
+  font-size: 0.7em;
+}
+.feynkit-expression .hs-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+  color: var(--hs-muted);
+  font-size: 11px;
+}
+.feynkit-expression .hs-meta code {
+  font:
+    11px ui-monospace,
+    monospace;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.feynkit-expression [hidden] {
+  display: none !important;
+}
+.feynkit-expression button:focus-visible,
+.feynkit-expression input:focus-visible {
+  outline: 2px solid var(--hs-active);
+  outline-offset: 2px;
+}
+@container (max-width:540px) {
+  .feynkit-expression .hs-sum-math {
+    font-size: 18px;
+  }
+  .feynkit-expression .hs-sum-term {
+    padding: 0 2px;
+  }
+}
+.feynkit-expression {
+  container-type: inline-size;
+  color-scheme: light dark;
+  max-width: 100%;
+}
+.feynkit-expression button {
+  cursor: pointer;
+}
+.feynkit-expression .hs-sum-current sub {
+  display: inline-flex;
+  vertical-align: sub;
+}
+.feynkit-expression .hs-status {
+  font-size: 12px;
+  color: var(--hs-muted);
+  margin: 6px 0;
+}
+.feynkit-expression .hs-status:empty {
+  display: none;
+}
+.feynkit-expression .hs-status[data-error="true"] {
+  color: light-dark(#a52e39, #ff9aa6);
+}
+.feynkit-expression .hs-definition {
+  font:
+    16px/1.45 var(--spenso-math-font);
+  overflow-wrap: anywhere;
+}
+
+.feynkit-expression .hs-contribution-numerator { display: inline-flex; align-items: baseline; justify-content: center; gap: 0.2em; }
+.feynkit-expression .hs-contribution-numerator math { font-size: 1em; }
+.feynkit-expression [data-power-label] { font-size: 0.7em; align-self: flex-start; }
+
+.feynkit-expression [data-spenso-math] {
+  /* Export the native math baseline instead of the block equation's bottom. */
+  display: inline-flex;
+  align-items: baseline;
+  vertical-align: baseline;
+  padding: 0;
+  overflow: visible;
+  --spenso-math-font-size: 1em;
+}

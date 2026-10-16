@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 
+use crate::cff::{Esurface, EsurfaceID, OrientationID};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{Context, eyre};
@@ -19,10 +20,9 @@ use crate::{
     cff::{
         CutCFFIndex,
         esurface::{
-            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingThresholds,
+            EsurfaceCollection, ExistingEsurfaceId, ExistingThresholds,
             esurface_value_is_strictly_inside,
         },
-        expression::OrientationID,
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     integrands::{

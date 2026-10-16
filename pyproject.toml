@@ -24,12 +24,12 @@ dependencies = [
   "pydot",
   "pytest",
   "pyyaml>=6.0.1",
-  "symbolica>=3.0.0",
+  "symbolica>=3.0.1",
   "ufo-model-loader>=1.0.0",
 ]
 
 [project.optional-dependencies]
-typst-display = ["typst>=0.15,<0.16"]
+notebook-display = ["anywidget>=0.9,<1"]
 
 [project.urls]
 homepage = "https://alphaloop.ch"
@@ -39,10 +39,12 @@ repository = "https://github.com/alphal00p/gammaloop"
 dev = [
   "PyYAML>=6.0.1,<7",
   "black>=23.12.1,<24",
+  "docstring-to-markdown>=0.17,<1",
+  "ty>=0.0.75",
   "inline-snapshot>=0.21.2",
   "marimo>=0.24,<0.25",
   "pytest>=8.3.5,<9",
-  "symbolica>=3.0.0",
+  "symbolica>=3.0.1",
   "ufo-model-loader>=1.0.0",
 ]
 
@@ -67,7 +69,7 @@ include = [
   { path = "crates/kurvst/typst/typst.toml", format = "sdist" },
   { path = "crates/kurvst/typst/kurvst.wasm", format = "sdist" },
 ]
-features = ["extension-module", "abi3"]
+features = ["pyo3-extension-module", "python_abi"]
 module-name = "gammaloop._gammaloop"
 python-source = "crates/gammaloop-api/python"
 
@@ -87,5 +89,15 @@ ignore_missing_imports = true
 # reportPrivateImportUsage = "none"
 # include = ["gamm/gammaloop"]
 
+[tool.marimo.language_servers.ty]
+enabled = true
+
+[tool.marimo.diagnostics]
+enabled = true
+
 [tool.uv]
 package = false
+
+# The Python distribution is not yet on PyPI; use the community source branch.
+[tool.uv.sources]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", branch = "community" }

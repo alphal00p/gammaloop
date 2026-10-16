@@ -156,14 +156,56 @@ fn svg_numbers(value: &str) -> Vec<f64> {
         .collect()
 }
 
-// The fixture deliberately uses horizontal cubic paths, so inspecting their
-// final x delta is enough and avoids coupling this test to a general SVG parser.
+// Shaft probes measure the X extent of straight segments. Accept both cubic
+// commands and CeTZ's optimized line forms, including moves and closed paths.
 fn horizontal_span(tag: &str) -> (f64, f64) {
-    let values = svg_numbers(svg_attr(tag, "d").unwrap());
-    assert!(values[0].abs() < 1e-9 && values[1].abs() < 1e-9);
-    let start = own_translation(tag).0;
-    let end = start + values[values.len() - 2];
-    (start.min(end), start.max(end))
+    let path = svg_attr(tag, "d").unwrap();
+    let commands = path
+        .char_indices()
+        .filter(|(_, command)| command.is_ascii_alphabetic() && !matches!(command, 'e' | 'E'))
+        .collect::<Vec<_>>();
+    let origin = own_translation(tag).0;
+    let mut x = origin;
+    let mut subpath_x = x;
+    let mut low = f64::INFINITY;
+    let mut high = f64::NEG_INFINITY;
+    for (index, &(offset, command)) in commands.iter().enumerate() {
+        let next = commands
+            .get(index + 1)
+            .map_or(path.len(), |&(next, _)| next);
+        let values = svg_numbers(&path[offset + 1..next]);
+        if matches!(command, 'Z' | 'z') {
+            low = low.min(x).min(subpath_x);
+            high = high.max(x).max(subpath_x);
+            x = subpath_x;
+            continue;
+        }
+        let stride = match command {
+            'H' | 'h' | 'V' | 'v' => 1,
+            'M' | 'm' | 'L' | 'l' => 2,
+            'C' | 'c' => 6,
+            _ => panic!("unexpected shaft path command {command}: {path}"),
+        };
+        assert_eq!(values.len() % stride, 0);
+        for (segment_index, segment) in values.chunks_exact(stride).enumerate() {
+            let previous = x;
+            if !matches!(command, 'V' | 'v') {
+                let endpoint_x = segment[if stride == 1 { 0 } else { stride - 2 }];
+                x = if command.is_ascii_lowercase() {
+                    x
+                } else {
+                    origin
+                } + endpoint_x;
+            }
+            if matches!(command, 'M' | 'm') && segment_index == 0 {
+                subpath_x = x;
+            } else {
+                low = low.min(previous).min(x);
+                high = high.max(previous).max(x);
+            }
+        }
+    }
+    if low.is_finite() { (low, high) } else { (x, x) }
 }
 
 fn merged_spans(mut spans: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
@@ -652,9 +694,17 @@ fn public_gammaloop_momentum_arrows_are_placed_along_the_edge() {
     ] {
         assert_eq!(label_positions["short"], label_positions[mode], "{mode}");
     }
-    assert_eq!(
-        label_positions["curved-short"],
-        label_positions["curved-long"]
+    // Trimming finite curved attachments changes their adaptive subdivision;
+    // use the same physical tolerance as the arrow geometry checks below.
+    assert_close(
+        label_positions["curved-short"].0,
+        label_positions["curved-long"].0,
+        0.02,
+    );
+    assert_close(
+        label_positions["curved-short"].1,
+        label_positions["curved-long"].1,
+        0.02,
     );
     assert_eq!(momentum_outputs["short"], momentum_outputs["label-default"]);
     assert_eq!(momentum_outputs["fallback"], momentum_outputs["ordinary"]);
@@ -855,13 +905,12 @@ fn public_configurable_map_style_behavior_is_observable() {
             include_str!("resources/map-style-behavior.typ"),
         ),
     ]);
-
-    let fixture = base.path().join(TEMPLATES).join("map-style-case.typ");
+    let fixture = base.path().join(".clinnet/templates/map-style-case.typ");
     let output = base.path().join("map-style-case.svg");
     let mut default_svg = None;
     for (case, unit, radius, node_width, widths) in [
-        ("defaults", 13.5, 0.18, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("legacy", 13.5, 0.18, "0.5", ["0.2", "0.4", "0.5", "1"]),
+        ("defaults", 13.5, 0.08, "0.5", ["0.2", "0.4", "0.5", "1"]),
+        ("reference", 13.5, 0.08, "0.5", ["0.2", "0.4", "0.5", "1"]),
         ("scaled", 20.0, 0.3, "0.5", ["0.2", "0.4", "0.5", "1"]),
         ("derived", 10.0, 0.3, "1.25", ["0.5", "1", "1.25", "2.5"]),
         (
@@ -888,14 +937,17 @@ fn public_configurable_map_style_behavior_is_observable() {
         let svg = fs::read_to_string(&output).unwrap();
         if case == "defaults" {
             default_svg = Some(svg.clone());
-        } else if case == "legacy" {
+        } else if case == "reference" {
             assert_eq!(
                 Some(&svg),
                 default_svg.as_ref(),
                 "default rendering changed"
             );
         }
-        let nodes = paths_with_attr(&svg, "fill", "#ffffff");
+        let nodes = paths_with_attr(&svg, "fill", "#000000")
+            .into_iter()
+            .filter(|(_, tag)| svg_attr(tag, "stroke-width") == Some(node_width))
+            .collect::<Vec<_>>();
         assert_eq!(nodes.len(), 2, "{case}: hidden nodes must not be painted");
         assert_close(
             own_translation(nodes[1].1).0 - own_translation(nodes[0].1).0,
@@ -1170,22 +1222,31 @@ fn public_gammaloop_momentum_geometry_ignores_label_visibility() {
         assert!(!particle.is_empty(), "{mode}");
         assert_eq!(paths_with_attr(&svg, "fill", "#dc2626").len(), 9, "{mode}");
         let origin = own_translation(particle[0].1);
-        // Text changes the canvas bounds. Compare actual shafts, arrowheads,
-        // and particle paths relative to the first underlying particle path.
-        let geometry = svg_paths(&svg)
+        // Text changes the canvas bounds. Compare pinned arrowheads and particle
+        // paths relative to the first particle path. Attached arrows are painted
+        // after all edges, and their shafts may span both halves in one path;
+        // curve-level fixtures check those continuous carriers separately.
+        let mut geometry = svg_paths(&svg)
             .into_iter()
             .filter(|(_, tag)| {
-                matches!(svg_attr(tag, "stroke"), Some("#2563eb" | "#dc2626"))
+                svg_attr(tag, "stroke") == Some("#2563eb")
                     || svg_attr(tag, "fill") == Some("#dc2626")
             })
             .map(|(_, tag)| {
                 let position = own_translation(tag);
                 (
-                    svg_attr(tag, "d").unwrap().to_owned(),
+                    // Typst may elide a redundant relative move in identical paths.
+                    svg_attr(tag, "d").unwrap().replace("m 0 0", ""),
                     (position.0 - origin.0, position.1 - origin.1),
                 )
             })
             .collect::<Vec<_>>();
+        geometry.sort_by(|left, right| {
+            left.0
+                .cmp(&right.0)
+                .then_with(|| left.1.1.total_cmp(&right.1.1))
+                .then_with(|| left.1.0.total_cmp(&right.1.0))
+        });
         if let Some(expected) = &baseline {
             assert_eq!(geometry.len(), expected.len(), "{mode}");
             for (actual, expected) in geometry.iter().zip(expected) {
@@ -1218,4 +1279,27 @@ fn public_gammaloop_external_order_tracks_physical_indices() {
             &[],
         )
         .unwrap();
+}
+
+#[test]
+fn public_native_curve_splits_layers_and_route_points_behave() {
+    let (base, renderer) = staged(&[
+        (
+            "crates/kurvst/typst/tests/pattern-split.typ",
+            include_str!("../../kurvst/typst/tests/pattern-split.typ"),
+        ),
+        (
+            "crates/kurvst/typst/tests/layer-offset.typ",
+            include_str!("../../kurvst/typst/tests/layer-offset.typ"),
+        ),
+        (
+            "route-points-behavior.typ",
+            include_str!("resources/route-points-behavior.typ"),
+        ),
+    ]);
+    let source = r#"#include "crates/kurvst/typst/tests/pattern-split.typ"
+#include "crates/kurvst/typst/tests/layer-offset.typ"
+#include "route-points-behavior.typ"
+"#;
+    render(&base, &renderer, "native-geometry.typ", source);
 }

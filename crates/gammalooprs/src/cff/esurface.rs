@@ -28,13 +28,13 @@ pub use crate::cff::surface::EsurfaceID;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
+use crate::graph::FinalizedCut;
 use crate::integrands::process::sampling::maps::SamplingEvaluationError;
 use crate::integrands::process::{GenericEvaluator, ImplicitSurfaceRadialMap};
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
 use crate::momentum::{Rotatable, Rotation, ThreeMomentum};
-use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::newton_solver::{
     NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity, SafeguardedNewtonError,
@@ -819,7 +819,7 @@ impl Esurface {
         let mut shared = Vec::new();
         for (left, &a) in varying[0].iter().enumerate() {
             for (right, &b) in varying[1].iter().enumerate() {
-                if graph[a].mass_atom() == graph[b].mass_atom()
+                if graph[a].mass_atom(&graph.model) == graph[b].mass_atom(&graph.model)
                     && lmb.edge_signatures[a]
                         .spatial_equality_up_to_sign(&lmb.edge_signatures[b], &externals)?
                 {
@@ -2381,7 +2381,7 @@ impl Esurface {
 
     pub(crate) fn new_from_cut_left<E, V, H>(
         graph: &HedgeGraph<E, V, H>,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         initial_state_cut: Option<&OrientedCut>,
     ) -> Self {
         let edges = graph
@@ -2424,11 +2424,16 @@ impl Esurface {
         }
     }
 
-    pub(crate) fn lmb_atom(&self, graph: &Graph, lmb_reps: &[Replacement]) -> Atom {
+    pub(crate) fn lmb_atom(
+        &self,
+        graph: &Graph,
+        model: &crate::model::Model,
+        lmb_reps: &[Replacement],
+    ) -> Atom {
         self.energies
             .iter()
             .map(|index| {
-                let mass_symbol = graph.underlying[*index].mass_atom();
+                let mass_symbol = graph.underlying[*index].mass_atom(model);
                 let emr_symbols = (0..3)
                     .map(|i| function!(GS.emr_mom, usize::from(*index), i + 1))
                     .collect_vec();
@@ -2451,11 +2456,16 @@ impl Esurface {
     }
 
     // more readable version for debugging, because it doesn't write out components
-    pub(crate) fn lmb_atom_simplified(&self, graph: &Graph, lmb_reps: &[Replacement]) -> Atom {
+    pub(crate) fn lmb_atom_simplified(
+        &self,
+        graph: &Graph,
+        model: &crate::model::Model,
+        lmb_reps: &[Replacement],
+    ) -> Atom {
         self.energies
             .iter()
             .map(|index| {
-                let mass_symbol = graph.underlying[*index].mass_atom();
+                let mass_symbol = graph.underlying[*index].mass_atom(model);
                 let emr_symbol = function!(GS.emr_mom, usize::from(*index));
 
                 (&emr_symbol * &emr_symbol + &mass_symbol * &mass_symbol).sqrt()
@@ -2547,7 +2557,7 @@ define_index!(
     pub struct RaisedEsurfaceId;
 );
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Default, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct RaisedEsurfaceData {
     pub raised_groups: TiVec<RaisedEsurfaceId, RaisedEsurfaceGroup>,
@@ -2684,7 +2694,8 @@ mod tests {
     use symbolica::parse;
 
     use crate::cff::VertexSet;
-    use crate::graph::{Graph, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph};
+    use crate::graph::FinalizedCut;
+    use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
     use crate::initialisation::test_initialise;
     use crate::integrands::process::SamplingMapAffine;
     use crate::momentum::{
@@ -2692,10 +2703,8 @@ mod tests {
         sample::{ExternalFourMomenta, LoopMomenta, SubspaceData},
         signature::LoopExtSignature,
     };
-    use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
-        dot,
         utils::{
             ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike,
             QuadFloat,
@@ -2777,20 +2786,21 @@ mod tests {
         test_initialise().unwrap();
         // Splitting the kite's common line through E gives distinct edge IDs
         // with opposite complete affine routes, without altering its two cycles.
-        let graph: Graph = dot!(digraph joint_serial_energy {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph joint_serial_energy {
+ graph [projector=1]
             ext_in [style=invis]
             ext_out [style=invis]
             node [num=1]
             edge [num=1 mass=1]
-            ext_in -> A:0 [id=0 mass=0]
-            C:1 -> ext_out [id=1 mass=0]
-            A -> B [id=2 mass=2]
-            B -> C [id=3]
-            C -> D [id=4 lmb_id=0]
-            D -> A [id=5 mass=3]
-            B -> E [id=6 lmb_id=1]
-            D -> E [id=7]
-        })
+            ext_in -> A:0 [id=0 mass=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            C:1 -> ext_out [id=1 mass=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            A -> B [id=2 mass=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            B -> C [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            C -> D [id=4 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            D -> A [id=5 mass=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            B -> E [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            D -> E [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
         let id = LmbIndex::from(0);
@@ -2929,24 +2939,25 @@ mod tests {
         test_initialise().unwrap();
         // The two extra external ports between the distinct common-energy
         // edges sum to zero spatially in CM, but carry nonzero total energy.
-        let graph: Graph = dot!(digraph joint_external_energy {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph joint_external_energy {
+ graph [projector=1]
             ext_in [style=invis]
             ext_out [style=invis]
             beam_a [style=invis]
             beam_b [style=invis]
             node [num=1]
             edge [num=1 mass=1]
-            ext_in -> A:0 [id=0 mass=0]
-            C:1 -> ext_out [id=1 mass=0]
-            A -> B [id=2 mass=2]
-            B -> C [id=3]
-            C -> D [id=4 lmb_id=0]
-            D -> A [id=5 mass=3]
-            B -> E [id=6 lmb_id=1]
-            D -> E [id=7]
-            beam_a -> E [id=8 mass=0]
-            beam_b -> E [id=9 mass=0]
-        })
+            ext_in -> A:0 [id=0 mass=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            C:1 -> ext_out [id=1 mass=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            A -> B [id=2 mass=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            B -> C [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            C -> D [id=4 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            D -> A [id=5 mass=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            B -> E [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            D -> E [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            beam_a -> E [id=8 mass=0 source="{ufo_order:0}" sink="{ufo_order:2}"]
+            beam_b -> E [id=9 mass=0 source="{ufo_order:0}" sink="{ufo_order:3}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         fn check<T: FloatLike>(graph: &Graph) {
             let one = F::<T>::default().one();
@@ -3439,16 +3450,17 @@ mod tests {
         // A ttH cut with back-to-back tops and a Higgs at rest has the analytic root
         // sqrt(((Q-mH)/2)^2-mt^2)/|p|. The Higgs momentum vanishes by cancellation of
         // two nonzero basis momenta, not because its graph signature is constant.
-        let graph: Graph = dot!(digraph massive_energy_at_rest {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph massive_energy_at_rest {
+ graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a:0 [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2 lmb_id=1]
-            a -> b [id=3]
-            b:1 -> ext [id=4]
-        })
+            ext -> a:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            a -> b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
+            b:1 -> ext [id=4 source="{ufo_order:3}" sink="{ufo_order:1}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
         let lmb = &lmbs[LmbIndex::from(0)];
@@ -3897,9 +3909,15 @@ mod tests {
         let one = point[0].one();
         let zero = one.zero();
         let model = crate::utils::load_generic_model("sm");
-        let graph: Graph = include_str!("../../../../tests/resources/graphs/GL638.dot")
-            .into_graph(&model)
-            .unwrap();
+        let graph: Graph = crate::graph::Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/GL638.dot"),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
+        .unwrap();
         let lmb = &graph.loop_momentum_basis;
         assert_eq!(
             lmb.loop_edges.raw,
@@ -4138,9 +4156,15 @@ mod tests {
         let zero = one.zero();
         let f = |value| one.from_i64(value);
         let model = crate::utils::load_generic_model("sm");
-        let graph: Graph = include_str!("../../../../tests/resources/graphs/GL638.dot")
-            .into_graph(&model)
-            .unwrap();
+        let graph: Graph = crate::graph::Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/GL638.dot"),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
+        .unwrap();
         let lmb = &graph.loop_momentum_basis;
         assert_eq!(
             lmb.loop_edges.raw,
@@ -4262,16 +4286,17 @@ mod tests {
     #[test]
     fn implicit_sampling_map_uses_graph_esurface_root_and_roundtrips() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph implicit_sampling_esurface {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph implicit_sampling_esurface {
+ graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a:0 [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2 lmb_id=1]
-            a -> b [id=3]
-            b:1 -> ext [id=4]
-        })
+            ext -> a:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            a -> b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
+            b:1 -> ext [id=4 source="{ufo_order:3}" sink="{ufo_order:1}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let lmb = graph.loop_momentum_basis.clone();
         let surface = Esurface {
@@ -4746,7 +4771,7 @@ mod tests {
 
             let cross_section_cuts = cuts
                 .into_iter()
-                .map(|(node_l, cut, node_r)| CrossSectionCut {
+                .map(|(node_l, cut, node_r)| FinalizedCut {
                     cut,
                     left: node_l,
                     right: node_r,
@@ -4834,7 +4859,7 @@ mod tests {
 
             let cross_section_cuts = cuts
                 .into_iter()
-                .map(|(node_l, cut, node_r)| CrossSectionCut {
+                .map(|(node_l, cut, node_r)| FinalizedCut {
                     cut,
                     left: node_l,
                     right: node_r,

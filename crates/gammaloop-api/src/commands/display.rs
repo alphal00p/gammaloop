@@ -21,6 +21,7 @@ use walkdir::WalkDir;
 use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
+    model::ModelGammaLoopExt,
     processes::{Amplitude, CrossSection, Process, ProcessCollection, ThresholdCountertermSide},
     settings::RuntimeSettings,
 };
@@ -747,7 +748,7 @@ fn render_integrand_thresholds_table(
     builder.push_record([
         "Group #".bold().blue().to_string(),
         "Graph".bold().blue().to_string(),
-        "Esurface".bold().blue().to_string(),
+        "EnergySurface".bold().blue().to_string(),
         "edges".bold().blue().to_string(),
         status_header.bold().blue().to_string(),
     ]);

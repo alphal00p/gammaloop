@@ -19,6 +19,7 @@ use clap::Args;
 use color_eyre::{Result, Section};
 use colored::Colorize;
 use eyre::{eyre, Context};
+use feynkit_generator::GenerationType;
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
@@ -35,12 +36,11 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use gammalooprs::{
     clear_interrupt_request,
-    feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
     integrands::process::ProcessIntegrand,
     is_interrupt_requested,
-    model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
+    model::{InputParamCard, Model, ModelGammaLoopExt, SerializableInputParamCard, UFOSymbol},
     processes::{
         begin_phase, merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
         GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
@@ -798,7 +798,7 @@ impl<'de> Deserialize<'de> for ProcessRef {
     }
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python_api")]
 impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ProcessRef {
     type Error = pyo3::PyErr;
 
@@ -1608,7 +1608,7 @@ fn parse_toml_command_history(value: TomlValue, context: &str) -> Result<Command
 }
 
 #[cfg_attr(
-    feature = "python",
+    feature = "python_api",
     pyo3::pyclass(from_py_object, unsendable, name = "GammaLoopState")
 )]
 #[derive(Clone)]
@@ -1654,7 +1654,9 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // regenerated rather than decoded as the new expression type.
 // Local UV forest contributions remain compatible with this layout because
 // they are combined into one persisted integrand before evaluator construction.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 15;
+// Version 18 combines the canonical FeynKit model and current compact runtime layout.
+// Older states from either development branch must be regenerated.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 18;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2112,7 +2114,7 @@ impl State {
     }
 
     pub fn import_model(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        self.model = Model::from_file(path)?;
+        self.model = Model::from_path(path)?;
         Ok(())
     }
 
@@ -2376,7 +2378,7 @@ impl State {
                             process_name
                         )
                     })?;
-                    let plan = amplitude.plan_graph_group_selection(selection)?;
+                    let plan = amplitude.plan_graph_group_selection(selection, &self.model)?;
                     amplitude.validate_graph_group_selection_plan(&plan)?;
                     (process_name, plan, amplitude.integrand.is_some())
                 }
@@ -2807,8 +2809,9 @@ impl State {
 
     pub fn resolve_model_for_settings(&self, settings: &RuntimeSettings) -> Result<Model> {
         let mut model = self.model.clone();
-        self.resolve_effective_model_parameter_card_for_settings(settings)?
-            .apply_to_model(&mut model)?;
+        model.apply_param_card(
+            &self.resolve_effective_model_parameter_card_for_settings(settings)?,
+        )?;
         Ok(model)
     }
 
@@ -3267,7 +3270,6 @@ impl State {
                         .add_cross_section(CrossSection::from_graph_list(
                             integrand_name.clone(),
                             graphs,
-                            &self.model,
                         )?)
                 }
             }
@@ -3293,7 +3295,7 @@ impl State {
         let _ = initialise();
 
         Self {
-            model: Model::default(),
+            model: Model::empty("ModelNotLoaded"),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
             generation_summaries: BTreeMap::new(),
@@ -3304,7 +3306,7 @@ impl State {
         init_test_tracing();
 
         Self {
-            model: Model::default(),
+            model: Model::empty("ModelNotLoaded"),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
             generation_summaries: BTreeMap::new(),
@@ -3315,7 +3317,7 @@ impl State {
         init_bench_tracing();
 
         Self {
-            model: Model::default(),
+            model: Model::empty("ModelNotLoaded"),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
             generation_summaries: BTreeMap::new(),
@@ -3374,17 +3376,17 @@ impl State {
         // callbacks; the import then remaps serialized symbol ids onto those definitions.
         let mut model = if let Some(model_path) = &model_path {
             info!("Loading model from {}", model_path.display());
-            Model::from_file(model_path)?
+            Model::from_path(model_path)?
         } else {
             let model_dir = save_path.join("model.json");
             info!(
                 "Loading model from default location: {}",
                 model_dir.display()
             );
-            Model::from_file(model_dir)?
+            Model::from_path(model_dir)?
         };
 
-        debug!("Loaded model: {}", model.name);
+        debug!("Loaded model: {}", model.name());
 
         let input_param_card = if save_path.join("model_parameters.json").exists() {
             let a = InputParamCard::from_file(save_path.join("model_parameters.json"))?;
@@ -3392,7 +3394,7 @@ impl State {
             let _ = model.apply_param_card(&a);
             a
         } else {
-            InputParamCard::default_from_model(&model)
+            model.default_param_card()
         };
 
         let symbolica_state = symbolica::state::State::import(
@@ -3542,8 +3544,7 @@ impl State {
         // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
         // fs::write(root_folder.join("process_list.bin"), binary)?;?
         self.model
-            .to_serializable()
-            .to_file(selected_root_folder.join("model.json"), override_state_file)?;
+            .write_json(selected_root_folder.join("model.json"))?;
         self.model_parameters.to_file(
             selected_root_folder.join("model_parameters.json"),
             override_state_file,
@@ -3561,7 +3562,7 @@ mod tests {
         graph::Graph,
         initialisation::test_initialise,
         integrands::process::{ActiveF64Backend, GaussianReferenceFunction},
-        model::InputParamCard,
+        model::ModelGammaLoopExt,
         momentum::{Dep, ExternalMomenta, Helicity},
         processes::{
             process::ProcessCollection, RaisedPropagatorScope, RaisedPropagatorSignature,
@@ -3681,8 +3682,9 @@ mod tests {
                     }
                 }
                 let mut model = state.model.clone();
-                model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(1.0)));
-                model.recompute_dependents().unwrap();
+                let mut card = model.default_param_card();
+                card.insert("aS".into(), Complex::new_re(F(1.0)));
+                model.apply_param_card(&card).unwrap();
                 params.update_model_values(&model).unwrap();
                 let coupling = model.get_coupling("GC_12");
                 let position = params.pairs.model_parameters.value_range.start
@@ -3691,12 +3693,14 @@ mod tests {
                         .model_parameters
                         .params
                         .iter()
-                        .position(|param| *param == Atom::from(coupling.name))
+                        .position(|param| {
+                            *param == Atom::from(UFOSymbol::from(coupling.name.as_str()))
+                        })
                         .unwrap();
                 for (value_index, values) in params.values.iter().enumerate() {
                     assert_eq!(
                         values[position * (value_index + 1)],
-                        coupling.value.unwrap().map(F)
+                        Complex::new(F(coupling.value.unwrap().re), F(coupling.value.unwrap().im))
                     );
                 }
                 for name in ["G", "orphan_ufo_printer"] {
@@ -3726,9 +3730,14 @@ mod tests {
         // Force a different registration order from the alphabetical manifest replay.
         let _ = UFOSymbol::from("GC_12");
         state.model = load_generic_model("sm");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
-        let mut graphs = Graph::from_string(
-            "digraph model_values { node [num=1]; edge [num=1, mass=0]; A -> A; }",
+        state.model_parameters = state.model.default_param_card();
+        let mut graphs = Graph::from_finalized_runtime_string(
+            r#"digraph model_values {
+                num=1; overall_factor=1; overall_factor_evaluated=1; projector=1;
+                A [num=1];
+                A:0 -> A:1 [particle="a", num=1, mass=0, id=0, lmb_id=0,
+                    lmb_rep="K(0,a___)", source="{ufo_order:0}", sink="{ufo_order:1}"];
+            }"#,
             &state.model,
         )
         .unwrap();
@@ -3791,11 +3800,11 @@ mod tests {
         test_initialise().expect("test initialisation should succeed");
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_path(&graph_path, &state.model)
+        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 
         state
@@ -3832,23 +3841,27 @@ mod tests {
         };
 
         test_initialise()?;
-        for (folder, source) in [
+        for (folder, source, model) in [
             (
                 "amplitudes",
                 include_str!("../../../tests/resources/graphs/scalar_bubble.dot"),
+                load_generic_model("scalars"),
             ),
             (
                 "cross_sections",
                 include_str!(
                     "../../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
                 ),
+                Model::from_json(include_str!(
+                    "../../../assets/models/json/scalars/scalars_2p_3p.json"
+                ))?,
             ),
         ] {
             let temp = tempdir()?;
             let mut state = State::new_test();
-            state.model = load_generic_model("scalars");
-            state.model_parameters = InputParamCard::default_from_model(&state.model);
-            let mut graphs = Graph::from_string(source, &state.model)?;
+            state.model = model;
+            state.model_parameters = state.model.default_param_card();
+            let mut graphs = Graph::import_dot(source, &state.model)?;
             graphs.truncate(1);
             let graph_name = graphs[0].name.clone();
             for name in ["first", "second"] {
@@ -3966,6 +3979,7 @@ mod tests {
                 for computed in [false, true] {
                     let output = temp.path().join(format!("export-{loaded}-{computed}"));
                     state.process_list.export_uv_forests(
+                        &state.model,
                         &output,
                         0,
                         "first",
@@ -3986,7 +4000,9 @@ mod tests {
                                 let node = node?;
                                 let dot = fs::read_to_string(node.path())?;
                                 assert!(dot.contains("forest_residue_index"));
-                                for graph in Graph::from_string(&dot, &state.model)? {
+                                for graph in
+                                    Graph::from_finalized_runtime_string(&dot, &state.model)?
+                                {
                                     exported_graph = true;
                                     expression += graph.full_numerator_atom();
                                 }
@@ -4295,11 +4311,11 @@ mod tests {
         test_initialise().expect("test initialisation should succeed");
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_path(&graph_path, &state.model)
+        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
         state
             .import_graphs(
@@ -5099,6 +5115,24 @@ commands = ["quit -n"]
     }
 
     #[test]
+    fn state_manifest_rejects_pre_feynkit_unification_versions() {
+        let temp = tempdir().unwrap();
+        let legacy_manifest = StateManifest {
+            version: 1,
+            ufo_print_symbols: Vec::new(),
+            linnet_subgraph_print_labels: Vec::new(),
+        };
+        fs::write(
+            temp.path().join(STATE_MANIFEST_FILE),
+            toml::to_string_pretty(&legacy_manifest).unwrap(),
+        )
+        .unwrap();
+
+        let err = load_state_manifest(temp.path()).unwrap_err();
+        assert!(format!("{err}").contains("regenerate the saved state"));
+    }
+
+    #[test]
     fn state_folder_classifies_saved_layout() {
         let temp = tempdir().unwrap();
         save_state_manifest(temp.path()).unwrap();
@@ -5187,11 +5221,15 @@ commands = ["quit -n"]
         let bubble = build_generated_scalar_bubble_state_with_external_backend();
         let mut kite = State::new_test();
         kite.model = load_generic_model("scalars");
-        kite.model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(1.0)));
-        kite.model_parameters = InputParamCard::default_from_model(&kite.model);
+        kite.model_parameters = kite.model.default_param_card();
+        kite.model_parameters
+            .insert("mass_scalar_1".into(), Complex::new_re(F(1.0)));
+        kite.model.apply_param_card(&kite.model_parameters)?;
         kite.import_graphs(
-            Graph::from_path(
-                crate::test_workspace_root().join("tests/resources/graphs/massive_kite.dot"),
+            Graph::import_dot(
+                &std::fs::read_to_string(
+                    crate::test_workspace_root().join("tests/resources/graphs/massive_kite.dot"),
+                )?,
                 &kite.model,
             )?,
             GraphImportOptions {
@@ -5262,10 +5300,11 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         // proposals; the broad components give the shifted Gaussian full support.
         let mut cut = State::new_test();
         cut.model = kite.model.clone();
-        cut.model_parameters = InputParamCard::default_from_model(&cut.model);
+        cut.model_parameters = cut.model.default_param_card();
         cut.import_graphs(
-            Graph::from_string(
+            Graph::import_dot(
                 r#"digraph sampling_cut_bubble {
+                    final_state="scalar_1,scalar_1";
                     num=1; edge [pdg=1001]; node [num=1];
                     ext [style=invis, is_cut=0];
                     ext -> a [id=0];
@@ -6022,7 +6061,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
     fn resolve_effective_model_parameter_card_overlays_runtime_model_settings() {
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
 
         let mut settings = RuntimeSettings::default();
         settings
@@ -6048,7 +6087,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
     fn resolve_effective_model_parameter_card_rejects_non_overridable_parameters() {
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         state
             .model_parameters
             .remove(&UFOSymbol::from("mass_scalar_2"));

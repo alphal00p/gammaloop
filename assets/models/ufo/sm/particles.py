@@ -12,6 +12,9 @@ from .object_library import all_particles, Particle
 from . import parameters as Param
 from . import propagators as Prop
 
+# Hypercharges use Q = T3 + Y/2. Y is left-handed for fermions and
+# YRight is right-handed; None means absent or not a hypercharge eigenstate.
+# charge_exact preserves fractional electric charges through JSON export.
 a = Particle(pdg_code=22,
              name='a',
              antiname='a',
@@ -24,7 +27,7 @@ a = Particle(pdg_code=22,
              charge=0,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='0')
 
 Z = Particle(pdg_code=23,
              name='Z',
@@ -38,7 +41,7 @@ Z = Particle(pdg_code=23,
              charge=0,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='0')
 
 W__plus__ = Particle(pdg_code=24,
                      name='W+',
@@ -52,7 +55,7 @@ W__plus__ = Particle(pdg_code=24,
                      charge=1,
                      GhostNumber=0,
                      LeptonNumber=0,
-                     Y=0,
+                     Y='0',
                      chemical_potential=Param.muW)
 
 W__minus__ = W__plus__.anti()
@@ -75,7 +78,7 @@ g = Particle(pdg_code=21,
              charge=0,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='0')
 
 ghA = Particle(pdg_code=9000001,
                name='ghA',
@@ -89,7 +92,7 @@ ghA = Particle(pdg_code=9000001,
                charge=0,
                GhostNumber=1,
                LeptonNumber=0,
-               Y=0)
+               Y='0')
 
 ghA__tilde__ = ghA.anti()
 
@@ -105,7 +108,7 @@ ghZ = Particle(pdg_code=9000002,
                charge=0,
                GhostNumber=1,
                LeptonNumber=0,
-               Y=0)
+               Y='0')
 
 ghZ__tilde__ = ghZ.anti()
 
@@ -121,7 +124,7 @@ ghWp = Particle(pdg_code=9000003,
                 charge=1,
                 GhostNumber=1,
                 LeptonNumber=0,
-                Y=0,
+                Y='0',
                 chemical_potential=Param.mughWp)
 
 ghWp__tilde__ = ghWp.anti()
@@ -138,7 +141,7 @@ ghWm = Particle(pdg_code=9000004,
                 charge=-1,
                 GhostNumber=1,
                 LeptonNumber=0,
-                Y=0,
+                Y='0',
                 chemical_potential=Param.mughWm)
 
 ghWm__tilde__ = ghWm.anti()
@@ -155,7 +158,7 @@ ghG = Particle(pdg_code=9000005,
                charge=0,
                GhostNumber=1,
                LeptonNumber=0,
-               Y=0)
+               Y='0')
 
 ghG__tilde__ = ghG.anti()
 
@@ -171,7 +174,7 @@ ve = Particle(pdg_code=12,
               charge=0,
               GhostNumber=0,
               LeptonNumber=1,
-              Y=-1,
+              Y='-1',
               YRight=None,
               chemical_potential=Param.muve)
 
@@ -189,7 +192,7 @@ vm = Particle(pdg_code=14,
               charge=0,
               GhostNumber=0,
               LeptonNumber=1,
-              Y=-1,
+              Y='-1',
               YRight=None,
               chemical_potential=Param.muvm)
 
@@ -207,7 +210,7 @@ vt = Particle(pdg_code=16,
               charge=0,
               GhostNumber=0,
               LeptonNumber=1,
-              Y=-1,
+              Y='-1',
               YRight=None,
               chemical_potential=Param.muvt)
 
@@ -367,7 +370,7 @@ G__plus__ = Particle(pdg_code=251,
                      charge=1,
                      GhostNumber=0,
                      LeptonNumber=0,
-                     Y=1,
+                     Y='1',
                      chemical_potential=Param.muG)
 
 G__minus__ = G__plus__.anti()
@@ -384,8 +387,8 @@ e__minus__ = Particle(pdg_code=11,
                       charge=-1,
                       GhostNumber=0,
                       LeptonNumber=1,
-                      Y=-1,
-                      YRight=-2,
+                      Y='-1',
+                      YRight='-2',
                       chemical_potential=Param.mue)
 
 e__plus__ = e__minus__.anti()
@@ -402,8 +405,8 @@ mu__minus__ = Particle(pdg_code=13,
                        charge=-1,
                        GhostNumber=0,
                        LeptonNumber=1,
-                       Y=-1,
-                       YRight=-2,
+                       Y='-1',
+                       YRight='-2',
                        chemical_potential=Param.mumu)
 
 mu__plus__ = mu__minus__.anti()
@@ -420,8 +423,8 @@ ta__minus__ = Particle(pdg_code=15,
                        charge=-1,
                        GhostNumber=0,
                        LeptonNumber=1,
-                       Y=-1,
-                       YRight=-2,
+                       Y='-1',
+                       YRight='-2',
                        chemical_potential=Param.muta)
 
 ta__plus__ = ta__minus__.anti()
