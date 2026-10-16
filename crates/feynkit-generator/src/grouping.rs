@@ -57,7 +57,7 @@ use symbolica::{
     },
     function,
     graph::Graph,
-    id::Replacement,
+    id::{AliasedAtom, Replacement},
     symbol,
 };
 use thiserror::Error;
@@ -1199,12 +1199,72 @@ fn evaluate_tensor_sample(
                 .map_err(|error| {
                     tensor_evaluation_error(diagram, sample, format!("Lorentz execution: {error}"))
                 })?;
-            let scalar: Atom = network
+            let mut scalar: Atom = network
                 .result_scalar()
                 .map_err(|error| {
                     tensor_evaluation_error(diagram, sample, format!("scalar extraction: {error}"))
                 })?
                 .into();
+            // Contraction leaves exact finite component coefficients in different
+            // nested Horner forms. Collect those coefficients before comparing
+            // samples; retain every function and composite power as an opaque
+            // factor, so this cannot distribute a graph numerator or denominator.
+            let mut exact = true;
+            scalar.visitor(&mut |part| {
+                if let AtomView::Num(number) = part {
+                    exact &= matches!(
+                        number.get_coeff_view(),
+                        symbolica::coefficient::CoefficientView::Natural(..)
+                            | symbolica::coefficient::CoefficientView::Large(..)
+                    );
+                }
+                exact
+            });
+            if exact {
+                let mut used = scalar.get_all_symbols(true);
+                let mut aliases = BTreeMap::<Atom, Atom>::new();
+                let mut serial = 0usize;
+                let mut collected = scalar.replace_map(|part, _, output| {
+                    let opaque = match part {
+                        AtomView::Fun(_) => true,
+                        AtomView::Pow(power) => {
+                            !matches!(power.get_base(), AtomView::Var(_))
+                                || !i64::try_from(power.get_exp())
+                                    .is_ok_and(|exponent| exponent > 0)
+                        }
+                        _ => false,
+                    };
+                    if opaque {
+                        let alias = aliases.entry(part.to_owned()).or_insert_with(|| {
+                            loop {
+                                let symbol = symbol!(&format!(
+                                    "feynkit_generator::sample_coefficient_{serial}"
+                                ));
+                                serial += 1;
+                                if used.insert(symbol) {
+                                    break Atom::var(symbol);
+                                }
+                            }
+                        });
+                        **output = alias.clone();
+                    }
+                });
+                loop {
+                    let next = collected
+                        .expand_num()
+                        .collect_horner::<Symbol>(None)
+                        .collect_factors();
+                    if next.as_view().get_byte_size() >= collected.as_view().get_byte_size() {
+                        break;
+                    }
+                    collected = next;
+                }
+                let mut collected = AliasedAtom::from(collected);
+                for (original, alias) in aliases {
+                    collected.register_alias(alias, original);
+                }
+                scalar = collected.into_inner();
+            }
             let color = color.canonize(GroupingIndex::Dummy).map_err(|error| {
                 tensor_evaluation_error(diagram, sample, format!("color canonicalization: {error}"))
             })?;
@@ -2514,13 +2574,32 @@ mod tests {
                 .unwrap()
                 .key,
         );
+        let mut sampled_words = Vec::new();
         for diagram in &diagrams {
             let samples = numerical_tensor_samples(diagram.numerator(), diagram, &options).unwrap();
-            for value in samples {
+            for value in &samples {
                 assert!(!value.contains_symbol(feynkit_graph::symbols::epsilon()));
                 assert!(!value.contains_symbol(feynkit_graph::symbols::epsilonbar()));
                 assert!(value.contains_symbol(symbol!("UFO::MT")));
             }
+            sampled_words.push(samples);
+        }
+        for (sample, (left, right)) in sampled_words[0].iter().zip(&sampled_words[1]).enumerate() {
+            // The source words obey the exact charge-conjugation identity
+            // above. These finite component probes also check its numerical
+            // execution without distributing the recorded numerator.
+            for mass in 0..=4 {
+                let left = left.replace(symbol!("UFO::MT")).with(Atom::num(mass));
+                let right = right.replace(symbol!("UFO::MT")).with(Atom::num(mass));
+                assert!(
+                    expressions_equal(&left, &right).unwrap(),
+                    "sample={sample}, mass={mass}: left={left}; right={right}"
+                );
+            }
+            assert!(
+                expressions_equal(left, right).unwrap(),
+                "symbolic sample={sample}: left={left}; right={right}"
+            );
         }
     }
 
