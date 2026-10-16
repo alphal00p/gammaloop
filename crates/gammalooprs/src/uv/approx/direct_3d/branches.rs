@@ -926,9 +926,14 @@ impl DirectResidueBranches {
                                         .all(|(i, tag)| call.get(i) == tag.as_view())
                             });
                             let valid = entry.is_some_and(|entry| {
-                                (entry.tags.len()..call.get_nargs())
-                                    .all(|i| Rational::try_from(call.get(i)).is_ok())
-                                    && !view.contains_symbol(variable)
+                                (entry.tags.len()..call.get_nargs()).all(|i| {
+                                    let argument = call.get(i);
+                                    Rational::try_from(argument).is_ok()
+                                        || (matches!(argument, AtomView::Fun(marker)
+                                                if marker.get_symbol() == GS.ct_marker
+                                                    && marker.get_nargs() == 1)
+                                            && !argument.contains_symbol(family))
+                                }) && !view.contains_symbol(variable)
                             });
                             if !valid {
                                 invalid = Some(view.to_owned());
@@ -949,7 +954,7 @@ impl DirectResidueBranches {
                 });
                 ensure!(
                     invalid.is_none(),
-                    "invalid retained numerator occurrence (expected numeric arguments and polynomial use): {:?}",
+                    "invalid retained numerator occurrence (expected constant numeric or UV-marker arguments and polynomial use): {:?}",
                     invalid
                 );
                 let proxy = atom.replace_multiple(&probes);

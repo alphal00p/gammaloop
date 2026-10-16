@@ -1683,9 +1683,19 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         &tensor_ct,
     );
     let marked_localized = localizer.localize(&marked, &mut graph, &integrated_node)?;
-    for (key, integrands) in
-        DirectResidueBranches::from_transient(&marked_localized.active)?.iter_keys()
-    {
+    let marked_branches = DirectResidueBranches::from_transient(&marked_localized.active)?;
+    let marker_variable = symbolica::symbol!("marker_series_boundary::t");
+    let series = marked_branches.series_preserving_numerators(
+        marker_variable,
+        Atom::Zero.as_view(),
+        0,
+        DirectResidueBranches::numerator_scope().1,
+    )?;
+    assert_eq!(
+        series.materialize(false)?.resolved()?,
+        marked_branches.materialize(false)?.resolved()?
+    );
+    for (key, integrands) in marked_branches.iter_keys() {
         assert!(
             integrands
                 .iter()
