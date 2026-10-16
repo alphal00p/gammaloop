@@ -273,17 +273,7 @@ impl ProcessDefinition {
 
     pub fn may_filter_covariant_partners(&self, model: &Model) -> bool {
         !self.covariant_cut_representatives(model).is_empty()
-            && [FilterScope::Graph, FilterScope::CutAmplitude]
-                .into_iter()
-                .any(|scope| {
-                    self.generation_options.filters(scope).iter().any(|filter| {
-                        !matches!(
-                            filter,
-                            feynkit_generator::GenerationFilter::CouplingOrders(_)
-                                | feynkit_generator::GenerationFilter::PerturbativeOrders(_)
-                        )
-                    })
-                })
+            && self.generation_options.may_filter_covariant_partners()
     }
 
     // Best attempt at creating what process definition matches the given graphs
