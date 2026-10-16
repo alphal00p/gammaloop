@@ -398,163 +398,156 @@ pub(crate) fn group_diagrams(
         NumeratorGrouping::None => false,
     };
     let progress = Mutex::new((0, 0));
-    #[cfg(target_arch = "wasm32")]
-    let diagrams = diagrams.into_iter();
-    #[cfg(not(target_arch = "wasm32"))]
-    let diagrams = diagrams.into_par_iter();
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);
-    let preparations = diagrams
-        .enumerate()
-        .map(|(source_diagram, diagram)| {
-            if generation_options.cancellation_requested() {
-                // Keep unchecked inputs on cancellation. Their preparation is
-                // unused: the incomplete result below contains singleton groups.
-                return Ok(Some((
-                    diagram,
-                    source_diagram,
-                    PreparedNumerator {
-                        exact: Atom::one(),
-                        sample_source: Atom::one(),
-                        samples: Vec::new(),
-                    },
-                )));
-            }
-            let raw_complete = model.expand_couplings(
-                &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
-            );
-            let color_reps = [
-                ColorAdjoint {}.into(),
-                ColorFundamental {}.into(),
-                ColorSextet {}.into(),
-            ];
-            let simplify_color = |expression: AtomView<'_>| {
-                // Keep structured indices and compound dimensions reversible
-                // across the typed algebra boundary.
-                let cooked = cooking.try_cook(expression).map_err(|error| {
-                    GroupingError::ColorSimplification {
-                        diagram: diagram.name().to_owned(),
-                        message: error.to_string(),
-                    }
-                })?;
-                SymbolicTensor::infer(cooked)
-                    .and_then(|tensor| {
-                        tensor.simplify_algebra(&AlgebraSettings {
-                            color: Some(
-                                ColorSimplifySettings::default().with_cof_dimension_invariants(),
-                            ),
-                            contract: if compares_numerators {
-                                AlgebraContraction::Fully
-                            } else {
-                                AlgebraContraction::None
-                            },
-                            ..Default::default()
-                        })
-                    })
-                    .map_err(|error| GroupingError::ColorSimplification {
-                        diagram: diagram.name().to_owned(),
-                        message: error.to_string(),
-                    })
-            };
-            let (simplified, is_zero) = if compares_numerators {
-                // Comparison retains symbolic color dimensions and contracts
-                // the projector before alpha-renaming dummy indices.
-                let tensor = simplify_color(raw_complete.to_parametric_color().as_view())?;
-                let zero = tensor
-                    .coefficients_are_zero(TensorCollectFilter::Reps(color_reps))
-                    .map_err(|error| GroupingError::ColorSimplification {
-                        diagram: diagram.name().to_owned(),
-                        message: error.to_string(),
-                    })?;
-                (tensor.expression().clone(), zero.is_true())
-            } else {
-                // Isolate complete color products before tensor inference. The
-                // collector protects Lorentz/momentum coefficients as opaque
-                // factors, including the alternatives of four-gluon vertices.
-                // Keep them aliased through rewriting and recollection so
-                // combining equal color structures does not revisit the
-                // momentum numerator. Resolve coefficients before the zero test.
-                // Only color identities and their contraction prerequisites run;
-                // there is no separate signed-network canonicalization pass.
-                let mut error = None;
-                let expression = raw_complete
-                    .as_view()
-                    .collect_with_map(|factor| {
-                        TensorCollectFilter::Reps(color_reps).matches(factor)
-                    })
-                    .map_root(|root| {
-                        root.map_collects(|wrapped, _, out| {
-                            if error.is_some() {
-                                return;
-                            }
-                            let AtomView::Fun(wrapper) = wrapped else {
-                                unreachable!()
-                            };
-                            let selected = wrapper.iter().next().expect("collected color product");
-                            match simplify_color(selected) {
-                                Ok(tensor) => **out = cooking.uncook(tensor.expression().as_view()),
-                                Err(cause) => error = Some(cause),
-                            }
-                        })
-                        .unwrap_collect()
-                        .collect_reps(color_reps)
-                    })
-                    .into_inner();
-                if let Some(error) = error {
-                    return Err(error);
-                }
-                let zero = expression
-                    .collect_factors()
-                    .check_zero_with(
-                        &symbolica::atom::ZeroTestSettings::default()
-                            .finite_field_samples(0)
-                            .numerical_samples(0)
-                            .exact_fallback(false),
-                    )
-                    .is_true();
-                (expression, zero)
-            };
-            // Keep unproved identities: a conservative coefficient proof must not
-            // expand the graph numerator or turn inconclusive sampling into a zero.
-            if is_zero {
-                return Ok(None);
-            }
-            let sample_source = if compares_numerators {
-                // Keep symbolic color dimensions for exact rescaling ratios. Tensor
-                // samples substitute concrete color values at their own boundary.
-                let complete = cooking.uncook(simplified.as_view());
-                normalize_momentum_routing(&diagram, complete)
-            } else {
-                Atom::one()
-            };
-            // Exact symbolic comparison needs alpha-renamed dummy indices.  Keep
-            // the routed, uncanonized expression separately for numerical tensor
-            // execution: canonicalization is an optional comparison strategy and
-            // historically was not applied to the numerical sample network.
-            let exact = if compares_canonical_numerators {
-                let exact_source = if symmetric_polarizations {
-                    normalize_symmetric_polarizations(&sample_source)
-                } else {
-                    sample_source.clone()
-                };
-                exact_source
-                    .canonize(GroupingIndex::Dummy)
-                    .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
-            } else {
-                Atom::one()
-            };
-            Ok(Some((
+    let prepare = |(source_diagram, diagram): (usize, FeynmanDiagram)| {
+        if generation_options.cancellation_requested() {
+            // Keep unchecked inputs on cancellation. Their preparation is
+            // unused: the incomplete result below contains singleton groups.
+            return Ok(Some((
                 diagram,
                 source_diagram,
                 PreparedNumerator {
-                    exact,
-                    sample_source,
+                    exact: Atom::one(),
+                    sample_source: Atom::one(),
                     samples: Vec::new(),
                 },
-            )))
-        })
-        .inspect(|result| {
+            )));
+        }
+        let raw_complete = model.expand_couplings(
+            &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
+        );
+        let color_reps = [
+            ColorAdjoint {}.into(),
+            ColorFundamental {}.into(),
+            ColorSextet {}.into(),
+        ];
+        let simplify_color = |expression: AtomView<'_>| {
+            // Keep structured indices and compound dimensions reversible
+            // across the typed algebra boundary.
+            let cooked = cooking.try_cook(expression).map_err(|error| {
+                GroupingError::ColorSimplification {
+                    diagram: diagram.name().to_owned(),
+                    message: error.to_string(),
+                }
+            })?;
+            SymbolicTensor::infer(cooked)
+                .and_then(|tensor| {
+                    tensor.simplify_algebra(&AlgebraSettings {
+                        color: Some(
+                            ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                        ),
+                        contract: if compares_numerators {
+                            AlgebraContraction::Fully
+                        } else {
+                            AlgebraContraction::None
+                        },
+                        ..Default::default()
+                    })
+                })
+                .map_err(|error| GroupingError::ColorSimplification {
+                    diagram: diagram.name().to_owned(),
+                    message: error.to_string(),
+                })
+        };
+        let (simplified, is_zero) = if compares_numerators {
+            // Comparison retains symbolic color dimensions and contracts
+            // the projector before alpha-renaming dummy indices.
+            let tensor = simplify_color(raw_complete.to_parametric_color().as_view())?;
+            let zero = tensor
+                .coefficients_are_zero(TensorCollectFilter::Reps(color_reps))
+                .map_err(|error| GroupingError::ColorSimplification {
+                    diagram: diagram.name().to_owned(),
+                    message: error.to_string(),
+                })?;
+            (tensor.expression().clone(), zero.is_true())
+        } else {
+            // Isolate complete color products before tensor inference. The
+            // collector protects Lorentz/momentum coefficients as opaque
+            // factors, including the alternatives of four-gluon vertices.
+            // Keep them aliased through rewriting and recollection so
+            // combining equal color structures does not revisit the
+            // momentum numerator. Resolve coefficients before the zero test.
+            // Only color identities and their contraction prerequisites run;
+            // there is no separate signed-network canonicalization pass.
+            let mut error = None;
+            let expression = raw_complete
+                .as_view()
+                .collect_with_map(|factor| TensorCollectFilter::Reps(color_reps).matches(factor))
+                .map_root(|root| {
+                    root.map_collects(|wrapped, _, out| {
+                        if error.is_some() {
+                            return;
+                        }
+                        let AtomView::Fun(wrapper) = wrapped else {
+                            unreachable!()
+                        };
+                        let selected = wrapper.iter().next().expect("collected color product");
+                        match simplify_color(selected) {
+                            Ok(tensor) => **out = cooking.uncook(tensor.expression().as_view()),
+                            Err(cause) => error = Some(cause),
+                        }
+                    })
+                    .unwrap_collect()
+                    .collect_reps(color_reps)
+                })
+                .into_inner();
+            if let Some(error) = error {
+                return Err(error);
+            }
+            let zero = expression
+                .collect_factors()
+                .check_zero_with(
+                    &symbolica::atom::ZeroTestSettings::default()
+                        .finite_field_samples(0)
+                        .numerical_samples(0)
+                        .exact_fallback(false),
+                )
+                .is_true();
+            (expression, zero)
+        };
+        // Keep unproved identities: a conservative coefficient proof must not
+        // expand the graph numerator or turn inconclusive sampling into a zero.
+        if is_zero {
+            return Ok(None);
+        }
+        let sample_source = if compares_numerators {
+            // Keep symbolic color dimensions for exact rescaling ratios. Tensor
+            // samples substitute concrete color values at their own boundary.
+            let complete = cooking.uncook(simplified.as_view());
+            normalize_momentum_routing(&diagram, complete)
+        } else {
+            Atom::one()
+        };
+        // Exact symbolic comparison needs alpha-renamed dummy indices.  Keep
+        // the routed, uncanonized expression separately for numerical tensor
+        // execution: canonicalization is an optional comparison strategy and
+        // historically was not applied to the numerical sample network.
+        let exact = if compares_canonical_numerators {
+            let exact_source = if symmetric_polarizations {
+                normalize_symmetric_polarizations(&sample_source)
+            } else {
+                sample_source.clone()
+            };
+            exact_source
+                .canonize(GroupingIndex::Dummy)
+                .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
+        } else {
+            Atom::one()
+        };
+        Ok(Some((
+            diagram,
+            source_diagram,
+            PreparedNumerator {
+                exact,
+                sample_source,
+                samples: Vec::new(),
+            },
+        )))
+    };
+    let report =
+        |result: &Result<Option<(FeynmanDiagram, usize, PreparedNumerator)>, GroupingError>| {
             // Serialize progress callbacks while preserving input order in the
             // indexed collection, independently of worker completion order.
             let mut progress = progress.lock().unwrap();
@@ -566,8 +559,30 @@ pub(crate) fn group_diagrams(
                 Some(total),
                 progress.1,
             );
-        })
-        .collect::<Result<Vec<_>, GroupingError>>()?;
+        };
+    #[cfg(target_arch = "wasm32")]
+    let preparations = diagrams
+        .into_iter()
+        .enumerate()
+        .map(prepare)
+        .inspect(report)
+        .collect::<Result<Vec<_>, _>>()?;
+    #[cfg(not(target_arch = "wasm32"))]
+    let preparations = if generation_options.threads == Some(1) {
+        diagrams
+            .into_iter()
+            .enumerate()
+            .map(prepare)
+            .inspect(report)
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        diagrams
+            .into_par_iter()
+            .enumerate()
+            .map(prepare)
+            .inspect(report)
+            .collect::<Result<Vec<_>, _>>()?
+    };
     let mut retained = Vec::with_capacity(total);
     let mut source_diagrams = Vec::with_capacity(total);
     let mut prepared = Vec::with_capacity(total);
