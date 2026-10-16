@@ -19,7 +19,7 @@ use symbolica::{
     function, symbol,
 };
 
-/// Evaluate the bookkeeping heads in a finalized diagram's overall factor.
+/// Evaluate bookkeeping heads without distributing the scalar payload.
 pub fn evaluate_overall_factor(factor: AtomView<'_>) -> Atom {
     let mut result = factor.to_owned();
     for head in [
@@ -59,7 +59,7 @@ pub fn evaluate_overall_factor(factor: AtomView<'_>) -> Atom {
                     .to_pattern(),
             );
     }
-    result.expand()
+    result
 }
 
 /// Application data access is supplied by callers; the selection rules are shared.
@@ -283,6 +283,19 @@ mod tests {
                 evaluated
             );
         }
+    }
+
+    #[test]
+    fn evaluating_factor_annotations_preserves_powered_payloads() {
+        let factor = Atom::parse(
+            "NumeratorDependentGrouping(7,(x+y)^11,InternalFermionLoopSign(-1))",
+            "feynkit_generator_factor",
+            Default::default(),
+        )
+        .unwrap();
+        let expected =
+            Atom::parse("-(x+y)^11", "feynkit_generator_factor", Default::default()).unwrap();
+        assert_eq!(super::evaluate_overall_factor(factor.as_view()), expected);
     }
 
     use super::*;

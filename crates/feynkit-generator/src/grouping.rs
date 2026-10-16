@@ -9,7 +9,7 @@ use std::{
 
 use feynkit_graph::{
     DiagramEndpoint, DiagramError, DiagramHalfEdge, EdgeId, ExternalLeg, ExternalState,
-    FeynmanDiagram, VertexId,
+    FeynmanDiagram, VertexId, expressions::evaluate_overall_factor,
 };
 use feynkit_model::{Model, ModelError, ParameterId, ParticleId};
 use idenso::{
@@ -20,7 +20,8 @@ use idenso::{
     rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
     tensor::{
-        AlgebraContraction, AlgebraSettings, SymbolicTensor, inference::TensorInferenceError,
+        AlgebraContraction, AlgebraSettings, ContractSettings, SymbolicTensor,
+        inference::TensorInferenceError,
     },
 };
 use spenso::{
@@ -474,11 +475,14 @@ pub(crate) fn group_diagrams(
             | NumeratorGrouping::UpToSign(_)
             | NumeratorGrouping::UpToScalar(_)
     );
-    let compares_canonical_numerators = match grouping {
+    let (compares_canonical_numerators, concrete_canonical_color) = match grouping {
         NumeratorGrouping::Identical(options)
         | NumeratorGrouping::UpToSign(options)
-        | NumeratorGrouping::UpToScalar(options) => options.check_canonical_numerator,
-        NumeratorGrouping::None => false,
+        | NumeratorGrouping::UpToScalar(options) => (
+            options.check_canonical_numerator,
+            options.fully_numerical_substitution,
+        ),
+        NumeratorGrouping::None => (false, false),
     };
     let symmetric_polarizations = match grouping {
         NumeratorGrouping::Identical(options)
@@ -533,8 +537,12 @@ pub(crate) fn group_diagrams(
                             color: Some(
                                 ColorSimplifySettings::default().with_cof_dimension_invariants(),
                             ),
-                            contract: if compares_numerators {
+                            contract: if compares_canonical_numerators {
                                 AlgebraContraction::Fully
+                            } else if compares_numerators {
+                                // Numerical Lorentz contraction belongs after momentum
+                                // sampling; keep this symbolic pass within the color domain.
+                                AlgebraContraction::Selected(color_reps.to_vec())
                             } else {
                                 AlgebraContraction::None
                             },
@@ -627,7 +635,18 @@ pub(crate) fn group_diagrams(
                 } else {
                     sample_source.clone()
                 };
-                exact_source
+                // Canonical-only comparison has no numerical sample boundary.
+                // Honor the requested concrete color dimensions here as well.
+                let exact_source = if concrete_canonical_color {
+                    exact_source
+                        .replace(CS.nc)
+                        .with(3)
+                        .replace(color_idx!(2, cof!(RS.d_)))
+                        .with(Atom::num(1) / Atom::num(2))
+                } else {
+                    exact_source
+                };
+                let canonical = exact_source
                     .canonize(GroupingIndex::Dummy)
                     .map_err(|error| {
                         tensor_evaluation_error(
@@ -635,7 +654,15 @@ pub(crate) fn group_diagrams(
                             0,
                             format!("exact canonicalization: {error}"),
                         )
-                    })?
+                    })?;
+                // Opposite and quarter-turned sums must share the same tensor
+                // body before scalar ratios are compared. Pull out numerical
+                // content only; keep all products and composite powers intact.
+                canonical.replace_map_bottom_up(|value, _, out| {
+                    if matches!(value, AtomView::Add(_)) {
+                        **out = value.collect_numeric_content();
+                    }
+                })
             } else {
                 Atom::one()
             };
@@ -710,8 +737,9 @@ pub(crate) fn group_diagrams(
         numerator.samples = numerical_tensor_samples(&numerator.sample_source, diagram, options)?;
         let mut zero_samples = !numerator.samples.is_empty();
         for (sample, value) in numerator.samples.iter().enumerate() {
-            if !expressions_equal(value, &Atom::Zero)
-                .map_err(|error| tensor_evaluation_error(diagram, sample, error))?
+            if !PreparedNumerator::finite_samples_equal(value, &Atom::Zero)
+                && !expressions_equal(value, &Atom::Zero)
+                    .map_err(|error| tensor_evaluation_error(diagram, sample, error))?
             {
                 zero_samples = false;
                 break;
@@ -791,6 +819,25 @@ pub(crate) fn group_diagrams(
         }
         groups.extend(bucket_groups);
     }
+    // Compare complete scalar weights after numerator ratios have been proved.
+    // Opposite members can cancel even though neither numerator is zero. Keep
+    // the graph numerators and retained provenance of surviving groups intact.
+    groups.retain(|group| {
+        let weight = Atom::add_many(group.members.iter().map(|member| {
+            &member.ratio * evaluate_overall_factor(member.overall_factor.as_view())
+        }));
+        // These are scalar normalization weights, not graph numerators.
+        // Exact rescaling can leave distinct denominators or algebraic
+        // constants such as sqrt(1/2)*sqrt(2). No sampled zero is accepted.
+        !weight
+            .check_zero_with(
+                &symbolica::atom::ZeroTestSettings::default()
+                    .finite_field_samples(0)
+                    .numerical_samples(0)
+                    .exact_fallback(true),
+            )
+            .is_true()
+    });
     groups.sort_by_key(|group| group.master);
 
     generation_options.report_progress_with_zero_count("grouping", 0, None, zero_numerator_count);
@@ -1269,6 +1316,14 @@ fn evaluate_tensor_sample(
     let contributions = sectors
         .into_iter()
         .map(|(color, lorentz)| {
+            // Separating a color coefficient can expose a closed metric loop
+            // that the mixed tensor expression retained. Complete that isolated
+            // contraction before comparing it with a colorless scalar sample.
+            let color = color
+                .contract(ContractSettings::default())
+                .map_err(|error| {
+                    tensor_evaluation_error(diagram, sample, format!("color contraction: {error}"))
+                })?;
             let color = cooking.uncook(color.expression().as_view());
             let lorentz = cooking.uncook(lorentz.expression().as_view());
             let mut network =
@@ -1637,7 +1692,7 @@ fn compare(
     {
         return Ok(Some(ratio));
     }
-    let mut first = None;
+    let mut first: Option<Atom> = None;
     for (candidate, master) in candidate.samples.iter().zip(&master.samples) {
         // This certificate is restricted to completed finite component samples.
         // The optional raw tensor comparison above keeps its existing policy.
@@ -1654,7 +1709,11 @@ fn compare(
             return Ok(None);
         };
         if let Some(first) = &first {
-            if !expressions_equal(&ratio, first)?
+            // These ratios contain only model/color scalars: all tensor heads
+            // have already been excluded. Compare their rational normalizations
+            // without distributing either source numerator.
+            if ratio != *first
+                && !(&ratio - first).together().is_zero()
                 && !PreparedNumerator::finite_samples_equal(candidate, &(first * master))
             {
                 return Ok(None);
@@ -1728,6 +1787,15 @@ fn expression_is_scalar(expression: &Atom, scalar_names: &BTreeSet<String>) -> b
         }
         let symbol = match atom {
             AtomView::Var(variable) => variable.get_symbol(),
+            AtomView::Fun(function)
+                if [Symbol::CONJ, INBUILTS.conj].contains(&function.get_symbol()) =>
+            {
+                // Conjugation broadcasts over both scalars and tensors. Its
+                // argument must still pass this check; the head alone does
+                // not certify a scalar ratio (notably for CKM couplings).
+                scalar = function.get_nargs() == 1;
+                return scalar;
+            }
             AtomView::Fun(function) => function.get_symbol(),
             _ => return true,
         };
@@ -2980,7 +3048,7 @@ mod tests {
         let model = Arc::new(model());
         let grouped = group_diagrams(
             vec![
-                diagram(&model, "g0", "x+y", 25, 25),
+                diagram(&model, "g0", "x+y", 25, 25).with_overall_factor(Atom::num(2)),
                 diagram(&model, "g1", "-x-y", 25, 25),
             ],
             &model,
@@ -3009,6 +3077,148 @@ mod tests {
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
         assert_eq!(grouped.groups[0].members[1].ratio, test_atom("2"));
+    }
+
+    #[test]
+    fn sampled_scalar_ratios_use_exact_common_denominators() {
+        let model = model();
+        let master = PreparedNumerator {
+            exact: Atom::one(),
+            sample_source: Atom::one(),
+            samples: vec![test_atom("M-N"), Atom::num(3)],
+        };
+        let mut candidate = PreparedNumerator {
+            exact: Atom::one(),
+            sample_source: Atom::one(),
+            samples: vec![test_atom("M^2-N^2"), test_atom("3*(M+N)")],
+        };
+        let options = GraphGroupingOptions::default();
+        let ratio = compare(
+            &candidate,
+            &master,
+            ComparisonMode::UpToScalar,
+            &options,
+            &scalar_names(&model),
+        )
+        .unwrap()
+        .unwrap();
+        assert!((ratio - test_atom("M+N")).together().is_zero());
+        candidate.samples[1] = test_atom("3*(M+N+1)");
+        assert!(
+            compare(
+                &candidate,
+                &master,
+                ComparisonMode::UpToScalar,
+                &options,
+                &scalar_names(&model)
+            )
+            .unwrap()
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn conjugated_model_couplings_are_scalar_but_conjugated_tensors_are_not() {
+        let model = model();
+        let scalars = scalar_names(&model);
+        let m = test_atom("M");
+        let n = test_atom("N");
+        let common = symbol!("FeynKit::conjugated_ratio_tensor").call(1);
+        for head in [Symbol::CONJ, INBUILTS.conj] {
+            let master = &common * function!(head, &m);
+            let candidate = &common * function!(head, &n) * 2;
+            let ratio = compare_atoms(&candidate, &master, ComparisonMode::UpToScalar, &scalars)
+                .unwrap()
+                .expect("a ratio of conjugated model couplings is scalar");
+            assert_eq!(ratio, 2 * function!(head, &n) / function!(head, &m));
+            let tensor = test_atom("spenso::g(spenso::coad(8,a),spenso::coad(8,b))");
+            assert!(!expression_is_scalar(&function!(head, tensor), &scalars));
+        }
+        assert!(!expression_is_scalar(
+            &function!(INBUILTS.conj, 1, 2),
+            &scalars
+        ));
+        assert!(!expression_is_scalar(
+            &test_atom("foreign::conj(M)"),
+            &scalars
+        ));
+    }
+
+    #[test]
+    fn canonical_only_comparison_honors_concrete_color_dimensions() {
+        let model = Arc::new(model());
+        let nc = Atom::var(CS.nc);
+        for concrete in [false, true] {
+            let grouped = group_diagrams(
+                vec![
+                    diagram(&model, "g0", "x", 25, 25),
+                    diagram(&model, "g1", &format!("{}*x", nc.to_plain_string()), 25, 25),
+                ],
+                &model,
+                &NumeratorGrouping::UpToScalar(GraphGroupingOptions {
+                    fully_numerical_substitution: concrete,
+                    number_of_numerical_samples: 0,
+                    ..exact_options()
+                }),
+                false,
+                &GenerationOptions::default(),
+            )
+            .unwrap();
+            assert_eq!(grouped.groups.len(), 1);
+            assert_eq!(
+                grouped.groups[0].members[1].ratio,
+                if concrete { Atom::num(3) } else { nc.clone() }
+            );
+            assert_eq!(grouped.diagrams[0].numerator(), &test_atom("x"));
+        }
+    }
+
+    #[test]
+    fn canonical_scalar_rescaling_collects_only_numerical_sum_content() {
+        let model = Arc::new(model());
+        let master = diagram(&model, "master", "(M+N)^7*(1i/9*x-1i/9*y)", 25, 25);
+        let source = master.numerator().clone();
+        let grouped = group_diagrams(
+            vec![master, diagram(&model, "member", "(M+N)^7*(y-x)", 25, 25)],
+            &model,
+            &NumeratorGrouping::UpToScalar(GraphGroupingOptions {
+                number_of_numerical_samples: 0,
+                ..exact_options()
+            }),
+            false,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(grouped.groups.len(), 1);
+        assert_eq!(grouped.groups[0].members[1].ratio, 9 * Atom::i());
+        assert_eq!(grouped.diagrams[0].numerator(), &source);
+    }
+
+    #[test]
+    fn completed_samples_contract_closed_color_metric_coefficients() {
+        let model = Arc::new(model());
+        let diagram = diagram(&model, "color_loop", "1", 25, 25);
+        let spectator = test_atom("(M+N)^7");
+        for dimension in ["3", "spenso::Nc"] {
+            let source = test_atom(&format!(
+                "(M+N)^7
+                 *spenso::g(spenso::dind(spenso::cof({dimension},FeynKit::DummyIndex(0))),spenso::cof({dimension},FeynKit::DummyIndex(1)))
+                 *spenso::g(spenso::dind(spenso::cof({dimension},FeynKit::DummyIndex(1))),spenso::cof({dimension},FeynKit::DummyIndex(0)))"
+            ));
+            for sample in 0..3 {
+                assert_eq!(
+                    evaluate_tensor_sample(
+                        &source,
+                        &diagram,
+                        &GraphGroupingOptions::default(),
+                        sample
+                    )
+                    .unwrap(),
+                    3 * &spectator
+                );
+            }
+            assert!(source.contains(&spectator));
+        }
     }
 
     #[test]
@@ -3233,6 +3443,129 @@ mod tests {
         assert_eq!(grouped.groups[0].members[0].diagram, 0);
         assert_eq!(grouped.groups[0].members[0].source_diagram, 1);
         assert_eq!(grouped.diagrams[0].name(), "g1");
+    }
+
+    #[test]
+    fn cancelling_weighted_groups_preserve_surviving_source_identity() {
+        let model = Arc::new(model());
+        let survivor = diagram(&model, "survivor", "(x+y)^7", 45, 25);
+        let numerator = survivor.numerator().clone();
+        let grouped = group_diagrams(
+            vec![
+                diagram(&model, "half", "x+y", 25, 25).with_overall_factor(Atom::num((1, 2))),
+                diagram(&model, "minus_quarter", "2*x+2*y", 25, 25)
+                    .with_overall_factor(Atom::num((-1, 4))),
+                survivor,
+            ],
+            &model,
+            &NumeratorGrouping::UpToScalar(exact_options()),
+            false,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(grouped.zero_numerator_count, 0);
+        assert_eq!(grouped.groups.len(), 1);
+        assert_eq!(grouped.diagrams.len(), 1);
+        assert_eq!(grouped.diagrams[0].name(), "survivor");
+        assert_eq!(grouped.diagrams[0].numerator(), &numerator);
+        assert_eq!(grouped.groups[0].master, 0);
+        assert_eq!(grouped.groups[0].members[0].diagram, 0);
+        assert_eq!(grouped.groups[0].members[0].source_diagram, 2);
+    }
+
+    #[test]
+    fn grouped_scalar_weights_cancel_after_rational_rescaling() {
+        let model = Arc::new(model());
+        // The independently checked FullSM two-loop GL51--56 scalar class.
+        // Its normalization vanishes only after combining rational weights.
+        let ratio = test_atom(
+            "(-5/3*UFO::cw^(-1)*UFO::sw+UFO::cw*UFO::sw^(-1))^(-1)*1/3*UFO::cw*UFO::sw^(-1)
+            +(-5/3*UFO::cw^(-1)*UFO::sw+UFO::cw*UFO::sw^(-1))^(-1)*1/3*UFO::cw^(-1)*UFO::sw",
+        );
+        let opposite = test_atom(
+            "(-5/3*UFO::cw^(-1)*UFO::sw+UFO::cw*UFO::sw^(-1))^(-1)*-1*UFO::cw*UFO::sw^(-1)
+            +(-5/3*UFO::cw^(-1)*UFO::sw+UFO::cw*UFO::sw^(-1))^(-1)*1/3*UFO::cw^(-1)*UFO::sw",
+        );
+        let cancelling_classes = [
+            vec![
+                Atom::one(),
+                ratio.clone(),
+                ratio.clone(),
+                ratio,
+                opposite.clone(),
+                opposite,
+            ],
+            // The charged-ghost/G0 tadpole normalization in the same model.
+            vec![Atom::one(), test_atom("-(1/2)^(1/2)*2^(1/2)")],
+        ];
+        for (weights, scale) in cancelling_classes.iter().flat_map(|weights| {
+            [Atom::one(), test_atom("UFO::ee^2/UFO::G^2")]
+                .into_iter()
+                .map(move |scale| (weights, scale))
+        }) {
+            for residual in [Atom::Zero, Atom::num((-1, 2))] {
+                let diagrams = weights
+                    .iter()
+                    .chain([&residual])
+                    .enumerate()
+                    .map(|(index, weight)| {
+                        diagram(&model, &format!("g{index}"), "(x+y)^7", 25, 25)
+                            .with_overall_factor(weight * &scale)
+                    })
+                    .collect();
+                let grouped = group_diagrams(
+                    diagrams,
+                    &model,
+                    &NumeratorGrouping::UpToScalar(exact_options()),
+                    false,
+                    &GenerationOptions::default(),
+                )
+                .unwrap();
+                if residual.is_zero() {
+                    assert!(grouped.diagrams.is_empty());
+                    assert!(grouped.groups.is_empty());
+                } else {
+                    assert_eq!(grouped.diagrams.len(), 1);
+                    assert_eq!(grouped.diagrams[0].numerator(), &test_atom("(x+y)^7"));
+                    assert!(
+                        evaluate_overall_factor(grouped.diagrams[0].overall_factor().as_view())
+                            .check_equal_with(
+                                &residual * &scale,
+                                &symbolica::atom::ZeroTestSettings::default()
+                                    .finite_field_samples(0)
+                                    .numerical_samples(0)
+                                    .exact_fallback(true),
+                            )
+                            .is_true()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn completed_samples_can_certify_a_factorized_scalar_zero() {
+        let model = Arc::new(model());
+        let grouped = group_diagrams(
+            vec![
+                diagram(&model, "zero", "(M+N)^2-M^2-2*M*N-N^2", 25, 25),
+                diagram(&model, "survivor", "(M+N)^7", 45, 25),
+            ],
+            &model,
+            &NumeratorGrouping::UpToScalar(GraphGroupingOptions {
+                check_canonical_numerator: false,
+                number_of_numerical_samples: 2,
+                ..GraphGroupingOptions::default()
+            }),
+            false,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(grouped.zero_numerator_count, 1);
+        assert_eq!(grouped.diagrams.len(), 1);
+        assert_eq!(grouped.diagrams[0].name(), "survivor");
+        assert_eq!(grouped.diagrams[0].numerator(), &test_atom("(M+N)^7"));
+        assert_eq!(grouped.groups[0].members[0].source_diagram, 1);
     }
 
     #[test]
