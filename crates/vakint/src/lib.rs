@@ -5825,85 +5825,44 @@ Evaluated (n_loops=1, mu_r=1) :
                 dummy += 1;
                 let first_new_dummy = dummy;
 
-                let mut a = a.to_owned();
-                loop {
-                    let dummy_wrapped = S.dot_dummy_ind(dummy);
-                    let new = a
-                        .replace(S.dot_pow(S.a_, S.b_, S.c_))
-                        .once()
-                        .with_map(move |m| {
-                            let Match::Single(a) = m.get(S.a_).unwrap() else {
-                                unreachable!()
-                            };
-                            let Match::Single(b) = m.get(S.b_).unwrap() else {
-                                unreachable!()
-                            };
-                            let rest = S
-                                .dot_pow(S.a_, S.b_, Atom::var(S.c_) - 1)
-                                .to_pattern()
-                                .replace_wildcards_with_matches(m);
-
-                            // if let (Ok(a), Ok(b)) =
-                            //     (FunctionBuilder::try_from(m.get(S.a_)), FunctionBuilder::try_from(b))
-                            // {
-                            //     a.add_arg(dummy).finish() * b.add_arg(dummy).finish() * rest
-                            // }
-                            match (a, b) {
-                                (AtomView::Var(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Var(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                _ => S
-                                    .dot_pow(S.a_, S.b_, S.c_)
-                                    .to_pattern()
-                                    .replace_wildcards_with_matches(m),
-                            }
-                        })
-                        .replace(S.dot_pow(S.a_, S.b_, 0))
-                        .with(1);
-
-                    if new == a {
-                        break;
+                // Visit each dot once. Replacing a single occurrence and
+                // rescanning the whole factorized numerator for the next one
+                // made this conversion quadratic in the number of dots.
+                let a = a.replace_map_bottom_up(|view, _, out| {
+                    let AtomView::Fun(dot) = view else { return };
+                    if dot.get_symbol() != S.dot_pow || dot.get_nargs() != 3 {
+                        return;
                     }
-                    a = new;
-                    dummy += 1;
-                }
+                    let arguments = dot.iter().collect::<Vec<_>>();
+                    let [left, right, exponent] = arguments.as_slice() else { unreachable!() };
+                    let Ok(copies) = usize::try_from(*exponent) else {
+                        // A non-integral scalar power has no finite indexed
+                        // product. Preserve its original compact notation.
+                        **out = S.dot(*left, *right).pow(*exponent);
+                        return;
+                    };
+                    if ![left, right].iter().all(|vector| {
+                        matches!(vector, AtomView::Var(_) | AtomView::Fun(_))
+                    }) {
+                        **out = S.dot(*left, *right).pow(*exponent);
+                        return;
+                    }
+                    let mut product = Atom::one();
+                    for _ in 0..copies {
+                        let index = S.dot_dummy_ind(dummy);
+                        dummy += 1;
+                        for vector in [left, right] {
+                            let indexed = match vector {
+                                AtomView::Var(vector) => FunctionBuilder::new(vector.get_symbol()),
+                                AtomView::Fun(vector) => FunctionBuilder::new(vector.get_symbol())
+                                    .add_args(vector.iter()),
+                                _ => unreachable!("vector heads were checked above"),
+                            };
+                            product *= indexed.add_arg(&index).finish();
+                        }
+                    }
+                    **out = product;
+                });
                 // Each copy of a powered scalar sum owns independent dummy
                 // contractions. Keep those copies factorized: expanding the
                 // numerator before conversion would hide index capture.
