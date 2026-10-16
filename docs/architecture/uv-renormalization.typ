@@ -434,7 +434,7 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   wood construction can see the medium. It rejects
   `local_uv_cts_from_expanded_4d_integrands` for medium modes and vacuum
   subtraction; their thermal-weight ownership is documented in
-  #link("architecture-current.typ#3-2-cff-production-and-numerator-energy-ownership")[the current architecture].
+  #link("architecture-current.typ#3-2-three-dimensional-representations-and-numerator-energy-ownership")[the current architecture].
 - LTD is vacuum-only and uses the projected local-4D route. Direct local-3D Taylor
   subtraction and orientation-local evaluation remain CFF-only.
 - The legacy DAG executor constructs union-shaped nodes but does not
