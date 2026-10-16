@@ -1046,6 +1046,23 @@ kernel-jet reference test. Its boosted soft-control test retained zero
 finite-field and numerical samples and disabled exact fallback when using the
 then-current zero-test API, preserving the previous exact quick-check semantics.
 
+Massless fixtures apply the explicit light-quark massless restriction before
+graph import and assert an exact zero quark mass. Raw SM defaults contain a
+nonzero down-quark mass, so selecting that graph alone does not define the
+massless specialization.
+
+The repaired generator combines the two charge-mate self-energy sources into
+one master. The density contract above retains both unit grouping ratios,
+source signs, the summed factor, physical cuts and component momentum charts.
+Its independent self-energy oracle sums Born densities at $-bold(p)$ and
+$+bold(p)$; in the rest-current kinematics, $t(p)$ and $t^3 rho_L(t q)$ are even
+under $(bold(q), bold(p)) arrow.r (-bold(q), -bold(p))$. Both vertex spectator
+charts remain. The eighteen grouped-master comparisons and historical
+twenty-seven ungrouped comparisons are distinguished above; the grouped test
+does not separately evaluate an actual GL2 master. Declared grouping metadata
+and numerical density agreement do not establish a symbolic identity of the
+grouped graphs or supply the observed weight as an expected-value multiplier.
+
 === Historical frozen temporal-trace stack
 
 This section records the original frozen source's qualification. Its runs and
