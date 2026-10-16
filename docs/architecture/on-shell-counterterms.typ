@@ -1026,6 +1026,26 @@ transformation independently of large public generation and route comparisons.
 
 == Rebased FeynKit validation and measurements
 
+=== Historical rebase onto the repaired FeynKit review
+
+The earlier OS functionality stack was replayed onto the exact review snapshot
+`e3adefb1fde053256f7c99c1c446e5835069333c`. All eleven separately named
+shared algebra repairs were included in that base. The replay retained its
+explicit CT-history arguments, native tensor reductions before Taylor
+operations, and medium/vacuum CFF options. Each implementation prefix compiled.
+Fresh runtime validation was required on that base; the temporal-trace results
+below remained evidence for their original revision only.
+
+The historical combined state manifest version 19 joined that repaired
+FeynKit layout with generated fixed OS frame metadata; both earlier
+version-18 layouts required regeneration. The current Indexed OS port
+uses version 22 as documented above, with the same strict regeneration policy.
+The earlier rebase used owned copies when changing borrowed CFF generation
+options and propagated errors from the now-fallible parameter builder in the
+kernel-jet reference test. Its boosted soft-control test retained zero
+finite-field and numerical samples and disabled exact fallback when using the
+then-current zero-test API, preserving the previous exact quick-check semantics.
+
 === Historical frozen temporal-trace stack
 
 This section records the original frozen source's qualification. Its runs and
