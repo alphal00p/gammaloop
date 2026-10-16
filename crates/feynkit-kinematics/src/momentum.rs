@@ -3,6 +3,7 @@ use std::{
     ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign},
 };
 
+use numerica::domains::float::FloatLike;
 use serde::{Deserialize, Serialize};
 
 use crate::KinematicScalar;
@@ -173,13 +174,15 @@ impl<T> ThreeMomentum<T> {
     }
 }
 
-impl<T: KinematicScalar> ThreeMomentum<T> {
-    /// Construct the zero vector using the active scalar's precision.
+impl<T: FloatLike> ThreeMomentum<T> {
+    /// Construct the zero vector retaining precision and derivative shape.
     pub fn zero(representative: &T) -> Self {
         let zero = representative.zero();
         Self::new(zero.clone(), zero.clone(), zero)
     }
+}
 
+impl<T: KinematicScalar> ThreeMomentum<T> {
     /// Compute the Euclidean norm.
     pub fn norm(&self) -> T {
         self.norm_squared().sqrt()
@@ -476,13 +479,15 @@ impl<T> FourMomentum<T> {
     }
 }
 
-impl<T: KinematicScalar> FourMomentum<T> {
-    /// Construct the zero four-vector using the active scalar's precision.
+impl<T: FloatLike> FourMomentum<T> {
+    /// Construct the zero four-vector retaining precision and derivative shape.
     pub fn zero(representative: &T) -> Self {
         let zero = representative.zero();
         Self::from_args(zero.clone(), zero.clone(), zero.clone(), zero)
     }
+}
 
+impl<T: KinematicScalar> FourMomentum<T> {
     /// Initial-state denominator: `2 E` for decay or invariant scattering flux.
     ///
     /// The one-particle value is frame dependent. Two future-directed on-shell
@@ -748,9 +753,14 @@ pub(crate) fn wrapped_delta_phi<T: KinematicScalar>(lhs: T, rhs: T) -> T {
 
 #[cfg(test)]
 mod tests {
-    use numerica::domains::float::{DoubleFloat, FloatLike, Real, RealLike};
+    use numerica::domains::{
+        dual::{DualNumberStructure, HyperDual},
+        float::{Complex, DoubleFloat, Float, FloatLike, Real, RealLike},
+    };
 
     use super::*;
+
+    numerica::create_hyperdual_single_derivative!(Dual, 2);
 
     fn assert_close(lhs: f64, rhs: f64) {
         assert!((lhs - rhs).abs() < 1.0e-12, "{lhs} != {rhs}");
@@ -787,5 +797,56 @@ mod tests {
         );
 
         assert_close(momentum.mass_squared().to_f64(), 0.0);
+    }
+
+    #[test]
+    fn zero_momenta_preserve_complex_precision_and_dual_shape() {
+        let value = Complex::new(Float::with_val(256, 2), Float::with_val(256, 3));
+        let complex_zero = FourMomentum::zero(&value);
+        for component in complex_zero.components() {
+            assert!(component.is_fully_zero());
+            assert_eq!(component.get_precision(), 256);
+        }
+
+        let dynamic = HyperDual::from_values(
+            vec![vec![0, 0], vec![1, 0], vec![0, 1], vec![1, 1]],
+            vec![value.clone(); 4],
+        );
+        let dynamic_zero = FourMomentum::zero(&dynamic);
+        for component in dynamic_zero.components() {
+            assert_eq!(component.get_shape(), dynamic.get_shape());
+            assert!(component.values.iter().all(FloatLike::is_fully_zero));
+            assert!(
+                component
+                    .values
+                    .iter()
+                    .all(|value| value.get_precision() == 256)
+            );
+        }
+
+        let fixed = Dual {
+            values: [value.clone(), value.one(), value.zero()],
+        };
+        let fixed_zero = ThreeMomentum::zero(&fixed);
+        for component in [&fixed_zero.px, &fixed_zero.py, &fixed_zero.pz] {
+            assert!(component.values.iter().all(FloatLike::is_fully_zero));
+            assert!(
+                component
+                    .values
+                    .iter()
+                    .all(|value| value.get_precision() == 256)
+            );
+        }
+        let momentum = FourMomentum::new(Energy::new(fixed), fixed_zero);
+        let square = momentum.mass_squared();
+        assert_eq!(
+            square.values[0],
+            Complex::new(Float::with_val(256, -5), Float::with_val(256, 12))
+        );
+        assert_eq!(
+            square.values[1],
+            Complex::new(Float::with_val(256, 4), Float::with_val(256, 6))
+        );
+        assert!(square.values[2].is_fully_zero());
     }
 }
