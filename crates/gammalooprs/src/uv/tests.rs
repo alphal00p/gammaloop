@@ -60,7 +60,7 @@ fn analytical_uv_limits_match_compact_and_explicit_energies() -> Result<(), eyre
         ext [style=invis];
         ext -> A:0 [id=0 sink="{ufo_order:0}"];
         B:1 -> ext [id=1 source="{ufo_order:0}"];
-        A -> B [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"];
+        A -> B [id=2 source="{ufo_order:1}" sink="{ufo_order:1}" lmb_id=0];
         A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
     })?;
     let lmb = &graph.loop_momentum_basis;
@@ -2240,16 +2240,16 @@ fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
     // Along the r-only cycle (q fixed), r0^2/Dr leaves a constant and therefore
     // has DOD_E=1. It is not a valid finite-pole oracle.
     let graph: Graph = finalized_runtime_dot!(
-        digraph energy_divergent_r_contact {
-            edge [particle=scalar_1]
+        digraph energy_divergent_r_contact { graph [projector=1]
+            edge [particle=scalar_1 num="1𝑖"]
             node [num=1]
             e [style=invis]
-            e -> A:0 [id=4]
-            A:1 -> e [id=5]
-            A -> A [id=0]
-            A -> B [id=1]
-            B -> C [id=2]
-            C -> A [id=3]
+            e -> A:0 [id=4 sink="{ufo_order:0}"]
+            A:1 -> e [id=5 source="{ufo_order:1}"]
+            A -> A [id=0 source="{ufo_order:2}" sink="{ufo_order:3}" lmb_id=0]
+            A -> B [id=1 source="{ufo_order:4}" sink="{ufo_order:0}" lmb_id=1]
+            B -> C [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            C -> A [id=3 sink="{ufo_order:5}" source="{ufo_order:1}"]
         },
         "scalars"
     )

@@ -2717,10 +2717,10 @@ mod tests {
             ParamBuilder<f64>: UpdateAndGetParams<T>,
         {
             let graph = finalized_runtime_dot!(
-                digraph arb_parameter_baseline {
+                digraph arb_parameter_baseline { graph [projector=1]
                     edge [num=1 mass=0]
                     node [num=1]
-                    A -> B [id=0]
+                    A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
                 }
             )
             .unwrap();

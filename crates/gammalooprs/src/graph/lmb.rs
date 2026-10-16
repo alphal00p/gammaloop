@@ -1258,22 +1258,22 @@ pub mod test {
     fn generated_singleton_lmbs_conserve_external_momentum() {
         test_initialise().unwrap();
         let graphs: Vec<Graph> = finalized_runtime_dot!(
-            digraph contact {
+            digraph contact { graph [projector=1] edge[num="1𝑖"]
                 ext [style=invis]
                 node[num=1]
-                ext->v:0[id=0]
-                ext->v:1[id=1]
-                v:2->ext[id=2]
-                v:3->ext[id=3]
+                ext->v:0[id=0 sink="{ufo_order:0}"]
+                ext->v:1[id=1 sink="{ufo_order:1}"]
+                v:2->ext[id=2 source="{ufo_order:2}"]
+                v:3->ext[id=3 source="{ufo_order:3}"]
             }
-            digraph tadpole {
+            digraph tadpole { graph [projector=1] edge[num="1𝑖"]
                 ext [style=invis]
                 node[num=1]
-                ext->v:0[id=0]
-                ext->v:1[id=1]
-                v:2->ext[id=2]
-                v:3->ext[id=3]
-                v->v[id=4 num=1 mass=1]
+                ext->v:0[id=0 sink="{ufo_order:0}"]
+                ext->v:1[id=1 sink="{ufo_order:1}"]
+                v:2->ext[id=2 source="{ufo_order:2}"]
+                v:3->ext[id=3 source="{ufo_order:3}"]
+                v->v[id=4 num=1 mass=1 lmb_id=0 source="{ufo_order:4}" sink="{ufo_order:5}"]
             }
         )
         .unwrap();
@@ -1508,8 +1508,8 @@ pub mod test {
             node[num=1]
             incoming[style=invis]
             outgoing[style=invis]
-            incoming -> a:0 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b:1 -> outgoing [id=5 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            incoming -> a:0 [id=0 sink="{ufo_order:0}"]
+            b:1 -> outgoing [id=5 source="{ufo_order:0}"]
             a:2 -> b:3 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
             a:4 -> b:5 [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
             b:6 -> a:7 [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
@@ -1522,12 +1522,12 @@ pub mod test {
             node[num=1]
             incoming[style=invis]
             outgoing[style=invis]
-            incoming -> root [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            incoming -> root [id=0 sink="{ufo_order:0}"]
             root -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
             c -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
             c -> b [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
             a -> b [id=4 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            root -> outgoing [id=5 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            root -> outgoing [id=5 source="{ufo_order:2}"]
             a -> b [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
@@ -1839,19 +1839,19 @@ pub mod test {
 
         let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
         SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let g: Graph = finalized_runtime_dot!(digraph {
+        let g: Graph = finalized_runtime_dot!(digraph { graph [projector=1]
             edge[num=1 mass=1]
             node[num=1]
-            b:17 -> a:0 [id=0]
-            a:1 -> e:2 [id=1]
-            a:3 -> f:4 [id=2]
-            b:5 -> c:6 [id=3]
-            b:7 -> d:8 [id=4]
-            c:9 -> d:10 [id=5]
-            c:11 -> f:12 [id=6]
-            d:13 -> e:14 [id=7]
-            e:15 -> f:16 [id=8]
-            x:18 -> y:19 [id=9]
+            b:17 -> a:0 [id=0 sink="{ufo_order:0}" source="{ufo_order:2}" lmb_id=3]
+            a:1 -> e:2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            a:3 -> f:4 [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            b:5 -> c:6 [id=3 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            b:7 -> d:8 [id=4 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=1]
+            c:9 -> d:10 [id=5 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            c:11 -> f:12 [id=6 source="{ufo_order:2}" sink="{ufo_order:1}" lmb_id=2]
+            d:13 -> e:14 [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            e:15 -> f:16 [id=8 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            x:18 -> y:19 [id=9 source="{ufo_order:0}" sink="{ufo_order:0}"]
         })
         .unwrap();
         let mut outer: SuBitGraph = g.empty_subgraph();

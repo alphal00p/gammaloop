@@ -1197,7 +1197,6 @@ mod tests {
     use super::*;
     use crate::utils::test_utils::ModelFixtureExt;
     use crate::{
-        graph::parse::from_dot::IntoFinalizedRuntimeGraph,
         initialisation::test_initialise,
         utils::{ArbPrec, load_generic_model},
     };
@@ -1643,7 +1642,8 @@ mod tests {
         test_initialise()?;
         let model = load_generic_model("sm");
         assert!(!model.get_parameter("WT").value.unwrap().re.is_zero());
-        let graph: Graph = r#"
+        let graph: Graph = Graph::unit_numerator_fixtures(
+            &(r#"
             digraph real_masses {
                 node [num=1];
                 edge [num=1];
@@ -1651,8 +1651,13 @@ mod tests {
                 A -> B [id=1 mass=2];
                 A -> B [id=2 particle="t"];
             }
-        "#
-        .into_finalized_runtime_graph(&model)?;
+        "#),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         graph.validate_real_masses(&model)
     }
 
@@ -1678,13 +1683,19 @@ mod tests {
                     ((&momentum - &mass) * (&momentum + &mass)).to_canonical_string(),
                 )?;
                 model = serde_json::from_value(definition)?;
-                let graph: Graph = format!(
-                    r#"digraph standard_denominator {{
+                let graph: Graph = Graph::unit_numerator_fixtures(
+                    &(format!(
+                        r#"digraph standard_denominator {{
                         node [num=1]; edge [num=1];
                         A -> B [particle="{name}"];
                     }}"#
+                    )),
+                    &model,
                 )
-                .into_finalized_runtime_graph(&model)?;
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })?;
                 graph.validate_real_masses(&model)?;
             }
         }
@@ -1715,24 +1726,42 @@ mod tests {
                 .to_canonical_string(),
         )?;
         model = serde_json::from_value(definition)?;
-        let unused: Graph = r#"digraph unused_width {
+        let unused: Graph = Graph::unit_numerator_fixtures(
+            &(r#"digraph unused_width {
             node [num=1]; edge [num=1];
             A -> B [particle="g"];
-        }"#
-        .into_finalized_runtime_graph(&model)?;
+        }"#),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         unused.validate_real_masses(&model)?;
-        let amputated: Graph = r#"digraph amputated_width {
+        let amputated: Graph = Graph::unit_numerator_fixtures(
+            &(r#"digraph amputated_width {
             ext [style=invis]; vertex [num=1]; edge [num=1];
             ext -> vertex [particle="H"];
-        }"#
-        .into_finalized_runtime_graph(&model)?;
+        }"#),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         assert!(amputated.iter_edges().all(|(pair, _, _)| !pair.is_paired()));
         amputated.validate_real_masses(&model)?;
-        let used: Graph = r#"digraph explicit_width {
+        let used: Graph = Graph::unit_numerator_fixtures(
+            &(r#"digraph explicit_width {
             node [num=1]; edge [num=1];
             A -> B [particle="H"];
-        }"#
-        .into_finalized_runtime_graph(&model)?;
+        }"#),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         let error = used.validate_real_masses(&model).unwrap_err().to_string();
         assert!(error.contains("explicit_width"));
         assert!(error.contains("unsupported propagator denominator"));
@@ -1745,13 +1774,19 @@ mod tests {
         test_initialise()?;
         let mut model = load_generic_model("sm");
         let mass = Atom::from(crate::model::UFOSymbol::from("MT")).to_canonical_string();
-        let graph: Graph = format!(
-            r#"digraph updated_denominator {{
+        let graph: Graph = Graph::unit_numerator_fixtures(
+            &(format!(
+                r#"digraph updated_denominator {{
                 node [num=1]; edge [num=1];
                 A -> B [particle="t" mass="{mass}+1"];
             }}"#
+            )),
+            &model,
         )
-        .into_finalized_runtime_graph(&model)?;
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         graph.validate_real_masses(&model)?;
         let mut definition = serde_json::to_value(&model)?;
         let propagator = definition["propagators"]
@@ -1782,15 +1817,21 @@ mod tests {
     fn cross_section_complex_mass_is_rejected_at_generation() -> eyre::Result<()> {
         test_initialise()?;
         let model = load_generic_model("sm");
-        let graph: Graph = r#"
+        let graph: Graph = Graph::unit_numerator_fixtures(
+            &(r#"
             digraph complex_mass {
                 node [num=1];
                 edge [num=1];
                 A -> B [id=0 mass="1+1𝑖"];
                 A -> B [id=1 mass=0];
             }
-        "#
-        .into_finalized_runtime_graph(&model)?;
+        "#),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         let error = graph.validate_real_masses(&model).unwrap_err().to_string();
         assert!(error.contains("complex_mass"));
         assert!(error.contains("unsupported complex mass"));
@@ -1805,28 +1846,31 @@ mod tests {
         for offset in ["", "+1"] {
             let mut model = load_generic_model("sm");
             let mass = Atom::from(crate::model::UFOSymbol::from("MT")).to_canonical_string();
-            let graph: Graph = format!(
-                r#"digraph runtime_mass {{
+            let graph: Graph = Graph::unit_numerator_fixtures(
+                &(format!(
+                    r#"digraph runtime_mass {{
                     node [num=1];
                     edge [num=1];
                     A -> B [id=0 mass="{mass}{offset}"];
                     A -> B [id=1 mass=0];
                 }}"#
+                )),
+                &model,
             )
-            .into_finalized_runtime_graph(&model)?;
+            .map(|mut graphs| {
+                assert_eq!(graphs.len(), 1);
+                graphs.remove(0)
+            })?;
             graph.validate_real_masses(&model)?;
 
-            let mut card = feynkit_model::ParameterCard::new();
-            card.insert("MT".into(), feynkit_model::ComplexValue::new(2.0, 0.5));
-            model.apply_parameter_card(&card)?;
+            model.set_fixture_values([("MT", Complex::new(F(2.0), F(0.5)))])?;
             // The DOT evaluator may still hold the old real value until its
             // slots refresh; validation must use the current model value.
             let error = graph.validate_real_masses(&model).unwrap_err().to_string();
             assert!(error.contains("runtime_mass"));
             assert!(error.contains("unsupported complex mass"));
 
-            card.insert("MT".into(), feynkit_model::ComplexValue::new(3.0, 0.0));
-            model.apply_parameter_card(&card)?;
+            model.set_fixture_values([("MT", Complex::new_re(F(3.0)))])?;
             graph.validate_real_masses(&model)?;
         }
         Ok(())

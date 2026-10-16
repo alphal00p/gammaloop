@@ -605,12 +605,12 @@ mod tests {
     #[test]
     fn expanded_4d_setting_does_not_change_the_empty_forest_root() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph root_identity {
+        let mut graph: Graph = finalized_runtime_dot!(digraph root_identity { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
@@ -661,19 +661,17 @@ mod tests {
     #[test]
     fn selected_raised_lu_projection_preserves_quadratic_contact_family() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph raised_lu_contact_family {
+        let mut graph: Graph = finalized_runtime_dot!(digraph raised_lu_contact_family { graph [projector=1]
             num = 1
             edge [particle="scalar_1" num=1]
             node [num=1]
 
-            ext0 [style=invis is_cut=0]
-            v2 -> ext0 [id=0]
-            ext0 -> v3
-            v0 -> v1 [id=1 lmb_id=0]
-            v0 -> v1 [id=2]
-            v3 -> v0 [id=3 lmb_id=1]
-            v1 -> v2 [id=4]
-            v2 -> v3 [id=5]
+            v2 -> v3 [id=0 is_cut=0 initial_state_connection=true source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v0 -> v1 [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            v0 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            v3 -> v0 [id=3 lmb_id=1 sink="{ufo_order:2}" source="{ufo_order:2}"]
+            v1 -> v2 [id=4 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            v2 -> v3 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
         }, "scalars")?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let production_numerator =
@@ -885,19 +883,19 @@ mod tests {
     #[test]
     fn gl24_direct_3d_modes_preserve_orientation_selector_contracts() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph gl24_selector_contract {
+        let mut graph: Graph = finalized_runtime_dot!(digraph gl24_selector_contract { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            v0 -> v1 [id=0 is_cut=0]
-            v0 -> v3 [id=1 lmb_id=0 num="(Q(1,spenso::cind(0))^2-Q(1,spenso::cind(1))^2-Q(1,spenso::cind(2))^2-Q(1,spenso::cind(3))^2)^2"]
-            v0 -> v5 [id=2]
-            v1 -> v2 [id=3 lmb_id=1]
-            v1 -> v3 [id=4]
-            v2 -> v4 [id=5 lmb_id=2]
-            v2 -> v4 [id=6]
-            v3 -> v5 [id=7]
-            v4 -> v5 [id=8 mass=2]
+            v0 -> v1 [id=0 is_cut=0 initial_state_connection=true source="{ufo_order:0}" sink="{ufo_order:0}"]
+            v0 -> v3 [id=1 lmb_id=0 num="(Q(1,spenso::cind(0))^2-Q(1,spenso::cind(1))^2-Q(1,spenso::cind(2))^2-Q(1,spenso::cind(3))^2)^2" source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v0 -> v5 [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            v1 -> v2 [id=3 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v1 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v2 -> v4 [id=5 lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v2 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v3 -> v5 [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v4 -> v5 [id=8 mass=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = graph.production_numerator_atom_for_full_3d_expression();
@@ -1049,14 +1047,14 @@ mod tests {
     fn nested_scalar_bubble_direct_3d_modes_match_without_a_cut() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = finalized_runtime_dot!(
-            digraph nested_scalar_bubble_selector_contract {
-                edge [particle="scalar_1"];
+            digraph nested_scalar_bubble_selector_contract { graph [projector=1]
+                edge [particle="scalar_1" num="1𝑖"];
                 node [num=1];
 
-                v1 -> v2 [id=0 lmb_id=0];
-                v1 -> v2 [id=1];
-                v2 -> v3 [id=2 lmb_id=1];
-                v3 -> v1 [id=3];
+                v1 -> v2 [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v2 -> v3 [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                v3 -> v1 [id=3 sink="{ufo_order:2}" source="{ufo_order:1}"];
             },
             "scalars"
         )?;
@@ -1277,16 +1275,16 @@ mod tests {
     #[test]
     fn factorized_owned_dot_child_cff_matches_direct_3d_for_uncut_self_energy() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph factorized_child_cff {
+        let mut graph: Graph = finalized_runtime_dot!(digraph factorized_child_cff { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v0 [id=0]
-            v0 -> v1 [id=1 lmb_id=0]
-            v0 -> v1 [id=2 num="Q(2,spenso::cind(0))^2-Q(2,spenso::cind(1))^2-Q(2,spenso::cind(2))^2-Q(2,spenso::cind(3))^2-1"]
-            v1 -> outgoing [id=3]
+            incoming -> v0 [id=0 sink="{ufo_order:0}"]
+            v0 -> v1 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v0 -> v1 [id=2 num="Q(2,spenso::cind(0))^2-Q(2,spenso::cind(1))^2-Q(2,spenso::cind(2))^2-Q(2,spenso::cind(3))^2-1" source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v1 -> outgoing [id=3 source="{ufo_order:2}"]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = graph.production_numerator_atom_for_full_3d_expression();
@@ -1588,31 +1586,31 @@ mod tests {
         test_initialise()?;
         for depth in [2, 3] {
             let mut graph: Graph = if depth == 2 {
-                finalized_runtime_dot!(digraph nested_scalar_banana {
+                finalized_runtime_dot!(digraph nested_scalar_banana { graph [projector=1]
                     edge [num=1 mass=1]
                     node [num=1]
                     incoming [style=invis]
                     outgoing [style=invis]
 
-                    incoming -> a [id=0]
-                    a -> b [id=1 lmb_id=0]
-                    a -> b [id=2 lmb_id=1]
-                    a -> b [id=3]
-                    b -> outgoing [id=4]
+                    incoming -> a [id=0 sink="{ufo_order:3}"]
+                    a -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+                    a -> b [id=2 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                    a -> b [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                    b -> outgoing [id=4 source="{ufo_order:3}"]
                 })?
             } else {
-                finalized_runtime_dot!(digraph depth_three_scalar_banana {
+                finalized_runtime_dot!(digraph depth_three_scalar_banana { graph [projector=1]
                     edge [num=1 mass=1]
                     node [num=1]
                     incoming [style=invis]
                     outgoing [style=invis]
 
-                    incoming -> a [id=0]
-                    a -> b [id=1 lmb_id=0]
-                    a -> b [id=2 lmb_id=1]
-                    a -> b [id=3 lmb_id=2]
-                    a -> b [id=4]
-                    b -> outgoing [id=5]
+                    incoming -> a [id=0 sink="{ufo_order:4}"]
+                    a -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+                    a -> b [id=2 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                    a -> b [id=3 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                    a -> b [id=4 source="{ufo_order:3}" sink="{ufo_order:3}"]
+                    b -> outgoing [id=5 source="{ufo_order:4}"]
                 })?
             };
             let global_marker = symbolica::symbol!("nested_scalar_banana::global");
@@ -1891,19 +1889,17 @@ mod tests {
     fn complete_self_energy_taylor_sum_matches_direct_3d_for_raised_lu_jets() -> Result<()> {
         test_initialise()?;
         let base_graph: Graph = finalized_runtime_dot!(
-            digraph complete_self_energy_taylor_sum {
+            digraph complete_self_energy_taylor_sum { graph [projector=1]
                 num = 1
                 edge [particle="scalar_1" num=1]
                 node [num=1]
 
-                ext0 [style=invis is_cut=0]
-                v2 -> ext0 [id=0]
-                ext0 -> v3
-                v0 -> v1 [id=1 lmb_id=0 num="Q(1,spenso::mink(4,1))"]
-                v0 -> v1 [id=2]
-                v3 -> v0 [id=3 lmb_id=1 num="Q(3,spenso::mink(4,1))"]
-                v1 -> v2 [id=4]
-                v2 -> v3 [id=5]
+                v2 -> v3 [id=0 is_cut=0 initial_state_connection=true source="{ufo_order:1}" sink="{ufo_order:0}"]
+                v0 -> v1 [id=1 lmb_id=0 num="Q(1,spenso::mink(4,1))" source="{ufo_order:0}" sink="{ufo_order:0}"]
+                v0 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                v3 -> v0 [id=3 lmb_id=1 num="Q(3,spenso::mink(4,1))" sink="{ufo_order:2}" source="{ufo_order:2}"]
+                v1 -> v2 [id=4 source="{ufo_order:2}" sink="{ufo_order:0}"]
+                v2 -> v3 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
             },
             "scalars"
         )?;

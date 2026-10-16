@@ -212,7 +212,7 @@ fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
 fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graphs = Graph::from_finalized_runtime_string(
+    let graphs = Graph::import_dot(
         r#"
         digraph direct {
             ext [style=invis];
@@ -221,6 +221,7 @@ fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
             amplitude -> ext [particle="ta+"];
         }
         digraph forward {
+            final_state="vt,ta+";
             ext [style=invis];
             ext -> left [particle="G+", is_cut=0];
             right -> ext [particle="G+", is_cut=0];
@@ -246,7 +247,7 @@ fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
 fn generated_complex_charged_current_preserves_the_ckm_norm() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graphs = Graph::from_finalized_runtime_string(
+    let graphs = Graph::import_dot(
         r#"
         digraph direct {
             ext [style=invis];
@@ -255,6 +256,7 @@ fn generated_complex_charged_current_preserves_the_ckm_norm() {
             amplitude -> ext [particle="u~"];
         }
         digraph forward {
+            final_state="b,u~";
             ext [style=invis];
             ext -> left [particle="W-", is_cut=0];
             right -> ext [particle="W-", is_cut=0];
@@ -486,7 +488,7 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
     // The approved canonical model carries the action-consistent Lorentz rules;
     // loading it rebuilds the vertex rules and their shared Lorentz references.
     let model = load_generic_model("sm");
-    let graphs = Graph::from_finalized_runtime_string(
+    let graphs = Graph::import_dot(
         r#"
             digraph goldstone {
                 ext [style=invis];
@@ -621,8 +623,8 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
         } else {
             ("Z", "G0", "ta-", "MZ")
         };
-        let graphs = Graph::from_finalized_runtime_string(
-            format!(
+        let graphs = Graph::import_dot(
+            &format!(
                 r#"
                 digraph vector_exchange {{
                     ext [style=invis];
