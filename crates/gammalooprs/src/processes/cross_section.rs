@@ -4811,6 +4811,235 @@ mod tests {
     }
 
     #[test]
+    fn localized_kernel_keeps_physical_lu_jets_at_separate_runtime_scales() -> eyre::Result<()> {
+        use crate::{
+            graph::Graph,
+            integrands::process::{
+                GenericEvaluator, ParamBuilder, evaluators::GenericEvaluatorFloat,
+                param_builder::LUParams,
+            },
+            momentum::{
+                Energy, FourMomentum, Helicity, ThreeMomentum,
+                sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
+            },
+            utils::{
+                ArbPrec, F,
+                hyperdual_utils::{
+                    DualOrNot, extract_t_derivatives_complex, new_constant,
+                    shape_from_cut_cff_index,
+                },
+                symbolica_ext::Q_I,
+            },
+        };
+        use spenso::algebra::complex::Complex;
+        use symbolica::{atom::Atom, domains::dual::HyperDual};
+
+        test_initialise()?;
+        // A scalar residue diagnostic: edges 0 and 1 are the same channel.
+        // The two physical cuts therefore share one second-order LU surface.
+        // There is no graph numerator to expand or OS spin projector to mock.
+        let model = crate::model::Model::from_json(include_str!(
+            "../../../../assets/models/json/scalars/scalars_2p_3p.json"
+        ))?;
+        let mut graphs = Graph::import_dot(
+            r#"digraph localized_raised_cut {
+                final_state="scalar_1,scalar_1";
+                projector=1;
+                node [num=1];
+                edge [particle="scalar_1", num=1];
+                ext [style=invis];
+                ext -> left [id=3 is_cut=0];
+                right -> ext [id=4 is_cut=0];
+                left -> middle [id=0 lmb_id=0];
+                middle -> right [id=1];
+                left -> right [id=2];
+            }"#,
+            &model,
+        )?;
+        assert_eq!(graphs.len(), 1);
+        let source = super::CrossSectionGraph::new(graphs.remove(0));
+        assert_eq!(source.cuts.len(), 2);
+        let graph = &source.graph;
+        assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 1);
+        assert!(
+            graph
+                .get_raised_edge_groups()
+                .iter()
+                .any(|edges| edges.len() == 2)
+        );
+        let group = super::CutGroup {
+            cuts: vec![super::CutId(0), super::CutId(1)],
+            related_esurface_group: RaisedEsurfaceGroup {
+                esurface_ids: vec![EsurfaceID(0), EsurfaceID(1)],
+                max_occurence: 2,
+            },
+        };
+        let t = Atom::var(GS.rescale_star);
+        let pi = Atom::var(Symbol::PI);
+        let phase = -Atom::num(2) * Atom::var(GS.pi) * Atom::i();
+        let measure = group.lu_prefactor(graph, &source.cuts)? / phase;
+        assert_eq!(measure, t.pow(3) * GS.hfunction_lu_cut);
+        // Remove only constant pi factors/cut phase. Runtime t, momenta and
+        // scales remain parameters, including the identity function int_loc.
+        let kernel = pi.pow(2) * GS.localizing_integrand(&graph.loop_momentum_basis);
+        let localized = &measure * &kernel;
+
+        // Independent exact scalar jet and radial-divergence identity. These
+        // certify the analytic oracle; the production runtime path is below.
+        let radius = Atom::var(symbol!("localized_kernel_radius"));
+        let scale = Atom::var(GS.renormalization_localization_scale);
+        let denominator = t.pow(2) * radius.pow(2) + scale.pow(2);
+        let expected = &scale * t.pow(3) / denominator.pow(2);
+        let expected_derivative =
+            &scale * t.pow(2) * (Atom::num(3) * scale.pow(2) - t.pow(2) * radius.pow(2))
+                / denominator.pow(3);
+        let radial_primitive = &scale * t.pow(2) * radius.pow(3) / denominator.pow(2);
+        for identity in [
+            expected.derivative(GS.rescale_star) - &expected_derivative,
+            radial_primitive.derivative(symbol!("localized_kernel_radius"))
+                - radius.pow(2) * expected_derivative,
+        ] {
+            assert!(
+                identity
+                    .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)?
+                    .numerator
+                    .is_zero()
+            );
+        }
+        // The radial primitive vanishes at zero and infinity. Thus the
+        // integrated first jet is zero; int d^3q t^3 rho_L(tq)=1 for t,L>0.
+
+        let shape = shape_from_cut_cff_index(&CutCFFIndex {
+            lu_cut_order: Some(2),
+            left_threshold_order: None,
+            right_threshold_order: None,
+        })
+        .expect("a double cut needs first derivatives");
+        let mut builder = ParamBuilder::new(
+            graph,
+            &graph.model,
+            &graph.loop_momentum_basis,
+            std::iter::empty::<Atom>(),
+        )?;
+        builder.initialize_duals(shape.len());
+        let mut evaluator = GenericEvaluator::new_from_builder(
+            [
+                localized,
+                kernel,
+                Atom::var(GS.m_uv_vacuum),
+                Atom::var(GS.m_uv_expansion),
+                scale,
+            ],
+            &builder,
+            Some(shape.clone()),
+            super::OptimizationSettings::default(),
+            &super::EvaluatorSettings::default(),
+        )?;
+        let one = F::<ArbPrec>::default().one();
+        let zero = one.zero();
+        let tolerance = F("1e-250".parse::<ArbPrec>()?);
+        let loop_momenta = LoopMomenta::from_iter([ThreeMomentum::new(
+            one.clone(),
+            one.from_i64(2),
+            one.from_i64(2),
+        )]);
+        let external_momenta: ExternalFourMomenta<F<ArbPrec>> = graph
+            .loop_momentum_basis
+            .ext_edges
+            .iter()
+            .map(|_| {
+                FourMomentum::new(
+                    Energy {
+                        value: one.from_i64(5),
+                    },
+                    ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone()),
+                )
+            })
+            .collect();
+        let helicities = vec![Helicity::ZERO; graph.loop_momentum_basis.ext_edges.len()];
+        let dual = HyperDual::<F<ArbPrec>>::new(shape);
+        for t_value in [one.clone(), one.from_i64(5) / one.from_i64(4)] {
+            for (m_uv, localization_scale) in [(7.0, 3.0), (13.0, 3.0), (7.0, 5.0), (13.0, 5.0)] {
+                // These are the same runtime-scale binding owners used by
+                // CrossSectionGraphTerm::warm_up, including all dual buffers.
+                builder.m_uv_value(Complex::new_re(F(m_uv)));
+                builder.renormalization_localization_scale_value(Complex::new_re(F(
+                    localization_scale,
+                )));
+                let dual_t = dual.variable(0, t_value.clone());
+                let momenta = MomentumSample {
+                    sample: BareMomentumSample {
+                        loop_moms: loop_momenta.clone(),
+                        dual_loop_moms: Some(loop_momenta.rescale_with_hyper_dual(&dual_t, None)),
+                        loop_mom_cache_id: 0,
+                        loop_mom_base_cache_id: 0,
+                        external_moms: external_momenta.clone(),
+                        external_mom_cache_id: 0,
+                        external_mom_base_cache_id: 0,
+                        jacobian: one.clone(),
+                        orientation: None,
+                        parameterization_branch: None,
+                    },
+                };
+                let lu = LUParams {
+                    h_function: DualOrNot::Dual(new_constant(&dual_t, &one)),
+                    tstar: DualOrNot::Dual(dual_t),
+                };
+                let params = <ArbPrec as GenericEvaluatorFloat>::get_parameters(
+                    &mut builder,
+                    (false, false),
+                    graph,
+                    &momenta,
+                    &helicities,
+                    &[],
+                    None,
+                    None,
+                    Some(&lu),
+                );
+                let actual = <ArbPrec as GenericEvaluatorFloat>::get_evaluator(&mut evaluator)(
+                    params.as_slice(),
+                );
+                let l = F::<ArbPrec>::from_f64(localization_scale);
+                let m = F::<ArbPrec>::from_f64(m_uv);
+                let a = one.from_i64(9);
+                let d = &t_value * &t_value * &a + &l * &l;
+                let rho = &l / d.powi(2);
+                let rho_derivative = -one.from_i64(4) * &l * &t_value * &a / d.powi(3);
+                let k = t_value.powi(3) * &rho;
+                let k_derivative =
+                    &l * t_value.powi(2) * (one.from_i64(3) * &l * &l - t_value.powi(2) * a)
+                        / d.powi(3);
+                for (index, (value, first_jet)) in [
+                    (k, k_derivative),
+                    (rho, rho_derivative),
+                    (m.clone(), zero.clone()),
+                    (m, zero.clone()),
+                    (l, zero.clone()),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let DualOrNot::Dual(result) = actual[index].clone() else {
+                        panic!("the runtime must retain the physical LU jet")
+                    };
+                    let jet = extract_t_derivatives_complex(result);
+                    assert_eq!(jet.len(), 2);
+                    for (order, expected) in [value, first_jet].into_iter().enumerate() {
+                        assert!(
+                            (&jet[order].re - &expected).abs()
+                                < &tolerance * (&one + expected.abs()),
+                            "output {index}, derivative {order}, M={m_uv}, L={localization_scale}, t={t_value}: actual={}, expected={expected}",
+                            jet[order].re
+                        );
+                        assert!(jet[order].im.abs() < tolerance);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn singleton_boundary_classification_uses_generic_mass_hierarchy() {
         use super::ThresholdCountertermStatus;
         use crate::utils::F;
