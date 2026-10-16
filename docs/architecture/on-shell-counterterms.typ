@@ -68,6 +68,14 @@ large performance and scaling workloads on the rebased stack. The later
 public-generation and performance records below identify their own revision
 and measurement scopes.
 
+The historical temporal-trace stack `6a5a3c3faf7bb662998a8b402549aea7f0573d19`
+passed the one-loop mechanism, maintained nested algebra and local limits,
+all six CLI three-route comparisons, and the nine-case physical acceptance.
+The detailed historical record below keeps these claims separate. At that
+checkpoint, exhaustive numerical UV scans and final isolated performance
+measurements remained pending the consolidated FeynKit repair rebase; those
+records did not certify that later revision or the current retained-tensor port.
+
 == Ordered component operation
 
 Use the Minkowski metric $(+, -, -, -)$, $d=4-2 epsilon$ and
@@ -1017,6 +1025,102 @@ then all three routes after summing hosts. These checks establish the grouping
 transformation independently of large public generation and route comparisons.
 
 == Rebased FeynKit validation and measurements
+
+=== Historical frozen temporal-trace stack
+
+This section records the original frozen source's qualification. Its runs and
+measurements are historical; the current retained-tensor checks above have
+their own source identities, selections and evidence.
+
+The frozen reference stack is
+`6a5a3c3faf7bb662998a8b402549aea7f0573d19`, named
+`on-shell-validated-temporal-stack`. Its shared temporal-trace patch is exactly
+`fd1fef9ff2d4d176e5658ad2ef8f74a63c552551`, copied above the other shared
+repairs as `7b9380de7b668c2fbec8a884d9a2bd4fb0796d81`. The physical
+four-dimensional trace recurrence preserves formal-dimension and disabled-trace
+boundaries. The associated evaluator change releases reduction caches before
+component graph construction. The shared patch passes all 152 Dirac tests,
+11 evaluator controls and strict Idenso/GammaLoop Clippy.
+
+The OS/core gates pass 79 bounded cases and 9 large cases, respectively:
+`c09e9887-e3a8-4ecf-9c78-ca94a873f6dc` and
+`89ecea37-c8aa-4d49-8906-8fa1004161d9`. The bounded total is 226.480 seconds;
+the longest individual case is 62.151 seconds under the unchanged 240-second
+limit. Large checks remain in the existing full-main lane. They include the
+independent complete three-loop component jets, proper two-loop cographs,
+generic and correlated hard limits, open finite coefficients and the maintained
+OS/OS and OS/IR radial soft strata. All 485 guarded sources and the core binary
+remain unchanged across these runs. The complete record is
+`target/os-feynkit/core-validation-after-temporal-trace/`.
+
+All six scalar CLI fixtures pass the three-route comparison at both nonzero
+points: the integrated primitive, quark in gluon, nested quark, soft gluon in
+quark, disjoint components and the three-loop chain. The three-loop run is
+`a46e7cd4-fe58-41a2-a867-be921fcd5642`; the primitive run is
+`c319bc7c-d0ba-4b82-9cf4-f7892efd2fdd`; the four two-loop cases are
+`a531d84b-ba4e-46e4-9f7b-484d14c62d88`. Numerator and denominator reconstruction
+certificates remain mandatory during generation. The final numerical comparison
+uses the existing stability-aware complex-norm criterion; it is not a symbolic
+identity proof. These shared-process, concurrent correctness runs do not supply
+isolated performance or per-route peak-memory measurements.
+
+The small physical checks pass in
+`a89026cf-9e23-4b83-bfce-cbf919f90925` (Born-density addbacks, route/sampling
+probes and the published reference) and
+`d5edb5bc-bb3a-40b0-8cbc-98ad25294ca1` (localization-kernel jets). The complete
+nine-case physical acceptance then passes in
+`50e78246-d7d6-494c-b55a-0b8257cc95bd`, taking 2952.964 seconds under the
+unchanged 7200-second limit. It retains the same 320,000 samples per case,
+seeds 1337 through 1345, ten workers, spherical coordinates and all-LMB proposal.
+All reference, imaginary-part, auxiliary-scale and cross-route assertions pass.
+The maximum reference distance is 1.616 reported standard errors; the maintained
+auxiliary-scale and cross-route distances are at most 0.919 and 1.585 combined
+standard errors. These are the test's comparisons, without a claim that adjacent
+seed offsets produce independent random streams.
+
+Every case has zero unstable samples. Quad precision is used for 10,354 samples;
+no arbitrary-precision escalation is used. All 1306 source guards and physical
+test binary `46f6c74a116d4c5a05d6098806737f79a865906043e9514a5983621f9ae3fea2`
+remain unchanged. This fresh run covers the Quad paths that byte-identical
+compiled double-precision objects alone could not certify. The LO and all nine
+NLO checkpoints, 31 compiled objects, results and source/binary manifests remain
+at their original paths in
+`target/os-feynkit/physical-acceptance-after-temporal-trace/`. In particular,
+the earlier final-checkpoint gap is closed.
+
+Shared repairs retain their own tests and immutable named commits. Numeric
+normalization `6480e4cd` distributes only the current numeric coefficient at
+each product/sum boundary. Parser batching `eab3d857` combines exact scalar
+summands after tensor admission while preserving the ordered fold in other
+coefficient domains. Printer registration `6eda5d7a` serializes first callback
+creation across subset/index types, with unchanged formatter output and error
+propagation after unlocking. The latter passes 261 Linnet unit tests and 256
+concurrent registrations in the unchanged reproducer. Strict production-library
+Clippy passes; 39 inherited all-target `energy-timing` configuration warnings
+remain separately recorded. No new cyclic-word Taylor repair is claimed here.
+
+Encoded Atom bytes are a factorized size diagnostic, not an algebraic invariant:
+pre-evaluator family tags come from a process-wide scope counter, and Symbolica
+uses packed symbol identifiers. An isolated quark-in-gluon measurement matches
+all ten numerical values and sizes of the older isolated measurement exactly,
+while the two sequential-route records share another size pattern. The audit
+is in `target/os-feynkit/performance-after-registration-fix/qg-history-review/`.
+The measurement tooling preserves both sizes and literal-equality diagnostics,
+checks graph/count inventory, and uses the strict machine-epsilon floor of the
+unchanged numerical criterion. It does not infer algebraic equivalence from
+matching sizes or a numerical sample. Graph numerators remain factorized.
+
+The following earlier records retain their original revision and scope. Five
+isolated measurements at `91ab7745` are historical observations; they are not
+relabelled as temporal-trace or consolidated-rebase results. At the time of
+this historical record, the exhaustive UV inventory of 259 limits per control
+and 39 isolated replays was prepared with its existing reference, seed,
+precision, timeout and performance-gate policies. Final measurements awaited
+the consolidated FeynKit repairs, including component factor collection and
+the restored antighost derivative. No full three-loop radial soft matrix was
+supplied by those two-loop checks.
+
+=== Earlier rebased records
 
 At source revision `1121da7ae5f2f68312bff6e4341175de084e1f45`, the fresh native
 $gamma^* arrow.r t overline(t)$ capture has the same complete topology inventory
