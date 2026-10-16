@@ -1001,9 +1001,17 @@ impl Model {
                 Ok(&propagator.denominator)
             };
             let pole = denominator(vector)?;
+            // Structural masslessness governs graph construction. A declared
+            // massive quartet additionally needs a nonzero evaluated pole for
+            // its physical longitudinal state, even when its mass is adjustable.
+            let zero_pole = self
+                .parameter_by_id(vector.mass)?
+                .value
+                .is_some_and(|mass| mass.re == 0.0 && mass.im == 0.0);
             if members[0] != physical
                 || !vector.is_vector()
                 || vector.is_massless(self)
+                || zero_pole
                 || vector.ghost_number != 0
                 || particles[1].spin != 1
                 || !particles[1].is_goldstone()
@@ -2643,6 +2651,27 @@ mod tests {
                 .fingerprint()
         );
         assert_eq!(original.fingerprint(), original_fingerprint);
+    }
+
+    #[test]
+    fn massive_covariant_multiplet_rejects_a_zero_evaluated_pole() {
+        let mut model = Model::standard_model();
+        model.validate_covariant_cut_multiplets().unwrap();
+        model
+            .apply_parameter_card(&ParameterCard::from_iter([(
+                "MZ".to_owned(),
+                ComplexValue::new(0.0, 0.0),
+            )]))
+            .unwrap();
+        assert!(!model.particle_by_pdg(23).unwrap().is_massless(&model));
+        assert!(model.validate_covariant_cut_multiplets().is_err());
+        model
+            .apply_parameter_card(&ParameterCard::from_iter([(
+                "MZ".to_owned(),
+                ComplexValue::new(3.0, 0.0),
+            )]))
+            .unwrap();
+        model.validate_covariant_cut_multiplets().unwrap();
     }
 
     #[test]

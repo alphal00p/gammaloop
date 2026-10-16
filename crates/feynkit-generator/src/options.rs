@@ -796,6 +796,51 @@ impl GenerationOptions {
         }
     }
 
+    /// Whether selection can remove diagrams within a complete covariant sector.
+    /// Complete loop and coupling orders preserve the partner sum; selecting
+    /// particular diagrams or restricting their particle content need not.
+    pub fn may_filter_covariant_partners(&self) -> bool {
+        self.selected_diagram_ids.is_some()
+            || self.selected_diagram_names.is_some()
+            || !self.vetoed_diagram_ids.is_empty()
+            || !self.vetoed_diagram_names.is_empty()
+            || self.max_vertices.is_some()
+            || self.filter.is_some()
+            || !self.forced_cuts.is_empty()
+            || self
+                .graph_filters
+                .iter()
+                .chain(&self.cut_amplitude_filters)
+                .any(|filter| match filter {
+                    GenerationFilter::CouplingOrders(_)
+                    | GenerationFilter::LoopCountRange(_)
+                    | GenerationFilter::PerturbativeOrders(_) => false,
+                    GenerationFilter::VertexAllow(_)
+                    | GenerationFilter::LoopOneParticleIrreducible => true,
+                    GenerationFilter::VertexVeto(vertices) => !vertices.is_empty(),
+                    GenerationFilter::ParticleVeto(particles) => !particles.is_empty(),
+                    GenerationFilter::FermionLoopCountRange((minimum, maximum))
+                    | GenerationFilter::FactorizedLoopTopologiesCountRange((minimum, maximum)) => {
+                        *minimum != 0 || *maximum != usize::MAX
+                    }
+                    GenerationFilter::BlobRange(range)
+                    | GenerationFilter::SpectatorRange(range) => {
+                        *range.start() != 0 || *range.end() != usize::MAX
+                    }
+                    GenerationFilter::MaxNumberOfBridges(maximum) => *maximum != usize::MAX,
+                    GenerationFilter::SelfEnergy(options) => {
+                        options.veto_massive || options.veto_massless
+                    }
+                    GenerationFilter::Tadpoles(options) => {
+                        options.veto_attached_to_massive || options.veto_attached_to_massless
+                    }
+                    GenerationFilter::ZeroSnails(options) => {
+                        options.veto_attached_to_massive || options.veto_attached_to_massless
+                    }
+                    GenerationFilter::Sewn(options) => options.filter_tadpoles,
+                })
+    }
+
     pub fn numerator_grouping(mut self, grouping: NumeratorGrouping) -> Self {
         self.numerator_grouping = grouping;
         self
@@ -1022,6 +1067,55 @@ mod tests {
     use super::{GenerationFilter, GenerationOptions, GraphGroupingOptions, NumeratorGrouping};
     use crate::{ParticleSelector, VertexSelector};
     use feynkit_graph::{DiagramId, EdgeId};
+
+    #[test]
+    fn covariant_partner_diagnostic_distinguishes_orders_from_subsets() {
+        use super::{FilterScope, SelfEnergyFilterOptions};
+
+        let complete = GenerationOptions::default().with_loop_count(0, 2).unwrap();
+        for scope in [FilterScope::Graph, FilterScope::CutAmplitude] {
+            let complete = complete
+                .clone()
+                .with_scoped_filter(scope, GenerationFilter::CouplingOrders(Default::default()))
+                .with_scoped_filter(scope, GenerationFilter::ParticleVeto(Vec::new()))
+                .with_scoped_filter(
+                    scope,
+                    GenerationFilter::SelfEnergy(SelfEnergyFilterOptions {
+                        veto_massive: false,
+                        veto_massless: false,
+                        only_scaleless: true,
+                    }),
+                );
+            assert!(!complete.may_filter_covariant_partners());
+            assert!(
+                complete
+                    .clone()
+                    .with_scoped_filter(scope, GenerationFilter::VertexAllow(Vec::new()))
+                    .may_filter_covariant_partners()
+            );
+            assert!(
+                complete
+                    .with_scoped_filter(
+                        scope,
+                        GenerationFilter::SelfEnergy(SelfEnergyFilterOptions::default())
+                    )
+                    .may_filter_covariant_partners()
+            );
+        }
+        assert!(
+            complete
+                .clone()
+                .select_diagram_ids([DiagramId(0)])
+                .may_filter_covariant_partners()
+        );
+        assert!(
+            complete
+                .clone()
+                .max_vertices(3)
+                .may_filter_covariant_partners()
+        );
+        assert!(complete.filter(|_, _| true).may_filter_covariant_partners());
+    }
 
     #[test]
     fn zero_color_filter_is_an_explicit_serialized_opt_in() {
