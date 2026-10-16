@@ -1992,7 +1992,7 @@ mod tests {
             v2 [num=1]
             edge [num=1 mass=0]
             ext -> v1 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
             v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
             v2 -> ext [id=3 source="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
@@ -2218,7 +2218,7 @@ mod tests {
             v2 [num=1]
             edge [num=1 mass=0]
             ext -> v1 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
             v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
             v2 -> ext [id=3 source="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
@@ -2429,7 +2429,7 @@ mod tests {
             v2 [num=1]
             edge [num=1 mass=0]
             ext -> v1 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
             v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
             v2 -> ext [id=3 source="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))
@@ -2566,8 +2566,8 @@ mod tests {
             v2 [num=1]
             edge [num=1 mass=0]
             ext -> v1 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}" lmb_id=1]
             v1 -> v2 [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
             v2 -> ext [id=4 source="{ufo_order:3}"]
         }, &crate::utils::load_generic_model("sm"))

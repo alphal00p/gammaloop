@@ -9237,10 +9237,10 @@ pub(crate) mod tests {
                 edge [num=1 mass=0]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-                A -> B [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                ext -> A [id=0 sink="{ufo_order:0}"]
+                A -> B [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
                 A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-                B -> ext [id=3 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                B -> ext [id=3 source="{ufo_order:2}"]
             }
         , &crate::utils::load_generic_model("sm"))
         .unwrap();

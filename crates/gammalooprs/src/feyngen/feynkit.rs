@@ -316,7 +316,7 @@ mod tests {
             endpoint,
         };
         let left = vec![
-            half_edge(0, DiagramEndpoint::Source),
+            half_edge(0, DiagramEndpoint::Target),
             half_edge(1, DiagramEndpoint::Source),
             half_edge(5, DiagramEndpoint::Source),
         ];
@@ -457,7 +457,7 @@ mod tests {
         );
 
         let routed_edge = runtime
-            .edge_name_to_index(&format!("feynkit_edge_{}", selected_loop_edge.0))
+            .edge_name_to_index(&format!("e{}", selected_loop_edge.0))
             .unwrap();
         assert_eq!(
             runtime
@@ -486,9 +486,7 @@ mod tests {
 
         for edge in 0..6 {
             assert_eq!(
-                runtime
-                    .edge_name_to_index(&format!("feynkit_edge_{edge}"))
-                    .unwrap(),
+                runtime.edge_name_to_index(&format!("e{edge}")).unwrap(),
                 EdgeIndex(edge),
                 "logical EdgeIndex must remain the stable FeynKit edge ID"
             );
@@ -626,8 +624,9 @@ mod tests {
             let HedgePair::Paired { source, sink } = runtime.underlying[&edge].1 else {
                 panic!("sewn connection {edge} is not paired");
             };
-            assert_eq!(runtime.underlying.node_id(source), incoming);
-            assert_eq!(runtime.underlying.node_id(sink), outgoing);
+            // Canonical initial-state connections point out of the RHS into the LHS.
+            assert_eq!(runtime.underlying.node_id(source), outgoing);
+            assert_eq!(runtime.underlying.node_id(sink), incoming);
         }
     }
 
@@ -769,7 +768,7 @@ mod tests {
                     .iter()
                     .map(|half_edge| {
                         runtime
-                            .edge_name_to_index(&format!("feynkit_edge_{}", half_edge.edge.0))
+                            .edge_name_to_index(&format!("e{}", half_edge.edge.0))
                             .unwrap()
                     })
                     .collect::<std::collections::BTreeSet<_>>();
@@ -798,7 +797,7 @@ mod tests {
                 let mut globally_reversed = None;
                 for half_edge in &canonical.cut {
                     let runtime_edge = runtime
-                        .edge_name_to_index(&format!("feynkit_edge_{}", half_edge.edge.0))
+                        .edge_name_to_index(&format!("e{}", half_edge.edge.0))
                         .unwrap();
                     let expected = match half_edge.endpoint {
                         DiagramEndpoint::Source => Orientation::Default,
@@ -824,7 +823,7 @@ mod tests {
 
             for canonical_loop_edge in &diagram.loop_momentum_basis().loop_edges {
                 let runtime_loop_edge = runtime
-                    .edge_name_to_index(&format!("feynkit_edge_{}", canonical_loop_edge.0))
+                    .edge_name_to_index(&format!("e{}", canonical_loop_edge.0))
                     .unwrap();
                 assert!(
                     runtime

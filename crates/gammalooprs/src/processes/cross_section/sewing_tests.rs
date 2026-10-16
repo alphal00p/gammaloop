@@ -139,9 +139,14 @@ fn vertex_matrix(
             .with(parameter.expression.as_ref().unwrap().to_pattern());
     }
     let ckm = model.get_parameter("CKM1x3");
-    expression = expression
-        .replace(Atom::from(UFOSymbol::from(ckm.name.as_str())).to_pattern())
-        .with(ckm.expression.as_ref().unwrap().to_pattern());
+    if !parameter_values
+        .iter()
+        .any(|(name, _)| *name == ckm.name.as_str())
+    {
+        expression = expression
+            .replace(Atom::from(UFOSymbol::from(ckm.name.as_str())).to_pattern())
+            .with(ckm.expression.as_ref().unwrap().to_pattern());
+    }
     for (name, value) in parameter_values {
         expression = expression
             .replace(Atom::from(UFOSymbol::from(*name)).to_pattern())

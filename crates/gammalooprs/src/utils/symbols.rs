@@ -2060,10 +2060,7 @@ mod tests {
                 GS.vbar.call_args([Atom::num(2), Atom::num(12)]),
                 "overline(v)_2^(12)",
             ),
-            (
-                GS.ose.call_args([Atom::num(3), Atom::num(13)]),
-                r#"E^("os")_3(13)"#,
-            ),
+            (GS.ose.call_args([Atom::num(3)]), r#"E^("os")_(3)"#),
             (
                 GS.emr_vec(EdgeIndex(4), Minkowski {}.new_rep(4).to_symbolic([])),
                 "arrow(q)_4",

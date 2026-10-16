@@ -953,7 +953,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
             for (pdg, mass) in [(1001, 1.0), (1000, 0.0)] {
                 let graph: Graph = crate::graph::Graph::import_dot(
                     r#"digraph cut_sampling_bubble {
-                num=1; edge [pdg=PDG]; node [num=1];
+                num=1; final_state="SCALAR,SCALAR"; edge [pdg=PDG]; node [num=1];
                 ext [style=invis, is_cut=0];
                 ext -> a [id=0];
                 a -> b [id=1, lmb_id=0];
@@ -961,6 +961,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                 b -> ext [id=3];
             }"#
                     .replace("PDG", &pdg.to_string())
+                    .replace("SCALAR", &format!("scalar_{}", pdg - 1000))
                     .as_str(),
                     &model,
                 )
@@ -2306,11 +2307,11 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
 
             test_initialise()?;
             let mut model = Model::from_json(SCALARS_2P_3P_MODEL)?;
-            model.apply_parameter_card(&feynkit_model::ParameterCard::from_iter([("mass_scalar_2".to_owned(), feynkit_model::ComplexValue::new(3.0,0.0))]))?;
+            crate::utils::test_utils::ModelFixtureExt::set_fixture_values(&mut model, [("mass_scalar_2", Complex::new(F(3.0), F(0.0)))])?;
             // Reuse the existing kite as a forward graph. Heavy fixed cut lines
             // permit two light varying energies on each side of their threshold.
             let mut graph_text = include_str!("../../../../tests/resources/graphs/massive_kite.dot")
-                .replace("massive_kite", "hosted_joint_kite")
+                .replace("massive_kite {", "hosted_joint_kite { final_state=\"scalar_1,scalar_1|scalar_2,scalar_2|scalar_1,scalar_1,scalar_2\";")
                 .replace("    ext_out [style=invis];\n", "")
                 .replace("ext_out", "ext_in")
                 .replace("ext_in [style=invis]", "ext_in [style=invis, is_cut=0]")

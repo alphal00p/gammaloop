@@ -4726,17 +4726,55 @@ mod tests {
         // This one-line cut is a residue-boundary diagnostic, not a 1->1
         // scattering-rate fixture. It deliberately bypasses the physical
         // process selector's requirement of at least two final particles.
-        let graph: Graph = finalized_runtime_dot!(
-            digraph scalar_cut_line {
-                node [num=1];
-                edge [particle="scalar_0", num="1𝑖"];
-                ext [style=invis];
-                ext -> left [is_cut=0];
-                right -> ext [is_cut=0];
-                left -> right;
-            }, "scalars"
-        )
-        .unwrap();
+        use crate::feyngen::feynkit::FeynmanDiagramGammaLoopExt;
+        use feynkit_graph::{
+            DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex, EdgeId, ExternalState,
+            FeynmanDiagram,
+        };
+        let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+        let particle = model.particle_id("scalar_0").unwrap();
+        let mut builder =
+            FeynmanDiagram::builder(model, "scalar_cut_line").numerator_prefactor(Atom::i());
+        let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
+        let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 0);
+        let left = builder.add_vertex(DiagramVertex {
+            name: "left".into(),
+            interaction: None,
+            numerator: Atom::one(),
+        });
+        let right = builder.add_vertex(DiagramVertex {
+            name: "right".into(),
+            interaction: None,
+            numerator: Atom::one(),
+        });
+        builder
+            .add_edge(incoming, left, DiagramEdge::new(particle, false))
+            .unwrap();
+        let mut propagator = DiagramEdge::new(particle, false);
+        propagator.numerator = Atom::i();
+        builder.add_edge(left, right, propagator).unwrap();
+        builder
+            .add_edge(right, outgoing, DiagramEdge::new(particle, false))
+            .unwrap();
+        let half = |edge, endpoint| DiagramHalfEdge {
+            edge: EdgeId(edge),
+            endpoint,
+        };
+        let left = vec![
+            half(0, DiagramEndpoint::Target),
+            half(1, DiagramEndpoint::Source),
+        ];
+        let right = vec![
+            half(0, DiagramEndpoint::Source),
+            half(1, DiagramEndpoint::Target),
+        ];
+        let graph: Graph = builder
+            .build()
+            .unwrap()
+            .with_topology_threshold_partitions(vec![(left, right)])
+            .unwrap()
+            .to_gamma_loop_graph(None, true)
+            .unwrap();
         let mut graph = super::CrossSectionGraph::new(graph);
         graph.cuts = graph
             .graph
@@ -5596,9 +5634,9 @@ mod tests {
             edge [num=1 mass=0]
             node [num=1]
             ext -> v1:0 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
             v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            v2 -> v3 [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            v2 -> v3 [id=3 source="{ufo_order:2}" sink="{ufo_order:0}" lmb_id=1]
             v3 -> v2 [id=4 source="{ufo_order:1}" sink="{ufo_order:3}"]
             ext -> v3:1 [id=5 sink="{ufo_order:2}"]
         }, &crate::utils::load_generic_model("sm"))

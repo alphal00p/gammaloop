@@ -3216,17 +3216,17 @@ pub mod test {
     #[test]
     fn amplitude_orientation_excluded_topological_threshold_remains_dormant() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = crate::graph::Graph::import_dot(
+        let mut graph: AmplitudeGraph = crate::graph::Graph::from_finalized_runtime_string(
             stringify!(
-            digraph dormant_amplitude_threshold {
-                edge [particle=scalar_1]
+            digraph dormant_amplitude_threshold { graph [projector=1]
+                edge [particle=scalar_1 num="1𝑖"]
                 node [num=1]
                 e [style=invis]
-                e -> A:0 [id=4]
-                C:1 -> e [id=3]
-                A -> B [id=0]
-                B -> C [id=1]
-                A -> C [id=2]
+                e -> A:0 [id=4 sink="{ufo_order:0}"]
+                C:1 -> e [id=3 source="{ufo_order:0}"]
+                A -> B [id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                B -> C [id=1 source="{ufo_order:1}" sink="{ufo_order:2}"]
+                A -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:1}" lmb_id=0]
             }),
             &crate::utils::load_generic_model("scalars"),
         )

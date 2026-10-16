@@ -300,22 +300,9 @@ fn cross_section_generation() -> GenerationSettings {
 
 fn cross_section_graph() -> Graph {
     crate::graph::Graph::import_dot(
-        stringify!(
-        digraph no_directive_cross_section {
-            graph [num=1, overall_factor=1]
-            edge [particle=scalar_0]
-            node [num=1]
-            exte0 [style=invis, is_cut=0]
-            exte1 [style=invis, is_cut=1]
-            v1 -> exte1 [id=0]
-            v1 -> exte0 [id=1]
-            exte0 -> v2 [id=2]
-            exte1 -> v2 [id=3]
-            v2 -> a [id=4]
-            a -> v1 [id=5]
-            v2 -> b [id=6]
-            b -> v1 [id=7]
-        }),
+        include_str!(
+            "../../../../tests/resources/graphs/ir_safe_thresholds/no_directive_cross_section.dot"
+        ),
         &crate::utils::load_generic_model("scalars"),
     )
     .map(|mut graphs| {

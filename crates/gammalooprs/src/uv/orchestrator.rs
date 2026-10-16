@@ -499,19 +499,20 @@ mod tests {
         };
         let legacy = expression(1);
         let hedge = expression(0);
+        assert_ne!(legacy, hedge, "the source dummy-index charts must differ");
         let legacy = ComparableExpr::new(&legacy);
         let hedge = ComparableExpr::new(&hedge);
 
-        assert_ne!(legacy.normalized().unwrap(), hedge.normalized().unwrap());
+        // Shared tensor reduction now contracts these indices during normalization.
+        assert_eq!(legacy.normalized().unwrap(), hedge.normalized().unwrap());
         for expression in [&legacy, &hedge] {
-            assert!(
-                expression
-                    .normalized()
-                    .unwrap()
-                    .pattern_match(&spectator.to_pattern(), None, None)
-                    .next()
-                    .is_some()
-            );
+            let normalized = expression.normalized().unwrap();
+            for factor in [
+                symbolica::parse!("compare_a+compare_b"),
+                symbolica::parse!("compare_c+compare_d"),
+            ] {
+                assert!(normalized.contains(&factor), "lost scalar factor {factor}");
+            }
         }
         assert!(
             legacy

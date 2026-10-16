@@ -2285,16 +2285,16 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
     // denominator-cancelling-r contact regression. This explicitly imported
     // numerator is deliberately stored on q edge 1 but depends on r edge 0;
     // neither the parser nor the public graph source API forbids that input.
-    let source = r#"digraph nonlocal_edge_energy_degree {
+    let source = r#"digraph nonlocal_edge_energy_degree { graph [projector=1]
         edge [particle=scalar_1 num=1]
         node [num=1]
         e [style=invis]
-        e -> A:0 [id=4]
-        A:1 -> e [id=5]
-        A -> A [id=0]
-        A -> B [id=1 num="Q(0,spenso::cind(0))^2"]
-        B -> C [id=2]
-        C -> A [id=3]
+        e -> A:0 [id=4 sink="{ufo_order:0}"]
+        A:1 -> e [id=5 source="{ufo_order:1}"]
+        A -> A [id=0 source="{ufo_order:2}" sink="{ufo_order:3}" lmb_id=0]
+        A -> B [id=1 num="Q(0,spenso::cind(0))^2" source="{ufo_order:4}" sink="{ufo_order:0}" lmb_id=1]
+        B -> C [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+        C -> A [id=3 sink="{ufo_order:5}" source="{ufo_order:1}"]
     }"#;
     let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let r_squared = function!(GS.emr_mom, 0, GS.cind(0)).pow(2);
