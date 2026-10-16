@@ -184,7 +184,8 @@ anchor = "pub fn generate("
 # after changing ghost spin; production generation and its documented ownership
 # are unchanged. The endpoint-sampling convention is documented separately.
 # Reviewed 2026-10-16: Process projector owners are resolved from external-leg labels before native finalization; the boundary and unchanged native local-slot convention are documented in the current architecture.
-digest = "dde7950a806b4d150bb88699dae76f9ddfb3be68"
+# Reviewed 2026-10-16: Paired incoming-state permutations preserve sewn partners; canonical-only comparison permits zero numerical samples. The current architecture records the label/routing contract.
+digest = "1b3b142bc66f6cd6f7b232eeeb0996a09f9cf401"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -209,7 +210,8 @@ anchor = "pub struct Model {"
 # fixed mass/medium identities while unrelated parameter expressions remain intact;
 # models without ZERO retain the exact proof on their internal parameters.
 # Reviewed 2026-10-16: The architecture distinguishes structural mass classification from a known zero pole in a massive covariant multiplet.
-digest = "e814279751b276d9275b3014ba6b6b197ce5b0a9"
+# Reviewed 2026-10-16: Canonical expression export makes fingerprints independent of registration order; model ownership and strict import validation remain unchanged.
+digest = "0fdae8e4e1028c7e0cf0aa8e27f2443b53076d10"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
@@ -234,7 +236,8 @@ anchor = "pub struct FeynmanDiagram {"
 # and runtime conversion. Explicit fragments retain their declared frame; the new
 # importer scope owns compact GammaLoop frame conversion.
 # Reviewed 2026-10-16: The architecture records explicit half-edge order and orientations in the native builder for validated runtime export.
-digest = "601954affd3b51c4b01f75d3d4b5ad1bdff42d7f"
+# Reviewed 2026-10-16: Default ordered routing roots at the outgoing sewn attachment; a physical-cut box regression preserves the center-of-mass origin and topology/numerator identity.
+digest = "d3cf42d49c9dcbe52078162ec9e3e0cae7f6df16"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -257,7 +260,8 @@ end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> S
 # construction errors propagate through every finalized import path.
 # Reviewed 2026-10-16: Compact half-edge slot conversion now belongs to Aind and is shared with CLI projector input; the documented compact/native frames and ownership remain unchanged.
 # Reviewed 2026-10-16: The architecture records canonical cut export and runtime metadata restoration at the native artifact boundary.
-digest = "1ad2390cf7e39edcd53311fe174b785b9c2ad20a"
+# Reviewed 2026-10-16: Import applies edge mass overrides before constructing energy definitions and mass evaluators; source-map and strict dialect ownership are unchanged.
+digest = "8a54813c9274010cc06cc65252967b32ebffbfb5"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -370,7 +374,8 @@ end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
 # Reviewed symbolic-label roundtrip: native abstract indices retain source identity;
 # only numeric backend labels acquire the topology chart. Represented ports and
 # powered spectators remain intact. The UV note records this restoration boundary.
-digest = "d2a7344971e95cab9e1a7cb1c94ca6b63d8e8f78"
+# Reviewed 2026-10-16: Fixed components use signed basis-vector contractions before native projection; the UV note records the formal-dimensional port contract.
+digest = "2fa9edc4de0c38667bd7285da6bd2e65440b2878"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
@@ -417,7 +422,10 @@ end_anchor = "    fn series_preserving_factors(\n        &self,\n        variabl
 # their ownership; both strict-size fixed-point checks are unchanged.
 # The UV note records this boundary. Deep exact recurrence and independent
 # centered-coefficient tests preserve the factorized algebraic contract.
-digest = "5a8cbffc674e315330c26249637157bc4b293aa0"
+# Reviewed 2026-10-16: Numeric-content normalization delegates to the shared Spenso collector; retained functions, powers, guards and numerator-family boundaries are unchanged.
+# Reviewed 2026-10-16: Scalar scopes bypass repeated tensor scans; empty positive-power catalogs bypass numeric-content work. Original guards, power ownership, strict-size bounds and all 18 replay expressions are unchanged.
+# Guard-scan review: without guards, numerator families or tensor-bearing inverses, the occurrence-local predicate is identically false. Skipping its traversal preserves every factor and all 18 replay expressions.
+digest = "d767adc42e482d3a9c75893042c5194ffcdf5311"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/overlap_numerators.rs"
@@ -991,7 +999,9 @@ anchor = "pub struct Vakint {"
 # reduction protects only loop-independent Lorentz scalars; native ports and supported
 # compact/indexed syntax remain explicit.
 # Reviewed 2026-10-16: No architecture impact: the numerical unit fixture invokes the public parser to initialize the existing typed symbols before parsing.
-digest = "3dc54488267928c6fcec847aaada72b9cab99f6a"
+# Reviewed 2026-10-16: Dot conversion visits normalized dot powers once while reserving existing indices and preserving independent powered-sum scopes; native/FORM dispatch and scalar evaluation policy are unchanged.
+# Reviewed 2026-10-16: Reserve numeric source slots as well as generated dummy labels; bind native compact representations in the common converter; retain explicit k/p source-slot provenance through native projection. Existing backend dispatch and factorization remain unchanged.
+digest = "db28bf12d2e98a21bc0774f0d3341a592384d80d"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -1039,7 +1049,8 @@ end_anchor = "#[cfg(test)]"
 # Reviewed 2026-10-15: Complete represented slots and declared projector markers
 # retain actual native incidence. Hidden compound interfaces and loop-dependent native
 # leaves are rejected; ordinary raw loop/external pairs still contract.
-digest = "7aad07324120a92b0666e358cf6bde7e996149e3"
+# Reviewed 2026-10-16: Admit a validated fixed-coordinate basis only as an operand of a closed external dot; reject standalone, invalid-component, open-port and active-loop cases.
+digest = "a8094d8c0a5c1567c4bebcb720b932c4ca813f87"
 
 [[section.note.scope]]
 path = "crates/vakint/src/projection.rs"
@@ -1445,18 +1456,21 @@ status = "Repairs in progress"
 lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-10-16"
-review_ref = "d3b91d31461e50d91dce4702d68c45294faca350"
+review_ref = "f6d6b810cd15acde53003f0228bf5b7301dac492"
 products = ["gammaloop", "feynkit", "idenso", "spenso"]
 topics = ["performance", "testing", "tensor-network", "ci"]
-review_triggers = ["benchmarks/performance/**", "crates/gammalooprs/src/integrands/process/evaluators.rs", "crates/idenso/src/dirac/simplify.rs", "crates/spenso/src/network/parsing/**"]
+review_triggers = ["benchmarks/performance/**", "crates/feynkit-generator/src/grouping.rs", "crates/gammalooprs/src/integrands/process/evaluators.rs", "crates/idenso/src/dirac/simplify.rs", "crates/spenso/src/network/parsing/**"]
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/process/evaluators.rs"
 symbol = "EvaluatorStack::preprocess_numerator_families"
 anchor = "fn preprocess_numerator_families<A: AtomCore>("
 # Reviewed 2026-10-16: finite component factors are collected before registration;
-# the investigation records identical-input instruction counts and pending gates.
-digest = "b382e5c8f7cbd28f68952ac7fa20ae89d93f3ef7"
+# guarded residue dispatch also skips default CPE across mutually exclusive branches.
+# The investigation records exact program replays, corpus pilots and pending gates.
+# Reviewed 2026-10-16: Added structured timing for post-algebra contraction, captured-formal discovery and finite-component collection. These diagnostics do not change evaluator algebra or guarded CPE policy.
+# Clippy review: copy Copy settings directly and iterate alias values; dispatch policy and iteration order are unchanged.
+digest = "054c356e16f166c8f22f6613d9884ec6b03d5c54"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
@@ -1465,6 +1479,14 @@ anchor = "fn finish_observation("
 # Reviewed 2026-10-16: completed duplicate scopes share immutable observations;
 # every occurrence remains inspected and counted. Massif and RSS evidence is recorded.
 digest = "27c32f90af7aeed625ec0def5ca8f727dd7e3477"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/src/grouping.rs"
+symbol = "group_diagrams"
+anchor = "pub(crate) fn group_diagrams("
+# Reviewed 2026-10-16: isolated color contraction, scalar conjugation, exact
+# algebraic weight cancellation and numeric content preserve factorized inputs.
+digest = "0ed73194dd53a6b6e84c72fe4ef2f40a76632de9"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
