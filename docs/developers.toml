@@ -484,7 +484,10 @@ anchor = "pub enum ShorthandParsing {"
 # Reviewed 2026-10-16: Mixed sums batch only exact complex-rational leading
 # coefficients after child admission. Other domains keep the original ordered
 # fold; scalar-only input, tensor order and opaque factor bodies are unchanged.
-digest = "6a90b9c6cbd74ed6561f6d355ada3bc7a799457b"
+# Reviewed 2026-10-16: Exact mixed scalar sums use one batch; other numeric
+# domains retain the ordered fold. Parser admission and factor boundaries
+# are unchanged. Registry validation must use the builder for this workspace.
+digest = "8ce8477a044d3c7a6f0f2478f0e822d946eae36e"
 
 [[section.note]]
 id = "schoonschip-network"
@@ -690,7 +693,10 @@ anchor = "pub struct ParseSettings {"
 # Reviewed 2026-10-15: The parsing note now records original admitted index spelling
 # without callback replay, compatible rank-one dot admission and metric syntax for
 # partial contractions. Scalar execution already documents MinIntermediateCost.
-digest = "6a90b9c6cbd74ed6561f6d355ada3bc7a799457b"
+# Reviewed 2026-10-16: Exact mixed scalar sums use one batch; other numeric
+# domains retain the ordered fold. Parser admission and factor boundaries
+# are unchanged. Registry validation must use the builder for this workspace.
+digest = "8ce8477a044d3c7a6f0f2478f0e822d946eae36e"
 
 [[section.note.scope]]
 path = "crates/spenso/src/symbolic_parallelism.rs"
@@ -865,8 +871,8 @@ kind = "System architecture"
 status = "Implemented · reviewed 2026-08-18"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+reviewed_at = "2026-10-16"
+review_ref = "jj:ywmmznxw"
 products = ["linnet"]
 topics = ["half-edge", "subgraph", "dot", "serialization", "algorithms"]
 review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs", "crates/linnet/src/half_edge/**", "crates/linnet/src/parser/**", "crates/linnet/src/permutation.rs", "crates/linnet/src/tree/**", "crates/linnet/src/union_find/**", "crates/linnet/src/drawing.rs", "crates/linnet/src/num_traits.rs", "crates/linnet/Cargo.toml"]
@@ -907,7 +913,10 @@ symbol = "linnet::half_edge::subgraph::SubGraphLike"
 anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
 # Reviewed 2026-09-24: the existing subset printer can be restored from its
 # label, as documented in linnet-architecture.typ; topology ownership is unchanged.
-digest = "1a5c8409404365debe91a930a4c464b4e0a5c327"
+# Reviewed 2026-10-16: Callback registration is serialized with a second
+# lookup; existing labels and the printer body are unchanged. Errors propagate
+# after releasing the lock.
+digest = "61c2d5f958487a63d422201ad7d71a77840f90a7"
 
 [[section.note.scope]]
 # Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
