@@ -3406,11 +3406,13 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .graph
                         .initial_state_cut
                         .iter_edges(&self.graph)
-                        .map(|(_, e)| {
-                            e.data
-                                .mass
+                        .map(|(_, e)| match &e.data.mass {
+                            crate::graph::edge::EdgeMass::Zero => {
+                                Complex::new_re(momentum_sample.zero())
+                            }
+                            mass => mass
                                 .value(context.model, &self.param_builder)
-                                .unwrap()
+                                .expect("initial-state mass has a validated model value"),
                         })
                         .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
                             acc * &mass * &mass

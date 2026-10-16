@@ -594,9 +594,8 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             cross_section
                 .build_integrand(
                     &model,
-                    &ProcessDefinition::from_graph_list(
-                        std::slice::from_ref(&cross_section.supergraphs[0].graph),
-                        GenerationType::CrossSection,
+                    &ProcessDefinition::from_cross_section_graphs(
+                        &cross_section.supergraphs,
                         &model,
                     )
                     .unwrap(),
@@ -973,9 +972,8 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                 let generation = generation_settings();
                 let runtime = runtime_settings();
                 let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
-                let definition = ProcessDefinition::from_graph_list(
-                    std::slice::from_ref(&cross_section.supergraphs[0].graph),
-                    GenerationType::CrossSection,
+                let definition = ProcessDefinition::from_cross_section_graphs(
+                    &cross_section.supergraphs,
                     &model,
                 )
                 .unwrap();
@@ -1529,11 +1527,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
             let generation = generation_settings();
             let runtime = runtime_settings();
             let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
-            let definition = ProcessDefinition::from_graph_list(
-                std::slice::from_ref(&cross_section.supergraphs[0].graph),
-                GenerationType::CrossSection,
-                &model,
-            )
+            let definition = ProcessDefinition::from_cross_section_graphs(&cross_section.supergraphs, &model)
             .unwrap();
             cross_section
                 .build_integrand(
@@ -2336,11 +2330,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
             ))?;
             let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
             assert_every_discovered_cut_is_grouped(&cross_section);
-            let definition = ProcessDefinition::from_graph_list(
-                std::slice::from_ref(&cross_section.supergraphs[0].graph),
-                GenerationType::CrossSection,
-                &model,
-            )?;
+            let definition = ProcessDefinition::from_cross_section_graphs(&cross_section.supergraphs, &model)?;
             cross_section.build_integrand(
                 &model,
                 &definition,

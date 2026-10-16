@@ -282,9 +282,39 @@ impl ProcessDefinition {
         generation_type: GenerationType,
         model: &Model,
     ) -> Result<Self> {
+        Self::infer_graph_process(
+            graphs
+                .iter()
+                .map(|graph| (graph, graph.finalized_cuts.as_slice())),
+            generation_type,
+            model,
+        )
+    }
+
+    /// Infer from the runtime cut owner after finalized inventories are consumed.
+    #[cfg(test)]
+    pub(crate) fn from_cross_section_graphs(
+        graphs: &[super::CrossSectionGraph],
+        model: &Model,
+    ) -> Result<Self> {
+        Self::infer_graph_process(
+            graphs
+                .iter()
+                .map(|graph| (&graph.graph, graph.cuts.raw.as_slice())),
+            GenerationType::CrossSection,
+            model,
+        )
+    }
+
+    fn infer_graph_process<'a>(
+        graphs: impl IntoIterator<Item = (&'a Graph, &'a [crate::graph::FinalizedCut])>,
+        generation_type: GenerationType,
+        model: &Model,
+    ) -> Result<Self> {
+        let graphs = graphs.into_iter().collect::<Vec<_>>();
         let mut initial_pdgs = HashSet::default();
 
-        for g in graphs {
+        for &(g, _) in &graphs {
             let mut initial_pdgs_of_graph = vec![];
             match generation_type {
                 GenerationType::Amplitude => {
@@ -330,7 +360,7 @@ impl ProcessDefinition {
         let mut final_states = HashSet::default();
         match generation_type {
             GenerationType::Amplitude => {
-                for g in graphs {
+                for &(g, _) in &graphs {
                     let mut final_pdgs_of_graph = vec![];
                     for (pair, _, edge) in g.iter_edges() {
                         if matches!(
@@ -352,8 +382,8 @@ impl ProcessDefinition {
                 }
             }
             GenerationType::CrossSection => {
-                for g in graphs {
-                    for finalized in &g.finalized_cuts {
+                for &(g, cuts) in &graphs {
+                    for finalized in cuts {
                         let mut final_pdgs_of_cut = vec![];
                         for (orientaion, edge) in finalized.cut.iter_edges(&g.underlying) {
                             if let PossibleParticle::Particle(particle) = &edge.data.particle {
@@ -384,7 +414,7 @@ impl ProcessDefinition {
         let mut min_loop_count = usize::MAX;
         let mut max_loop_count = 0usize;
 
-        for g in graphs {
+        for &(g, _) in &graphs {
             // don't know how the looop count is really intended, for now it doesn't matter I think
             let lc = g.underlying.cyclotomatic_number(&g.full_filter());
             if lc < min_loop_count {

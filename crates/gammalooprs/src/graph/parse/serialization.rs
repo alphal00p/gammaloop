@@ -1,3 +1,7 @@
+use feynkit_graph::{
+    DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex, EdgeId, ExternalLeg,
+    ExternalState, FeynmanDiagram, VertexId, VertexSlot,
+};
 use idenso::{
     CookMode, CookSettings, color::ColorSimplifySettings, dirac::GammaSimplifySettings,
     tensor::SymbolicTensor,
@@ -5,8 +9,8 @@ use idenso::{
 use linnet::{
     half_edge::{
         HedgeGraph,
-        involution::{Flow, HedgePair, Orientation},
-        subgraph::SubSetLike,
+        involution::{EdgeIndex, Flow, HedgePair, Orientation},
+        subgraph::{Inclusion, SubSetLike},
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
 };
@@ -75,7 +79,187 @@ impl Graph {
             );
         }
 
+        if !settings.split_xs_by_initial_states
+            && (!self.finalized_cuts.is_empty()
+                || !self.finalized_topology_threshold_candidates.is_empty())
+        {
+            return self.to_canonical_dot_graph(dotgraph);
+        }
         Ok(dotgraph)
+    }
+
+    /// Transport finalized physics into the native artifact, without applying
+    /// rules, enumerating cuts, or changing its symbolic or momentum frame.
+    fn to_canonical_dot_graph(&self, runtime: DotGraph) -> eyre::Result<DotGraph> {
+        let endpoint = |hedge: linnet::half_edge::involution::Hedge| DiagramHalfEdge {
+            edge: EdgeId(self.underlying[&hedge].0),
+            endpoint: if self.underlying.flow(hedge) == Flow::Source {
+                DiagramEndpoint::Source
+            } else {
+                DiagramEndpoint::Target
+            },
+        };
+        let mut builder = FeynmanDiagram::builder(self.model.clone(), self.name.clone())
+            .overall_factor(self.overall_factor.clone())
+            .numerator_prefactor(self.global_prefactor.num.clone())
+            .projector(self.global_prefactor.projector.clone())
+            .half_edge_order(
+                self.underlying
+                    .iter_hedges()
+                    .map(|(h, _)| endpoint(h))
+                    .collect(),
+            )
+            .edge_orientations(
+                self.underlying
+                    .iter_edges()
+                    .map(|(_, _, e)| e.orientation)
+                    .collect(),
+            );
+        for (id, _, vertex) in self.underlying.iter_nodes() {
+            let added = builder.add_vertex(DiagramVertex {
+                name: vertex.name.value.clone(),
+                interaction: vertex.vertex_rule,
+                numerator: vertex.num.value.clone(),
+            });
+            eyre::ensure!(
+                added.0 == id.0,
+                "canonical export requires stable vertex IDs"
+            );
+        }
+        let mut external_index = 0;
+        for (pair, id, data) in self.underlying.iter_edges() {
+            let particle = data.data.particle().ok_or_else(|| {
+                eyre::eyre!("canonical cross-section export requires a model particle on edge {id}")
+            })?;
+            let mut edge = DiagramEdge::new(particle, data.orientation != Orientation::Undirected);
+            edge.numerator = data.data.num.value.clone();
+            edge.is_dummy = data.data.is_dummy;
+            let (source, target, source_slot, target_slot, state) = match pair {
+                HedgePair::Paired { source, sink } => (
+                    Some(VertexId(self.underlying.node_id(source).0)),
+                    Some(VertexId(self.underlying.node_id(sink).0)),
+                    VertexSlot(self.underlying[source].ufo_order.value.into()),
+                    VertexSlot(self.underlying[sink].ufo_order.value.into()),
+                    self.initial_state_cut
+                        .left
+                        .includes(&sink)
+                        .then_some(ExternalState::Incoming),
+                ),
+                HedgePair::Unpaired { hedge, flow } => {
+                    let node = Some(VertexId(self.underlying.node_id(hedge).0));
+                    let slot = VertexSlot(self.underlying[hedge].ufo_order.value.into());
+                    if flow == Flow::Source {
+                        (
+                            node,
+                            None,
+                            slot,
+                            VertexSlot(0),
+                            Some(ExternalState::Outgoing),
+                        )
+                    } else {
+                        (
+                            None,
+                            node,
+                            VertexSlot(0),
+                            slot,
+                            Some(ExternalState::Incoming),
+                        )
+                    }
+                }
+                HedgePair::Split { .. } => eyre::bail!("canonical export requires whole edges"),
+            };
+            if let Some(state) = state {
+                edge.external = Some(ExternalLeg {
+                    name: data.data.name.value.clone(),
+                    index: external_index,
+                    state,
+                    connection: external_index,
+                });
+                external_index += 1;
+            }
+            let added =
+                builder.add_edge_with_slots(source, target, edge, source_slot, target_slot)?;
+            eyre::ensure!(added.0 == id.0, "canonical export requires stable edge IDs");
+        }
+        let mut diagram = builder.build()?.with_loop_momentum_edges(
+            &self
+                .loop_momentum_basis
+                .loop_edges
+                .iter()
+                .map(|e| EdgeId(e.0))
+                .collect::<Vec<_>>(),
+        )?;
+        for (edge, signature) in &self.loop_momentum_basis.edge_signatures {
+            let native = &diagram.loop_momentum_basis().edge_signatures[&EdgeId(edge.0)];
+            eyre::ensure!(
+                signature.internal.iter().copied().eq(native.loops.iter())
+                    && signature
+                        .external
+                        .iter()
+                        .copied()
+                        .eq(native.external.iter()),
+                "canonical export changed routing of edge {edge}"
+            );
+        }
+        let partition = |side: &linnet::half_edge::subgraph::SuBitGraph| {
+            side.included_iter().map(endpoint).collect::<Vec<_>>()
+        };
+        diagram = diagram
+            .with_cut_partitions(
+                self.finalized_cuts
+                    .iter()
+                    .map(|cut| (partition(&cut.left), partition(&cut.right)))
+                    .collect(),
+            )?
+            .with_topology_threshold_partitions(
+                self.finalized_topology_threshold_candidates
+                    .iter()
+                    .map(|cut| (partition(&cut.left), partition(&cut.right)))
+                    .collect(),
+            )?;
+        let mut canonical: DotGraph =
+            DotGraph::from_string(&diagram.to_dot()?).map_err(|error| eyre::eyre!("{error}"))?;
+        // Parse the rendered metadata once so quoted runtime strings enter the
+        // native serializer as values, preserving real newlines in directives.
+        let runtime: DotGraph =
+            DotGraph::from_string(&runtime.debug_dot()).map_err(|error| eyre::eyre!("{error}"))?;
+        for name in [
+            "group_id",
+            "is_group_master",
+            "threshold_counterterms",
+            "params",
+            "full_num",
+        ] {
+            if let Some(value) = runtime.global_data.statements.get(name) {
+                canonical
+                    .global_data
+                    .statements
+                    .insert(name.into(), value.clone());
+            }
+        }
+        for (_, id, data) in runtime.iter_edges() {
+            for name in [
+                "name",
+                "dod",
+                "mass",
+                "momtrop_edge_power",
+                "vakint_edge_power",
+            ] {
+                if let Some(value) = data.data.statements.get(name) {
+                    canonical.graph[EdgeIndex(id.0)]
+                        .statements
+                        .insert(name.into(), value.clone());
+                }
+            }
+        }
+        for (id, _, vertex) in runtime.iter_nodes() {
+            if let Some(dod) = vertex.statements.get("dod") {
+                canonical.graph[id]
+                    .statements
+                    .insert("dod".into(), dod.clone());
+            }
+        }
+        Ok(canonical)
     }
 
     pub fn to_split_dotgraph(&self) -> DotGraph {

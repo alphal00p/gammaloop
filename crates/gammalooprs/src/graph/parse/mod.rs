@@ -341,6 +341,17 @@ impl Graph {
                     let mut graph =
                         Self::from_feynkit(&diagram, metadata.group_id, metadata.is_group_master)?;
                     graph.apply_import_metadata(metadata, model)?;
+                    graph.apply_import_edge_metadata(
+                        parsed
+                            .iter_edges()
+                            .map(|(_, edge, data)| (edge, data.data.statements.clone())),
+                        model,
+                    )?;
+                    for (node, _, vertex) in parsed.iter_nodes() {
+                        if let Some(dod) = vertex.statements.get("dod") {
+                            graph.underlying[node].dod = Autogen::explicit(dod.strip_parse()?);
+                        }
+                    }
                     return Ok(graph);
                 }
                 let explicit_runtime = attributes.contains_key("gammaloop_runtime")
@@ -464,9 +475,23 @@ impl Graph {
         let mut result =
             Self::from_feynkit(&completed, metadata.group_id, metadata.is_group_master)?;
         result.apply_import_metadata(metadata, model)?;
-        for (source, attributes) in edge_metadata {
-            let target = EdgeIndex(source_map.edges()[source].0);
-            let edge = &mut result.underlying[target];
+        result.apply_import_edge_metadata(
+            edge_metadata
+                .into_iter()
+                .map(|(source, attributes)| (EdgeIndex(source_map.edges()[source].0), attributes)),
+            model,
+        )?;
+        result.threshold_counterterms.validate_for_graph(&result)?;
+        Ok(result)
+    }
+
+    fn apply_import_edge_metadata(
+        &mut self,
+        edge_metadata: impl IntoIterator<Item = (EdgeIndex, BTreeMap<String, String>)>,
+        model: &Model,
+    ) -> Result<()> {
+        for (target, attributes) in edge_metadata {
+            let edge = &mut self.underlying[target];
             if let Some(name) = attributes.get("name") {
                 edge.name = Autogen::explicit(name.clone());
             }
@@ -476,7 +501,7 @@ impl Graph {
             if let Some(mass) = attributes.get("mass") {
                 let mass: Atom = mass.strip_parse()?;
                 edge.particle = edge.particle.clone().override_mass(Some(mass.clone()));
-                edge.mass = EdgeMass::from_atom(mass, model, &result.param_builder)?;
+                edge.mass = EdgeMass::from_atom(mass, model, &self.param_builder)?;
             }
             if let Some(power) = attributes.get("momtrop_edge_power") {
                 edge.extra_data.momtrop_edge_power = Some(power.strip_parse()?);
@@ -485,8 +510,7 @@ impl Graph {
                 edge.extra_data.vakint_edge_power = Some(power.trim().parse()?);
             }
         }
-        result.threshold_counterterms.validate_for_graph(&result)?;
-        Ok(result)
+        Ok(())
     }
 
     fn apply_import_metadata(&mut self, metadata: ParseData, model: &Model) -> Result<()> {
