@@ -145,6 +145,13 @@ method from its textual label, including composite labels. Consumers can persist
 and register the printers before importing a Symbolica archive; this restores display behavior
 without reconstructing graph topology or adding a persistence service to Linnet.
 
+First registration is serialized across subset types and index types. A lookup
+initializes Symbolica before the registration lock is acquired; a second lookup
+under that lock prevents concurrent callers from installing the same Rust
+formatter twice. Existing symbols and formatter output are reused unchanged.
+Registration errors are propagated after releasing the lock, so a caught
+invalid-label error cannot poison later registrations.
+
 == Maintained invariants
 
 - An internal edge is always represented by two mutually paired half-edges; an external edge is
