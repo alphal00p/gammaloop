@@ -1384,9 +1384,21 @@ fn scalar_sum_parsing_batches_coefficients_alongside_tensor_contractions() {
     }));
     let coefficients =
         Atom::add_many((1..65).map(|i| function!(symbol!("sum_parse_coefficient"), i)));
+    let x = Atom::var(symbol!("sum_parse_factor_x"));
+    let y = Atom::var(symbol!("sum_parse_factor_y"));
+    let weights = [
+        Atom::num((2, 3)) + Atom::i() * Atom::num((5, 7)),
+        Atom::num(2).pow(80) + 1 + Atom::i() * Atom::num((11, 13)),
+    ];
+    let factorized_coefficients = Atom::add_many((1..65).map(|i| {
+        &weights[i % weights.len()]
+            * function!(symbol!("sum_parse_factorized_coefficient"), i, &x + &y)
+            * (&x + i).pow(11)
+            / (&y + i)
+    }));
 
     // Exercise both a mixed sum and the path with no pure scalar summands.
-    for coefficients in [Atom::Zero, coefficients] {
+    for coefficients in [Atom::Zero, coefficients, factorized_coefficients] {
         let expression = &tensors + &coefficients;
         let mut parsed = expression
             .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
@@ -1395,10 +1407,61 @@ fn scalar_sum_parsing_batches_coefficients_alongside_tensor_contractions() {
         if !coefficients.is_zero() {
             assert!(parsed.store.scalar.contains(&coefficients));
         }
+        let mut aliased = parsed.clone();
+        let aliases = aliased.alias_scalar_refs(|_, _| true);
         parsed.simple_execute();
         let actual: Atom = parsed.result_scalar().unwrap().into();
-        assert_eq!(actual, &expected_tensors + coefficients);
+        assert_eq!(actual, &expected_tensors + &coefficients);
+        aliased.simple_execute();
+        let aliased_result: Atom = aliased.result_scalar().unwrap().into();
+        assert_eq!(
+            aliased.resolve_scalar_aliases(&aliases, aliased_result),
+            &expected_tensors + coefficients
+        );
     }
+}
+
+#[test]
+fn mixed_scalar_sum_preserves_inexact_rest_then_first_order() {
+    let index = slot!(mink4(), sum_parse_inexact_i).to_atom();
+    let tensor = vector!(sum_parse_inexact_p, &index) * vector!(sum_parse_inexact_q, &index);
+    let x = Atom::var(symbol!("sum_parse_inexact_x"));
+    let coefficients = Atom::add_many([0.1, -0.2, 1.0e30].into_iter().enumerate().map(
+        |(i, weight)| {
+            Atom::num(weight)
+                * function!(symbol!("sum_parse_inexact_coefficient"), i)
+                * (&x + i + 1).pow(3)
+        },
+    ));
+    let source = &tensor + &coefficients;
+    let AtomView::Add(sum) = source.as_view() else {
+        unreachable!()
+    };
+    let mut terms = sum.iter();
+    let first = terms.next().unwrap();
+    // This is the pre-existing inexact accumulation contract, not an
+    // associative-arithmetic identity or a tolerance-based comparison.
+    let mut expected_coefficient = Atom::Zero;
+    for term in terms.chain(std::iter::once(first)) {
+        if term != tensor.as_view() {
+            expected_coefficient += term;
+        }
+    }
+    let mut parsed = source
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    assert_eq!(parsed.state, NetworkState::Scalar);
+    assert_eq!(parsed.store.scalar, vec![expected_coefficient.clone()]);
+    let expected_tensor = Atom::add_many((0..4).map(|component| {
+        let index = function!(AIND_SYMBOLS.cind, component);
+        let sign = if component == 0 { 1 } else { -1 };
+        Atom::num(sign)
+            * vector!(sum_parse_inexact_p, &index)
+            * vector!(sum_parse_inexact_q, &index)
+    }));
+    parsed.simple_execute();
+    let actual: Atom = parsed.result_scalar().unwrap().into();
+    assert_eq!(actual, expected_tensor + expected_coefficient);
 }
 
 #[test]

@@ -29,6 +29,7 @@ use store::TensorScalarStore;
 use symbolica::atom::{
     AddView, Atom, AtomOrView, AtomView, MulView, PowView, representation::FunView,
 };
+use symbolica::coefficient::CoefficientView;
 
 use crate::structure::{HasStructure, TensorStructure};
 
@@ -1442,15 +1443,40 @@ where
             if res.is_empty() {
                 Ok(construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?))
             } else {
-                // Fold only the coefficient that survives in a mixed network.
-                // Keep the previous rest-then-first order, including inexact
-                // arithmetic; an all-scalar source is retained unchanged above.
-                let mut scalars = Atom::Zero;
-                for term in scalar_terms {
+                // These are original summands, selected only after tensor
+                // admission. Batch exact rational coefficients without copying
+                // the growing sum; complete function/power bodies stay literal.
+                // Other domains retain the previous rest-then-first fold.
+                let exact_coefficients = scalar_terms.iter().all(|term| {
+                    let coefficient = match term {
+                        AtomView::Num(number) => number.get_coeff_view(),
+                        AtomView::Mul(product) => match product.get_coefficient() {
+                            Some(AtomView::Num(number)) => number.get_coeff_view(),
+                            None => return true,
+                            _ => return false,
+                        },
+                        AtomView::Var(_) | AtomView::Fun(_) | AtomView::Pow(_) => return true,
+                        _ => return false,
+                    };
+                    matches!(
+                        coefficient,
+                        CoefficientView::Natural(..) | CoefficientView::Large(..)
+                    )
+                });
+                let scalars = if exact_coefficients {
                     let _span = profile::span(Timer::ScalarAddAccum);
-                    profile::bump(Counter::ScalarAddAccum, 1);
-                    scalars += term;
-                }
+                    // Count admitted terms, even though the batch sums them once.
+                    profile::bump(Counter::ScalarAddAccum, scalar_terms.len() as u64);
+                    Atom::add_many(scalar_terms)
+                } else {
+                    let mut scalars = Atom::Zero;
+                    for term in scalar_terms {
+                        let _span = profile::span(Timer::ScalarAddAccum);
+                        profile::bump(Counter::ScalarAddAccum, 1);
+                        scalars += term;
+                    }
+                    scalars
+                };
                 let s = if scalars != Atom::Zero {
                     construction.scalar(Self::scalar_from_expression(AtomOrView::Atom(scalars))?)
                 } else {
