@@ -263,5 +263,11 @@ separate from the core crate described here.
 Parsing retains scalar spectators and compatible sum boundaries. Fallible `Concretize` methods
 separate target construction from canonical layout: symbolic tensors may retain symbolic dimensions,
 while finite-component targets report errors. This uses the same `CanonicalLayout` as library leaves.
+`TensorFromExpression` returns that layout together with the resulting tensor.
+An eager opaque-word realization can contract repeated spectator ports before
+the outer network is assembled; its layout therefore describes the realized
+coordinate order. Symbolic targets retain the source layout because their
+contractions still belong to the outer network. The parser never reattaches a
+pre-contraction layout to a tensor with a smaller interface.
 Odd tensor powers preserve the remaining base after paired contractions. Completed execution waves
 release unused store payloads while retaining live aliases and tensor handles.

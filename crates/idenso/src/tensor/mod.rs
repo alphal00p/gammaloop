@@ -128,7 +128,7 @@ where
         _tensor_library: &Lib,
         _function_library: &FunLib,
         _settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>> {
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, Symbol>> {
         <Self as TensorFromExpression<
             'src,
             OrderedStructure<LibraryRep, Aind>,
@@ -144,7 +144,7 @@ where
     fn tensor_from_leaf(
         expression: AtomOrView<'src>,
         structure: Canonicalized<OrderedStructure<LibraryRep, Aind>>,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>> {
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, Symbol>> {
         let (is_composite, is_metric) = if let AtomView::Fun(fun) = expression.as_view() {
             (false, fun.get_symbol() == ETS.metric)
         } else {
@@ -154,13 +154,13 @@ where
             AtomOrView::View(view) => view.into(),
             owned => owned.into_owned().into(),
         };
-        Ok(Self {
+        Ok(structure.map_canonical(|structure| Self {
             proofs: Default::default(),
-            structure: structure.into_canonical(),
+            structure,
             expression,
             is_metric,
             is_composite,
-        })
+        }))
     }
 }
 

@@ -33,6 +33,8 @@ use crate::{
 /// tensor type represents the original expression. Symbolic tensors can keep
 /// the expression directly, while concretized tensor types may parse and
 /// execute an expanded sub-network here with the MinIntermediateCost policy.
+/// The returned layout describes the realized tensor: eager contraction can
+/// remove internal ports from the originally inferred interface.
 pub trait TensorFromExpression<'src, S, Sc, K, FK, Aind, Lib, FunLib>: Sized
 where
     S: TensorStructure,
@@ -47,7 +49,7 @@ where
         tensor_library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, FK>>
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, FK>>
     where
         K: Display,
         FK: Display;
@@ -58,7 +60,7 @@ where
     fn tensor_from_leaf(
         expression: AtomOrView<'src>,
         structure: Canonicalized<S>,
-    ) -> Result<Self, TensorNetworkError<K, FK>>
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, FK>>
     where
         K: Display,
         FK: Display;
@@ -131,9 +133,10 @@ where
     fn tensor_from_leaf(
         _expression: AtomOrView<'src>,
         structure: Canonicalized<S>,
-    ) -> Result<Self, TensorNetworkError<K, symbolica::atom::Symbol>> {
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, symbolica::atom::Symbol>> {
         let (canonical, layout) = structure.into_parts();
-        Ok(canonical.to_shell().concretize_logical(&layout)?)
+        let tensor = canonical.to_shell().concretize_logical(&layout)?;
+        Ok(Canonicalized::from_parts(tensor, layout))
     }
 
     fn tensor_from_expression(
@@ -142,7 +145,7 @@ where
         tensor_library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, symbolica::atom::Symbol>>
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, symbolica::atom::Symbol>>
     where
         K: Display,
         symbolica::atom::Symbol: Display,
@@ -166,32 +169,35 @@ where
             function_library,
         )?;
 
-        match network.result()? {
-            ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => Ok(tensor.clone()),
+        let tensor = match network.result()? {
+            ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => tensor.clone(),
             ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => {
-                Ok(T::new_scalar(scalar.clone().into()))
+                T::new_scalar(scalar.clone().into())
             }
             ExecutionResult::Val(TensorOrScalarOrKey::Key { nodeid, .. }) => {
-                Ok(network
+                network
                     .graph
-                    .get_lib_data::<S, Lib::LibraryTensor, Lib>(tensor_library, nodeid)?)
+                    .get_lib_data::<S, Lib::LibraryTensor, Lib>(tensor_library, nodeid)?
             }
             ExecutionResult::One => {
                 let one: Sc = Atom::num(1).as_view().try_into()?;
-                Ok(T::new_scalar(one.into()))
+                T::new_scalar(one.into())
             }
             ExecutionResult::Zero => {
                 let zero: Sc = Atom::num(0).as_view().try_into()?;
-                Ok(T::new_scalar(zero.into()))
+                T::new_scalar(zero.into())
             }
-        }
+        };
+        // Execution has already applied logical permutations and contracted
+        // internal ports. Its stored coordinate order is the interface to sew.
+        Ok(Canonicalized::identity(tensor))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use symbolica::{
-        atom::{Atom, Symbol},
+        atom::{Atom, AtomCore, Symbol},
         function, symbol,
     };
 
@@ -240,6 +246,58 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(tensor.structure().order(), 1);
+        assert_eq!(tensor.canonical().structure().order(), 1);
+    }
+
+    #[test]
+    fn realized_opaque_chain_keeps_its_contracted_interface() {
+        type Structure = NamedStructure<Symbol, Vec<Atom>, LibraryRep, AbstractIndex>;
+        type Tensor = ParamTensor<Structure>;
+        type Net = Network<NetworkStore<Tensor, Atom>, DummyKey, Symbol, AbstractIndex>;
+        let rep = Minkowski {}.new_rep(2);
+        let left = rep.slot::<AbstractIndex, _>(AbstractIndex::from(1));
+        let right = rep.slot::<AbstractIndex, _>(AbstractIndex::from(2));
+        let spectator = rep.slot::<AbstractIndex, _>(AbstractIndex::from(3));
+        let tags = crate::network::tags::SPENSO_TAG;
+        let factor = function!(
+            tensor_symbol!(realized_opaque_matrix),
+            tags.chain_in,
+            tags.chain_out,
+            spectator.to_atom()
+        );
+        let word = crate::chain!(left.to_atom(), right.to_atom(); [factor.clone(), factor]);
+        let source = word
+            * function!(tensor_symbol!(realized_opaque_left), left.to_atom())
+            * function!(tensor_symbol!(realized_opaque_right), right.to_atom());
+        let library = DummyLibrary::<Tensor>::new();
+        let functions = ErroringLibrary::<Symbol>::new();
+        let mut results = Vec::new();
+        for shorthand_parsing in [
+            ShorthandParsing::expand_all(),
+            ShorthandParsing::expand_schoonschip_only(),
+            ShorthandParsing::Opaque,
+        ] {
+            let mut network = Net::try_from_view::<Structure, _>(
+                source.as_view(),
+                &library,
+                &ParseSettings {
+                    shorthand_parsing,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert!(network.state.is_scalar());
+            assert!(network.graph.dangling_indices().is_empty());
+            network
+                .execute::<Sequential, MinIntermediateCost, _, _, _>(&library, &functions)
+                .unwrap();
+            let scalar: Atom = network.result_scalar().unwrap().into();
+            results.push(scalar);
+        }
+        assert_ne!(results[0], Atom::Zero);
+        // Compare the finite two-dimensional component polynomial independently
+        // of contraction schedule. Distinct vectors detect endpoint transposes.
+        assert_eq!(results[0].expand(), results[1].expand());
+        assert_eq!(results[0].expand(), results[2].expand());
     }
 }

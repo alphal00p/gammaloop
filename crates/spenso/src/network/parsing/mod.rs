@@ -763,17 +763,15 @@ where
             }
         };
 
-        let layout = structure.layout().clone();
-        Ok(construction.tensor(
-            T::tensor_from_expression(
-                retain(value),
-                structure,
-                library,
-                function_library,
-                settings,
-            )?,
-            layout,
-        )?)
+        let (tensor, layout) = T::tensor_from_expression(
+            retain(value),
+            structure,
+            library,
+            function_library,
+            settings,
+        )?
+        .into_parts();
+        Ok(construction.tensor(tensor, layout)?)
     }
 
     #[allow(clippy::result_large_err)]
@@ -1214,11 +1212,9 @@ where
                 // Tensor dimensions may remain symbolic during analytic normalization;
                 // opaque scalars and library tensors need no eager shadow here.
                 // The target decides whether missing leaves need finite components.
-                let layout = structure.layout().clone();
-                Ok(construction.tensor(
-                    T::tensor_from_leaf(retain(value.as_view()), structure)?,
-                    layout,
-                )?)
+                let (tensor, layout) =
+                    T::tensor_from_leaf(retain(value.as_view()), structure)?.into_parts();
+                Ok(construction.tensor(tensor, layout)?)
             }
         }
     }
