@@ -1,5 +1,6 @@
 digraph local_soft_gluon_in_top_self_energy {
-  projector = "1" // The self-energy has open external spinor ports.
+  // The component numerator stays open; scalar amplitudes attach the native
+  // external fermion states only during final integrand assembly.
   // A quark-loop gluon self-energy inside a massive-quark self-energy.
   // The gluon carrier e2 is the outer loop coordinate p, so the child soft
   // point p=0 is independent of the outer fermion subtraction momentum q.
