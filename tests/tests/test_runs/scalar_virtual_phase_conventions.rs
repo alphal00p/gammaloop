@@ -99,6 +99,9 @@ graphs = "summed"
 orientations = "summed"
 lmb_multichanneling = false
 lmb_channels = "summed"
+# Basis zero retains the explicitly ordered cut/virtual momenta.
+# Automatic optimized-basis ordering depends on incidental edge identifiers.
+lmb_basis_ids = {{ virtual_triangle = [0] }}
 coordinate_system = "spherical"
 mapping = "linear"
 b = 1.0

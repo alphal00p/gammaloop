@@ -1,4 +1,4 @@
-digraph diagnostic_post_t_disconnected_poles {
+digraph diagnostic_post_t_disconnected_poles { graph [projector=1]
     // Deliberately non-local algebraic input for the diagnostic-only 3Drep CLI:
     // this couples two disconnected components and must never serve as a
     // Feynman-rule or BPHZ-locality oracle.
@@ -8,13 +8,13 @@ digraph diagnostic_post_t_disconnected_poles {
 
     incoming [style=invis]
     outgoing [style=invis]
-    incoming -> v0 [id=0 label="p1"]
-    v0 -> v1 [id=2 lmb_id=0 label="k1"]
-    v1 -> v2 [id=3 label="k1"]
-    v2 -> v0 [id=4 label="k1-p1"]
-    v2 -> outgoing [id=1 label="p1"]
+    incoming -> v0 [id=0 label="p1" sink="{ufo_order:0}"]
+    v0 -> v1 [id=2 lmb_id=0 label="k1" source="{ufo_order:1}" sink="{ufo_order:0}"]
+    v1 -> v2 [id=3 label="k1" source="{ufo_order:1}" sink="{ufo_order:0}"]
+    v2 -> v0 [id=4 label="k1-p1" sink="{ufo_order:2}" source="{ufo_order:2}"]
+    v2 -> outgoing [id=1 label="p1" source="{ufo_order:1}"]
 
-    u0 -> u1 [id=5 lmb_id=1 label="k2"]
-    u1 -> u2 [id=6 label="k2"]
-    u2 -> u0 [id=7 label="k2"]
+    u0 -> u1 [id=5 lmb_id=1 label="k2" source="{ufo_order:0}" sink="{ufo_order:0}"]
+    u1 -> u2 [id=6 label="k2" source="{ufo_order:1}" sink="{ufo_order:0}"]
+    u2 -> u0 [id=7 label="k2" sink="{ufo_order:1}" source="{ufo_order:1}"]
 }

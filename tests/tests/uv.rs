@@ -2939,9 +2939,10 @@ fn genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs() -> Res
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const VACUUM_TADPOLE: &str = r#"
         digraph vacuum_tadpole {
+            projector=1
             edge [num=1 mass=2]
             node [num=1]
-            a -> a [id=0 lmb_id=0]
+            a -> a [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
         }
     "#;
     const VACUUM_RUNTIME: &str = r#"
