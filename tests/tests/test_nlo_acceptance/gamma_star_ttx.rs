@@ -4,6 +4,7 @@ use std::{
 };
 
 use color_eyre::{Result, eyre::eyre};
+use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_api::{
     commands::{
         Inspect, Integrate,
@@ -16,7 +17,9 @@ use gammaloop_integration_tests::{clean_test, get_example_cli, get_tests_workspa
 use gammalooprs::{
     graph::edge::PossibleParticle,
     integrands::{
-        HasIntegrand, evaluation::PreciseEvaluationResultOutput, process::ProcessIntegrand,
+        HasIntegrand,
+        evaluation::PreciseEvaluationResultOutput,
+        process::{ProcessIntegrand, ProcessIntegrandImpl, sampling::SamplingMapDefinition},
     },
     settings::global::VectorPolarizationSumGauge,
     utils::{ArbPrec, F, FloatLike},
@@ -28,23 +31,40 @@ use gammalooprs::{
 use linnet::half_edge::subgraph::SubSetOps;
 use ndarray::Array2;
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-use symbolica::domains::float::{Real, SingleFloat};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView},
+    domains::float::{Real, SingleFloat},
+    symbol,
+};
 use which::which;
 
 #[test]
 fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> Result<()> {
-    gamma_star_ttx_nlo_matches_reference(false, false)
+    gamma_star_ttx_nlo_matches_reference(GammaStarTtxCase::MsbarReference)
 }
 
 #[test]
 fn gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross_section_and_auxiliary_scales()
 -> Result<()> {
-    gamma_star_ttx_nlo_matches_reference(true, false)
+    gamma_star_ttx_nlo_matches_reference(GammaStarTtxCase::OsInclusive)
 }
 
 #[test]
 fn gamma_star_ttx_os_sampling_probes_compare_route_maps() -> Result<()> {
-    gamma_star_ttx_nlo_matches_reference(true, true)
+    gamma_star_ttx_nlo_matches_reference(GammaStarTtxCase::OsSamplingProbe)
+}
+
+#[test]
+fn gamma_star_ttx_os_finite_addback_matches_born_densities() -> Result<()> {
+    gamma_star_ttx_nlo_matches_reference(GammaStarTtxCase::OsFiniteAddbackDensity)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GammaStarTtxCase {
+    MsbarReference,
+    OsInclusive,
+    OsSamplingProbe,
+    OsFiniteAddbackDensity,
 }
 
 // Pole-mass R-ratio, Chetyrkin, Kuehn and Steinhauser, hep-ph/9606230,
@@ -106,7 +126,8 @@ fn pole_mass_vector_current_reference_matches_published_nlo_benchmarks() {
     assert!((nlo - 0.432_830_086_776_986).abs() <= 1.0e-13);
 }
 
-fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: bool) -> Result<()> {
+fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
+    let on_shell = case != GammaStarTtxCase::MsbarReference;
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const LO_PROCESS: &str = "gamma_star_ttx_lo";
     const MSBAR_NLO_PROCESS: &str = "gamma_star_ttx_explicit_local_3d";
@@ -120,6 +141,7 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
         ("gamma_star_ttx_os_explicit_local_3d", true, false),
         ("gamma_star_ttx_os_local_4d_then_cff", true, true),
     ];
+    const NO_INTEGRATED_PROCESS: &str = "gamma_star_ttx_os_no_integrated_density_control";
     const LO: &str = "LO";
     const NLO: &str = "NLO";
     let e_cm = if on_shell { 400.0 } else { 600.0 };
@@ -134,16 +156,21 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
     let routes: &[(&str, bool, bool)] = if on_shell { &OS_ROUTES } else { &MSBAR_ROUTES };
     let reference_index = if on_shell { 2 } else { 1 };
     let nlo_process = routes[reference_index].0;
-    let test_name = if sampling_probe_only {
-        "gamma_star_ttx_os_sampling_probes_compare_route_maps"
-    } else if on_shell {
-        "gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross_section_and_auxiliary_scales"
-    } else {
-        "gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections"
+    let test_name = match case {
+        GammaStarTtxCase::MsbarReference => {
+            "gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections"
+        }
+        GammaStarTtxCase::OsInclusive => {
+            "gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross_section_and_auxiliary_scales"
+        }
+        GammaStarTtxCase::OsSamplingProbe => "gamma_star_ttx_os_sampling_probes_compare_route_maps",
+        GammaStarTtxCase::OsFiniteAddbackDensity => {
+            "gamma_star_ttx_os_finite_addback_matches_born_densities"
+        }
     };
     let test_root = get_tests_workspace_path().join(test_name);
     clean_test(&test_root);
-    let acceptance_artifacts = (on_shell && !sampling_probe_only)
+    let acceptance_artifacts = (case == GammaStarTtxCase::OsInclusive)
         .then(|| gammaloop_integration_tests::new_test_artifact_dir("gamma_star_ttx_os_acceptance"))
         .transpose()?;
 
@@ -238,24 +265,49 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
     // The paper averages over the two incoming-current polarizations. Keep
     // that factor separate so that `summed` below applies exactly -g^{mu nu}
     // rather than the invalid on-shell photon spin sum.
-    for (process, explicit_orientation_sum_only, project_local_4d_to_cff) in routes.iter().copied()
+    let no_integrated_route = (case == GammaStarTtxCase::OsFiniteAddbackDensity).then_some((
+        NO_INTEGRATED_PROCESS,
+        false,
+        false,
+    ));
+    // The independent density formulas below are authored in these physical
+    // source charts. Select them explicitly before native graph generation.
+    let density_basis = if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+        "--loop-momentum-bases GL0=1,2 GL1=1,4 GL2=1,4"
+    } else {
+        ""
+    };
+    for (process, explicit_orientation_sum_only, project_local_4d_to_cff) in
+        routes.iter().copied().chain(no_integrated_route)
     {
         {
             let generation = &mut cli.cli_settings.global.generation;
             generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
             generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d_to_cff;
+            generation.uv.generate_integrated = process != NO_INTEGRATED_PROCESS;
         }
         cli.run_command(&format!(
             r#"generate xs a > t t~ | a t t~ g ghG ghG~ QCD^2==2 QED^2==2 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i {NLO} --global-prefactor-num "1/2" --only-diagrams"#,
+                -p {process} -i {NLO} --global-prefactor-num "1/2" --only-diagrams {density_basis}"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i {NLO}"))?;
     }
+    // The optional control has the same generation inputs as the first OS
+    // route except for the analytic addback. Restore the shared audit settings.
+    if no_integrated_route.is_some() {
+        let generation = &mut cli.cli_settings.global.generation;
+        let (_, explicit, projected) = routes.last().expect("at least one route");
+        generation.explicit_orientation_sum_only = *explicit;
+        generation.uv.local_uv_cts_from_expanded_4d_integrands = *projected;
+        generation.uv.generate_integrated = true;
+    }
     let mut role_master_names = BTreeMap::<&str, BTreeMap<&str, Vec<String>>>::new();
+    let mut finite_components = BTreeMap::<(&str, String), Vec<BTreeSet<usize>>>::new();
+    let mut os_sampling_components = BTreeMap::<(&str, String), BTreeSet<BTreeSet<usize>>>::new();
     let mut reference_group_inventory = None;
-    for (process, _, _) in routes.iter().copied() {
+    for (process, _, _) in routes.iter().copied().chain(no_integrated_route) {
         let process_id = cli
             .state
             .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
@@ -292,13 +344,74 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
         assert_eq!(
             integrand.get_n_dim(),
             6,
-            "relative spherical sampling requires two integrated three-momenta"
+            "the sampling checks require two integrated three-momenta"
         );
         let settings = &cli.cli_settings.global.generation.uv;
         let mut physical_cut_particles = BTreeSet::new();
         let mut graph_roles = Vec::new();
         for term in &integrand.data.graph_terms {
             let graph = &term.graph;
+            if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+                gammalooprs::debug_tags!(#generation, #uv, #graph, #inspect;
+                    stage = "finite_addback_native_input_chart",
+                    process,
+                    graph_name = %graph.name,
+                    file.routing = %serde_json::to_string(&graph.loop_momentum_basis)?,
+                    file.source_graph = %graph.debug_dot(),
+                    "Native finite-addback input chart"
+                );
+                // The two charge-mate self-energies now share one native
+                // master. Check their retained source weights independently
+                // of the Born-density oracle below.
+                let mut grouping_sources = BTreeMap::new();
+                let grouping = symbol!("feynkit_generator_factor::NumeratorDependentGrouping");
+                graph.overall_factor.visitor(&mut |view| {
+                    if let AtomView::Fun(member) = view
+                        && member.get_symbol() == grouping
+                    {
+                        assert_eq!(member.get_nargs(), 3);
+                        let source = usize::try_from(member.get(0))
+                            .expect("a grouping source has an integer diagram index");
+                        assert!(
+                            grouping_sources
+                                .insert(
+                                    source,
+                                    (
+                                        member.get(1).to_owned(),
+                                        evaluate_overall_factor(member.get(2)),
+                                    ),
+                                )
+                                .is_none(),
+                            "a source self-energy must contribute exactly once"
+                        );
+                        return false;
+                    }
+                    true
+                });
+                let (expected_sources, expected_factor, expected_cuts) = match graph.name.as_str() {
+                    "GL0" => (BTreeMap::new(), -1, 4),
+                    "GL1" => (
+                        BTreeMap::from([
+                            (1, (Atom::one(), Atom::num(-1))),
+                            (2, (Atom::one(), Atom::num(-1))),
+                        ]),
+                        -2,
+                        3,
+                    ),
+                    name => panic!("the finite-addback reference has no source for {name}"),
+                };
+                assert_eq!(grouping_sources, expected_sources);
+                assert_eq!(
+                    evaluate_overall_factor(graph.overall_factor.as_view()),
+                    Atom::num(expected_factor)
+                );
+                assert!(graph.global_prefactor.num.is_scalar());
+                assert_eq!(
+                    graph.global_prefactor.num.expression(),
+                    &(Atom::one() / Atom::num(2))
+                );
+                assert_eq!(term.cuts.len(), expected_cuts);
+            }
             let mut roles = BTreeSet::new();
             let grouped_cuts = term
                 .cut_group_data
@@ -375,6 +488,45 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
                         "NLO has no nested virtual loops"
                     );
                     let identifier = graph.ct_identifier(spinney.filter(), &graph.model);
+                    if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+                        // The independent densities below use the source gluon/quark
+                        // loop edge 1, and retain both vertex spectator charts.
+                        assert_eq!(
+                            spinney
+                                .lmb
+                                .loop_edges
+                                .iter()
+                                .copied()
+                                .map(usize::from)
+                                .collect::<Vec<_>>(),
+                            vec![1]
+                        );
+                        let edges = graph
+                            .paired_edges(spinney.filter())
+                            .into_iter()
+                            .map(usize::from)
+                            .collect::<BTreeSet<_>>();
+                        if spinney.dod == 0 {
+                            let external_edges = spinney
+                                .lmb
+                                .ext_edges
+                                .iter()
+                                .copied()
+                                .map(usize::from)
+                                .collect::<BTreeSet<_>>();
+                            assert!(
+                                (edges == BTreeSet::from([1, 2, 4])
+                                    && external_edges == BTreeSet::from([0, 3, 5]))
+                                    || (edges == BTreeSet::from([1, 3, 5])
+                                        && external_edges == BTreeSet::from([0, 2, 4])),
+                                "the vertex reference requires both native spectator charts"
+                            );
+                        }
+                        finite_components
+                            .entry((process, graph.name.clone()))
+                            .or_default()
+                            .push(edges);
+                    }
                     if spinney.dod == 1 {
                         assert_eq!(
                             spinney.renormalization_scheme,
@@ -391,6 +543,22 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
                                 Some([6, 21].into_iter().collect())
                             )
                         );
+                        if case == GammaStarTtxCase::OsSamplingProbe {
+                            let component = graph
+                                .paired_edges(spinney.filter())
+                                .into_iter()
+                                .map(usize::from)
+                                .collect::<BTreeSet<_>>();
+                            assert_eq!(
+                                component.len(),
+                                2,
+                                "the OS child has quark and gluon edges"
+                            );
+                            os_sampling_components
+                                .entry((process, graph.name.clone()))
+                                .or_default()
+                                .insert(component);
+                        }
                         roles.insert("self-energy");
                     } else {
                         assert_eq!(spinney.dod, 0);
@@ -433,6 +601,26 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
             );
             let master = masters[0];
             let role = graph_roles[master.graph_id];
+            if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+                let expected_basis = match master.name.as_str() {
+                    "GL0" => vec![1, 2],
+                    "GL1" => vec![1, 4],
+                    name => panic!("the finite-addback reference has no chart for {name}"),
+                };
+                assert_eq!(
+                    integrand.data.graph_terms[master.graph_id]
+                        .graph
+                        .loop_momentum_basis
+                        .loop_edges
+                        .iter()
+                        .copied()
+                        .map(usize::from)
+                        .collect::<Vec<_>>(),
+                    expected_basis,
+                    "{} changed the native momentum-input chart",
+                    master.name
+                );
+            }
             assert!(
                 master_names.insert(master.name.clone()),
                 "duplicate master {}",
@@ -477,6 +665,17 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
         for names in masters_by_role.values_mut() {
             names.sort();
         }
+        if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+            assert_eq!(integrand.data.graph_terms.len(), 2);
+            assert_eq!(
+                masters_by_role,
+                BTreeMap::from([
+                    ("vertex", vec!["GL0".to_owned()]),
+                    ("self-energy", vec!["GL1".to_owned()]),
+                ]),
+                "the finite-density oracle must cover every native master"
+            );
+        }
         if let Some(reference) = &reference_group_inventory {
             assert_eq!(
                 &group_inventory, reference,
@@ -492,13 +691,269 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
         .flatten()
         .cloned()
         .collect::<Vec<_>>();
-    if sampling_probe_only {
+
+    if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+        let on_process = OS_ROUTES[0].0;
+        // Source charts: the two vertex insertions have spectator K1 and
+        // K0+K1. The self-energy master retains both charge-mate source
+        // weights. Its adjacent physical cuts are grouped into one residue.
+        for process in [on_process, NO_INTEGRATED_PROCESS] {
+            assert_eq!(
+                finite_components[&(process, "GL1".to_owned())],
+                vec![BTreeSet::from([1, 2])]
+            );
+            let vertex = &finite_components[&(process, "GL0".to_owned())];
+            assert_eq!(vertex.len(), 2);
+            assert_eq!(
+                vertex.iter().cloned().collect::<BTreeSet<_>>(),
+                BTreeSet::from([BTreeSet::from([1, 2, 4]), BTreeSet::from([1, 3, 5])])
+            );
+        }
+        let process_id = cli
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(on_process.to_owned())))?;
+        let model = cli.state.resolve_model_for_integrand(process_id, NLO)?;
+        let gc = model
+            .coupling("GC_11")?
+            .value
+            .ok_or_else(|| eyre!("missing QCD coupling"))?;
+        assert!(gc.re == 0.0 && gc.im > 0.0);
+        let alpha_s = model
+            .parameter("aS")?
+            .value
+            .ok_or_else(|| eyre!("missing alpha_s"))?;
+        let one = F("1".parse::<ArbPrec>()?);
+        let two = &one + &one;
+        let three = &two + &one;
+        let four = &two * &two;
+        let pi = F(one.0.PI());
+        // GC_11=i*g_s is stored at binary64 precision, then promoted through
+        // the actual model-parameter convention. Keep that input rounding
+        // separate from the arbitrary-precision density identity below.
+        let g = F::<ArbPrec>::from_f64(gc.im);
+        let a_model = &g * &g / (&three * &four * &pi * &pi);
+        let a_physical = F::<ArbPrec>::from_f64(alpha_s.re) / (&three * &pi);
+        let coupling_rounding = Complex::new_re((&a_model - &a_physical) / &a_physical)
+            .norm()
+            .re;
+        assert!(coupling_rounding < F("1e-14".parse::<ArbPrec>()?));
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        let evaluate = |cli: &mut gammaloop_integration_tests::CLIState,
+                        process: &str,
+                        integrand: &str,
+                        points: &Array2<f64>,
+                        names: &[String]|
+         -> Result<Vec<Complex<F<ArbPrec>>>> {
+            let process_id = cli
+                .state
+                .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_owned())))?;
+            let result = evaluate_samples_precise(
+                &mut cli.state,
+                &EvaluateSamplesPrecise {
+                    process_id: Some(process_id),
+                    integrand_name: Some(integrand.to_owned()),
+                    use_arb_prec: true,
+                    minimal_output: true,
+                    return_generated_events: Some(false),
+                    momentum_space: true,
+                    points: points.view(),
+                    integrator_weights: None,
+                    discrete_dims: None,
+                    graph_names: Some(names.iter().cloned().map(Some).collect()),
+                    orientations: Some(vec![None; names.len()]),
+                },
+            )?;
+            assert_eq!(result.samples.len(), points.nrows());
+            result.samples.into_iter().map(|sample| {
+                let PreciseEvaluationResultOutput::Arb(value) = sample.evaluation else {
+                    return Err(eyre!("finite-addback reference requires native Arb output"));
+                };
+                assert!(value.parameterization_jacobian.is_none(), "explicit graph momentum input must not include a cube Jacobian or proposal partition");
+                assert_eq!(value.integrator_weight, one);
+                Ok(value.integrand_result)
+            }).collect()
+        };
+        let source_points = [
+            [17.0, -31.0, 43.0, -29.0, 53.0, 71.0],
+            [71.0, 13.0, -41.0, -29.0, 53.0, 71.0],
+            [-47.0, 59.0, 23.0, 37.0, -11.0, 83.0],
+        ];
+        let mut names = Vec::new();
+        let mut points = Vec::new();
+        let mut born_points = Vec::new();
+        for (graph, role, sign) in [("GL1", "self-energy", -1.0), ("GL0", "vertex", 1.0)] {
+            assert!(role_master_names[on_process][role].contains(&graph.to_owned()));
+            for point in source_points {
+                names.push(graph.to_owned());
+                points.extend(point);
+                // GL1 has p-P; its representative Born chart is -p.
+                // The right GL0 insertion already has p+P.
+                born_points.extend(point[3..].iter().map(|p| sign * p));
+            }
+        }
+        let points = Array2::from_shape_vec((names.len(), 6), points)?;
+        let born_points = Array2::from_shape_vec((names.len(), 3), born_points)?;
+        let born = evaluate(
+            &mut cli,
+            LO_PROCESS,
+            LO,
+            &born_points,
+            &vec!["GL0".to_owned(); names.len()],
+        )?;
+        let charge_mate_points = Array2::from_shape_vec(
+            (source_points.len(), 3),
+            source_points
+                .iter()
+                .flat_map(|point| point[3..].iter().copied())
+                .collect(),
+        )?;
+        let charge_mate_born = evaluate(
+            &mut cli,
+            LO_PROCESS,
+            LO,
+            &charge_mate_points,
+            &vec!["GL0".to_owned(); source_points.len()],
+        )?;
+        for (representative, charge_mate) in born.iter().zip(&charge_mate_born) {
+            let norm = representative.norm().re;
+            assert!(!IsZero::is_zero(&norm));
+            assert!(
+                (representative.clone() - charge_mate).norm().re <= &tolerance * norm,
+                "the rest-current Born density must agree in the two charge-related charts"
+            );
+        }
+        let vertex_left_points = Array2::from_shape_vec(
+            (source_points.len(), 3),
+            source_points
+                .iter()
+                .flat_map(|point| (0..3).map(move |i| point[i] + point[i + 3]))
+                .collect(),
+        )?;
+        let vertex_left_born = evaluate(
+            &mut cli,
+            LO_PROCESS,
+            LO,
+            &vertex_left_points,
+            &vec!["GL0".to_owned(); source_points.len()],
+        )?;
+        let artifacts = gammaloop_integration_tests::new_test_artifact_dir(
+            "gamma_star_ttx_os_finite_addback_density",
+        )?;
+        let mut comparisons = Vec::new();
+        for (m_uv, localization_scale) in [(173.0, 173.0), (346.0, 173.0), (173.0, 346.0)] {
+            for process in [on_process, NO_INTEGRATED_PROCESS] {
+                cli.run_command(&format!("set process -p {process} -i {NLO} kv general.m_uv={m_uv} general.renormalization_localization_scale={localization_scale}"))?;
+            }
+            let on = evaluate(&mut cli, on_process, NLO, &points, &names)?;
+            let off = evaluate(&mut cli, NO_INTEGRATED_PROCESS, NLO, &points, &names)?;
+            for (index, ((on, off), born)) in on.iter().zip(&off).zip(&born).enumerate() {
+                let point = points.row(index);
+                let promote = |value| F(ArbPrec::from_f64_exact_binary(value));
+                let q_squared = point
+                    .iter()
+                    .take(3)
+                    .map(|x| {
+                        let v = promote(*x);
+                        &v * &v
+                    })
+                    .reduce(|sum, value| sum + value)
+                    .unwrap();
+                let p_squared = point
+                    .iter()
+                    .skip(3)
+                    .map(|x| {
+                        let v = promote(*x);
+                        &v * &v
+                    })
+                    .reduce(|sum, value| sum + value)
+                    .unwrap();
+                let mass = F("173".parse::<ArbPrec>()?);
+                let half_energy = F("200".parse::<ArbPrec>()?);
+                let t = ((&half_energy * &half_energy - &mass * &mass) / p_squared).sqrt();
+                let l = F::<ArbPrec>::from_f64(localization_scale);
+                let m = F::<ArbPrec>::from_f64(m_uv);
+                let mu = F::<ArbPrec>::from_f64(mu_r);
+                let logarithm = (&m * &m / (&mu * &mu)).log();
+                // Born already contains its LU measure. The extra integrated
+                // child contributes t^3*rho_L(t*q), with rho normalized in d^3q.
+                let denominator = &t * &t * &q_squared + &l * &l;
+                let kernel = &t * &t * &t * &l / (&pi * &pi * &denominator * &denominator);
+                // Charge conjugation reverses (q,p); t(p) and the radial
+                // localization kernel are even. Sum the two independent Born
+                // charts rather than using an observed grouping multiplier.
+                let source_born = if names[index] == "GL1" {
+                    born.clone() + &charge_mate_born[index % source_points.len()]
+                } else {
+                    born.clone()
+                };
+                let mut cograph_density = source_born * Complex::new_re(kernel);
+                let coefficient = if names[index] == "GL0" {
+                    let left_point = vertex_left_points.row(index % source_points.len());
+                    let p_squared = left_point
+                        .iter()
+                        .map(|x| {
+                            let v = promote(*x);
+                            &v * &v
+                        })
+                        .reduce(|sum, value| sum + value)
+                        .unwrap();
+                    let t = ((&half_energy * &half_energy - &mass * &mass) / p_squared).sqrt();
+                    let denominator = &t * &t * &q_squared + &l * &l;
+                    let kernel = &t * &t * &t * &l / (&pi * &pi * &denominator * &denominator);
+                    cograph_density += vertex_left_born[index % source_points.len()].clone()
+                        * Complex::new_re(kernel);
+                    // (d-2)^2/d times q^2/D^3 gives the finite vertex
+                    // coefficient -a_CF[2+log(M^2/mu^2)] relative to Born.
+                    -(&two + &logarithm)
+                } else {
+                    // The native ordered S(p)(p/-m)S(p) pinch leaves one
+                    // Born propagator with +a_CF[1+log(M^2/mu^2)].
+                    &one + &logarithm
+                };
+                let expected = cograph_density * Complex::new_re(&a_model * coefficient);
+                let actual = on.clone() - off;
+                assert!(actual.re.is_finite() && actual.im.is_finite());
+                let actual_norm = actual.norm().re;
+                let expected_norm = expected.norm().re;
+                assert!(!IsZero::is_zero(&actual_norm) && !IsZero::is_zero(&expected_norm));
+                let distance = (actual.clone() - &expected).norm().re;
+                let scale = if actual_norm > expected_norm {
+                    actual_norm
+                } else {
+                    expected_norm
+                };
+                let relative = distance / scale;
+                comparisons.push(serde_json::json!({"graph": names[index], "point": index % source_points.len(),
+                    "coordinates": point.to_vec(), "m_uv": m_uv, "localization_scale": localization_scale,
+                    "actual_re": actual.re.0, "actual_im": actual.im.0,
+                    "expected_re": expected.re.0, "expected_im": expected.im.0, "relative_delta": relative.0}));
+                assert!(
+                    relative <= tolerance,
+                    "{} finite addback differs from the independent Born density at point {}, M={m_uv}, L={localization_scale}: actual={actual:e}, expected={expected:e}, relative={relative:e}",
+                    names[index],
+                    index % source_points.len()
+                );
+            }
+        }
+        std::fs::write(
+            artifacts.join("density_comparisons.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "a_cf_runtime_model": a_model.0, "a_cf_physical_alpha_s": a_physical.0,
+                "coupling_rounding_relative": coupling_rounding.0, "arithmetic_tolerance": tolerance.0,
+                "comparisons": comparisons,
+            }))?,
+        )?;
+        clean_test(&test_root);
+        return Ok(());
+    }
+
+    if case == GammaStarTtxCase::OsSamplingProbe {
         let artifacts = gammaloop_integration_tests::new_test_artifact_dir(
             "gamma_star_ttx_os_sampling_probes",
         )?;
         // The first two rows are the largest positive and negative samples of
         // the projected-route M_uv=346 pilot at 320k evaluations (seed 1338).
-        // Compare the map boundary before changing adaptive sampling settings.
+        // Compare each map boundary independently at the identical input points.
         let probe_points = Array2::from_shape_vec(
             (3, 6),
             vec![
@@ -524,40 +979,46 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
         )?;
         let mut matrix = Vec::new();
         let mut mappings = Vec::new();
+        let mut soft_coverage = Vec::new();
+        let sampling_configurations = [
+            ("relative_spherical", "auto:optimized_lmb"),
+            ("spherical", "auto:lmb"),
+        ];
         let mut reference_values: BTreeMap<_, Complex<F<ArbPrec>>> = BTreeMap::new();
         let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
-        for (process, _, _) in routes {
-            let process_id = cli
-                .state
-                .resolve_process_ref(Some(&ProcessRef::Unqualified((*process).to_owned())))?;
-            let graph_groups = cli.state.process_list.processes[process_id]
-                .get_integrand(NLO)?
-                .require_generated()?
-                .graph_group_master_names()
-                .into_iter()
-                .map(str::to_owned)
-                .collect::<Vec<_>>();
-            for graph in
-                std::iter::once(None).chain(graph_names.iter().map(|name| Some(name.as_str())))
-            {
-                let graph_sampling = if graph.is_some() {
-                    "monte_carlo"
-                } else {
-                    "summed"
-                };
-                // EvaluateSamples consumes full-domain discrete group indices;
-                // the integration-only graph_names filter does not select them.
-                let discrete_graph = graph
-                    .map(|name| {
-                        graph_groups
-                            .iter()
-                            .position(|master| master == name)
-                            .map(|index| Array2::from_elem((probe_points.nrows(), 1), index))
-                            .ok_or_else(|| eyre!("sampling probe has no graph group {name}"))
-                    })
-                    .transpose()?;
-                cli.run_command(&format!(
-                    r#"set process -p {process} -i {NLO} kv
+        for (coordinate_system, channel_selection) in sampling_configurations {
+            for (process, _, _) in routes {
+                let process_id = cli
+                    .state
+                    .resolve_process_ref(Some(&ProcessRef::Unqualified((*process).to_owned())))?;
+                let graph_groups = cli.state.process_list.processes[process_id]
+                    .get_integrand(NLO)?
+                    .require_generated()?
+                    .graph_group_master_names()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>();
+                for graph in
+                    std::iter::once(None).chain(graph_names.iter().map(|name| Some(name.as_str())))
+                {
+                    let graph_sampling = if graph.is_some() {
+                        "monte_carlo"
+                    } else {
+                        "summed"
+                    };
+                    // EvaluateSamples consumes full-domain discrete group indices;
+                    // the integration-only graph_names filter does not select them.
+                    let discrete_graph = graph
+                        .map(|name| {
+                            graph_groups
+                                .iter()
+                                .position(|master| master == name)
+                                .map(|index| Array2::from_elem((probe_points.nrows(), 1), index))
+                                .ok_or_else(|| eyre!("sampling probe has no graph group {name}"))
+                        })
+                        .transpose()?;
+                    cli.run_command(&format!(
+                        r#"set process -p {process} -i {NLO} kv
                         general.m_uv=346.0
                         general.renormalization_localization_scale=173.0
                         sampling.graphs="{graph_sampling}"
@@ -566,113 +1027,207 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
                         sampling.sampling_multichanneling=true
                         sampling.sampling_channels="summed"
                         sampling.sampling_channel_weight="map_density"
-                        sampling.coordinate_system="relative_spherical""#,
-                ))?;
-                let result = evaluate_samples_precise(
-                    &mut cli.state,
-                    &EvaluateSamplesPrecise {
-                        process_id: Some(process_id),
-                        integrand_name: Some(NLO.to_owned()),
-                        use_arb_prec: true,
-                        minimal_output: false,
-                        return_generated_events: Some(false),
-                        momentum_space: false,
-                        points: probe_points.view(),
-                        integrator_weights: None,
-                        discrete_dims: discrete_graph.as_ref().map(|indices| indices.view()),
-                        graph_names: None,
-                        orientations: None,
-                    },
-                )?;
-                for (point, sample) in result.samples.into_iter().enumerate() {
-                    let PreciseEvaluationResultOutput::Arb(value) = sample.evaluation else {
-                        return Err(eyre!("sampling probes require Arb precision"));
-                    };
-                    let jacobian = value.parameterization_jacobian.as_ref().ok_or_else(|| {
-                        eyre!("x-space sampling probe needs its remaining Jacobian")
-                    })?;
-                    let weighted = value.integrand_result.clone() * jacobian.clone();
-                    assert!(weighted.re.is_finite() && weighted.im.is_finite());
-                    let key = (graph.map(str::to_owned), point);
-                    if let Some(reference) = reference_values.get(&key) {
-                        let distance = (weighted.clone() - reference).norm().re;
-                        let actual_norm = weighted.norm().re;
-                        let reference_norm = reference.norm().re;
-                        let scale = if actual_norm > reference_norm {
-                            actual_norm
-                        } else {
-                            reference_norm
+                        sampling.coordinate_system="{coordinate_system}"
+                        sampling.default_channel_selection=["{channel_selection}"]"#,
+                    ))?;
+                    let result = evaluate_samples_precise(
+                        &mut cli.state,
+                        &EvaluateSamplesPrecise {
+                            process_id: Some(process_id),
+                            integrand_name: Some(NLO.to_owned()),
+                            use_arb_prec: true,
+                            minimal_output: false,
+                            return_generated_events: Some(false),
+                            momentum_space: false,
+                            points: probe_points.view(),
+                            integrator_weights: None,
+                            discrete_dims: discrete_graph.as_ref().map(|indices| indices.view()),
+                            graph_names: None,
+                            orientations: None,
+                        },
+                    )?;
+                    for (point, sample) in result.samples.into_iter().enumerate() {
+                        let PreciseEvaluationResultOutput::Arb(value) = sample.evaluation else {
+                            return Err(eyre!("sampling probes require Arb precision"));
                         };
-                        assert!(
-                            distance <= &tolerance * scale,
-                            "sampling probe {process} {graph:?} point {point} differs between routes"
+                        let jacobian =
+                            value.parameterization_jacobian.as_ref().ok_or_else(|| {
+                                eyre!("x-space sampling probe needs its remaining Jacobian")
+                            })?;
+                        let weighted = value.integrand_result.clone() * jacobian.clone();
+                        assert!(weighted.re.is_finite() && weighted.im.is_finite());
+                        let key = (
+                            coordinate_system,
+                            channel_selection,
+                            graph.map(str::to_owned),
+                            point,
                         );
-                    } else {
-                        reference_values.insert(key, weighted.clone());
+                        if let Some(reference) = reference_values.get(&key) {
+                            let distance = (weighted.clone() - reference).norm().re;
+                            let actual_norm = weighted.norm().re;
+                            let reference_norm = reference.norm().re;
+                            let scale = if actual_norm > reference_norm {
+                                actual_norm
+                            } else {
+                                reference_norm
+                            };
+                            assert!(
+                                distance <= &tolerance * scale,
+                                "sampling probe {coordinate_system}/{channel_selection} {process} {graph:?} point {point} differs between routes"
+                            );
+                        } else {
+                            reference_values.insert(key, weighted.clone());
+                        }
+                        matrix.push(serde_json::json!({
+                            "coordinate_system": coordinate_system,
+                            "channel_selection": channel_selection,
+                            "process": process,
+                            "graph": graph,
+                            "point": point,
+                            "integrand": format!("{:e}", value.integrand_result),
+                            "parameterization_jacobian": format!("{jacobian:e}"),
+                            "weighted_re": format!("{:e}", weighted.re),
+                            "weighted_im": format!("{:e}", weighted.im),
+                            "metadata": value.evaluation_metadata,
+                        }));
                     }
-                    matrix.push(serde_json::json!({
-                        "process": process,
-                        "graph": graph,
-                        "point": point,
-                        "integrand": format!("{:e}", value.integrand_result),
-                        "parameterization_jacobian": format!("{jacobian:e}"),
-                        "weighted_re": format!("{:e}", weighted.re),
-                        "weighted_im": format!("{:e}", weighted.im),
-                        "metadata": value.evaluation_metadata,
-                    }));
-                }
-                if graph.is_none() {
-                    let resolved =
-                        cli.state.process_list.processes[process_id].get_integrand(NLO)?;
-                    let ProcessIntegrand::CrossSection(integrand) = resolved.require_generated()?
-                    else {
-                        return Err(eyre!("sampling probes need a cross-section"));
-                    };
-                    for term in &integrand.data.graph_terms {
-                        let bridge = term.multi_channeling_setup.sampling_bridge::<ArbPrec>()?;
-                        for (channel, entry) in bridge.channels().iter().enumerate() {
-                            for (point, row) in probe_points.outer_iter().enumerate() {
-                                // These f64 coordinates are the exact same explicit
-                                // API input boundary used by evaluate_samples_precise.
-                                let xs = row
-                                    .iter()
-                                    .map(|x| F::<ArbPrec>::from_f64(*x).0)
-                                    .collect::<Vec<_>>();
-                                let mapped = bridge.forward(channel.into(), &xs)?;
-                                mappings.push(serde_json::json!({
-                                    "process": process,
-                                    "graph": term.graph.name,
-                                    "point": point,
-                                    "channel": channel,
-                                    "name": entry.name,
-                                    "basis_id": entry.basis_id,
-                                    "embedded_edges": entry.embedded_edges,
-                                    "raw_coordinates": mapped.raw_coordinates.iter().map(|x| format!("{:e}", F(x.clone()))).collect::<Vec<_>>(),
-                                    "jacobian": format!("{:e}", F(mapped.map.jacobian)),
-                                    "partition": mapped.partition.weights.iter().map(|x| format!("{:e}", F(x.clone()))).collect::<Vec<_>>(),
-                                }));
+                    if graph.is_none() {
+                        let resolved =
+                            cli.state.process_list.processes[process_id].get_integrand(NLO)?;
+                        let ProcessIntegrand::CrossSection(integrand) =
+                            resolved.require_generated()?
+                        else {
+                            return Err(eyre!("sampling probes need a cross-section"));
+                        };
+                        let source_policy = integrand.sampling_source_policy()?;
+                        for term in &integrand.data.graph_terms {
+                            let bridge =
+                                term.multi_channeling_setup.sampling_bridge::<ArbPrec>()?;
+                            if channel_selection == "auto:lmb"
+                                && let Some(components) =
+                                    os_sampling_components.get(&(*process, term.graph.name.clone()))
+                            {
+                                // Each admitted native LMB is full rank. Requiring
+                                // each actual child edge with a cograph carrier
+                                // covers both the OS fermion-soft point and the
+                                // physical gluon-soft point, with an independent
+                                // spectator for the hard-child tail.
+                                for component in components {
+                                    for edge in component {
+                                        let carriers = bridge
+                                            .channels()
+                                            .iter()
+                                            .filter_map(|channel| {
+                                                let SamplingMapDefinition::Lmb(edges) =
+                                                    &channel.definition
+                                                else {
+                                                    return None;
+                                                };
+                                                (edges.len() == 2
+                                                    && edges.contains(edge)
+                                                    && edges
+                                                        .iter()
+                                                        .any(|other| !component.contains(other)))
+                                                .then_some(edges.clone())
+                                            })
+                                            .collect::<Vec<_>>();
+                                        assert!(
+                                            !carriers.is_empty(),
+                                            "{process} {} has no native child-edge {edge} plus spectator channel for OS component {component:?}",
+                                            term.graph.name
+                                        );
+                                        soft_coverage.push(serde_json::json!({
+                                            "coordinate_system": coordinate_system,
+                                            "channel_selection": channel_selection,
+                                            "process": process,
+                                            "graph": term.graph.name,
+                                            "component": component,
+                                            "child_edge": edge,
+                                            "native_bases": carriers,
+                                        }));
+                                    }
+                                }
+                            }
+                            for (channel, entry) in bridge.channels().iter().enumerate() {
+                                for (point, row) in probe_points.outer_iter().enumerate() {
+                                    // Preserve the API's exact binary64 coordinates.
+                                    // These Arb maps are diagnostics; the evaluator's
+                                    // fixed proposal precision is recorded separately.
+                                    let xs = row
+                                        .iter()
+                                        .map(|x| ArbPrec::from_f64_exact_binary(*x))
+                                        .collect::<Vec<_>>();
+                                    let mapped = bridge.forward(channel.into(), &xs)?;
+                                    mappings.push(serde_json::json!({
+                                        "coordinate_system": coordinate_system,
+                                        "channel_selection": channel_selection,
+                                        "mapping_precision": "Arb diagnostic",
+                                        "mapping_input": "exact binary64",
+                                        "runtime_sampling_source_policy": {
+                                            "precision": format!("{:?}", source_policy.0),
+                                            "relative_error_budget": source_policy.1,
+                                        },
+                                        "process": process,
+                                        "graph": term.graph.name,
+                                        "point": point,
+                                        "channel": channel,
+                                        "name": entry.name,
+                                        "basis_id": entry.basis_id,
+                                        "definition": entry.definition,
+                                        "embedded_edges": entry.embedded_edges,
+                                        "raw_coordinates": mapped.raw_coordinates.iter().map(|x| format!("{:e}", F(x.clone()))).collect::<Vec<_>>(),
+                                        "jacobian": format!("{:e}", F(mapped.map.jacobian)),
+                                        "partition": mapped.partition.weights.iter().map(|x| format!("{:e}", F(x.clone()))).collect::<Vec<_>>(),
+                                    }));
+                                }
                             }
                         }
                     }
                 }
             }
+            for point in 0..probe_points.nrows() {
+                let total = &reference_values[&(coordinate_system, channel_selection, None, point)];
+                let graph_sum = graph_names
+                    .iter()
+                    .map(|name| {
+                        reference_values[&(
+                            coordinate_system,
+                            channel_selection,
+                            Some(name.clone()),
+                            point,
+                        )]
+                            .clone()
+                    })
+                    .reduce(|sum, value| sum + value)
+                    .expect("the physical roles contain native masters");
+                let distance = (graph_sum - total).norm().re;
+                assert!(
+                    distance <= &tolerance * total.norm().re,
+                    "sampling probe {coordinate_system}/{channel_selection} point {point} does not sum every native graph group exactly once"
+                );
+            }
         }
-        for point in 0..probe_points.nrows() {
-            let total = &reference_values[&(None, point)];
-            let graph_sum = graph_names
-                .iter()
-                .map(|name| reference_values[&(Some(name.clone()), point)].clone())
-                .reduce(|sum, value| sum + value)
-                .expect("the physical roles contain native masters");
-            let distance = (graph_sum - total).norm().re;
-            assert!(
-                distance <= &tolerance * total.norm().re,
-                "sampling probe point {point} does not sum every native graph group exactly once"
-            );
-        }
+        let expected_coverage = os_sampling_components
+            .values()
+            .flat_map(|components| components.iter())
+            .map(BTreeSet::len)
+            .sum::<usize>();
+        assert!(
+            expected_coverage > 0,
+            "the physical fixture needs OS components"
+        );
+        assert_eq!(
+            soft_coverage.len(),
+            expected_coverage,
+            "the native catalogue must cover every edge of every OS component"
+        );
         std::fs::write(
             artifacts.join("route_map_matrix.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
+                "sampling_configurations": sampling_configurations.iter().map(|(coordinate_system, channel_selection)| serde_json::json!({
+                    "coordinate_system": coordinate_system, "channel_selection": channel_selection,
+                })).collect::<Vec<_>>(),
+                "os_component_soft_coverage": soft_coverage,
                 "physical_role_masters": role_master_names,
                 "points": probe_points.rows().into_iter().map(|row| row.to_vec()).collect::<Vec<_>>(),
                 "weighted_values": matrix,
@@ -898,25 +1453,28 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
             } else {
                 serde_json::to_string(&role_master_names[graph_process][graph])?
             };
-            // OS counterterms introduce soft points that differ from the
-            // original massive propagator energies. Use each LMB map's
-            // actual density to partition these overlapping soft regions.
+            // A fixed spectator and hard child make both vectors of the
+            // relative-spherical map hard: its density falls as q^-8 while
+            // the normalized finite OS kernel falls as q^-4. The complete
+            // localization contrast retains that tail and has infinite
+            // conditional variance. Spherical native LMBs supply q^-4
+            // density; retaining both child carriers also covers the distinct
+            // fermion- and gluon-soft points. This changes proposal geometry,
+            // not the reference, seed or physical integrand.
             let channel_weight = if on_shell { "map_density" } else { "ose" };
-            // The largest OS pilot weights occur at k1 ~ k2. Sampling the
-            // common and relative momenta supplies the relative r^2 dr
-            // Jacobian explicitly, including this correlated soft region.
-            let coordinate_system = if on_shell {
-                "relative_spherical"
+            let coordinate_system = "spherical";
+            let channel_selection = if on_shell {
+                "auto:lmb"
             } else {
-                "spherical"
+                "auto:optimized_lmb"
             };
-            // Keep the sample budget fixed while testing stronger Vegas
-            // adaptation of the measured correlated soft regions. Independent
-            // seeds and the 5% reference-relative bound remain unchanged.
+            // Keep the sample budget, deterministic seeds and 5% reference-relative
+            // bound fixed while adapting the measured correlated soft regions.
             let n_max = if on_shell { 320_000 } else { 40_000 };
             let continuous_learning_rate = if on_shell { 0.25 } else { 0.1 };
-            // Different seeds keep route/scale comparisons statistically
-            // independent; the projected baseline retains seed 1337.
+            // The projected baseline retains seed 1337. These offsets do not
+            // establish independent runs: the integrator also adds the iteration
+            // number, so consecutive cases reuse some RNG streams.
             let seed = 1337 + route_index * integration_cases.len() + graph_index;
             cli.run_command(&format!(
                 r#"set process -p {graph_process} -i {NLO} kv
@@ -929,6 +1487,7 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
                     sampling.sampling_channels="summed"
                     sampling.sampling_channel_weight="{channel_weight}"
                     sampling.coordinate_system="{coordinate_system}"
+                    sampling.default_channel_selection=["{channel_selection}"]
                     integrator.integrated_phase="real"
                     integrator.min_samples_for_update=20000
                     integrator.n_start=20000
@@ -981,6 +1540,7 @@ fn gamma_star_ttx_nlo_matches_reference(on_shell: bool, sampling_probe_only: boo
                 "n_max": n_max,
                 "sampling_channel_weight": channel_weight,
                 "coordinate_system": coordinate_system,
+                "default_channel_selection": [channel_selection],
                 "continuous_dim_learning_rate": continuous_learning_rate,
                 "value": value,
                 "error": error,
