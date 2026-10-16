@@ -15,6 +15,7 @@ use idenso::{color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bi
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
 use linnet::half_edge::{HedgeGraph, NodeIndex};
+use linnet::permutation::Permutation;
 use rayon::ThreadPoolBuildError;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::{ThreadPoolBuilder, prelude::*};
@@ -91,7 +92,7 @@ pub enum GenerationError {
     },
     #[error("generation thread count must be greater than zero, received {0}")]
     InvalidThreadCount(usize),
-    #[error("numerator grouping requires at least one numerical sample")]
+    #[error("numerator grouping requires canonical comparison or at least one numerical sample")]
     InvalidNumericalSampleCount,
     #[error("arithmetic overflow while computing {0}")]
     ArithmeticOverflow(&'static str),
@@ -1966,7 +1967,7 @@ impl Generator {
             NumeratorGrouping::Identical(options)
                 | NumeratorGrouping::UpToSign(options)
                 | NumeratorGrouping::UpToScalar(options)
-                if options.number_of_numerical_samples == 0
+                if options.number_of_numerical_samples == 0 && !options.check_canonical_numerator
         ) {
             return Err(GenerationError::InvalidNumericalSampleCount);
         }
@@ -3888,15 +3889,16 @@ impl ResolvedProcess {
                 (ExternalState::Incoming, true) | (ExternalState::Outgoing, false) => false,
             })
         };
-        let symmetrized_within_state = match state {
-            ExternalState::Incoming => self.symmetrize_initial,
-            ExternalState::Outgoing => self.symmetrize_final,
-        } && (self.generation_type == GenerationType::CrossSection
-            || !particle.is_fermion()
-            || self.symmetrize_external_fermions);
-        // Left/right symmetry is one global transformation of a sewn graph,
-        // not an independent automorphism of every external pair. It is
-        // applied after generation when canonical diagram keys are built.
+        let symmetrized_within_state = self.generation_type == GenerationType::Amplitude
+            && match state {
+                ExternalState::Incoming => self.symmetrize_initial,
+                ExternalState::Outgoing => self.symmetrize_final,
+            }
+            && (!particle.is_fermion() || self.symmetrize_external_fermions);
+        // Both sides of a forward graph are labelled copies of the incoming
+        // state. Neither independent permutations nor final-state symmetry may
+        // enter its raw automorphism denominator. Paired incoming permutations
+        // and the optional global side exchange are compared after generation.
         let external_class = if symmetrized_within_state {
             ExternalCanonicalClass::WithinState(state)
         } else {
@@ -3943,8 +3945,8 @@ impl ResolvedProcess {
             | NumeratorGrouping::UpToScalar(options) => Some(options),
             NumeratorGrouping::None => None,
         };
-        let include_left_right =
-            self.generation_type == GenerationType::CrossSection && self.symmetrize_left_right;
+        let include_external = self.generation_type == GenerationType::CrossSection
+            && (self.symmetrize_initial || self.symmetrize_left_right);
         let exact_internal_particles =
             grouping_options.is_some_and(|options| !options.differentiate_particle_masses_only);
 
@@ -3952,10 +3954,10 @@ impl ResolvedProcess {
             graph,
             model,
             exact_internal_particles,
-            include_left_right,
-            include_left_right,
+            include_external,
+            include_external,
         )?;
-        let canonical = if include_left_right {
+        let canonical = if include_external {
             self.canonicalize_numerator_graph_pass(
                 &selected,
                 model,
@@ -3974,12 +3976,12 @@ impl ResolvedProcess {
         graph: &Graph<ColoredNode, EdgeColor>,
         model: &Model,
         exact_internal_particles: bool,
-        include_left_right_remapping: bool,
-        use_left_right_external_colors: bool,
+        include_external_remapping: bool,
+        use_sewn_external_colors: bool,
     ) -> Result<Graph<ColoredNode, EdgeColor>, GenerationError> {
         let mut candidates = Vec::new();
-        let mut remappings = vec![BTreeMap::new()];
-        if include_left_right_remapping {
+        let mut remappings = vec![(false, BTreeMap::new())];
+        if include_external_remapping {
             let external_nodes = graph
                 .nodes()
                 .iter()
@@ -3992,29 +3994,59 @@ impl ResolvedProcess {
             let incoming_count = self.incoming.len();
             if external_nodes.len() != 2 * incoming_count {
                 return Err(GenerationError::GraphConstruction(format!(
-                    "left/right canonicalization expected {} sewn external nodes, found {}",
+                    "sewn canonicalization expected {} external nodes, found {}",
                     2 * incoming_count,
                     external_nodes.len()
                 )));
             }
-            remappings.push(
-                (0..incoming_count)
-                    .flat_map(|index| {
-                        [
-                            (
-                                external_nodes[&index],
-                                external_nodes[&(incoming_count + index)],
-                            ),
-                            (
-                                external_nodes[&(incoming_count + index)],
-                                external_nodes[&index],
-                            ),
-                        ]
-                    })
-                    .collect(),
-            );
+            let mut generators = vec![Permutation::id(incoming_count)];
+            if self.symmetrize_initial {
+                let mut species = BTreeMap::<i64, Vec<usize>>::new();
+                for (index, particle) in self.incoming.iter().enumerate() {
+                    species.entry(particle.pdg_code).or_default().push(index);
+                }
+                // Adjacent transpositions generate only permutations within
+                // each identical-species class, without enumerating rejected
+                // permutations of distinct incoming particles.
+                for positions in species.values() {
+                    for pair in positions.windows(2) {
+                        let mut mapping = (0..incoming_count).collect::<Vec<_>>();
+                        mapping.swap(pair[0], pair[1]);
+                        generators.push(Permutation::from_map(mapping));
+                    }
+                }
+            }
+            let mut permutations = Permutation::generate_all(&generators)
+                .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+            permutations.sort_by(|left, right| left.map().cmp(right.map()));
+            remappings.clear();
+            for permutation in permutations {
+                for swapped in [false, true] {
+                    if swapped && !self.symmetrize_left_right {
+                        continue;
+                    }
+                    let mapping = (0..incoming_count)
+                        .flat_map(|index| {
+                            let target = permutation.map()[index];
+                            let (left, right) = if swapped {
+                                (target + incoming_count, target)
+                            } else {
+                                (target, target + incoming_count)
+                            };
+                            [
+                                (external_nodes[&index], external_nodes[&left]),
+                                (
+                                    external_nodes[&(index + incoming_count)],
+                                    external_nodes[&right],
+                                ),
+                            ]
+                        })
+                        .collect();
+                    remappings.push((swapped, mapping));
+                }
+            }
         }
-        for (swapped, remapping) in remappings.into_iter().enumerate() {
+        for (swapped, remapping) in remappings {
             let mut skeleton = Graph::new();
             for node in graph.nodes() {
                 let color = match &node.data {
@@ -4025,7 +4057,7 @@ impl ResolvedProcess {
                         let incoming_count = i64::try_from(self.incoming.len()).map_err(|_| {
                             GenerationError::ArithmeticOverflow("an external canonical color")
                         })?;
-                        if use_left_right_external_colors {
+                        if use_sewn_external_colors {
                             if index < incoming_count {
                                 -2001 - index
                             } else {
@@ -4097,7 +4129,7 @@ impl ResolvedProcess {
                     )
                     .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
             }
-            candidates.push((swapped == 1, remapping, skeleton.canonize()));
+            candidates.push((swapped, remapping, skeleton.canonize()));
         }
         candidates.sort_by(|left, right| {
             (left.2.graph.nodes(), left.2.graph.edges())
@@ -4107,10 +4139,14 @@ impl ResolvedProcess {
             .into_iter()
             .next()
             .ok_or_else(|| GenerationError::GraphConstruction("no canonical graph".to_owned()))?;
+        let inverse_remapping = remapping
+            .iter()
+            .map(|(source, target)| (*target, *source))
+            .collect::<BTreeMap<_, _>>();
         let mut canonical_to_input = vec![0; graph.nodes().len()];
         for (input, canonical_position) in canonical.vertex_map.iter().copied().enumerate() {
             canonical_to_input[canonical_position] =
-                remapping.get(&input).copied().unwrap_or(input);
+                inverse_remapping.get(&input).copied().unwrap_or(input);
         }
         let mut input_to_canonical = vec![0; graph.nodes().len()];
         for (canonical_position, input) in canonical_to_input.iter().copied().enumerate() {
@@ -4119,10 +4155,9 @@ impl ResolvedProcess {
 
         let mut result = Graph::new();
         for input in canonical_to_input.iter().copied() {
-            // The selected global remapping is an involution. Applying it
-            // a second time keeps each physical external label attached to
-            // its original process state while adopting the selected
-            // topology.
+            // Source edges retain their input owners; external labels belong
+            // to the selected paired remapping. General incoming cycles need
+            // the inverse above, unlike the involutive global side exchange.
             let data = remapping.get(&input).copied().unwrap_or(input);
             result.add_node(graph.nodes()[data].data.clone());
         }
@@ -7947,6 +7982,16 @@ mod tests {
             generator.validate_options(GenerationType::Amplitude, &invalid),
             Err(GenerationError::InvalidNumericalSampleCount)
         ));
+        let canonical_only = GenerationOptions::default().numerator_grouping(
+            NumeratorGrouping::Identical(GraphGroupingOptions {
+                number_of_numerical_samples: 0,
+                check_canonical_numerator: true,
+                ..GraphGroupingOptions::default()
+            }),
+        );
+        generator
+            .validate_options(GenerationType::Amplitude, &canonical_only)
+            .unwrap();
     }
 
     #[test]
@@ -8237,8 +8282,14 @@ mod tests {
                 GenerationOptions::default().symmetrize_initial(true)
             ),
             vec![
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Incoming,
+                    index: 0
+                },
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Incoming,
+                    index: 1
+                },
                 ExternalCanonicalClass::Exact {
                     state: ExternalState::Outgoing,
                     index: 2,
