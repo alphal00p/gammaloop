@@ -1,5 +1,6 @@
 digraph local_disjoint_os_top_self_energies {
-  projector = "1" // The self-energy has open external spinor ports.
+  // The component numerator stays open; scalar amplitudes attach the native
+  // external fermion states only during final integrand assembly.
   // Vertex-disjoint one-loop quark self-energies on a common physical line.
   // The live bridge e4 retains p even when the two child subtraction points
   // independently evaluate their own boundary copies at sigma*m*(1,0,0,0).
