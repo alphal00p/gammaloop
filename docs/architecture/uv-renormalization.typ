@@ -41,6 +41,12 @@ When integrated counterterms are enabled, the shared UV entry checks the raw edg
 
 The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defaults to `true`. It selects Vakint's universal tensor kernels and isolated scalar coefficients; `false` supplies the complete numerator to the selected tensor backend. This choice is independent of backend selection: the native FeynKit tensor reducer is the default, while AlphaLoop uses FORM. Scalar-master evaluation has its own backend policy. After tensor reduction, both projection modes use the same scalar coefficient kernel, retaining loop-independent factors outside the analytic backend and restoring them before final Laurent projection. Distinct denominator topologies remain separate; both projection modes use the same GammaLoop dimensional-algebra boundaries and conservative forest epsilon depth. Positive epsilon prefactors do not reduce that depth, and final truncation removes any excess orders.
 
+Physical fixed momentum components are lowered to contractions with fixed basis
+vectors at the Vakint boundary. Spatial basis contractions retain their Minkowski
+signs; repeated `cind(0)` factors are independent temporal projections, not a dummy
+index occurring more than twice. Open tensor ports and powered scalar spectators
+remain owned by the shared tensor interface.
+
 == Orchestrators
 <orchestrators>
 `UVgenerationSettings::orchestrator` selects one of three execution
@@ -75,6 +81,13 @@ powers, and guarded inverse factors remain opaque. Positive scalar powers share
 their complete base with linear occurrences; a summed base remains one opaque
 factor. Restoring it may expose another linear cancellation, so the same
 protected pass repeats only after a strict expression-size decrease.
+Completed scalar components establish the absence of tensor interfaces once per
+scope, avoiding repeated subtree scans. Tensor-bearing scopes keep the existing
+factor-specific checks. The positive-power lookup skips summed-base
+normalization when no such base was found; neither guard isolation nor the
+collected expression changes.
+The shared Spenso scalar collector owns literal numeric-content extraction;
+GammaLoop uses that owner at its factor-preserving boundary.
 Literal numeric content uses the real rational GCD of all real and imaginary
 coefficient coordinates, including implicit units. The first coefficient in
 coefficient-free body order chooses a phase in `{1, -1, i, -i}` so its remaining

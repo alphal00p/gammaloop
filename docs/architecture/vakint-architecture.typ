@@ -78,6 +78,16 @@ without requiring FORM. Selecting `TensorReductionMethod::AlphaLoop` uses the hi
 projector: it expands compact dot notation, translates vectors and indices, runs the embedded
 reduction program, and maps the result back to Symbolica.
 
+Dot conversion visits every normalized dot power once, reserving existing dummy
+indices and numeric source slots before assigning fresh ones. Each copy of a powered scalar sum receives
+an independent dummy scope. Graph numerator products and scalar spectators stay
+factored; the converter does not rescan the entire numerator for each occurrence.
+Its indexed output binds a native vector's index inside the existing compact
+representation. This contract applies after scalar integration as well as
+tensor reduction. Explicit source slots on loop and external momenta retain
+their representation through projection, so a surviving numeric source label
+cannot be mistaken for a newly allocated backend dummy.
+
 Integral evaluation matches again so that it has the canonical topology and numerator mapping.
 It then walks `settings.evaluation_order` and selects the first method whose topology, loop count,
 and requested epsilon depth are supported. AlphaLoop is limited to its registered topologies,
@@ -252,6 +262,11 @@ stay factorized. Hidden compound Lorentz slots or projector markers require
 materialization by their tensor owner; loop-dependent native leaves require
 tensor reduction before this scalar boundary. Vakint does not infer spin or
 color identities from those interfaces.
+
+A closed dot of a fixed coordinate basis and an external momentum is scalar at
+this boundary. Spenso's fixed-basis matcher validates its concrete component and
+representation. The basis vector alone is still non-scalar, and a dot involving
+an active loop momentum still requires projection before scalar evaluation.
 
 The native FeynKit projector accepts compact fixed vectors as well as indexed
 vector factors. The GammaLoop bridge normalizes scalar weights in compact dots

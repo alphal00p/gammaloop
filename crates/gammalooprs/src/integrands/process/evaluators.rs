@@ -523,11 +523,11 @@ impl EvaluatorStack {
                 mapped
             })
             .collect::<Vec<_>>();
-        let mut compiler_settings = settings.clone();
+        let mut compiler_settings = *settings;
         if settings.cpe_iterations.is_none()
             && parametric_atoms.iter().any(|atom| {
                 std::iter::once(atom.get_root())
-                    .chain(atom.get_aliases().iter().map(|(_, body)| body))
+                    .chain(atom.get_aliases().values())
                     .any(|body| {
                         body.contains_symbol(GS.residue_map_id) && body.contains_symbol(Symbol::IF)
                     })
@@ -1000,11 +1000,21 @@ impl EvaluatorStack {
             })?;
             // Algebra borrows its input, whose cached graph is no longer needed.
             drop(input);
-            simplified.contract(idenso::tensor::ContractSettings {
+            let completion_started = std::time::Instant::now();
+            let contracted = simplified.contract(idenso::tensor::ContractSettings {
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
-            })?
+            })?;
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_post_algebra_contraction",
+                atom_index,
+                certified_complete = simplified.contraction_complete(),
+                expression_changed = contracted.expression() != simplified.expression(),
+                elapsed_ms = completion_started.elapsed().as_secs_f64() * 1000.0,
+                "Completed evaluator structural contraction"
+            );
+            contracted
         } else {
             input
         };
@@ -1710,6 +1720,7 @@ impl EvaluatorStack {
             // An existing zero-argument parameter alias can capture a formal
             // without mentioning it in the family body. Keep such formals
             // conservatively; generated scalar aliases are analyzed exactly below.
+            let capture_started = std::time::Instant::now();
             let captured_arguments = formal_args
                 .iter()
                 .enumerate()
@@ -1721,6 +1732,14 @@ impl EvaluatorStack {
                         .then_some(index)
                 })
                 .collect::<HashSet<_>>();
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_family_captured_arguments",
+                family_index,
+                formal_count = formal_args.len(),
+                captured_count = captured_arguments.len(),
+                elapsed_ms = capture_started.elapsed().as_secs_f64() * 1000.0,
+                "Resolved captured numerator arguments"
+            );
             let shadow = Self::preprocess_tensor(
                 &definition.rhs,
                 family_index,
@@ -1860,7 +1879,17 @@ impl EvaluatorStack {
                         // does not make the scalar compiler share unnecessary
                         // arithmetic across different orientation branches.
                         // Powers and lazy guards keep their existing boundaries.
+                        let collection_started = std::time::Instant::now();
+                        let input_bytes = body.get_byte_size();
                         let body = body.collect_compact_factors();
+                        crate::debug_tags!(#generation, #profile, #compile, #summary;
+                            stage = "evaluator_component_factor_collection",
+                            family_index,
+                            input_bytes,
+                            output_bytes = body.as_view().get_byte_size(),
+                            elapsed_ms = collection_started.elapsed().as_secs_f64() * 1000.0,
+                            "Collected completed numerator component factors"
+                        );
                         let positions = argument_positions(&body);
                         populated.insert(index.clone(), positions.clone());
                         generated.push(FnMapEntry {
