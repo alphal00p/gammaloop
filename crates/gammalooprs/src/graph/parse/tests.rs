@@ -984,12 +984,12 @@ fn compact_model_import_preserves_metadata_in_the_finalized_frame() {
         final_state="scalar_1,scalar_1"
         group_id=0
         is_group_master=true
-        params="source_weight"
+        params="source_weight;source_mass"
         ext [style=invis]
         ext -> a [id=0 particle=scalar_1 is_cut=7]
         a -> b [id=1 particle=scalar_1 lmb_id=0]
         b -> ext [id=2 particle=scalar_1 is_cut=7]
-        a -> b [id=3 particle=scalar_1]
+        a -> b [id=3 particle=scalar_1 mass="source_mass"]
     }"#,
     )
     .unwrap();
@@ -1012,8 +1012,20 @@ parent_lmb = [3]
     assert!(imported.is_group_master);
     assert_eq!(
         imported.param_builder.pairs.additional_params.params.len(),
-        1
+        2
     );
+    let mass = symbol!("gammalooprs::source_mass").to_atom();
+    assert_eq!(imported.underlying[EdgeIndex(2)].mass_atom(&model), mass);
+    let energy = imported
+        .param_builder
+        .reps
+        .iter()
+        .find(|entry| entry.lhs == GS.ose(EdgeIndex(2)))
+        .expect("the remapped loop edge has a registered energy");
+    let spatial_square = Atom::add_many((1..4).map(|axis| {
+        symbolica::function!(GS.emr_mom, 2, GS.cind(axis)).pow(2)
+    }));
+    assert_eq!(energy.rhs, (mass.pow(2) + spatial_square).pow((1, 2)));
     let cut = &imported.threshold_counterterms.cuts[0];
     assert_eq!(cut.edges, [EdgeIndex(1), EdgeIndex(2)]);
     assert_eq!(cut.thresholds[0].edges, [EdgeIndex(1), EdgeIndex(2)]);
