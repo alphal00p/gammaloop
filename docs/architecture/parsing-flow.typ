@@ -6,6 +6,7 @@ control flow, shorthand expansion, opaque leaves, structure inference,
 and edge cases that affect Schoonschip-style notation.
 
 #strong[Audit status:] reviewed 2026-09-29 against the unified reduction and admitted-parser implementation.
+Scalar coefficient assembly reviewed 2026-10-16.
 Lifecycle: current implementation architecture.
 
 == Entry Points
@@ -85,11 +86,21 @@ structure-attempt timer also includes cache lookup and slot reconstruction.
     meaning.],
 )
 
-When scalar precontraction is enabled, sum parsing collects borrowed pure-scalar
-summands and constructs their sum once with `Atom::add_many` only if tensor
-summands remain. An entirely scalar sum reuses the already normalized input
-atom. This avoids repeatedly copying a growing scalar sum; compatibility checks
-and tensor summands retain their existing meaning.
+When scalar precontraction is enabled, an entirely scalar sum reuses the
+already normalized input atom. A mixed scalar/tensor sum first parses and
+admits every child, retaining its original pure-scalar summands. If their
+leading numeric coefficients are exact complex rationals, the parser constructs
+that scalar coefficient once with `Atom::add_many`. Only Symbolica's `Natural`
+and `Large` coefficient representations are admitted; a variable, function or
+power has an implicit unit coefficient. Function bodies, powers, inverse
+denominators and scalar alias handles remain intact.
+
+Other coefficient domains retain the existing ordered fold: remaining source
+summands first, then the original first summand if scalar. In particular,
+inexact arithmetic is not reassociated. A nested additive operand is not
+admitted by the shallow exact-coefficient check. This avoids repeated copying
+of exact scalar prefixes without changing child callbacks, compatibility
+checks, tensor order, depth limits or first-term structure discovery.
 
 == Option Examples
 <option-examples>

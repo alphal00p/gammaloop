@@ -456,8 +456,8 @@ kind = "Architecture diagram"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-01"
-review_ref = "jj:xuoqsyop"
+reviewed_at = "2026-10-16"
+review_ref = "jj:krlonmsn"
 products = ["spenso", "idenso"]
 topics = ["parsing", "tensor-network"]
 review_triggers = ["crates/spenso/src/network/parsing/**", "crates/idenso/src/tensor/mod.rs"]
@@ -481,6 +481,9 @@ anchor = "pub enum ShorthandParsing {"
 # Reviewed 2026-10-15: The parsing note now records original admitted index spelling
 # without callback replay, compatible rank-one dot admission and metric syntax for
 # partial contractions. Scalar execution already documents MinIntermediateCost.
+# Reviewed 2026-10-16: Mixed sums batch only exact complex-rational leading
+# coefficients after child admission. Other domains keep the original ordered
+# fold; scalar-only input, tensor order and opaque factor bodies are unchanged.
 digest = "6a90b9c6cbd74ed6561f6d355ada3bc7a799457b"
 
 [[section.note]]
