@@ -1,5 +1,4 @@
 use gammalooprs::{
-    finalized_runtime_dot,
     graph::{Graph, parse::IntoFinalizedRuntimeGraph},
     initialisation::test_initialise,
     model::{Model, ModelGammaLoopExt},
@@ -279,13 +278,15 @@ fn rqft_alignment_normalizes_positive_uv_scale_logs() {
 #[test]
 fn scalar_pole_part() {
     test_initialise().unwrap();
-    let sunrise: Vec<Graph> = finalized_runtime_dot!( digraph sunrise{
-        edge [particle=scalar_1]
-        A -> B    [ id=0]
-        A -> B     [ id=1]
-        A -> B   [ id=2]
-
-    },"scalars")
+    let sunrise: Vec<Graph> = Graph::import_dot(
+        stringify!(digraph sunrise {
+            edge [particle=scalar_1]
+            A -> B [id=0]
+            A -> B [id=1]
+            A -> B [id=2]
+        }),
+        &load_generic_model("scalars"),
+    )
     .unwrap();
 
     let mut results = Vec::new();
