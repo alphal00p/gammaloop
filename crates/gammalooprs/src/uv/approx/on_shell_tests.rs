@@ -1134,3 +1134,676 @@ fn on_shell_rest_frame_basis_materializes_scalar_inner_products() -> Result<()> 
     );
     Ok(())
 }
+
+#[test]
+fn actual_native_charge_mates_have_the_same_os_component_conventions() -> Result<()> {
+    use crate::uv::approx::integrated::{self, Integrated};
+    use idenso::color::ColorSimplifier;
+    use linnet::half_edge::subgraph::ModifySubSet;
+    use spenso::{network::library::symbolic::ETS, shadowing::TensorCollectFilter};
+
+    test_initialise()?;
+    // These are the complete native acceptance graphs, including their exact
+    // source slots, local Feynman factors, physical LMB and global metadata.
+    // Their opposite arrows represent the charge-conjugate insertions; both
+    // components are positive-top matrices in their own flow-oriented chart.
+    for (source, name, row, column, incoming_edge) in [
+        (
+            include_str!(
+                "../../../../../tests/resources/graphs/local_os_native_gl1_self_energy.dot"
+            ),
+            "GL1",
+            5,
+            8,
+            4,
+        ),
+        (
+            include_str!(
+                "../../../../../tests/resources/graphs/local_os_native_gl2_self_energy.dot"
+            ),
+            "GL2",
+            7,
+            6,
+            3,
+        ),
+    ] {
+        let mut graphs = Graph::import_dot(source, &crate::utils::load_generic_model("sm"))?;
+        assert_eq!(graphs.len(), 1);
+        let graph = graphs.remove(0);
+        let mut selected = graph.empty_subgraph::<SuBitGraph>();
+        for edge in [1, 2] {
+            selected.add(graph[&EdgeIndex(edge)].1);
+        }
+        let current = OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                InternalSubGraph::cleaned_filter_optimist(selected, graph.as_ref()),
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::OS,
+                1,
+            )?
+            .expect("the actual top self-energy is UV divergent"),
+            topo_order: 1,
+        };
+        let root = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        assert_eq!(
+            graph
+                .dummy_less_full_crown(current.subgraph())
+                .included_iter()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([Hedge(row), Hedge(column)]),
+            "{name}: the native component retains its two physical fermion ports"
+        );
+        assert_eq!(graph.flow(Hedge(row)), Flow::Source);
+        assert_eq!(graph.flow(Hedge(column)), Flow::Sink);
+        assert_eq!(graph[&Hedge(column)], EdgeIndex(incoming_edge));
+        assert_eq!(
+            current.lmb().loop_edges.iter().copied().collect::<Vec<_>>(),
+            vec![EdgeIndex(1)],
+            "{name}: this independent reference uses the actual fermion loop carrier",
+        );
+        // The incoming half-edge owns p_OS, while the compatible component
+        // chart chooses its independent external carrier. Keep this exact
+        // routing certificate separate from ownership for each native graph.
+        let incoming_signature = &current.lmb().edge_signatures[EdgeIndex(incoming_edge)];
+        assert!(
+            incoming_signature
+                .internal
+                .iter()
+                .all(|sign| *sign == crate::momentum::SignOrZero::Zero)
+        );
+        let independent_external = incoming_signature
+            .external
+            .iter_enumerated()
+            .filter(|(_, sign)| sign.is_sign())
+            .collect::<Vec<_>>();
+        assert_eq!(independent_external.len(), 1);
+        let (external_index, sign) = independent_external[0];
+        assert_eq!(*sign, crate::momentum::SignOrZero::Plus);
+        let external_coordinate = usize::from(current.lmb().ext_edges[external_index]);
+        assert_eq!(
+            current.lmb().edge_signatures[EdgeIndex(external_coordinate)],
+            current.lmb().edge_signatures[EdgeIndex(incoming_edge)],
+            "{name}: the reference external carrier equals the physical incoming momentum"
+        );
+        assert_eq!(
+            current.lmb().edge_signatures[EdgeIndex(3)],
+            current.lmb().edge_signatures[EdgeIndex(4)],
+            "{name}: the two adjacent top lines carry the same signed momentum"
+        );
+        let mass = graph[EdgeIndex(1)].mass_atom(&graph.model);
+        let numerator = graph
+            .numerator(current.subgraph(), root.subgraph())?
+            .to_d_dim(GS.dim)?
+            .color_simplify()?
+            .state
+            .expr;
+        let row_slot = graph.underlying[Hedge(row)]
+            .edge_spin_slots()
+            .next()
+            .unwrap()
+            .to_atom();
+        let column_slot = graph.underlying[Hedge(column)]
+            .edge_spin_slots()
+            .next()
+            .unwrap()
+            .to_atom();
+        let identity = function!(ETS.metric, &row_slot, &column_slot);
+        // Amputation leaves the VERTEX color interface, dual to the removed
+        // external propagator. The edge-to-edge Kronecker helper instead has
+        // the opposite variance and cannot supply this component identity.
+        let color_slots = [row, column].map(|hedge| {
+            graph.underlying[Hedge(hedge)]
+                .num_indices
+                .color_indices
+                .vertex_indices
+                .external_structure_iter()
+                .next()
+                .expect("the actual top boundary has one vertex color slot")
+                .to_atom()
+        });
+        let color = function!(ETS.metric, &color_slots[0], &color_slots[1]);
+        let scalar_coefficient =
+            Atom::num((4, 3)) * Atom::from(crate::model::UFOSymbol::from("GC_11")).pow(2);
+        let coefficient = &scalar_coefficient * color;
+        let lorentz = spenso::mink!(GS.dim, Atom::from(Aind::new_dummy()));
+        let slash_q =
+            function!(GS.emr_mom, 1, &lorentz) * idenso::gamma!(&row_slot, &column_slot, &lorentz);
+        let expected_numerator = &coefficient
+            * ((Atom::num(2) - Atom::var(GS.dim)) * &slash_q
+                + Atom::var(GS.dim) * &mass * &identity);
+        let actual_tensor = &numerator;
+        let expected_tensor =
+            NumeratorInterface::admit(expected_numerator.clone(), None)?.try_into_indexed()?;
+        let interfaces = [actual_tensor, &expected_tensor].map(|tensor| {
+            tensor
+                .structure()
+                .canonical()
+                .external_structure_iter()
+                .collect::<Vec<_>>()
+        });
+        debug_tags!(#uv, #local, #on_shell, #inspect;
+            stage = "native_os_component_bare_interfaces",
+            graph = name,
+            actual_interface = ?interfaces[0], expected_interface = ?interfaces[1],
+            file.actual = %NumeratorInterface::export(&numerator).0.to_canonical_string(),
+            file.expected = %expected_numerator.to_canonical_string(),
+            "Actual native component and independent bare reference before subtraction"
+        );
+        assert_eq!(
+            interfaces[0], interfaces[1],
+            "{name}: the independent reference must preserve the amputated spin/color interface"
+        );
+        let difference = numerator.try_sub(&expected_tensor)?;
+        let difference = difference
+            .with_checked_expression(difference.expression().to_cof_dimension_invariants())?;
+        let normalized_tensor = integrated::simplify(&difference).wrap_err_with(|| {
+            format!("{name}: independent d-dimensional bare numerator comparison")
+        })?;
+        // Canonical Clifford reduction may retain a factored scalar expression
+        // such as -d+(d-2)+2 around a complete color/spin word. Certify only
+        // those scalar coefficients, keeping the tensor word and d untouched.
+        let normalized_tensor: SymbolicTensor<spenso::structure::partial::PartialStructure> =
+            normalized_tensor.into();
+        for (_, coefficient) in
+            normalized_tensor.coefficient_list(TensorCollectFilter::<0>::TaggedTensors)?
+        {
+            assert!(coefficient.is_scalar());
+            assert!(
+                coefficient.expression().collect_compact_factors().is_zero(),
+                "{name}: independent d-dimensional bare phase/color/spin reference"
+            );
+        }
+
+        for components in [["1", "0", "0", "0"], ["5/4", "1/4", "1/2", "1/2"]] {
+            let settings = UVgenerationSettings {
+                add_marker: false,
+                generate_integrated: true,
+                on_shell_subtraction_velocity: components.map(str::to_owned),
+                ..Default::default()
+            };
+            let velocity = settings.on_shell_velocity()?;
+            let ctx = UVCtx::new(&graph, &graph.model, &settings);
+            let local = uv_limit(&Full4dCts::root(), &ctx, &current, &root, &current, &root)?;
+            let numerator4 =
+                physical_expression(&graph, &current, &NumeratorInterface::export(&numerator).0);
+            let massless = numerator4.replace(mass.to_pattern()).with(0);
+            let vector_slot = Minkowski {}.new_rep(4).to_symbolic([]);
+            let q = function!(GS.emr_mom, 1, &vector_slot);
+            let p = function!(GS.emr_mom, external_coordinate, &vector_slot);
+            let q_squared = dot(&q, &q);
+            let qv: Atom = (0..4)
+                .map(|mu| {
+                    Atom::num(if mu == 0 { 1 } else { -1 })
+                        * &velocity[mu]
+                        * GS.emr_mom(EdgeIndex(1), GS.cind(mu))
+                })
+                .sum();
+            let quark = GS.den(
+                1,
+                function!(GS.emr_mom, 1),
+                mass.pow(2),
+                &q_squared - mass.pow(2),
+            );
+            let vacuum = GS.den(
+                1,
+                function!(GS.emr_mom, 1),
+                Atom::var(GS.m_uv_vacuum).pow(2),
+                &q_squared - Atom::var(GS.m_uv_vacuum).pow(2),
+            );
+            let mut on_shell = Atom::Zero;
+            for sigma in [1, -1] {
+                let point = GS.on_shell_momentum(
+                    EdgeIndex(incoming_edge),
+                    &(Atom::num(sigma) * &mass),
+                    &velocity,
+                );
+                let gluon = GS.den(
+                    2,
+                    function!(GS.emr_mom, 1) - &point,
+                    Atom::Zero,
+                    &q_squared - Atom::num(2 * sigma) * &mass * &qv + mass.pow(2),
+                );
+                on_shell += (&numerator4
+                    + Atom::num(sigma)
+                        * gamma_velocity_at_port(&graph, &numerator4, row, &velocity))
+                    / (Atom::num(2) * &quark * gluon);
+            }
+            let remainder = Atom::num(2)
+                * (&massless * dot(&q, &p)
+                    - &mass * gamma_velocity_at_port(&graph, &massless, row, &velocity) * &qv)
+                / vacuum.pow(3);
+            assert_rational_zero(
+                &format!("{name}: actual native signed local OS"),
+                &graph,
+                &current,
+                &(NumeratorInterface::export(local.atom()).0 + &on_shell + &remainder),
+                SpinReduction::SymbolicFirst,
+            )?;
+            let scheme = local
+                .active_sectors()
+                .iter()
+                .fold(Atom::Zero, |sum, sector| {
+                    sum + NumeratorInterface::export(sector.integration_atom()).0
+                });
+            assert_rational_zero(
+                &format!("{name}: actual native signed vacuum input"),
+                &graph,
+                &current,
+                &(scheme + &remainder),
+                SpinReduction::SymbolicFirst,
+            )?;
+
+            // Independent exact nonzero control: the two ends of the actual
+            // source cannot be exchanged merely because the graph is a C mate.
+            let commutator = gamma_velocity_at_port(&graph, &numerator4, row, &velocity)
+                - gamma_velocity_at_port(&graph, &numerator4, column, &velocity);
+            assert!(
+                !NumeratorJetCache::default()
+                    .canonicalize(&commutator.undo_dots::<Aind>()?)?
+                    .is_zero
+            );
+
+            let vakint_settings = settings.vakint.true_settings();
+            let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
+                .run(&local, &ctx, &current, &root, &current, &root)?;
+            let field = (&coefficient
+                * (function!(GS.emr_mom, external_coordinate, &lorentz)
+                    * idenso::gamma!(&row_slot, &column_slot, &lorentz)
+                    - &mass * &identity))
+                .replace(GS.dim)
+                .with(4);
+            let normalization = Atom::i() / (Atom::num(16) * Atom::var(Symbol::PI).pow(2));
+            let epsilon = Atom::var(GS.dim_epsilon);
+            let pole = NumeratorInterface::export(&integrated.physical_pole()?)
+                .0
+                .replace(GS.dim)
+                .with(4);
+            assert_rational_zero(
+                &format!("{name}: actual native field pole"),
+                &graph,
+                &current,
+                &(pole - &normalization * &field / &epsilon),
+                SpinReduction::SymbolicFirst,
+            )?;
+            // Finite epsilon^0 only; no enclosing pole in this physical NLO component.
+            let finite = integrated.physical_finite_counterterm()?;
+            let finite = finite.with_checked_expression(
+                finite
+                    .expression()
+                    .replace(GS.dim)
+                    .with(4)
+                    .replace(GS.dim_epsilon)
+                    .with(0)
+                    .replace(GS.m_uv_vacuum)
+                    .with(1),
+            )?;
+            let expected_finite = &normalization
+                * &field
+                * (Atom::one() + function!(Symbol::LOG, Atom::one() / Atom::var(GS.mu_r_sq)));
+            assert_rational_zero(
+                &format!("{name}: actual native finite scheme addback"),
+                &graph,
+                &current,
+                &(NumeratorInterface::export(&finite).0 - expected_finite),
+                SpinReduction::SymbolicFirst,
+            )?;
+
+            // Check the actual two adjacent propagator NUMERATORS before
+            // energy projection. N=i*(p-slash+m) obeys N*F*N=i*D_phys*N,
+            // with F=p-slash-m and D_phys=p^2-m^2. A propagator denominator
+            // carrying nonzero i0 cannot be cancelled by this identity as an
+            // ordinary rational function; no prescription is dropped here.
+            let outgoing_edge = graph[&Hedge(row)];
+            let mut adjacent = graph.empty_subgraph::<SuBitGraph>();
+            for edge in [outgoing_edge, EdgeIndex(incoming_edge)] {
+                adjacent.add(graph[&edge].1);
+            }
+            let adjacent_numerator = graph[outgoing_edge]
+                .num
+                .value
+                .clone()
+                .multiply(graph[EdgeIndex(incoming_edge)].num.value.clone())?;
+            let adjacent_numerator = adjacent_numerator.with_checked_expression(
+                adjacent_numerator
+                    .expression()
+                    .replace_multiple(graph.uv_wrapped_replacement(
+                        &adjacent,
+                        current.lmb(),
+                        &[W_.x___],
+                    )),
+            )?;
+            let outer_hedges = [graph.inv(Hedge(row)), graph.inv(Hedge(column))];
+            let outer_spin = outer_hedges.map(|hedge| {
+                graph.underlying[hedge]
+                    .edge_spin_slots()
+                    .next()
+                    .unwrap()
+                    .to_atom()
+            });
+            let outer_color = outer_hedges.map(|hedge| {
+                graph.underlying[hedge]
+                    .edge_color_slots()
+                    .next()
+                    .unwrap()
+                    .to_atom()
+            });
+            let pinch_lorentz = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+            let pinched_numerator = Atom::i()
+                * (function!(GS.emr_mom, external_coordinate, &pinch_lorentz)
+                    * idenso::gamma!(&outer_spin[0], &outer_spin[1], &pinch_lorentz)
+                    + &mass * function!(ETS.metric, &outer_spin[0], &outer_spin[1]))
+                * function!(ETS.metric, &outer_color[0], &outer_color[1]);
+            let physical_polynomial = dot(&p, &p) - mass.pow(2);
+            let adjacent_denominators = graph.denominator(&adjacent, &graph.model, |_| -1);
+            let terms = FourDTerm::from_view(adjacent_denominators.as_view())?;
+            assert_eq!(terms.len(), 1);
+            assert_eq!(terms[0].denominators.len(), 2);
+            assert_eq!(
+                terms[0]
+                    .denominators
+                    .iter()
+                    .map(|denominator| denominator.source_edge)
+                    .collect::<BTreeSet<_>>(),
+                BTreeSet::from([outgoing_edge, EdgeIndex(incoming_edge)])
+            );
+            for denominator in &terms[0].denominators {
+                assert_eq!(denominator.mass_squared, mass.pow(2));
+                let routed_polynomial =
+                    denominator
+                        .full_expr
+                        .replace_multiple(graph.uv_wrapped_replacement(
+                            &adjacent,
+                            current.lmb(),
+                            &[W_.x___],
+                        ));
+                assert_rational_zero(
+                    &format!("{name}: repeated physical top denominator polynomial"),
+                    &graph,
+                    &current,
+                    &(routed_polynomial - &physical_polynomial),
+                    SpinReduction::SymbolicFirst,
+                )?;
+            }
+            let expected_pinched =
+                Atom::i() * &scalar_coefficient * &physical_polynomial * &pinched_numerator;
+            let field_tensor =
+                NumeratorInterface::admit(field.clone(), None)?.try_into_indexed()?;
+            assert_rational_zero(
+                &format!("{name}: native open spin/color field insertion numerator"),
+                &graph,
+                &current,
+                &(NumeratorInterface::export(&adjacent_numerator.clone().multiply(field_tensor)?)
+                    .0
+                    - &expected_pinched),
+                SpinReduction::SymbolicFirst,
+            )?;
+            assert!(
+                !NumeratorJetCache::default()
+                    .canonicalize(&expected_pinched.undo_dots::<Aind>()?)?
+                    .is_zero,
+                "{name}: the native numerator identity is nontrivial off shell"
+            );
+            // The integrated coefficient supplies another i. Thus its native
+            // pinched coefficient is -C/(16*pi^2)*(1-L), not i*C/(16*pi^2).
+            let pinched_finite_coefficient = -&scalar_coefficient
+                / (Atom::num(16) * Atom::var(Symbol::PI).pow(2))
+                * (Atom::one() + function!(Symbol::LOG, Atom::one() / Atom::var(GS.mu_r_sq)));
+            assert_rational_zero(
+                &format!("{name}: actual finite insertion has the native pinched phase"),
+                &graph,
+                &current,
+                &(NumeratorInterface::export(&adjacent_numerator.multiply(finite.clone())?).0
+                    - pinched_finite_coefficient * &physical_polynomial * &pinched_numerator),
+                SpinReduction::SymbolicFirst,
+            )?;
+
+            if components != ["1", "0", "0", "0"] {
+                // The finite matrix's boost independence was checked above;
+                // its physical cograph needs one exact projection comparison.
+                continue;
+            }
+            let source_scope = graph.full_filter().subtract(&graph.initial_state_cut);
+            let remaining = source_scope.subtract(current.subgraph());
+            // Keep both photon vertices and the other top propagator factored.
+            // The fixed external polarization projector multiplies both sides
+            // unchanged; checking all open photon components is stronger here.
+            let overall_factor = SymbolicTensor::infer_indexed(graph.overall_factor.clone())?;
+            assert!(overall_factor.is_scalar());
+            let spectator = graph
+                .numerator(&remaining.subtract(&adjacent), current.subgraph())?
+                .state
+                .expr
+                .multiply(graph.global_prefactor.num.clone())?
+                .multiply(overall_factor)?;
+            let pinched_prefix = current
+                .subgraph()
+                .union(&graph.get_edge_subgraph(EdgeIndex(incoming_edge)));
+            let pinched_owners = source_scope.subtract(&pinched_prefix);
+            let pinched_finite_coefficient = -&scalar_coefficient
+                / (Atom::num(16) * Atom::var(Symbol::PI).pow(2))
+                * (Atom::one() + function!(Symbol::LOG, Atom::one() / Atom::var(GS.mu_r_sq)));
+            let pinched_source_numerator = pinched_numerator
+                .replace(function!(GS.emr_mom, external_coordinate, W_.x___))
+                .with(function!(GS.emr_mom, usize::from(outgoing_edge), W_.x___).to_pattern());
+            let pinched_source =
+                NumeratorInterface::admit(pinched_source_numerator, None)?.try_into_indexed()?;
+            let pinched_source = pinched_source.with_checked_expression(
+                pinched_source.expression() * &pinched_finite_coefficient,
+            )?;
+            let inputs = [
+                (
+                    "raised",
+                    // Keep the actual distinct edge owners until exact source
+                    // reconstruction, including their raised-pole samples.
+                    spectator
+                        .clone()
+                        .multiply(graph[outgoing_edge].num.value.clone())?
+                        .multiply(finite)?
+                        .multiply(graph[EdgeIndex(incoming_edge)].num.value.clone())?,
+                    remaining,
+                    current.subgraph().clone(),
+                    3,
+                    2,
+                ),
+                (
+                    "pinched",
+                    spectator.multiply(pinched_source)?,
+                    pinched_owners,
+                    pinched_prefix,
+                    2,
+                    1,
+                ),
+            ];
+            let crown = graph.dummy_stripped_external_flows_of(&source_scope);
+            let source_edges = graph.paired_edges(&source_scope);
+            // The pinched edge cannot remain a parent loop carrier. Choose
+            // the equal-momentum surviving top line in the common parent
+            // chart, then certify the signed routing of every active edge.
+            let parent_carriers = graph
+                .get_edge_subgraph(EdgeIndex(1))
+                .union(&graph.get_edge_subgraph(outgoing_edge));
+            let parent_lmb = graph.lmb_impl(
+                &source_scope,
+                &source_scope.subtract(&parent_carriers),
+                crown.clone(),
+            )?;
+            assert_eq!(
+                parent_lmb.loop_edges.iter().copied().collect::<Vec<_>>(),
+                vec![EdgeIndex(1), outgoing_edge]
+            );
+            for edge in &source_edges {
+                assert_eq!(
+                    parent_lmb.edge_signatures[*edge],
+                    graph.loop_momentum_basis.edge_signatures[*edge],
+                    "{name}: the pinched carrier change preserves the exact physical chart"
+                );
+            }
+            let cutset = crate::graph::cuts::CutSet::empty(graph.n_hedges());
+            let options = graph.denominator_only_cff_3d_expression_options();
+            let mut projection_graph = graph.clone();
+            let mut projected = Vec::new();
+            for (label, numerator, owners, prefix, denominator_count, maximum_power) in inputs {
+                let prefix = InternalSubGraph::cleaned_filter_optimist(prefix, graph.as_ref());
+                let quotient = graph.shrunken_sub_lmb(
+                    &source_scope,
+                    &prefix,
+                    crown.clone(),
+                    Some(&parent_lmb),
+                )?;
+                assert_eq!(quotient.loop_edges.len(), 1);
+                let expression = numerator.with_checked_expression(
+                    numerator.expression() * graph.denominator(&owners, &graph.model, |_| -1),
+                )?;
+                let sector = FourDSector::new(
+                    expression.clone(),
+                    vec![(owners, source_scope.clone(), quotient.clone())],
+                    Vec::new(),
+                );
+                // This first certificate preserves the complete numerator and
+                // denominator momenta, masses, powers and source ownership.
+                let canonical = sector.canonical_projection(&graph)?;
+                assert_eq!(canonical.terms.len(), 1);
+                assert_eq!(canonical.terms[0].source_witness.len(), denominator_count);
+                assert_eq!(
+                    canonical.terms[0].powers.values().copied().max(),
+                    Some(maximum_power)
+                );
+                let terms = FourDTerm::from_tensor(&expression)?;
+                assert_eq!(terms.len(), 1);
+                // A live photon crown is a physical source, not a Taylor
+                // vacuum. The existing source owner certifies each chosen
+                // numerator assignment before generating its causal CFF.
+                let (cff, _) = projection_graph.cff_from_4d_denominators_in_uv_sub_lmb(
+                    &terms[0].denominators,
+                    source_edges.iter().copied(),
+                    crown.included_iter(),
+                    &quotient,
+                    crate::graph::ExactUvSubLmbFrame::RetainedPhysicalCrown,
+                    &cutset,
+                    &options,
+                    terms[0].numerator.expression(),
+                    None,
+                    &[],
+                    &BTreeMap::new(),
+                )?;
+                let mut value = terms[0].numerator.with_checked_expression(Atom::Zero)?;
+                let mut source_maps = 0;
+                for term in cff.terms.values() {
+                    for orientation in &term.orientations {
+                        source_maps += 1;
+                        let mapped = terms[0].numerator.with_checked_expression(
+                            term.map_exact_source_numerator(&orientation.orientation, None)?,
+                        )?;
+                        let contribution = mapped.with_checked_expression(
+                            &orientation.expression * mapped.expression(),
+                        )?;
+                        value = value.try_add(&contribution)?;
+                    }
+                }
+                assert!(
+                    source_maps > 0,
+                    "{name}/{label}: the complete source-map sum is nonempty"
+                );
+                value = value.with_checked_expression(
+                    value.expression() * Atom::num(cff.production_prefactor_factor()),
+                )?;
+                assert!(
+                    !value
+                        .expression()
+                        .contains_symbol(GS.renormalization_localization_scale)
+                );
+                debug_tags!(#uv, #local, #on_shell, #cff, #inspect;
+                    stage = "native_os_pinched_cograph_projection",
+                    graph = name, source = label, source_maps,
+                    file.value = %NumeratorInterface::export(&value).0.to_canonical_string(),
+                    "Certified physical cograph projection with its frozen kernel kept outside"
+                );
+                projected.push(value);
+            }
+            // CFF represents the shared causal prescription's boundary value.
+            // These exact rational component checks supplement the general
+            // reconstruction certificates; they are not a rational identity
+            // obtained by cancelling a formal nonzero i0 in a double pole.
+            for spatial in [[4, 0, 0], [0, 4, 0]] {
+                let values = projected
+                    .iter()
+                    .map(|expression| {
+                        let mut value = NumeratorInterface::export(expression)
+                            .0
+                            .replace(mass.to_pattern())
+                            .with(3)
+                            .replace(GS.mu_r_sq)
+                            .with(1)
+                            .replace(GS.dim)
+                            .with(4);
+                        for edge in [3, 4, 5] {
+                            value = value
+                                .replace(crate::utils::ose_atom_from_index(EdgeIndex(edge)))
+                                .with(5);
+                        }
+                        value.replace_map(|view, _, output| {
+                            let AtomView::Fun(momentum) = view else {
+                                return;
+                            };
+                            if ![GS.emr_mom, GS.emr_vec].contains(&momentum.get_symbol())
+                                || momentum.get_nargs() != 2
+                            {
+                                return;
+                            }
+                            let Ok(edge) = usize::try_from(momentum.get(0)) else {
+                                return;
+                            };
+                            if ![0, 3, 4, 5].contains(&edge) {
+                                return;
+                            }
+                            let index = momentum.get(1);
+                            if edge == 0 {
+                                **output = if momentum.get_symbol() == GS.emr_vec {
+                                    Atom::Zero
+                                } else {
+                                    GS.energy_delta(index)
+                                };
+                            } else if let AtomView::Fun(component) = index
+                                && component.get_symbol()
+                                    == spenso::structure::abstract_index::AIND_SYMBOLS.cind
+                                && let Ok(component @ 1..=3) = usize::try_from(component.get(0))
+                            {
+                                **output = Atom::num(spatial[component - 1]);
+                            } else if momentum.get_symbol() == GS.emr_vec {
+                                **output = Atom::add_many((1..=3).map(|component| {
+                                    Atom::num(spatial[component - 1])
+                                        * function!(GS.delta_vec, GS.cind(component), index)
+                                }));
+                            }
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let mut tensors = NumeratorJetCache::default();
+                assert!(
+                    !tensors
+                        .canonicalize(&values[1].undo_dots::<Aind>()?)?
+                        .is_zero,
+                    "{name}: the pinched physical cograph is nonzero"
+                );
+                let difference = (&values[0] - &values[1]).to_cof_dimension_invariants();
+                let certificate = tensors.canonicalize(&difference.undo_dots::<Aind>()?)?;
+                debug_tags!(#uv, #local, #on_shell, #cff, #inspect;
+                    stage = "native_os_pinched_cograph_comparison",
+                    graph = name, spatial = ?spatial, is_zero = certificate.is_zero,
+                    file.difference = %difference.to_canonical_string(),
+                    file.tensor = %certificate.key.to_canonical_string(),
+                    "Exact finite-component comparison of all raised and pinched source maps"
+                );
+                assert!(
+                    certificate.is_zero,
+                    "{name}: raised versus pinched CFF at {spatial:?}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
