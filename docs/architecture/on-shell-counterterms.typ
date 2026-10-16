@@ -1126,6 +1126,175 @@ original checkpoints are retained, including 110 files and 22 compiled objects;
 their hashes, source guard and binary identity pass final verification.
 Concurrent correctness timings do not supply isolated performance measurements.
 
+=== Historical repaired-review route measurements
+
+All measurements and UV verdicts in this subsection belong to the historical
+`faad517b089022402dbdc1e01c43dfd39fb73274` source. They do not qualify the current
+retained-tensor port or change its explicit runtime deferrals. That stack completed
+39 fresh processes: 18 logging-off
+baselines, 18 separate construction profiles and three primitive local-only
+baselines. Routes run separately and serially within this task on a shared
+host. The main primitive includes integrated terms; the other fixtures are
+local-only. These are observations of that historical source, not paired speedups over an older
+revision. One- and two-loop measurements are configured with sixteen Rayon
+workers; the three-loop measurement uses one. The UV profiles below all use one.
+All 180 baseline point/repeat comparisons pass the unchanged strict bound,
+with the largest discrepancy using 3.48 percent of that bound.
+
+For compactness, slash-separated cells below give *projected / explicit /
+orientation* in that order. Generation and evaluator-build times are seconds;
+evaluation means are µs per sample. There are five repeats at each of two points,
+with twenty batch means per repeat. Repeat spread and per-point values remain
+in the artifacts; they are not independent-run uncertainty. Evaluator
+compilation time is zero in every row.
+
+#table(
+  columns: 5,
+  table.header([Fixture], [Generate (s)], [Build (s)], [Kernel (µs)], [Total (µs)]),
+  [Primitive], [0.27 / 0.254 / 0.255], [0.0386 / 0.0433 / 0.047], [1.66 / 1.6 / 2.83], [10.8 / 10.4 / 11.7],
+  [Quark in gluon], [8.92 / 227 / 226], [2.27 / 223 / 222], [33.5 / 93.9 / 220], [46.8 / 108 / 237],
+  [OS in OS], [5 / 12.3 / 13.2], [1.18 / 10.3 / 11.6], [22.6 / 52.1 / 533], [36 / 67 / 551],
+  [Soft gluon in OS], [10.8 / 8.33 / 8.68], [2.83 / 4.38 / 4.88], [67.5 / 30.3 / 766], [82.5 / 44.4 / 785],
+  [Disjoint OS], [2.42 / 5.41 / 5.14], [0.974 / 4.62 / 4.41], [24.5 / 16.3 / 39.3], [37.8 / 28 / 53.7],
+)
+
+The three-loop evaluation columns use *milliseconds*, with the sample standard
+deviation of the ten repeat means shown explicitly.
+
+#table(
+  columns: 5,
+  table.header([Three-loop route], [Generate (s)], [Build (s)], [Kernel (ms)], [Total (ms)]),
+  [projected], [159.22], [46.36], [0.473 ± 0.032], [0.494 ± 0.033],
+  [explicit], [1240.32], [1116.30], [4.036 ± 0.732], [4.090 ± 0.756],
+  [orientation], [1072.24], [975.42], [284.951 ± 38.069], [285.280 ± 38.112],
+)
+
+The following profiles are separate from the baselines. CT orchestration is
+inclusive. CFF envelopes include the production root and rejected proposals
+once; native CFF is a subset. These columns overlap and must not be added.
+The retained CT remainder excludes only profiled CFF work inside orchestration,
+so it is not pure Taylor time. Route order remains projected / explicit /
+orientation.
+
+#table(
+  columns: 4,
+  table.header([Fixture], [CT inclusive (s)], [CFF envelopes (s)], [Native CFF (ms)]),
+  [Primitive], [0.193 / 0.18 / 0.178], [0.018 / 0.000473 / 0.000448], [0.767 / 0.279 / 0.26],
+  [Quark in gluon], [6.66 / 4.32 / 3.44], [0.601 / 0.0118 / 0.0119], [39.3 / 1.35 / 1.39],
+  [OS in OS], [3.76 / 1.93 / 1.6], [1.01 / 0.0117 / 0.0116], [11.2 / 1.35 / 1.33],
+  [Soft gluon in OS], [7.74 / 3.87 / 3.71], [0.885 / 0.00109 / 0.00111], [13.5 / 1 / 1.01],
+  [Disjoint OS], [1.44 / 0.749 / 0.685], [0.312 / 0.0891 / 0.0891], [2.26 / 1.79 / 1.96],
+  [Three-loop OS], [111 / 124 / 92.9], [28.3 / 0.0699 / 0.0707], [206 / 20.9 / 21],
+)
+
+Peak memory below means process-tree RSS sampled every two seconds through
+import, generation and evaluation; brief peaks may be missed. Generation RSS
+and Linux VmHWM have separate scopes. Stored sizes count factorized roots plus
+retained definitions without unfolding; their root/definition decomposition
+remains in JSON. Encoded-byte equality is diagnostic, not an algebraic identity.
+
+#table(
+  columns: 4,
+  table.header([Fixture], [Sampled RSS (MiB)], [Stored size (KiB)], [Definitions]),
+  [Primitive], [89.1 / 93.8 / 93.8], [8.1 / 10.3 / 10.4], [7 / 11 / 11],
+  [Quark in gluon], [300.9 / 2908.5 / 2934.9], [282.6 / 1073.5 / 1160.3], [28 / 75 / 75],
+  [OS in OS], [99.5 / 214.6 / 280.2], [210.2 / 409.4 / 426.6], [24 / 38 / 38],
+  [Soft gluon in OS], [131.2 / 133.0 / 139.4], [359.4 / 918.4 / 1313.2], [26 / 46 / 46],
+  [Disjoint OS], [92.6 / 166.8 / 167.3], [119.9 / 111.0 / 136.5], [28 / 62 / 62],
+  [Three-loop OS], [1702.6 / 16865.1 / 19310.6], [6506.2 / 28057.6 / 31059.5], [88 / 152 / 152],
+)
+
+The matched primitive local-only supplement disables integrated terms. Its
+twenty direct-versus-projected point/repeat checks pass the existing strict
+bound, with maximum relative difference $5.029 times 10^(-14)$. This numerical
+check supplements the separate exact and integrated certificates.
+
+#table(
+  columns: 4,
+  table.header([Local-only route], [Generate / build (s)], [Kernel (µs)], [Total (µs)]),
+  [projected], [0.1678 / 0.0344], [1.339], [10.032],
+  [explicit], [0.1586 / 0.0409], [1.363], [10.129],
+  [orientation], [0.1475 / 0.0435], [2.835], [11.706],
+)
+
+Projected 4D has lower observed generation, evaluation and memory costs for
+quark-in-gluon, OS-in-OS and the three-loop chain. Explicit direct evaluates
+soft-gluon-in-OS faster at both generic points. Disjoint and primitive local-only
+cases retain construction/evaluation tradeoffs. Hard UV rays and precision
+retries require their own route-cost controls.
+
+The three-loop orientation benchmark uses the Double-only minimal settings.
+Its twenty-sample minimum per repeat gives 200 timed calls and 100 warmups:
+57.056 and 28.601 seconds respectively, accounting for most of the 88.349
+seconds outside generation. The two-second target calibrates workload; it is
+not a measured-duration promise. The JSON has no precision histogram; the
+Double-only scope follows the frozen benchmark settings.
+
+Full per-point spread, Spenso/Symbolica build stages, CT/CFF accounting,
+component/projection counts, actual workload and memory/size records are in
+`target/os-feynkit/uv-perf-review-faad517b/performance/summary.json`.
+These diagnostics do not replace the existing paired CI performance gate.
+
+=== Historical complete numerical UV matrix
+
+The six maintained tests pass on the same source in run
+`6bace624-e180-48fe-9be2-acd91e130b78`, taking 275.278 seconds in total.
+Each test constructs the local-only OS forest and a matched unsubtracted
+control. All physical loop-momentum bases and all nonempty hard subsets are
+included, with 25 scales from $10^8$ to $10^12$ and seed 1337. The native
+degree-of-divergence threshold, fit criteria and precision retries are unchanged.
+One test and one Rayon worker run at a time, using the existing full-main
+7200-second per-test limit; ordinary tests retain their 240-second limit.
+
+#table(
+  columns: (1.4fr, 1fr, 0.7fr, 0.9fr, 0.9fr),
+  table.header([Fixture], [Route], [LMBs], [Limits per control], [Whole test (s)]),
+  [Primitive], [explicit], [2], [2], [0.607],
+  [Quark in gluon], [projected], [7], [21], [17.979],
+  [OS in OS], [projected], [7], [21], [6.513],
+  [Soft gluon in OS], [explicit], [7], [21], [11.159],
+  [Disjoint OS], [projected], [4], [12], [4.459],
+  [Three-loop OS], [projected], [26], [182], [234.559],
+)
+
+The retained reports contain exactly 259 limits per control, with identical
+scales, LMBs and subsets between the OS and bare profiles. All OS limits pass.
+The bare profiles have 122 resolved degree-of-divergence failures, four
+unstable-fit verdicts and 133 passes; each fixture has a resolved divergence as
+required. There are no missing fits.
+The nominal 12,950 initial profile evaluations are separate from 147 retained
+full-ray arbitrary-precision retries: 21 in OS profiles and 126 in bare profiles.
+Each retry repeats 25 points. These counts do not count the internal precision
+evaluations made by each profile call.
+
+Route choices use the construction and evaluation measurements together.
+Six representative one-worker profiles compare projected and explicit routes
+for the soft-gluon, disjoint and primitive fixtures; all twelve native limits
+pass with matching paired inventories. The soft-gluon construction-plus-profile
+costs are 11.302 versus 8.493 seconds, and the disjoint costs are 2.701 versus
+5.771 seconds. These representative profiles do not measure complete bare-control
+costs. A separate byte-exact copy of the maintained primitive helper measures
+both controls and all LMBs, including the orientation checks where supported:
+projected, explicit and orientation routes pass in 0.514, 0.522 and 0.686 seconds.
+The first two differ by only 8.1 ms in one shared-host observation, so the
+existing explicit choice is retained without claiming a reliable ranking.
+
+The complete three-loop projected test, including both controls, takes less
+time than either direct route's measured subtracted construction alone
+(1072 and 1240 seconds with one worker). This supports retaining projected 4D
+for the extensive matrix. These are observed workload costs, not a proof of a
+globally fastest route. Small three-route equivalence tests remain in place.
+The primitive orientation-local control also passes separately in
+`666270b5-dc8a-4d2a-bbb4-301a27d90a0e`, covering two summed limits and four
+orientation entries in each control.
+
+All 2117 guarded runtime sources and the native binary, metadata and test
+configuration remain unchanged throughout this run. The twelve original
+profiles, native verdicts and inventory audit are retained under
+`target/os-feynkit/uv-perf-review-faad517b/uv/`. This numerical UV coverage
+supplements the separate exact reconstruction and integrated OS certificates;
+it does not establish a complete three-loop radial soft matrix.
+
 === Historical frozen temporal-trace stack
 
 This section records the original frozen source's qualification. Its runs and
@@ -1212,14 +1381,11 @@ matching sizes or a numerical sample. Graph numerators remain factorized.
 
 The following earlier records retain their original revision and scope. Five
 isolated measurements at `91ab7745` are historical observations; they are not
-relabelled as temporal-trace or consolidated-rebase results. At the time of
-this historical record, the exhaustive UV inventory of 259 limits per control
-and 39 isolated replays was prepared with its existing reference, seed,
-precision, timeout and performance-gate policies. After the repaired-review
-correctness runs, those measurements were still pending on that base, which
-already included component factor collection and the restored antighost
-derivative. No full three-loop radial soft matrix was supplied by those
-two-loop checks.
+relabelled as temporal-trace or consolidated-rebase results. The completed
+historical repaired-review UV matrix and isolated replays are recorded above;
+this supersedes only that earlier source's pending measurement record. No
+full three-loop radial soft matrix follows from those numerical UV controls
+or their two-loop soft checks.
 
 === Earlier rebased records
 
