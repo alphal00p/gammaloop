@@ -1022,9 +1022,9 @@ parent_lmb = [3]
         .iter()
         .find(|entry| entry.lhs == GS.ose(EdgeIndex(2)))
         .expect("the remapped loop edge has a registered energy");
-    let spatial_square = Atom::add_many((1..4).map(|axis| {
-        symbolica::function!(GS.emr_mom, 2, GS.cind(axis)).pow(2)
-    }));
+    let spatial_square = Atom::add_many(
+        (1..4).map(|axis| symbolica::function!(GS.emr_mom, 2, GS.cind(axis)).pow(2)),
+    );
     assert_eq!(energy.rhs, (mass.pow(2) + spatial_square).pow((1, 2)));
     let cut = &imported.threshold_counterterms.cuts[0];
     assert_eq!(cut.edges, [EdgeIndex(1), EdgeIndex(2)]);

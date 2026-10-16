@@ -1,4 +1,4 @@
-digraph diagnostic_shifted_double_pole_affine {
+digraph diagnostic_shifted_double_pole_affine { graph [projector=1]
     num = 1
     edge [particle="scalar_1" num=1]
     node [num=1]
@@ -6,9 +6,9 @@ digraph diagnostic_shifted_double_pole_affine {
     incoming [style=invis]
     outgoing [style=invis]
     v0 [num="Q(2,spenso::cind(0))*(Q(4,spenso::cind(0))+Q(0,spenso::cind(0)))"]
-    incoming -> v0 [id=0 label="p1"]
-    v0 -> v1 [id=2 lmb_id=0 label="k1"]
-    v1 -> v2 [id=3 label="k1"]
-    v2 -> v0 [id=4 label="k1-p1"]
-    v2 -> outgoing [id=1 label="p1"]
+    incoming -> v0 [id=0 label="p1" sink="{ufo_order:0}"]
+    v0 -> v1 [id=2 lmb_id=0 label="k1" source="{ufo_order:1}" sink="{ufo_order:0}"]
+    v1 -> v2 [id=3 label="k1" source="{ufo_order:1}" sink="{ufo_order:0}"]
+    v2 -> v0 [id=4 label="k1-p1" sink="{ufo_order:2}" source="{ufo_order:2}"]
+    v2 -> outgoing [id=1 label="p1" source="{ufo_order:1}"]
 }

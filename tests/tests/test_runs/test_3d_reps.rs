@@ -487,31 +487,26 @@ fn cff_cli_validate_and_build_use_gammaloop_graph_state() -> Result<()> {
 
     let ltd_path = test_root.join("ltd.json");
     cli.run_command(&format!(
-        "3drep build -p threedreps_box_build -i default -g 0 --representation ltd --workspace-path {} --json-out {} --no-color",
-        workspace_path.display(), ltd_path.display(),
+        "3Drep build -p threedreps_box_build -i default -g 0 --representation ltd --workspace-path {} --json-out {} --no-pretty",
+        workspace_path.display(), ltd_path.display()
     ))?;
-    let artifact = serde_json::from_str::<JsonValue>(&fs::read_to_string(&ltd_path)?)?;
-    assert_eq!(artifact["family"], "ltd");
-    assert_eq!(artifact["medium_mode"], "vacuum");
-    assert!(artifact["energy_degree_bounds"].is_null());
-    let ltd =
-        serde_json::from_value::<ThreeDExpression<OrientationID>>(artifact["expression"].clone())?;
-    assert_eq!(ltd.orientations.len(), 4);
-    assert!(ltd.orientations.iter().any(|row| {
-        row.loop_energy_map
-            .iter()
-            .any(|energy| !energy.external_terms.is_empty())
-    }));
-    cli.run_command(
-        "3drep build -p threedreps_box_build -i default -g 0 --family ltd --no-save-json --no-pretty --no-color --show-details-for-residue 0",
-    )?;
-    // This diagnostic constructs symbolic maps only; numerical evaluation remains
-    // in the regular generated-integrand commands.
-    assert!(cli.run_command("3drep evaluate").is_err());
-    assert!(
-        cli.run_command("3drep build -g 0 --representation unknown")
-            .is_err()
-    );
+    let ltd = serde_json::from_str::<JsonValue>(&fs::read_to_string(ltd_path)?)?;
+    assert_eq!(ltd["family"].as_str(), Some("ltd"));
+    assert_eq!(ltd["validation"]["ok"].as_bool(), Some(true));
+    let ltd = serde_json::from_value::<ThreeDExpression<OrientationID>>(ltd["expression"].clone())?
+        .remap_energy_edge_indices(&local_map);
+    for seed in [17, 41] {
+        let input = EvaluationInput::deterministic(&parsed, seed, &Default::default(), None)?;
+        let actual = evaluate_expression(&parsed, &ltd, "1", &input)?.value;
+        let expected = evaluate_expression(&parsed, &reference.expression, "1", &input)?.value;
+        let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+        assert!(
+            actual.is_finite()
+                && expected.is_finite()
+                && (actual - expected).abs() <= 1.0e-12 * scale,
+            "the exported LTD source changed the scalar box at seed {seed}: {actual:e} != {expected:e}"
+        );
+    }
 
     clean_test(test_root);
     Ok(())

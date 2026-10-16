@@ -3030,26 +3030,47 @@ mod tests {
         let [a, b, c, d] = ["a", "b", "c", "d"]
             .map(|name| builder.add_vertex(DiagramVertex::interaction(name, rule)));
         for (source, target) in [(b, a), (a, d), (c, b), (d, c)] {
-            builder.add_edge(source, target, DiagramEdge::new(particle, false)).unwrap();
+            builder
+                .add_edge(source, target, DiagramEdge::new(particle, false))
+                .unwrap();
         }
         for (connection, incoming, outgoing) in [(0, a, c), (1, b, d)] {
             let source = builder.add_generation_external(
-                format!("in{connection}"), connection, ExternalState::Incoming, connection,
+                format!("in{connection}"),
+                connection,
+                ExternalState::Incoming,
+                connection,
             );
             let target = builder.add_generation_external(
-                format!("out{connection}"), connection + 2, ExternalState::Outgoing, connection,
+                format!("out{connection}"),
+                connection + 2,
+                ExternalState::Outgoing,
+                connection,
             );
-            builder.add_edge(source, incoming, DiagramEdge::new(particle, false)).unwrap();
-            builder.add_edge(outgoing, target, DiagramEdge::new(particle, false)).unwrap();
+            builder
+                .add_edge(source, incoming, DiagramEdge::new(particle, false))
+                .unwrap();
+            builder
+                .add_edge(outgoing, target, DiagramEdge::new(particle, false))
+                .unwrap();
         }
         let original = builder.build().unwrap();
         let (left, right) = original.half_edges().partition(|half_edge| {
             let hedge = original.half_edge_id(*half_edge).unwrap();
-            matches!(original.graph[original.graph.node_id(hedge)].name.as_str(), "a" | "b")
+            matches!(
+                original.graph[original.graph.node_id(hedge)].name.as_str(),
+                "a" | "b"
+            )
         });
         let original = original.with_cut_partitions(vec![(left, right)]).unwrap();
-        let routed = original.clone()
-            .with_first_loop_momentum_basis_in_edge_order(&[EdgeId(2), EdgeId(3), EdgeId(4), EdgeId(5)])
+        let routed = original
+            .clone()
+            .with_first_loop_momentum_basis_in_edge_order(&[
+                EdgeId(2),
+                EdgeId(3),
+                EdgeId(4),
+                EdgeId(5),
+            ])
             .unwrap();
         // With the outgoing root, the independent loop is a physical cut
         // momentum. Both cut momenta vanish spatially at K=0 in the centre-of-
@@ -3061,7 +3082,10 @@ mod tests {
             assert_eq!(shift.len(), 2);
             assert_eq!(shift.get(0), shift.get(1));
         }
-        assert_eq!(routed.canonical_key().unwrap(), original.canonical_key().unwrap());
+        assert_eq!(
+            routed.canonical_key().unwrap(),
+            original.canonical_key().unwrap()
+        );
         assert_eq!(routed.numerator(), original.numerator());
     }
 

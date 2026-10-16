@@ -1,4 +1,7 @@
 digraph benchmark_epem_a_tth_NNLO_graph {
+    // All connected source/target cuts; the runtime retains the 25 multi-edge
+    // cuts before the physical ttH process specification selects its nine.
+    final_state="H,g,g,t,t~|H,g,t,t~|H,t,t~|a|g,g,t,t~|g,t,t,t~,t~|g,t,t~|t,t,t~,t~|t,t~";
     num = "1";
     overall_factor = "1";
     overall_factor_evaluated = "1";
