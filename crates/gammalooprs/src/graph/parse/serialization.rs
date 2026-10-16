@@ -222,7 +222,7 @@ impl Graph {
         // Parse the rendered metadata once so quoted runtime strings enter the
         // native serializer as values, preserving real newlines in directives.
         let runtime: DotGraph =
-            DotGraph::from_string(&runtime.debug_dot()).map_err(|error| eyre::eyre!("{error}"))?;
+            DotGraph::from_string(runtime.debug_dot()).map_err(|error| eyre::eyre!("{error}"))?;
         for name in [
             "group_id",
             "is_group_master",

@@ -226,6 +226,7 @@ impl PyFactorProjector {
         Self::build(py, factors, FactorProjector::Cyclic)
     }
 
+    /// Describe the permutation group and the number of retained factors.
     fn __repr__(&self) -> String {
         format!("FactorProjector({:?}, {} factors)", self.kind, self.count)
     }

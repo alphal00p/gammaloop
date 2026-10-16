@@ -28,6 +28,11 @@ GammaLoop owns the Dirac algebra. Vakint sees the Lorentz slots of opaque spin t
 
 Restoration reattaches the Minkowski representation to numeric backend labels and symbolic native labels. Only numeric labels acquire the topology-local index chart; native abstract labels retain their source identity. Already represented slots keep their complete interface.
 
+Before reinsertion, completed internal momentum pairs are contracted and written
+as scalar products. This prevents independent integrated factors from retaining
+the same topology-local dummy label in their later product. Open boundary ports
+remain available to the cograph, and its numerator is not distributed.
+
 Unresolved closed spin/Lorentz traces and internal contractions between open spin chains must report unsupported dimensional algebra. Retained free tensor slots remain a valid external basis. This avoids implicitly assigning a four-dimensional value to an evanescent operator; Sigma tensors also require a symbolic dimensional implementation before analytic UV use.
 
 The required backend depth includes epsilon poles in numerator coefficients and loop-normalization factors. Positive epsilon orders needed by enclosing UV operations are retained using the forest's loop-order bound. A backend that cannot supply the required depth must report an error instead of silently returning a shallower expansion. The Laurent-series boundary also verifies integer powers and epsilon-independent coefficients. Supported scalar mathematical functions are expanded there; unresolved opaque epsilon dependence produces an error.
@@ -297,7 +302,10 @@ The projected local-4D route is separate: it completes the Taylor expansion in f
 <marker-representation>
 UV markers are diagnostic symbolic structure. Approximation,
 integration, series, and truncation are distinct canonical function
-heads applied to the history of current/given subgraphs. Spenso printing
+heads applied to the history of current/given subgraphs. Marker
+calls remain actual arguments rather than hidden body constants, so an outer
+approximation or cograph prefix updates each history before evaluator binding.
+This does not distribute the numerator. Spenso printing
 supplies the compact `K[...]`, angled-bracket, `Σ(...)`, and truncation
 notation while structured DOT uses the same underlying atoms. Typst
 presentation combines Symbolica\'s Typst arithmetic mode with those

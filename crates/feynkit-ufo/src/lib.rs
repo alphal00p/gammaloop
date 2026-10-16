@@ -398,6 +398,19 @@ mod tests {
     fn forwards_options_and_deserializes_json() {
         Python::initialize();
         Python::attach(|py| {
+            let temporary = PyModule::import(py, "tempfile")
+                .unwrap()
+                .getattr("TemporaryDirectory")
+                .unwrap()
+                .call0()
+                .unwrap();
+            let directory = temporary
+                .getattr("name")
+                .unwrap()
+                .extract::<PathBuf>()
+                .unwrap();
+            let model_path = directory.join("scalar.json");
+            std::fs::write(&model_path, MODEL_JSON).unwrap();
             let code = format!(
                 r#"
 import sys
@@ -419,12 +432,17 @@ def load_model(**kwargs):
     return JsonValue(MODEL_JSON), JsonValue(CARD_JSON)
 
 package = types.ModuleType("ufo_model_loader")
+package.__path__ = []
+common = types.ModuleType("ufo_model_loader.common")
+common.DATA_PATH = ""
 commands = types.ModuleType("ufo_model_loader.commands")
 commands.load_model = load_model
 commands.seen = seen
 package.commands = commands
+package.common = common
 sys.modules["ufo_model_loader"] = package
 sys.modules["ufo_model_loader.commands"] = commands
+sys.modules["ufo_model_loader.common"] = common
 "#
             );
             PyModule::from_code(
@@ -439,7 +457,7 @@ sys.modules["ufo_model_loader.commands"] = commands
                 .restriction_name("massless")
                 .simplify_model(false)
                 .wrap_indices_in_lorentz_structures(false);
-            let loaded = loader.load(py, "/models/scalar").unwrap();
+            let loaded = loader.load(py, &model_path).unwrap();
             assert_eq!(loaded.model.name(), "scalar");
             assert_eq!(loaded.parameters["mass"].re, 2.5);
             assert!(loaded.model.particle("s").unwrap().is_propagating());
@@ -448,7 +466,7 @@ sys.modules["ufo_model_loader.commands"] = commands
             assert_eq!(
                 loaded.diagnostics,
                 UfoLoadDiagnostics {
-                    source: PathBuf::from("/models/scalar"),
+                    source: model_path.clone(),
                     options: loader.options().clone(),
                     order_count: 1,
                     model_parameter_count: 2,
@@ -475,7 +493,7 @@ sys.modules["ufo_model_loader.commands"] = commands
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "/models/scalar"
+                model_path.to_str().unwrap()
             );
             assert_eq!(
                 seen.get_item("restriction_name")
@@ -510,11 +528,13 @@ sys.modules["ufo_model_loader.commands"] = commands
                 .unwrap();
             let source = PyModule::from_code(
                 py,
-                c"from types import SimpleNamespace\nall_particles = [SimpleNamespace(name='s', charge=0.6666666666666666, charge_exact='2/3', Y='1/3', YRight='4/3')]",
+                c"from types import SimpleNamespace\nall_parameters = [SimpleNamespace(name='ZERO'), SimpleNamespace(name='mass')]\nall_particles = [SimpleNamespace(name='s', charge=0.6666666666666666, charge_exact='2/3', Y='1/3', YRight='4/3')]",
                 c"scalar.py", c"scalar",
             ).unwrap();
             modules.set_item("scalar", &source).unwrap();
-            let exact = loader.load(py, "/models/scalar").unwrap();
+            let model_directory = directory.join("scalar");
+            std::fs::create_dir(&model_directory).unwrap();
+            let exact = loader.load(py, &model_directory).unwrap();
             let particle = exact.model.particle("s").unwrap();
             assert_eq!(particle.charge.to_string(), "2/3");
             assert_eq!(particle.y_charge.as_ref().unwrap().to_string(), "1/3");
@@ -526,7 +546,7 @@ sys.modules["ufo_model_loader.commands"] = commands
                 .unwrap();
             particle.delattr("Y").unwrap();
             particle.setattr("YRight", py.None()).unwrap();
-            let unknown = loader.load(py, "/models/scalar").unwrap();
+            let unknown = loader.load(py, &model_directory).unwrap();
             assert!(
                 unknown
                     .model
@@ -545,7 +565,9 @@ sys.modules["ufo_model_loader.commands"] = commands
             );
             modules.del_item("scalar").unwrap();
             modules.del_item("ufo_model_loader.commands").unwrap();
+            modules.del_item("ufo_model_loader.common").unwrap();
             modules.del_item("ufo_model_loader").unwrap();
+            temporary.call_method0("cleanup").unwrap();
         });
     }
 }

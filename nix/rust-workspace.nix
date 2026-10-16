@@ -599,6 +599,7 @@
       "docs/assets/typst/theme.typ"
     ];
     "gammaloop-api" = [
+      "benchmarks/performance/gg-hhh-gl15.dot"
       "tests/resources/graphs/scalar_box.dot"
       "tests/resources/graphs/scalar_bubble.dot"
     ];
@@ -611,6 +612,7 @@
     ];
     "gammaloop-integration-tests" = [
       "assets/plot_approach_result.py"
+      "benchmarks/performance/gg-hhh-gl15.dot"
       "examples/api"
       "examples/cli"
       "tests/resources"

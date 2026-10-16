@@ -1,4 +1,5 @@
-# Historical GL20 is GL38 with CP grouping disabled; the directed topology is unchanged.
+# Prepare the ungenerated diagrams. The test selects the historical multichannel
+# topology by its colored connectivity, cut inventory and complete LMB count.
 commands = [
   "import model sm-default.json",
   "set model MT=173.0",
@@ -16,8 +17,6 @@ commands = [
       -p epem_a_tth -i NLO
       --only-diagrams
   """,
-  "select -p epem_a_tth -i NLO --with-graph-names GL38",
-  "generate existing -p epem_a_tth -i NLO",
 ]
 
 [default_runtime_settings.general]

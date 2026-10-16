@@ -449,8 +449,11 @@ mod tests {
 
     #[test]
     fn spin_vector_rejects_incompatible_states_and_averaging() {
-        let model =
+        let mut model =
             Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        // This fixture needs genuinely massless states, rather than adjustable
+        // mass parameters whose current numerical value happens to be zero.
+        model.simplify_zero_values().unwrap();
         let p = parse!("p");
         let spin = parse!("s");
         let indices = [parse!("i"), parse!("j")];

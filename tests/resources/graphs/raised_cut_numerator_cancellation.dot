@@ -1,4 +1,5 @@
 digraph powered_cancel {
+    final_state="scalar_1,scalar_1";
     num = 1
     edge [pdg=1001, num=1]
     node [num=1]
@@ -11,6 +12,7 @@ digraph powered_cancel {
 }
 
 digraph lower_bubble {
+    final_state="scalar_1,scalar_1";
     num = -1
     edge [pdg=1001, num=1]
     node [num=1]

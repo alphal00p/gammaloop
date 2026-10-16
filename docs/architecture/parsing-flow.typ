@@ -9,6 +9,12 @@ and edge cases that affect Schoonschip-style notation.
 Scalar coefficient assembly reviewed 2026-10-16.
 Lifecycle: current implementation architecture.
 
+Opaque target construction returns the realized tensor and its canonical
+layout together. Eager contraction can remove internal ports, whereas a
+symbolic target retains the original interface. Eager construction uses the
+network's tensor-result boundary so completed lazy scalar multiples and sums
+are materialized with their coefficients intact.
+
 == Entry Points
 <entry-points>
 External parsing starts from `NetworkParse` methods such as `parse_to_atom_net`.

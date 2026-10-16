@@ -1811,18 +1811,16 @@ fn feyngen_from_spec_args(
         }
     }
 
-    // Perturbative orders (only to matching container)
-    if !pert.orders.is_empty() {
+    // Perturbative orders describe unresolved cut content, as on main. They
+    // have no amplitude-graph predicate; amplitude loop/coupling constraints
+    // are carried separately. Keep the parsed annotation for CLI round trips.
+    if generation_type == GenerationType::CrossSection && !pert.orders.is_empty() {
         let map: BTreeMap<String, usize> = pert
             .orders
             .iter()
             .map(|(k, v)| (k.clone(), *v as usize))
             .collect();
-        if generation_type == GenerationType::Amplitude {
-            amp_filters.push(GenerationFilter::PerturbativeOrders(map));
-        } else {
-            xs_filters.push(GenerationFilter::PerturbativeOrders(map));
-        }
+        xs_filters.push(GenerationFilter::PerturbativeOrders(map));
     }
 
     // CouplingOrders
@@ -2912,6 +2910,12 @@ mod tests {
         assert_eq!(ps.pert.orders.get("QCD"), Some(&1));
 
         // XS-style powered constraints recorded
+        assert!(!ps
+            .process_definition
+            .generation_options
+            .filters(FilterScope::Graph)
+            .iter()
+            .any(|filter| matches!(filter, GenerationFilter::PerturbativeOrders(_))));
         let key_qed2 = CouplingKey {
             name: "QED".into(),
             power: 2,

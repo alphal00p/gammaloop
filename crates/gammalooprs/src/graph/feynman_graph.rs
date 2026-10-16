@@ -1643,7 +1643,7 @@ mod tests {
         let model = load_generic_model("sm");
         assert!(!model.get_parameter("WT").value.unwrap().re.is_zero());
         let graph: Graph = Graph::unit_numerator_fixtures(
-            &(r#"
+            r#"
             digraph real_masses {
                 node [num=1];
                 edge [num=1];
@@ -1651,7 +1651,7 @@ mod tests {
                 A -> B [id=1 mass=2];
                 A -> B [id=2 particle="t"];
             }
-        "#),
+        "#,
             &model,
         )
         .map(|mut graphs| {
@@ -1727,10 +1727,10 @@ mod tests {
         )?;
         model = serde_json::from_value(definition)?;
         let unused: Graph = Graph::unit_numerator_fixtures(
-            &(r#"digraph unused_width {
+            r#"digraph unused_width {
             node [num=1]; edge [num=1];
             A -> B [particle="g"];
-        }"#),
+        }"#,
             &model,
         )
         .map(|mut graphs| {
@@ -1739,10 +1739,10 @@ mod tests {
         })?;
         unused.validate_real_masses(&model)?;
         let amputated: Graph = Graph::unit_numerator_fixtures(
-            &(r#"digraph amputated_width {
+            r#"digraph amputated_width {
             ext [style=invis]; vertex [num=1]; edge [num=1];
             ext -> vertex [particle="H"];
-        }"#),
+        }"#,
             &model,
         )
         .map(|mut graphs| {
@@ -1752,10 +1752,10 @@ mod tests {
         assert!(amputated.iter_edges().all(|(pair, _, _)| !pair.is_paired()));
         amputated.validate_real_masses(&model)?;
         let used: Graph = Graph::unit_numerator_fixtures(
-            &(r#"digraph explicit_width {
+            r#"digraph explicit_width {
             node [num=1]; edge [num=1];
             A -> B [particle="H"];
-        }"#),
+        }"#,
             &model,
         )
         .map(|mut graphs| {
@@ -1818,14 +1818,14 @@ mod tests {
         test_initialise()?;
         let model = load_generic_model("sm");
         let graph: Graph = Graph::unit_numerator_fixtures(
-            &(r#"
+            r#"
             digraph complex_mass {
                 node [num=1];
                 edge [num=1];
                 A -> B [id=0 mass="1+1𝑖"];
                 A -> B [id=1 mass=0];
             }
-        "#),
+        "#,
             &model,
         )
         .map(|mut graphs| {

@@ -2349,6 +2349,11 @@ fn hat_t_raw_with_provenance<S: ForestNodeLike>(
 }
 
 fn finalize(raw: Atom) -> Result<Atom> {
+    debug_tags!(#uv, #local, #trace;
+        stage = "local_4d_finalize_input",
+        file.raw = %raw.to_plain_string(),
+        "Checking the retained local UV tensor interface"
+    );
     // Keep the local Taylor numerator factorized through exact CFF projection.
     // Analytic integration owns its Dirac algebra in integrated::simplify;
     // numerical evaluation contracts the retained tensors after residue mapping.
@@ -2735,6 +2740,7 @@ mod tests {
         color::ColorSimplifySettings,
         dirac::GammaSimplifySettings,
         representations::{Bispinor, ColorAdjoint},
+        tensor::{SymbolicNetExt, SymbolicNetParse},
     };
     use linnet::half_edge::{
         involution::Hedge,
@@ -2742,7 +2748,7 @@ mod tests {
     };
     use spenso::{
         network::tags::SPENSO_TAG,
-        shadowing::{IntoAtom, symbolica_utils::LogPrint},
+        shadowing::IntoAtom,
         structure::representation::{LibraryRep, Minkowski, RepName},
     };
     use std::collections::{BTreeMap, BTreeSet};
@@ -6039,15 +6045,11 @@ mod tests {
                         &weight * Atom::add_many(sum.iter().map(|term| term / weight.as_view()));
                 }
             });
-        let normalized_tensor = SymbolicTensor::infer(normalized.clone()).unwrap();
-        assert_eq!(
-            normalized_tensor
-                .coefficients_are_zero(spenso::shadowing::TensorCollectFilter::<0>::Tensors)
-                .unwrap(),
-            symbolica::id::ConditionResult::True,
-            "{label}: {}",
-            cooking.uncook(normalized.as_view())
-        );
+        let normalized = cooking.uncook(normalized.as_view());
+        let certificate = crate::uv::overlap_numerators::NumeratorJetCache::default()
+            .canonicalize(&normalized)
+            .unwrap();
+        assert!(certificate.is_zero, "{label}: {normalized}");
     }
 
     fn paper_dot(left: Atom, right: Atom) -> Atom {
@@ -6177,16 +6179,72 @@ mod tests {
     /// independent Appendix-B oracle: it neither calls the production series
     /// projectors nor reconstructs H from their U/S/US branch decomposition.
     fn paper_direct_coefficient(atom: &Atom, parameter: Symbol, degree: usize) -> Atom {
+        // A retained trace is multilinear in matrix words, not an unknown
+        // scalar function of those words. Complete its shared Dirac algebra
+        // before literal differentiation; the Taylor oracle stays independent
+        // of the production series and U/S/US construction.
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
+            .unwrap()
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap();
+        let mut dependent_word = false;
+        reduced.expression().visitor(&mut |view| {
+            if matches!(view, AtomView::Fun(word)
+                if [SPENSO_TAG.chain, SPENSO_TAG.trace].contains(&word.get_symbol()))
+                && view.contains_symbol(parameter)
+            {
+                dependent_word = true;
+            }
+            !dependent_word
+        });
+        // A remaining parameter-dependent word needs explicit matrix ports:
+        // in/out are contextual ports, not scalar chain-rule arguments. Already
+        // reduced scalar products keep their established factorized chart.
+        let atom = if dependent_word {
+            reduced
+                .undo_trace()
+                .unwrap()
+                .undo_chain()
+                .unwrap()
+                .expression()
+                .parse_to_symbolic_net::<spenso::structure::abstract_index::AbstractIndex>(
+                    &spenso::network::parsing::ParseSettings::default(),
+                )
+                .unwrap()
+                .simple_execute::<()>()
+                .unwrap()
+        } else {
+            reduced.into_expression()
+        };
         let derivative = match degree {
             0 => atom.clone(),
             1 => atom.derivative(parameter),
             2 => atom.derivative(parameter).derivative(parameter) / 2,
             _ => panic!("the Appendix-B oracle only needs degrees zero through two"),
         };
-        derivative
+        let coefficient = derivative
             .replace(parameter)
             .with(Atom::Zero)
-            .collect_factors()
+            .collect_factors();
+        // Each independently differentiated coefficient owns its internal
+        // materialization indices. Close them before combining coefficient
+        // products; only the original graph boundary ports may be shared.
+        let coefficient = if dependent_word {
+            SymbolicTensor::infer(coefficient)
+                .unwrap()
+                .contract(Default::default())
+                .unwrap()
+                .into_expression()
+        } else {
+            coefficient
+        };
+        cooking.uncook(coefficient.as_view())
     }
 
     #[derive(Clone)]
@@ -6303,15 +6361,24 @@ mod tests {
                     .replace(GS.dim)
                     .with(Atom::num(4)),
         )
-        .unwrap()
-        .collect_factors()
-        .expand_num()
-        .cancel();
-        assert!(
-            difference.is_zero(),
-            "{label}: {}",
-            difference.log_print(Some(400))
-        );
+        .unwrap();
+        let mut denominators = mappings
+            .iter()
+            .flat_map(|mapping| {
+                [
+                    Atom::var(mapping.physical_symbol),
+                    Atom::var(mapping.uv_symbol),
+                ]
+            })
+            .collect::<Vec<_>>();
+        denominators.sort();
+        denominators.dedup();
+        // The atomic denominator chart was independently checked above. Keep
+        // its complete Laurent support and certify each factorized tensor
+        // coefficient, including the Clifford identities on the manual RHS.
+        for (_, coefficient) in difference.coefficient_list_exact(&denominators).unwrap() {
+            paper_assert_normalized_zero(label, coefficient);
+        }
     }
 
     #[test]
@@ -6403,7 +6470,7 @@ mod tests {
 
         paper_assert_normalized_zero(
             "Eq. 4.16 quadratic mass split",
-            (actual - expected).cancel(),
+            (actual - expected).together(),
         );
         assert!(paper_has_pattern(&soft_part, mass.clone()));
         assert!(!paper_has_muv(&soft_part));
@@ -6422,7 +6489,7 @@ mod tests {
             - (&quadratic - mass.pow(2) + m_uv.pow(2)) / uv_denominator.pow(2);
         paper_assert_normalized_zero(
             "Eq. 4.16 includes the Taylor factor 1/2",
-            (half_second_derivative - expected_second_order).cancel(),
+            (half_second_derivative - expected_second_order).together(),
         );
     }
 
@@ -6466,10 +6533,17 @@ mod tests {
             / uv_denominator.pow(4)
             + Atom::num(4) * p_dot_q.pow(2) * &uv_numerator / uv_denominator.pow(5);
 
-        paper_assert_normalized_zero(
-            "Appendix B.7 physical low orders and UV quadratic coefficient",
-            (actual - &expected_physical - &expected_quadratic).cancel(),
-        );
+        // The four opaque numerator coefficients are independent. Normalize
+        // only their scalar denominator coefficients; no tensor numerator is opened.
+        for (_, coefficient) in (actual - &expected_physical - &expected_quadratic)
+            .coefficient_list_exact(&[physical_numerator, physical_linear, uv_numerator, uv_linear])
+            .unwrap()
+        {
+            paper_assert_normalized_zero(
+                "Appendix B.7 physical low orders and UV quadratic coefficient",
+                coefficient.together(),
+            );
+        }
         assert!(paper_has_pattern(&physical_low_orders, mass));
         assert!(!paper_has_muv(&physical_low_orders));
         assert!(paper_has_muv(&uv_quadratic));
@@ -7344,30 +7418,15 @@ mod tests {
                 let child_side_boundary = Atom::from(Aind::Hedge(8, 0));
                 let co_graph_side_boundary = Atom::from(Aind::Hedge(9, 0));
                 let assert_b_16_rhs = |label: &str, actual: Atom, expected: Atom| {
-                    paper_assert_denominator_provenance(label, &actual, &denominator_mappings);
-                    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-                    let prepare = |atom: Atom| {
-                        let atom = GS.erase_uv_momentum_provenance(&paper_atomic_denominators(atom, &denominator_mappings))
-                            .replace(function!(GS.ct_marker, W_.a_)).with(Atom::one())
-                            .replace(GS.dim).with(Atom::num(4))
-                            .replace(child_side_boundary.clone()).with(co_graph_side_boundary.clone());
-                        // Closing the boundary can expose color traces and finite
-                        // tensor contractions. The typed owner preserves common
-                        // numerator factors while normalizing those domains.
-                        SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap()).unwrap()
-                            .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                                color: Some(ColorSimplifySettings::default()),
-                                ..Default::default()
-                            }).unwrap()
-                            .contract(ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap()
-                            .to_dots().unwrap()
-                    };
-                    let actual = prepare(actual);
-                    let expected = prepare(expected);
-                    assert_eq!(
-                        actual.coefficients_equal(&expected, spenso::shadowing::TensorCollectFilter::<0>::Tensors).unwrap(),
-                        symbolica::id::ConditionResult::True,
-                        "{label}"
+                    // Use the same complete atomic-denominator certificate as
+                    // the independently derived child identities. A rational
+                    // coefficient comparison alone can be inconclusive before
+                    // equivalent Clifford words and Laurent rows are aligned.
+                    paper_assert_atomic_rhs(
+                        label,
+                        actual.replace(child_side_boundary.clone()).with(co_graph_side_boundary.clone()),
+                        expected.replace(child_side_boundary.clone()).with(co_graph_side_boundary.clone()),
+                        &denominator_mappings,
                     );
                 };
                 assert_b_16_rhs(
@@ -7393,9 +7452,10 @@ mod tests {
                     "the local B.16 UV product has no constant or linear outer soft jet",
                     tilde_t_raw(&outer_uv_remainder, &ctx, &gamma, &gamma_one, &outer_lmb).unwrap(),
                 );
-                paper_assert_normalized_zero(
+                assert_b_16_rhs(
                     "massless local B.16 branch comparison",
-                    &outer_h - &outer_s - &outer_uv_remainder,
+                    outer_h.clone(),
+                    &outer_s + &outer_uv_remainder,
                 );
                 assert!(
                     !outer_s.is_zero(),
@@ -7414,9 +7474,10 @@ mod tests {
                     .atom()
                     .replace(function!(GS.ct_marker, W_.a_))
                     .with(Atom::one());
-                paper_assert_normalized_zero(
+                assert_b_16_rhs(
                     "Appendix B.16 F_gamma;Gamma is minus the finalized local B.16 match",
-                    nested_stripped + finalize(outer_h).unwrap(),
+                    nested_stripped,
+                    -finalize(outer_h).unwrap(),
                 );
             })
             .unwrap()
@@ -7701,7 +7762,11 @@ mod tests {
 
         paper_assert_normalized_zero(
             "Eq. 4.19 constant/linear mass split",
-            (actual - expected).cancel(),
+            (actual - expected).cancel_scalar_poles(&[
+                numerator_constant,
+                Atom::var(symbol!("paper_eq_4_19_a_one")),
+                Atom::var(symbol!("paper_eq_4_19_a_two")),
+            ]),
         );
         assert!(!paper_has_muv(&soft));
         assert!(paper_has_muv(&linear_part));
@@ -9527,18 +9592,40 @@ mod tests {
             UvMomentumProvenanceRole::TaylorFixed,
             function!(GS.emr_mom, usize::from(owners[0])),
         );
+        let comparison = SymbolicTensor::infer(cooking.try_cook(production.as_view())?)?
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
+            .to_dots()?;
+        let comparison = cooking.uncook(comparison.expression().as_view());
         let numerator_keys = [1, 2].map(|index| {
-            function!(
+            let vector = function!(
                 GS.emr_mom,
                 &hard_q1,
                 minkowski.to_symbolic([Atom::num(index)])
-            )
+            );
+            function!(SPENSO_TAG.dot, &vector, &vector)
         });
+        // Both comparison views contract the same numerator pairs to dots.
+        // Keep each complete numerator invariant opaque and compare only the
+        // rational denominator coefficients. The production payload below
+        // retains its original quartic factors and owner-local energy families.
+        let actual = comparison.coefficient_list_exact(&numerator_keys).unwrap();
+        let expected = scalar_series_oracle
+            .coefficient_list_exact(&numerator_keys)
+            .unwrap();
         assert_eq!(
-            production.coefficient_list::<u32>(&numerator_keys),
-            scalar_series_oracle.coefficient_list::<u32>(&numerator_keys),
-            "production T must equal the complete scalar Taylor series, including leading and linear layers",
+            actual.iter().map(|row| &row.0).collect::<Vec<_>>(),
+            expected.iter().map(|row| &row.0).collect::<Vec<_>>()
         );
+        for ((_, actual), (_, expected)) in actual.into_iter().zip(expected) {
+            assert!(
+                (actual - expected).together().is_zero(),
+                "production T must equal the complete scalar Taylor series, including leading and linear layers"
+            );
+        }
         let mut production_numerators = BTreeMap::<[usize; 3], Atom>::new();
         for term in FourDTerm::from_view(production.as_view())? {
             assert!(
@@ -9582,6 +9669,14 @@ mod tests {
             "production T must retain seven natural topologies with fixed e1 rank four and only derivative-local rank increases",
         );
 
+        let normalized_numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
+            .to_dots()?;
+        let normalized_numerator = cooking.uncook(normalized_numerator.expression().as_view());
         let expansion_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
         for (position, owner) in owners.into_iter().enumerate() {
             let mut constant_leaf = [1, 1, 1];
@@ -9602,7 +9697,7 @@ mod tests {
                 // Normalize numerical coefficients within the mass sum only;
                 // momentum factors and products of sums stay factorized.
                 .expand_num();
-            let expected_mass_part = (&numerator
+            let expected_mass_part = (&normalized_numerator
                 * (physical_mass.pow(2) - &expansion_mass_squared))
                 .collect_factors()
                 .expand_num();
@@ -10027,8 +10122,9 @@ mod tests {
                 });
             }
         }
-        // A proper child also has paired crown edges. Their literal external
-        // coordinates remain soft even when their out-of-domain LMB rows vanish.
+        // A proper child has paired crown edges with explicit external rows.
+        // Also retain the diagnostic of a projected chart omitting that row:
+        // the literal external coordinate must remain soft in either chart.
         let child_filter = graph
             .get_edge_subgraph(EdgeIndex(1))
             .union(&graph.get_edge_subgraph(EdgeIndex(2)));
@@ -10043,13 +10139,24 @@ mod tests {
             .ext_edges
             .iter()
             .copied()
-            .find(|edge| {
-                graph[edge].1.is_paired()
-                    && child_lmb
-                        .ext_atom::<Atom>(*edge, GS.emr_mom, &[], true)
-                        .is_zero()
-            })
-            .expect("the bubble has an external paired carrier with a zero local row");
+            .find(|edge| graph[edge].1.is_paired())
+            .expect("the bubble has an external paired carrier");
+        assert!(
+            !child_lmb
+                .ext_atom::<Atom>(crown, GS.emr_mom, &[], true)
+                .is_zero()
+        );
+        let mut omitted_row = child_lmb.clone();
+        omitted_row.edge_signatures[crown].external = std::iter::repeat_n(
+            feynkit_kinematics::SignOrZero::Zero,
+            child_lmb.ext_edges.len(),
+        )
+        .collect();
+        assert!(
+            omitted_row
+                .ext_atom::<Atom>(crown, GS.emr_mom, &[], true)
+                .is_zero()
+        );
         for index in [GS.cind(0), GS.cind(1)] {
             let payload = FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(crown))
@@ -10062,11 +10169,13 @@ mod tests {
                 ))
                 .add_arg(index)
                 .finish();
-            assert_eq!(
-                graph.uv_rescaled(&child_filter, 0, &child_lmb, &child_lmb, &soft),
-                soft,
-                "an entirely external soft carrier must not acquire a synthetic zero hard factor",
-            );
+            for chart in [&child_lmb, &omitted_row] {
+                assert_eq!(
+                    graph.uv_rescaled(&child_filter, 0, chart, chart, &soft),
+                    soft,
+                    "an entirely external soft carrier must not acquire a synthetic zero hard factor",
+                );
+            }
         }
         for owner in [EdgeIndex(1), EdgeIndex(2)] {
             let expected = child_lmb.loop_atom(owner, GS.emr_mom, &[GS.cind(0)], true) / GS.rescale

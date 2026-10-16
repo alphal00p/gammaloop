@@ -328,6 +328,95 @@ struct PreparedNumerator {
     samples: Vec<Atom>,
 }
 
+impl PreparedNumerator {
+    // This bounds a complete interpolation certificate, not a statistical
+    // zero test. Unsupported syntax or a larger grid stays unproved.
+    const MAX_COEFFICIENT_PROBES: usize = 256;
+
+    fn sample_degrees(value: AtomView<'_>) -> Option<BTreeMap<Symbol, usize>> {
+        let (product, parts) = match value {
+            AtomView::Num(number) => {
+                return matches!(
+                    number.get_coeff_view(),
+                    symbolica::coefficient::CoefficientView::Natural(..)
+                        | symbolica::coefficient::CoefficientView::Large(..)
+                )
+                .then(BTreeMap::new);
+            }
+            AtomView::Var(variable) => return Some(BTreeMap::from([(variable.get_symbol(), 1)])),
+            AtomView::Pow(power) => {
+                let exponent = usize::try_from(power.get_exp()).ok()?;
+                let mut degrees = Self::sample_degrees(power.get_base())?;
+                for degree in degrees.values_mut() {
+                    *degree = degree.checked_mul(exponent)?;
+                }
+                return degrees
+                    .values()
+                    .try_fold(1usize, |size, degree| {
+                        size.checked_mul(degree.checked_add(1)?)
+                    })
+                    .filter(|size| *size <= Self::MAX_COEFFICIENT_PROBES)
+                    .map(|_| degrees);
+            }
+            AtomView::Add(sum) => (false, sum.iter().collect::<Vec<_>>()),
+            AtomView::Mul(factors) => (true, factors.iter().collect::<Vec<_>>()),
+            _ => return None,
+        };
+        let mut degrees = BTreeMap::<Symbol, usize>::new();
+        for part in parts {
+            for (symbol, degree) in Self::sample_degrees(part)? {
+                let current = degrees.entry(symbol).or_default();
+                *current = if product {
+                    current.checked_add(degree)?
+                } else {
+                    (*current).max(degree)
+                };
+            }
+            let size = degrees.values().try_fold(1usize, |size, degree| {
+                size.checked_mul(degree.checked_add(1)?)
+            })?;
+            if size > Self::MAX_COEFFICIENT_PROBES {
+                return None;
+            }
+        }
+        Some(degrees)
+    }
+
+    fn finite_samples_equal(left: &Atom, right: &Atom) -> bool {
+        let difference = (left - right).collect_factors();
+        if difference.is_zero() {
+            return true;
+        }
+        let factors = match difference.as_view() {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            other => vec![other],
+        };
+        factors.into_iter().any(|factor| {
+            let Some(degrees) = Self::sample_degrees(factor) else {
+                return false;
+            };
+            if degrees.is_empty() {
+                return factor.is_zero();
+            }
+            let count = degrees.values().map(|degree| degree + 1).product::<usize>();
+            // Degree d in each variable requires every point of the Cartesian
+            // (d+1)-grid. Exact Gaussian-rational arithmetic certifies zero;
+            // substituting coordinates never distributes the factored body.
+            (0..count).all(|mut point| {
+                let replacements = degrees
+                    .iter()
+                    .map(|(symbol, degree)| {
+                        let coordinate = point % (degree + 1);
+                        point /= degree + 1;
+                        Replacement::new(Atom::var(*symbol), Atom::num(coordinate))
+                    })
+                    .collect::<Vec<_>>();
+                factor.replace_multiple(&replacements).is_zero()
+            })
+        })
+    }
+}
+
 type GroupingTensorLibrary = TensorLibrary<ParamTensor<ExplicitKey<GroupingIndex>>, GroupingIndex>;
 type GroupingTensorNetwork = Network<
     NetworkStore<ParamTensor<ShadowedStructure<GroupingIndex>>, Atom>,
@@ -1249,11 +1338,18 @@ fn evaluate_tensor_sample(
                         **output = alias.clone();
                     }
                 });
+                let normalize_content = |value: &Atom| {
+                    value.replace_map_bottom_up(|part, _, output| {
+                        if matches!(part, AtomView::Add(_)) {
+                            **output = part.collect_numeric_content();
+                        }
+                    })
+                };
+                collected = normalize_content(&collected);
                 loop {
-                    let next = collected
-                        .expand_num()
-                        .collect_horner::<Symbol>(None)
-                        .collect_factors();
+                    let next =
+                        normalize_content(&collected.expand_num().collect_horner::<Symbol>(None))
+                            .collect_factors();
                     if next.as_view().get_byte_size() >= collected.as_view().get_byte_size() {
                         break;
                     }
@@ -1543,11 +1639,24 @@ fn compare(
     }
     let mut first = None;
     for (candidate, master) in candidate.samples.iter().zip(&master.samples) {
-        let Some(ratio) = compare_atoms(candidate, master, mode, scalar_names)? else {
+        // This certificate is restricted to completed finite component samples.
+        // The optional raw tensor comparison above keeps its existing policy.
+        let ratio = if PreparedNumerator::finite_samples_equal(candidate, master) {
+            Some(Atom::one())
+        } else if matches!(mode, ComparisonMode::UpToSign)
+            && PreparedNumerator::finite_samples_equal(candidate, &(-master))
+        {
+            Some(-Atom::one())
+        } else {
+            compare_atoms(candidate, master, mode, scalar_names)?
+        };
+        let Some(ratio) = ratio else {
             return Ok(None);
         };
         if let Some(first) = &first {
-            if !expressions_equal(&ratio, first)? {
+            if !expressions_equal(&ratio, first)?
+                && !PreparedNumerator::finite_samples_equal(candidate, &(first * master))
+            {
                 return Ok(None);
             }
         } else {
@@ -2221,6 +2330,83 @@ mod tests {
             evaluate_tensor_sample(&numerator, &diagram, &options, 0).unwrap(),
             Atom::num(-4) * (m + n).pow(30),
         );
+    }
+
+    #[test]
+    fn finite_sample_certificate_covers_the_degree_and_rejects_unsupported_domains() {
+        let left = test_atom("(x+1)*(x+2)*(x+3)");
+        let right = test_atom("6+x*(11+x*(6+x))");
+        assert!(PreparedNumerator::finite_samples_equal(&left, &right));
+        // Six coincident probes are insufficient for this nonzero degree-six
+        // polynomial. A complete certificate must also test its seventh point.
+        let vanishing_probes = test_atom("x*(x-1)*(x-2)*(x-3)*(x-4)*(x-5)");
+        assert!(!PreparedNumerator::finite_samples_equal(
+            &vanishing_probes,
+            &Atom::Zero
+        ));
+        assert!(!PreparedNumerator::finite_samples_equal(
+            &test_atom("(x+y)^1000"),
+            &Atom::Zero
+        ));
+        for unsupported in ["sin(x)", "(x+1)^(-1)", "(x+1)^(1/2)", "1.25`20*x"] {
+            assert!(PreparedNumerator::sample_degrees(test_atom(unsupported).as_view()).is_none());
+        }
+        assert_eq!(left, test_atom("(x+1)*(x+2)*(x+3)"));
+    }
+
+    #[test]
+    fn massive_closed_loop_flow_reversal_preserves_the_complete_nlo_inventory() {
+        // The physical e+e- -> ttH NLO command's native process/options, without
+        // application state. Main combines the 30 nonzero flow assignments into
+        // 16 masters, including both closed-top-loop orientations in one master.
+        let input: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/tt_higgs_nlo_grouping.json"))
+                .unwrap();
+        let process: crate::Process = serde_json::from_value(input["process"].clone()).unwrap();
+        let options: GenerationOptions =
+            serde_json::from_value(input["generation_options"].clone()).unwrap();
+        let model =
+            Model::from_json(include_str!("../tests/fixtures/tt_higgs_nlo_model.json")).unwrap();
+        let result = process
+            .generate_cross_section(Arc::new(model), &options.threads(1))
+            .unwrap();
+        assert!(result.report.completed);
+        assert_eq!(
+            result.report.zero_numerator_count, 16,
+            "{:?}",
+            result.report
+        );
+        assert_eq!(result.diagrams.len(), 16, "{:?}", result.report);
+        assert_eq!(
+            result
+                .groups
+                .iter()
+                .map(|group| group.members.len())
+                .sum::<usize>(),
+            30
+        );
+    }
+
+    #[test]
+    fn finite_closed_top_loop_samples_match_under_charge_conjugation() {
+        // Captured finite component coefficients for the two six-vertex closed
+        // top-loop flows in e+e- -> ttH at NLO (main groups them with weight -2).
+        // Their raw tensor numerators stay factorized; this certificate only
+        // collects the completed exact scalar sample bodies.
+        let samples: [Vec<String>; 2] = serde_json::from_str(include_str!(
+            "../tests/fixtures/closed_top_loop_cc_samples.json"
+        ))
+        .unwrap();
+        let model = Arc::new(model());
+        let diagram = diagram(&model, "finite-closed-loop", "1", 25, 25);
+        let options = GraphGroupingOptions::default();
+        assert_eq!(samples[0].len(), 5);
+        assert_eq!(samples[1].len(), 5);
+        for (left, right) in samples[0].iter().zip(&samples[1]) {
+            let left = evaluate_tensor_sample(&test_atom(left), &diagram, &options, 0).unwrap();
+            let right = evaluate_tensor_sample(&test_atom(right), &diagram, &options, 0).unwrap();
+            assert_eq!(left, right);
+        }
     }
 
     #[test]

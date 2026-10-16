@@ -429,7 +429,9 @@ fn tensor_reduction_preserves_symbolica_user_namespaces() {
             expected.to_canonical_string(),
         );
         assert!(
-            reduced.collect_factors() == expected.collect_factors(),
+            // Normalize the scalar epsilon denominator's sign; the exact
+            // namespace identity was independently checked above.
+            (reduced.clone() - &expected).together().is_zero(),
             "namespace round trip changed {coefficient}: actual={}, expected={}",
             reduced.to_canonical_string(),
             expected.to_canonical_string(),
@@ -472,12 +474,17 @@ fn whole_numerator_and_tensor_projection_preserve_structured_open_slots() {
             "{mode}: actual={actual}; expected={expected}"
         );
     }
-    let malformed = vakint_parse!("k(1,mu)^2*p(1,mu)*topo(I1L(muvsq,1))").unwrap();
+    // A tensor square closes its own pair of ports. Three distinct vectors
+    // instead expose the invalid three-way Einstein index intended here.
+    let malformed = vakint_parse!("k(1,mu)*p(1,mu)*p(2,mu)*topo(I1L(muvsq,1))").unwrap();
     for project_onto_tensor_integrals in [true, false] {
         vakint.settings.project_onto_tensor_integrals = project_onto_tensor_integrals;
-        assert!(matches!(
-            vakint.tensor_reduce(malformed.as_view()),
-            Err(vakint::VakintError::InvalidNumerator(_))
-        ));
+        let result = vakint.tensor_reduce(malformed.as_view());
+        assert!(
+            matches!(result, Err(vakint::VakintError::FeynKitTensorReduction(
+                feynkit_tensor::TensorReductionError::AmbiguousIndex { ref index, integrated: 1, outside: 2 }
+            )) if index == &vakint_parse!("mu").unwrap()),
+            "projection={project_onto_tensor_integrals}: {result:?}"
+        );
     }
 }

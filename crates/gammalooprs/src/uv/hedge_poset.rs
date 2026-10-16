@@ -1717,7 +1717,6 @@ mod tests {
         },
     };
     use idenso::tensor::ContractSettings;
-    use symbolica::id::ConditionResult;
 
     use super::*;
     use color_eyre::Result;
@@ -4079,11 +4078,20 @@ mod tests {
             .with_representation_payloads(true, true);
         let actual = SymbolicTensor::infer(cooking.try_cook(actual.as_view())?)?;
         let expected = SymbolicTensor::infer(cooking.try_cook(expected.as_view())?)?;
-        assert_eq!(
-            actual.coefficients_equal(&expected, TensorCollectFilter::<0>::Tensors)?,
-            ConditionResult::True,
-            "the complete collective Taylor value must equal -T_U(1-T_A)(1-T_B)I"
-        );
+        let difference = SymbolicTensor::infer(actual.expression() - expected.expression())?;
+        // The fixture's numerator consists of its selected Q tensor factors.
+        // Compare their complete scalar denominator weights in the same formal
+        // dimension; finite-component specialization would narrow the identity.
+        for (tensor, coefficient) in
+            difference.coefficient_list(TensorCollectFilter::<0>::Tensors)?
+        {
+            assert!(coefficient.is_scalar());
+            assert!(
+                tensor.expression().is_zero() || coefficient.expression().together().is_zero(),
+                "the complete collective Taylor value must equal -T_U(1-T_A)(1-T_B)I: {}",
+                coefficient.expression()
+            );
+        }
 
         assert!(
             forests.graph.iter_nodes().all(|(_, _, operation)| {

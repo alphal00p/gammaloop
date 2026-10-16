@@ -325,6 +325,7 @@ fn scalar_born_exchange_tree_matches_squared_amplitude() -> Result<()> {
     // possible spectator choices or their interference graphs. All vertex and
     // propagator numerators are supplied by the model, including their i's.
     const DOT: &str = r#"digraph born_tree {
+        final_state="scalar_0,scalar_0,scalar_0";
         overall_factor="1/6";
         a[int_id="V_3_SCALAR_012"]; b[int_id="V_3_SCALAR_001"];
         c[int_id="V_3_SCALAR_012"]; d[int_id="V_3_SCALAR_001"];

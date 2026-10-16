@@ -325,6 +325,22 @@ fn linnest_public_svg() -> &'static str {
                 "named-map-behavior.typ",
                 include_str!("resources/named-map-behavior.typ"),
             ),
+            (
+                "identity-target-behavior.typ",
+                include_str!("resources/identity-target-behavior.typ"),
+            ),
+            (
+                "cetz-bounds-behavior.typ",
+                include_str!("resources/cetz-bounds-behavior.typ"),
+            ),
+            (
+                "marker-geometry-behavior.typ",
+                include_str!("resources/marker-geometry-behavior.typ"),
+            ),
+            (
+                "annotation-placement-behavior.typ",
+                include_str!("resources/annotation-placement-behavior.typ"),
+            ),
         ]);
         render(&base, &renderer, fixture.0, fixture.1)
     })

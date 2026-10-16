@@ -224,6 +224,7 @@ impl SpensoExpressionEvaluator {
         self.evaluator.clone_ref(py)
     }
 
+    /// Describe the output tensor layout and supported numeric domains.
     fn __repr__(&self, py: Python<'_>) -> String {
         format!(
             "TensorEvaluator({}, real={}, complex=True)",
@@ -441,6 +442,7 @@ impl SpensoCompiledExpressionEvaluator {
         )
     }
 
+    /// Describe the compiled output tensor layout and numeric domain.
     fn __repr__(&self) -> String {
         format!(
             "CompiledTensorEvaluator({}, number_type={})",

@@ -347,7 +347,10 @@ class CompiledTensorEvaluator:
         r"""
         Evaluate real or complex inputs, according to the compiled number type.
         """
-    def __repr__(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the compiled output tensor layout and numeric domain.
+        """
 
 class CookingError(builtins.TypeError):
     r"""
@@ -721,8 +724,17 @@ class ExecutionMode:
     >>> network.execute(n_steps=1, mode=ExecutionMode.Single)
     """
     Single: typing.ClassVar[ExecutionMode]
+    r"""
+    Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
+    """
     Scalar: typing.ClassVar[ExecutionMode]
+    r"""
+    Restrict each execution step to scalar work.
+    """
     All: typing.ClassVar[ExecutionMode]
+    r"""
+    Use the default contraction schedule.
+    """
     def __int__(self) -> builtins.int:
         r"""
         Return the underlying integer discriminant.
@@ -1219,7 +1231,10 @@ class FactorProjector(typing.Generic[_Projected]):
         >>> group = FactorProjector.cyclic(A, A)
         >>> result = trace(space, group)
         """
-    def __repr__(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the permutation group and the number of retained factors.
+        """
     def _repr_html_(self) -> builtins.str:
         r"""
         Show the checked factor group using the tensor index printer.
@@ -3741,7 +3756,10 @@ class TensorEvaluator:
         Use for arbitrary-precision evaluation, export, or instruction inspection.
         These operations return scalar components; they do not wrap tensor metadata.
         """
-    def __repr__(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the output tensor layout and supported numeric domains.
+        """
     def evaluate(self, inputs: numpy.typing.ArrayLike) -> builtins.list[Tensor]:
         r"""
         Evaluate real inputs using Symbolica's ArrayLike input conventions.

@@ -195,6 +195,7 @@
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
       "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-schema"
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
     ];
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-catalogs" = [
       "packages.x86_64-linux.cargoArtifacts"

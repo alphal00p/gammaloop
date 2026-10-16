@@ -269,5 +269,7 @@ the outer network is assembled; its layout therefore describes the realized
 coordinate order. Symbolic targets retain the source layout because their
 contractions still belong to the outer network. The parser never reattaches a
 pre-contraction layout to a tensor with a smaller interface.
+The eager boundary also resolves completed lazy scaled tensors and tensor sums
+through `result_tensor`, preserving their coefficients and logical coordinates.
 Odd tensor powers preserve the remaining base after paired contractions. Completed execution waves
 release unused store payloads while retaining live aliases and tensor handles.

@@ -568,6 +568,12 @@ impl Amplitude {
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
+        if self.graphs.is_empty() {
+            return Err(eyre!(
+                "Cannot build amplitude '{}' without any diagrams",
+                self.name
+            ));
+        }
         let integrand_name = self.name.clone();
         generation_progress::begin_phase(
             GenerationProgressPhase::GraphGeneration,

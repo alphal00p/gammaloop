@@ -266,15 +266,9 @@ rotation_axis = []
 disable_threshold_subtraction = false
 '"#,
             "remove processes",
-            r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
-                --only-diagrams
-                --filter-zero-color --numerator-grouping no_grouping
-                --select-graphs GL42
-                --loop-momentum-bases GL42=2
-                --global-prefactor-num '1𝑖*(1/8)*spenso::g(spenso::coad(8,FeynKit::SourceIndex(5,1)),
-                                                           spenso::coad(8,FeynKit::SourceIndex(6,1)))'
-                -p gg_hhh
-                -i 1L"#,
+            // The original GL15 pentagon, projector and loop routing are frozen
+            // independently of generator numbering (current main uses edge 8).
+            "import graphs ./benchmarks/performance/gg-hhh-gl15.dot --process-spec 'g g > h h h / u d c s b QED==3 [{1}]' -p gg_hhh -i 1L",
             "generate",
             "set model MT=173.0",
             "set model WT=0.0",

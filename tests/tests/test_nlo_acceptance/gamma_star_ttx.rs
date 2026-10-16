@@ -149,7 +149,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
             .collect::<BTreeSet<_>>();
         assert_eq!(
             masters,
-            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
             "the {process} direct-current acceptance must contain exactly the self-energy and vertex supergraphs",
         );
     }
@@ -258,7 +258,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
             17.0, -31.0, 43.0, -29.0, 53.0, 71.0, 17.0, -31.0, 43.0, -29.0, 53.0, 71.0,
         ],
     )?;
-    let graph_names = ["GL0", "GL2"];
+    let graph_names = ["GL0", "GL1"];
     // Retaining one eighth of ArbPrec's requested precision permits substantial
     // expression-dependent loss while still testing the precision-increase path.
     let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
@@ -339,7 +339,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
     let mut graph_estimates = BTreeMap::new();
     let mut imaginary_sum = 0.0;
     let mut imaginary_variance = 0.0;
-    for (graph_index, graph) in ["GL0", "GL2"].into_iter().enumerate() {
+    for (graph_index, graph) in ["GL0", "GL1"].into_iter().enumerate() {
         cli.run_command(&format!(
             r#"set process -p {graph_process} -i {NLO} kv
                 sampling.graphs="monte_carlo"
@@ -388,7 +388,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
         let error = estimate.error.re.0.abs();
         graph_estimates.insert(graph, (value, error));
     }
-    for (graph, target) in [("GL0", PUBLISHED_SELF_ENERGY), ("GL2", PUBLISHED_VERTEX)] {
+    for (graph, target) in [("GL0", PUBLISHED_SELF_ENERGY), ("GL1", PUBLISHED_VERTEX)] {
         let (value, error) = graph_estimates[graph];
         assert!(
             error / target.abs() <= 0.15,

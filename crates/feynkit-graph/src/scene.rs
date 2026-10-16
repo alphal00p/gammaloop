@@ -668,7 +668,7 @@ mod tests {
             (None, None, false)
         );
         // Every edge shares one particle label; the name stays outside the SVG.
-        assert_eq!(scene.pages, ["[$ phi $]"]);
+        assert_eq!(scene.pages, ["[$ \"phi\" $]"]);
         assert!(scene.edges.iter().all(|edge| edge.label == Some(0)));
         assert!(scene.title.is_none());
         // Half-edges are numbered in builder order, as Typst's `build` does.
@@ -676,7 +676,7 @@ mod tests {
         assert_eq!(scalar.details.get("sink-hedge"), Some(&2.into()));
         let document = scene.label_document();
         assert!(!document.contains("#import"));
-        assert!(document.contains("[$ phi $]"));
+        assert!(document.contains("[$ \"phi\" $]"));
     }
 
     #[test]

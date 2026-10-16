@@ -33,10 +33,10 @@ fn massive_fermion_bubble_matches_contracted_numerator_after_uv_integration() {
                     edge [particle="scalar_1", num="1", mass="0"];
                     node [num="1", dod="0"];
                     incoming [style=invis]; outgoing [style=invis];
-                    incoming -> a [id=0];
-                    a -> b [id=1, lmb_id=0, mass="UFO::mass_scalar_1", dod="-1", num="{}"];
-                    b -> a [id=2, mass="UFO::mass_scalar_1", dod="-1", num="{}"];
-                    b -> outgoing [id=3];
+                    incoming -> a [id=0, sink="{{ufo_order:0}}"];
+                    a -> b [id=1, source="{{ufo_order:1}}", sink="{{ufo_order:0}}", lmb_id=0, mass="UFO::mass_scalar_1", dod="-1", num="{}"];
+                    b -> a [id=2, source="{{ufo_order:1}}", sink="{{ufo_order:2}}", mass="UFO::mass_scalar_1", dod="-1", num="{}"];
+                    b -> outgoing [id=3, source="{{ufo_order:2}}"];
                     a [num="{}"];
                     b [num="{}"];
                 }}"#,

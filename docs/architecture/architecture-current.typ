@@ -210,6 +210,9 @@ model and survive JSON and binary round trips. Exact internal zero expressions
 are propagated through dependent masses and chemical potentials when the model
 is constructed or restricted. An external parameter whose current numerical
 value is zero remains adjustable; it does not establish a structural zero.
+Validation of a massive covariant cut multiplet additionally rejects a known
+zero numerical pole mass, because that polarization basis requires a massive
+state. This check does not change the particle's structural classification.
 Converting a generation result into a coherent amplitude requires its completed
 status; cancellation cannot silently publish a complete amplitude.
 
@@ -279,6 +282,14 @@ Compact cross sections pair incoming/outgoing dangling legs using `is_cut` tags.
 Their `final_state` attribute lists comma-separated particles, with `|` between
 allowed alternatives; physical cuts are the deduplicated union, while topology
 threshold candidates and the declared loop basis are independent of this filter.
+
+Cross-section preprocessing transfers physical cuts to the runtime cross-section
+owner. Native DOT export reattaches that owner's selected cuts and threshold
+catalogue only in a temporary graph view. The FeynKit builder preserves the
+original half-edge order, edge orientations, local factors and loop coordinates;
+conversion checks every routing signature before export. No rule generation or
+cut enumeration occurs at this boundary. Native import also restores runtime
+metadata such as names, mass overrides and threshold directives.
 
 Compact GammaLoop expressions enter the native index frame before finalization.
 Only represented half-edge local index labels change from zero-based to
