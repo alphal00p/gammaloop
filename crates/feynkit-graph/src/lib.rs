@@ -1606,7 +1606,7 @@ impl FeynmanDiagram {
         let full = ordered_graph.full_filter();
         let roots = external_attachments
             .values()
-            .filter_map(|(incoming, outgoing)| (*outgoing).or(*incoming))
+            .filter_map(|(source, target)| (*source).or(*target))
             .collect::<Vec<_>>();
         let mut remaining = full.clone();
         let mut forest: SuBitGraph = ordered_graph.empty_subgraph();
@@ -3019,6 +3019,50 @@ mod tests {
             )
             .unwrap();
         builder.build().unwrap()
+    }
+
+    #[test]
+    fn sewn_box_default_routing_roots_at_the_outgoing_attachment() {
+        let model = scalar_model();
+        let particle = model.particle_id("phi").unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "sewn-box");
+        let [a, b, c, d] = ["a", "b", "c", "d"]
+            .map(|name| builder.add_vertex(DiagramVertex::interaction(name, rule)));
+        for (source, target) in [(b, a), (a, d), (c, b), (d, c)] {
+            builder.add_edge(source, target, DiagramEdge::new(particle, false)).unwrap();
+        }
+        for (connection, incoming, outgoing) in [(0, a, c), (1, b, d)] {
+            let source = builder.add_generation_external(
+                format!("in{connection}"), connection, ExternalState::Incoming, connection,
+            );
+            let target = builder.add_generation_external(
+                format!("out{connection}"), connection + 2, ExternalState::Outgoing, connection,
+            );
+            builder.add_edge(source, incoming, DiagramEdge::new(particle, false)).unwrap();
+            builder.add_edge(outgoing, target, DiagramEdge::new(particle, false)).unwrap();
+        }
+        let original = builder.build().unwrap();
+        let (left, right) = original.half_edges().partition(|half_edge| {
+            let hedge = original.half_edge_id(*half_edge).unwrap();
+            matches!(original.graph[original.graph.node_id(hedge)].name.as_str(), "a" | "b")
+        });
+        let original = original.with_cut_partitions(vec![(left, right)]).unwrap();
+        let routed = original.clone()
+            .with_first_loop_momentum_basis_in_edge_order(&[EdgeId(2), EdgeId(3), EdgeId(4), EdgeId(5)])
+            .unwrap();
+        // With the outgoing root, the independent loop is a physical cut
+        // momentum. Both cut momenta vanish spatially at K=0 in the centre-of-
+        // mass frame P0=-P1. An incoming root instead selects the t-channel
+        // edge, putting K=0 outside the massive two-particle LU cut surface.
+        assert_eq!(routed.loop_momentum_basis().loop_edges, [EdgeId(4)]);
+        for cut_edge in [EdgeId(3), EdgeId(4)] {
+            let shift = &routed.loop_momentum_basis().edge_signatures[&cut_edge].external;
+            assert_eq!(shift.len(), 2);
+            assert_eq!(shift.get(0), shift.get(1));
+        }
+        assert_eq!(routed.canonical_key().unwrap(), original.canonical_key().unwrap());
+        assert_eq!(routed.numerator(), original.numerator());
     }
 
     fn one_loop_reordered() -> FeynmanDiagram {
