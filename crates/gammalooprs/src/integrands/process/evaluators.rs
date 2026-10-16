@@ -506,10 +506,9 @@ impl EvaluatorStack {
         let _progress_guard = crate::processes::enter_detailed_progress_span(
             "Generating Single Parametric Evaluator",
         );
-        let opt_settings = settings.optimization_settings();
-
-        GenericEvaluator::new_from_builder(
-            parametric_atoms.into_iter().map(|atom| {
+        let parametric_atoms = parametric_atoms
+            .into_iter()
+            .map(|atom| {
                 let map = |atom| {
                     GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
                         atom,
@@ -522,11 +521,31 @@ impl EvaluatorStack {
                     mapped.register_alias(alias, map(body));
                 }
                 mapped
-            }),
+            })
+            .collect::<Vec<_>>();
+        let mut compiler_settings = settings.clone();
+        if settings.cpe_iterations.is_none()
+            && parametric_atoms.iter().any(|atom| {
+                std::iter::once(atom.get_root())
+                    .chain(atom.get_aliases().iter().map(|(_, body)| body))
+                    .any(|body| {
+                        body.contains_symbol(GS.residue_map_id) && body.contains_symbol(Symbol::IF)
+                    })
+            })
+        {
+            // Common-pair elimination can reduce static program size by moving
+            // arithmetic out of mutually exclusive residue branches. That work
+            // then runs for every selected orientation. Keep direct DAG sharing,
+            // but skip this extra pass for runtime dispatch unless requested.
+            compiler_settings.cpe_iterations = Some(0);
+        }
+
+        GenericEvaluator::new_from_builder(
+            parametric_atoms,
             param_builder,
             dual_shape.clone(),
-            opt_settings.clone(),
-            settings,
+            compiler_settings.optimization_settings(),
+            &compiler_settings,
         )
     }
     #[instrument(skip_all)]
