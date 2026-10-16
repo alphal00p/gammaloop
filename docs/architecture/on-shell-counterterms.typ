@@ -43,6 +43,18 @@ The nine-case inclusive OS workload remains deferred to the existing full-main
 gate; these ordinary checks and the earlier source/run identities below do
 not qualify that workload on this port.
 
+At retained-tensor source `b4c11e911594acd1d3a91a992efc0a156bbc9055`, the
+three open-component controls passed in run `36c16895-4b5e-4d12-8fb3-52d0e6806127`
+(44.174 seconds). Exact old/new fixture imports also retain every component
+tensor and logical interface, local factor, denominator and signed basis;
+only native external fermion attachment closes the final scalar interface.
+The soft-gluon scalar route case passed in run
+`a198f3ef-a685-4544-8454-a97a663e9a56` (70.441 seconds), comparing the three
+local-only routes at two points under the existing full-main 7200-second cap.
+The other five affected scalar-route and complete-UV cases remain deferred.
+Current source, projector identities and route reports are bound under
+`target/os-feynkit/retained-tensor-os-rebase/09-scalar-fixtures/`.
+
 The rebased boosted implementation at `5dc4d91fa9ea` passed 34 focused cases
 in nextest run `1ccd928f-3bdf-4c13-a511-c9d377138076`. These cover the independent
 one-loop operator and CFF certificates, local UV coefficients and complete
@@ -1349,6 +1361,23 @@ small nested forests, integrated boosted poles, complete rainbow soft limits,
 primitive direct-route controls and overlap-proof guards. The serial total is
 225.193 seconds; the longest case takes 61.710 seconds under the unchanged
 240-second per-case limit. Strict Clippy and workspace formatting also pass.
+
+The scalar CLI fixtures for a soft gluon inside a quark self-energy, disjoint
+quark self-energies and the three-loop chain attach native external fermion
+states at final integrand assembly. Their component numerators remain open
+through every counterterm operation. An explicit unit projector in the old
+fixtures suppressed that final contraction and correctly failed the scalar
+evaluator's interface check. Removing only that override leaves the complete
+factorized component numerators, every edge and vertex factor, denominator
+atoms, particles, routing and signed loop bases exactly unchanged, as checked
+in `target/os-feynkit/projector-fixture-ownership/`.
+
+The disjoint fixture keeps $p=(250,0,0,50)$ so its live bridge remains off its
+physical pole. Its external spinors define a scalar diagnostic functional of
+this off-shell Green function, with the supplied timelike momentum determining
+their components; this is not a physical on-shell top amplitude. Open-matrix
+component certificates and the integrated on-shell conditions remain separate
+checks. No momentum, helicity, scale, seed or numerical tolerance changes.
 
 The remaining CLI route comparisons and their extensive numerical UV matrices
 are still open. No full-three-loop radial soft matrix is supplied by the

@@ -20,6 +20,8 @@ commands = [
 type = "constant"
 
 # The bridge carries the external momentum; keep it off its physical pole.
+# Native external spinors supply a scalar diagnostic contraction of this
+# off-shell Green function, not an on-shell top scattering amplitude.
 [default_runtime_settings.kinematics.externals.data]
 momenta = [
   [250.0, 0.0, 0.0, 50.0],
