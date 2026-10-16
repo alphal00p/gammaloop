@@ -219,6 +219,11 @@ only for identity selection; the original port payloads remain intact. An
 adjoint generator contracted with its incident chain endpoint vanishes by
 structure-constant antisymmetry before network materialization. Trace evaluation
 and cross-line Fierz expansion are independent settings.
+Adjacent repeated raw adjoint matrices also reduce in their retained word:
+`f(i,k,a) f(k,j,a) = -C_A delta(i,j)`. The existing orientation reader supplies
+the matrix phases; explicit structure-constant products independently check the
+sign. This closes internal color labels before scalar coefficients reach an
+analytic backend.
 
 Settings objects are part of the semantics. Gamma ordering and trace evaluation, color Fierz and
 invariant substitutions, contraction budgets, and cooking source/tag filters can all

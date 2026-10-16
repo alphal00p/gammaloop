@@ -515,6 +515,50 @@ fn adjoint_chain_endpoint_contraction_vanishes_before_materialization() {
 }
 
 #[test]
+fn adjoint_chain_repeated_pair_agrees_with_explicit_structure_contraction() {
+    test_initialize();
+    let settings = ColorSimplifySettings::default().without_trace_evaluation();
+    let spectator = parse_lit!((x + y) ^ 7);
+    let expected = -parse_lit!(
+        cas(2, coad(dA)) * g(coad(dA, i), coad(dA, j)),
+        default_namespace = "spenso"
+    ) * &spectator;
+    for (first, second, explicit, sign) in [
+        (
+            "f(in,out,coad(dA,a))",
+            "f(in,out,coad(dA,a))",
+            "f(coad(dA,i),coad(dA,k),coad(dA,a))*f(coad(dA,k),coad(dA,j),coad(dA,a))",
+            1,
+        ),
+        (
+            "f(out,in,coad(dA,a))",
+            "f(in,out,coad(dA,a))",
+            "f(coad(dA,k),coad(dA,i),coad(dA,a))*f(coad(dA,k),coad(dA,j),coad(dA,a))",
+            -1,
+        ),
+        (
+            "f(out,in,coad(dA,a))",
+            "f(out,in,coad(dA,a))",
+            "f(coad(dA,k),coad(dA,i),coad(dA,a))*f(coad(dA,j),coad(dA,k),coad(dA,a))",
+            1,
+        ),
+    ] {
+        let input = Atom::parse(
+            format!("chain(coad(dA,i),coad(dA,j),{first},{second})"),
+            "spenso",
+            Default::default(),
+        )
+        .unwrap()
+            * &spectator;
+        let explicit = Atom::parse(explicit, "spenso", Default::default()).unwrap() * &spectator;
+        let result = simplify_formal_color(&input, settings);
+        assert_eq!(result, &expected * sign);
+        assert_eq!(result, simplify_formal_color(&explicit, settings));
+        assert_eq!(simplify_formal_color(&result, settings), result);
+    }
+}
+
+#[test]
 fn cubic_trace_contraction_rejects_unowned_or_incompatible_slots() {
     test_initialize();
     let _ = spenso::tensor_symbol!("spenso::unknown_color_operator");

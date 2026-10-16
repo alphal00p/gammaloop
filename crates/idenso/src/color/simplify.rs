@@ -599,6 +599,34 @@ impl ColorAlgebraSimplifier {
             return Some(rewritten);
         }
 
+        if let Some(dimension) = color_adjoint_dimension(&start)
+            && color_adjoint_dimension(&end).as_ref() == Some(&dimension)
+        {
+            let rep = adjoint_rep(dimension.clone());
+            for i in 0..factors.len().saturating_sub(1) {
+                let Some((left, left_weight)) =
+                    adjoint_generator(rep.as_view(), factors[i].as_view())
+                else {
+                    continue;
+                };
+                let Some((right, right_weight)) =
+                    adjoint_generator(rep.as_view(), factors[i + 1].as_view())
+                else {
+                    continue;
+                };
+                if left == right {
+                    // These are raw real f matrices: f(i,k,a) f(k,j,a)
+                    // equals -C_A delta(i,j), before generator phases.
+                    return Some(
+                        -left_weight
+                            * right_weight
+                            * adjoint_casimir_for_dimension(dimension)
+                            * chain_with_removed_range(&start, &end, &factors, i, i + 2),
+                    );
+                }
+            }
+        }
+
         for i in 0..factors.len().saturating_sub(1) {
             let Some(left) = color_generator_adjoint(factors[i].as_view()) else {
                 continue;
