@@ -406,7 +406,13 @@ end_anchor = "    fn series_preserving_factors(\n        &self,\n        variabl
 # unchanged; unequal finite coefficients remain distinct in the regression.
 # Reviewed 2026-10-15: Exact complex content uses rational-coordinate GCDs
 # and a canonical unit phase, retaining opaque bodies and inverse guards.
-digest = "4759b305455f1e7f26aa1fab03106f28dd551f2c"
+# Reviewed 2026-10-16: numeric distribution visits each current product/sum
+# boundary once from the bottom up instead of recursively revisiting rebuilt
+# scalar subtrees. Other factors, opaque functions/powers and guards retain
+# their ownership; both strict-size fixed-point checks are unchanged.
+# The UV note records this boundary. Deep exact recurrence and independent
+# centered-coefficient tests preserve the factorized algebraic contract.
+digest = "5a8cbffc674e315330c26249637157bc4b293aa0"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/overlap_numerators.rs"

@@ -76,12 +76,22 @@ coefficient-free body order chooses a phase in `{1, -1, i, -i}` so its remaining
 real part is positive and its imaginary part is nonnegative. This preserves
 opposite and quarter-turned power owners without invoking Gaussian-integer GCD
 or changing any symbolic factor boundary.
+Numerical weights are distributed once at each current product/sum boundary,
+from the bottom up. Other multiplicative factors remain intact; rewritten
+scalar subtrees are not recursively revisited. This avoids repeated copying
+of deep signed sums in the scalar evaluator while preserving function,
+inverse-power and guarded boundaries. Common numeric content is then
+extracted by the same exact rule. Both enclosing normalization loops require
+strictly smaller expressions before another pass.
+
 Each finite-component pass makes one bounded collection in repeated literal
 scalar factors. Complete scalar sums are admitted only after checking their
 native scalar interface. A retained sum owns its proper additive subsets,
 identified by their direct coefficient-free terms; selecting both would hide
-their linear relation. Unrelated product factors stay outside the exact
-coefficient rows. Recomposition can expose another cancellation, so the same
+their linear relation. Distinct summed candidates with the same
+coefficient-free support also leave their constituents available to the
+collector; complete positive-power bases remain opaque. Unrelated product
+factors stay outside the exact coefficient rows. Recomposition can expose another cancellation, so the same
 deterministic pass repeats only after a strict size decrease, at most eight
 times. Unsupported collection or the pass limit leaves an unproven residual.
 The certificate takes no numerical samples, forms no common denominators, and

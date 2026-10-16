@@ -711,7 +711,38 @@ impl NumeratorAtomExt for AtomView<'_> {
                     return value;
                 }
                 value
-                    .expand_num()
+                    .replace_map_bottom_up(|view, context, out| {
+                        if context.function_level != 0 {
+                            return;
+                        }
+                        let AtomView::Mul(product) = view else {
+                            return;
+                        };
+                        let Some(number) = product.get_coefficient() else {
+                            return;
+                        };
+                        let Some((position, sum)) = product.iter().enumerate().find_map(
+                            |(position, factor)| match factor {
+                                AtomView::Add(sum) => Some((position, sum)),
+                                _ => None,
+                            },
+                        ) else {
+                            return;
+                        };
+                        // Children are already visited. Distribute only this
+                        // product's number into its first sum, without walking
+                        // the rebuilt subtree again or opening other factors.
+                        let mut factors = product
+                            .iter()
+                            .enumerate()
+                            .filter(|(index, factor)| {
+                                *index != position && !matches!(factor, AtomView::Num(_))
+                            })
+                            .map(|(_, factor)| factor.to_owned())
+                            .collect::<Vec<_>>();
+                        factors.push(Atom::add_many(sum.iter().map(|term| term * number)));
+                        **out = Atom::mul_many(factors);
+                    })
                     .replace_map_bottom_up(|view, context, out| {
                         if context.function_level == 0 && matches!(view, AtomView::Add(_)) {
                             **out = numeric_content(view);
@@ -892,6 +923,8 @@ impl NumeratorAtomExt for AtomView<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use idenso::IndexTooling;
     use linnet::half_edge::involution::EdgeIndex;
     use spenso::{
@@ -1261,6 +1294,91 @@ mod tests {
     }
 
     #[test]
+    fn compact_factors_keep_deep_weighted_scalar_circuits_factorized() {
+        use symbolica::atom::AtomView;
+
+        test_initialise().unwrap();
+        let head = symbol!("compact_nested_scalar::leaf");
+        let depth = 512;
+        let mut core = function!(head, 0);
+        for index in 1..=depth {
+            core = function!(head, 2 * index) * (function!(head, 2 * index + 1) - core);
+        }
+        let protected = [
+            parse_lit!((u + v) ^ 11),
+            parse_lit!(1 / (w + 2 * (x + y))),
+            parse_lit!(opaque(a + 2 * (b + c))),
+            parse_lit!((r + 2 * (s + t)) ^ (1 / 2)),
+        ];
+        let source = core * Atom::mul_many(&protected);
+        let normalized = source.collect_compact_factors();
+        assert!(!normalized.is_zero());
+        assert_eq!(normalized.collect_compact_factors(), normalized);
+        for factor in &protected {
+            assert!(normalized.contains(factor));
+        }
+        let mut leaves = 0;
+        normalized.visitor(&mut |part| {
+            if let AtomView::Fun(function) = part {
+                leaves += usize::from(function.get_symbol() == head);
+                return false;
+            }
+            true
+        });
+        assert_eq!(leaves, 2 * depth + 1);
+
+        // Supplement the symbolic boundary checks with independent exact
+        // recurrence values. These valuations do not expand the scalar circuit.
+        for shift in [0, 1] {
+            let value = |index: usize| {
+                if index == 0 {
+                    Atom::num((1 + shift, 7))
+                } else if index.is_multiple_of(2) {
+                    Atom::num((
+                        if (index / 2).is_multiple_of(2) {
+                            2 + shift
+                        } else {
+                            -2 - shift
+                        },
+                        3,
+                    ))
+                } else {
+                    Atom::num((((index / 2) % 7) as i64 - 3 + shift, 5))
+                }
+            };
+            let mut expected = value(0);
+            for index in 1..=depth {
+                expected = value(2 * index) * (value(2 * index + 1) - expected);
+            }
+            let evaluated = normalized.replace_map(|part, _, output| {
+                if let AtomView::Fun(function) = part
+                    && function.get_symbol() == head
+                {
+                    **output = value(usize::try_from(function.get(0)).unwrap());
+                }
+            });
+            assert_eq!(
+                evaluated.collect_compact_factors(),
+                (expected * Atom::mul_many(&protected)).collect_compact_factors()
+            );
+        }
+
+        // The same pass must still close scalar linear cancellation, with the
+        // complete deep numerator retained as its surrounding factor.
+        let k = parse_lit!(k);
+        let p = parse_lit!(p);
+        assert_eq!(
+            (&source * (&k - (&k - &p))).collect_compact_factors(),
+            (&normalized * &p).collect_compact_factors()
+        );
+        assert!(
+            (&source * (&k - (&k - &p) - &p))
+                .collect_compact_factors()
+                .is_zero()
+        );
+    }
+
+    #[test]
     fn compact_factors_keep_signed_integer_and_fractional_power_domains_distinct() {
         test_initialise().unwrap();
         let base = parse_lit!(a - b);
@@ -1414,13 +1532,41 @@ mod tests {
         let result = source
             .series_preserving_factors(t, Atom::num(2).as_view(), 1, &[])
             .unwrap();
-        assert_eq!(
-            result,
-            parse_lit!(
-                g * ((a + 2 * b) * (c + 2 * d)
-                    + (series_t - 2) * (b * (c + 2 * d) + d * (a + 2 * b)))
-            )
-        );
+        let delta = Atom::var(symbol!("nonzero_series_center_delta"));
+        let expected = BTreeMap::from([
+            (Atom::one(), parse_lit!(g * (a + 2 * b) * (c + 2 * d))),
+            (
+                delta.clone(),
+                parse_lit!(g * (b * (c + 2 * d) + d * (a + 2 * b))),
+            ),
+        ]);
+        for (label, expression) in [
+            ("factor-preserving series", result),
+            (
+                "native series",
+                source.series(t, Atom::num(2), 1).unwrap().to_atom(),
+            ),
+        ] {
+            let centered = expression.replace(t).with(&delta + 2);
+            let coefficients = centered
+                .coefficient_list_exact(std::slice::from_ref(&delta))
+                .expect("the recentered Taylor polynomial has exact scalar coefficients")
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(
+                coefficients.keys().collect::<Vec<_>>(),
+                expected.keys().collect::<Vec<_>>(),
+                "{label}: complete Taylor degree inventory"
+            );
+            for (power, coefficient) in coefficients {
+                assert!(
+                    (coefficient - &expected[&power])
+                        .collect_compact_factors()
+                        .is_zero(),
+                    "{label}: Taylor coefficient of {power}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -1512,17 +1658,65 @@ mod tests {
         let result = source
             .series_preserving_factors(t, Atom::num(2).as_view(), 0, &keys)
             .unwrap();
-        assert_eq!(
-            result,
-            n0 * (parse_lit!(a) / shift.pow(2) + parse_lit!(b) / &shift)
-                + n1 * (parse_lit!(a) / &shift + parse_lit!(b))
-                + n2 * parse_lit!(a)
-        );
-        assert!(
-            (result - source.series(t, Atom::num(2), 0).unwrap().to_atom())
-                .expand()
-                .is_zero()
-        );
+        let delta = Atom::var(symbol!("owned_series_center_delta"));
+        let expected = BTreeMap::from([
+            (delta.pow(-2), parse_lit!(a) * n0),
+            (delta.pow(-1), parse_lit!(b) * n0 + parse_lit!(a) * n1),
+            (Atom::one(), parse_lit!(b) * n1 + parse_lit!(a) * n2),
+        ]);
+        for (label, expression) in [
+            ("factor-preserving series", result),
+            (
+                "native series",
+                source.series(t, Atom::num(2), 0).unwrap().to_atom(),
+            ),
+        ] {
+            let centered = expression.replace(t).with(&delta + 2);
+            // Recentring can leave a pole base as 2-(2+delta). Certify that
+            // affine base independently before retaining its original power;
+            // no denominator clearing or numerator distribution is needed.
+            let centered = centered.replace_map_bottom_up(|part, context, output| {
+                if context.function_level != 0 {
+                    return;
+                }
+                if let symbolica::atom::AtomView::Pow(power) = part
+                    && power.get_base().contains(&delta)
+                {
+                    let exponent = i64::try_from(power.get_exp())
+                        .expect("the recentered denominator has an integer power");
+                    assert!(
+                        exponent < 0,
+                        "only Laurent poles require base reconstruction"
+                    );
+                    let rows = power
+                        .get_base()
+                        .coefficient_list_exact(std::slice::from_ref(&delta))
+                        .expect("the denominator base is affine in the center displacement");
+                    assert_eq!(rows.len(), 1);
+                    assert_eq!(rows[0].0, delta);
+                    assert!(rows[0].1 == Atom::one() || rows[0].1 == -Atom::one());
+                    **output = (&rows[0].1 * &delta).pow(exponent);
+                }
+            });
+            let coefficients = centered
+                .coefficient_list_exact(std::slice::from_ref(&delta))
+                .expect("the recentered Laurent polynomial keeps exact family coefficients")
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(
+                coefficients.keys().collect::<Vec<_>>(),
+                expected.keys().collect::<Vec<_>>(),
+                "{label}: complete Laurent pole/degree inventory"
+            );
+            for (power, coefficient) in coefficients {
+                assert!(
+                    (coefficient - &expected[&power])
+                        .collect_compact_factors()
+                        .is_zero(),
+                    "{label}: Laurent coefficient of {power}"
+                );
+            }
+        }
     }
 
     #[test]
