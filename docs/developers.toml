@@ -99,7 +99,8 @@ anchor = "pub fn warm_up(&mut self, model"
 # architecture; runtime orchestration remains downstream of generation.
 # Reviewed 2026-10-15: The current architecture covers Fermi-surface evaluation and
 # weighted precise profiles alongside canonical FeynKit models.
-digest = "31e1c406bd1947e8297329482f496389e69e9751"
+# Reviewed 2026-10-16: Authored warm-up fixtures declare a physical loop basis and only real endpoint rule slots. Production warm-up ownership is unchanged.
+digest = "c795c1a404f9a6118501d7b5ee2d5e580e44886c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -207,7 +208,8 @@ anchor = "pub struct Model {"
 # Reviewed 2026-10-15: Absent chemical-potential metadata is omitted. A canonical ZERO supplies
 # fixed mass/medium identities while unrelated parameter expressions remain intact;
 # models without ZERO retain the exact proof on their internal parameters.
-digest = "9d8d8d1add70b93af14af25c719f4a0631eb2f36"
+# Reviewed 2026-10-16: The architecture distinguishes structural mass classification from a known zero pole in a massive covariant multiplet.
+digest = "e814279751b276d9275b3014ba6b6b197ce5b0a9"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
@@ -231,7 +233,8 @@ anchor = "pub struct FeynmanDiagram {"
 # Reviewed 2026-10-15: Canonical diagrams retain source-map ownership through import
 # and runtime conversion. Explicit fragments retain their declared frame; the new
 # importer scope owns compact GammaLoop frame conversion.
-digest = "e4169b6a7cffecd3b1ef38d1b8a25ac31dfc94f1"
+# Reviewed 2026-10-16: The architecture records explicit half-edge order and orientations in the native builder for validated runtime export.
+digest = "601954affd3b51c4b01f75d3d4b5ad1bdff42d7f"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -253,7 +256,8 @@ end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> S
 # Reviewed 2026-10-15: Canonical graph ownership is unchanged; model-parameter
 # construction errors propagate through every finalized import path.
 # Reviewed 2026-10-16: Compact half-edge slot conversion now belongs to Aind and is shared with CLI projector input; the documented compact/native frames and ownership remain unchanged.
-digest = "475de272950b5351855d085321658b9e3e91937b"
+# Reviewed 2026-10-16: The architecture records canonical cut export and runtime metadata restoration at the native artifact boundary.
+digest = "1ad2390cf7e39edcd53311fe174b785b9c2ad20a"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -342,7 +346,8 @@ anchor = "impl UVOrchestrator {"
 # meaning.
 # Reviewed 2026-10-15: The UV orchestrator retains canonical model access and complete
 # generation settings for medium-dependent forest selection.
-digest = "b366988fb7451148c68402ae7fc9ca36bd3a1952"
+# Reviewed 2026-10-16: Only comparison fixtures changed: shared normalization contracts dummy charts; exact equivalence and retained scalar factors remain asserted. UV ownership is unchanged.
+digest = "e3d71a9ec1fe5eac2f07d19909ceb55cab05b074"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"
@@ -487,7 +492,8 @@ anchor = "pub enum ShorthandParsing {"
 # Reviewed 2026-10-16: Exact mixed scalar sums use one batch; other numeric
 # domains retain the ordered fold. Parser admission and factor boundaries
 # are unchanged. Registry validation must use the builder for this workspace.
-digest = "8ce8477a044d3c7a6f0f2478f0e822d946eae36e"
+# Reviewed 2026-10-16: Realized tensor layouts now travel with eager construction; parsing-flow and Spenso architecture describe post-contraction interfaces and lazy scaled results.
+digest = "583f0514c0418a75d13870024bb02a8b42f3ba02"
 
 [[section.note]]
 id = "schoonschip-network"
@@ -605,7 +611,8 @@ anchor = "pub trait IndexTooling {"
 # Reviewed 2026-10-15: Plain-Atom typed admission and canonical index registration
 # match the maintained notes; the former tensor-alias implementation remains archived.
 # Evaluator scalar aliases are a separate downstream owner.
-digest = "ccbcffa11a97dab555ad9b97182f7f4036520ab9"
+# Reviewed 2026-10-16: Index canonicalization preserves dual wrappers; raw queries reject unbound chain endpoints and ignore scalar metadata. Idenso architecture and shared syntax now describe these contracts.
+digest = "fa7352f63c6af806f937fa23093fcc950cf41d6d"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -673,7 +680,9 @@ anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # Reviewed 2026-10-15: Sparse coordinate-permutation repair enforces documented
 # logical slot alignment. Borrowed operation graphs, execution ownership and verbose-
 # profile controls remain as described.
-digest = "022085d55aacc0d51b944997a83c4ed4cd429d16"
+# Reviewed 2026-10-16: eager opaque realization uses result_tensor to resolve lazy
+# scaled leaves; its library bound now uses the existing WithIndices contract.
+digest = "410491ec4a23db5061510dc830fe9a880b6b6a0a"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
@@ -696,7 +705,8 @@ anchor = "pub struct ParseSettings {"
 # Reviewed 2026-10-16: Exact mixed scalar sums use one batch; other numeric
 # domains retain the ordered fold. Parser admission and factor boundaries
 # are unchanged. Registry validation must use the builder for this workspace.
-digest = "8ce8477a044d3c7a6f0f2478f0e822d946eae36e"
+# Reviewed 2026-10-16: Realized tensor layouts now travel with eager construction; parsing-flow and Spenso architecture describe post-contraction interfaces and lazy scaled results.
+digest = "583f0514c0418a75d13870024bb02a8b42f3ba02"
 
 [[section.note.scope]]
 path = "crates/spenso/src/symbolic_parallelism.rs"
@@ -745,7 +755,8 @@ anchor = "pub trait IndexTooling {"
 # Reviewed 2026-10-15: Plain-Atom typed admission and canonical index registration
 # match the maintained notes; the former tensor-alias implementation remains archived.
 # Evaluator scalar aliases are a separate downstream owner.
-digest = "ccbcffa11a97dab555ad9b97182f7f4036520ab9"
+# Reviewed 2026-10-16: Index canonicalization preserves dual wrappers; raw queries reject unbound chain endpoints and ignore scalar metadata. Idenso architecture and shared syntax now describe these contracts.
+digest = "fa7352f63c6af806f937fa23093fcc950cf41d6d"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
@@ -773,7 +784,8 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # Reviewed 2026-10-15: The documented typed interface remains authoritative for scalar
 # zero, declared open ports and callback validation. Reconciliation retains plain-Atom
 # storage and checked interfaces.
-digest = "09cad935c92903ee530cd789b803e3e001305470"
+# Reviewed 2026-10-16: Symbolic TensorFromExpression retains the canonical source layout; reviewed against the Idenso symbolic-target and Spenso realization descriptions.
+digest = "dbdd7eb00b2b34397b7d7d71a9ea0bc4bb5f1ccf"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/contract.rs"
@@ -809,7 +821,8 @@ anchor = "pub struct AlgebraSettings {"
 # Reviewed 2026-10-15: The note covers the unified scheduler and selected identity
 # families. Removed tensor-coefficient alias plumbing is reflected in the GammaLoop
 # summary; evaluator scalar aliases remain separate.
-digest = "240d92e3bab01bca7feedfb421066572f29c3899"
+# Reviewed 2026-10-16: The architecture records independent trace/Fierz settings. Symmetric trace prerequisites respect disabled trace evaluation.
+digest = "481d0e55177bbc939325f39083db539804e145d8"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
@@ -821,7 +834,8 @@ anchor = "pub(crate) struct DomainObservations {"
 # Reviewed 2026-10-15: Borrowed regional observations retain branch-local slots and
 # callback-sensitive validation. The note distinguishes admitted facts from explicit
 # component execution.
-digest = "17c9fc628ce90f8a60165660e014bf477e610040"
+# Reviewed 2026-10-16: The architecture records completed observation sharing during the initial walk while every occurrence is scanned and counted.
+digest = "27c32f90af7aeed625ec0def5ca8f727dd7e3477"
 
 
 [[section.note.scope]]
@@ -832,7 +846,8 @@ end_anchor = "    /// Adjacent pairs remain cheapest."
 # Reviewed 2026-10-16: Mixed physical gamma0 traces use the existing trace
 # recurrence directly; formal dimensions and disabled trace evaluation retain
 # their boundary. This prevents component-only execution of reducible traces.
-digest = "32b63d9cfb87c255dc6d8a5e36206d912038cf4b"
+# Reviewed 2026-10-16: The architecture records weighted Dirac trace recurrence and strict physical gamma0 dimensions, preserving spectator powers.
+digest = "ebfe09fc2626bc76c1f50ea399ec96b818045492"
 
 [[section.note.scope]]
 path = "crates/idenso/src/color/simplify.rs"
@@ -845,7 +860,9 @@ anchor = "    fn simplify_product("
 # Reviewed 2026-10-15: Color reduction uses the typed regional owner and preserves
 # unrelated spin/momentum coefficients. Native tag and fixture migration retain exact
 # color and collision assertions.
-digest = "2361bd76b48391fdb441b457a41fc6e55b7d61df"
+# Reviewed 2026-10-16: The architecture records complete SU(N) invariant projection, local cubic contractions and adjoint endpoint zero reduction.
+# Reviewed 2026-10-16: adjacent raw adjoint pairs now reduce to their signed Casimir before scalar evaluation; explicit-product orientation controls pass.
+digest = "08f1e1c43c75271f84402e3c1d9ce0ed26ef25c4"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"
@@ -973,7 +990,8 @@ anchor = "pub struct Vakint {"
 # scalar backend evaluation and final Laurent projection. Whole AlphaLoop tensor
 # reduction protects only loop-independent Lorentz scalars; native ports and supported
 # compact/indexed syntax remain explicit.
-digest = "8ab00d4b0492fa752bfabd69195a2186f08614b2"
+# Reviewed 2026-10-16: No architecture impact: the numerical unit fixture invokes the public parser to initialize the existing typed symbols before parsing.
+digest = "3dc54488267928c6fcec847aaada72b9cab99f6a"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -1432,6 +1450,22 @@ products = ["gammaloop", "feynkit", "idenso", "spenso"]
 topics = ["performance", "testing", "tensor-network", "ci"]
 review_triggers = ["benchmarks/performance/**", "crates/gammalooprs/src/integrands/process/evaluators.rs", "crates/idenso/src/dirac/simplify.rs", "crates/spenso/src/network/parsing/**"]
 
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/evaluators.rs"
+symbol = "EvaluatorStack::preprocess_numerator_families"
+anchor = "fn preprocess_numerator_families<A: AtomCore>("
+# Reviewed 2026-10-16: finite component factors are collected before registration;
+# the investigation records identical-input instruction counts and pending gates.
+digest = "b382e5c8f7cbd28f68952ac7fa20ae89d93f3ef7"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/simplification/observation.rs"
+symbol = "DomainObservations::finish_observation"
+anchor = "fn finish_observation("
+# Reviewed 2026-10-16: completed duplicate scopes share immutable observations;
+# every occurrence remains inspected and counted. Massif and RSS evidence is recorded.
+digest = "27c32f90af7aeed625ec0def5ca8f727dd7e3477"
+
 [[section.note]]
 id = "nix-crane-cache-reuse"
 title = "Nix and Crane artifact reuse"
@@ -1580,7 +1614,8 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-15: Embedded-input audit covers renderer CSS/JS/HTML and
 # compile-time Python, Atom, JSON and graph fixtures in their owning producers.
 # Native FeynKit rendering no longer keys its producer on obsolete Typst templates.
-digest = "59e5e98838c5ce3681fb263e27644ec19ac7a07e"
+# Reviewed 2026-10-16: API and integration runtime inputs include the approved frozen GL15; the cache-source ownership note records that boundary.
+digest = "634e2eaec56e9afc2fa75ad6d3f85ea9167a11e3"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

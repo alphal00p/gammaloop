@@ -1671,6 +1671,55 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
     let right = idenso::bis!(4, finite_right);
     let tensor_ct =
         &finite_ct * spenso::g!(&left, &middle) + Atom::num(3) * idenso::gamma0!(&left, &middle);
+    let marker = crate::uv::marker::UvMarker::new(&crate::uv::UVgenerationSettings {
+        add_marker: true,
+        keep_marker: true,
+        ..Default::default()
+    });
+    let marked = marker.apply(
+        crate::uv::marker::UvOperation::Approx,
+        &graph.full_filter(),
+        &graph.empty_subgraph(),
+        &tensor_ct,
+    );
+    let marked_localized = localizer.localize(&marked, &mut graph, &integrated_node)?;
+    for (key, integrands) in
+        DirectResidueBranches::from_transient(&marked_localized.active)?.iter_keys()
+    {
+        assert!(
+            integrands
+                .iter()
+                .any(|(_, atom)| atom.contains_symbol(GS.ct_marker))
+        );
+        assert!(
+            integrands
+                .numerators()
+                .iter()
+                .all(|entry| !entry.rhs.contains_symbol(GS.ct_marker))
+        );
+        let mapped = integrands.resolved()?;
+        for operation in [
+            crate::uv::marker::UvOperation::Approx,
+            crate::uv::marker::UvOperation::Integrate,
+        ] {
+            let apply = |atom: &Atom| {
+                marker.apply(
+                    operation,
+                    &graph.full_filter(),
+                    &graph.empty_subgraph(),
+                    atom,
+                )
+            };
+            assert_eq!(
+                integrands.map(apply).resolved()?,
+                mapped.map(apply),
+                "shared marker arguments preserve the complete history for {key:?}"
+            );
+        }
+        let prefix =
+            |atom: &Atom| marker.prefix(&graph.full_filter(), &graph.empty_subgraph(), atom);
+        assert_eq!(integrands.map(prefix).resolved()?, mapped.map(prefix));
+    }
     let cograph = (&finite_ct + Atom::one()) * idenso::gamma0!(&middle, &right);
     let tensor_localized = localizer.localize(&tensor_ct, &mut graph, &integrated_node)?;
     assert_eq!(tensor_localized.frozen_integrands, frozen_kernel);

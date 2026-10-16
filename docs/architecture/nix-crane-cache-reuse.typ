@@ -1847,6 +1847,9 @@ four-photon fixtures used with `include_str!`. Its RQFT renormalization graphs
 are runtime inputs instead. Declaring these files at their owning boundaries
 keeps isolated Nix test runs equivalent to a complete checkout without widening
 unrelated production sources.
+The API and integration packages also declare the frozen GL15 graph as a
+runtime input: their metadata and event checks import the same physical
+pentagon independently of generator numbering.
 
 The Python ABI artifact family now selects Cargo library targets explicitly.
 Its `pyo3-extension-module` feature intentionally leaves Python symbols for

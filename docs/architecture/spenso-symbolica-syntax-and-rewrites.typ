@@ -63,6 +63,9 @@ dind(cof(NC, j)) dual color-fundamental slot
 such as `mink`, `bis`, and `coad` use the same representation on both sides of a
 contraction. Dualizable representations such as `cof` use the unwrapped slot for
 one orientation and `dind(...)` for the dual orientation.
+Index canonicalization preserves these wrappers while renaming their shared
+base index. Removing duality first would allow a symmetric metric to merge two
+oppositely oriented occurrences into an invalid tensor square.
 
 Direct slot arguments define the exposed tensor structure. Non-slot arguments
 are metadata on the symbolic tensor leaf:

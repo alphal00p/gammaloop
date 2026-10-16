@@ -7216,7 +7216,7 @@ mod tests {
                 )
             })
             .collect();
-        let input = vk_parse!("(p(1,11)+p(2,11))*p(3,11)").unwrap();
+        let input = crate::vakint_parse!("(p(1,11)+p(2,11))*p(3,11)").unwrap();
         let partial = Vakint::partial_numerical_evaluation(
             &settings,
             input.as_view(),

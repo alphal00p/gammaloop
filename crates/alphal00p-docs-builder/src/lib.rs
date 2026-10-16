@@ -754,7 +754,7 @@ impl SiteBuilder {
             .map(|product| product.id.as_str())
             .collect::<BTreeSet<_>>();
         ensure!(
-            ids == PRODUCT_IDS.into_iter().collect(),
+            ids == PRODUCT_IDS.into_iter().collect::<BTreeSet<_>>(),
             "registry must contain exactly: {}",
             PRODUCT_IDS.join(", ")
         );
@@ -3336,6 +3336,21 @@ impl SiteBuilder {
         let path = site.join(&page.route).join("index.html");
         let source = fs::read_to_string(&path)?;
         let mut body = extract_html_body(&source)?.to_owned();
+        // Typst's inline frames carry Linnest's inspection protocol as SVG
+        // links. The drawing owner turns these into accessible controls before
+        // document navigation and link validation see the page.
+        let svg = Regex::new(r"(?s)<svg\b.*?</svg>")?;
+        let frames = svg
+            .find_iter(&body)
+            .map(|frame| {
+                linnest::svg::Scene::interactive_svg(frame.as_str())
+                    .map(|interactive| (frame.range(), interactive))
+                    .map_err(|error| eyre::eyre!("{}: {error}", path.display()))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (range, interactive) in frames.into_iter().rev() {
+            body.replace_range(range, &interactive);
+        }
         body = body.replace("<nav><a href=\"../../\">Documentation home</a></nav>", "");
         if page.route.is_empty() {
             body = format!("{}{body}", product_hero(product));
@@ -10187,14 +10202,14 @@ mod tests {
 
         assert_eq!(module, "symbolica.community.tensor");
         assert_ne!(module, catalog.component.package);
-        assert_eq!(item.required_features.as_slice(), ["python-stubs"]);
+        assert_eq!(item.required_features.as_slice(), ["python_stubgen"]);
         assert!(rendered.contains(&format!("<p><code>{module}</code> · version")));
         assert!(!rendered.contains(&format!(
             "<p><code>{}</code> · version",
             catalog.component.package
         )));
         assert!(rendered.contains(
-            "<strong>Source-build provenance:</strong> this catalog was generated with <code>python-stubs</code>."
+            "<strong>Source-build provenance:</strong> this catalog was generated with <code>python_stubgen</code>."
         ));
         assert!(!symbol.contains("api-feature-requirement"));
         assert!(symbol.contains("href=\"guides/python/\""));
@@ -13040,6 +13055,60 @@ mod tests {
             )));
             assert!(rendered.contains("issues/new?labels=documentation&amp;title="));
         }
+    }
+
+    #[test]
+    fn inline_graph_frames_use_inspection_controls_and_preserve_document_links() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|p| p.id == "linnet")
+            .unwrap();
+        let page = SitePage::new("guides/linnest/", "Linnest", "Guide");
+        let site = tempfile::tempdir().unwrap();
+        let destination = site.path().join(&page.route);
+        fs::create_dir_all(&destination).unwrap();
+        let ordinary = r##"<svg xmlns="http://www.w3.org/2000/svg"><a href="#topic"><path d="M 1 2 L 3 4"/></a></svg>"##;
+        let drawing = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50"><a href="#linnet-node-2?{&quot;name&quot;:&quot;v&quot;}"><path d="M 0 0 L 1 1"/></a></svg>"##;
+        fs::write(destination.join("index.html"), format!(
+            "<!doctype html><html><body><h1>Linnest</h1><h2 id=\"topic\">Topic</h2>{ordinary}{drawing}{drawing}</body></html>"
+        )).unwrap();
+        let metadata = SnapshotMetadata {
+            schema: SCHEMA_VERSION,
+            product: &product.id,
+            title: &product.title,
+            channel: BuildChannel::Latest,
+            snapshot_tag: None,
+            git_commit: "0123456789abcdef".to_owned(),
+            git_timestamp: 1,
+            route: "products/linnet/latest/".to_owned(),
+            components: Vec::new(),
+        };
+        builder
+            .decorate_html_page(
+                product,
+                &metadata,
+                site.path(),
+                &page,
+                (None, None),
+                (BuildScope::FullSite, &[]),
+            )
+            .unwrap();
+        let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
+        assert!(rendered.contains(ordinary));
+        assert_eq!(
+            rendered.matches("data-linnet-interactive=\"true\"").count(),
+            2
+        );
+        assert_eq!(rendered.matches("viewBox=\"0 0 40 50\"").count(), 2);
+        assert_eq!(rendered.matches("<path d=\"M 0 0 L 1 1\"/>").count(), 2);
+        assert_eq!(
+            rendered.matches("role=\"button\" tabindex=\"0\"").count(),
+            2
+        );
+        assert!(!rendered.contains("href=\"#linnet-node-"));
     }
 
     #[test]

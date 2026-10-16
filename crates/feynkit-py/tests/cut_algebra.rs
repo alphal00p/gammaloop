@@ -87,7 +87,9 @@ else:
 energy_factor = core.Expression.num(1)
 for energy in result.on_shell_energies.values():
     energy_factor /= -2*energy.symbol
-assert result.residue(group, variable=q, root=1, surface=q-1, coefficient=q**2) == energy_factor
+residue = result.residue(group, variable=q, root=1, surface=q-1, coefficient=q**2)
+assert residue.rank == 0
+assert residue.to_expression() == energy_factor
 "#,
         )
         .unwrap();

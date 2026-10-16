@@ -66,7 +66,7 @@ fn cool_qm_eos_nlo_matches_example_target() -> Result<()> {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         masters,
-        BTreeSet::from(["GL0", "GL1", "GL2", "GL3", "GL5"]),
+        BTreeSet::from(["GL0", "GL1", "GL2", "GL3", "GL4"]),
         "the acceptance must generate the complete cool-QM NLO example",
     );
 

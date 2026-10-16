@@ -6,12 +6,13 @@ use spenso::{
         AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShorthandParsing,
         StrictTensorFilter,
     },
+    shadowing::Collectable,
     structure::representation::{Minkowski, RepName},
 };
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomType, AtomView, Symbol},
-    coefficient::{Coefficient, CoefficientView},
+    coefficient::CoefficientView,
     domains::atom::AtomField,
     function,
     poly::{polynomial::MultivariatePolynomial, series::SeriesDepth},
@@ -527,55 +528,8 @@ impl NumeratorAtomExt for AtomView<'_> {
         ]
         .into_iter()
         .any(|head| atom.contains_symbol(head));
-        // Extract only direct numeric content. In particular, implicit unit
-        // coefficients participate in the GCD, and term bodies stay literal.
-        // Ordering by those bodies makes opposite sums choose the same owner.
-        let numeric_content = |value: AtomView<'_>| {
-            let AtomView::Add(sum) = value else {
-                return value.to_owned();
-            };
-            let mut terms = Vec::with_capacity(sum.get_nargs());
-            for term in sum.iter() {
-                let number = match term {
-                    AtomView::Num(number) => number.get_coeff_view().to_owned(),
-                    AtomView::Mul(product) => match product.get_coefficient() {
-                        Some(AtomView::Num(number)) => number.get_coeff_view().to_owned(),
-                        _ => Coefficient::one(),
-                    },
-                    _ => Coefficient::one(),
-                };
-                let Coefficient::Complex(exact) = &number else {
-                    return value.to_owned();
-                };
-                terms.push((term / Atom::num(&number).as_view(), exact.clone()));
-            }
-            terms.sort_by(|left, right| left.0.cmp(&right.0));
-            let first = &terms[0].1;
-            // Only real rational GCDs are needed for literal content. The
-            // upstream Gaussian GCD can cycle, e.g. on 2+i and 2-i; never call
-            // it even for a small, exact complex coefficient.
-            let mut content = first.re.gcd(&first.im);
-            for (_, number) in &terms[1..] {
-                content = content.gcd(&number.re).gcd(&number.im);
-            }
-            // Choose a unit so the first coefficient has positive real part
-            // and nonnegative imaginary part. This preserves real/imaginary
-            // content and gives opposite or quarter-turned sums one owner.
-            let unit = if first.re > 0 && first.im >= 0 {
-                Atom::one()
-            } else if first.re <= 0 && first.im > 0 {
-                Atom::i()
-            } else if first.re < 0 && first.im <= 0 {
-                -Atom::one()
-            } else {
-                -Atom::i()
-            };
-            let content = Atom::num(content) * unit;
-            if content.is_one() {
-                return value.to_owned();
-            }
-            &content * Atom::add_many(sum.iter().map(|term| term / content.as_view()))
-        };
+        let numeric_content = |value: AtomView<'_>| value.collect_numeric_content();
+
         let split_number = |value: &Atom| {
             let number = match value.as_view() {
                 AtomView::Mul(product) => product
@@ -817,6 +771,29 @@ impl NumeratorAtomExt for AtomView<'_> {
                 }
             }
         }
+        // Scalar Taylor expansion cannot differentiate the retained matrix-word
+        // container or move Laurent poles out of its arguments. Reduce Dirac
+        // words with their shared algebra owner first, retaining independent
+        // numerator factors and the library's dimensional restrictions.
+        if [
+            spenso::network::tags::SPENSO_TAG.chain,
+            spenso::network::tags::SPENSO_TAG.trace,
+        ]
+        .into_iter()
+        .any(|head| dependent.contains_symbol(head))
+        {
+            let cooking = idenso::CookSettings::indices()
+                .with_mode(idenso::CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced =
+                idenso::tensor::SymbolicTensor::infer(cooking.try_cook(dependent.as_view())?)?
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                        gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                        contract: idenso::tensor::AlgebraContraction::Minimal,
+                        ..Default::default()
+                    })?;
+            dependent = cooking.uncook(reduced.expression().as_view());
+        }
         // Keep native whole-product precision lifting and cross-arm zero
         // detection before regrouping the surviving coefficient families.
         let started = std::time::Instant::now();
@@ -924,6 +901,29 @@ impl NumeratorAtomExt for AtomView<'_> {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+
+    #[test]
+    fn series_reduces_dirac_words_with_laurent_arguments_without_opening_spectators() {
+        use super::NumeratorAtomExt;
+        use symbolica::atom::AtomCore;
+        crate::initialisation::test_initialise().unwrap();
+        let t = symbolica::symbol!("dirac_series_t");
+        let variable = symbolica::atom::Atom::var(t);
+        let spectator = symbolica::parse!("(dirac_series_a+dirac_series_b)^7");
+        let spin = symbolica::parse!("spenso::bis(4)");
+        let source = &spectator
+            * spenso::trace!(
+                spin,
+                idenso::gamma0!() / &variable,
+                (symbolica::atom::Atom::one() + &variable) * idenso::gamma0!()
+            );
+        let result = source
+            .series_preserving_factors(t, symbolica::atom::Atom::Zero.as_view(), 0, &[])
+            .unwrap();
+        assert!(result.contains(&spectator));
+        let expected = &spectator * (symbolica::atom::Atom::num(4) / &variable + 4);
+        assert!((result - expected).collect_compact_factors().is_zero());
+    }
 
     use idenso::IndexTooling;
     use linnet::half_edge::involution::EdgeIndex;

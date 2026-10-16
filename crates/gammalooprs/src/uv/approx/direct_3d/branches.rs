@@ -282,6 +282,28 @@ impl DirectResidueBranches {
             }
         }
         let numerator = numerator.replace_multiple(energy_map_replacements_gs(energies, graph));
+        // Forest-history markers remain visible to enclosing Approx/prefix
+        // operations. Hiding them in the shared body would create a second,
+        // incomplete CT history on the outer scalar weight. Pass each complete
+        // marker as an actual argument, just like the affine map coefficients.
+        let mut markers = BTreeMap::<Atom, Atom>::new();
+        let numerator = numerator.replace_map(|view, _, output| {
+            if let AtomView::Fun(function) = view
+                && function.get_symbol() == GS.ct_marker
+            {
+                let marker = view.to_owned();
+                let parameter = markers.entry(marker.clone()).or_insert_with(|| {
+                    let parameter =
+                        coefficient.call_args([Atom::num(scope), Atom::num(parameters.len())]);
+                    parameters.push(parameter.clone());
+                    for (_, arguments) in &mut rows {
+                        arguments.push(marker.clone());
+                    }
+                    parameter
+                });
+                **output = parameter.clone();
+            }
+        });
         let mut used = vec![false; parameters.len()];
         let _ = numerator.replace_map(|view, _, _| {
             if let AtomView::Fun(function) = view

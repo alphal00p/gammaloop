@@ -127,8 +127,8 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
             .collect::<BTreeSet<_>>();
         assert_eq!(
             nlo_masters,
-            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
-            "the {process} acceptance must integrate the complete GL0+GL2 NLO example",
+            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
+            "the {process} acceptance must integrate the complete GL0+GL1 NLO example",
         );
 
         let (process_id, resolved_nlo_name) = cli
@@ -183,19 +183,19 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
                 || report.physical_parent_bounds == report.assigned_cff_source_bounds),
             "{process} physical-graph sources must use their physical edge bounds unchanged: {gl0_reports:?}",
         );
-        let gl2_reports = &reports
+        let gl1_reports = &reports
             .iter()
-            .find(|report| report.graph_name == "GL2")
-            .ok_or_else(|| eyre!("missing GL2 generation report for {process}"))?
+            .find(|report| report.graph_name == "GL1")
+            .ok_or_else(|| eyre!("missing GL1 generation report for {process}"))?
             .stats
             .cff_energy_degree_bound_reports;
-        let physical_gl2_max = gl2_reports
+        let physical_gl2_max = gl1_reports
             .iter()
             .filter(|report| report.source_kind == CffEnergyBoundSourceKind::PhysicalGraph)
             .flat_map(|report| report.assigned_cff_source_bounds.iter())
             .map(|(_, degree)| *degree)
             .max();
-        let exact_gl2_max = gl2_reports
+        let exact_gl2_max = gl1_reports
             .iter()
             .filter(|report| report.source_kind == CffEnergyBoundSourceKind::ExactFourD)
             .flat_map(|report| report.assigned_cff_source_bounds.iter())
@@ -204,17 +204,17 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         assert_eq!(
             physical_gl2_max,
             Some(1),
-            "{process} GL2 physical-graph CFF-source bounds must have maximum one: {gl2_reports:?}",
+            "{process} GL1 physical-graph CFF-source bounds must have maximum one: {gl1_reports:?}",
         );
         assert!(
             exact_gl2_max.is_none_or(|maximum| maximum == 1),
-            "{process} any exact-4D GL2 source, including an integrated counterterm source in the direct-3D route, must have maximum one: {gl2_reports:?}",
+            "{process} any exact-4D GL1 source, including an integrated counterterm source in the direct-3D route, must have maximum one: {gl1_reports:?}",
         );
         if project_local_4d_to_cff {
             assert_eq!(
                 exact_gl2_max,
                 Some(1),
-                "{process} projected local-4D GL2 must report an exact source with maximum bound one: {gl2_reports:?}",
+                "{process} projected local-4D GL1 must report an exact source with maximum bound one: {gl1_reports:?}",
             );
         }
     }
@@ -310,7 +310,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
             .collect::<BTreeSet<_>>();
         assert_eq!(
             masters,
-            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
             "the local-only {process} acceptance must contain exactly the self-energy and vertex supergraphs",
         );
     }
@@ -376,7 +376,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
                 .iter()
                 .map(|graph| graph.graph_name.clone())
                 .collect::<BTreeSet<_>>(),
-            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
             "the {process} default divergent-only profile must cover both NLO supergraphs",
         );
         let profile_signatures = analysis
@@ -523,7 +523,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
             17.0, -31.0, 43.0, -29.0, 53.0, 71.0, 17.0, -31.0, 43.0, -29.0, 53.0, 71.0,
         ],
     )?;
-    let graph_names = ["GL0", "GL2"];
+    let graph_names = ["GL0", "GL1"];
     // Retaining one eighth of ArbPrec's requested precision permits substantial
     // expression-dependent loss while still testing the precision-increase path.
     let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
@@ -773,7 +773,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
             .copied()
             .ok_or_else(|| eyre!("missing {graph} {variant} scale estimate"))
     };
-    let base_graphs = ["GL0", "GL2"]
+    let base_graphs = ["GL0", "GL1"]
         .into_iter()
         .map(|graph| Ok((graph.to_string(), estimate(graph, NLO)?)))
         .collect::<Result<BTreeMap<_, _>>>()?;
@@ -805,7 +805,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         delta / combined_error,
     );
     // The paper's individual gamma-star rows cannot be converted graph by
-    // graph because GL0 and GL2 are not separately Ward-transverse. Their
+    // graph because GL0 and GL1 are not separately Ward-transverse. Their
     // inclusive sum is transverse and therefore obeys this closure factor.
     let published_delta = (nlo_value - published_nlo_pb).abs();
     let published_tolerance = (3.0 * nlo_error).max(0.05 * published_nlo_pb);
@@ -825,7 +825,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
     );
 
     for (variant, scale_name) in [(MUV_SHIFTED, "M_UV"), (RHO_SHIFTED, "localization rho")] {
-        for graph in ["GL0", "GL2"] {
+        for graph in ["GL0", "GL1"] {
             let (base_value, base_error) = base_graphs[graph];
             let (variant_value, variant_error) = estimate(graph, variant)?;
             let error = base_error.hypot(variant_error);
@@ -846,7 +846,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         }
     }
 
-    let mur_graphs = ["GL0", "GL2"]
+    let mur_graphs = ["GL0", "GL1"]
         .into_iter()
         .map(|graph| Ok((graph.to_string(), estimate(graph, MUR_SHIFTED)?)))
         .collect::<Result<BTreeMap<_, _>>>()?;
@@ -860,11 +860,11 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         .sum::<f64>()
         .sqrt();
     // Do not normalize this uncertainty by either total: both are small
-    // differences of the individually resolved GL0 and GL2 contributions.
+    // differences of the individually resolved GL0 and GL1 contributions.
     // The graphwise logarithms below are the well-conditioned scale-law oracle.
     assert!(
         mur_total_delta <= 4.0 * mur_total_error,
-        "GL0+GL2 is not mu_r independent across graphs: base={base_total:e}, shifted={mur_total:e}, delta/sigma={:e}",
+        "GL0+GL1 is not mu_r independent across graphs: base={base_total:e}, shifted={mur_total:e}, delta/sigma={:e}",
         mur_total_delta / mur_total_error,
     );
 
@@ -876,7 +876,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         * normalization
         * lo_error
         * (COMMON_UV_SCALE.powi(2) / SHIFTED_SCALE.powi(2)).ln();
-    for (graph, sign) in [("GL0", -1.0), ("GL2", 1.0)] {
+    for (graph, sign) in [("GL0", -1.0), ("GL1", 1.0)] {
         let observed_shift = base_graphs[graph].0 - mur_graphs[graph].0;
         let observed_error = base_graphs[graph].1.hypot(mur_graphs[graph].1);
         let expected = sign * expected_mur_shift;
@@ -896,11 +896,11 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
             delta / combined_error,
         );
     }
-    let graph_delta_sum = ["GL0", "GL2"]
+    let graph_delta_sum = ["GL0", "GL1"]
         .iter()
         .map(|graph| base_graphs[*graph].0 - mur_graphs[*graph].0)
         .sum::<f64>();
-    let graph_delta_error = ["GL0", "GL2"]
+    let graph_delta_error = ["GL0", "GL1"]
         .iter()
         .flat_map(|graph| [base_graphs[*graph].1, mur_graphs[*graph].1])
         .map(|error| error * error)
@@ -908,9 +908,9 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         .sqrt();
     assert!(
         graph_delta_sum.abs() <= 4.0 * graph_delta_error,
-        "the GL0 and GL2 mu_r shifts do not cancel: GL0 shift={:e}, GL2 shift={:e}, sum/sigma={:e}",
+        "the GL0 and GL1 mu_r shifts do not cancel: GL0 shift={:e}, GL1 shift={:e}, sum/sigma={:e}",
         base_graphs["GL0"].0 - mur_graphs["GL0"].0,
-        base_graphs["GL2"].0 - mur_graphs["GL2"].0,
+        base_graphs["GL1"].0 - mur_graphs["GL1"].0,
         graph_delta_sum.abs() / graph_delta_error,
     );
 

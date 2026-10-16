@@ -63,6 +63,7 @@ fn scalar_virtual_triangle_mirrors_match_signed_born_interference() -> Result<()
             // over the mirror: each graph is tested against its own target.
             let dot = format!(
                 r#"digraph virtual_triangle {{
+                final_state="scalar_0,scalar_0";
                 overall_factor="1/2";
                 edge [particle=scalar_0];
                 ext0 [style=invis is_cut=0];

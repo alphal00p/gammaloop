@@ -13,7 +13,7 @@ use crate::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
-    coefficient::CoefficientView,
+    coefficient::{Coefficient, CoefficientView},
     id::{AliasedAtom, Context},
     symbol,
     utils::Settable,
@@ -39,6 +39,10 @@ pub enum TensorCollectFilter<const N: usize> {
 }
 
 pub trait Collectable {
+    /// Extract direct exact numeric content from a sum without distributing its
+    /// term bodies. Implicit unit coefficients participate, inexact domains are
+    /// unchanged, and opposite or quarter-turned sums choose the same body.
+    fn collect_numeric_content(self) -> Atom;
     /// Collect selected leaves while retaining opaque coefficients as alias definitions.
     fn collect_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> AliasedAtom;
     fn expand_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> Atom;
@@ -48,6 +52,10 @@ pub trait Collectable {
     fn unwrap_collect(self) -> Atom;
 }
 impl Collectable for Atom {
+    fn collect_numeric_content(self) -> Atom {
+        self.as_view().collect_numeric_content()
+    }
+
     fn collect_with_map(self, map: impl FnMut(AtomView<'_>) -> bool) -> AliasedAtom {
         self.as_view().collect_with_map(map)
     }
@@ -73,6 +81,54 @@ impl Collectable for Atom {
     }
 }
 impl Collectable for AtomView<'_> {
+    fn collect_numeric_content(self) -> Atom {
+        let value = self;
+        let AtomView::Add(sum) = value else {
+            return value.to_owned();
+        };
+        let mut terms = Vec::with_capacity(sum.get_nargs());
+        for term in sum.iter() {
+            let number = match term {
+                AtomView::Num(number) => number.get_coeff_view().to_owned(),
+                AtomView::Mul(product) => match product.get_coefficient() {
+                    Some(AtomView::Num(number)) => number.get_coeff_view().to_owned(),
+                    _ => Coefficient::one(),
+                },
+                _ => Coefficient::one(),
+            };
+            let Coefficient::Complex(exact) = &number else {
+                return value.to_owned();
+            };
+            terms.push((term / Atom::num(&number).as_view(), exact.clone()));
+        }
+        terms.sort_by(|left, right| left.0.cmp(&right.0));
+        let first = &terms[0].1;
+        // Only real rational GCDs are needed for literal content. The
+        // upstream Gaussian GCD can cycle, e.g. on 2+i and 2-i; never call
+        // it even for a small, exact complex coefficient.
+        let mut content = first.re.gcd(&first.im);
+        for (_, number) in &terms[1..] {
+            content = content.gcd(&number.re).gcd(&number.im);
+        }
+        // Choose a unit so the first coefficient has positive real part
+        // and nonnegative imaginary part. This preserves real/imaginary
+        // content and gives opposite or quarter-turned sums one owner.
+        let unit = if first.re > 0 && first.im >= 0 {
+            Atom::one()
+        } else if first.re <= 0 && first.im > 0 {
+            Atom::i()
+        } else if first.re < 0 && first.im <= 0 {
+            -Atom::one()
+        } else {
+            -Atom::i()
+        };
+        let content = Atom::num(content) * unit;
+        if content.is_one() {
+            return value.to_owned();
+        }
+        &content * Atom::add_many(sum.iter().map(|term| term / content.as_view()))
+    }
+
     fn collect_collects(self) -> Atom {
         // A repeated tensor belongs to the complete collected monomial. Keep
         // its power compressed while exposing all copies to mapping callbacks.

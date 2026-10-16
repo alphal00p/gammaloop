@@ -384,9 +384,12 @@ assert (2 * expr).components(library=lib) == [2*x for x in values]
 
 # Built-in values and sparse zeros retain the ordinary network result types.
 mink = spenso.Representation.mink(4)
-metric = mink.g('mu', 'nu').components(library=spenso.TensorLibrary.hep_lib_atom())
+metric = mink.g('mu', 'nu').components(library=spenso.TensorLibrary.hep_lib())
 assert metric == [1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1]
 assert all(isinstance(x, float) for x in metric)
+exact_metric = mink.g('mu', 'nu').components(library=spenso.TensorLibrary.hep_lib_atom())
+assert exact_metric == [1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1]
+assert all(isinstance(x, type(spenso.TensorExpression(1).to_expression())) for x in exact_metric)
 
 # A symbolic library entry keeps exact coefficients and input identities.
 symbols = spenso.TensorName('component_exact_input')(euc).components()

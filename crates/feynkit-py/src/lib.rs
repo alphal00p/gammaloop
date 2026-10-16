@@ -412,7 +412,7 @@ mod tests {
     use std::ffi::CString;
 
     use pyo3::types::PyDict;
-    use symbolica::api::python::PythonExpression;
+    use spynso3::expression::TensorExpression;
 
     use super::*;
 
@@ -520,12 +520,24 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
             let tensor = PyModule::new(py, "symbolica.community.tensor").unwrap();
             spynso3::SpensoModule::register_module(&tensor).unwrap();
             spynso3::SpensoModule::initialize(py).unwrap();
-            py.import("sys")
-                .unwrap()
-                .getattr("modules")
-                .unwrap()
-                .set_item("symbolica.community.tensor", tensor)
-                .unwrap();
+            // Supply the complete Community package hierarchy used by display
+            // imports, without requiring a separately installed Python host.
+            let root = PyModule::new(py, "symbolica").unwrap();
+            let community = PyModule::new(py, "symbolica.community").unwrap();
+            root.add("__path__", Vec::<String>::new()).unwrap();
+            community.add("__path__", Vec::<String>::new()).unwrap();
+            root.add("community", &community).unwrap();
+            community.add("tensor", &tensor).unwrap();
+            community.add("hepkit", &module).unwrap();
+            let modules = py.import("sys").unwrap().getattr("modules").unwrap();
+            for (name, value) in [
+                ("symbolica", &root),
+                ("symbolica.community", &community),
+                ("symbolica.community.tensor", &tensor),
+                ("symbolica.community.hepkit", &module),
+            ] {
+                modules.set_item(name, value).unwrap();
+            }
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
             locals
@@ -641,7 +653,15 @@ assert "_gammaloop" not in sys.modules
 
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
             let expression = locals.get_item("expression").unwrap().unwrap();
-            assert!(expression.is_instance_of::<PythonExpression>());
+            assert!(expression.is_instance_of::<TensorExpression>());
+            assert_eq!(
+                expression
+                    .getattr("rank")
+                    .unwrap()
+                    .extract::<usize>()
+                    .unwrap(),
+                0
+            );
         });
     }
 

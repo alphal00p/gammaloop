@@ -1,0 +1,200 @@
+{
+  "process": {
+    "incoming": [
+      {
+        "kind": "pdg",
+        "value": -11
+      },
+      {
+        "kind": "pdg",
+        "value": 11
+      }
+    ],
+    "outgoing_alternatives": [
+      [
+        {
+          "kind": "pdg",
+          "value": 6
+        },
+        {
+          "kind": "pdg",
+          "value": -6
+        },
+        {
+          "kind": "pdg",
+          "value": 25
+        }
+      ]
+    ],
+    "particle_veto": null,
+    "particle_selection": null,
+    "vertex_allow": null,
+    "vertex_veto": []
+  },
+  "generation_options": {
+    "threads": null,
+    "max_vertices": null,
+    "symmetrize_initial": false,
+    "symmetrize_final": true,
+    "symmetrize_left_right": false,
+    "symmetrize_external_fermions": false,
+    "allow_self_loops": true,
+    "allow_zero_flow_edges": false,
+    "graph_filters": [
+      {
+        "perturbative_orders": {
+          "QCD": 1
+        }
+      },
+      {
+        "coupling_orders": {
+          "QCD": [
+            2,
+            2
+          ],
+          "QED": [
+            6,
+            6
+          ]
+        }
+      },
+      {
+        "particle_veto": [
+          {
+            "kind": "pdg",
+            "value": 1
+          },
+          {
+            "kind": "pdg",
+            "value": 2
+          },
+          {
+            "kind": "pdg",
+            "value": 3
+          },
+          {
+            "kind": "pdg",
+            "value": 4
+          },
+          {
+            "kind": "pdg",
+            "value": 5
+          },
+          {
+            "kind": "pdg",
+            "value": 12
+          },
+          {
+            "kind": "pdg",
+            "value": 13
+          },
+          {
+            "kind": "pdg",
+            "value": 14
+          },
+          {
+            "kind": "pdg",
+            "value": 15
+          },
+          {
+            "kind": "pdg",
+            "value": 16
+          },
+          {
+            "kind": "pdg",
+            "value": 23
+          },
+          {
+            "kind": "pdg",
+            "value": 24
+          },
+          {
+            "kind": "pdg",
+            "value": 250
+          },
+          {
+            "kind": "pdg",
+            "value": 251
+          },
+          {
+            "kind": "pdg",
+            "value": 9000001
+          },
+          {
+            "kind": "pdg",
+            "value": 9000002
+          },
+          {
+            "kind": "pdg",
+            "value": 9000003
+          },
+          {
+            "kind": "pdg",
+            "value": 9000004
+          }
+        ]
+      },
+      {
+        "blob_range": {
+          "start": 1,
+          "end": 1
+        }
+      },
+      {
+        "spectator_range": {
+          "start": 0,
+          "end": 0
+        }
+      },
+      {
+        "self_energy": {
+          "veto_massive": true,
+          "veto_massless": true,
+          "only_scaleless": false
+        }
+      },
+      {
+        "zero_snails": {
+          "veto_attached_to_massive": false,
+          "veto_attached_to_massless": true,
+          "only_scaleless": false
+        }
+      },
+      {
+        "tadpoles": {
+          "veto_attached_to_massive": true,
+          "veto_attached_to_massless": true,
+          "only_scaleless": false
+        }
+      },
+      {
+        "loop_count_range": [
+          3,
+          3
+        ]
+      }
+    ],
+    "cut_amplitude_filters": [],
+    "numerator_grouping": {
+      "up_to_scalar": {
+        "numerical_sample_seed": 3,
+        "number_of_numerical_samples": 5,
+        "differentiate_particle_masses_only": true,
+        "fully_numerical_substitution": false,
+        "check_canonical_numerator": false,
+        "symmetric_polarizations": false
+      }
+    },
+    "filter_zero_color": false,
+    "graph_prefix": "GL",
+    "selected_diagram_ids": null,
+    "selected_diagram_names": null,
+    "vetoed_diagram_ids": [],
+    "vetoed_diagram_names": [],
+    "loop_momentum_bases": {},
+    "named_loop_momentum_bases": {},
+    "forced_cuts": [],
+    "numerator_prefactor": "1",
+    "projector": null
+  }
+}

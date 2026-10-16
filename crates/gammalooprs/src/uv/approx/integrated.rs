@@ -778,9 +778,11 @@ impl Integrated<'_> {
         let mut res = Self::restore_numerator(res, current.topo_order());
 
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        // Close internal momentum pairs before independently integrated factors
+        // are multiplied. Their local UV dummy labels can coincide; completed
+        // scalar products must not expose those labels to the next factor.
         let dotted = SymbolicTensor::infer(cooking.try_cook(res.as_view())?)?
             .contract(ContractSettings {
-                rank_one: false,
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
@@ -1167,8 +1169,14 @@ pub(crate) fn to_vakint_integrand<
             ..Default::default()
         },
     )?;
-    let mut integrand_vakint = cooking
-        .uncook(color.expression().as_view())
+    let lorentz_input = cooking.uncook(color.expression().as_view());
+    debug_tags!(#uv, #integrated, #vakint, #trace;
+        stage = "to_vakint_before_lorentz_materialization",
+        reduced = %reduced_label,
+        file.expr = %lorentz_input.to_plain_string(),
+        "Admitted color result before Lorentz network materialization"
+    );
+    let mut integrand_vakint = lorentz_input
         .parse_to_symbolic_net::<Aind>(&ParseSettings {
             shorthand_parsing: ShorthandParsing::Expand {
                 schoonschip: SchoonschipExpansionMode {

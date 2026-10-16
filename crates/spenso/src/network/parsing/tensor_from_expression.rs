@@ -10,7 +10,7 @@ use crate::{
     algebra::ScalarMul,
     network::{
         ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, MinIntermediateCost,
-        Network, Ref, Sequential, TensorNetworkError, TensorOrScalarOrKey,
+        Network, Ref, Sequential, TensorNetworkError,
         library::{FunctionLibrary, Library, LibraryTensor},
         store::NetworkStore,
     },
@@ -169,16 +169,8 @@ where
             function_library,
         )?;
 
-        let tensor = match network.result()? {
-            ExecutionResult::Val(TensorOrScalarOrKey::Tensor { tensor, .. }) => tensor.clone(),
-            ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => {
-                T::new_scalar(scalar.clone().into())
-            }
-            ExecutionResult::Val(TensorOrScalarOrKey::Key { nodeid, .. }) => {
-                network
-                    .graph
-                    .get_lib_data::<S, Lib::LibraryTensor, Lib>(tensor_library, nodeid)?
-            }
+        let tensor = match network.result_tensor(tensor_library)? {
+            ExecutionResult::Val(tensor) => tensor.into_owned(),
             ExecutionResult::One => {
                 let one: Sc = Atom::num(1).as_view().try_into()?;
                 T::new_scalar(one.into())
@@ -265,7 +257,9 @@ mod tests {
             tags.chain_out,
             spectator.to_atom()
         );
-        let word = crate::chain!(left.to_atom(), right.to_atom(); [factor.clone(), factor]);
+        // A weighted word may finish as a lazy ScaledTensor rather than a
+        // LocalTensor. Eager realization must retain that scale too.
+        let word = crate::chain!(left.to_atom(), right.to_atom(); [Atom::num(7) * &factor, factor]);
         let source = word
             * function!(tensor_symbol!(realized_opaque_left), left.to_atom())
             * function!(tensor_symbol!(realized_opaque_right), right.to_atom());

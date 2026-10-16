@@ -178,8 +178,11 @@ fn insert_function_values<'a>(
 )]
 #[derive(Clone)]
 pub enum ExecutionMode {
+    /// Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
     Single,
+    /// Restrict each execution step to scalar work.
     Scalar,
+    /// Use the default contraction schedule.
     All,
 }
 
