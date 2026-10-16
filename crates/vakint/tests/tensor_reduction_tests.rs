@@ -266,19 +266,44 @@ fn dot_conversion_preserves_existing_indices() {
 }
 
 #[test]
+fn dot_conversion_reserves_numeric_and_represented_source_slots() {
+    use symbolica::atom::AtomCore;
+    use vakint::Vakint;
+
+    let _ = &*vakint::symbols::S;
+    for source_slot in ["2", "spenso::mink(D,2)"] {
+        let source = vakint_parse!(format!("(a+b)^7*dot(p(3),k(1))*k(1,{source_slot})")).unwrap();
+        let converted = Vakint::convert_from_dot_notation(source.as_view());
+        let expected = vakint_parse!(format!(
+            "(a+b)^7*p(3,dot_dummy_ind(3))*k(1,dot_dummy_ind(3))*k(1,{source_slot})"
+        ))
+        .unwrap();
+        assert_eq!(converted, expected);
+        assert_eq!(
+            Vakint::convert_from_dot_notation(converted.as_view()),
+            converted
+        );
+    }
+}
+
+#[test]
 fn dot_conversion_retains_independent_scopes_in_factored_products() {
     use symbolica::atom::AtomCore;
     use vakint::Vakint;
 
     let _ = vakint::symbols::S.dot;
     let spectator = vakint_parse!("(alpha+beta)^11").unwrap();
-    let source = &spectator * vakint_parse!(
-        "(dot(k(1),p(1))+dot(k(1),p(2)))^3*(dot(k(2),p(1))+dot(k(2),p(2)))^2"
-    ).unwrap();
+    let source = &spectator
+        * vakint_parse!("(dot(k(1),p(1))+dot(k(1),p(2)))^3*(dot(k(2),p(1))+dot(k(2),p(2)))^2")
+            .unwrap();
     let converted = Vakint::convert_from_dot_notation(source.as_view());
     assert!(converted.contains(&spectator));
-    assert_eq!(Vakint::convert_from_dot_notation(converted.as_view()), converted);
-    let restored = Vakint::convert_to_dot_notation(&VakintSettings::default(), converted.as_view()).unwrap();
+    assert_eq!(
+        Vakint::convert_from_dot_notation(converted.as_view()),
+        converted
+    );
+    let restored =
+        Vakint::convert_to_dot_notation(&VakintSettings::default(), converted.as_view()).unwrap();
     assert_eq!(restored, source);
 }
 
