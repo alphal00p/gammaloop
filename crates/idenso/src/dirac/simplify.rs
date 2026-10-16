@@ -74,6 +74,42 @@ impl DiracWord<'_> {
             Self::Trace(rep) => has_four_dimensional_trace_rep(rep),
         }
     }
+
+    /// Move exact commuting coefficients out of matrix slots without opening
+    /// any scalar sum or changing the ordered matrix product.
+    fn extract_scalar_factors(self, factors: &[AtomView<'_>]) -> Option<Atom> {
+        let mut coefficient = Atom::one();
+        let mut matrices = Vec::with_capacity(factors.len());
+        let mut changed = false;
+        for &factor in factors {
+            let AtomView::Mul(product) = factor else {
+                matrices.push(factor.to_owned());
+                continue;
+            };
+            let mut matrix = None;
+            let mut scalar = Atom::one();
+            for part in product {
+                if DiracSimplifier::exact_scalar_expression(part) {
+                    scalar *= part;
+                } else if !matches!(DiracFactor::parse(part), DiracFactor::Other(_))
+                    && matrix.is_none()
+                {
+                    matrix = Some(part);
+                } else {
+                    matrix = None;
+                    break;
+                }
+            }
+            if let Some(matrix) = matrix {
+                coefficient *= scalar;
+                matrices.push(matrix.to_owned());
+                changed = true;
+            } else {
+                matrices.push(factor.to_owned());
+            }
+        }
+        changed.then(|| coefficient * self.build(matrices))
+    }
 }
 
 static MINKOWSKI_SYMBOL: LazyLock<Symbol> =
@@ -724,6 +760,56 @@ impl<'settings> DiracSimplifier<'settings> {
         }
     }
 
+    fn exact_scalar_expression(value: AtomView<'_>) -> bool {
+        match value {
+            AtomView::Add(sum) => sum.iter().all(Self::exact_scalar_expression),
+            AtomView::Mul(product) => product.iter().all(Self::exact_scalar_expression),
+            AtomView::Pow(power) => {
+                Self::exact_scalar_expression(power.get_base())
+                    && Self::exact_scalar_expression(power.get_exp())
+            }
+            _ => Self::exact_scalar_leaf(value),
+        }
+    }
+
+    /// A weighted sum of slashed vectors is one vector argument of the trace
+    /// recurrence. Keep that sum inside the metric contractions instead of
+    /// distributing the matrix word into a Cartesian product of traces.
+    fn weighted_gamma_argument<'a>(
+        factor: AtomView<'a>,
+        dimension: &mut Option<AtomView<'a>>,
+    ) -> Option<Atom> {
+        let parsed = DiracFactor::parse(factor);
+        if let Some(index) = parsed.gamma_mink_index(TRACE_GAMMA_RECURSION) {
+            return (!is_minkowski_slot(index)
+                && TRACE_GAMMA_RECURSION
+                    .merge_known_gamma_dimension(dimension, parsed.gamma_dimension()))
+            .then(|| index.to_owned());
+        }
+        match factor {
+            AtomView::Add(sum) => sum
+                .iter()
+                .map(|term| Self::weighted_gamma_argument(term, dimension))
+                .collect::<Option<Vec<_>>>()
+                .map(Atom::add_many),
+            AtomView::Mul(product) => {
+                let mut scalar = Atom::one();
+                let mut vector = None;
+                for part in product {
+                    if Self::exact_scalar_expression(part) {
+                        scalar *= part;
+                    } else if vector.is_none() {
+                        vector = Some(Self::weighted_gamma_argument(part, dimension)?);
+                    } else {
+                        return None;
+                    }
+                }
+                vector.map(|vector| scalar * vector)
+            }
+            _ => None,
+        }
+    }
+
     /// Recognize one trace multiplied by the terminal evaluator's exact scalar spectators.
     fn scalar_trace_factor(expr: AtomView<'_>, trace: u32) -> Option<AtomView<'_>> {
         let AtomView::Mul(product) = expr else {
@@ -1353,6 +1439,10 @@ impl<'settings> DiracSimplifier<'settings> {
         let [start, end, factors @ ..] = args.as_slice() else {
             return None;
         };
+
+        if let Some(normalized) = DiracWord::Chain(*start, *end).extract_scalar_factors(factors) {
+            return Some(normalized);
+        }
 
         if let Some(normalized) =
             Self::normalize_temporal_basis_slash(DiracWord::Chain(*start, *end), factors)
@@ -2126,6 +2216,43 @@ impl DiracSimplifier<'_> {
     fn simplify_trace_node(self, f: FunView, dummies: &ParseState<AbstractIndex>) -> Option<Atom> {
         let (rep, factors) = shadowing::trace_parts(f)?;
 
+        if let Some(normalized) = DiracWord::Trace(rep).extract_scalar_factors(&factors) {
+            return Some(normalized);
+        }
+
+        if factors
+            .iter()
+            .any(|factor| matches!(factor, AtomView::Add(_) | AtomView::Mul(_)))
+        {
+            let mut dimension = None;
+            let indices = factors
+                .iter()
+                .map(|&factor| {
+                    let parsed = DiracFactor::parse(factor);
+                    if let Some(index) = parsed.gamma_mink_index(TRACE_GAMMA_RECURSION) {
+                        TRACE_GAMMA_RECURSION
+                            .merge_known_gamma_dimension(&mut dimension, parsed.gamma_dimension())
+                            .then(|| index.to_owned())
+                    } else {
+                        Self::weighted_gamma_argument(factor, &mut dimension)
+                    }
+                })
+                .collect::<Option<Vec<_>>>();
+            if let Some(indices) = indices {
+                if indices.len() % 2 == 1 {
+                    return Some(Atom::Zero);
+                }
+                let indices = indices.iter().map(Atom::as_view).collect::<Vec<_>>();
+                let unit = Self::simplify_trace_terminal(trace!(rep).as_view())?;
+                return Some(trace_kernel::evaluate_generic(
+                    &indices,
+                    unit.as_view(),
+                    false,
+                    self.output,
+                ));
+            }
+        }
+
         if let Some(normalized) =
             Self::normalize_temporal_basis_slash(DiracWord::Trace(rep), &factors)
         {
@@ -2550,6 +2677,91 @@ mod tests {
 
     mod collected_trace;
     mod contracted_trace;
+
+    #[test]
+    fn weighted_slashes_reduce_without_distributing_scalar_spectators() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let t = Atom::var(symbolica::symbol!("weighted_trace_t"));
+        let spectator = symbolica::parse!("(weighted_trace_a+weighted_trace_b)^11");
+        for representation in [&reps.mink4, &reps.mink_d] {
+            let [p, q, ..] = momenta(&representation.to_symbolic([]));
+            let source = &spectator * trace!(&spin, gamma!(&p) / &t - gamma!(&q), gamma!(&q));
+            let expected =
+                &spectator * (4 * ETS.metric_literal(&p, &q) / &t - 4 * ETS.metric_literal(&q, &q));
+            let result = SymbolicTensor::infer(source.clone())
+                .unwrap()
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .to_dots()
+                .unwrap()
+                .into_expression();
+            let expected = SymbolicTensor::infer(expected)
+                .unwrap()
+                .to_dots()
+                .unwrap()
+                .into_expression();
+            assert!(result.contains(&spectator));
+            assert!(
+                (&result / &spectator - &expected / &spectator)
+                    .together()
+                    .is_zero()
+            );
+            let unchanged = SymbolicTensor::infer(source.clone())
+                .unwrap()
+                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings {
+                        evaluate_traces: false,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })
+                .unwrap()
+                .into_expression();
+            assert_eq!(unchanged, source);
+        }
+    }
+
+    #[test]
+    fn scalar_word_coefficients_preserve_the_temporal_dimension_boundary() {
+        let reps = test_initialize();
+        let t = Atom::var(symbolica::symbol!("weighted_gamma0_t"));
+        let source = trace!(
+            reps.bis4.to_symbolic([]),
+            crate::gamma0!() / &t,
+            (Atom::one() + &t) * crate::gamma0!()
+        );
+        let result = SymbolicTensor::infer(source)
+            .unwrap()
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression();
+        assert_eq!(
+            result.collect_factors(),
+            (Atom::num(4) * (Atom::one() + &t) / &t).collect_factors()
+        );
+        let source = trace!(
+            symbolica::parse!("spenso::bis(weighted_spin_dimension)"),
+            crate::gamma0!() / &t,
+            crate::gamma0!()
+        );
+        let result = SymbolicTensor::infer(source)
+            .unwrap()
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression();
+        assert!(result.contains_symbol(T.trace));
+        assert!(result.contains_symbol(AGS.gamma0));
+    }
 
     #[test]
     fn uniformly_reversed_gamma_traces_evaluate_in_the_same_pass() {

@@ -338,7 +338,7 @@ fn parse_val() {
       layout = "neato";
 
       0	 [label = "∏"];
-      1	 [label = "S:((Q(5,cind(0)))^2+(Q(5,cind(1)))^2*-1+(Q(5,cind(2)))^2*-1+(Q(5,cind(3)))^2*-1)^(-1)*((Q(6,cind(0)))^2+(Q(6,cind(1)))^2*-1+(Q(6,cind(2)))^2*-1+(Q(6,cind(3)))^2*-1)^(-1)*𝑖/27"];
+      1	 [label = "S:((Q(5,cind(0)))^2+(Q(5,cind(1)))^2*-1+(Q(5,cind(2)))^2*-1+(Q(5,cind(3)))^2*-1)^(-1)*((Q(6,cind(0)))^2+(Q(6,cind(1)))^2*-1+(Q(6,cind(2)))^2*-1+(Q(6,cind(3)))^2*-1)^(-1)*(𝑖/27)"];
       2	 [label = "T:g(cof(3,hedge_1),dind(cof(3,hedge_2)))"];
       3	 [label = "T:g(cof(3,hedge_2),dind(cof(3,hedge_1)))"];
       4	 [label = "T:gamma(bis(4,hedge_2),bis(4,hedge_8),mink(4,hedge_0))"];
@@ -1046,19 +1046,19 @@ fn infinite_execution() {
       overlap = "scale";
       layout = "neato";
 
-      0	 [label = "TT:(-1*g(mink(4,l_6),mink(4,l_9))*g(mink(4,l_7),mink(4,l_8))+g(mink(4,l_6),mink(4,l_8))*g(mink(4,l_7),mink(4,l_9)))*g(bis(4,l_2),bis(4,l_5))*g(bis(4,l_3),bis(4,l_6))*g(mink(4,l_0),mink(4,l_6))*g(mink(4,l_1),mink(4,l_7))*g(mink(4,l_4),mink(4,l_8))*g(mink(4,l_5),mink(4,l_9))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_5))*-𝑖*G^3"];
+      0	 [label = "TT:(-1*g(mink(4,l_6),mink(4,l_9))*g(mink(4,l_7),mink(4,l_8))+g(mink(4,l_6),mink(4,l_8))*g(mink(4,l_7),mink(4,l_9)))*g(bis(4,l_2),bis(4,l_5))*g(bis(4,l_3),bis(4,l_6))*g(mink(4,l_0),mink(4,l_6))*g(mink(4,l_1),mink(4,l_7))*g(mink(4,l_4),mink(4,l_8))*g(mink(4,l_5),mink(4,l_9))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_5))*(-𝑖)*G^3"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];
-      0:3:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
+      0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
       ext2	 [style=invis];
-      0:1:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
+      0:2:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
       ext3	 [style=invis];
-      0:5:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
+      0:4:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
       ext4	 [style=invis];
-      0:2:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
+      0:3:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
       ext5	 [style=invis];
-      0:4:s	-> ext5	 [id=5 dir=none color="red" label="bis4|l_2"];
+      0:5:s	-> ext5	 [id=5 dir=none color="red" label="bis4|l_2"];
     }
     "#
     );

@@ -191,9 +191,12 @@ impl DotNormalizer {
         // vectors have one final argument carrying their tensor structure;
         // preceding scalar parameters and slot payloads remain opaque.
         match atom {
-            AtomView::Fun(function) if function.get_symbol() == T.dot => self
-                .normalize_weighted_dot(function)
-                .map_or(DotRewrite::Descend, DotRewrite::Rewritten),
+            AtomView::Fun(function)
+                if function.get_symbol() == T.dot || function.get_symbol() == self.metric =>
+            {
+                self.normalize_weighted_dot(function)
+                    .map_or(DotRewrite::Descend, DotRewrite::Rewritten)
+            }
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
                 self.normalize_power(base, exponent)
@@ -219,6 +222,16 @@ impl DotNormalizer {
         {
             return None;
         }
+        // A metric may also represent a partial contraction. Require the same
+        // complete scalar interface as dot before changing its spelling.
+        let dot = (function.get_symbol() != T.dot).then(|| {
+            FunctionBuilder::new(T.dot)
+                .add_args(function.iter())
+                .finish()
+        });
+        let function = dot
+            .as_ref()
+            .map_or(function, |dot| dot.as_fun_view().unwrap());
         // Reuse the materializer's compatibility and scalar-interface proofs.
         // This only moves coefficients out of an already explicit inner product;
         // it neither pairs indices nor distributes sums inside either operand.
@@ -367,6 +380,8 @@ mod tests {
         let input = dot!(&scalar * &inner * &p, Atom::num(3) * &q);
         let expected = Atom::num(3) * &scalar * inner.pow(2);
         assert_eq!(DotNormalizer::notation(input.as_view()), expected);
+        let metric = g!(&scalar * &inner * &p, Atom::num(3) * &q);
+        assert_eq!(DotNormalizer::notation(metric.as_view()), expected);
         assert_eq!(DotNormalizer::notation(expected.as_view()), expected);
 
         // An explicit tensor factor is not a scalar coefficient, and notation
@@ -387,6 +402,11 @@ mod tests {
         );
         let input = dot!(&indexed * &p, &q) * &indexed;
         assert_eq!(DotNormalizer::notation(input.as_view()), input);
+        let partial_metric = g!(&indexed * &p, &q) * &indexed;
+        assert_eq!(
+            DotNormalizer::notation(partial_metric.as_view()),
+            partial_metric
+        );
     }
 
     #[test]
