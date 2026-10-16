@@ -639,6 +639,7 @@ fn main() -> Result<(), DynError> {
         "mass_approach_scalar_self_energy",
         "dotted_double_triangle",
         "double_dotted_double_triangle",
+        "ir_safe_thresholds/triple_dotted_bubble",
     ] {
         let path = format!("tests/resources/graphs/{name}.dot");
         let graphs =

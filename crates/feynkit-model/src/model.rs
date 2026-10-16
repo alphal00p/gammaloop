@@ -17,7 +17,7 @@ use symbolica::{
     domains::rational::Rational,
     id::{Pattern, Replacement},
     parser::ParseSettings,
-    printer::PrintOptions,
+    printer::CanonicalOrderingSettings,
     symbol,
 };
 
@@ -65,9 +65,12 @@ fn parse_expression(
 /// Keeping that conversion in one place also gives every exported expression
 /// a deterministic ordering.
 fn export_expression(expression: &Atom) -> String {
-    expression
-        .printer(PrintOptions::file().hide_namespace("UFO"))
-        .to_string()
+    expression.to_canonically_ordered_string(
+        CanonicalOrderingSettings::new()
+            .include_namespace(true)
+            .include_attributes(false)
+            .hide_namespace(Some("UFO")),
+    )
 }
 
 /// The UFO convention stores twice the spin plus one (scalar = 1, spinor = 2,
@@ -2562,6 +2565,48 @@ mod tests {
     }
 
     #[test]
+    fn fingerprints_are_independent_of_symbol_registration_order() {
+        const ORDER: &str = "FEYNKIT_MODEL_FINGERPRINT_TEST_ORDER";
+        if let Ok(order) = std::env::var(ORDER) {
+            let names = if order == "forward" {
+                ["Gamma", "Gamma5"]
+            } else {
+                ["Gamma5", "Gamma"]
+            };
+            for name in names {
+                let _ = symbol!(&format!("UFO::{name}"));
+            }
+            let model = Model::standard_model();
+            let restored = Model::from_json(&model.to_json().unwrap()).unwrap();
+            assert_eq!(model.fingerprint(), restored.fingerprint());
+            println!("MODEL_FINGERPRINT={}", model.fingerprint());
+            return;
+        }
+        let fingerprints = ["forward", "reverse"].map(|order| {
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "model::tests::fingerprints_are_independent_of_symbol_registration_order",
+                    "--nocapture",
+                ])
+                .env(ORDER, order)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            String::from_utf8(result.stdout)
+                .unwrap()
+                .lines()
+                .find_map(|line| line.strip_prefix("MODEL_FINGERPRINT=").map(str::to_owned))
+                .expect("the child must report the model fingerprint")
+        });
+        assert_eq!(fingerprints[0], fingerprints[1]);
+    }
+
+    #[test]
     fn model_round_trip_preserves_non_ufo_namespaces() {
         let mut definition = Model::from_json(&model_json("GC1")).unwrap().definition();
         definition.propagators[0].numerator =
@@ -2987,7 +3032,7 @@ mod tests {
                 [crate::EvaluationFormFactor {
                     name: "FF1".to_owned(),
                     type_name: Some("complex".to_owned()),
-                    value: Some("twice(P(1)^2)".to_owned()),
+                    value: Some("twice((P(1))^2)".to_owned()),
                 }]
             );
             Ok::<_, std::convert::Infallible>(EvaluatedValues {
