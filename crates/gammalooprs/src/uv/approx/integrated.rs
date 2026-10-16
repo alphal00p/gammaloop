@@ -1076,6 +1076,45 @@ impl Integrated<'_> {
     }
 
     fn to_vakint_numerator(numerator: &Atom) -> Result<Atom> {
+        // A concrete component is a fixed-vector projection, not an Einstein
+        // index. Keep repeated temporal/spatial components distinct from dummy
+        // multiplicity before Vakint supplies its formal-dimensional slots.
+        let representation = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+        let slots = SlotMatcher::default();
+        let mut component_error = None;
+        let numerator = numerator.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if ![GS.loop_mom, GS.emr_mom].contains(&momentum.get_symbol())
+                || momentum.get_nargs() != 2
+            {
+                return;
+            }
+            let Some(component) = slots.concrete_component(momentum.get(1)) else {
+                return;
+            };
+            let component = match component {
+                Ok(component) if component < 4 => component,
+                other => {
+                    component_error = Some(eyre!(
+                        "invalid physical Minkowski momentum component: {other:?}"
+                    ));
+                    return;
+                }
+            };
+            let basis = function!(GS.delta_vec, GS.cind(component), &representation);
+            let vector = function!(momentum.get_symbol(), momentum.get(0), &representation);
+            let sign = if (Minkowski {}).is_neg(component) {
+                -1
+            } else {
+                1
+            };
+            **output = Atom::num(sign) * function!(SPENSO_TAG.dot, basis, vector);
+        });
+        if let Some(error) = component_error {
+            return Err(error);
+        }
         // Normalize scalar coefficients inside compact dots before translating
         // their vector leaves. The shared notation owner preserves powers and
         // indexed contractions without opening the surrounding numerator.
@@ -1966,6 +2005,63 @@ mod tests {
     use crate::{initialisation::test_initialise, utils::symbolica_ext::Q_I};
 
     use super::*;
+
+    #[test]
+    fn fixed_momentum_components_have_the_formal_dimensional_wick_projection() {
+        test_initialise().unwrap();
+        let vakint = crate::utils::vakint().unwrap();
+        let settings = VakintSettings::default().true_settings();
+        let spectator = parse!("(component_spectator_a+component_spectator_b)^11");
+        let dimension = Atom::var(vakint_symbol!(&settings.epsilon_symbol)) * -2 + 4;
+        let square = vakint::symbols::S.dot(
+            &function!(vakint::symbols::S.k, 1),
+            &function!(vakint::symbols::S.k, 1),
+        );
+        for (axes, coefficient) in [
+            (vec![0, 0], Atom::one() / &dimension),
+            (vec![1, 1], -Atom::one() / &dimension),
+            (vec![0, 1], Atom::Zero),
+            (
+                vec![0, 0, 0, 0],
+                Atom::num(3) / (&dimension * (&dimension + 2)),
+            ),
+            (
+                vec![0, 0, 1, 1],
+                -Atom::one() / (&dimension * (&dimension + 2)),
+            ),
+        ] {
+            let source = &spectator
+                * Atom::mul_many(
+                    axes.iter()
+                        .map(|axis| function!(GS.loop_mom, 1, GS.cind(*axis))),
+                );
+            let mut term = vakint::VakintTerm {
+                integral: vakint::vakint_parse!("topo(I1L(component_mass_squared,3))").unwrap(),
+                numerator: Integrated::to_vakint_numerator(&source).unwrap(),
+                vectors: vec![("k".into(), 1)],
+            };
+            term.tensor_reduce(vakint, &settings).unwrap();
+            let resolved = Integrated::new(vakint, &settings)
+                .simplify_projected_numerator(&term.numerator, 0)
+                .unwrap();
+            // Cancel the unchanged spectator and invariant powers literally;
+            // only the rational coefficient in D is brought to a common denominator.
+            let actual = (resolved / (&spectator * square.pow(axes.len() / 2))).collect_factors();
+            assert!(
+                (&actual - &coefficient).together().is_zero(),
+                "axes={axes:?}: {actual} != {coefficient}"
+            );
+            assert_eq!(
+                source,
+                &spectator
+                    * Atom::mul_many(axes.iter().map(|axis| function!(
+                        GS.loop_mom,
+                        1,
+                        GS.cind(*axis)
+                    )))
+            );
+        }
+    }
 
     #[test]
     fn analytic_os_temporal_dot_keeps_scalar_and_numerator_factors() {
