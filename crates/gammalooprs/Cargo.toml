@@ -134,6 +134,8 @@ features = [
 
 [dev-dependencies]
 insta = { workspace = true, features = ["json", "ron", "serde"] }
+# Match the retained-call serialization version used by the backend regressions.
+symjit = "=2.27.0"
 # oneloop_bridge = { git = "https://github.com/SecretGmG/OneLOopBridge", version = "0.2.0" }
 
 [build-dependencies]

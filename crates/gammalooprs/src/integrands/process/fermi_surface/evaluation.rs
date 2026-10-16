@@ -64,6 +64,7 @@ impl FermiSurfaceEvaluator {
             &sector.coefficient,
             param_builder,
             numerator_definitions,
+            &[],
             orientation_catalog,
             Some(sector.product.shape.clone()),
             settings,

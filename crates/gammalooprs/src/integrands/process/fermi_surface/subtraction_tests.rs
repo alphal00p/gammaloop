@@ -53,12 +53,17 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
         settings.uv.generate_integrated = generate_integrated;
         settings.uv.softct = false;
         let mut amplitude = original.clone();
-        amplitude.generate_cff(&settings)?;
-        amplitude.build_integrands(&settings, crate::utils::vakint()?)?;
+        let mut stats = amplitude.generate_cff(&settings)?;
+        amplitude.build_integrands(&settings, crate::utils::vakint()?, &mut stats)?;
 
         // Exercise the actual evaluator input before resolving any retained
         // numerator definitions. Sector collection keeps those bodies opaque.
-        let expression = &amplitude.derived_data.all_mighty_integrand;
+        let source = &amplitude.derived_data.representations
+            [&three_dimensional_reps::RepresentationMode::Cff];
+        let expression = source
+            .all_mighty_integrand
+            .atom(&crate::cff::CutCFFIndex::new_all_none())
+            .unwrap();
         let (bulk, sectors) = FermiSurfaceSector::extract(&amplitude.graph, expression)?;
         assert!(
             !sectors.is_empty(),
@@ -93,7 +98,7 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
 
         // These are scalar diagnostic copies. Only now resolve the definitions
         // to compare separately generated UV settings with distinct scope tags.
-        generated.push(amplitude.derived_data.resolved_integrand()?);
+        generated.push(source.resolved_integrand()?);
     }
 
     let raw = &generated[0];

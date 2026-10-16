@@ -21,8 +21,8 @@ kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-09"
-review_ref = "c2f94664f0dfb28e98160a5d06768fa55b4a1dff"
+reviewed_at = "2026-10-14"
+review_ref = "134611ebcb76d4f70bf8cbec499e04e99ef77a5e"
 products = ["gammaloop"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
 review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
@@ -63,7 +63,24 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-14: version 15 rejects saved Fermi coefficient catalogues with
 # the previous global-index semantics; the one-entry catalogue mapping and
 # regeneration requirement are documented in architecture-current.typ.
-digest = "b07adbd4a1cf8299414e885a2de300264295388c"
+# Reviewed 2026-09-27: State v11 persists ordered CFF/LTD payloads and retained
+# numerator programs; regeneration and semantic parameter ordering are documented.
+# Reviewed 2026-09-27: Persisted generation summaries retain ordered representation
+# timings and shared work; progress labels no longer imply CFF-only generation.
+# Reviewed 2026-09-27: State v12 stores authoritative generic numerator terms and
+# exact residue rows; the updated architecture note documents regeneration.
+# Reviewed 2026-10-10: State v13 combines ordered representations and coefficient
+# rows with main's imported-symbol reconstruction, aliases and inlining policies; old
+# formats reject before import.
+# Reviewed 2026-10-10: The combined version also retains physical auxiliary
+# programs and their ordered interfaces, documented in architecture-current.typ.
+# Reviewed 2026-10-15: State16 unifies representation rows with medium/Fermi
+# payloads, source-frame signs and JIT compilation snapshots; old states reject.
+# Reviewed 2026-10-15: Native thermal-weight records and one source frame preserve
+# exact detached residue maps; state16 rejects prior incompatible medium/representation layouts.
+# Reviewed 2026-10-15: State16 also retains representation-specific cross-section
+# source-denominator catalogues for runtime coincident-pole validation.
+digest = "fbe3c42460cd0986be68856b6a88d1968d873dba"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -99,7 +116,17 @@ anchor = "pub struct EvaluationResult {"
 # only module/import paths changed, with numerical and persistence contracts unchanged.
 # No architecture impact 2026-10-04: only a statistics test moves into normal
 # CI and checks the existing microsecond display unit; production is unchanged.
-digest = "707cd302e3ed6b9c792c4263fb24e0b1b04e86f1"
+# Reviewed 2026-09-27: Stability results retain the resolved representation
+# beside precision and timing; accepted-attempt event ownership is unchanged.
+# Reviewed 2026-09-27: Native narrowing jointly bounds original components when
+# a complex normalization mixes phases, preserving meaningful completed weights.
+# Reviewed 2026-09-27: Full three_dimensional_representations and
+# three_dimensional_representation names now identify generation settings,
+# stability choices and diagnostics in configuration, Python and the manual.
+# Reviewed 2026-10-10: Representation diagnostics coexist with main's phase-aware
+# stability accounting; coherent complex narrowing retains separate meaningful
+# component bounds.
+digest = "1857da7af57fdceed85fe96662c56e6144a4ce51"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/process/mod.rs"
@@ -132,7 +159,24 @@ anchor = "pub fn warm_up(&mut self, model"
 # restricted to this crate; warm-up and localization behavior are unchanged.
 # No architecture impact 2026-10-11: the precise profile evaluator retains its
 # existing arguments with a scoped Clippy allowance; runtime behavior is unchanged.
-digest = "ce12a0f560b08a6198ca32f950d8063b3e84afa9"
+# Reviewed 2026-09-27: Ordered representation dispatch, same-precision retries,
+# forced Arb selection, complete-sum restrictions and shared sampling are documented.
+# The note compares complete physical higher-pole contributions, while retaining
+# separate simple-pole, cut, threshold, channel and observable identities.
+# Reviewed 2026-09-27: Compilation returns per-representation timing reports;
+# numerical warm-up and runtime dispatch are unchanged.
+# No architecture impact 2026-09-27: native narrowing regressions cover coherent
+# complex promotion and safe underflow; warm-up and dispatch remain unchanged.
+# Reviewed 2026-09-27: Full three_dimensional_representations and
+# three_dimensional_representation names now identify generation settings,
+# stability choices and diagnostics in configuration, Python and the manual.
+# No architecture impact 2026-09-28: standalone row schema has one process-level
+# owner shared by native and generated loaders; archive layouts are unchanged.
+# Reviewed 2026-10-10: Representation retries preserve main's exact candidate-LMB
+# preparation and saved-symbol model refresh; archive formats require regeneration.
+# Reviewed 2026-10-15: Full profile weights remain independent stability inputs;
+# fallible mass refresh and empty-external routing preserve the documented owners.
+digest = "2a8946fac4656396f65ebc79b0dbba12b0f37c43"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -175,7 +219,36 @@ anchor = "struct GammaLoopAPI {"
 # outer-grid weights; the typed integration entrypoint remains disabled.
 # Reviewed 2026-10-12: Capability feature names and formatting are updated;
 # the reviewed implementation and data contracts are unchanged.
-digest = "f49d9a4a439665c6944987961a185d3596fbd3f3"
+# Reviewed 2026-09-27: Python settings snapshots preserve representation order,
+# and stability results expose the evaluated mode through the shared runtime.
+# No architecture impact 2026-09-27: the overlap-objective regression exercises
+# the existing settings snapshot and TOML conversion without a new binding path.
+# Reviewed 2026-09-27: Structured generated-integrand metadata exposes stored
+# representation order, native map sizes and complete-sum execution layout.
+# Reviewed 2026-09-27: Full three_dimensional_representations and
+# three_dimensional_representation names now identify generation settings,
+# stability choices and diagnostics in configuration, Python and the manual.
+# No architecture impact 2026-09-28: Python docstrings now clarify ordered
+# stability attempts and native orientation data; binding behavior is unchanged.
+# Reviewed 2026-09-28: get_residue_map replaces get_orientations with detached
+# native maps, exact Python coefficients and explicit generated-mode selection.
+# Reviewed 2026-10-15: State16 unifies representation rows with medium/Fermi
+# payloads, source-frame signs and JIT compilation snapshots; old states reject.
+# Reviewed 2026-10-15: Native thermal-weight records and one source frame preserve
+# exact detached residue maps; state16 rejects prior incompatible medium/representation layouts.
+digest = "9fa9db226aa882e2810ddf263a7472a852e6e01b"
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/python/residue_map.rs"
+symbol = "gammaloop_api::python::residue_map::PyResidueMap"
+anchor = "pub struct PyResidueMap {"
+# Reviewed 2026-09-28: native residue identity, exact affine maps, scalar variants
+# and detached surface/convention metadata are documented in the Python API guide.
+# Reviewed 2026-10-15: State16 unifies representation rows with medium/Fermi
+# payloads, source-frame signs and JIT compilation snapshots; old states reject.
+# Reviewed 2026-10-15: Native thermal-weight records and one source frame preserve
+# exact detached residue maps; state16 rejects prior incompatible medium/representation layouts.
+digest = "3a0fd26fd2c432aeeb3e2f29e0d4f615275191b1"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -208,6 +281,45 @@ anchor = "pub fn generate("
 # rational charge with is_zero, preserving the documented ghost-flow rule.
 digest = "185b08e821e88d54e7a981500fba2a757ab57b49"
 
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/evaluators/parametric_rows.rs"
+symbol = "gammalooprs::integrands::process::evaluators::ParametricResidueRows"
+anchor = "pub(crate) struct ParametricResidueRows {"
+# Reviewed 2026-09-27: The architecture note documents evaluator-owned constant
+# ports, final physical-row coalescing, lazy guards and late specialization;
+# tensor-generated formal pruning does not trigger another row merge.
+# Reviewed 2026-09-28: Reused private-index freshening before generic products;
+# declared free interfaces and opaque scalar arguments retain their scopes.
+# No architecture impact 2026-09-28: extracted evaluator row lowering and
+# execution into a private child module without changing either algorithm.
+# Reviewed 2026-10-10: Coefficient rows specialize only reachable scalar aliases
+# using main's shared alias owner; tensor preparation remains independent of final
+# numerator inlining.
+# Reviewed 2026-10-10: Independent additive families share calls by local row
+# ordinal, retaining each family's complete source-product rows. Equal exact
+# coefficient columns share ports and constant columns bind exact literals.
+# Whole-product activity guards follow shared tensor preprocessing; the ordinary
+# scalar contribution runs once at ordinal zero. A batch reuses its evaluator
+# closure, dual-shape builder and output scratch without rounding coefficients.
+# Reviewed 2026-10-12: Equal activity guards group complete scalar products.
+# Scalar selectors retain original carrier leaves and branch-local poles,
+# allowing direct gathering without cross-branch factor extraction.
+# Auxiliary extraction keeps owner-scoped aliases, exact coefficient roles and
+# distinct caller ports for shared numerator assignments and selected scalar leaves.
+# Nested selectors gather leaves while enclosing arithmetic stays in the carrier;
+# inactive zeros do not symbolically cancel products or singular contributions.
+# Reachable alias selection preserves original keys/bodies after unused-port pruning.
+# Closed ordinary scalar calls keep their formal bodies and caller-scoped actuals;
+# captured row inputs, conditional actuals and unknown physical guards stay opaque.
+# Exact head/tag/arity lookup preserves opaque overload inputs and metadata tags.
+# Scalar certificates are reused only within the same owner; missing/nonscalar
+# leaf certificates retain complete dependency analysis without cache mutation.
+# Full native jets, original row order, exact inputs and complete source catalogues
+# are preserved by evaluation, native state and standalone gather payloads.
+# No architecture impact 2026-10-12: Clippy cleanup preserves tag-count
+# insertion order and uses the existing exact integer comparison in tests.
+digest = "14c4dff4fc230ef560f412540f4c40829f6bd05c"
+
 [[section.note]]
 id = "integration-dashboard"
 title = "Integration dashboard architecture"
@@ -217,8 +329,8 @@ kind = "Runtime presentation architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
+reviewed_at = "2026-10-10"
+review_ref = "4ffcfb5b5fe24b3a398ee2a2e5f7ec7147764c47"
 products = ["gammaloop"]
 topics = ["integration", "terminal", "ratatui", "status"]
 review_triggers = ["crates/gammaloop-api/src/commands/integrate.rs", "crates/gammalooprs/src/integrate/**"]
@@ -262,7 +374,14 @@ anchor = "mod render_ratatui;"
 # its missing-reference positive control changed; integration behavior is unchanged.
 # No architecture impact 2026-10-11: the existing result-archive path helper is
 # public for acceptance tests; paths and persistence behavior are unchanged.
-digest = "96a529380419396b71a9e4fc3c4323215a75de74"
+# Reviewed 2026-09-27: the dashboard note distinguishes ordered precision/representation
+# attempts from precision-wide histograms. Renderer and terminal ownership are unchanged.
+# Reviewed 2026-10-10: The dashboard reports the ordered precision/representation
+# stack; main's completed-iteration checkpoint and statistics ownership are
+# preserved.
+# Reviewed 2026-10-15: The existing workspace result-archive path helper is public;
+# integration and dashboard behavior are unchanged.
+digest = "ac4d906069e76c49e899ccd2d190bd4a30567332"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -273,8 +392,8 @@ kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-01"
-review_ref = "jj:xuoqsyop"
+reviewed_at = "2026-10-10"
+review_ref = "4ffcfb5b5fe24b3a398ee2a2e5f7ec7147764c47"
 products = ["gammaloop"]
 topics = ["uv", "renormalization"]
 review_triggers = ["crates/gammalooprs/src/uv/**", "crates/gammalooprs/src/graph/**"]
@@ -292,7 +411,107 @@ anchor = "impl UVOrchestrator {"
 # documented in Current Boundaries; backend selection is unchanged.
 # No architecture impact 2026-10-07: that medium check moved to a shared
 # GenerationSettings validator with the same condition.
-digest = "230b9086b57f416da617ef0a42f24927cc2e0d0e"
+# Reviewed 2026-09-27: Both forest backends reuse local 4D Taylor/Vakint results across
+# requested representations, then extract each mode's cut projection independently.
+# Documented cache/assignment ownership, LTD's projected-4D requirement and local
+# equivalence of complete physical higher-pole contributions.
+# No UV architecture impact 2026-09-27: Timing instrumentation separates shared
+# four-dimensional work from representation projections; forest ownership and
+# numerical expressions are unchanged.
+# Reviewed 2026-10-10: Both forest backends share main's local-4D soft/UV preparation
+# and dispatch into ordered representation projections below it; scheme rejections
+# remain shared.
+# Reviewed 2026-10-10: A graph/backend owns one bounded projection context across
+# requested modes. Canonical sectors are reused; Source/native cache keys retain
+# full mode options, and each compute call reports only its shared-time delta.
+# Reviewed 2026-10-15: Complete generation settings and the medium guard retain
+# shared preparation before representation-specific projection.
+digest = "d7e02e0b7d9e265248420f2a1dffdd75dc4397d2"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/mod.rs"
+symbol = "gammalooprs::uv::Integrands"
+anchor = "pub struct Integrands {"
+# Reviewed 2026-09-27: Scalar addbacks and generic numerator row terms are
+# separate authoritative lanes. Cartesian multiplication preserves source keys;
+# additive template grouping concatenates rows without coefficient coalescing.
+# Reviewed 2026-09-28: Reused private-index freshening before generic products;
+# declared free interfaces and opaque scalar arguments retain their scopes.
+# Reviewed 2026-10-10: Integrands owns retained scalar definitions together with
+# factorized numerator products and exact rows; algebra and resolution preserve both
+# stores.
+digest = "c0aed99dd60aa55df56a63ce478c1c8613906651"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/projected_4d.rs"
+symbol = "gammalooprs::uv::approx::projected_4d::Local4dProjectionContext"
+anchor = "pub(crate) struct Local4dProjectionContext {"
+# Reviewed 2026-09-27: Exact post-Taylor projection retains one generic product
+# with Rational coefficient rows and full source-map tuples for each local-4D
+# representation; reconstruction certificates and source ownership are unchanged.
+# Reviewed 2026-10-10: Exact main reconstruction certificates remain before
+# representation dispatch; ordinary LTD bypasses CFF capacity scoring, while raised
+# LTD requests bounds.
+# Reviewed 2026-10-10: A graph/backend owns one bounded projection context across
+# requested modes. Canonical sectors are reused; Source/native cache keys retain
+# full mode options, and each compute call reports only its shared-time delta.
+# Reviewed 2026-10-15: Borrowed projection options are cloned at the existing
+# ownership boundary; exact reconstruction and dispatch are unchanged.
+digest = "9183d692e8325791c41c69ff455b66f2c7ca46f4"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/final_integrand.rs"
+symbol = "gammalooprs::uv::approx::final_integrand::FinalIntegrandBuilder"
+anchor = "pub(crate) struct FinalIntegrandBuilder<'a> {"
+# Reviewed 2026-09-27: Final composition combines generic child/cograph bodies
+# and scalar carriers with Cartesian rows, preserving independent addbacks and
+# cut-indexed sparse LTD orders until evaluator lowering.
+# Reviewed 2026-09-28: Reused private-index freshening before generic products;
+# declared free interfaces and opaque scalar arguments retain their scopes.
+# Reviewed 2026-09-28: Complete final integrated numerator products are retained
+# during localization and never receive a second cograph multiplication.
+# Reviewed 2026-10-10: Scalar aliases resolve in generic bodies and row carriers
+# before evaluator construction without concretizing numerator families per residue.
+# Reviewed 2026-10-10: Private child weights are collected once after routing;
+# homogeneous linearity is checked before applying complete outer energy maps.
+# Reviewed 2026-10-12: Scalar fixtures check bounded compaction invariants;
+# production final composition is unchanged.
+# Reviewed 2026-10-15: Test compilation settings use the complete snapshot;
+# final-integrand composition and numerator factorization are unchanged.
+digest = "ecc1e1251658e77364df65668f452451c030b309"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/direct_3d/branches.rs"
+symbol = "gammalooprs::uv::approx::direct_3d::DirectResidueBranches::series_preserving_numerators"
+anchor = "    pub(crate) fn series_preserving_numerators("
+# Reviewed 2026-09-27: Direct CFF3D retains its existing Taylor path; projected
+# local-4D rows are created afterwards and are explicitly rejected by that
+# scalar-family series API instead of silently losing their separate lane.
+# Reviewed 2026-10-10: Direct-3D branches retain main's soft provenance, compact
+# energy handling and conditional local-4D preparation; representation-independent
+# scalar stores survive composition.
+digest = "eaee8086271357e77599f7a26e8c93aa8af9db86"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/numerator/symbolica_ext.rs"
+symbol = "gammalooprs::numerator::symbolica_ext::NumeratorAtomExt::freshen_private_indices"
+anchor = "pub trait NumeratorAtomExt {"
+# Reviewed 2026-09-28: The shared private-index walker preserves free tensor
+# interfaces and opaque scalar functions; UV composition and evaluator family
+# fusion use this one implementation before joining independently scoped bodies.
+# Reviewed 2026-10-10: Numerator functions retain main's explicit inlining and
+# caller-alias metadata; joint preprocessing shares bodies before the final evaluator
+# policy applies.
+digest = "6dd402570aecc7fabc521e5c2f1bb8837c41171a"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs"
+symbol = "gammalooprs::uv::approx::local_3d::Localizer::localize"
+anchor = "    pub(crate) fn localize<S: ForestNodeLike>("
+# Reviewed 2026-09-28: Final local-4D addbacks retain the analytic finite
+# coefficient together with the supplied cograph/global numerator in exact rows.
+# Direct CFF3D localization remains Taylor-visible and attaches its cograph later.
+digest = "f4c589fe5a6a5fd06fa5e8ec6314b7aa029d7e3b"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -1005,11 +1224,11 @@ kind = "Build engineering"
 status = "Current guide"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-06"
-review_ref = "jj:mrluluxqozss"
+reviewed_at = "2026-10-12"
+review_ref = "134611ebcb76d4f70bf8cbec499e04e99ef77a5e"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "testing"]
-review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", "just/ci.just", ".github/scripts/ci-report.mjs", "CONTRIBUTING.typ"]
+review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", "just/ci.just", ".github/scripts/ci-report.mjs", ".github/scripts/performance_gate.py", ".github/scripts/run_performance.py", ".github/workflows/performance.yml", "benchmarks/performance/**", "CONTRIBUTING.typ"]
 
 [[section.note.scope]]
 path = "just/ci.just"

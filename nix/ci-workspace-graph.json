@@ -158,6 +158,7 @@
         "symbolica"
       ],
       "three-dimensional-reps": [
+        "cli",
         "display"
       ]
     },
@@ -815,6 +816,7 @@
         "symbolica"
       ],
       "three-dimensional-reps": [
+        "cli",
         "display"
       ]
     },

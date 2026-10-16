@@ -16,7 +16,7 @@ use crate::{
     uv::{
         ApproximationType, Spinney, UltravioletGraph,
         approx::{
-            OrientationProjection,
+            ForestNodeLike, OrientationProjection,
             direct_3d::{Direct3dCts, DirectResidueBranches},
             local_3d::Localizer,
         },
@@ -171,7 +171,7 @@ fn soft_dispatch_preserves_the_complete_quartic_contour() -> Result<()> {
         .finish();
     let numerator = &originals * soft;
     let proposals = graph
-        .soft_momentum_routing_proposals(std::slice::from_ref(&numerator), active)?
+        .soft_momentum_routing_proposals(std::slice::from_ref(&numerator), active, true)?
         .into_iter()
         .map(|mut factors| factors.pop().unwrap())
         .collect::<Vec<_>>();
@@ -467,6 +467,7 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
             &graph,
             &numerator,
             DirectResidueBranches::numerator_scope(),
+            false,
         )?;
         // Compare the exact production expression after lowering only the
         // retained scalar surfaces; the mapped numerator stays factorized.
@@ -1549,7 +1550,7 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
         topo_order: 0,
     };
 
-    let localized = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
+    let localized = localizer.localize(&Atom::one(), &mut graph, &integrated_node, None)?;
 
     assert!(localized.active.iter().any(|(_, atom)| !atom.is_zero()));
     Ok(())
@@ -1621,8 +1622,8 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         topo_order: 0,
     };
 
-    let baseline = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
-    let localized = localizer.localize(&finite_ct, &mut graph, &integrated_node)?;
+    let baseline = localizer.localize(&Atom::one(), &mut graph, &integrated_node, None)?;
+    let localized = localizer.localize(&finite_ct, &mut graph, &integrated_node, None)?;
     let baseline = baseline
         .active
         .iter_orientations()
@@ -1636,6 +1637,73 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
 
     assert_eq!(localized, &baseline.map(|atom| atom * &mapped_finite_ct));
     assert_ne!(localized, &baseline.map(|atom| atom * &finite_ct));
+
+    // Final local-4D assembly supplies this exact cograph/global product. Its
+    // factor seven deliberately differs from graph.global_atom(), while both
+    // numerator factors retain nontrivial energy dependence before mapping.
+    let cograph_numerator = (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + 3).pow(2) * 7;
+    let complete_numerator = &finite_ct * &cograph_numerator;
+    let pattern = OrientationPattern::default();
+    let localizer = Localizer::new(
+        &cutset,
+        OrientationProjection::exact(&production, &options, &pattern, false),
+    );
+    let retained = localizer.localize(
+        &finite_ct,
+        &mut graph,
+        &integrated_node,
+        Some(&cograph_numerator),
+    )?;
+    // Independent oracle: project the scalar source using the same complete
+    // capacity, then apply its literal affine map directly to the full product.
+    let carriers = localizer.with_independent_source_sum().projected_cff(
+        &mut graph,
+        integrated_node.subgraph(),
+        [&complete_numerator],
+        CffGenerationContext::Standalone,
+    )?;
+    let tree_denominators = GS.wrap_tree_denoms(
+        graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
+    );
+    let mut retained_rows = 0;
+    for (id, source_map, integrands) in retained.active.iter_orientations() {
+        let baseline = carriers
+            .iter_orientations()
+            .find_map(|(other_id, other_map, integrands)| {
+                (other_id == id && other_map == source_map).then_some(integrands)
+            })
+            .expect("the independently projected source retains each full affine map");
+        let mapped =
+            localizer
+                .orientation
+                .map_numerator(&graph, id, source_map, &complete_numerator)?;
+        let expected = baseline.map(|carrier| carrier * &tree_denominators * &mapped);
+        let difference = integrands
+            .resolved()?
+            .checked_zip(&expected, |_, actual, expected| {
+                Ok((actual - expected).cancel())
+            })?;
+        assert!(difference.is_zero());
+        for index in integrands.cut_indices() {
+            assert!(integrands.atom(index).unwrap().is_zero());
+            let terms = integrands.parametric_terms(index);
+            assert_eq!(terms.len(), 1);
+            retained_rows += terms[0].rows.len();
+            assert!(terms[0].rows.iter().all(|row| row.source_keys.len() == 1));
+        }
+    }
+    assert!(
+        retained_rows > 1,
+        "the finite-CT oracle must exercise several affine rows"
+    );
+    let combined = DirectResidueBranches::from_transient(&retained.active)?.materialize(false)?;
+    let terms = combined.parametric_terms(&CutCFFIndex::new_all_none());
+    assert_eq!(
+        terms.len(),
+        1,
+        "all addback rows share one complete numerator"
+    );
+    assert_eq!(terms[0].rows.len(), retained_rows);
     Ok(())
 }
 
@@ -1811,6 +1879,74 @@ fn cut_valid_ids_host_one_inner_representative_per_outer_sector() -> Result<()> 
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn localized_ltd_maps_keep_distinct_numerators_without_production_hosts() -> Result<()> {
+    let graph = two_edge_graph()?;
+    let production = [[1, 1], [1, -1]]
+        .into_iter()
+        .map(|directions| {
+            energy_map(
+                edgevec(directions),
+                directions
+                    .into_iter()
+                    .enumerate()
+                    .map(|(edge, sign)| LinearEnergyExpr::ose(EdgeIndex(edge), i64::from(sign)))
+                    .collect(),
+            )
+        })
+        .collect::<TiVec<OrientationID, _>>();
+    let mut options = graph.denominator_only_cff_3d_expression_options();
+    options.representation = three_dimensional_reps::RepresentationMode::Ltd;
+    let pattern = OrientationPattern::default();
+    let cutset = CutSet::empty(graph.n_hedges());
+    let localizer = Localizer::new(
+        &cutset,
+        OrientationProjection::exact(&production, &options, &pattern, true),
+    );
+    let mut branches = Vec::new();
+    let index = CutCFFIndex::new_all_none();
+    // Selected LTD residues need not retain any production orientation ID.
+    // Equal physical directions also do not identify equal numerator maps.
+    for (sample, weight) in [(2, 5), (3, 7)] {
+        let reduced = energy_map(
+            edgevec([0, 0]),
+            vec![
+                LinearEnergyExpr::uniform_scale(sample),
+                LinearEnergyExpr::zero(),
+            ],
+        );
+        for (selector_id, body) in localizer.localized_orientation_terms(
+            &graph,
+            &reduced,
+            &Atom::num(weight),
+            &graph.empty_subgraph(),
+            &[],
+            Some(&BTreeSet::new()),
+            None,
+        )? {
+            branches.push(OrientationIntegrandBranch {
+                selector_id,
+                source_edge_energy_map: Some(reduced.edge_energy_map.clone()),
+                integrands: [(index, body)].into_iter().collect(),
+            });
+        }
+    }
+    let keyed = DirectResidueBranches::from_transient(&OrientationIntegrands(branches))?;
+    assert_eq!(keyed.iter_keys().count(), 2);
+    let numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2);
+    let actual = keyed
+        .iter_keys()
+        .try_fold(Atom::Zero, |sum, (key, terms)| {
+            let mapped = key.map_numerator(localizer.orientation, &graph, &numerator)?;
+            Ok::<_, color_eyre::Report>(sum + mapped * terms.iter().next().unwrap().1)
+        })?;
+    assert_eq!(
+        actual,
+        Atom::num(83) * Atom::var(GS.numerator_sampling_scale).pow(2)
+    );
     Ok(())
 }
 

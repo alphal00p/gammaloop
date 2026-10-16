@@ -10,7 +10,7 @@ use eyre::eyre;
 use linnet::half_edge::subgraph::SubSetLike;
 use symbolica::{
     atom::{Atom, AtomCore, Indeterminate},
-    id::Replacement,
+    domains::rational::Rational,
     symbol,
 };
 use three_dimensional_reps::CffGenerationContext;
@@ -26,9 +26,9 @@ use crate::{
     numerator::energy_degree::{EnergyPowerAnalyzer, EnergyPowerCapMap},
     utils::GS,
     uv::{
-        Integrands, UVgenerationSettings,
+        Integrands, ParametricIntegrandRow, ParametricIntegrandTerm, UVgenerationSettings,
         approx::{
-            direct_3d::DirectResidueBranches,
+            direct_3d::{DirectResidueBranches, DirectResidueKey},
             local_3d::Localizer,
             local_4d::{CanonicalUvSector, FourDSector, Local4dCts},
         },
@@ -104,6 +104,8 @@ pub(crate) struct Local4dProjectionContext {
     pub(crate) canonical_preparation_builds: usize,
     pub(crate) source_preparation_builds: usize,
     pub(crate) projected_component_requests: usize,
+    /// Measured representation-independent 4D/canonical/source preparation.
+    pub(crate) shared_preparation_time: Duration,
 }
 
 impl Default for Local4dProjectionContext {
@@ -116,6 +118,7 @@ impl Default for Local4dProjectionContext {
             canonical_preparation_builds: 0,
             source_preparation_builds: 0,
             projected_component_requests: 0,
+            shared_preparation_time: Duration::ZERO,
         }
     }
 }
@@ -140,6 +143,7 @@ impl Local4dProjectionContext {
         let projection_started = Instant::now();
         let sector = Arc::new(raw.canonical_projection(graph)?);
         let projection_time = projection_started.elapsed();
+        self.shared_preparation_time += projection_time;
         let bytes = raw.accounted_bytes()
             + sector.accounted_bytes()
             + 2 * std::mem::size_of::<PreparationKey>()
@@ -213,7 +217,21 @@ impl Localizer<'_> {
             let raw_reports = sector
                 .active_components
                 .iter()
-                .map(|(owners, _, _)| {
+                .enumerate()
+                .map(|(component, (owners, _, _))| {
+                    // Class powers already identify repeated exact poles in
+                    // this component, including degenerate physical owners.
+                    // Ordinary LTD needs no energy degree analysis, even for
+                    // a diagnostic report; raised LTD retains the raw report
+                    // alongside its certified occurrence-local sampling bounds.
+                    let needs_bounds = options.representation
+                        == three_dimensional_reps::RepresentationMode::Cff
+                        || term.powers.iter().any(|(class, power)| {
+                            *power > 1 && sector.class(*class).component == component
+                        });
+                    if !needs_bounds {
+                        return Ok(EnergyPowerCapMap::default());
+                    }
                     let owners = graph
                         .iter_edges_of(owners)
                         .filter_map(|(pair, edge, data)| {
@@ -230,7 +248,7 @@ impl Localizer<'_> {
                 stage = "raw_physical_degree_report",
                 components = raw_reports.len(),
                 elapsed_ms = raw_degree_started.elapsed().as_secs_f64() * 1000.0,
-                "Analyzed raw physical ownership for degree reporting"
+                "Prepared raw physical degree reports"
             );
             let mut component_denominators = vec![Vec::new(); sector.active_components.len()];
             let mut residual_factor = Atom::one();
@@ -258,7 +276,11 @@ impl Localizer<'_> {
                 raw_reports,
                 term.numerator.clone(),
                 Vec::<Atom>::new(),
-                vec![(residual_factor, Vec::<Atom>::new())],
+                vec![(
+                    residual_factor,
+                    Vec::<Atom>::new(),
+                    Vec::<DirectResidueKey>::new(),
+                )],
             ));
         }
         // Each component still owns its exact source and occurrence assignment.
@@ -351,30 +373,36 @@ impl Localizer<'_> {
                         )
                     })?;
                 let composition_started = Instant::now();
-                let mut next_rows = BTreeMap::<Vec<Atom>, Atom>::new();
-                for (carrier, arguments) in std::mem::take(rows) {
-                    for (orientation, incoming) in cff_term.orientations.iter().zip(&argument_rows)
+                let mut next_rows = Vec::new();
+                for (carrier, arguments, keys) in std::mem::take(rows) {
+                    for (row_index, (orientation, incoming)) in
+                        cff_term.orientations.iter().zip(&argument_rows).enumerate()
                     {
                         let arguments = arguments
                             .iter()
                             .cloned()
                             .chain(incoming.iter().cloned())
                             .collect();
-                        *next_rows.entry(arguments).or_insert(Atom::Zero) +=
-                            &carrier * &orientation.expression * &production_prefactor;
+                        let weight = &carrier * &orientation.expression * &production_prefactor;
+                        if weight.is_zero() {
+                            continue;
+                        }
+                        let mut source_keys = keys.clone();
+                        source_keys.push(DirectResidueKey::source(
+                            orientation
+                                .production_orientation_id
+                                .unwrap_or(crate::cff::expression::OrientationID(row_index)),
+                            orientation.orientation.edge_energy_map.clone(),
+                        ));
+                        next_rows.push((weight, arguments, source_keys));
                     }
                 }
-                *rows = next_rows
-                    .into_iter()
-                    .filter_map(|(arguments, carrier)| {
-                        (!carrier.is_zero()).then_some((carrier, arguments))
-                    })
-                    .collect();
+                *rows = next_rows;
                 *numerator = mapped;
                 parameters.extend(new_parameters);
-                // Equal complete argument rows share one summed carrier. Other
-                // Taylor families remain separate ordinary bodies; adding them
-                // must not create another numerator copy per residue sample.
+                // Keep the carrier tied to its complete native map tuple until
+                // physical cut selection finishes. Equal argument rows can be
+                // coalesced only by the final evaluator lowering.
                 composition_time += composition_started.elapsed();
             }
             let composition_started = Instant::now();
@@ -410,7 +438,7 @@ impl Localizer<'_> {
                             vec![EnergyPowerCapMap::default(); reports.len()],
                             numerator,
                             parameters,
-                            BTreeMap::<Vec<Atom>, Atom>::new(),
+                            Vec::<(Atom, Vec<Atom>, Vec<DirectResidueKey>)>::new(),
                         )
                     });
                 for (combined, report) in combined_reports.iter_mut().zip(reports) {
@@ -418,30 +446,9 @@ impl Localizer<'_> {
                 }
                 // Merge only exact body/formal equality. Distinct argument
                 // rows, including maps with the same physical host, survive.
-                for (carrier, arguments) in rows {
-                    *combined_rows.entry(arguments).or_insert(Atom::Zero) += carrier;
-                }
+                combined_rows.extend(rows);
             }
-            terms = remaining
-                .into_values()
-                .map(
-                    |(denominators, classes, powers, reports, numerator, parameters, rows)| {
-                        (
-                            denominators,
-                            classes,
-                            powers,
-                            reports,
-                            numerator,
-                            parameters,
-                            rows.into_iter()
-                                .filter_map(|(arguments, carrier)| {
-                                    (!carrier.is_zero()).then_some((carrier, arguments))
-                                })
-                                .collect(),
-                        )
-                    },
-                )
-                .collect();
+            terms = remaining.into_values().collect();
             composition_time += composition_started.elapsed();
             debug_tags!(#generation, #uv, #local, #four_d, #profile;
                 stage = "component_composition",
@@ -465,8 +472,7 @@ impl Localizer<'_> {
         }
 
         let composition_started = Instant::now();
-        let mut active = Atom::Zero;
-        let mut definitions = Vec::new();
+        let mut parametric_terms = Vec::new();
         for (_, _, _, _, numerator, parameters, rows) in terms {
             if rows.is_empty() || numerator.is_zero() {
                 continue;
@@ -498,28 +504,37 @@ impl Localizer<'_> {
                 inlining: symbolica::evaluate::InliningPolicy::Always,
                 is_alias: false,
             });
-            for (carrier, arguments) in rows {
-                let arguments = arguments
-                    .into_iter()
-                    .zip(&used)
-                    .filter_map(|(argument, used)| used.then_some(argument));
-                let call = entry.lhs.replace_multiple(
-                    parameters
-                        .iter()
-                        .zip(arguments)
-                        .map(|(parameter, value)| Replacement::new(parameter.to_pattern(), value)),
-                );
-                active += carrier * call;
-            }
-            definitions.push(entry);
+            let rows = rows
+                .into_iter()
+                .map(|(carrier, arguments, source_keys)| {
+                    let coefficients = arguments
+                        .into_iter()
+                        .zip(&used)
+                        .filter_map(|(argument, used)| used.then_some(argument))
+                        .map(|argument| {
+                            Rational::try_from(argument.as_view()).map_err(|error| eyre!(error))
+                        })
+                        .collect::<Result<_>>()?;
+                    Ok(ParametricIntegrandRow {
+                        coefficients,
+                        carrier,
+                        source_keys,
+                    })
+                })
+                .collect::<Result<_>>()?;
+            parametric_terms.push((
+                CutCFFIndex::new_all_none(),
+                ParametricIntegrandTerm::new(entry, rows)?,
+            ));
         }
         debug_tags!(#generation, #uv, #local, #four_d, #profile;
             stage = "sector_composition",
-            numerator_families = definitions.len(),
+            numerator_families = parametric_terms.len(),
             elapsed_ms = composition_started.elapsed().as_secs_f64() * 1000.0,
             "Composed factorized UV sector coefficient"
         );
-        Integrands::from_iter([(CutCFFIndex::new_all_none(), active)]).with_numerators(definitions)
+        Integrands::from_iter([(CutCFFIndex::new_all_none(), Atom::Zero)])
+            .with_parametric_terms(parametric_terms)
     }
 }
 
@@ -551,6 +566,7 @@ impl Projected4dApproximation<'_> {
         // owned by the separately integrated branch; no cograph is attached here.
         let normalization_started = Instant::now();
         let sectors = local.projection_sectors();
+        context.shared_preparation_time += normalization_started.elapsed();
         debug_tags!(#generation, #uv, #local, #four_d, #profile;
             stage = "sector_grouping",
             raw_sectors = local.active_sectors().len(),
@@ -651,7 +667,72 @@ mod tests {
         involution::EdgeIndex,
         subgraph::{InternalSubGraph, SubSetOps},
     };
-    use symbolica::atom::{AtomCore, FunctionBuilder};
+    use symbolica::{
+        atom::{AtomCore, FunctionBuilder},
+        id::Replacement,
+    };
+
+    #[test]
+    fn ordinary_ltd_taylor_projection_does_not_request_degree_reports() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph ordinary_ltd_taylor {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 mass=2]
+        })?;
+        let numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one();
+        let mut coefficient = numerator;
+        for edge in [EdgeIndex(0), EdgeIndex(1)] {
+            let momentum = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish();
+            let mass_squared = Atom::num((usize::from(edge) + 1).pow(2));
+            let polynomial = (1..=3).fold(
+                GS.emr_mom(edge, GS.cind(0)).pow(2) - &mass_squared,
+                |polynomial, index| polynomial - GS.emr_mom(edge, GS.cind(index)).pow(2),
+            );
+            coefficient *= GS
+                .den(usize::from(edge), momentum, mass_squared, polynomial)
+                .pow(-1);
+        }
+        let full = graph.full_filter();
+        let canonical = FourDSector::new(
+            coefficient,
+            vec![(full.clone(), full, graph.loop_momentum_basis.clone())],
+            Vec::new(),
+        )
+        .canonical_projection(&graph)?;
+        assert!(
+            canonical
+                .terms
+                .iter()
+                .all(|term| term.powers.values().all(|p| *p == 1))
+        );
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let production = Default::default();
+        let mut options = graph.denominator_only_cff_3d_expression_options();
+        options.representation = three_dimensional_reps::RepresentationMode::Ltd;
+        options.energy_degree_bounds = None;
+        let reports = std::sync::Mutex::new(Vec::new());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, true)
+                .with_energy_degree_bound_reports(&reports),
+        );
+        let projected = localizer.project_factorized_taylor_sector(
+            &mut graph,
+            &canonical,
+            &mut Local4dProjectionContext::default(),
+        )?;
+        assert_eq!(projected.numerators().len(), 1);
+        let reports = reports.into_inner().unwrap();
+        assert_eq!(reports.len(), 1);
+        assert!(reports[0].physical_parent_bounds.is_empty());
+        assert!(reports[0].assigned_cff_source_bounds.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn projected_rows_retain_one_ordinary_numerator_and_scalar_arguments() -> Result<()> {
@@ -707,32 +788,37 @@ mod tests {
                 .contains_symbol(symbol!("gammalooprs::uv::numerator_family"))
         );
         assert!(!entry.args.is_empty());
-        let root = projected.iter().next().unwrap().1;
         assert!(
-            !root.contains_symbol(common),
-            "complete graph factors must live only in the shared body"
+            projected
+                .atom(&CutCFFIndex::new_all_none())
+                .unwrap()
+                .is_zero(),
+            "no specialized numerator calls may remain in the scalar lane"
         );
+        let terms = projected.parametric_terms(&CutCFFIndex::new_all_none());
+        assert_eq!(terms.len(), 1);
+        assert!(Arc::ptr_eq(&terms[0].numerator, entry));
         let opaque_numerator = symbol!("projected_parametric_test::mapped_numerator");
-        let replacements = [entry.replacement()];
-        let mut calls = 0;
-        let actual = root.replace_map(|view, _, out| {
-            if let symbolica::atom::AtomView::Fun(call) = view
-                && call.get_symbol() == symbol!("gammalooprs::uv::numerator_family")
-            {
-                calls += 1;
-                assert!(
-                    call.iter()
-                        .skip(entry.tags.len())
-                        .all(|argument| { matches!(argument, symbolica::atom::AtomView::Num(_)) })
-                );
-                **out = symbolica::function!(
-                    opaque_numerator,
-                    view.replace_multiple(&replacements).collect_factors()
-                );
-            }
-        });
+        let parameters = entry
+            .args
+            .iter()
+            .cloned()
+            .map(Atom::from)
+            .collect::<Vec<_>>();
+        let actual = Atom::add_many(terms[0].rows.iter().map(|row| {
+            assert!(!row.carrier.contains_symbol(common));
+            assert!(!row.source_keys.is_empty());
+            let body = entry
+                .rhs
+                .replace_multiple(parameters.iter().zip(&row.coefficients).map(
+                    |(parameter, value)| {
+                        Replacement::new(parameter.to_pattern(), Atom::num(value.clone()))
+                    },
+                ));
+            &row.carrier * symbolica::function!(opaque_numerator, body.collect_factors())
+        }));
         assert!(
-            calls > 1,
+            terms[0].rows.len() > 1,
             "the fixture must share its numerator across distinct residue samples"
         );
         // The fixture's two unit-mass lines have opposite loop momenta,
@@ -841,13 +927,8 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let pattern = OrientationPattern::default();
         let production = Default::default();
-        let options = graph.denominator_only_cff_3d_expression_options();
-        let localizer = Localizer::new(
-            &cutset,
-            OrientationProjection::exact(&production, &options, &pattern, false),
-        );
         let mut context = Local4dProjectionContext::default();
-        let mut expected = None;
+        let mut expected = BTreeMap::new();
         for phase in ["cold", "warm", "disabled", "evicted", "evicted_again"] {
             if phase == "disabled" {
                 context.preparations = crate::cff::generation::GenerationCache::new(0, 0);
@@ -855,18 +936,36 @@ mod tests {
                 context.preparations =
                     crate::cff::generation::GenerationCache::new(48 * 1024 * 1024, 1);
             }
-            let sector = context.canonical_projection(raw.clone(), &graph)?;
-            let coefficient = localizer
-                .project_factorized_taylor_sector(&mut graph, &sector, &mut context)
-                .and_then(|coefficient| {
-                    Ok(coefficient.resolved()?.iter().next().unwrap().1.clone())
-                })?
-                .collect_factors();
-            assert_eq!(
-                expected.get_or_insert_with(|| coefficient.clone()),
-                &coefficient,
-                "{phase}"
-            );
+            for representation in [
+                three_dimensional_reps::RepresentationMode::Cff,
+                three_dimensional_reps::RepresentationMode::Ltd,
+            ] {
+                let options = three_dimensional_reps::Generate3DExpressionOptions {
+                    representation,
+                    ..graph.denominator_only_cff_3d_expression_options()
+                };
+                let localizer = Localizer::new(
+                    &cutset,
+                    OrientationProjection::exact(&production, &options, &pattern, false),
+                );
+                let sector = context.canonical_projection(raw.clone(), &graph)?;
+                let coefficient = localizer
+                    .project_factorized_taylor_sector(&mut graph, &sector, &mut context)
+                    .and_then(|coefficient| {
+                        Ok(coefficient.resolved()?.iter().next().unwrap().1.clone())
+                    })?
+                    .collect_factors();
+                assert_eq!(
+                    expected
+                        .entry(representation)
+                        .or_insert_with(|| coefficient.clone()),
+                    &coefficient,
+                    "{phase} {representation:?}"
+                );
+                if matches!(phase, "cold" | "warm") {
+                    assert_eq!(context.canonical_preparation_builds, 1);
+                }
+            }
             let budget = if phase == "disabled" {
                 0
             } else {

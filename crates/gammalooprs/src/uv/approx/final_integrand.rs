@@ -6,10 +6,11 @@ use crate::{
     debug_tags,
     graph::Graph,
     integrands::process::param_builder::FnMapEntry,
-    numerator::symbolica_ext::NumeratorAtomExt,
+    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
     utils::{GS, W_},
     uv::{
-        Integrands, UVgenerationSettings, UltravioletGraph,
+        Integrands, ParametricIntegrandRow, ParametricIntegrandTerm, UVgenerationSettings,
+        UltravioletGraph,
         approx::{
             ForestNodeLike,
             direct_3d::{Direct3dCts, DirectResidueBranches},
@@ -23,25 +24,30 @@ use crate::{
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
+    IndexTooling,
     color::{ColorSimplifier, ColorSimplifySettings},
     shorthands::metric::MetricSimplifier,
 };
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate},
+    domains::rational::Rational,
     function,
     id::Replacement,
     symbol,
 };
-use three_dimensional_reps::CffGenerationContext;
+use three_dimensional_reps::{CffGenerationContext, RepresentationMode};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct FinalIntegrands(Integrands);
+pub(crate) struct FinalIntegrands {
+    integrands: Integrands,
+    representation: RepresentationMode,
+}
 
 impl FinalIntegrands {
     /// Iterate over finalized semantic expressions for diagnostics.
     #[cfg(test)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = (CutCFFIndex, Atom)> {
-        self.0
+        self.integrands
             .resolved()
             .expect("finalized diagnostic numerator definitions must resolve")
             .atoms
@@ -52,23 +58,95 @@ impl FinalIntegrands {
         &self,
         mut map: impl FnMut(&Atom) -> Result<Atom>,
     ) -> Result<Self> {
-        Ok(Self(self.0.fallible_map(&mut map)?.map_numerators(map)?))
+        Ok(Self {
+            integrands: self
+                .integrands
+                .fallible_map(&mut map)?
+                .map_numerators(map)?,
+            representation: self.representation,
+        })
     }
 
-    pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
-        Ok(Self(self.0.zip_add([other.0])?))
+    pub(crate) fn zip_add(self, others: impl IntoIterator<Item = Self>) -> Result<Self> {
+        let representation = self.representation;
+        if representation == RepresentationMode::Cff {
+            let others = others
+                .into_iter()
+                .map(|other| {
+                    eyre::ensure!(
+                        other.representation == representation,
+                        "cannot sum final integrands from different representations"
+                    );
+                    Ok(other.integrands)
+                })
+                .collect::<Result<Vec<_>>>()?;
+            return Ok(Self {
+                integrands: self.integrands.zip_add(others)?,
+                representation,
+            });
+        }
+
+        // Independent LTD sources can have different Laurent orders at the
+        // same selected physical poles. Missing coefficients are zero in this
+        // final additive sum; source multiplication and CFF keep strict shapes.
+        // Never merge different selected axes or duplicate numerator bodies.
+        let mut axes = None;
+        let mut terms = BTreeMap::<_, Vec<Atom>>::new();
+        let mut numerators = Vec::new();
+        let mut scalars = Vec::new();
+        let mut parametric_terms = Vec::new();
+        for source in std::iter::once(self).chain(others) {
+            eyre::ensure!(
+                source.representation == representation,
+                "cannot sum final integrands from different representations"
+            );
+            numerators.extend(source.integrands.numerators);
+            scalars.extend(source.integrands.scalars);
+            for (index, rows) in source.integrands.parametric_terms {
+                parametric_terms.extend(rows.into_iter().map(|term| (index, term)));
+            }
+            for (index, atom) in source.integrands.atoms {
+                let orders = [
+                    index.left_threshold_order,
+                    index.right_threshold_order,
+                    index.lu_cut_order,
+                ];
+                eyre::ensure!(
+                    orders.iter().flatten().all(|order| *order > 0),
+                    "invalid zero residue order in {index:?}"
+                );
+                let selected_axes = orders.map(|order| order.is_some());
+                eyre::ensure!(
+                    *axes.get_or_insert(selected_axes) == selected_axes,
+                    "cannot sum different selected residue axes at {index:?}"
+                );
+                terms.entry(index).or_default().push(atom);
+            }
+        }
+        let integrands: Integrands = terms
+            .into_iter()
+            .map(|(index, terms)| (index, terms.into_iter().sum()))
+            .collect();
+        Ok(Self {
+            integrands: integrands
+                .with_numerators(numerators)?
+                .with_parametric_terms(parametric_terms)?
+                .with_scalar_definitions(scalars)?,
+            representation,
+        })
     }
 
     /// Recover shared numerator factors after all selected forests are assembled.
     /// Denominator powers and function arguments stay opaque at this boundary.
     pub(crate) fn into_integrands(self) -> Integrands {
-        self.0.map(|atom| atom.collect_compact_factors())
+        self.integrands.map(|atom| atom.collect_compact_factors())
     }
 }
 
 pub(crate) struct FinalIntegrandBuilder<'a> {
     localizer: Localizer<'a>,
     marker: UvMarker,
+    retain_rows: bool,
 }
 
 impl<'a> FinalIntegrandBuilder<'a> {
@@ -76,6 +154,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         Self {
             localizer,
             marker: UvMarker::new(settings),
+            retain_rows: settings.local_uv_cts_from_expanded_4d_integrands,
         }
     }
 
@@ -127,6 +206,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 &integrated.physical_finite_counterterm_atom(),
                 graph,
                 current,
+                self.retain_rows.then_some(&resnum),
             )?
             .combine()?;
         let localized_integrated = DirectResidueBranches::from_transient(&localized_integrated)?
@@ -134,14 +214,27 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let localized_local = local_terms
             .branches()?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
-        let final_branches = localized_integrated
-            .zip_add(&localized_local)?
-            .multiply_key_mapped(
+        let final_branches = if self.retain_rows {
+            // The integrated addback already owns its complete generic product.
+            // Only the local term still needs the final cograph numerator.
+            localized_integrated.zip_add(&localized_local.multiply_key_mapped(
                 self.localizer.orientation,
                 graph,
                 &resnum,
                 DirectResidueBranches::numerator_scope(),
-            )?;
+                true,
+            )?)?
+        } else {
+            localized_integrated
+                .zip_add(&localized_local)?
+                .multiply_key_mapped(
+                    self.localizer.orientation,
+                    graph,
+                    &resnum,
+                    DirectResidueBranches::numerator_scope(),
+                    false,
+                )?
+        };
 
         // Normalize complete mapped branches before their orientation sum grows
         // the scalar coefficients seen by color collection. Keep each branch's
@@ -159,9 +252,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // evaluator boundary, after every branch-owned numerator map has been
         // applied. An explicit sum simply replaces every sigma by one; physical
         // edge directions are separate sign metadata.
-        Ok(FinalIntegrands(finalized.materialize(
-            !self.localizer.orientation.explicit_orientation_sum_only,
-        )?))
+        Ok(FinalIntegrands {
+            integrands: finalized
+                .materialize(!self.localizer.orientation.explicit_orientation_sum_only)?,
+            representation: self.localizer.orientation.cff_options()?.representation,
+        })
     }
 
     #[debug_instrument(
@@ -244,7 +339,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .collect::<Vec<_>>();
         let mut selector_free: Option<Vec<Integrands>> = None;
         for sector in active_sectors {
-            if sector.coefficient.iter().all(|(_, atom)| atom.is_zero()) {
+            if sector.coefficient.is_zero() {
                 // A disabled integrated prefix can deliberately retain a
                 // typed zero sector for later forest replay. Preserve all
                 // allowed cut orders without asking the outer CFF to resolve
@@ -263,54 +358,48 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     "nonzero projected coefficient has no shared numerator family"
                 ));
             }
-            for entry in sector.coefficient.numerators() {
+            for term in sector
+                .coefficient
+                .parametric_terms(&crate::cff::CutCFFIndex::new_all_none())
+            {
+                let entry = &term.numerator;
                 let weight_scope = DirectResidueBranches::numerator_scope().1;
-                let mut weights = BTreeMap::<Atom, Atom>::new();
-                let carrier =
-                    sector
-                        .coefficient
+                let weights = term
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .map(|(index, _)| {
+                        coefficient.call_args([weight_scope.clone(), Atom::num(index)])
+                    })
+                    .collect::<Vec<_>>();
+                let carrier = Atom::add_many(
+                    term.rows
                         .iter()
-                        .try_fold(Atom::Zero, |sum, (index, root)| {
-                            if *index != crate::cff::CutCFFIndex::new_all_none() {
-                                return Err(eyre::eyre!(
-                                    "projected child coefficient has a production cut key"
-                                ));
-                            }
-                            let carrier = root.replace_map(|view, _, output| {
-                                if let AtomView::Fun(call) = view
-                                    && call.get_symbol() == family
-                                {
-                                    if call.get_nargs() > 0
-                                        && call.get(0) == entry.tags[0].as_view()
-                                    {
-                                        let next = weights.len();
-                                        **output = weights
-                                            .entry(view.to_owned())
-                                            .or_insert_with(|| {
-                                                coefficient.call_args([
-                                                    weight_scope.clone(),
-                                                    Atom::num(next),
-                                                ])
-                                            })
-                                            .clone();
-                                    } else {
-                                        **output = Atom::Zero;
-                                    }
-                                }
-                            });
-                            Ok(sum + carrier)
-                        })?;
+                        .zip(&weights)
+                        .map(|(row, weight)| &row.carrier * weight),
+                );
                 if carrier.is_zero() {
                     continue;
                 }
                 // Plan one product while retaining its two ordinary factors.
+                // Private contractions belong to each child/cograph body;
+                // their free slots retain the physical graph interface.
+                let numerator = [&entry.rhs, &resnum]
+                    .into_iter()
+                    .map(|body| {
+                        let interface = body.list_dangling::<Aind>()?.into_iter().collect();
+                        Ok(body.freshen_private_indices(&interface, || {
+                            DirectResidueBranches::numerator_scope().1
+                        }))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
                 // The chosen occurrence-local route is replayed separately on
                 // the body and the small scalar carrier, never on expanded rows.
                 let (mut factors, localized) = localizer
                     .projected_cff_from_soft_momentum_proposals(
                         graph,
                         current.subgraph(),
-                        &[&entry.rhs * &resnum, carrier],
+                        &[Atom::mul_many(numerator), carrier],
                         active_edges.iter().copied(),
                         CffGenerationContext::EmbeddedCffFactor,
                     )?;
@@ -361,6 +450,29 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     inlining: entry.inlining,
                     is_alias: entry.is_alias,
                 });
+                // Routing changes only energies, so this carrier remains linear
+                // in its private row weights. Collect all coefficients together
+                // instead of rescanning the complete sum for each one-hot row.
+                // The ordinary numerator is separate from this scalar operation.
+                let mut coefficients = carrier
+                    .coefficient_list::<u8>(&weights)
+                    .into_iter()
+                    .collect::<BTreeMap<_, _>>();
+                eyre::ensure!(
+                    coefficients
+                        .values()
+                        .all(|value| !value.contains(&weight_scope)),
+                    "routed child carrier retains a private row weight in its coefficients"
+                );
+                let child_carriers = weights
+                    .iter()
+                    .map(|weight| coefficients.remove(weight).unwrap_or(Atom::Zero))
+                    .collect::<Vec<_>>();
+                eyre::ensure!(
+                    coefficients.is_empty(),
+                    "routed child carrier is not homogeneous and linear in its private row weights"
+                );
+
                 // A child's arguments can depend on the entire graph. Bind the
                 // cograph body, child body and carrier with this same outer key
                 // before summing anything; no selector is materialized here.
@@ -368,43 +480,50 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     localized.iter_keys().zip(rows)
                 {
                     eyre::ensure!(*key == row_key, "prepared outer residue order changed");
-                    let replacements = weights
+                    let mapped_carriers = child_carriers
                         .iter()
-                        .map(|(call, weight)| {
-                            let AtomView::Fun(call) = call.as_view() else {
-                                unreachable!()
-                            };
-                            let arguments = call
-                                .iter()
-                                .skip(entry.tags.len())
-                                .map(|argument| argument.to_owned())
-                                .chain(outer_arguments.iter().cloned());
-                            let call = prepared.lhs.replace_multiple(
-                                parameters.iter().zip(arguments).map(|(parameter, value)| {
-                                    Replacement::new(parameter.to_pattern(), value)
-                                }),
-                            );
-                            Replacement::new(weight.to_pattern(), call)
+                        .map(|carrier| key.map_numerator(localizer.orientation, graph, carrier))
+                        .collect::<Result<Vec<_>>>()?;
+                    let outer_coefficients = outer_arguments
+                        .iter()
+                        .map(|argument| {
+                            Rational::try_from(argument.as_view())
+                                .map_err(|error| eyre::eyre!(error))
                         })
-                        .collect::<Vec<_>>();
-                    let mapped_carrier = key
-                        .map_numerator(localizer.orientation, graph, &carrier)?
-                        .replace_multiple(replacements);
-                    let mapped = integrands
-                        .map(|atom| {
-                            self.marker.prefix(
-                                &full_graph,
-                                current.subgraph(),
-                                &(atom * &mapped_carrier * &sector.frozen_factor),
-                            )
-                        })
-                        .with_numerators(
-                            integrands
-                                .numerators()
-                                .iter()
-                                .cloned()
-                                .chain([Arc::clone(&prepared)]),
-                        )?;
+                        .collect::<Result<Vec<_>>>()?;
+                    let mut mapped_terms = Vec::new();
+                    for (index, atom) in integrands.iter() {
+                        let mut mapped_rows = Vec::new();
+                        for (child, carrier) in term.rows.iter().zip(&mapped_carriers) {
+                            if carrier.is_zero() {
+                                continue;
+                            }
+                            mapped_rows.push(ParametricIntegrandRow {
+                                coefficients: child
+                                    .coefficients
+                                    .iter()
+                                    .chain(&outer_coefficients)
+                                    .cloned()
+                                    .collect(),
+                                carrier: self.marker.prefix(
+                                    &full_graph,
+                                    current.subgraph(),
+                                    &(atom * carrier * &sector.frozen_factor),
+                                ),
+                                source_keys: child
+                                    .source_keys
+                                    .iter()
+                                    .cloned()
+                                    .chain([key.clone()])
+                                    .collect(),
+                            });
+                        }
+                        mapped_terms.push((
+                            *index,
+                            ParametricIntegrandTerm::new(Arc::clone(&prepared), mapped_rows)?,
+                        ));
+                    }
+                    let mapped = integrands.zero_like().with_parametric_terms(mapped_terms)?;
                     selector_free.get_or_insert_with(Vec::new).push(mapped);
                 }
             }
@@ -419,6 +538,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 &integrated.physical_finite_counterterm_atom(),
                 graph,
                 current,
+                Some(&resnum),
             )?
             .combine()?;
         // An empty integrated zero contributes no source map. The typed local
@@ -427,12 +547,6 @@ impl<'a> FinalIntegrandBuilder<'a> {
         if localized_integrated.iter_orientations().next().is_some() {
             let localized_integrated =
                 DirectResidueBranches::from_transient(&localized_integrated)?
-                    .multiply_key_mapped(
-                        self.localizer.orientation,
-                        graph,
-                        &resnum,
-                        DirectResidueBranches::numerator_scope(),
-                    )?
                     .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
             // Both legitimate projected maps have now consumed every still-unmapped
             // numerator factor. Production hosts are mapping metadata only in this
@@ -447,13 +561,31 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let selector_free = selector_free.ok_or_else(|| {
             eyre::eyre!("final 3D UV integrand contains no production energy maps")
         })?;
-        Ok(FinalIntegrands(
-            allowed_zero
-                .zip_add(selector_free)?
+        let representation = localizer.orientation.cff_options()?.representation;
+        let summed = FinalIntegrands {
+            integrands: allowed_zero,
+            representation,
+        }
+        .zip_add(selector_free.into_iter().map(|integrands| FinalIntegrands {
+            integrands,
+            representation,
+        }))?;
+        Self::simplify_final(graph, &reduced, summed.integrands, representation)
+    }
+
+    fn simplify_final(
+        graph: &Graph,
+        reduced: &SuBitGraph,
+        integrands: Integrands,
+        representation: RepresentationMode,
+    ) -> Result<FinalIntegrands> {
+        Ok(FinalIntegrands {
+            integrands: integrands
                 .resolved_scalars()?
-                .fallible_map(Self::final_normalizer(graph, &reduced))?
-                .map_numerators(Self::final_normalizer(graph, &reduced))?,
-        ))
+                .fallible_map(Self::final_normalizer(graph, reduced))?
+                .map_numerators(Self::final_normalizer(graph, reduced))?,
+            representation,
+        })
     }
 
     /// Normalize an already mapped final atom without splitting its factors. This
@@ -606,8 +738,6 @@ mod tests {
             a -> b [id=0 lmb_id=0];
             a -> b [id=1];
         })?;
-        let reduced = graph.full_filter();
-        let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
         let index = CutCFFIndex::new_all_none();
         let (a, b, d1, d2) = symbol!(
             "final_factor_test::a",
@@ -651,23 +781,97 @@ mod tests {
                     + spenso::tensor!(other_factor_test, spenso::mink!(4, mu)) * &second,
             ),
         ] {
-            let output = FinalIntegrands([(index, input)].into_iter().collect())
-                .map_expressions(&normalize)?
-                .into_integrands();
+            let output = FinalIntegrandBuilder::simplify_final(
+                &graph,
+                &graph.full_filter(),
+                [(index, input)].into_iter().collect(),
+                RepresentationMode::Cff,
+            )?
+            .into_integrands();
             assert_eq!(output, [(index, expected)].into_iter().collect());
             assert_eq!(
-                FinalIntegrands(output.clone())
-                    .map_expressions(&normalize)?
-                    .into_integrands(),
+                FinalIntegrandBuilder::simplify_final(
+                    &graph,
+                    &graph.full_filter(),
+                    output.clone(),
+                    RepresentationMode::Cff,
+                )?
+                .into_integrands(),
                 output
             );
         }
-        let first_forest = FinalIntegrands([(index, &numerator * &first)].into_iter().collect())
-            .map_expressions(&normalize)?;
-        let second_forest = FinalIntegrands([(index, -&numerator * &second)].into_iter().collect())
-            .map_expressions(&normalize)?;
+        // The bounded collector need not choose the fully factored form. Check
+        // exact scalar equivalence, compactness and idempotency independently,
+        // keeping complete original powers and functions opaque in the oracle.
+        let x = Atom::var(a);
+        let y = Atom::var(b);
+        let z = Atom::var(d1);
+        let opaque = symbol!("final_factor_test::bounded_opaque");
+        for input in [
+            Atom::Zero,
+            Atom::num(1),
+            x.clone(),
+            &x * &y,
+            &x * 2 / 3 + &y * 2 / 3,
+            &x * &y * 2 / 3 + &x * &z * 5 / 7,
+            x.pow(3) * &y + x.pow(3) * &z,
+            (&x + &y) * &z + (&x + &y) * Atom::var(d2),
+            &x * (&y * &z + &y * Atom::var(d2)),
+            (&x * &y + &x * &z).pow(2),
+            function!(opaque, &x * &y + &x * &z),
+        ] {
+            let output = FinalIntegrands {
+                integrands: [(index, input.clone())].into_iter().collect(),
+                representation: RepresentationMode::Cff,
+            }
+            .into_integrands();
+            let compact = output.atom(&index).unwrap();
+            let mut opaque_atoms = BTreeMap::new();
+            let mut protect = |atom: &Atom| {
+                atom.replace_map(|view, _, out| {
+                    if matches!(view, AtomView::Pow(_) | AtomView::Fun(_)) {
+                        let next = opaque_atoms.len();
+                        **out = opaque_atoms
+                            .entry(view.to_owned())
+                            .or_insert_with(|| function!(opaque, next))
+                            .clone();
+                    }
+                })
+            };
+            // Only this small scalar skeleton is expanded. A changed opaque
+            // payload gets a distinct key and cannot pass by expanding its body.
+            assert!(
+                (protect(&input) - protect(compact)).expand().is_zero(),
+                "bounded scalar equivalence for {input}"
+            );
+            assert!(
+                compact.as_view().get_byte_size() <= input.as_view().get_byte_size(),
+                "bounded scalar size for {input}"
+            );
+            assert_eq!(
+                FinalIntegrands {
+                    integrands: output.clone(),
+                    representation: RepresentationMode::Cff,
+                }
+                .into_integrands(),
+                output,
+                "bounded scalar idempotency for {input}"
+            );
+        }
+        let first_forest = FinalIntegrandBuilder::simplify_final(
+            &graph,
+            &graph.full_filter(),
+            [(index, &numerator * &first)].into_iter().collect(),
+            RepresentationMode::Cff,
+        )?;
+        let second_forest = FinalIntegrandBuilder::simplify_final(
+            &graph,
+            &graph.full_filter(),
+            [(index, -&numerator * &second)].into_iter().collect(),
+            RepresentationMode::Cff,
+        )?;
         assert_eq!(
-            first_forest.zip_add(second_forest)?.into_integrands(),
+            first_forest.zip_add([second_forest])?.into_integrands(),
             [(index, factored)].into_iter().collect()
         );
         Ok(())
@@ -677,13 +881,18 @@ mod tests {
     fn final_factor_collection_preserves_inactive_singular_branches() -> Result<()> {
         use crate::{
             cff::expression::OrientationID,
+            integrands::evaluation::EvaluationMetaData,
             integrands::process::{
-                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
+                evaluators::{EvaluatorStack, InputParams, SingleOrAllOrientations, SliceMut},
                 param_builder::{ParamBuilder, ParamValuePairs},
             },
             processes::EvaluatorSettings,
-            settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
+            settings::{
+                RuntimeSettings,
+                global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
+            },
             utils::F,
+            utils::hyperdual_utils::DualOrNot,
         };
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
         use spenso::algebra::complex::Complex;
@@ -714,20 +923,53 @@ mod tests {
         ] {
             let source = &numerator
                 * (production_ids[0].atom() * 2 * &factor + production_ids[1].atom() * 3 * &factor);
-            let collected = FinalIntegrands(
-                [(CutCFFIndex::new_all_none(), source.clone())]
+            let collected = FinalIntegrands {
+                integrands: [(CutCFFIndex::new_all_none(), source.clone())]
                     .into_iter()
                     .collect(),
-            )
+                representation: RepresentationMode::Cff,
+            }
             .into_integrands();
-            let finalized = collected.iter().next().unwrap().1;
-            for atom in [&source, finalized] {
-                let (mut stack, _) = EvaluatorStack::new_with_timings(
-                    std::slice::from_ref(atom),
+            let scope = DirectResidueBranches::numerator_scope().1;
+            let entry = Arc::new(FnMapEntry {
+                is_alias: false,
+                lhs: function!(symbol!("gammalooprs::uv::numerator_family"), &scope),
+                rhs: numerator.clone(),
+                args: Vec::new(),
+                tags: vec![scope],
+                inlining: Default::default(),
+            });
+            let typed = Integrands::from_iter([(CutCFFIndex::new_all_none(), Atom::Zero)])
+                .with_parametric_terms([(
+                    CutCFFIndex::new_all_none(),
+                    ParametricIntegrandTerm::new(
+                        entry,
+                        vec![
+                            ParametricIntegrandRow {
+                                coefficients: Vec::new(),
+                                carrier: production_ids[0].atom() * 2 * &factor,
+                                source_keys: Vec::new(),
+                            },
+                            ParametricIntegrandRow {
+                                coefficients: Vec::new(),
+                                carrier: production_ids[1].atom() * 3 * &factor,
+                                source_keys: Vec::new(),
+                            },
+                        ],
+                    )?,
+                )])?;
+            for integrands in [
+                Integrands::from_iter([(CutCFFIndex::new_all_none(), source.clone())]),
+                collected.clone(),
+                typed,
+            ] {
+                let index = CutCFFIndex::new_all_none();
+                let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+                    integrands.atom(&index).unwrap(),
                     &builder,
-                    &[],
-                    &orientations,
-                    &production_ids,
+                    integrands.numerators(),
+                    integrands.parametric_terms(&index),
+                    Some((&orientations, &production_ids)),
                     None,
                     &EvaluatorSettings::default(),
                 )?;
@@ -751,12 +993,34 @@ mod tests {
                             Complex::new_re(F(map_id as f64));
                         values[builder.pairs.additional_params.value_range.start] =
                             Complex::new_re(F(input_x));
-                        assert_eq!(
-                            <f64 as GenericEvaluatorFloat>::get_evaluator_single(
-                                &mut stack.single_parametric
-                            )(&values),
-                            Complex::new_re(F(expected))
-                        );
+                        // Runtime orientation IDs index the catalogue; native
+                        // residue-map keys remain the independent 4/9/17 values.
+                        let orientation_index = production_ids
+                            .iter()
+                            .position(|id| *id == OrientationID(map_id))
+                            .unwrap();
+                        let result = stack.evaluate(
+                            InputParams {
+                                values: SliceMut::Owned(values),
+                                residue_map_id_start: builder
+                                    .pairs
+                                    .residue_map_id
+                                    .value_range
+                                    .start,
+                                orientations_start: builder.pairs.orientations.value_range.start,
+                                multiplicative_offset: 1,
+                            },
+                            SingleOrAllOrientations::Single {
+                                orientation: &orientations[orientation_index],
+                                id: OrientationID(orientation_index),
+                            },
+                            &RuntimeSettings::default(),
+                            &mut EvaluationMetaData::new_empty(),
+                        )?;
+                        let [DualOrNot::NonDual(value)] = result.as_slice() else {
+                            panic!("expected one scalar output")
+                        };
+                        assert_eq!(*value, Complex::new_re(F(expected)));
                     }
                 }
             }
@@ -768,13 +1032,18 @@ mod tests {
     fn final_factor_collection_preserves_closed_tensor_pairs() -> Result<()> {
         use crate::{
             cff::expression::OrientationID,
+            integrands::evaluation::EvaluationMetaData,
             integrands::process::{
-                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
+                evaluators::{EvaluatorStack, InputParams, SingleOrAllOrientations, SliceMut},
                 param_builder::{ParamBuilder, ParamValuePairs},
             },
             processes::EvaluatorSettings,
-            settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
+            settings::{
+                RuntimeSettings,
+                global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
+            },
             utils::F,
+            utils::hyperdual_utils::DualOrNot,
         };
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
         use spenso::algebra::complex::Complex;
@@ -793,11 +1062,12 @@ mod tests {
         let first = production_ids[0].atom() * &v1 * &v2_minus * d.pow(-1);
         let second = production_ids[1].atom() * &v1 * &v2_plus * 3 * d.pow(-2);
         let source = &numerator * &first + &numerator * &second;
-        let collected = FinalIntegrands(
-            [(CutCFFIndex::new_all_none(), source.clone())]
+        let collected = FinalIntegrands {
+            integrands: [(CutCFFIndex::new_all_none(), source.clone())]
                 .into_iter()
                 .collect(),
-        )
+            representation: RepresentationMode::Cff,
+        }
         .into_integrands();
         let finalized = collected.iter().next().unwrap().1;
         // Recover the shared scalar numerator while each vector pair still
@@ -815,13 +1085,46 @@ mod tests {
             .collect();
         let parameter_count = builder.pairs.update_ranges();
         builder.values = vec![vec![Complex::new_re(F(0.0)); parameter_count]];
-        for atom in [&source, finalized] {
-            let (mut stack, _) = EvaluatorStack::new_with_timings(
-                std::slice::from_ref(atom),
+        let scope = DirectResidueBranches::numerator_scope().1;
+        let entry = Arc::new(FnMapEntry {
+            is_alias: false,
+            lhs: function!(symbol!("gammalooprs::uv::numerator_family"), &scope),
+            rhs: numerator.clone(),
+            args: Vec::new(),
+            tags: vec![scope],
+            inlining: Default::default(),
+        });
+        let typed = Integrands::from_iter([(CutCFFIndex::new_all_none(), Atom::Zero)])
+            .with_parametric_terms([(
+                CutCFFIndex::new_all_none(),
+                ParametricIntegrandTerm::new(
+                    entry,
+                    vec![
+                        ParametricIntegrandRow {
+                            coefficients: Vec::new(),
+                            carrier: first,
+                            source_keys: Vec::new(),
+                        },
+                        ParametricIntegrandRow {
+                            coefficients: Vec::new(),
+                            carrier: second,
+                            source_keys: Vec::new(),
+                        },
+                    ],
+                )?,
+            )])?;
+        for integrands in [
+            Integrands::from_iter([(CutCFFIndex::new_all_none(), source.clone())]),
+            collected.clone(),
+            typed,
+        ] {
+            let index = CutCFFIndex::new_all_none();
+            let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+                integrands.atom(&index).unwrap(),
                 &builder,
-                &[],
-                &orientations,
-                &production_ids,
+                integrands.numerators(),
+                integrands.parametric_terms(&index),
+                Some((&orientations, &production_ids)),
                 None,
                 &EvaluatorSettings::default(),
             )?;
@@ -852,12 +1155,28 @@ mod tests {
                     {
                         *slot = Complex::new_re(F(value));
                     }
-                    assert_eq!(
-                        <f64 as GenericEvaluatorFloat>::get_evaluator_single(
-                            &mut stack.single_parametric
-                        )(&values),
-                        Complex::new_re(F(expected))
-                    );
+                    let orientation_index = production_ids
+                        .iter()
+                        .position(|id| *id == OrientationID(map_id))
+                        .unwrap();
+                    let result = stack.evaluate(
+                        InputParams {
+                            values: SliceMut::Owned(values),
+                            residue_map_id_start: builder.pairs.residue_map_id.value_range.start,
+                            orientations_start: builder.pairs.orientations.value_range.start,
+                            multiplicative_offset: 1,
+                        },
+                        SingleOrAllOrientations::Single {
+                            orientation: &orientations[orientation_index],
+                            id: OrientationID(orientation_index),
+                        },
+                        &RuntimeSettings::default(),
+                        &mut EvaluationMetaData::new_empty(),
+                    )?;
+                    let [DualOrNot::NonDual(value)] = result.as_slice() else {
+                        panic!("expected one scalar output")
+                    };
+                    assert_eq!(*value, Complex::new_re(F(expected)));
                 }
             }
         }
@@ -976,6 +1295,322 @@ mod tests {
             )
             .expect_err("absent sectors are different from a deliberate typed zero");
         assert!(error.to_string().contains("no active UV sectors"));
+        Ok(())
+    }
+
+    #[test]
+    fn ltd_final_addition_preserves_sparse_orders_and_numerator_rows() -> Result<()> {
+        test_initialise()?;
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let parameter = symbol!("ltd_final_addition_test::parameter");
+        let (x, y, z) = symbol!(
+            "ltd_final_addition_test::x",
+            "ltd_final_addition_test::y",
+            "ltd_final_addition_test::z"
+        );
+        let first = Arc::new(FnMapEntry {
+            is_alias: false,
+            inlining: Default::default(),
+            lhs: function!(family, 11, parameter),
+            rhs: (Atom::var(parameter) + 1).pow(4),
+            args: vec![Indeterminate::try_from(Atom::var(parameter)).unwrap()],
+            tags: vec![Atom::num(11)],
+        });
+        let second = Arc::new(FnMapEntry {
+            lhs: function!(family, 12, parameter),
+            rhs: (Atom::var(parameter) - 1).pow(3),
+            tags: vec![Atom::num(12)],
+            ..first.as_ref().clone()
+        });
+        let indices = [1, 2, 3].map(|order| CutCFFIndex {
+            left_threshold_order: None,
+            right_threshold_order: Some(1),
+            lu_cut_order: Some(order),
+        });
+        let first_x = function!(family, 11, x);
+        let first_y = function!(family, 11, y);
+        let second_x = function!(family, 12, x);
+        let second_z = function!(family, 12, z);
+        let source = |terms: Vec<_>, numerators: Vec<_>| -> Result<FinalIntegrands> {
+            Ok(FinalIntegrands {
+                integrands: Integrands::from_iter(terms).with_numerators(numerators)?,
+                representation: RepresentationMode::Ltd,
+            })
+        };
+        let initial = source(
+            vec![(indices[0], &first_x * 2), (indices[1], &first_y * 5)],
+            vec![Arc::clone(&first)],
+        )?;
+        let sum = initial.clone().zip_add([
+            source(
+                vec![(indices[0], -&first_x), (indices[2], second_z.clone())],
+                vec![Arc::new(first.as_ref().clone()), Arc::clone(&second)],
+            )?,
+            source(
+                vec![(indices[1], -&first_y * 5), (indices[2], second_x.clone())],
+                vec![Arc::clone(&first), Arc::clone(&second)],
+            )?,
+        ])?;
+        let expected = [
+            (indices[0], first_x),
+            (indices[1], Atom::Zero),
+            (indices[2], &second_x + &second_z),
+        ];
+        assert_eq!(sum.integrands.atoms, BTreeMap::from(expected));
+        assert_eq!(
+            sum.integrands.numerators(),
+            &[Arc::clone(&first), Arc::clone(&second)]
+        );
+        assert!(Arc::ptr_eq(&sum.integrands.numerators()[0], &first));
+        // Argument rows stay opaque throughout summation; canceled orders keep
+        // a typed zero. A diagnostic view resolves each surviving binding once.
+        assert_eq!(
+            sum.integrands.resolved()?.atoms,
+            BTreeMap::from([
+                (indices[0], (Atom::var(x) + 1).pow(4)),
+                (indices[1], Atom::Zero),
+                (
+                    indices[2],
+                    (Atom::var(x) - 1).pow(3) + (Atom::var(z) - 1).pow(3)
+                ),
+            ])
+        );
+        let typed = |index, value: i64| -> Result<FinalIntegrands> {
+            Ok(FinalIntegrands {
+                representation: RepresentationMode::Ltd,
+                integrands: Integrands::from_iter([(index, Atom::Zero)]).with_parametric_terms(
+                    [(
+                        index,
+                        ParametricIntegrandTerm::new(
+                            Arc::clone(&first),
+                            vec![ParametricIntegrandRow {
+                                coefficients: vec![Rational::from(value)],
+                                carrier: Atom::one(),
+                                source_keys: vec![
+                                    crate::uv::approx::direct_3d::DirectResidueKey::production(
+                                        OrientationID(value as usize),
+                                    ),
+                                ],
+                            }],
+                        )?,
+                    )],
+                )?,
+            })
+        };
+        let typed_sum = typed(indices[0], 2)?
+            .zip_add([typed(indices[2], 3)?])?
+            .into_integrands();
+        assert_eq!(
+            typed_sum.cut_indices().copied().collect::<Vec<_>>(),
+            vec![indices[0], indices[2]]
+        );
+        for (index, expected) in [(indices[0], 81), (indices[2], 256)] {
+            assert!(typed_sum.atom(&index).unwrap().is_zero());
+            assert_eq!(typed_sum.parametric_terms(&index).len(), 1);
+            assert_eq!(typed_sum.parametric_terms(&index)[0].rows.len(), 1);
+            assert_eq!(
+                typed_sum.resolved()?.atom(&index),
+                Some(&Atom::num(expected))
+            );
+        }
+        // Sparse LTD addition must retain the soft-Taylor scalar store even
+        // when only one independent source references it through a row carrier.
+        let scalar_head = Integrands::scalar_symbol();
+        let scalar = Arc::new(FnMapEntry {
+            lhs: function!(scalar_head, 19, parameter),
+            rhs: Atom::var(parameter) + 1,
+            args: vec![parameter.into()],
+            tags: vec![Atom::num(19)],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
+        });
+        let mut scalar_source = typed(indices[0], 2)?;
+        scalar_source.integrands = scalar_source
+            .integrands
+            .map(|carrier| carrier * function!(scalar_head, 19, x))
+            .with_scalar_definitions([Arc::clone(&scalar)])?;
+        let mixed = scalar_source.zip_add([typed(indices[2], 3)?])?;
+        assert_eq!(mixed.integrands.scalar_definitions(), &[scalar]);
+        let resolved = mixed.integrands.resolved()?;
+        assert_eq!(resolved.atom(&indices[0]), Some(&(81 * (Atom::var(x) + 1))));
+        assert_eq!(resolved.atom(&indices[2]), Some(&Atom::num(256)));
+
+        let conflict = Arc::new(FnMapEntry {
+            rhs: Atom::var(parameter),
+            ..first.as_ref().clone()
+        });
+        let error = initial
+            .zip_add([source(
+                vec![(indices[2], function!(family, 11, z))],
+                vec![conflict],
+            )?])
+            .expect_err("sparse addition must reject conflicting family bodies");
+        assert!(error.to_string().contains("conflicting retained numerator"));
+        Ok(())
+    }
+
+    #[test]
+    fn final_addition_rejects_incompatible_residue_support() -> Result<()> {
+        test_initialise()?;
+        let first = CutCFFIndex {
+            left_threshold_order: None,
+            right_threshold_order: Some(1),
+            lu_cut_order: Some(1),
+        };
+        let second = CutCFFIndex {
+            lu_cut_order: Some(2),
+            ..first
+        };
+        let source = |representation, index| FinalIntegrands {
+            integrands: [(index, Atom::one())].into_iter().collect(),
+            representation,
+        };
+        for (left, right) in [
+            (RepresentationMode::Cff, RepresentationMode::Ltd),
+            (RepresentationMode::Ltd, RepresentationMode::Cff),
+        ] {
+            let error = source(left, first)
+                .zip_add([source(right, first)])
+                .expect_err("representation identity must survive final assembly");
+            assert!(error.to_string().contains("different representations"));
+        }
+        for wrong_axis in [
+            CutCFFIndex {
+                right_threshold_order: None,
+                ..first
+            },
+            CutCFFIndex {
+                left_threshold_order: Some(1),
+                right_threshold_order: None,
+                ..first
+            },
+            CutCFFIndex::new_all_none(),
+        ] {
+            let error = source(RepresentationMode::Ltd, first)
+                .zip_add([source(RepresentationMode::Ltd, wrong_axis)])
+                .expect_err("different selected physical axes cannot be added");
+            assert!(
+                error
+                    .to_string()
+                    .contains("different selected residue axes")
+            );
+        }
+        for invalid in [
+            CutCFFIndex {
+                left_threshold_order: Some(0),
+                ..first
+            },
+            CutCFFIndex {
+                right_threshold_order: Some(0),
+                ..first
+            },
+            CutCFFIndex {
+                lu_cut_order: Some(0),
+                ..first
+            },
+        ] {
+            let error = source(RepresentationMode::Ltd, invalid)
+                .zip_add([])
+                .expect_err("zero is not a selected residue order");
+            assert!(error.to_string().contains("invalid zero residue order"));
+        }
+        for (left, right) in [(first, second), (second, first)] {
+            let error = source(RepresentationMode::Cff, left)
+                .zip_add([source(RepresentationMode::Cff, right)])
+                .expect_err("CFF addition must retain its strict support invariant");
+            assert!(error.to_string().contains("missing key"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn frozen_localization_uses_actual_source_orders_and_strict_products() -> Result<()> {
+        use crate::uv::approx::local_3d::{FrozenActiveCt, OrientationIntegrands};
+
+        test_initialise()?;
+        let mut parent = CutSet::empty(0).residue_selector;
+        parent.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: RaisedEsurfaceGroup {
+                esurface_ids: Vec::new(),
+                max_occurence: 1,
+            },
+            cut_edge_alternatives: Vec::new(),
+        });
+        let first = parent.generate_allowed_keys()[0];
+        let second = CutCFFIndex {
+            lu_cut_order: Some(2),
+            ..first
+        };
+        let source: Integrands = [(first, Atom::num(3)), (second, Atom::num(7))]
+            .into_iter()
+            .collect();
+        let active: OrientationIntegrands = [
+            (OrientationID(4), source.clone()),
+            (OrientationID(9), source.map(|atom| -atom)),
+        ]
+        .into_iter()
+        .collect();
+        let mut localized = FrozenActiveCt::from(active);
+        let factor = Atom::var(symbol!("ltd_final_addition_test::smooth_localizer"));
+        localized.frozen_integrands = localized.frozen_integrands.map(|_| factor.clone());
+        let combined = localized.combine()?;
+        for ((id, _, actual), sign) in combined.iter_orientations().zip([1, -1]) {
+            assert!(matches!(id, OrientationID(4) | OrientationID(9)));
+            assert_eq!(actual, &source.map(|atom| atom * &factor * sign));
+        }
+        assert_eq!(combined.iter_orientations().count(), 2);
+        // A smooth factor is defined on every actual source order. A partial
+        // multiplier is still an invalid product, even for an LTD source.
+        localized.frozen_integrands = parent
+            .generate_allowed_keys()
+            .into_iter()
+            .map(|index| (index, factor.clone()))
+            .collect();
+        assert!(
+            localized
+                .combine()
+                .expect_err("multiplication must remain strict")
+                .to_string()
+                .contains("missing key")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn final_factor_collection_handles_many_distinct_denominators() -> Result<()> {
+        test_initialise()?;
+        let (a, b, denominator) = symbol!(
+            "final_sparse_factor_test::a",
+            "final_sparse_factor_test::b",
+            "final_sparse_factor_test::denominator"
+        );
+        let tensor = spenso::tensor!(final_sparse_factor_test, spenso::mink!(4, mu));
+        let numerator = &tensor * (Atom::var(a) + b).pow(3);
+        let inverse_denominators = (0..2048)
+            .map(|index| function!(denominator, index).pow(-1))
+            .collect::<Vec<_>>();
+        let source = Atom::add_many(
+            inverse_denominators
+                .iter()
+                .map(|inverse| &numerator * inverse)
+                .collect::<Vec<_>>(),
+        );
+        let expected = &numerator * Atom::add_many(&inverse_denominators);
+        let index = CutCFFIndex::new_all_none();
+        let collected = FinalIntegrands {
+            integrands: [(index, source)].into_iter().collect(),
+            representation: RepresentationMode::Ltd,
+        }
+        .into_integrands();
+        assert_eq!(collected, [(index, expected)].into_iter().collect());
+        assert_eq!(
+            FinalIntegrands {
+                integrands: collected.clone(),
+                representation: RepresentationMode::Ltd,
+            }
+            .into_integrands(),
+            collected,
+        );
         Ok(())
     }
 
