@@ -3,6 +3,149 @@
 use super::*;
 
 #[test]
+fn paired_incoming_three_cycles_preserve_the_canonical_connection_frame() {
+    let model = Model::phi4();
+    let particle = model.particle_id("phi").unwrap();
+    let interaction = model.vertex_rule_id(&model.vertex_rules()[0].name).unwrap();
+    // An asymmetric attachment graph exercises the canonical coordinate map
+    // independently of Feynman-rule evaluation. A three-cycle is not its own inverse.
+    let mut graph = Graph::new();
+    for _ in 0..6 {
+        graph.add_node(ColoredNode::Interaction(interaction));
+    }
+    for index in 0..6 {
+        let external = graph.add_node(ColoredNode::External(ExternalNode {
+            index,
+            state: if index < 3 {
+                ExternalState::Incoming
+            } else {
+                ExternalState::Outgoing
+            },
+            particle,
+        }));
+        let (source, target) = if index < 3 {
+            (external, index)
+        } else {
+            (index, external)
+        };
+        graph
+            .add_edge(
+                source,
+                target,
+                false,
+                EdgeColor {
+                    particle,
+                    direction: None,
+                },
+            )
+            .unwrap();
+    }
+    for (source, target) in [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 4),
+        (4, 5),
+        (0, 2),
+        (0, 3),
+        (1, 4),
+        (3, 5),
+    ] {
+        graph
+            .add_edge(
+                source,
+                target,
+                false,
+                EdgeColor {
+                    particle,
+                    direction: None,
+                },
+            )
+            .unwrap();
+    }
+    let relabel = |paired: bool| {
+        let mut output = Graph::new();
+        for node in graph.nodes() {
+            let mut data = node.data.clone();
+            if let ColoredNode::External(external) = &mut data
+                && (paired || external.index < 3)
+            {
+                external.index = (external.index / 3) * 3 + (external.index + 1) % 3;
+            }
+            output.add_node(data);
+        }
+        for edge in graph.edges() {
+            output
+                .add_edge(edge.vertices.0, edge.vertices.1, edge.directed, edge.data)
+                .unwrap();
+        }
+        output
+    };
+    let process = Process::new(["phi", "phi", "phi"], ["phi", "phi"]);
+    for left_right in [false, true] {
+        let options = GenerationOptions::default()
+            .symmetrize_initial(true)
+            .symmetrize_left_right(left_right);
+        let resolved =
+            ResolvedProcess::new(&model, &process, GenerationType::CrossSection, &options).unwrap();
+        let canonical = resolved
+            .canonicalize_numerator_graph(&graph, &model, &NumeratorGrouping::None)
+            .unwrap();
+        assert_eq!(
+            canonical,
+            resolved
+                .canonicalize_numerator_graph(&relabel(true), &model, &NumeratorGrouping::None)
+                .unwrap()
+        );
+        assert_eq!(
+            canonical,
+            resolved
+                .canonicalize_numerator_graph(&canonical, &model, &NumeratorGrouping::None)
+                .unwrap()
+        );
+        assert_ne!(
+            canonical,
+            resolved
+                .canonicalize_numerator_graph(&relabel(false), &model, &NumeratorGrouping::None)
+                .unwrap(),
+            "one-sided permutations must not exchange physical incoming pairs"
+        );
+    }
+}
+
+#[test]
+fn identical_incoming_scalar_born_weights_only_divide_by_final_state_symmetry() {
+    use feynkit_graph::expressions::evaluate_overall_factor;
+
+    let model = Arc::new(Model::phi4());
+    let process = Process::new(["phi", "phi"], ["phi", "phi"]);
+    for initial in [false, true] {
+        for final_state in [false, true] {
+            for left_right in [false, true] {
+                let options = GenerationOptions::default()
+                    .with_loop_count(1, 1)
+                    .unwrap()
+                    .max_vertices(2)
+                    .symmetrize_initial(initial)
+                    .symmetrize_final(final_state)
+                    .symmetrize_left_right(left_right)
+                    .threads(1);
+                let result = process
+                    .generate_cross_section(Arc::clone(&model), &options)
+                    .unwrap();
+                assert_eq!(result.diagrams.len(), 1);
+                assert_eq!(result.diagrams[0].cuts().len(), 1);
+                assert_eq!(
+                    evaluate_overall_factor(result.diagrams[0].overall_factor().as_view()),
+                    Atom::num((1, 2)),
+                    "initial={initial}, final={final_state}, left_right={left_right}: a labelled two-particle flux has no extra initial-state factorial"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn directed_self_loop_symmetry_factors_match_wick_contractions() {
     let neutral = HalfEdge::undirected("a");
     let charged = HalfEdge::incoming("q");
