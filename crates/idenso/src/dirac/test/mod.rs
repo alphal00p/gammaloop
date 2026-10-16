@@ -449,10 +449,34 @@ fn four_dimensional_chisholm_requires_four_dimensional_interior() {
 
 #[test]
 fn gamma_trace_evaluation_can_be_disabled() {
-    test_initialize();
+    let r = test_initialize();
     let expr = gamma!(a, b, mu) * gamma!(b, a, nu);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu))))");
+    let actual = SymbolicTensor::infer(expr)
+        .unwrap()
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression();
+    // Compare the cyclic word itself; its printed starting point can depend
+    // on symbol registration order. The trace must remain unevaluated.
+    assert_eq!(
+        actual,
+        trace!(
+            r.bis4.to_symbolic([]),
+            gamma!(slot!(r.mink4, mu)),
+            gamma!(slot!(r.mink4, nu))
+        )
+    );
 }
 
 #[test]

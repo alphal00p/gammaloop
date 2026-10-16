@@ -22,6 +22,7 @@ use symbolica::{
         Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol, representation::FunView,
     },
     coefficient::CoefficientView,
+    function,
     id::{Context, Replacement},
     utils::Settable,
 };
@@ -2223,6 +2224,35 @@ impl DiracSimplifier<'_> {
             && let Some(rewritten) = self.simplify_gamma5_trace_node(rep, &factors, dummies)
         {
             return Some(rewritten);
+        }
+
+        if factor_kinds.has_gamma0 && has_four_dimensional_trace_rep(rep) {
+            // A temporal matrix is the slash of the physical time basis vector.
+            // Feed that vector directly to the trace recurrence: rewriting the
+            // word would cycle through normalize_temporal_basis_slash above.
+            // Ordinary factors must expose dimension four; formal dimensions
+            // and other special matrices retain their existing treatment.
+            let temporal = function!(
+                ETS.delta,
+                function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0),
+                function!(*MINKOWSKI_SYMBOL, 4)
+            );
+            let indices = factors
+                .iter()
+                .map(|factor| match factor {
+                    DiracFactor::Gamma0(_) => Some(temporal.as_view()),
+                    _ => factor.gamma_mink_index(FOUR_DIM_CHISHOLM),
+                })
+                .collect::<Option<Vec<_>>>();
+            if let Some(indices) = indices {
+                let unit = Self::simplify_trace_terminal(trace!(rep).as_view())?;
+                return Some(trace_kernel::evaluate_generic(
+                    &indices,
+                    unit.as_view(),
+                    true,
+                    self.output,
+                ));
+            }
         }
 
         let trace_mink_indices =

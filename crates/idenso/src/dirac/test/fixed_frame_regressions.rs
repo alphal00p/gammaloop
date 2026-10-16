@@ -24,6 +24,58 @@ fn collect(expression: &Atom) -> Atom {
 }
 
 #[test]
+fn mixed_temporal_traces_reduce_without_fixing_formal_dimensions() {
+    use spenso::{
+        network::library::symbolic::ETS, shadowing::IntoAtom,
+        structure::abstract_index::AIND_SYMBOLS,
+    };
+    use symbolica::function;
+
+    let r = test_initialize();
+    let mu = slot!(r.mink4, mu).into_atom();
+    let nu = slot!(r.mink4, nu).into_atom();
+    let time_mu = function!(ETS.delta, function!(AIND_SYMBOLS.cind, 0), mu.clone());
+    let time_nu = function!(ETS.delta, function!(AIND_SYMBOLS.cind, 0), nu.clone());
+    let expression = trace!(
+        r.bis4.to_symbolic([]),
+        gamma0!(),
+        gamma!(mu.clone()),
+        gamma0!(),
+        gamma!(nu.clone()),
+    );
+    let expected = Atom::num(8) * time_mu * time_nu - Atom::num(4) * g!(mu, nu);
+    let reduced = simplify(&expression, GammaSimplifySettings::default());
+    assert!(!reduced.contains_symbol(spenso::network::tags::SPENSO_TAG.trace));
+    assert_eq!(reduced, expected);
+    assert_eq!(
+        simplify(&reduced, GammaSimplifySettings::default()),
+        reduced
+    );
+
+    let odd = trace!(
+        r.bis4.to_symbolic([]),
+        gamma0!(),
+        gamma!(slot!(r.mink4, mu)),
+        gamma!(slot!(r.mink4, nu)),
+    );
+    assert!(simplify(&odd, GammaSimplifySettings::default()).is_zero());
+
+    for (spin, vector) in [(r.bis_d, r.mink4), (r.bis4, r.mink_d)] {
+        let formal = trace!(
+            spin.to_symbolic([]),
+            gamma0!(),
+            gamma!(slot!(vector, mu)),
+            gamma0!(),
+            gamma!(slot!(vector, nu)),
+        );
+        assert!(
+            simplify(&formal, GammaSimplifySettings::default())
+                .contains_symbol(spenso::network::tags::SPENSO_TAG.trace)
+        );
+    }
+}
+
+#[test]
 fn fixed_temporal_slash_uses_gamma_zero_without_fixing_lorentz_dimension() {
     use spenso::{
         network::library::symbolic::ETS, shadowing::IntoAtom,
