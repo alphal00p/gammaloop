@@ -66,6 +66,38 @@ fn dangling_indices<Aind: ParseableAind + AbsInd + DummyAind>(
 pub fn list_dangling_impl<Aind: ParseableAind + AbsInd + DummyAind>(
     view: AtomView,
 ) -> Result<Vec<Atom>, IndexToolingError> {
+    if view.contains_symbol(SPENSO_TAG.chain) {
+        let mut matcher = SlotMatcher::default();
+        let mut opaque_level = None;
+        let mut invalid = None;
+        let _ = view.replace_map(|part, context, _| {
+            if invalid.is_some() || opaque_level.is_some_and(|level| context.function_level > level)
+            {
+                return;
+            }
+            opaque_level = None;
+            let AtomView::Fun(function) = part else {
+                return;
+            };
+            if function.get_symbol().is_scalar()
+                || SPENSO_TAG.is_scalar_metadata(function.get_symbol())
+            {
+                opaque_level = Some(context.function_level);
+            } else if function.get_symbol() == SPENSO_TAG.chain {
+                for (label, endpoint) in ["start", "end"].into_iter().zip(function.iter().take(2)) {
+                    if matcher.compact_representation(endpoint).is_some() {
+                        invalid = Some(format!(
+                            "invalid chain {label} `{endpoint}`: unresolved public endpoint"
+                        ));
+                        break;
+                    }
+                }
+            }
+        });
+        if let Some(reason) = invalid {
+            return Err(IndexToolingError::ListDangling { reason });
+        }
+    }
     dangling_indices::<Aind>(view).map_err(|reason| IndexToolingError::ListDangling { reason })
 }
 

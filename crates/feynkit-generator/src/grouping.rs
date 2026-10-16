@@ -540,7 +540,13 @@ pub(crate) fn group_diagrams(
                 };
                 exact_source
                     .canonize(GroupingIndex::Dummy)
-                    .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
+                    .map_err(|error| {
+                        tensor_evaluation_error(
+                            &diagram,
+                            0,
+                            format!("exact canonicalization: {error}"),
+                        )
+                    })?
             } else {
                 Atom::one()
             };
@@ -1168,7 +1174,9 @@ fn evaluate_tensor_sample(
                 ColorSextet {}.into(),
             ]))
         })
-        .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
+        .map_err(|error| {
+            tensor_evaluation_error(diagram, sample, format!("color-sector separation: {error}"))
+        })?;
     let contributions = sectors
         .into_iter()
         .map(|(color, lorentz)| {
@@ -1176,20 +1184,30 @@ fn evaluate_tensor_sample(
             let lorentz = cooking.uncook(lorentz.expression().as_view());
             let mut network =
                 GroupingTensorNetwork::try_from_view(lorentz.as_view(), &library, &settings)
-                    .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
+                    .map_err(|error| {
+                        tensor_evaluation_error(
+                            diagram,
+                            sample,
+                            format!("Lorentz parsing: {error}"),
+                        )
+                    })?;
             for scalar in &mut network.store.scalar {
                 *scalar = scalar.replace_multiple(&scalar_replacements);
             }
             network
                 .execute::<Sequential, MinResultRank, _, _, _>(&library, &functions)
-                .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
+                .map_err(|error| {
+                    tensor_evaluation_error(diagram, sample, format!("Lorentz execution: {error}"))
+                })?;
             let scalar: Atom = network
                 .result_scalar()
-                .map_err(|error| tensor_evaluation_error(diagram, sample, error))?
+                .map_err(|error| {
+                    tensor_evaluation_error(diagram, sample, format!("scalar extraction: {error}"))
+                })?
                 .into();
-            let color = color
-                .canonize(GroupingIndex::Dummy)
-                .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
+            let color = color.canonize(GroupingIndex::Dummy).map_err(|error| {
+                tensor_evaluation_error(diagram, sample, format!("color canonicalization: {error}"))
+            })?;
             Ok((color * scalar).replace_multiple(&color_replacements))
         })
         .collect::<Result<Vec<_>, GroupingError>>()?;
@@ -3174,5 +3192,34 @@ mod tests {
                     .collect::<Vec<_>>()
             );
         }
+    }
+
+    #[test]
+    fn neutral_vector_forward_numerator_groups_chiral_vertices() {
+        use crate::Process;
+        let mut model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        model.simplify_zero_values().unwrap();
+        let model = Arc::new(model);
+        let process = Process::new([23_i64], [1_i64, -1]);
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .max_vertices(2)
+            .threads(1);
+        let raw = process
+            .generate_cross_section(Arc::clone(&model), &options)
+            .unwrap();
+        let grouped = process
+            .generate_cross_section(
+                model,
+                &options.numerator_grouping(NumeratorGrouping::UpToScalar(Default::default())),
+            )
+            .unwrap();
+        assert_eq!(raw.diagrams.len(), 1);
+        assert_eq!(grouped.diagrams.len(), 1);
+        assert_eq!(grouped.diagrams[0].numerator(), raw.diagrams[0].numerator());
+        assert_eq!(grouped.diagrams[0].projector(), raw.diagrams[0].projector());
+        assert_eq!(grouped.diagrams[0].cuts(), raw.diagrams[0].cuts());
     }
 }
