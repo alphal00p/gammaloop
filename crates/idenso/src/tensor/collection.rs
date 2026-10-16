@@ -1996,7 +1996,9 @@ mod tests {
             source
                 .coefficients_are_zero(TensorCollectFilter::<0>::TaggedTensors)
                 .unwrap(),
-            ConditionResult::Inconclusive,
+            // Symbolica proves this product is structurally nonzero without
+            // opening its factors, before its disabled sampling/fallback stages.
+            ConditionResult::False,
         );
     }
 

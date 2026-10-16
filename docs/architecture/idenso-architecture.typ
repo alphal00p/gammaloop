@@ -144,6 +144,15 @@ unresolved identities and normalization behavior. Callback-sensitive output is
 validated rather than inheriting the original interface blindly. Neither trace
 simplification nor its surrounding scheduler expands the full result.
 
+Exact scalar weights in Dirac words are extracted without distributing their
+products. A weighted sum of ordinary slashed vectors enters the same trace
+recurrence as one vector argument; it does not generate a Cartesian product of
+matrix words. Explicit-index matrix sums remain outside that rule. Weighted
+compact metrics and dots share complete-interface admission before bilinear
+normalization. Mixed physical `gamma0` traces require explicit four-dimensional
+spin and Lorentz representations; formal dimensions and disabled trace
+evaluation retain their words.
+
 Uniformly reversed closed gamma and gamma5 words use the trace transpose
 identity before entering those same kernels: reverse the factor order and
 restore forward endpoints. The normalization remains local to the trace, so
@@ -202,6 +211,15 @@ Each family retains its internal kernel:
 - `Cookable` replaces selected functions or representation-index payloads with compact symbols,
   either as readable flattened names or reversible Symbolica `UserData::Atom` encodings.
 
+Formal SU(N) color reduction recognizes complete invariant fundamental networks
+with zero or one external adjoint. Singlet/adjoint projection and the local
+cubic symmetric-trace contractions retain other open lines and scalar factors.
+Known dimension relations are decoded from portable representation payloads
+only for identity selection; the original port payloads remain intact. An
+adjoint generator contracted with its incident chain endpoint vanishes by
+structure-constant antisymmetry before network materialization. Trace evaluation
+and cross-line Fierz expansion are independent settings.
+
 Settings objects are part of the semantics. Gamma ordering and trace evaluation, color Fierz and
 invariant substitutions, contraction budgets, and cooking source/tag filters can all
 change the result form. Reproducible callers record the exact settings; the
@@ -209,6 +227,10 @@ planner chooses eligible work using candidate counts, prerequisites and estimate
 growth. The expression receives one initial candidate scan. Regional replacements
 update occurrence counts; unchanged regions are not rescanned. Per-family settled
 regions and explicit change flags drive local fixed points.
+Completed identical scope observations share immutable storage even during the
+initial walk. Each occurrence is still inspected and contributes its counts;
+sharing does not skip admission or change the planner's budget. Parent records
+retain the shared completed record instead of duplicate observation subtrees.
 The same observations retain explicit metric and vector source ports by
 representation. Their absence can certify a completed structural fallback even
 when compact vectors or repeated gamma ports remain. Head occurrence alone

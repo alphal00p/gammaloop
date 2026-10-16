@@ -931,6 +931,7 @@ impl InterfaceInference {
     pub(crate) fn intrinsic_normalization_head(symbol: Symbol) -> bool {
         symbol.get_evaluation_info().is_none()
             && (symbol == ETS.metric
+                || symbol == SPENSO_TAG.dot
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
                 || symbol == *shadowing::CYCLIC)
@@ -947,6 +948,7 @@ impl InterfaceInference {
         tests::INTRINSIC_HEAD_CHECKS.with(|count| count.set(count.get() + 1));
         symbol.get_evaluation_info().is_none()
             && (symbol == *metric.get_or_insert_with(|| ETS.metric)
+                || symbol == SPENSO_TAG.dot
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
                 || symbol == *shadowing::CYCLIC)

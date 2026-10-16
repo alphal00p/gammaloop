@@ -8,6 +8,7 @@ use symbolica::printer::{PrintState, PrintUserData};
 #[cfg(test)]
 use symbolica::symbol;
 
+use crate::network::parsing::{AtomStructureExt, StrictTensorFilter};
 use crate::network::tags::{SPENSO_TAG, tensor_print};
 use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 use crate::tensor_symbol;
@@ -119,6 +120,30 @@ impl MetricNormalization {
         slots: &mut SlotMatcher,
         literal: bool,
     ) -> Option<Atom> {
+        if let AtomView::Mul(product) = vector {
+            // This intrinsic substitution also accepts symbolic representation
+            // heads. It does not require a concrete component-library entry.
+            let (position, vector) = product.iter().enumerate().find(|(_, factor)| {
+                matches!(factor, AtomView::Fun(vector)
+                    if vector.get_symbol().has_tag(&SPENSO_TAG.rank1)
+                        && slots.vector_argument(*vector)
+                            .and_then(|port| slots.compact_representation(port)).is_some())
+            })?;
+            if product.iter().enumerate().any(|(index, factor)| {
+                index != position && factor.is_tensorial(StrictTensorFilter::ContainsReps)
+            }) {
+                return None;
+            }
+            let contracted =
+                Self::compact_vector(metric, slot_value, slot, vector, slots, literal)?;
+            let coefficient = Atom::mul_many(
+                product
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, factor)| (index != position).then_some(factor)),
+            );
+            return Some(coefficient * contracted);
+        }
         let AtomView::Fun(vector) = vector else {
             return None;
         };
@@ -1218,6 +1243,18 @@ mod metric_normalization_tests {
             let expected = function!(vector, &metadata, endpoint);
             assert_eq!(ETS.metric(endpoint, &compact), expected);
             assert_eq!(ETS.metric(&compact, endpoint), expected);
+            let weight = (Atom::var(symbol!("metric_weight_a"))
+                + Atom::var(symbol!("metric_weight_b")))
+            .pow(7)
+                / Atom::var(symbol!("metric_weight_t"));
+            assert_eq!(
+                ETS.metric(endpoint, &weight * &compact),
+                &weight * &expected
+            );
+            assert_eq!(
+                ETS.metric(&weight * &compact, endpoint),
+                &weight * &expected
+            );
         }
     }
 

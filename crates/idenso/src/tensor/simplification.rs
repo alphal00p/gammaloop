@@ -447,6 +447,16 @@ impl SymbolicTensor<PartialStructure> {
                         let prerequisites = before.contract_prerequisites(prerequisite_settings, |value| {
                             // A metric is a prerequisite, not the identity's seed.
                             if matches!(value, AtomView::Fun(function) if function.get_symbol() == spenso::network::library::symbolic::ETS.metric) { return false; }
+                            // A retained symmetric trace has no terminal rule
+                            // when trace evaluation is disabled. Other colour
+                            // seeds can still request their incident connections.
+                            if operation == COLOR
+                                && settings.color.is_some_and(|color| !color.evaluate_traces)
+                                && let AtomView::Fun(function) = value
+                                && let Some((_, factors)) = spenso::shadowing::trace_parts(function)
+                                && matches!(factors.as_slice(), [AtomView::Fun(projector)]
+                                    if projector.get_symbol() == *spenso::shadowing::SYM)
+                            { return false; }
                             if let Some(region) = observed.region(value) { return region.identity_candidates() & operation != 0; }
                             match operation {
                                 GAMMA => spenso::shadowing::TensorCollectFilter::Reps([crate::representations::Bispinor {}.into()]).matches(value),

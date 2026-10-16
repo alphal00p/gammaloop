@@ -141,7 +141,7 @@ fn invariant_open_fundamental_chain_reduces_with_symbolic_nc() {
         };
         let simplified = simplify_formal_color(&(&closed * &open * &spectator), settings);
         let scalar = simplified.coefficient((&metric * &spectator).as_view());
-        assert_eq!(scalar.expand(), coefficient.expand());
+        assert_eq!(scalar.expand(), coefficient.expand(), "{simplified}");
         assert_eq!(simplified, scalar * &metric * &spectator);
         assert_eq!(simplify_formal_color(&simplified, settings), simplified);
         assert_eq!(
@@ -222,7 +222,7 @@ fn equivariant_open_fundamental_chain_keeps_its_adjoint_generator() {
         let input = &closed * &open * &spectator;
         let simplified = simplify_formal_color(&input, settings);
         let scalar = simplified.coefficient((&generator * &spectator).as_view());
-        assert_eq!(scalar.expand(), coefficient.expand());
+        assert_eq!(scalar.expand(), coefficient.expand(), "{simplified}");
         assert_eq!(simplified, scalar * &generator * &spectator);
         assert_eq!(simplify_formal_color(&simplified, settings), simplified);
         assert_eq!(
@@ -237,8 +237,18 @@ fn equivariant_open_fundamental_chain_keeps_its_adjoint_generator() {
                 .list_dangling::<AbstractIndex>()
                 .expect("formal reference slots"),
         );
+        // Trace evaluation and cross-line Fierz are independent policies.
+        // Fierz may shorten a retained trace, but must not evaluate it.
+        let unevaluated = simplify_formal_color(&input, settings.without_trace_evaluation());
+        assert!(unevaluated.contains_symbol(spenso::network::tags::SPENSO_TAG.trace));
+        assert_eq!(simplify_formal_color(&unevaluated, settings), simplified);
         assert_eq!(
-            simplify_formal_color(&input, settings.without_trace_evaluation()),
+            simplify_formal_color(
+                &input,
+                settings
+                    .without_trace_evaluation()
+                    .without_cross_chain_fierz_expansion()
+            ),
             input,
         );
         // The preserved free index must not be captured by a trace dummy,
@@ -330,7 +340,18 @@ fn cubic_trace_contraction_preserves_two_open_color_lines() {
     );
     let generator = color_t!(adjoints[0].clone(), &start, &end);
     let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 5 * (opaque(z) + opaque(w)));
-    let tensor = &generator * &other * &spectator;
+    // The adjoint joining the two open fundamental lines is summed. Compare
+    // that internal label in one canonical chart; i,j,k,l remain free and ordered.
+    let canonical = |expression: &Atom| {
+        let cooking = crate::CookSettings::reversible().with_representation_payloads(true, true);
+        let value = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap())
+            .unwrap()
+            .canonize()
+            .unwrap()
+            .into_expression();
+        cooking.uncook(value.as_view())
+    };
+    let tensor = canonical(&(&generator * &other * &spectator));
     let default_settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
     let settings = default_settings.without_cross_chain_fierz_expansion();
     let fierz_tensor = simplify_formal_color(&(&generator * &other), default_settings);
@@ -355,7 +376,7 @@ fn cubic_trace_contraction_preserves_two_open_color_lines() {
             } else {
                 -Atom::one() / (Atom::num(2) * n.clone())
             };
-            let simplified = simplify_formal_color(&input, settings);
+            let simplified = canonical(&simplify_formal_color(&input, settings));
             let scalar = simplified.coefficient(tensor.as_view());
             assert_eq!(
                 scalar.expand(),
@@ -409,8 +430,11 @@ fn cubic_trace_contraction_preserves_two_open_color_lines() {
                     ),
                 ];
                 assert_eq!(
-                    simplify_formal_color(&input.replace_multiple(&replacements), settings),
-                    simplified.replace_multiple(&replacements),
+                    canonical(&simplify_formal_color(
+                        &input.replace_multiple(&replacements),
+                        settings
+                    )),
+                    canonical(&simplified.replace_multiple(&replacements)),
                 );
             }
         }
@@ -424,14 +448,19 @@ fn cubic_trace_contraction_preserves_two_open_color_lines() {
     let preserved_color = chain!(&start, &end;
         [color_t!(before), factors[0].clone(), color_t!(after)]
     ) * &other;
-    let preserved = &preserved_color * &spectator;
+    let preserved = canonical(&(&preserved_color * &spectator));
     let symmetric =
         CS.symmetric_generator_trace(ColorFundamental {}.to_symbolic([n.clone()]), adjoints);
     let input = &symmetric * open * &other * &spectator;
-    let simplified = simplify_formal_color(&input, settings);
+    let simplified_color = simplify_formal_color(&input, settings);
+    assert_eq!(
+        simplify_formal_color(&simplified_color, settings),
+        simplified_color
+    );
+    let simplified = canonical(&simplified_color);
     let scalar = simplified.coefficient(preserved.as_view());
     let coefficient = (n.clone().pow(2) - Atom::num(4)) / (Atom::num(8) * n);
-    assert_eq!(scalar.expand(), coefficient.expand());
+    assert_eq!(scalar.expand(), coefficient.expand(), "{simplified}");
     let default_result = simplify_formal_color(&input, default_settings);
     let default_color = default_result.coefficient(spectator.as_view());
     assert_eq!(default_result, &default_color * &spectator);
@@ -441,7 +470,48 @@ fn cubic_trace_contraction_preserves_two_open_color_lines() {
         (&coefficient * fierz_tensor).expand()
     );
     assert_eq!(simplified, scalar * preserved);
-    assert_eq!(simplify_formal_color(&simplified, settings), simplified);
+    assert_eq!(
+        canonical(&simplify_formal_color(&simplified, settings)),
+        simplified
+    );
+}
+
+#[test]
+fn adjoint_chain_endpoint_contraction_vanishes_before_materialization() {
+    test_initialize();
+    let settings = ColorSimplifySettings::default().without_trace_evaluation();
+    let spectator = parse_lit!((x + y) ^ 7);
+    for word in [
+        "chain(coad(dA,a),coad(dA,b),f(in,out,coad(dA,a)),f(in,out,coad(dA,c)))",
+        "chain(coad(dA,a),coad(dA,b),f(in,out,coad(dA,c)),f(in,out,coad(dA,b)))",
+        "chain(coad(dA,a),coad(dA,b),f(out,in,coad(dA,c)),f(out,in,coad(dA,b)))",
+    ] {
+        let word = Atom::parse(word, "spenso", Default::default()).unwrap();
+        assert_eq!(
+            simplify_formal_color(&(&word * &spectator), settings),
+            Atom::Zero
+        );
+    }
+    let zero = parse!(
+        "chain(coad(dA,b),coad(dA,d_0),f(in,out,coad(dA,a)),f(in,out,coad(dA,d_0)))",
+        default_namespace = "spenso"
+    );
+    let expected = parse_lit!(
+        g(coad(dA, a), coad(dA, b)) * cas(2, coad(dA)) ^ 3 / 2,
+        default_namespace = "spenso"
+    );
+    let source = (&zero * parse_lit!(cas(2, coad(dA)) ^ 2 / 12, default_namespace = "spenso")
+        + &expected)
+        * &spectator;
+    assert_eq!(
+        simplify_formal_color(&source, settings),
+        &expected * &spectator
+    );
+    let open = parse!(
+        "chain(coad(dA,a),coad(dA,b),f(in,out,coad(dA,c)))",
+        default_namespace = "spenso"
+    );
+    assert_eq!(simplify_formal_color(&open, settings), open);
 }
 
 #[test]
@@ -497,7 +567,17 @@ fn cubic_trace_contraction_rejects_unowned_or_incompatible_slots() {
         default_namespace = "spenso"
     );
     let input = &symmetric * &open * &spectator * third_occurrence;
-    assert_eq!(simplify_formal_color(&input, settings), input);
+    let cooking = crate::CookSettings::reversible().with_representation_payloads(true, true);
+    let admitted = cooking.try_cook(input.as_view()).unwrap();
+    assert!(matches!(
+        SymbolicTensor::infer(admitted),
+        Err(crate::tensor::inference::TensorInferenceError::Composition(
+            crate::tensor::composition::TensorCompositionError::InvalidExplicitMultiplicity {
+                occurrences: 3,
+                ..
+            }
+        ))
+    ));
     for incompatible_spectator in [
         parse_lit!(
             t(coad(Nc ^ 2 - 1, a), cof(Nc + 1, k), dind(cof(Nc + 1, l))),
@@ -773,7 +853,7 @@ fn three_generator_trace_terminal() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"(𝑖/2)*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out)))");
 }
 
 #[test]
@@ -1339,7 +1419,7 @@ fn mixed_trace_structure_contraction() {
         slot!(r.coad_da, c),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,c),coad(dA,d))*idx(2,cof(Nc))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"(𝑖/2)*cas(2,coad(dA))*g(coad(dA,c),coad(dA,d))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -1366,7 +1446,7 @@ fn four_generator_trace_terminal() {
         color_t!(slot!(r.coad_da, d)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"-1/3*chain(coad(dA,c),coad(dA,d),f(coad(dA,b),in,out),f(coad(dA,a),in,out))*idx(2,cof(Nc))+1/6*chain(coad(dA,c),coad(dA,d),f(coad(dA,a),in,out),f(coad(dA,b),in,out))*idx(2,cof(Nc))+f(coad(dA,a),coad(dA,b),coad(dA,d_0))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,d_0),in,out)))*𝑖/2+f(coad(dA,c),coad(dA,d),coad(dA,d_0))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,d_0),in,out)))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"(𝑖/2)*f(coad(dA,a),coad(dA,b),coad(dA,d_0))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,d_0),in,out)))+(𝑖/2)*f(coad(dA,c),coad(dA,d),coad(dA,d_0))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,d_0),in,out)))+-1/3*chain(coad(dA,c),coad(dA,d),f(coad(dA,b),in,out),f(coad(dA,a),in,out))*idx(2,cof(Nc))+1/6*chain(coad(dA,c),coad(dA,d),f(coad(dA,a),in,out),f(coad(dA,b),in,out))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
 }
 
 // FORM's repository includes a valgrind-oriented size-5 port of color.h's
