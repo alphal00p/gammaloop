@@ -1812,7 +1812,11 @@ impl EvaluatorStack {
                         })
                     };
                     for (alias, body) in aliases {
-                        let body = if body == alias { body } else { rename(body) };
+                        let body = if body == alias {
+                            body
+                        } else {
+                            rename(body.collect_compact_factors())
+                        };
                         generated.push(FnMapEntry {
                             inlining,
                             is_alias: false,
@@ -1832,7 +1836,12 @@ impl EvaluatorStack {
                             continue;
                         }
                         let index = Atom::from(tensor.co_expanded_index(index)?);
-                        let body = body.to_owned();
+                        // Component contraction exposes new repeated scalar
+                        // factors. Collect them before registration so inlining
+                        // does not make the scalar compiler share unnecessary
+                        // arithmetic across different orientation branches.
+                        // Powers and lazy guards keep their existing boundaries.
+                        let body = body.collect_compact_factors();
                         let positions = argument_positions(&body);
                         populated.insert(index.clone(), positions.clone());
                         generated.push(FnMapEntry {

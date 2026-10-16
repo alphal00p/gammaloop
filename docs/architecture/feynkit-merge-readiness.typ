@@ -106,3 +106,25 @@ edge/half-edge identities, declared bases, comments and test assertions are
 preserved. Fixtures requiring model-rule generation or canonical cross-section
 sewing are handled at their proper import boundary instead of weakening the
 strict finalized-artifact parser.
+
+The next scalar-compiler repair collects compact factors in each finite numerator
+component and its scalar definitions before registration. Tensor contraction
+creates new repeated factors after the earlier source-expression collection.
+An identical-input compiler replay isolates the benefit to function bodies:
+collecting only the outer root changes no operations. Compact collection changes
+7,853 additions and 10,491 multiplications to 5,710 and 7,951, preserving all
+299 inversions and 76 calls. The diagnostic interpreter counts 3,564--4,042
+executed instructions across nine orientations, versus 4,682--5,249 before the
+change and 3,187--3,847 on main. These instruction counts are diagnostic, not
+elapsed-time gates. Scalar powers, lazy guards and numerator products remain
+factorized; no compiler optimization setting or benchmark threshold changes.
+The source captures, replay programs and per-orientation counts are retained in
+`target/readiness-repair`. Normal CLI measurements remain required.
+
+The runtime import repairs also preserve canonical cut and threshold inventories
+for process inference after preprocessing, use the canonical `eN` edge names for
+forced-cut selection, and exclude dummy edges from the spanning-forest guide as
+well as the physical graph. Synthetic graphs explicitly declare their numerator,
+projector, vertex slots and loop coordinates. Synthetic scalar cross sections
+with two-valent insertions use canonical artifacts built from the original
+incidence, with all two-particle cuts and external scalar phases retained.
