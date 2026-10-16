@@ -617,25 +617,30 @@ impl NumeratorAtomExt for AtomView<'_> {
                     let mut branch_local = tensor_sum;
                     let protect_inverse = guarded
                         || (tensorial && view.is_tensorial(StrictTensorFilter::ContainsReps));
-                    view.visitor(&mut |part| {
-                        branch_local |= match part {
-                            AtomView::Pow(power) => {
-                                protect_inverse
-                                    && !i64::try_from(power.get_base_exp().1)
-                                        .is_ok_and(|exponent| exponent >= 0)
-                            }
-                            AtomView::Fun(fun) => [
-                                OrientationID::symbol(),
-                                GS.theta,
-                                GS.orientation_delta,
-                                Symbol::IF,
-                                symbol!("gammalooprs::uv::numerator_family"),
-                            ]
-                            .contains(&fun.get_symbol()),
-                            _ => false,
-                        };
-                        !branch_local
-                    });
+                    // A scalar scope without guards or numerator families
+                    // cannot contain an occurrence-local factor. Avoid walking
+                    // its opaque function payloads again to prove that fact.
+                    if protect_inverse || !share_positive_powers {
+                        view.visitor(&mut |part| {
+                            branch_local |= match part {
+                                AtomView::Pow(power) => {
+                                    protect_inverse
+                                        && !i64::try_from(power.get_base_exp().1)
+                                            .is_ok_and(|exponent| exponent >= 0)
+                                }
+                                AtomView::Fun(fun) => [
+                                    OrientationID::symbol(),
+                                    GS.theta,
+                                    GS.orientation_delta,
+                                    Symbol::IF,
+                                    symbol!("gammalooprs::uv::numerator_family"),
+                                ]
+                                .contains(&fun.get_symbol()),
+                                _ => false,
+                            };
+                            !branch_local
+                        });
+                    }
                     // Guarded inverses remain occurrence-local, including inverses
                     // nested in functions or powers. Numerator families and tensor
                     // sums must still form independent contraction networks even
