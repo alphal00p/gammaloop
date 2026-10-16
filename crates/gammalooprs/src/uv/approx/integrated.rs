@@ -2091,7 +2091,7 @@ mod tests {
         let retained = function!(
             vakint::symbols::S.p,
             3,
-            Minkowski {}.to_symbolic([Atom::var(GS.dim), function!(GS.uvaind, 0, 2)])
+            Minkowski {}.to_symbolic([Atom::var(GS.dim), Atom::num(2)])
         );
         let square = vakint::symbols::S.dot(&loop_momentum, &loop_momentum);
         let coefficient = (resolved / (&spectator * retained * square)).collect_factors();

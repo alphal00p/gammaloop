@@ -267,7 +267,6 @@ fn dot_conversion_preserves_existing_indices() {
 
 #[test]
 fn dot_conversion_reserves_numeric_and_represented_source_slots() {
-    use symbolica::atom::AtomCore;
     use vakint::Vakint;
 
     let _ = &*vakint::symbols::S;
@@ -278,6 +277,28 @@ fn dot_conversion_reserves_numeric_and_represented_source_slots() {
             "(a+b)^7*p(3,dot_dummy_ind(3))*k(1,dot_dummy_ind(3))*k(1,{source_slot})"
         ))
         .unwrap();
+        assert_eq!(converted, expected);
+        assert_eq!(
+            Vakint::convert_from_dot_notation(converted.as_view()),
+            converted
+        );
+    }
+}
+
+#[test]
+fn dot_conversion_binds_native_vector_representations() {
+    use vakint::Vakint;
+
+    let _ = &*vakint::symbols::S;
+    for vector in [
+        "spenso::δ(spenso::cind(1),spenso::mink(D))",
+        "v(5,spenso::mink(D))",
+    ] {
+        let source = vakint_parse!(format!("(a+b)^7*dot({vector},p(3))")).unwrap();
+        let indexed_vector = vector.replace("spenso::mink(D)", "spenso::mink(D,dot_dummy_ind(2))");
+        let expected =
+            vakint_parse!(format!("(a+b)^7*{indexed_vector}*p(3,dot_dummy_ind(2))")).unwrap();
+        let converted = Vakint::convert_from_dot_notation(source.as_view());
         assert_eq!(converted, expected);
         assert_eq!(
             Vakint::convert_from_dot_notation(converted.as_view()),
