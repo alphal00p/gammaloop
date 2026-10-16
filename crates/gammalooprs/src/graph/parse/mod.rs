@@ -179,7 +179,7 @@ impl ParseGraph {
             },
             |_, edge_id, pair, data| {
                 let mut edge = ParseEdge::new(data.data.particle)
-                    .with_label(format!("feynkit_edge_{}", edge_id.0))
+                    .with_label(format!("e{}", edge_id.0))
                     .with_num(data.data.numerator.clone());
                 edge.is_dummy = data.data.is_dummy;
                 edge.lmb_id = diagram
@@ -1206,7 +1206,10 @@ impl Graph {
         }
 
         let external = graph.internal_crown(&full);
-        let mut loop_momentum_basis = graph.lmb_impl(&full, full_cut, external)?;
+        // Dummy edges cannot carry physical momentum or enter the spanning
+        // forest used to materialize the explicitly selected loop coordinates.
+        let forest_guide = full_cut.intersection(&full);
+        let mut loop_momentum_basis = graph.lmb_impl(&full, &forest_guide, external)?;
 
         for e in 0..xs_ext_id.len() {
             let (l, _) = loop_momentum_basis

@@ -153,6 +153,11 @@ fn complex_ckm_updates_preserve_direct_integrand_warm_up() -> color_eyre::Result
         settings.generation.uv.generate_integrated = false;
         settings.generation.threshold_subtraction.enable_thresholds = false;
         let mass = model.get_parameter("MW").value.unwrap().re;
+        // Longitudinal helicity needs a spatial direction. A fixed on-shell
+        // boost exercises CKM warm-up with finite polarizations; the old rest
+        // input divided by zero in the inherited helicity convention.
+        let energy = mass * 1.25;
+        let longitudinal = mass * 0.75;
         let runtime: RuntimeSettings = toml::from_str(&format!(
             r#"
             [kinematics]
@@ -160,7 +165,7 @@ fn complex_ckm_updates_preserve_direct_integrand_warm_up() -> color_eyre::Result
             [kinematics.externals]
             type = "constant"
             [kinematics.externals.data]
-            momenta = [[{mass}, 0.0, 0.0, 0.0]]
+            momenta = [[{energy}, 0.0, 0.0, {longitudinal}]]
             helicities = [0]
         "#
         ))?;
