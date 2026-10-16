@@ -1,5 +1,6 @@
 ---
 source: src/graph/lmb.rs
+assertion_line: 1495
 expression: "&lmb.to_string()"
 ---
 ╭─────────┬────╮
@@ -15,7 +16,7 @@ expression: "&lmb.to_string()"
 ╭──────┬───────┬─────────╮
 │ edge │ L0 e1 │ Ext0 e0 │
 ├──────┼───────┼─────────┤
-│ e0   │ .     │ .       │
+│ e0   │ .     │ +       │
 │ e1   │ +     │ .       │
 │ e2   │ -     │ -       │
 ╰──────┴───────┴─────────╯
