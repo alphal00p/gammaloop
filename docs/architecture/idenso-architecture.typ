@@ -137,6 +137,15 @@ ports, checks every sum branch, and retains necessary multiplicity checks. Uncha
 are borrowed; changed exact sums and products use bulk construction when callback ordering
 permits it.
 
+Before power and interface admission, the existing dot normalizer lowers
+nested rank-one notation such as `δ(cind(0),p(mink(d)))` to
+`g(δ(cind(0),mink(d)),p(mink(d)))`, retaining the symbolic dimension.
+This admission pass leaves explicit metrics, dots, indexed contractions and
+scalar payloads unchanged. Callback-sensitive ancestors and metadata remain
+on the existing checked path; the deterministic fixed-component delta is a
+local exception, not an intrinsic-interface certificate. Full admission
+validates the normalized expression before publishing it.
+
 Closed gamma traces emit factored local identities into the tensor expression.
 Four-dimensional short-word and symbolic-dimensional recurrence rules
 share that result owner. The interface proof checks dimensions, surviving ports,

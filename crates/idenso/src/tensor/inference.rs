@@ -275,6 +275,7 @@ impl SymbolicTensor<PartialStructure> {
     }
 
     fn infer_with_contractions(atom: Atom) -> InferenceResult<(Self, bool)> {
+        let atom = crate::shorthands::schoonschip::DotNormalizer::nested_vectors(atom.as_view());
         let atom = InterfaceInference::lower_tensor_powers(atom.as_view())?.unwrap_or(atom);
         let mut inference = InterfaceInference::default();
         let (structure, _) = inference.infer_observed(atom.as_view())?;
@@ -6032,6 +6033,218 @@ pub(crate) mod tests {
         let invalid =
             symbolica::function!(ETS.delta, symbolica::function!(AIND_SYMBOLS.cind, -1), slot);
         assert!(SymbolicTensor::infer(invalid).is_err());
+    }
+
+    #[test]
+    fn nested_fixed_vectors_are_admitted_before_scalar_powers_and_scopes() {
+        crate::test_support::test_initialize();
+        let momentum = spenso::vector_symbol!("nested_admission::p");
+        let metadata = symbolica::function!(
+            symbolica::symbol!("nested_admission::provenance"; Scalar),
+            6,
+            -symbolica::function!(symbolica::symbol!("nested_admission::source"), 2)
+        );
+        let dimension = Atom::var(symbolica::symbol!("nested_admission::d"));
+        let x = Atom::var(symbolica::symbol!("nested_admission::x"; Scalar));
+        let y = Atom::var(symbolica::symbol!("nested_admission::y"; Scalar));
+        let spectator = (&x + &y).pow(9)
+            * symbolica::function!(
+                symbolica::symbol!("nested_admission::opaque"; Scalar),
+                (&x - &y).pow(11)
+            )
+            / (&x + Atom::num(3));
+        for dimension in [dimension, Atom::num(4)] {
+            let rep = Minkowski {}.new_rep(Dimension::try_from(dimension.as_view()).unwrap());
+            let compact = rep.to_symbolic([]);
+            let slot = rep
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(881925))
+                .to_atom();
+            let vector = symbolica::function!(momentum, &metadata, &compact);
+            let generic = symbolica::function!(momentum, &metadata, &vector);
+            assert_eq!(
+                SymbolicTensor::infer(generic)
+                    .unwrap()
+                    .to_dots()
+                    .unwrap()
+                    .expression(),
+                &spenso::dot!(&vector, &vector)
+            );
+            for component in 0..4 {
+                let coordinate = symbolica::function!(AIND_SYMBOLS.cind, component);
+                let nested = symbolica::function!(ETS.delta, &coordinate, &vector);
+                let expected = spenso::dot!(
+                    symbolica::function!(ETS.delta, &coordinate, &compact),
+                    &vector
+                );
+                let admitted = SymbolicTensor::infer(nested.clone()).unwrap();
+                assert!(admitted.is_scalar());
+                assert_eq!(admitted.to_dots().unwrap().expression(), &expected);
+
+                // Explicit repeated indices independently define the contraction.
+                let indexed = SymbolicTensor::infer(
+                    symbolica::function!(ETS.delta, &coordinate, &slot)
+                        * symbolica::function!(momentum, &metadata, &slot),
+                )
+                .unwrap()
+                .contract(Default::default())
+                .unwrap()
+                .to_dots()
+                .unwrap();
+                assert_eq!(indexed.expression(), &expected);
+                for basis in 0..4 {
+                    let fixed = symbolica::function!(
+                        ETS.delta,
+                        symbolica::function!(AIND_SYMBOLS.cind, basis),
+                        &compact
+                    );
+                    let actual = admitted
+                        .to_dots()
+                        .unwrap()
+                        .expression()
+                        .replace(vector.clone())
+                        .with(fixed.clone());
+                    let nested_basis =
+                        SymbolicTensor::infer(symbolica::function!(ETS.delta, &coordinate, fixed))
+                            .unwrap();
+                    assert_eq!(nested_basis.expression(), &actual);
+                    assert_eq!(
+                        actual,
+                        Atom::num(if component != basis {
+                            0
+                        } else if component == 0 {
+                            1
+                        } else {
+                            -1
+                        })
+                    );
+                }
+                for power in [-2, 1, 2, 3] {
+                    let source = &spectator * (nested.pow(power) + &x);
+                    let result = SymbolicTensor::infer(source).unwrap().to_dots().unwrap();
+                    assert!(result.is_scalar());
+                    assert_eq!(
+                        result.expression(),
+                        &(&spectator * (expected.pow(power) + &x))
+                    );
+                    assert_eq!(
+                        SymbolicTensor::infer(result.expression().clone()).unwrap(),
+                        result
+                    );
+                }
+                let open = symbolica::function!(momentum, &metadata, &slot);
+                let product = SymbolicTensor::infer(&spectator * &nested * &open)
+                    .unwrap()
+                    .to_dots()
+                    .unwrap();
+                assert_eq!(product.expression(), &(&spectator * &expected * &open));
+                assert_eq!(
+                    product.structure(),
+                    SymbolicTensor::infer(open).unwrap().structure()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn nested_vector_admission_retains_callback_and_metadata_guards() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        crate::test_support::test_initialize();
+        let vector = spenso::vector_symbol!("nested_admission_guard::p");
+        let rep = Minkowski {}.new_rep(4);
+        let compact = rep.to_symbolic([]);
+        let slot = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(881926))
+            .to_atom();
+        let coordinate = symbolica::function!(AIND_SYMBOLS.cind, 0);
+        let p = symbolica::function!(vector, &compact);
+        for invalid in [
+            symbolica::function!(vector, &slot),
+            symbolica::function!(
+                spenso::tensor_symbol!("nested_admission_guard::rank_two"),
+                &compact,
+                &compact
+            ),
+            symbolica::function!(vector, &compact, &compact),
+            symbolica::function!(vector, symbolica::function!(vector, &slot), &compact),
+        ] {
+            assert!(
+                SymbolicTensor::infer(symbolica::function!(ETS.delta, &coordinate, invalid))
+                    .is_err()
+            );
+        }
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let callback = spenso::vector_symbol!(
+            "nested_admission_guard::callback",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let source = symbolica::function!(callback, &p);
+        calls.store(0, Ordering::Relaxed);
+        assert!(SymbolicTensor::infer(source).is_err());
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            1,
+            "only the established power-lowering constructor may replay the callback"
+        );
+
+        let observed = Arc::clone(&calls);
+        let ancestor = spenso::tensor_symbol!(
+            "nested_admission_guard::callback_ancestor",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let source = symbolica::function!(
+            ancestor,
+            symbolica::function!(ETS.delta, &coordinate, &p),
+            &slot
+        );
+        calls.store(0, Ordering::Relaxed);
+        assert!(SymbolicTensor::infer(source).is_err());
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            1,
+            "admission must not rebuild a callback-bearing ancestor"
+        );
+
+        let observed = Arc::clone(&calls);
+        let metadata = symbolica::symbol!("nested_admission_guard::metadata"; Scalar;
+            norm = move |_, _| { observed.fetch_add(1, Ordering::Relaxed); }
+        );
+        let source = symbolica::function!(
+            ETS.delta,
+            &coordinate,
+            symbolica::function!(vector, symbolica::function!(metadata, 7), &compact)
+        );
+        calls.store(0, Ordering::Relaxed);
+        assert!(SymbolicTensor::infer(source).is_err());
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            0,
+            "opaque scalar metadata must not be replayed"
+        );
+
+        let scalar = symbolica::symbol!("nested_admission_guard::scalar"; Scalar);
+        for unchanged in [
+            spenso::g!(&p, &p),
+            spenso::dot!(&p, &p),
+            symbolica::function!(vector, &slot).pow(2),
+            symbolica::function!(scalar, symbolica::function!(ETS.delta, coordinate, &p)),
+        ] {
+            assert_eq!(
+                SymbolicTensor::infer(unchanged.clone())
+                    .unwrap()
+                    .expression(),
+                &unchanged
+            );
+        }
     }
 
     #[test]
