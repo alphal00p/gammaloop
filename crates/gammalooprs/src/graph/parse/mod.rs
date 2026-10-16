@@ -340,8 +340,8 @@ impl Graph {
                     )?;
                     let mut graph =
                         Self::from_feynkit(&diagram, metadata.group_id, metadata.is_group_master)?;
-                    graph.apply_import_metadata(metadata, model)?;
-                    graph.apply_import_edge_metadata(
+                    graph.apply_import_metadata(
+                        metadata,
                         parsed
                             .iter_edges()
                             .map(|(_, edge, data)| (edge, data.data.statements.clone())),
@@ -474,8 +474,8 @@ impl Graph {
         }
         let mut result =
             Self::from_feynkit(&completed, metadata.group_id, metadata.is_group_master)?;
-        result.apply_import_metadata(metadata, model)?;
-        result.apply_import_edge_metadata(
+        result.apply_import_metadata(
+            metadata,
             edge_metadata
                 .into_iter()
                 .map(|(source, attributes)| (EdgeIndex(source_map.edges()[source].0), attributes)),
@@ -485,11 +485,17 @@ impl Graph {
         Ok(result)
     }
 
-    fn apply_import_edge_metadata(
+    fn apply_import_metadata(
         &mut self,
+        metadata: ParseData,
         edge_metadata: impl IntoIterator<Item = (EdgeIndex, BTreeMap<String, String>)>,
         model: &Model,
     ) -> Result<()> {
+        self.group_id = metadata.group_id;
+        self.is_group_master = metadata.is_group_master;
+        self.threshold_counterterms =
+            Autogen::from_option_or_generate(metadata.threshold_counterterms, Default::default);
+        let mut overridden_masses = Vec::new();
         for (target, attributes) in edge_metadata {
             let edge = &mut self.underlying[target];
             if let Some(name) = attributes.get("name") {
@@ -501,7 +507,7 @@ impl Graph {
             if let Some(mass) = attributes.get("mass") {
                 let mass: Atom = mass.strip_parse()?;
                 edge.particle = edge.particle.clone().override_mass(Some(mass.clone()));
-                edge.mass = EdgeMass::from_atom(mass, model, &self.param_builder)?;
+                overridden_masses.push((target, mass));
             }
             if let Some(power) = attributes.get("momtrop_edge_power") {
                 edge.extra_data.momtrop_edge_power = Some(power.strip_parse()?);
@@ -510,16 +516,14 @@ impl Graph {
                 edge.extra_data.vakint_edge_power = Some(power.trim().parse()?);
             }
         }
-        Ok(())
-    }
-
-    fn apply_import_metadata(&mut self, metadata: ParseData, model: &Model) -> Result<()> {
-        self.group_id = metadata.group_id;
-        self.is_group_master = metadata.is_group_master;
-        self.threshold_counterterms =
-            Autogen::from_option_or_generate(metadata.threshold_counterterms, Default::default);
+        // Energy definitions depend on the completed edge masses. Build them
+        // after applying overrides, then compile the mass evaluators against
+        // that same parameter layout (including graph-local parameters).
         self.param_builder =
             ParamBuilder::new(self, model, &self.loop_momentum_basis, metadata.parameters)?;
+        for (target, mass) in overridden_masses {
+            self.underlying[target].mass = EdgeMass::from_atom(mass, model, &self.param_builder)?;
+        }
         self.threshold_counterterms.validate_for_graph(self)
     }
 
