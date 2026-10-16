@@ -542,6 +542,10 @@ impl NumeratorAtomExt for AtomView<'_> {
             (number, body)
         };
         loop {
+            // Completed scalar components contain no tensor interfaces. Establish
+            // that once per collection scope instead of rescanning every nested
+            // factor; tensor-bearing scopes retain the per-factor checks.
+            let tensorial = atom.is_tensorial(StrictTensorFilter::ContainsReps);
             // Collect only complete factors after Taylor and residue mapping.
             // Opaque powers keep distinct inverse denominators, their owners,
             // and numerator powers intact; functions keep their arguments intact.
@@ -559,7 +563,7 @@ impl NumeratorAtomExt for AtomView<'_> {
                     AtomView::Fun(_) => false,
                     AtomView::Pow(power) => {
                         if i64::try_from(power.get_exp()).is_ok_and(|exponent| exponent > 0)
-                            && !part.is_tensorial(StrictTensorFilter::ContainsReps)
+                            && !(tensorial && part.is_tensorial(StrictTensorFilter::ContainsReps))
                         {
                             let (_, base) = split_number(&numeric_content(power.get_base()));
                             if matches!(base.as_view(), AtomView::Add(_))
@@ -580,25 +584,28 @@ impl NumeratorAtomExt for AtomView<'_> {
                 // Keep these tensor sums local to their original occurrences.
                 let tensor_sum = matches!(view, AtomView::Add(_))
                     && context.parent_type == Some(AtomType::Mul)
-                    && view.is_tensorial(StrictTensorFilter::ContainsReps);
+                    && (tensorial && view.is_tensorial(StrictTensorFilter::ContainsReps));
                 if share_positive_powers
+                    && matches!(view, AtomView::Pow(_) | AtomView::Add(_))
                     && !tensor_sum
-                    && !view.is_tensorial(StrictTensorFilter::ContainsReps)
+                    && !(tensorial && view.is_tensorial(StrictTensorFilter::ContainsReps))
                 {
                     if let AtomView::Pow(power) = view
                         && i64::try_from(power.get_exp()).is_ok_and(|exponent| exponent > 0)
                     {
-                        let (number, base) = split_number(&numeric_content(power.get_base()));
-                        if powered_sums.contains(&base) {
-                            **out = (number * function!(opaque, base)).pow(power.get_exp());
-                            return;
+                        if !powered_sums.is_empty() {
+                            let (number, base) = split_number(&numeric_content(power.get_base()));
+                            if powered_sums.contains(&base) {
+                                **out = (number * function!(opaque, base)).pow(power.get_exp());
+                                return;
+                            }
                         }
                         // Traversal still wraps function bases. Atomic scalar
                         // powers retain their native relationship to linear terms.
                         if matches!(power.get_base(), AtomView::Var(_) | AtomView::Fun(_)) {
                             return;
                         }
-                    } else if matches!(view, AtomView::Add(_)) {
+                    } else if !powered_sums.is_empty() && matches!(view, AtomView::Add(_)) {
                         let (number, base) = split_number(&numeric_content(view));
                         if powered_sums.contains(&base) {
                             **out = number * function!(opaque, base);
@@ -608,8 +615,8 @@ impl NumeratorAtomExt for AtomView<'_> {
                 }
                 if tensor_sum || matches!(view, AtomView::Pow(_) | AtomView::Fun(_)) {
                     let mut branch_local = tensor_sum;
-                    let protect_inverse =
-                        guarded || view.is_tensorial(StrictTensorFilter::ContainsReps);
+                    let protect_inverse = guarded
+                        || (tensorial && view.is_tensorial(StrictTensorFilter::ContainsReps));
                     view.visitor(&mut |part| {
                         branch_local |= match part {
                             AtomView::Pow(power) => {
@@ -639,7 +646,7 @@ impl NumeratorAtomExt for AtomView<'_> {
                     // remain opaque to subsequent common-factor collection.
                     let normalized = if let AtomView::Pow(power) = view
                         && !branch_local
-                        && !view.is_tensorial(StrictTensorFilter::ContainsReps)
+                        && !(tensorial && view.is_tensorial(StrictTensorFilter::ContainsReps))
                         && let Ok(exponent) = i64::try_from(power.get_exp())
                     {
                         numeric_content(power.get_base()).pow(exponent)
