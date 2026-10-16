@@ -2683,6 +2683,19 @@ impl FeynmanDiagramBuilder {
         self
     }
 
+    /// Retain an already finalized half-edge frame. Build validates that every
+    /// attached endpoint occurs exactly once; symbolic payloads keep this frame.
+    pub fn half_edge_order(mut self, order: Vec<DiagramHalfEdge>) -> Self {
+        self.half_edge_order = Some(order);
+        self
+    }
+
+    /// Retain the orientation attached to each stable edge ID during transport.
+    pub fn edge_orientations(mut self, orientations: Vec<Orientation>) -> Self {
+        self.edge_orientations = Some(orientations);
+        self
+    }
+
     /// Choose canonical topology order when no explicit basis is supplied.
     pub fn canonical_loop_momentum_basis(mut self) -> Self {
         self.canonical_loop_momentum_basis = true;
