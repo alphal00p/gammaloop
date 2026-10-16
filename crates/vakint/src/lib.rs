@@ -3596,14 +3596,34 @@ impl VakintTerm {
     }
 
     fn next_dot_dummy_index(numerator: AtomView<'_>) -> usize {
-        let dummy_pattern = function!(S.dot_dummy_ind, S.a_).to_pattern();
-        numerator
-            .replace(&dummy_pattern)
-            .match_iter()
-            .filter_map(|matched| usize::try_from(&matched[&S.a_]).ok())
-            .max()
-            .unwrap_or(0)
-            + 1
+        let mut largest = 0;
+        let mut reserve = |index| {
+            if let Ok(index) = usize::try_from(index) {
+                largest = largest.max(index);
+            }
+        };
+        numerator.visitor(&mut |view| {
+            let AtomView::Fun(function) = view else {
+                return true;
+            };
+            if function.get_symbol() == S.dot_dummy_ind && function.get_nargs() == 1 {
+                reserve(function.get(0));
+            } else if [S.k, S.p].contains(&function.get_symbol()) && function.get_nargs() == 2 {
+                reserve(function.get(1));
+            } else if function.get_symbol() == S.g {
+                for index in function {
+                    reserve(index);
+                }
+            } else if function.get_symbol() == S.tensor {
+                for index in function.iter().skip(1) {
+                    reserve(index);
+                }
+            } else if let Some((_, index)) = Self::spenso_minkowski_slot_parts(view) {
+                reserve(index);
+            }
+            true
+        });
+        largest + 1
     }
 
     fn bridge_opaque_projectors(numerator: AtomView<'_>, next_dummy: &mut usize) -> Atom {
@@ -5813,16 +5833,10 @@ Evaluated (n_loops=1, mu_r=1) :
             .when(S.c_.filter(|a| a < 0))
             .with(S.dot_pow(S.a_, S.b_, -Atom::var(S.c_)).pow(-1))
             .map_terms_single_core(|a| {
-                let mut dummy = 1;
-                for m in a.replace(&dummy_pat).match_iter() {
-                    let Ok(d) = usize::try_from(&m[&S.a_]) else {
-                        continue;
-                    };
-                    if dummy <= d {
-                        dummy = d;
-                    }
-                }
-                dummy += 1;
+                // Numeric source slots and generated dot labels later share
+                // the backend's index chart. Reserve both before introducing
+                // a contraction, including represented native source slots.
+                let mut dummy = VakintTerm::next_dot_dummy_index(a).max(2);
                 let first_new_dummy = dummy;
 
                 // Visit each dot once. Replacing a single occurrence and
@@ -5834,16 +5848,19 @@ Evaluated (n_loops=1, mu_r=1) :
                         return;
                     }
                     let arguments = dot.iter().collect::<Vec<_>>();
-                    let [left, right, exponent] = arguments.as_slice() else { unreachable!() };
+                    let [left, right, exponent] = arguments.as_slice() else {
+                        unreachable!()
+                    };
                     let Ok(copies) = usize::try_from(*exponent) else {
                         // A non-integral scalar power has no finite indexed
                         // product. Preserve its original compact notation.
                         **out = S.dot(*left, *right).pow(*exponent);
                         return;
                     };
-                    if ![left, right].iter().all(|vector| {
-                        matches!(vector, AtomView::Var(_) | AtomView::Fun(_))
-                    }) {
+                    if ![left, right]
+                        .iter()
+                        .all(|vector| matches!(vector, AtomView::Var(_) | AtomView::Fun(_)))
+                    {
                         **out = S.dot(*left, *right).pow(*exponent);
                         return;
                     }

@@ -2064,6 +2064,46 @@ mod tests {
     }
 
     #[test]
+    fn projected_loop_dummies_do_not_capture_retained_numeric_ports() {
+        test_initialise().unwrap();
+        let vakint = crate::utils::vakint().unwrap();
+        let settings = VakintSettings::default().true_settings();
+        let dimension = Atom::var(vakint_symbol!(&settings.epsilon_symbol)) * -2 + 4;
+        let spectator = parse!("(retained_port_a+retained_port_b)^11");
+        let loop_momentum = function!(vakint::symbols::S.k, 1);
+        let source = &spectator
+            * 2
+            * vakint::symbols::S.dot(&function!(vakint::symbols::S.p, 3), &loop_momentum)
+            * function!(
+                vakint::symbols::S.k,
+                1,
+                Minkowski {}.to_symbolic([Atom::var(GS.dim), Atom::num(2)])
+            );
+        let mut term = vakint::VakintTerm {
+            integral: vakint::vakint_parse!("topo(I1L(retained_port_mass_squared,3))").unwrap(),
+            numerator: source.clone(),
+            vectors: vec![("k".into(), 1)],
+        };
+        term.tensor_reduce(vakint, &settings).unwrap();
+        let resolved = Integrated::new(vakint, &settings)
+            .simplify_projected_numerator(&term.numerator, 0)
+            .unwrap();
+        let retained = function!(
+            vakint::symbols::S.p,
+            3,
+            Minkowski {}.to_symbolic([Atom::var(GS.dim), function!(GS.uvaind, 0, 2)])
+        );
+        let square = vakint::symbols::S.dot(&loop_momentum, &loop_momentum);
+        let coefficient = (resolved / (&spectator * retained * square)).collect_factors();
+        assert!(
+            (coefficient - Atom::num(2) / dimension)
+                .together()
+                .is_zero()
+        );
+        assert!(source.contains(&spectator));
+    }
+
+    #[test]
     fn analytic_os_temporal_dot_keeps_scalar_and_numerator_factors() {
         test_initialise().unwrap();
         let vakint = crate::utils::vakint().unwrap();

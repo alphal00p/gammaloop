@@ -4,7 +4,10 @@ use std::collections::BTreeMap;
 
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    structure::representation::{BaseRepName, Minkowski},
+    structure::{
+        representation::{BaseRepName, Minkowski},
+        slot::SlotMatcher,
+    },
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 
@@ -145,7 +148,12 @@ impl LorentzTensor {
                                 || vector.get_symbol() == S.p)
                                 && vector.iter().any(VakintTerm::is_compact_spenso_minkowski_representation)
                                 && !vector.iter().any(|argument| VakintTerm::spenso_minkowski_slot_parts(argument).is_some()));
-                        if !compact_vector {
+                        let fixed_basis = SlotMatcher::default()
+                            .fixed_basis_vector(argument)
+                            .is_some_and(|(_, representation)| {
+                                representation.head() == Minkowski::selfless_symbol()
+                            });
+                        if !compact_vector && !fixed_basis {
                             return Err(VakintError::InvalidNumerator(
                                 "compound native tensor interfaces must be materialized before scalar evaluation".into(),
                             ));
@@ -174,6 +182,25 @@ impl LorentzTensor {
             AtomView::Fun(function) => {
                 let mut result = FunctionBuilder::new(function.get_symbol());
                 for argument in function {
+                    // A fixed coordinate vector is an operand of an index-free
+                    // dot, not a standalone scalar. Its representation must
+                    // remain intact until the caller restores native notation.
+                    if [S.dot, SPENSO_TAG.dot].contains(&function.get_symbol())
+                        && function.get_nargs() == 2
+                        && SlotMatcher::default()
+                            .fixed_basis_vector(argument)
+                            .is_some_and(|(_, representation)| {
+                                representation.head() == Minkowski::selfless_symbol()
+                            })
+                    {
+                        if view.contains_symbol(S.k) {
+                            return Err(VakintError::InvalidNumerator(
+                                "loop-dependent fixed-component dots require tensor reduction before scalar evaluation".into(),
+                            ));
+                        }
+                        result = result.add_arg(argument);
+                        continue;
+                    }
                     let argument = Self::parse(argument, dimension)?;
                     if !argument.is_scalar() {
                         return Err(VakintError::InvalidNumerator(format!(
@@ -417,6 +444,44 @@ impl LorentzTensor {
 mod tests {
     use super::*;
     use crate::utils::vakint_macros::vk_parse;
+
+    #[test]
+    fn fixed_coordinate_vectors_are_consumed_only_by_closed_dots() {
+        use spenso::structure::{abstract_index::AIND_SYMBOLS, representation::RepName};
+        use symbolica::{function, symbol};
+
+        let dimension = Atom::var(symbol!("fixed_coordinate_dimension"));
+        let representation = Minkowski {}.to_symbolic([dimension.clone()]);
+        let spectator = vk_parse!("(a+b)*(c+d)^11").unwrap();
+        for component in 0..4 {
+            let basis = function!(
+                ETS.delta,
+                function!(AIND_SYMBOLS.cind, component),
+                &representation
+            );
+            for dot in [S.dot, SPENSO_TAG.dot] {
+                let source = &spectator * function!(dot, &basis, function!(S.p, 3));
+                let parsed = LorentzTensor::parse(source.as_view(), &dimension).unwrap();
+                assert!(parsed.is_scalar());
+                assert_eq!(parsed.expression, source);
+                assert_eq!(
+                    crate::projection::ScalarTerms::parse(parsed.expression.as_view())
+                        .unwrap()
+                        .expression(),
+                    source
+                );
+            }
+            assert!(LorentzTensor::parse(basis.as_view(), &dimension).is_err());
+            let loop_dot = S.dot(&basis, &function!(S.k, 1));
+            assert!(LorentzTensor::parse(loop_dot.as_view(), &dimension).is_err());
+            let open = S.dot(&basis, &function!(S.p, 3, 2));
+            assert!(LorentzTensor::parse(open.as_view(), &dimension).is_err());
+        }
+        let invalid = function!(ETS.delta, function!(AIND_SYMBOLS.cind, 4), representation);
+        assert!(
+            LorentzTensor::parse(S.dot(invalid, function!(S.p, 3)).as_view(), &dimension).is_err()
+        );
+    }
 
     #[test]
     fn native_projector_markers_remain_lorentz_ports() {
