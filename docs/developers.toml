@@ -810,6 +810,16 @@ digest = "17c9fc628ce90f8a60165660e014bf477e610040"
 
 
 [[section.note.scope]]
+path = "crates/idenso/src/dirac/simplify.rs"
+symbol = "idenso::dirac::DiracSimplifier::simplify_trace_node"
+anchor = "    fn simplify_trace_node("
+end_anchor = "    /// Adjacent pairs remain cheapest."
+# Reviewed 2026-10-16: Mixed physical gamma0 traces use the existing trace
+# recurrence directly; formal dimensions and disabled trace evaluation retain
+# their boundary. This prevents component-only execution of reducible traces.
+digest = "32b63d9cfb87c255dc6d8a5e36206d912038cf4b"
+
+[[section.note.scope]]
 path = "crates/idenso/src/color/simplify.rs"
 symbol = "idenso::color::simplify::ColorAlgebraSimplifier::simplify_product"
 anchor = "    fn simplify_product("

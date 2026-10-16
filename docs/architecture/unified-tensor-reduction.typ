@@ -96,6 +96,18 @@ shared collection primitives own dots, oriented chains and unevaluated traces.
 Family kernels own gamma, colour and epsilon identities. Explicit arithmetic
 expansion and Python object wrapping remain separate boundaries.
 
+Mixed `gamma0` traces with explicitly four-dimensional spin and Lorentz
+representations use the existing trace recurrence with the physical time-basis
+vector. Passing that vector directly avoids a cycle through temporal-slash
+normalization and reduces the trace before numeric component contraction.
+Formal dimensions and requests to leave traces unevaluated retain their existing
+semantics; scalar spectators remain factorized.
+
+GammaLoop consumes the reduced carrier before building the component-execution
+network. Admission and reduction caches are released at that handoff, so the
+symbolic planner and the component graph do not retain the same large expression
+simultaneously. The component parser still performs its normal checked intake.
+
 The migration removes repeated whole-family scheduling, global epsilon
 permission inferred from registry presence, whole-alias-table progress comparison,
 and contraction hidden inside a notation conversion. Trusted continuations pass

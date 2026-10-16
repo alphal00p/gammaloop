@@ -966,24 +966,26 @@ impl EvaluatorStack {
         // component indices are reversibly encoded only for that strict boundary.
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let input = if settings.do_algebra {
-            a.as_atom_view().to_owned()
+            cooking.try_cook(a.as_atom_view())?
         } else {
-            a.as_atom_view().to_cof_dimension_invariants()
+            let invariants = a.as_atom_view().to_cof_dimension_invariants();
+            cooking.try_cook(invariants.as_view())?
         };
-        let input = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?;
+        let input = SymbolicTensor::infer(input)?;
         let network_input = if settings.do_algebra {
-            input
-                .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
-                    gamma: Some(GammaSimplifySettings::default()),
-                    epsilon: true,
-                    ..Default::default()
-                })?
-                .contract(idenso::tensor::ContractSettings {
-                    collect_chains: false,
-                    collect_traces: false,
-                    ..Default::default()
-                })?
+            let simplified = input.simplify_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?;
+            // Algebra borrows its input, whose cached graph is no longer needed.
+            drop(input);
+            simplified.contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
         } else {
             input
         };
@@ -1089,13 +1091,18 @@ impl EvaluatorStack {
             },
             ..Default::default()
         };
-        let network_expression = cooking.uncook(network_input.expression().as_view());
-        // CFF sums remain opaque through nested forest operations. Their
-        // explicit momentum arguments have already received every deformation.
-        let network_expression = if network_expression.contains_symbol(GS.esurface) {
-            GS.lower_esurfaces(&network_expression)
-        } else {
-            network_expression
+        // Component execution owns a separate graph. Release reduction caches
+        // before constructing it instead of keeping both graphs live together.
+        let network_expression = {
+            let normalized = network_input.into_expression();
+            let expression = cooking.uncook(normalized.as_view());
+            // CFF sums remain opaque through nested forest operations. Their
+            // explicit arguments have already received every deformation.
+            if expression.contains_symbol(GS.esurface) {
+                GS.lower_esurfaces(&expression)
+            } else {
+                expression
+            }
         };
         let net = ParsingNet::try_from_view_with_function_library(
             network_expression.as_view(),
@@ -1103,6 +1110,7 @@ impl EvaluatorStack {
             FUN_LIB.deref(),
             &parse_settings,
         )?;
+        drop(network_expression);
         let mut net = net.map_result(Ok::<_, eyre::Report>, |tensor| match tensor_map {
             Some(map) => map(tensor),
             None => Ok(tensor),
@@ -6421,7 +6429,7 @@ mod tests {
         .collect();
         let numerator = Bispinor {}.new_rep(4).g(9, 9) * &coefficients[0]
             + Bispinor {}.new_rep(4).g(8, 8) * &coefficients[1];
-        let expected = Atom::num(4) * &coefficients[0] + Atom::num(4) * &coefficients[1];
+        let expected = Atom::num(4) * (&coefficients[0] + &coefficients[1]);
         let scalar = EvaluatorStack::preprocess_atom(
             &numerator,
             0,
