@@ -342,11 +342,18 @@ Index wrapping is an ownership operation. `list_dangling` discovers external slo
 shared parser's structure-only construction; `wrap_indices(scope, dummies_only=True)` scopes non-external explicit indices; its default scopes all explicit indices while leaving unresolved
 open-port markers intact. Independently created expressions should be wrapped before multiplication when
 same-spelled dummy names must not contract.
+Unbound chain endpoints do not yet have named indices, so `list_dangling`
+rejects them. Scalar metadata stays opaque to that check.
 
 Index canonicalization reconstructs the admitted operation graph without
 executing tensor algebra. Closed scalar inverse powers keep their own dummy
 scope while their interior indices are canonicalized. These preparation and
 conjugation operations remain orthogonal to the reduction planner.
+Dual-index wrappers remain in the canonical graph. The base index links both
+occurrences, while `dind(...)` retains the variance of each occurrence. Erasing
+variance and restoring it by function name can turn oppositely oriented metrics
+into an invalid tensor square. A closed fundamental metric cycle stays a scalar
+with trace equal to its dimension, independent of the dummy labels.
 
 The shared concrete syntax and which crate owns each rewrite are specified in the
 #link("spenso-symbolica-syntax-and-rewrites.typ")[Spenso/Idenso Symbolica syntax note].

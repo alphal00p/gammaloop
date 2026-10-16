@@ -575,7 +575,7 @@ fn three_vertex_contraction_preserves_components() {
 fn canonicalization_keeps_explicit_dummies_distinct_from_compact_dot_indices() {
     initialize();
     let mink = Minkowski {}.new_rep(4);
-    let vector = symbol!("capture_probe");
+    let vector = spenso::tensor_symbol!("capture_probe");
     let spectator = parse!("(capture_a+capture_b)*(capture_c+capture_d)");
     for dots in 1..=2 {
         let compact = (0..dots).fold(Atom::one(), |product, index| {
@@ -612,6 +612,35 @@ fn canonicalization_keeps_explicit_dummies_distinct_from_compact_dot_indices() {
                         .is_some()
                 );
             }
+        }
+    }
+}
+
+#[test]
+fn canonicalization_preserves_dual_occurrences_in_a_closed_metric_cycle() {
+    initialize();
+    let spectator = parse!("(dual_cycle_a+dual_cycle_b)^17");
+    let mut reference = None;
+    for (left, right) in [("i", "j"), ("renamed_right", "renamed_left")] {
+        let cycle = parse!(format!(
+            "spenso::g(spenso::cof(3,{left}),spenso::dind(spenso::cof(3,{right})))*spenso::g(spenso::cof(3,{right}),spenso::dind(spenso::cof(3,{left})))"
+        ));
+        let canonical = (&spectator * cycle).canonize(AbstractIndex::Dummy).unwrap();
+        let tensor = SymbolicTensor::infer(canonical.clone()).unwrap();
+        assert!(tensor.is_scalar());
+        assert!(canonical.contains(&spectator));
+        assert_eq!(
+            tensor
+                .contract(Default::default())
+                .unwrap()
+                .into_expression(),
+            &spectator * 3
+        );
+        assert_eq!(canonical.canonize(AbstractIndex::Dummy).unwrap(), canonical);
+        if let Some(reference) = &reference {
+            assert_eq!(&canonical, reference);
+        } else {
+            reference = Some(canonical);
         }
     }
 }
