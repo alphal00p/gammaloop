@@ -12,6 +12,7 @@ mod display;
 pub mod expressions;
 mod finalization;
 mod integrals;
+mod numerator_interface;
 mod power_counting;
 pub mod routing;
 #[cfg(feature = "svg")]
@@ -24,6 +25,7 @@ mod uv;
 pub use integrals::{
     IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
 };
+pub use numerator_interface::NumeratorInterface;
 pub use power_counting::DOD;
 #[cfg(feature = "svg")]
 pub use scene::SceneOptions;
@@ -65,6 +67,7 @@ use std::{
 pub use feynkit_kinematics::MomentumSignature;
 use feynkit_kinematics::Signature;
 use feynkit_model::{Model, ModelError, ModelFingerprint, Particle, ParticleId, VertexRuleId};
+use idenso::tensor::SymbolicTensor;
 use linnet::{
     half_edge::{
         HedgeGraph, NodeIndex,
@@ -76,6 +79,7 @@ use linnet::{
     parser::{DotGraph, set::DotGraphSet},
 };
 use serde::{Deserialize, Serialize};
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
     atom::{Atom, AtomCore, UserData},
@@ -168,7 +172,7 @@ pub struct ExternalLeg {
 pub struct DiagramVertex {
     pub name: String,
     pub interaction: Option<VertexRuleId>,
-    pub numerator: Atom,
+    pub numerator: SymbolicTensor<PartialStructure>,
 }
 
 impl DiagramVertex {
@@ -176,7 +180,7 @@ impl DiagramVertex {
         Self {
             name: name.into(),
             interaction: Some(rule),
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
         }
     }
 }
@@ -188,7 +192,7 @@ pub struct DiagramEdge {
     pub is_dummy: bool,
     pub particle: ParticleId,
     pub directed: bool,
-    pub numerator: Atom,
+    pub numerator: SymbolicTensor<PartialStructure>,
     source_slot: VertexSlot,
     target_slot: VertexSlot,
 }
@@ -200,7 +204,7 @@ impl DiagramEdge {
             is_dummy: false,
             particle,
             directed,
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
             source_slot: VertexSlot(0),
             target_slot: VertexSlot(0),
         }
@@ -520,6 +524,10 @@ pub enum DiagramError {
         "diagram-wide numerator differs from the product of the vertex and edge numerator fragments"
     )]
     NumeratorFragmentMismatch,
+    #[error("invalid diagram tensor: {0}")]
+    Tensor(#[from] idenso::tensor::inference::TensorInferenceError),
+    #[error("incompatible diagram tensor product: {0}")]
+    TensorComposition(#[from] idenso::tensor::composition::TensorCompositionError),
     #[error("cannot replace the numerator of a diagram without an interaction vertex")]
     MissingNumeratorAnchor,
     #[error("diagram invariant failed while {operation}: {message}")]
@@ -558,8 +566,14 @@ struct DiagramSerde {
     symmetry_factor: u64,
     overall_factor: String,
     numerator: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    num_interface: Option<NumeratorInterface>,
     numerator_prefactor: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    numerator_prefactor_interface: Option<NumeratorInterface>,
     projector: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    projector_interface: Option<NumeratorInterface>,
     loop_momentum_basis: LoopMomentumBasis,
     cuts: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
@@ -571,6 +585,8 @@ struct DiagramVertexSerde {
     name: String,
     interaction: Option<VertexRuleId>,
     numerator: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    num_interface: Option<NumeratorInterface>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -581,6 +597,8 @@ struct DiagramEdgeSerde {
     particle: ParticleId,
     directed: bool,
     numerator: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    num_interface: Option<NumeratorInterface>,
     source_slot: VertexSlot,
     target_slot: VertexSlot,
 }
@@ -594,9 +612,9 @@ pub struct FeynmanDiagram {
     graph: HedgeGraph<DiagramEdge, DiagramVertex>,
     symmetry_factor: u64,
     overall_factor: Atom,
-    numerator: Atom,
-    numerator_prefactor: Atom,
-    projector: Atom,
+    numerator: SymbolicTensor<PartialStructure>,
+    numerator_prefactor: SymbolicTensor<PartialStructure>,
+    projector: SymbolicTensor<PartialStructure>,
     loop_momentum_basis: LoopMomentumBasis,
     cuts: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
@@ -649,25 +667,28 @@ impl FeynmanDiagram {
         &self.overall_factor
     }
 
-    pub fn numerator(&self) -> &Atom {
+    pub fn numerator(&self) -> &SymbolicTensor<PartialStructure> {
         &self.numerator
     }
 
-    fn fragment_numerator(graph: &HedgeGraph<DiagramEdge, DiagramVertex>) -> Atom {
-        Atom::mul_many(
-            graph
-                .iter_edges()
-                .map(|(_, _, edge)| &edge.data.numerator)
-                .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator)),
-        )
+    fn fragment_numerator(
+        graph: &HedgeGraph<DiagramEdge, DiagramVertex>,
+    ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
+        graph
+            .iter_edges()
+            .map(|(_, _, edge)| &edge.data.numerator)
+            .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator))
+            .try_fold(SymbolicTensor::infer(Atom::one())?, |product, factor| {
+                Ok(product.multiply(factor)?)
+            })
     }
 
     /// Replace local numerator fragments in the finalized index frame and
     /// rebuild their product. Fragment edits preserve topology and routing.
     pub fn with_numerator_fragments(
         mut self,
-        vertices: impl IntoIterator<Item = (VertexId, Atom)>,
-        edges: impl IntoIterator<Item = (EdgeId, Atom)>,
+        vertices: impl IntoIterator<Item = (VertexId, SymbolicTensor<PartialStructure>)>,
+        edges: impl IntoIterator<Item = (EdgeId, SymbolicTensor<PartialStructure>)>,
     ) -> Result<Self, DiagramError> {
         self.validation.take();
         for (vertex, numerator) in vertices {
@@ -688,7 +709,7 @@ impl FeynmanDiagram {
             }
             self.graph[EdgeIndex(edge.0)].numerator = numerator;
         }
-        self.numerator = Self::fragment_numerator(&self.graph);
+        self.numerator = Self::fragment_numerator(&self.graph)?;
         self.validate_with_fragment_numerator(Some(&self.numerator))?;
         Ok(self)
     }
@@ -705,12 +726,12 @@ impl FeynmanDiagram {
     }
 
     /// Global numerator multiplier supplied by the generation request.
-    pub fn numerator_prefactor(&self) -> &Atom {
+    pub fn numerator_prefactor(&self) -> &SymbolicTensor<PartialStructure> {
         &self.numerator_prefactor
     }
 
     /// External-state projector applied to the generated numerator.
-    pub fn projector(&self) -> &Atom {
+    pub fn projector(&self) -> &SymbolicTensor<PartialStructure> {
         &self.projector
     }
 
@@ -1148,7 +1169,11 @@ impl FeynmanDiagram {
     /// interaction and particle assignments needed to interpret the topology.
     /// A diagram without an interaction vertex cannot own such a replacement.
     /// Diagram IDs identify the model-resolved topology and remain unchanged.
-    pub fn with_numerator(self, numerator: Atom) -> Result<Self, DiagramError> {
+    pub fn with_numerator(
+        self,
+        numerator: SymbolicTensor<PartialStructure>,
+    ) -> Result<Self, DiagramError> {
+        let one = SymbolicTensor::infer(Atom::one())?;
         let anchor = self
             .vertices()
             .map(|(id, _)| id)
@@ -1162,14 +1187,14 @@ impl FeynmanDiagram {
                     if id == anchor {
                         numerator.clone()
                     } else {
-                        Atom::one()
+                        one.clone()
                     },
                 )
             })
             .collect::<Vec<_>>();
         let edges = self
             .edges()
-            .map(|(id, _, _)| (id, Atom::one()))
+            .map(|(id, _, _)| (id, one.clone()))
             .collect::<Vec<_>>();
         self.with_numerator_fragments(vertices, edges)
     }
@@ -1178,7 +1203,7 @@ impl FeynmanDiagram {
     ///
     /// The projector is numerator payload and therefore does not alter the
     /// topology-derived diagram ID.
-    pub fn with_projector(mut self, projector: Atom) -> Self {
+    pub fn with_projector(mut self, projector: SymbolicTensor<PartialStructure>) -> Self {
         self.projector = projector;
         self
     }
@@ -1668,7 +1693,7 @@ impl FeynmanDiagram {
     // other invariants; public validation derives it independently from the graph.
     fn validate_with_fragment_numerator(
         &self,
-        fragment_numerator: Option<&Atom>,
+        fragment_numerator: Option<&SymbolicTensor<PartialStructure>>,
     ) -> Result<(), DiagramError> {
         let mut degrees = vec![0_usize; self.graph.n_nodes()];
         let mut external_indices = BTreeSet::new();
@@ -1688,7 +1713,7 @@ impl FeynmanDiagram {
                         legs: 2,
                     });
                 }
-                if edge.numerator != Atom::one() {
+                if !edge.numerator.is_scalar() || edge.numerator.expression() != &Atom::one() {
                     return Err(DiagramError::ExternalEdgeNumerator { edge: edge_id.0 });
                 }
                 if endpoints.source.is_some() && endpoints.target.is_some() {
@@ -1893,12 +1918,15 @@ impl FeynmanDiagram {
         let fragment_numerator = match fragment_numerator {
             Some(numerator) => numerator,
             None => {
-                reconstructed = Self::fragment_numerator(&self.graph);
+                reconstructed = Self::fragment_numerator(&self.graph)?;
                 &reconstructed
             }
         };
-        if fragment_numerator != &self.numerator
-            && fragment_numerator.expand() != self.numerator.expand()
+        if !fragment_numerator.same_value(&self.numerator)
+            && fragment_numerator.coefficients_equal(
+                &self.numerator,
+                spenso::shadowing::TensorCollectFilter::<0>::Tensors,
+            )? != symbolica::id::ConditionResult::True
         {
             return Err(DiagramError::NumeratorFragmentMismatch);
         }
@@ -1922,9 +1950,26 @@ impl FeynmanDiagram {
             .collect::<Vec<_>>()
             .join(",");
         writeln!(output, "digraph feynkit {{")?;
+        let mut interfaces = String::new();
+        for (key, interface) in [
+            ("num_interface", &snapshot.num_interface),
+            (
+                "numerator_prefactor_interface",
+                &snapshot.numerator_prefactor_interface,
+            ),
+            ("projector_interface", &snapshot.projector_interface),
+        ] {
+            if let Some(interface) = interface {
+                write!(
+                    interfaces,
+                    ", {key}={}",
+                    Self::dot_string(&interface.to_json())?
+                )?;
+            }
+        }
         writeln!(
             output,
-            "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, loop_momentum_basis={}, half_edge_order={}, cuts={}, topology_threshold_candidates={}];",
+            "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, loop_momentum_basis={}, half_edge_order={}, cuts={}, topology_threshold_candidates={}{}];",
             Self::dot_string(&self.name)?,
             Self::dot_string(&self.model.fingerprint().to_string())?,
             self.symmetry_factor,
@@ -1937,6 +1982,7 @@ impl FeynmanDiagram {
             Self::dot_string(&serde_json::to_string(&snapshot.half_edge_order)?)?,
             Self::dot_string(&serde_json::to_string(&self.cuts)?)?,
             Self::dot_string(&serde_json::to_string(&self.topology_threshold_candidates)?)?,
+            interfaces,
         )?;
         for (id, vertex) in self.vertices() {
             write!(
@@ -1954,10 +2000,18 @@ impl FeynmanDiagram {
                     Self::dot_string(&self.model.vertex_rule_by_id(rule)?.name)?
                 )?;
             }
+            let (numerator, interface) = NumeratorInterface::export(&vertex.numerator);
+            if let Some(interface) = interface {
+                write!(
+                    output,
+                    ", num_interface={}",
+                    Self::dot_string(&interface.to_json())?
+                )?;
+            }
             writeln!(
                 output,
                 ", numerator={}];",
-                Self::dot_string(&vertex.numerator.to_canonical_string())?
+                Self::dot_string(&numerator.to_canonical_string())?
             )?;
         }
         for (id, endpoints, edge) in self.edges() {
@@ -1982,9 +2036,17 @@ impl FeynmanDiagram {
                 Orientation::Reversed => "back",
                 Orientation::Undirected => "none",
             };
+            let (numerator, interface) = NumeratorInterface::export(&edge.numerator);
+            let interface = interface
+                .map(|interface| {
+                    Self::dot_string(&interface.to_json())
+                        .map(|value| format!(", num_interface={value}"))
+                })
+                .transpose()?
+                .unwrap_or_default();
             writeln!(
                 output,
-                "  {source} -> {target} [id={}, particle_id={}, pdg={}, particle={}, directed={}, source_slot={}, target_slot={}, dir={}, external={}, is_dummy={}, numerator={}];",
+                "  {source} -> {target} [id={}, particle_id={}, pdg={}, particle={}, directed={}, source_slot={}, target_slot={}, dir={}, external={}, is_dummy={}, numerator={}{}];",
                 id.0,
                 edge.particle.index(),
                 particle.pdg_code,
@@ -1995,7 +2057,8 @@ impl FeynmanDiagram {
                 direction,
                 Self::dot_string(&serde_json::to_string(&edge.external)?)?,
                 edge.is_dummy,
-                Self::dot_string(&edge.numerator.to_canonical_string())?,
+                Self::dot_string(&numerator.to_canonical_string())?,
+                interface,
             )?;
         }
         writeln!(output, "}}")?;
@@ -2139,12 +2202,33 @@ impl FeynmanDiagram {
         let mut builder = Self::builder(Arc::clone(&model), name)
             .symmetry_factor(symmetry_factor)
             .overall_factor(Self::parse_expression("overall factor", overall_factor)?)
-            .numerator(Self::parse_expression("numerator", numerator)?)
-            .numerator_prefactor(Self::parse_expression(
-                "numerator prefactor",
-                numerator_prefactor,
+            .numerator(NumeratorInterface::admit(
+                Self::parse_expression("numerator", numerator)?,
+                parsed
+                    .global_data
+                    .statements
+                    .get("num_interface")
+                    .map(|value| NumeratorInterface::parse(value))
+                    .transpose()?,
             )?)
-            .projector(Self::parse_expression("projector", projector)?)
+            .numerator_prefactor(NumeratorInterface::admit(
+                Self::parse_expression("numerator prefactor", numerator_prefactor)?,
+                parsed
+                    .global_data
+                    .statements
+                    .get("numerator_prefactor_interface")
+                    .map(|value| NumeratorInterface::parse(value))
+                    .transpose()?,
+            )?)
+            .projector(NumeratorInterface::admit(
+                Self::parse_expression("projector", projector)?,
+                parsed
+                    .global_data
+                    .statements
+                    .get("projector_interface")
+                    .map(|value| NumeratorInterface::parse(value))
+                    .transpose()?,
+            )?)
             .cuts(cuts)
             .topology_threshold_candidates(topology_threshold_candidates);
         let mut node_map = BTreeMap::new();
@@ -2178,12 +2262,18 @@ impl FeynmanDiagram {
             let vertex = DiagramVertex {
                 name: vertex_name,
                 interaction,
-                numerator: Self::parse_expression(
-                    "vertex numerator",
+                numerator: NumeratorInterface::admit(
+                    Self::parse_expression(
+                        "vertex numerator",
+                        data.statements
+                            .get("numerator")
+                            .cloned()
+                            .unwrap_or_else(|| "1".to_owned()),
+                    )?,
                     data.statements
-                        .get("numerator")
-                        .cloned()
-                        .unwrap_or_else(|| "1".to_owned()),
+                        .get("num_interface")
+                        .map(|value| NumeratorInterface::parse(value))
+                        .transpose()?,
                 )?,
             };
             node_map.insert(node, builder.add_vertex(vertex));
@@ -2266,13 +2356,20 @@ impl FeynmanDiagram {
                     .unwrap_or(false),
                 particle: model.particle_id_at(particle_id)?,
                 directed: data.orientation != Orientation::Undirected,
-                numerator: Self::parse_expression(
-                    "edge numerator",
+                numerator: NumeratorInterface::admit(
+                    Self::parse_expression(
+                        "edge numerator",
+                        data.data
+                            .statements
+                            .get("numerator")
+                            .cloned()
+                            .unwrap_or_else(|| "1".to_owned()),
+                    )?,
                     data.data
                         .statements
-                        .get("numerator")
-                        .cloned()
-                        .unwrap_or_else(|| "1".to_owned()),
+                        .get("num_interface")
+                        .map(|value| NumeratorInterface::parse(value))
+                        .transpose()?,
                 )?,
                 source_slot: VertexSlot(0),
                 target_slot: VertexSlot(0),
@@ -2471,21 +2568,30 @@ impl FeynmanDiagram {
     }
 
     fn serde_view(&self) -> DiagramSerde {
+        let (numerator, num_interface) = NumeratorInterface::export(&self.numerator);
+        let (numerator_prefactor, numerator_prefactor_interface) =
+            NumeratorInterface::export(&self.numerator_prefactor);
+        let (projector, projector_interface) = NumeratorInterface::export(&self.projector);
         DiagramSerde {
             id: self.id,
             model: self.model.fingerprint(),
             name: self.name.clone(),
             vertices: self
                 .vertices()
-                .map(|(_, vertex)| DiagramVertexSerde {
-                    name: vertex.name.clone(),
-                    interaction: vertex.interaction,
-                    numerator: vertex.numerator.to_canonical_string(),
+                .map(|(_, vertex)| {
+                    let (numerator, num_interface) = NumeratorInterface::export(&vertex.numerator);
+                    DiagramVertexSerde {
+                        name: vertex.name.clone(),
+                        interaction: vertex.interaction,
+                        numerator: numerator.to_canonical_string(),
+                        num_interface,
+                    }
                 })
                 .collect(),
             edges: self
                 .edges()
                 .map(|(id, endpoints, edge)| {
+                    let (numerator, num_interface) = NumeratorInterface::export(&edge.numerator);
                     (
                         endpoints,
                         DiagramEdgeSerde {
@@ -2497,7 +2603,8 @@ impl FeynmanDiagram {
                             ),
                             particle: edge.particle,
                             directed: edge.directed,
-                            numerator: edge.numerator.to_canonical_string(),
+                            numerator: numerator.to_canonical_string(),
+                            num_interface,
                             source_slot: edge.source_slot,
                             target_slot: edge.target_slot,
                         },
@@ -2507,9 +2614,12 @@ impl FeynmanDiagram {
             half_edge_order: self.half_edges().collect(),
             symmetry_factor: self.symmetry_factor,
             overall_factor: self.overall_factor.to_canonical_string(),
-            numerator: self.numerator.to_canonical_string(),
-            numerator_prefactor: self.numerator_prefactor.to_canonical_string(),
-            projector: self.projector.to_canonical_string(),
+            numerator: numerator.to_canonical_string(),
+            num_interface,
+            numerator_prefactor: numerator_prefactor.to_canonical_string(),
+            numerator_prefactor_interface,
+            projector: projector.to_canonical_string(),
+            projector_interface,
             loop_momentum_basis: self.loop_momentum_basis.clone(),
             cuts: self.cuts.clone(),
             topology_threshold_candidates: self.topology_threshold_candidates.clone(),
@@ -2531,12 +2641,18 @@ impl FeynmanDiagram {
                 "overall factor",
                 data.overall_factor,
             )?)
-            .numerator(Self::parse_expression("numerator", data.numerator)?)
-            .numerator_prefactor(Self::parse_expression(
-                "numerator prefactor",
-                data.numerator_prefactor,
+            .numerator(NumeratorInterface::admit(
+                Self::parse_expression("numerator", data.numerator)?,
+                data.num_interface,
             )?)
-            .projector(Self::parse_expression("projector", data.projector)?)
+            .numerator_prefactor(NumeratorInterface::admit(
+                Self::parse_expression("numerator prefactor", data.numerator_prefactor)?,
+                data.numerator_prefactor_interface,
+            )?)
+            .projector(NumeratorInterface::admit(
+                Self::parse_expression("projector", data.projector)?,
+                data.projector_interface,
+            )?)
             .loop_momentum_basis(data.loop_momentum_basis)
             .cuts(data.cuts)
             .topology_threshold_candidates(data.topology_threshold_candidates);
@@ -2551,7 +2667,10 @@ impl FeynmanDiagram {
             builder.add_vertex(DiagramVertex {
                 name: vertex.name,
                 interaction: vertex.interaction,
-                numerator: Self::parse_expression("vertex numerator", vertex.numerator)?,
+                numerator: NumeratorInterface::admit(
+                    Self::parse_expression("vertex numerator", vertex.numerator)?,
+                    vertex.num_interface,
+                )?,
             });
         }
         for (endpoints, edge) in data.edges {
@@ -2563,7 +2682,10 @@ impl FeynmanDiagram {
                     is_dummy: edge.is_dummy,
                     particle: edge.particle,
                     directed: edge.directed,
-                    numerator: Self::parse_expression("edge numerator", edge.numerator)?,
+                    numerator: NumeratorInterface::admit(
+                        Self::parse_expression("edge numerator", edge.numerator)?,
+                        edge.num_interface,
+                    )?,
                     source_slot: edge.source_slot,
                     target_slot: edge.target_slot,
                 },
@@ -2622,9 +2744,9 @@ pub struct FeynmanDiagramBuilder {
     edge_orientations: Option<Vec<Orientation>>,
     symmetry_factor: u64,
     overall_factor: Atom,
-    numerator: Option<Atom>,
-    numerator_prefactor: Atom,
-    projector: Atom,
+    numerator: Option<SymbolicTensor<PartialStructure>>,
+    numerator_prefactor: SymbolicTensor<PartialStructure>,
+    projector: SymbolicTensor<PartialStructure>,
     loop_momentum_basis: Option<LoopMomentumBasis>,
     canonical_loop_momentum_basis: bool,
     cuts: Vec<DiagramCut>,
@@ -2644,8 +2766,8 @@ impl FeynmanDiagramBuilder {
             symmetry_factor: 1,
             overall_factor: Atom::one(),
             numerator: None,
-            numerator_prefactor: Atom::one(),
-            projector: Atom::one(),
+            numerator_prefactor: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
+            projector: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
             loop_momentum_basis: None,
             canonical_loop_momentum_basis: false,
             cuts: Vec::new(),
@@ -2668,17 +2790,20 @@ impl FeynmanDiagramBuilder {
 
     /// Supply an explicit aggregate numerator. By default, the builder multiplies
     /// the local vertex and edge fragments after finalizing their indices.
-    pub fn numerator(mut self, numerator: Atom) -> Self {
+    pub fn numerator(mut self, numerator: SymbolicTensor<PartialStructure>) -> Self {
         self.numerator = Some(numerator);
         self
     }
 
-    pub fn numerator_prefactor(mut self, numerator_prefactor: Atom) -> Self {
+    pub fn numerator_prefactor(
+        mut self,
+        numerator_prefactor: SymbolicTensor<PartialStructure>,
+    ) -> Self {
         self.numerator_prefactor = numerator_prefactor;
         self
     }
 
-    pub fn projector(mut self, projector: Atom) -> Self {
+    pub fn projector(mut self, projector: SymbolicTensor<PartialStructure>) -> Self {
         self.projector = projector;
         self
     }
@@ -2740,7 +2865,7 @@ impl FeynmanDiagramBuilder {
         let vertex = self.add_vertex(DiagramVertex {
             name: name.clone(),
             interaction: None,
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
         });
         self.generation_externals.insert(
             vertex,
@@ -2871,8 +2996,8 @@ mod tests {
         let diagram = FeynmanDiagram::from_dot(model.clone(), dot).unwrap();
         diagram.validate().unwrap();
         assert_eq!(diagram.loop_count(), 1);
-        assert_eq!(diagram.numerator(), &Atom::num(6));
-        assert_eq!(diagram.numerator_prefactor(), &Atom::num(5));
+        assert_eq!(diagram.numerator().expression(), &Atom::num(6));
+        assert_eq!(diagram.numerator_prefactor().expression(), &Atom::num(5));
         assert_eq!(diagram.loop_momentum_basis().loop_edges, vec![EdgeId(3)]);
         assert!(
             diagram
@@ -3142,12 +3267,12 @@ mod tests {
         let left = builder.add_vertex(DiagramVertex {
             name: "left".into(),
             interaction: None,
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
         });
         let right = builder.add_vertex(DiagramVertex {
             name: "right".into(),
             interaction: None,
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
         });
         let initial = builder
             .add_edge(
@@ -3292,7 +3417,10 @@ mod tests {
             ParseSettings::default(),
         )
         .unwrap();
-        let diagram = builder.numerator(numerator).build().unwrap();
+        let diagram = builder
+            .numerator(NumeratorInterface::admit(numerator, None).unwrap())
+            .build()
+            .unwrap();
         let (edge, _, _) = diagram
             .edges()
             .find(|(_, _, edge)| edge.external.is_none())
@@ -3318,7 +3446,7 @@ mod tests {
             ParseSettings::default(),
         )
         .unwrap();
-        assert_eq!(diagram.numerator(), &expected);
+        assert_eq!(NumeratorInterface::export(diagram.numerator()).0, expected);
     }
 
     #[test]
@@ -3342,16 +3470,19 @@ mod tests {
             builder
                 .add_edge(vertex, outgoing_1, DiagramEdge::new(particle, false))
                 .unwrap();
+            // Each transported vector contributes to one common output port.
+            // Different free labels cannot be added as a typed tensor sum.
             let numerator = Atom::parse(
                 format!(
-                    "-{coefficient}*gammalooprs::Q(1,spenso::mink(4,gammalooprs::hedge(2,1)))\
-                     -gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))\
-                     +gammalooprs::Q(2,spenso::mink(4,gammalooprs::vertex(3,1)))"
+                    "-{coefficient}*gammalooprs::Q(1,spenso::mink(4,gammalooprs::hedge(2,1)))*spenso::g(spenso::mink(4,gammalooprs::hedge(2,1)),spenso::mink(4,991))\
+                     -gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))*spenso::g(spenso::mink(4,gammalooprs::edge(0,1)),spenso::mink(4,991))\
+                     +gammalooprs::Q(2,spenso::mink(4,gammalooprs::vertex(3,1)))*spenso::g(spenso::mink(4,gammalooprs::vertex(3,1)),spenso::mink(4,991))"
                 ),
                 "feynkit_graph",
                 ParseSettings::default(),
             )
             .unwrap();
+            let numerator = NumeratorInterface::admit(numerator, None).unwrap();
             builder.vertices[vertex.0].numerator = numerator.clone();
             if explicit {
                 builder = builder.numerator(numerator);
@@ -3359,15 +3490,19 @@ mod tests {
             let diagram = builder.build().unwrap();
             let expected = Atom::parse(
                 format!(
-                    "{coefficient}*gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0,1)))\
-                     -gammalooprs::Q(2,spenso::mink(4,gammalooprs::edge(2,1)))\
-                     +gammalooprs::Q(1,spenso::mink(4,gammalooprs::vertex(0,1)))"
+                    "{coefficient}*gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0,1)))*spenso::g(spenso::mink(4,gammalooprs::hedge(0,1)),spenso::mink(4,991))\
+                     -gammalooprs::Q(2,spenso::mink(4,gammalooprs::edge(2,1)))*spenso::g(spenso::mink(4,gammalooprs::edge(2,1)),spenso::mink(4,991))\
+                     +gammalooprs::Q(1,spenso::mink(4,gammalooprs::vertex(0,1)))*spenso::g(spenso::mink(4,gammalooprs::vertex(0,1)),spenso::mink(4,991))"
                 ),
                 "feynkit_graph",
                 ParseSettings::default(),
             )
             .unwrap();
-            assert_eq!(diagram.numerator(), &expected, "coefficient {coefficient}");
+            assert_eq!(
+                NumeratorInterface::export(diagram.numerator()).0,
+                expected,
+                "coefficient {coefficient}"
+            );
         }
     }
 
@@ -3707,26 +3842,29 @@ mod tests {
             .map_data(
                 |_, vertex| {
                     let mut vertex = vertex.clone();
-                    vertex.numerator =
+                    vertex.numerator = NumeratorInterface::admit(
                         symbolica::function!(momentum_symbol(), internal_edges[0].0, 0)
-                            + symbolica::symbol!("feynkit_graph::uv_test_mass");
+                            + symbolica::symbol!("feynkit_graph::uv_test_mass"),
+                        None,
+                    )
+                    .unwrap();
                     vertex
                 },
                 |id, _, edge| {
                     let mut edge = edge.clone();
                     if internal_edges.contains(&id) {
-                        edge.numerator = symbolica::function!(momentum_symbol(), id.0, 0)
-                            + symbolica::symbol!("feynkit_graph::uv_test_mass");
+                        edge.numerator = NumeratorInterface::admit(
+                            symbolica::function!(momentum_symbol(), id.0, 0)
+                                + symbolica::symbol!("feynkit_graph::uv_test_mass"),
+                            None,
+                        )
+                        .unwrap();
                     }
                     edge
                 },
             )
             .unwrap();
-        with_momenta.numerator = with_momenta
-            .vertices()
-            .map(|(_, vertex)| &vertex.numerator)
-            .chain(with_momenta.edges().map(|(_, _, edge)| &edge.numerator))
-            .fold(Atom::num(1), |product, numerator| product * numerator);
+        with_momenta.numerator = FeynmanDiagram::fragment_numerator(&with_momenta.graph).unwrap();
         assert_eq!(with_momenta.superficial_degree_of_divergence(4).unwrap(), 4);
         let restored =
             FeynmanDiagram::from_json(with_momenta.model_arc(), &with_momenta.to_json().unwrap())
@@ -3873,16 +4011,62 @@ mod tests {
     }
 
     #[test]
+    fn diagram_source_roundtrips_keep_ranked_zero_and_logical_ports() {
+        let ports = [
+            Minkowski {}.new_rep(4).to_symbolic([]),
+            spenso::structure::representation::Euclidean {}
+                .new_rep(2)
+                .to_symbolic([]),
+        ];
+        let matrix = NumeratorInterface::admit(
+            symbolica::function!(
+                spenso::tensor_symbol!("feynkit_graph::roundtrip_matrix"),
+                &ports[0],
+                &ports[1]
+            ),
+            None,
+        )
+        .unwrap();
+        let zero = matrix.with_checked_expression(Atom::Zero).unwrap();
+        let diagram = one_loop()
+            .with_numerator(zero.clone())
+            .unwrap()
+            .with_projector(matrix.clone());
+        for restored in [
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap(),
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+        ] {
+            assert!(restored.numerator().same_value(&zero));
+            assert!(restored.projector().same_value(&matrix));
+            assert_eq!(
+                restored.numerator().structure().logical_slots(),
+                zero.structure().logical_slots()
+            );
+            restored.validate().unwrap();
+        }
+        assert!(diagram.to_json().unwrap().contains("num_interface"));
+        assert!(diagram.to_dot().unwrap().contains("num_interface"));
+    }
+
+    #[test]
     fn validates_factored_and_expanded_numerators_and_rejects_mismatches() {
         let factored =
             Atom::parse("(x+y)*(x-y)", "validation_test", ParseSettings::default()).unwrap();
-        let mut diagram = one_loop().with_numerator(factored.clone()).unwrap();
+        let mut diagram = one_loop()
+            .with_numerator(NumeratorInterface::admit(factored.clone(), None).unwrap())
+            .unwrap();
         diagram.validate().unwrap();
         diagram.validation.take();
-        diagram.numerator = factored.expand();
+        diagram.numerator = diagram
+            .numerator
+            .with_algebra_result(factored.expand())
+            .unwrap();
         diagram.validate().unwrap();
         diagram.validation.take();
-        diagram.numerator += Atom::one();
+        diagram.numerator = diagram
+            .numerator
+            .try_add(&SymbolicTensor::infer(Atom::one()).unwrap())
+            .unwrap();
         assert!(matches!(
             diagram.validate(),
             Err(DiagramError::NumeratorFragmentMismatch)
@@ -3901,9 +4085,12 @@ mod tests {
             .0;
         let updated = original
             .clone()
-            .with_numerator_fragments([(vertex, Atom::num(2))], [(edge, Atom::num(3))])
+            .with_numerator_fragments(
+                [(vertex, SymbolicTensor::infer(Atom::num(2)).unwrap())],
+                [(edge, SymbolicTensor::infer(Atom::num(3)).unwrap())],
+            )
             .unwrap();
-        assert_eq!(updated.numerator(), &Atom::num(6));
+        assert_eq!(updated.numerator().expression(), &Atom::num(6));
         assert_eq!(updated.id(), original.id());
         assert_eq!(
             updated.loop_momentum_basis(),
@@ -3917,7 +4104,7 @@ mod tests {
                 |id, _, data| {
                     let mut data = data.clone();
                     if id == edge {
-                        data.numerator = Atom::num(5);
+                        data.numerator = SymbolicTensor::infer(Atom::num(5)).unwrap();
                     }
                     data
                 },
@@ -3928,7 +4115,7 @@ mod tests {
             Err(DiagramError::NumeratorFragmentMismatch)
         ));
         let repaired = inconsistent.with_numerator_fragments([], []).unwrap();
-        assert_eq!(repaired.numerator(), &Atom::num(10));
+        assert_eq!(repaired.numerator().expression(), &Atom::num(10));
 
         let external = original
             .edges()
@@ -3938,7 +4125,7 @@ mod tests {
         assert!(matches!(
             original
                 .clone()
-                .with_numerator_fragments([], [(external, Atom::num(2))]),
+                .with_numerator_fragments([], [(external, SymbolicTensor::infer(Atom::num(2)).unwrap())]),
             Err(DiagramError::ExternalEdgeNumerator { edge }) if edge == external.0
         ));
         updated.validate().unwrap();
@@ -3949,29 +4136,31 @@ mod tests {
     fn replacing_a_numerator_preserves_identity_and_fragment_invariants() {
         let diagram = one_loop();
         let topology_id = diagram.id();
-        let replaced = diagram.with_numerator(Atom::num(7)).unwrap();
+        let replaced = diagram
+            .with_numerator(SymbolicTensor::infer(Atom::num(7)).unwrap())
+            .unwrap();
 
         assert_eq!(replaced.id(), topology_id);
-        assert_eq!(replaced.numerator(), &Atom::num(7));
+        assert_eq!(replaced.numerator().expression(), &Atom::num(7));
         assert_eq!(
             replaced
                 .vertices()
-                .filter(|(_, vertex)| vertex.numerator != Atom::one())
+                .filter(|(_, vertex)| vertex.numerator.expression() != &Atom::one())
                 .count(),
             1
         );
         assert!(
             replaced
                 .edges()
-                .all(|(_, _, edge)| edge.numerator == Atom::one())
+                .all(|(_, _, edge)| edge.numerator.expression() == &Atom::one())
         );
         replaced.validate().unwrap();
         let from_json =
             FeynmanDiagram::from_json(replaced.model_arc(), &replaced.to_json().unwrap()).unwrap();
         let from_dot =
             FeynmanDiagram::from_dot(replaced.model_arc(), &replaced.to_dot().unwrap()).unwrap();
-        assert_eq!(from_json.numerator(), &Atom::num(7));
-        assert_eq!(from_dot.numerator(), &Atom::num(7));
+        assert_eq!(from_json.numerator().expression(), &Atom::num(7));
+        assert_eq!(from_dot.numerator().expression(), &Atom::num(7));
     }
 
     #[test]
@@ -3980,7 +4169,7 @@ mod tests {
             .build()
             .unwrap();
         assert!(matches!(
-            diagram.with_numerator(Atom::num(7)),
+            diagram.with_numerator(SymbolicTensor::infer(Atom::num(7)).unwrap()),
             Err(DiagramError::MissingNumeratorAnchor)
         ));
     }
@@ -4355,7 +4544,7 @@ mod tests {
                 builder.add_vertex(DiagramVertex {
                     name: format!("v{i}"),
                     interaction: None,
-                    numerator: Atom::one(),
+                    numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
                 })
             })
             .collect::<Vec<_>>();
@@ -4402,7 +4591,10 @@ mod tests {
         let diagram = one_loop();
         diagram.validate().unwrap();
         let updated = diagram
-            .with_numerator_fragments([(VertexId(0), Atom::num(7))], [])
+            .with_numerator_fragments(
+                [(VertexId(0), SymbolicTensor::infer(Atom::num(7)).unwrap())],
+                [],
+            )
             .unwrap();
         updated.loop_momentum_basis().validate(&updated).unwrap();
         let tree_edge = updated.loop_momentum_basis().tree_edges[0];
@@ -4489,10 +4681,14 @@ mod tests {
                 },
                 |id, _, edge| {
                     let mut edge = edge.clone();
-                    edge.numerator = Atom::parse(
-                        format!("N({})", id.0),
-                        "feynkit_graph_test",
-                        ParseSettings::default(),
+                    edge.numerator = NumeratorInterface::admit(
+                        Atom::parse(
+                            format!("N({})", id.0),
+                            "feynkit_graph_test",
+                            ParseSettings::default(),
+                        )
+                        .unwrap(),
+                        None,
                     )
                     .unwrap();
                     edge
@@ -4607,7 +4803,7 @@ mod tests {
         let vertex = builder.add_vertex(DiagramVertex {
             name: "v".into(),
             interaction: None,
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
         });
         builder
             .add_edge(

@@ -1163,9 +1163,10 @@ mod tests {
                         .subtract(&route_graph.initial_state_cut);
                     let resnum = route_graph
                         .numerator(&reduced, child.subgraph())?
-                        .get_single_atom()
-                        .expect("the scalar outer numerator is available")
-                        * route_graph.global_atom();
+                        .state
+                        .expr
+                        .multiply(&route_graph.global_numerator()?)?;
+                    let resnum = feynkit_graph::NumeratorInterface::export(&resnum).0;
                     let analysis_branches = sector
                         .active
                         .iter_keys()
@@ -1621,7 +1622,8 @@ mod tests {
                 })?
             };
             let global_marker = symbolica::symbol!("nested_scalar_banana::global");
-            graph.global_prefactor.num = Atom::var(global_marker);
+            graph.global_prefactor.num =
+                crate::numerator::AppliedFeynmanRule::new(Atom::var(global_marker))?.expr;
 
             let mut filter = graph.get_edge_subgraph(EdgeIndex(1));
             let mut spinneys = Vec::new();

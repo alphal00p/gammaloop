@@ -222,6 +222,68 @@ fn explicit_ports_keep_logical_axes_when_symbolic_dimensions_reorder() {
 }
 
 #[test]
+fn scalar_weight_changes_preserve_identical_anonymous_axes() {
+    crate::test_support::test_initialize();
+    let rep = LibraryRep::from(Minkowski {}).new_rep(4).to_symbolic([]);
+    let matrix = function!(
+        spenso::tensor_symbol!("scalar_weight_axes::matrix"),
+        &rep,
+        &rep
+    );
+    let (a, b, x, y, d) = symbolica::symbol!(
+        "scalar_weight_axes::a",
+        "scalar_weight_axes::b",
+        "scalar_weight_axes::x",
+        "scalar_weight_axes::y",
+        "scalar_weight_axes::d"
+    );
+    let spectator = (Atom::var(x) + y).pow(5);
+    let source = SymbolicTensor::infer(
+        &matrix
+            * &spectator
+            * (Atom::var(a) / Atom::var(d).pow(2) + Atom::var(b) / Atom::var(d).pow(3)),
+    )
+    .unwrap();
+    let extracted = Atom::var(a) * &matrix * &spectator;
+    let result = source.with_checked_expression(extracted.clone()).unwrap();
+    assert_eq!(result.expression(), &extracted);
+    assert_eq!(
+        result.structure.logical_slots(),
+        source.structure.logical_slots()
+    );
+    assert_eq!(
+        result.with_checked_expression(extracted.clone()).unwrap(),
+        result
+    );
+    assert_eq!(
+        source
+            .with_checked_expression(Atom::Zero)
+            .unwrap()
+            .structure,
+        source.structure
+    );
+
+    let other = function!(
+        spenso::tensor_symbol!("scalar_weight_axes::other"),
+        &rep,
+        &rep
+    );
+    assert!(
+        source
+            .with_checked_expression(Atom::var(a) * other * &spectator)
+            .is_err()
+    );
+    assert!(source.with_checked_expression(Atom::var(a)).is_err());
+    // A scalar-looking placeholder is still checked in the full expression;
+    // excluding scalar factors from identity witnesses cannot admit bad scopes.
+    assert!(
+        source
+            .with_checked_expression(extracted * Atom::var(SPENSO_TAG.chain_in))
+            .is_err()
+    );
+}
+
+#[test]
 fn one_affine_vector_rewrite_keeps_other_anonymous_ports_anchored() {
     crate::test_support::test_initialize();
     let dimension = Atom::var(symbolica::symbol!("affine_auto_vector::D"));

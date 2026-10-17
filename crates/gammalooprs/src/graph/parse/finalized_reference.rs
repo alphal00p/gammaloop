@@ -44,8 +44,8 @@ fn snapshot(graph: &Graph, model: &crate::model::Model) -> Value {
         "external_edges":graph.loop_momentum_basis.ext_edges.iter().map(|edge|edge.0).collect::<Vec<_>>(),
         "initial_left":selection(&graph.initial_state_cut.left),"initial_right":selection(&graph.initial_state_cut.right),
         "num":graph.numerator(&graph.full_filter(),&graph.empty_subgraph()).unwrap().get_single_atom().unwrap().to_canonical_string(),
-        "overall":graph.overall_factor.to_canonical_string(),"prefactor":graph.global_prefactor.num.to_canonical_string(),
-        "projector":graph.global_prefactor.projector.to_canonical_string(),
+        "overall":graph.overall_factor.to_canonical_string(),"prefactor":crate::graph::parse::NumeratorInterface::export(&graph.global_prefactor.num).0.to_canonical_string(),
+        "projector":crate::graph::parse::NumeratorInterface::export(&graph.global_prefactor.projector).0.to_canonical_string(),
         "cuts":graph.finalized_cuts.iter().map(|cut|json!({"cut":selection(&cut.cut.left),"opposite":selection(&cut.cut.right),"left":selection(&cut.left),"right":selection(&cut.right)})).collect::<Vec<_>>(),
         "thresholds":graph.finalized_topology_threshold_candidates.iter().map(|cut|json!({"cut":selection(&cut.cut.left),"opposite":selection(&cut.cut.right),"left":selection(&cut.left),"right":selection(&cut.right)})).collect::<Vec<_>>()
     })

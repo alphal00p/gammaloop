@@ -10,9 +10,11 @@ use feynkit_graph::expressions::{GraphExpressions, PropagatorSymbols};
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge,
     DiagramThresholdCandidate, DiagramVertex, FeynmanDiagram, LoopMomentumBasis, MomentumSignature,
+    NumeratorInterface,
 };
 use feynkit_model::Model;
 use feynkit_tensor::FeynmanDiagramTensorExt;
+use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::{
     NodeIndex,
     involution::{EdgeIndex, Flow, Hedge},
@@ -25,6 +27,7 @@ use pyo3::{
     prelude::*,
     types::{PyAny, PyModule},
 };
+use spenso::structure::partial::PartialStructure;
 use spynso3::{expression::TensorExpression, structure::SpensoName};
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},
@@ -152,7 +155,9 @@ impl PyDiagramVertex {
     /// >>> factor = vertex.numerator_expression()
     #[getter]
     fn numerator(&self) -> PyResult<String> {
-        Ok(self.inner.numerator.to_plain_string())
+        Ok(NumeratorInterface::export(&self.inner.numerator)
+            .0
+            .to_plain_string())
     }
 
     /// Return the numerator annotation as a Spenso TensorExpression.
@@ -165,7 +170,7 @@ impl PyDiagramVertex {
     /// >>> vertex_factor = vertex.numerator_expression()
     /// >>> weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
     fn numerator_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_atom_interface(py, self.inner.numerator.clone(), None)
+        TensorExpression::from_structured(py, self.inner.numerator.clone())
     }
 
     /// Return a concise, unambiguous description of the vertex.
@@ -674,7 +679,9 @@ impl PyDiagramEdge {
     /// >>> factor = edge.numerator_expression()
     #[getter]
     fn numerator(&self) -> PyResult<String> {
-        Ok(self.inner.numerator.to_plain_string())
+        Ok(NumeratorInterface::export(&self.inner.numerator)
+            .0
+            .to_plain_string())
     }
 
     /// Return the numerator annotation as a Spenso TensorExpression.
@@ -687,7 +694,7 @@ impl PyDiagramEdge {
     /// >>> propagator_factor = edge.numerator_expression()
     /// >>> weighted_propagator = diagram.overall_factor_expression() * propagator_factor
     fn numerator_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_atom_interface(py, self.inner.numerator.clone(), None)
+        TensorExpression::from_structured(py, self.inner.numerator.clone())
     }
 
     /// Return a concise description of the edge and its endpoints.
@@ -2621,29 +2628,37 @@ impl PyFeynmanDiagram {
         )
     }
 
-    fn local_numerator(&self, without: Option<&DiagramSelection>) -> Atom {
+    fn local_numerator(
+        &self,
+        without: Option<&DiagramSelection>,
+    ) -> PyResult<SymbolicTensor<PartialStructure>> {
         let graph = self.inner.underlying();
         let excluded = without.map_or_else(
             || SuBitGraph::empty(graph.n_hedges()),
             |region| region.hedges.clone(),
         );
         let isolated = self.isolated_nodes();
-        graph.numerator_of(
-            &self.selection(),
-            &excluded,
-            |node, vertex| {
-                if graph.iter_crown(node).next().is_none()
-                    && (!isolated.contains(&node.0)
-                        || without.is_some_and(|region| region.isolated.contains(&node.0)))
-                {
-                    Atom::one()
-                } else {
-                    vertex.numerator.clone()
-                }
-            },
-            |edge| edge.numerator.clone(),
-            |edge| edge.is_dummy,
-        )
+        let one = NumeratorInterface::admit(Atom::one(), None).map_err(error::diagram)?;
+        graph
+            .try_fold_numerator(
+                &self.selection(),
+                &excluded,
+                one.clone(),
+                |node, vertex| {
+                    if graph.iter_crown(node).next().is_none()
+                        && (!isolated.contains(&node.0)
+                            || without.is_some_and(|region| region.isolated.contains(&node.0)))
+                    {
+                        one.clone()
+                    } else {
+                        vertex.numerator.clone()
+                    }
+                },
+                |edge| edge.numerator.clone(),
+                |edge| edge.is_dummy,
+                |left, right| left.multiply(&right),
+            )
+            .map_err(|error| crate::error::DiagramError::new_err(error.to_string()))
     }
 
     fn is_complete(&self) -> bool {
@@ -3329,8 +3344,10 @@ impl PyFeynmanDiagram {
     /// >>> source_text = diagram.numerator
     /// >>> numerator = diagram.numerator_expression()
     #[getter]
-    fn numerator(&self) -> String {
-        self.local_numerator(None).to_plain_string()
+    fn numerator(&self) -> PyResult<String> {
+        Ok(NumeratorInterface::export(&self.local_numerator(None)?)
+            .0
+            .to_plain_string())
     }
 
     /// Return the product of internal propagator denominators as a scalar TensorExpression.
@@ -3525,7 +3542,7 @@ impl PyFeynmanDiagram {
         let without = without
             .map(|region| self.region_argument(py, region))
             .transpose()?;
-        let numerator = self.local_numerator(without.as_ref());
+        let numerator = self.local_numerator(without.as_ref())?;
         let numerator = match lmb {
             Some(basis) => {
                 if !Arc::ptr_eq(&basis.owner, &self.owner) {
@@ -3533,15 +3550,20 @@ impl PyFeynmanDiagram {
                         "momentum basis belongs to a different diagram",
                     ));
                 }
-                basis.inner.route_expression(&numerator)
+                numerator
+                    .with_checked_expression(basis.inner.route_expression(numerator.expression()))
+                    .map_err(|error| crate::error::DiagramError::new_err(error.to_string()))?
             }
-            None if in_lmb => self
-                .inner
-                .loop_momentum_basis()
-                .route_expression(&numerator),
+            None if in_lmb => numerator
+                .with_checked_expression(
+                    self.inner
+                        .loop_momentum_basis()
+                        .route_expression(numerator.expression()),
+                )
+                .map_err(|error| crate::error::DiagramError::new_err(error.to_string()))?,
             None => numerator,
         };
-        TensorExpression::from_atom_interface(py, numerator, None)
+        TensorExpression::from_structured(py, numerator)
     }
 
     /// Expand the local integrand through its UV degree of divergence.
@@ -3599,15 +3621,17 @@ impl PyFeynmanDiagram {
             .collect();
         let numerator = match numerator {
             Some(value) => match value.extract::<PyRef<'_, TensorExpression>>() {
-                Ok(value) => value.structured().expression().clone(),
-                Err(_) => {
+                Ok(value) => value.structured().clone(),
+                Err(_) => NumeratorInterface::admit(
                     value
                         .extract::<ConvertibleToExpression>()?
                         .to_expression()
-                        .expr
-                }
+                        .expr,
+                    None,
+                )
+                .map_err(error::diagram)?,
             },
-            None => self.local_numerator(None),
+            None => self.local_numerator(None)?,
         };
         let expanded = self
             .inner
@@ -3615,11 +3639,14 @@ impl PyFeynmanDiagram {
                 &selected,
                 &uv_mass.to_expression().expr,
                 dimension,
-                Some(&numerator),
+                Some(numerator.expression()),
                 &powers,
             )
             .map_err(error::diagram)?;
-        TensorExpression::from_atom_interface(py, expanded, None)
+        let expanded = numerator
+            .with_checked_expression(expanded)
+            .map_err(|error| crate::error::DiagramError::new_err(error.to_string()))?;
+        TensorExpression::from_structured(py, expanded)
     }
 
     /// Return the additive local UV counterterm, the negative of ``uv_expansion``.
@@ -3659,8 +3686,8 @@ impl PyFeynmanDiagram {
         edge_powers: Option<BTreeMap<usize, isize>>,
     ) -> PyResult<Py<TensorExpression>> {
         let expanded = self.uv_expansion(py, uv_mass, dimension, numerator, edge_powers)?;
-        let counterterm = -expanded.borrow(py).structured().expression();
-        TensorExpression::from_atom_interface(py, counterterm, None)
+        let counterterm = -expanded.borrow(py).structured().clone();
+        TensorExpression::from_structured(py, counterterm)
     }
 
     /// Return the request-wide numerator multiplier as a Symbolica expression.
@@ -3672,10 +3699,8 @@ impl PyFeynmanDiagram {
     /// >>> prefactor = diagram.numerator_prefactor_expression()
     /// >>> weighted_numerator = prefactor * diagram.numerator_expression()
     /// >>> weighted_numerator
-    fn numerator_prefactor_expression(&self) -> PythonExpression {
-        PythonExpression {
-            expr: self.inner.numerator_prefactor().clone(),
-        }
+    fn numerator_prefactor_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+        TensorExpression::from_structured(py, self.inner.numerator_prefactor().clone())
     }
 
     /// Return the external-state projector as a Symbolica expression.
@@ -3687,10 +3712,8 @@ impl PyFeynmanDiagram {
     /// >>> projector = diagram.projector_expression()
     /// >>> projected_numerator = projector * diagram.numerator_expression()
     /// >>> projected_numerator
-    fn projector_expression(&self) -> PythonExpression {
-        PythonExpression {
-            expr: self.inner.projector().clone(),
-        }
+    fn projector_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+        TensorExpression::from_structured(py, self.inner.projector().clone())
     }
 
     /// Reduce the numerator and projector using the diagram's internal edge momenta.
@@ -3715,7 +3738,7 @@ impl PyFeynmanDiagram {
     /// expression : Expression or TensorExpression, optional
     ///     Complete prepared input to reduce instead of the numerator and projector.
     ///     Cannot be combined with an explicit projector.
-    /// projector : Expression or None, optional
+    /// projector : Expression or TensorExpression or None, optional
     ///     Explicit external tensor projector, required for partial regions unless expression is supplied.
     #[pyo3(signature = (dimension, *, expression=None, projector=None))]
     fn tensor_reduce(
@@ -3724,7 +3747,8 @@ impl PyFeynmanDiagram {
         dimension: ConvertibleToExpression,
         #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.tensor.TensorExpression | None", imports=("symbolica", "symbolica.community.tensor")))]
         expression: Option<&Bound<'_, PyAny>>,
-        projector: Option<ConvertibleToExpression>,
+        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.tensor.TensorExpression | None", imports=("symbolica", "symbolica.community.tensor")))]
+        projector: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Py<TensorExpression>> {
         if expression.is_some() && projector.is_some() {
             return Err(error::DiagramError::new_err(
@@ -3735,16 +3759,33 @@ impl PyFeynmanDiagram {
         let expression = expression
             .map(
                 |expression| match expression.extract::<PyRef<'_, TensorExpression>>() {
-                    Ok(value) => Ok(value.structured().expression().clone()),
-                    Err(_) => expression
-                        .extract::<ConvertibleToExpression>()
-                        .map(|value| value.to_expression().expr),
+                    Ok(value) => Ok(value.structured().clone()),
+                    Err(_) => NumeratorInterface::admit(
+                        expression
+                            .extract::<ConvertibleToExpression>()?
+                            .to_expression()
+                            .expr,
+                        None,
+                    )
+                    .map_err(error::diagram),
                 },
             )
             .transpose()?;
         let projector = match projector {
-            Some(projector) => projector.to_expression().expr,
-            None if expression.is_some() => Atom::one(),
+            Some(projector) => match projector.extract::<PyRef<'_, TensorExpression>>() {
+                Ok(value) => value.structured().clone(),
+                Err(_) => NumeratorInterface::admit(
+                    projector
+                        .extract::<ConvertibleToExpression>()?
+                        .to_expression()
+                        .expr,
+                    None,
+                )
+                .map_err(error::diagram)?,
+            },
+            None if expression.is_some() => {
+                NumeratorInterface::admit(Atom::one(), None).map_err(error::diagram)?
+            }
             None if self.is_complete() => self.inner.projector().clone(),
             None => {
                 return Err(error::DiagramError::new_err(
@@ -3752,7 +3793,13 @@ impl PyFeynmanDiagram {
                 ));
             }
         };
-        let expression = expression.unwrap_or_else(|| self.local_numerator(None) * &projector);
+        let expression = match expression {
+            Some(expression) => expression,
+            None => self
+                .local_numerator(None)?
+                .multiply(&projector)
+                .map_err(|error| crate::error::DiagramError::new_err(error.to_string()))?,
+        };
         let reduction = self
             .inner
             .tensor_reduce_of(
@@ -3762,7 +3809,7 @@ impl PyFeynmanDiagram {
                 Some(&expression),
             )
             .map_err(error::tensor)?;
-        TensorExpression::from_atom_interface(py, reduction.into_expression(), None)
+        TensorExpression::from_structured(py, reduction.into_expression().map_err(error::tensor)?)
     }
 
     /// Reduce the finalized numerator and projector with a tensor reducer.
@@ -3790,14 +3837,17 @@ impl PyFeynmanDiagram {
     /// ----------
     /// reducer : TensorReducer
     ///     Tensor projector and integrated-momentum selection to apply.
-    fn reduce_tensor_numerator(&self, reducer: &PyTensorReducer) -> PyResult<PythonExpression> {
+    fn reduce_tensor_numerator(
+        &self,
+        py: Python<'_>,
+        reducer: &PyTensorReducer,
+    ) -> PyResult<Py<TensorExpression>> {
         self.require_complete()?;
-        self.inner
+        let reduction = self
+            .inner
             .reduce_tensor_numerator(&reducer.inner)
-            .map(|reduction| PythonExpression {
-                expr: reduction.into_expression(),
-            })
-            .map_err(error::tensor)
+            .map_err(error::tensor)?;
+        TensorExpression::from_structured(py, reduction.into_expression().map_err(error::tensor)?)
     }
 
     /// Split the tensor numerator into scalar contributions on this topology.

@@ -40,7 +40,9 @@ impl FeynmanDiagramBuilder {
                     degree,
                 });
             }
-            if self.vertices[vertex.0].numerator != Atom::one() {
+            if !self.vertices[vertex.0].numerator.is_scalar()
+                || self.vertices[vertex.0].numerator.expression() != &Atom::one()
+            {
                 return Err(DiagramError::ExternalVertexNumerator { vertex: vertex.0 });
             }
         }
@@ -73,7 +75,7 @@ impl FeynmanDiagramBuilder {
                         })
                 });
             if let Some((leg, attachment, old_flow, slot)) = external {
-                if edge.numerator != Atom::one() {
+                if !edge.numerator.is_scalar() || edge.numerator.expression() != &Atom::one() {
                     return Err(DiagramError::ExternalEdgeNumerator { edge: id });
                 }
                 let attachment = attachment
@@ -492,14 +494,21 @@ impl FeynmanDiagramBuilder {
             }
             Ok(translated)
         };
+        let translate_tensor = |tensor: &SymbolicTensor<PartialStructure>| {
+            if generated {
+                NumeratorInterface::translate(tensor, &translate)
+            } else {
+                Ok(tensor.clone())
+            }
+        };
         graph = graph.map_data_ref_result(
             |_, _, vertex| {
                 let mut vertex = vertex.clone();
-                vertex.numerator = translate(&vertex.numerator)?;
+                vertex.numerator = translate_tensor(&vertex.numerator)?;
                 Ok::<_, DiagramError>(vertex)
             },
             |_, _, _, edge| {
-                let numerator = translate(&edge.data.numerator)?;
+                let numerator = translate_tensor(&edge.data.numerator)?;
                 Ok(edge.map(|edge| {
                     let mut edge = edge.clone();
                     edge.numerator = numerator;
@@ -509,8 +518,8 @@ impl FeynmanDiagramBuilder {
             |(_, data)| Ok(*data),
         )?;
         let numerator = match &self.numerator {
-            Some(numerator) => translate(numerator)?,
-            None => FeynmanDiagram::fragment_numerator(&graph),
+            Some(numerator) => translate_tensor(numerator)?,
+            None => FeynmanDiagram::fragment_numerator(&graph)?,
         };
         let mut diagram = FeynmanDiagram {
             model: self.model.clone(),
@@ -520,8 +529,8 @@ impl FeynmanDiagramBuilder {
             symmetry_factor: self.symmetry_factor,
             overall_factor: translate(&self.overall_factor)?,
             numerator,
-            numerator_prefactor: translate(&self.numerator_prefactor)?,
-            projector: translate(&self.projector)?,
+            numerator_prefactor: translate_tensor(&self.numerator_prefactor)?,
+            projector: translate_tensor(&self.projector)?,
             loop_momentum_basis: LoopMomentumBasis {
                 tree_edges: vec![],
                 loop_edges: vec![],

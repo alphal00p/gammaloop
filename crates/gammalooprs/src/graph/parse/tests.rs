@@ -150,6 +150,85 @@ fn runtime_and_canonical_dot_preserve_ranked_zero_fragments() {
 }
 
 #[test]
+fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order() {
+    use super::NumeratorInterface;
+    use crate::numerator::GlobalPrefactor;
+    use crate::uv::UltravioletGraph;
+    use idenso::tensor::SymbolicTensor;
+    use spenso::structure::{
+        abstract_index::AbstractIndex,
+        partial::{PartialIndex, PartialStructure, PartialStructureExt},
+    };
+    test_initialise().unwrap();
+    let representation = Minkowski {}.new_rep(4).to_lib();
+    let interface =
+        PartialStructure::from_logical_slots([41, 37].map(|index| {
+            representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)))
+        }));
+    let zero = SymbolicTensor::from_declared_parts(Atom::Zero, interface.clone()).unwrap();
+    let metric = NumeratorInterface::admit(
+        symbolica::function!(
+            spenso::network::library::symbolic::ETS.metric,
+            representation.to_symbolic([Atom::num(37)]),
+            representation.to_symbolic([Atom::num(41)]),
+        ),
+        None,
+    )
+    .unwrap();
+    let metric =
+        SymbolicTensor::from_declared_parts(metric.expression().clone(), interface.clone())
+            .unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let canonical = Graph::import_dot(
+        include_str!("../../../../../tests/resources/graphs/ir_safe_thresholds/no_directive_cross_section.dot"),
+        &model,
+    ).unwrap().remove(0);
+    for mut graph in [parse_triangle_fixture(3, None), canonical] {
+        graph.global_prefactor.num = zero.clone();
+        graph.global_prefactor.projector = metric.clone();
+        let json = serde_json::to_value(&graph.global_prefactor).unwrap();
+        assert!(json.get("num_interface").is_some());
+        let restored_global: GlobalPrefactor = serde_json::from_value(json).unwrap();
+        assert!(restored_global.num.same_value(&zero));
+        assert!(restored_global.projector.same_value(&metric));
+        let product = restored_global
+            .num
+            .multiply(&restored_global.projector)
+            .unwrap();
+        assert!(product.is_zero() && product.is_scalar());
+
+        let dot = graph.dot_serialize(&DotExportSettings::default());
+        assert!(dot.contains("numerator_prefactor_interface"));
+        let restored = Graph::import_dot(&dot, &model).unwrap().remove(0);
+        assert!(restored.global_prefactor.num.same_value(&zero));
+        assert!(restored.global_prefactor.projector.same_value(&metric));
+        assert_eq!(restored.global_prefactor.num.rank(), 2);
+        assert_eq!(
+            restored.global_prefactor.num.structure().logical_slots(),
+            interface.logical_slots()
+        );
+        assert_eq!(
+            restored
+                .global_prefactor
+                .projector
+                .structure()
+                .logical_slots(),
+            interface.logical_slots()
+        );
+        assert_eq!(restored.finalized_cuts.len(), graph.finalized_cuts.len());
+        let full = restored
+            .numerator(&restored.full_filter(), &restored.empty_subgraph())
+            .unwrap()
+            .state
+            .expr
+            .multiply(&restored.global_numerator().unwrap())
+            .unwrap();
+        assert!(full.is_zero() && full.is_scalar());
+        restored.validate_full_numerator_tensor_network().unwrap();
+    }
+}
+
+#[test]
 fn legacy_internal_order_key_recovers_pre_normalized_fermion_flow() {
     let model = crate::utils::load_generic_model("sm");
     let forward = DiagramEdge::new(model.particle_id("u").unwrap(), true);
@@ -557,10 +636,7 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
         let (runtime_data, runtime_pair) = &runtime.underlying[&edge];
         assert_eq!(*runtime_pair, pair);
         assert_eq!(runtime.underlying.orientation(edge), data.orientation);
-        assert_eq!(
-            super::NumeratorInterface::export(&runtime_data.num.value).0,
-            data.data.numerator
-        );
+        assert_eq!(runtime_data.num.value, data.data.numerator);
         assert_eq!(runtime_data.is_dummy, data.data.is_dummy);
     }
     for index in 0..source.n_hedges() {
@@ -586,7 +662,9 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
             .get_single_atom()
             .unwrap()
             .expand(),
-        diagram.numerator().expand()
+        super::NumeratorInterface::export(diagram.numerator())
+            .0
+            .expand()
     );
     for (_, edge, _) in source.iter_edges() {
         let mut selected: linnet::half_edge::subgraph::SuBitGraph = source.empty_subgraph();
@@ -598,7 +676,7 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
                 .unwrap()
                 .get_single_atom()
                 .unwrap(),
-            diagram.numerator_of(&selected, &empty)
+            super::NumeratorInterface::export(&diagram.numerator_of(&selected, &empty).unwrap()).0
         );
         assert_eq!(
             runtime.denominator(&selected, diagram.model(), |_| -2),
@@ -785,7 +863,7 @@ fn native_runtime_enrichment_preserves_explicit_loop_order() {
     let node = builder.add_vertex(DiagramVertex {
         name: "vertex".into(),
         interaction: None,
-        numerator: Atom::one(),
+        numerator: super::NumeratorInterface::admit(Atom::one(), None).unwrap(),
     });
     let mut incoming = DiagramEdge::new(particle, false);
     incoming.external = Some(feynkit_graph::ExternalLeg {
@@ -833,7 +911,7 @@ fn native_subgraph_routing_matches_runtime_for_empty_and_disconnected_selections
             builder.add_vertex(DiagramVertex {
                 name: format!("v{index}"),
                 interaction: None,
-                numerator: Atom::one(),
+                numerator: super::NumeratorInterface::admit(Atom::one(), None).unwrap(),
             })
         })
         .collect::<Vec<_>>();
@@ -1033,7 +1111,13 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
             .new_rep(4)
             .to_symbolic([Atom::from(Aind::Hedge(hedge.0 as u16, local))])
     });
-    literal.global_prefactor.num *= function!(ETS.metric, first, second);
+    literal.global_prefactor.num = literal
+        .global_prefactor
+        .num
+        .multiply(
+            &super::NumeratorInterface::admit(function!(ETS.metric, first, second), None).unwrap(),
+        )
+        .unwrap();
     let error = Graph::import_dot(
         &literal.dot_serialize(&DotExportSettings::default()),
         &model,
@@ -1047,7 +1131,7 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
         "{error:?}"
     );
 
-    literal.global_prefactor.num = Atom::one();
+    literal.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
     literal.underlying = literal.underlying.map_data_ref(
         |_, _, vertex| {
             let mut vertex = vertex.clone();
@@ -1152,29 +1236,29 @@ fn compact_qcd_import_instantiates_rules_and_retains_explicit_fragments() {
     let topology =
         feynkit_graph::FeynmanDiagram::from_dot(std::sync::Arc::new(model.clone()), source)
             .unwrap();
-    assert_eq!(topology.numerator(), &Atom::one());
+    assert_eq!(topology.numerator().expression(), &Atom::one());
     let reference = topology.apply_feynman_rules().unwrap();
     let imported = Graph::import_dot(source, &model).unwrap().remove(0);
-    assert_ne!(reference.numerator(), &Atom::one());
+    assert_ne!(reference.numerator().expression(), &Atom::one());
     assert_eq!(
         imported
             .numerator(&imported.full_filter(), &imported.empty_subgraph())
             .unwrap()
             .get_single_atom()
             .unwrap(),
-        *reference.numerator()
+        super::NumeratorInterface::export(reference.numerator()).0
     );
     assert_eq!(
         imported.global_prefactor.projector,
         reference.external_state_projector().unwrap()
     );
-    assert!(!imported.global_prefactor.projector.is_one());
+    assert!(!imported.global_prefactor.projector.expression().is_one());
     let supplied = source.replace(
         "ext [style=invis]",
         "projector=1; a[num=7]; ext [style=invis]",
     );
     let explicit = Graph::import_dot(&supplied, &model).unwrap().remove(0);
-    assert!(explicit.global_prefactor.projector.is_one());
+    assert!(explicit.global_prefactor.projector.expression().is_one());
     assert_eq!(
         explicit.underlying[linnet::half_edge::NodeIndex(0)]
             .num
@@ -1209,7 +1293,7 @@ fn compact_gamma_loop_indices_bind_to_native_rule_ports() {
         .validate_full_numerator_tensor_network()
         .unwrap();
     assert_eq!(qualified.global_prefactor, unqualified.global_prefactor);
-    let projector = &qualified.global_prefactor.projector;
+    let projector = super::NumeratorInterface::export(&qualified.global_prefactor.projector).0;
     for hedge in qualified
         .external_filter::<linnet::half_edge::subgraph::SuBitGraph>()
         .included_iter()
@@ -1445,13 +1529,20 @@ fn full_numerator_requires_one_q3_structure_argument() {
     );
 
     graph.overall_factor = Atom::one();
-    let original_global = graph.global_prefactor.clone();
-    graph.global_prefactor.num = nested_q.clone();
-    assert!(graph.validate_spatial_momentum_convention().is_err());
-    graph.global_prefactor = original_global.clone();
-    graph.global_prefactor.projector = nested_q;
-    assert!(graph.validate_spatial_momentum_convention().is_err());
-    graph.global_prefactor = original_global;
+    for attribute in ["num", "projector"] {
+        let mut source =
+            linnet::parser::DotGraph::from_string(&graph.dot_serialize(&Default::default()))
+                .unwrap();
+        source
+            .global_data
+            .statements
+            .insert(attribute.into(), nested_q.to_canonical_string());
+        let error = Graph::from_finalized_runtime_dot(source, &graph.model).unwrap_err();
+        assert!(
+            error.to_string().contains("found no edge argument"),
+            "malformed raw global {attribute} must retain source validation: {error:?}"
+        );
+    }
 
     // Component normalization happens before either traversal sees the atom.
     let component = GS.emr_vec(out_of_range_edge, GS.cind(1));
@@ -1467,7 +1558,7 @@ fn full_numerator_requires_one_q3_structure_argument() {
     graph.overall_factor = &malformed_q3 - &malformed_q3;
     graph.validate_spatial_momentum_convention().unwrap();
     graph.overall_factor = malformed_q3;
-    graph.global_prefactor.num = Atom::Zero;
+    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::Zero, None).unwrap();
     graph.validate_spatial_momentum_convention().unwrap();
 }
 
@@ -1609,7 +1700,7 @@ fn open_fundamental_color_requires_an_explicit_projector() {
     .unwrap();
 
     graph.validate_full_numerator_tensor_network().unwrap();
-    graph.global_prefactor.num = Atom::num(1);
+    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
     let error = graph.validate_full_numerator_tensor_network().unwrap_err();
     assert!(
         error

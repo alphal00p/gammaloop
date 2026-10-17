@@ -345,13 +345,15 @@ impl TypedNumeratorState for UnInit {
 struct _GlobalPrefactorAny {
     projector: serde_json::Value,
     num: serde_json::Value,
+    projector_interface: Option<serde_json::Value>,
+    num_interface: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, PartialEq)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct GlobalPrefactor {
-    pub projector: Atom,
-    pub num: Atom,
+    pub projector: SymbolicTensor<PartialStructure>,
+    pub num: SymbolicTensor<PartialStructure>,
 }
 
 impl JsonSchema for GlobalPrefactor {
@@ -366,7 +368,13 @@ impl JsonSchema for GlobalPrefactor {
 impl GlobalPrefactor {
     pub fn polarizations(&self) -> Vec<(PolDef, Atom)> {
         let mut pols = Vec::new();
-        let full_prefactor = &self.projector * &self.num;
+        // Polarization parameters use the component parser's source index
+        // syntax. This observation does not replace either retained tensor.
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let full_prefactor =
+            cooking.uncook((self.projector.expression() * self.num.expression()).as_view());
         let pat = function!(GS.epsilon, W_.e_, W_.i_).to_pattern();
         for m in full_prefactor.pattern_match(&pat, None, None) {
             let Some(e) = m.get(&W_.e_) else {
@@ -484,8 +492,8 @@ impl GlobalPrefactor {
 impl Default for GlobalPrefactor {
     fn default() -> Self {
         GlobalPrefactor {
-            projector: Atom::num(1),
-            num: Atom::num(1),
+            projector: SymbolicTensor::infer(Atom::one()).expect("one is a scalar tensor"),
+            num: SymbolicTensor::infer(Atom::one()).expect("one is a scalar tensor"),
         }
     }
 }
@@ -495,9 +503,21 @@ impl Serialize for GlobalPrefactor {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("GlobalPrefactor", 2)?;
-        state.serialize_field("projector", &self.projector.to_string())?;
-        state.serialize_field("num", &self.num.to_string())?;
+        let (projector, projector_interface) =
+            feynkit_graph::NumeratorInterface::export(&self.projector);
+        let (num, num_interface) = feynkit_graph::NumeratorInterface::export(&self.num);
+        let mut state = serializer.serialize_struct(
+            "GlobalPrefactor",
+            2 + usize::from(projector_interface.is_some()) + usize::from(num_interface.is_some()),
+        )?;
+        state.serialize_field("projector", &projector.to_string())?;
+        state.serialize_field("num", &num.to_string())?;
+        if let Some(interface) = projector_interface {
+            state.serialize_field("projector_interface", &interface.to_json())?;
+        }
+        if let Some(interface) = num_interface {
+            state.serialize_field("num_interface", &interface.to_json())?;
+        }
 
         state.end()
     }
@@ -512,11 +532,26 @@ impl<'de> Deserialize<'de> for GlobalPrefactor {
         struct GlobalPrefactorHelper {
             num: String,
             projector: String,
+            #[serde(default)]
+            num_interface: Option<String>,
+            #[serde(default)]
+            projector_interface: Option<String>,
         }
         let helper = GlobalPrefactorHelper::deserialize(deserializer)?;
+        let admit = |source: &str,
+                     interface: Option<String>|
+         -> std::result::Result<SymbolicTensor<PartialStructure>, D::Error> {
+            let expression = try_parse!(source).map_err(serde::de::Error::custom)?;
+            let interface = interface
+                .map(|source| feynkit_graph::NumeratorInterface::parse(&source))
+                .transpose()
+                .map_err(serde::de::Error::custom)?;
+            feynkit_graph::NumeratorInterface::admit(expression, interface)
+                .map_err(serde::de::Error::custom)
+        };
         Ok(GlobalPrefactor {
-            projector: parse!(&helper.projector),
-            num: parse!(&helper.num),
+            projector: admit(&helper.projector, helper.projector_interface)?,
+            num: admit(&helper.num, helper.num_interface)?,
         })
     }
 }

@@ -402,16 +402,11 @@ mod test {
             let numerator = graph
                 .numerator(&graph.full_filter(), &graph.empty_subgraph())
                 .unwrap();
-            let prefactor = crate::numerator::AppliedFeynmanRule::new(
-                &graph.global_prefactor.projector
-                    * &graph.global_prefactor.num
-                    * &graph.overall_factor,
-            )
-            .unwrap();
+            let prefactor = graph.global_numerator().unwrap();
             let numerator = numerator
                 .state
                 .expr
-                .multiply(&prefactor.expr)
+                .multiply(&prefactor)
                 .unwrap()
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(idenso::color::ColorSimplifySettings::default()),

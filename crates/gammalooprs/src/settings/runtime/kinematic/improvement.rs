@@ -1002,8 +1002,12 @@ mod tests {
         .unwrap();
         assert_eq!(graphs.len(), 1);
         let mut graph = graphs.pop().unwrap();
-        graph.global_prefactor.num *=
-            graph.underlying[Hedge(2)].color_kronekers(&graph.underlying[Hedge(3)]);
+        let color = crate::numerator::AppliedFeynmanRule::new(
+            graph.underlying[Hedge(2)].color_kronekers(&graph.underlying[Hedge(3)]),
+        )
+        .unwrap()
+        .expr;
+        graph.global_prefactor.num = graph.global_prefactor.num.multiply(&color).unwrap();
         graph.validate_full_numerator_tensor_network().unwrap();
         test_default_momenta_graph(&graph, &sm, &F(600.0)).unwrap();
     }
@@ -1025,8 +1029,12 @@ mod tests {
         assert_eq!(graphs.len(), 1);
         let mut graph = graphs.pop().unwrap();
         for (source, sink) in [(0, 2), (1, 3)] {
-            graph.global_prefactor.num *=
-                graph.underlying[Hedge(source)].color_kronekers(&graph.underlying[Hedge(sink)]);
+            let color = crate::numerator::AppliedFeynmanRule::new(
+                graph.underlying[Hedge(source)].color_kronekers(&graph.underlying[Hedge(sink)]),
+            )
+            .unwrap()
+            .expr;
+            graph.global_prefactor.num = graph.global_prefactor.num.multiply(&color).unwrap();
         }
         graph.validate_full_numerator_tensor_network().unwrap();
         test_default_momenta_graph(&graph, &sm, &F(700.0)).unwrap();

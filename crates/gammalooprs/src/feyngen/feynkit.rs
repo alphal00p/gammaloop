@@ -159,7 +159,7 @@ mod tests {
     use feynkit_generator::{GenerationOptions, Process};
     use feynkit_graph::{
         DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
-        EdgeId, ExternalState, FeynmanDiagram, LoopMomentumBasis,
+        EdgeId, ExternalState, FeynmanDiagram, LoopMomentumBasis, NumeratorInterface,
     };
     use linnet::half_edge::{
         involution::{EdgeIndex, Hedge, HedgePair, Orientation},
@@ -241,16 +241,16 @@ mod tests {
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "direct")
             .symmetry_factor(7)
             .overall_factor(atom("kept_overall"))
-            .numerator(numerator)
-            .numerator_prefactor(atom("kept_prefactor"))
-            .projector(atom("kept_projector"));
+            .numerator(NumeratorInterface::admit(numerator, None).unwrap())
+            .numerator_prefactor(NumeratorInterface::admit(atom("kept_prefactor"), None).unwrap())
+            .projector(NumeratorInterface::admit(atom("kept_projector"), None).unwrap());
         let incoming = builder.add_generation_external("incoming", 0, ExternalState::Incoming, 0);
         let left = builder.add_vertex(DiagramVertex {
-            numerator: left_numerator,
+            numerator: NumeratorInterface::admit(left_numerator, None).unwrap(),
             ..DiagramVertex::interaction("left", interaction)
         });
         let right = builder.add_vertex(DiagramVertex {
-            numerator: atom("kept_vertex_fragment"),
+            numerator: NumeratorInterface::admit(atom("kept_vertex_fragment"), None).unwrap(),
             ..DiagramVertex::interaction("right", interaction)
         });
         let outgoing = builder.add_generation_external("outgoing", 1, ExternalState::Outgoing, 1);
@@ -259,7 +259,7 @@ mod tests {
             .unwrap();
         for _ in 0..2 {
             let mut edge = DiagramEdge::new(particle, false);
-            edge.numerator = atom("kept_edge_fragment");
+            edge.numerator = NumeratorInterface::admit(atom("kept_edge_fragment"), None).unwrap();
             builder.add_edge(left, right, edge).unwrap();
         }
         builder
@@ -277,10 +277,10 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "legacy_order_bubble")
-            .numerator(atom("kept_vertex_fragment^4"));
+            .numerator(NumeratorInterface::admit(atom("kept_vertex_fragment^4"), None).unwrap());
         let incoming = builder.add_generation_external("incoming", 0, ExternalState::Incoming, 0);
         let interaction_vertex = |name| DiagramVertex {
-            numerator: atom("kept_vertex_fragment"),
+            numerator: NumeratorInterface::admit(atom("kept_vertex_fragment"), None).unwrap(),
             ..DiagramVertex::interaction(name, interaction)
         };
         let first = builder.add_vertex(interaction_vertex("first"));
@@ -433,8 +433,14 @@ mod tests {
 
         assert_eq!(diagram.symmetry_factor(), 7);
         assert_eq!(runtime.overall_factor, atom("kept_overall"));
-        assert_eq!(runtime.global_prefactor.num, atom("kept_prefactor"));
-        assert_eq!(runtime.global_prefactor.projector, atom("kept_projector"));
+        assert_eq!(
+            runtime.global_prefactor.num.expression(),
+            &atom("kept_prefactor")
+        );
+        assert_eq!(
+            runtime.global_prefactor.projector.expression(),
+            &atom("kept_projector")
+        );
         assert!(runtime.underlying.iter_nodes().any(|(_, _, vertex)| {
             crate::graph::parse::NumeratorInterface::export(&vertex.num.value).0
                 == atom("kept_vertex_fragment")
@@ -450,7 +456,7 @@ mod tests {
                 .get_single_atom()
                 .unwrap()
                 .expand(),
-            diagram.numerator().expand()
+            NumeratorInterface::export(diagram.numerator()).0.expand()
         );
 
         let routed_edge = runtime
@@ -651,7 +657,7 @@ mod tests {
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), diagram.name())
             .symmetry_factor(diagram.symmetry_factor())
             .overall_factor(diagram.overall_factor().clone())
-            .numerator(atom("different_numerator"))
+            .numerator(NumeratorInterface::admit(atom("different_numerator"), None).unwrap())
             .numerator_prefactor(diagram.numerator_prefactor().clone())
             .projector(diagram.projector().clone())
             .loop_momentum_basis(diagram.loop_momentum_basis().clone())

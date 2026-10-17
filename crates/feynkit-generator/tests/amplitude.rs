@@ -4,7 +4,7 @@ use feynkit_amplitude::{Amplitude, AmplitudeError, AmplitudeOptions};
 use feynkit_generator::{GenerationFilter, GenerationOptions, NumeratorGrouping, Process};
 use feynkit_model::Model;
 use idenso::{
-    CookMode, CookSettings, IndexTooling,
+    IndexTooling,
     tensor::{ContractSettings, SymbolicTensor},
 };
 use spenso::{
@@ -18,11 +18,7 @@ use symbolica::{
     parse,
 };
 
-fn canonical_tensor(expression: Atom) -> SymbolicTensor<PartialStructure> {
-    let cooking = CookSettings::indices()
-        .with_mode(CookMode::ReversibleEncoding)
-        .with_representation_payloads(true, true);
-    let source = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap()).unwrap();
+fn canonical_tensor(source: SymbolicTensor<PartialStructure>) -> SymbolicTensor<PartialStructure> {
     let contracted = source
         .contract(ContractSettings::default().without_rank_one_tensors())
         .unwrap()
@@ -65,8 +61,13 @@ fn photons() -> Vec<Arc<feynkit_graph::FeynmanDiagram>> {
 fn generated_amplitude_aligns_ports_and_conjugates_involutively() {
     let amplitude = Amplitude::from_diagrams(photons()).unwrap();
     assert_eq!(amplitude.legs().len(), 4);
+    for term in amplitude.terms() {
+        assert_eq!(term.structure(), &amplitude.structure());
+    }
     assert_eq!(
         amplitude
+            .expression()
+            .unwrap()
             .expression()
             .list_dangling::<AbstractIndex>()
             .unwrap()
@@ -75,12 +76,19 @@ fn generated_amplitude_aligns_ports_and_conjugates_involutively() {
     );
     let adjoint = amplitude.conjugate().unwrap();
     assert!(adjoint.is_conjugated());
-    assert!(!adjoint.expression().to_plain_string().contains("conj"));
+    assert!(
+        !adjoint
+            .expression()
+            .unwrap()
+            .expression()
+            .to_plain_string()
+            .contains("conj")
+    );
     let roundtrip = adjoint.conjugate().unwrap();
     assert_eq!(
-        canonical_tensor(roundtrip.expression())
+        canonical_tensor(roundtrip.expression().unwrap())
             .coefficients_equal(
-                &canonical_tensor(amplitude.expression()),
+                &canonical_tensor(amplitude.expression().unwrap()),
                 TensorCollectFilter::<0>::Tensors,
             )
             .unwrap(),
@@ -90,11 +98,42 @@ fn generated_amplitude_aligns_ports_and_conjugates_involutively() {
 }
 
 #[test]
+fn zero_amplitude_keeps_physical_leg_order_through_adjoint_and_state_sums() {
+    let diagrams = photons();
+    let original = Amplitude::from_diagram(diagrams[0].clone()).unwrap();
+    let zero = diagrams[0]
+        .numerator()
+        .with_checked_expression(Atom::Zero)
+        .unwrap();
+    let diagram = diagrams[0].as_ref().clone().with_numerator(zero).unwrap();
+    let amplitude = Amplitude::from_diagram(diagram).unwrap();
+    assert_eq!(amplitude.legs(), original.legs());
+    let expression = amplitude.expression().unwrap();
+    assert!(expression.is_zero());
+    assert_eq!(expression.structure(), &original.structure());
+    let adjoint = amplitude.conjugate().unwrap();
+    assert!(adjoint.expression().unwrap().is_zero());
+    assert_eq!(
+        adjoint.expression().unwrap().structure(),
+        &adjoint.structure()
+    );
+    let squared = amplitude.squared().unwrap();
+    assert!(squared.expression().is_zero());
+    assert_eq!(squared.expression().rank(), 8);
+    let summed = squared
+        .sum_spins(&[0, 1, 2, 3], true, &BTreeMap::new(), &BTreeMap::new())
+        .unwrap();
+    assert!(summed.expression().is_zero());
+    assert_eq!(summed.expression().rank(), 0);
+}
+
+#[test]
 fn squared_ports_remain_open_until_explicit_state_sums() {
     let amplitude = Amplitude::from_diagrams(photons()).unwrap();
     let squared = amplitude.squared().unwrap();
     assert_eq!(
         squared
+            .expression()
             .expression()
             .list_dangling::<AbstractIndex>()
             .unwrap()
@@ -107,6 +146,7 @@ fn squared_ports_remain_open_until_explicit_state_sums() {
     assert_eq!(
         fermions
             .expression()
+            .expression()
             .list_dangling::<AbstractIndex>()
             .unwrap()
             .len(),
@@ -117,6 +157,7 @@ fn squared_ports_remain_open_until_explicit_state_sums() {
         .unwrap();
     assert!(
         all.expression()
+            .expression()
             .list_dangling::<AbstractIndex>()
             .unwrap()
             .is_empty()
@@ -141,11 +182,15 @@ fn coherent_square_includes_cross_diagram_interference() {
             .expression()
             .clone()
     };
+    let single = normalize(&one);
+    let expected = single
+        .with_checked_expression(single.expression() * Atom::num(4))
+        .unwrap();
     // Two identical diagrams give |2 A|² = 4 |A|², not the diagonal-only 2 |A|².
     assert_eq!(
         canonical_tensor(normalize(&doubled))
             .coefficients_equal(
-                &canonical_tensor(normalize(&one) * Atom::num(4)),
+                &canonical_tensor(expected),
                 TensorCollectFilter::<0>::Tensors,
             )
             .unwrap(),
@@ -205,11 +250,17 @@ fn scalar_couplings_are_conjugated_without_assuming_they_are_real() {
     .unwrap();
     let amplitude = Amplitude::from_diagram(diagram).unwrap();
     assert_eq!(
-        amplitude.conjugate().unwrap().expression(),
+        amplitude
+            .conjugate()
+            .unwrap()
+            .expression()
+            .unwrap()
+            .expression()
+            .clone(),
         parse!("spenso::conj(amplitude_test::z)")
     );
     assert_eq!(
-        amplitude.squared().unwrap().expression(),
+        amplitude.squared().unwrap().expression().expression(),
         &parse!("amplitude_test::z*spenso::conj(amplitude_test::z)")
     );
 }
@@ -249,6 +300,7 @@ fn colored_fermion_interference_preserves_physical_leg_pairings() {
     assert_eq!(
         squared
             .expression()
+            .expression()
             .list_dangling::<AbstractIndex>()
             .unwrap()
             .len(),
@@ -257,6 +309,7 @@ fn colored_fermion_interference_preserves_physical_leg_pairings() {
     let colors = squared.sum_colors(&[0, 1, 2, 3], true).unwrap();
     assert_eq!(
         colors
+            .expression()
             .expression()
             .list_dangling::<AbstractIndex>()
             .unwrap()
@@ -268,6 +321,7 @@ fn colored_fermion_interference_preserves_physical_leg_pairings() {
         .unwrap();
     assert!(
         summed
+            .expression()
             .expression()
             .list_dangling::<AbstractIndex>()
             .unwrap()
@@ -297,9 +351,10 @@ fn loop_square_keeps_independent_integration_momenta() {
     assert!(
         squared
             .expression()
+            .expression()
             .contains(parse!("gammalooprs::K(0,spenso::mink(4))"))
     );
-    assert!(squared.expression().contains(parse!(
+    assert!(squared.expression().expression().contains(parse!(
         "gammalooprs::K(feynkit_amplitude::bra(0),spenso::mink(4))"
     )));
 }
@@ -318,10 +373,11 @@ fn one_process_generates_diagrams_amplitudes_and_cross_sections() {
         .unwrap();
     assert_eq!(amplitude.diagrams().len(), diagrams.diagrams.len());
     assert_eq!(
-        amplitude.expression(),
+        amplitude.expression().unwrap(),
         Amplitude::from_diagrams(diagrams.diagrams.into_iter().map(Arc::new))
             .unwrap()
             .expression()
+            .unwrap()
     );
     let forward = process
         .generate_cross_section(

@@ -36,16 +36,12 @@ impl Graph {
 
         if settings.output_full_numerator {
             let numerator = self.numerator(&self.full_filter(), &self.empty_subgraph())?;
-            let prefactor = crate::numerator::AppliedFeynmanRule::new(
-                &self.global_prefactor.num
-                    * &self.global_prefactor.projector
-                    * &self.overall_factor,
-            )?;
+            let prefactor = self.global_numerator()?;
             let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
             let num = numerator
                 .state
                 .expr
-                .multiply(&prefactor.expr)?
+                .multiply(&prefactor)?
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: settings
                         .do_color_algebra
@@ -118,7 +114,7 @@ impl Graph {
             let added = builder.add_vertex(DiagramVertex {
                 name: vertex.name.value.clone(),
                 interaction: vertex.vertex_rule,
-                numerator: NumeratorInterface::export(&vertex.num.value).0,
+                numerator: vertex.num.value.clone(),
             });
             eyre::ensure!(
                 added.0 == id.0,
@@ -131,7 +127,7 @@ impl Graph {
                 eyre::eyre!("canonical cross-section export requires a model particle on edge {id}")
             })?;
             let mut edge = DiagramEdge::new(particle, data.orientation != Orientation::Undirected);
-            edge.numerator = NumeratorInterface::export(&data.data.num.value).0;
+            edge.numerator = data.data.num.value.clone();
             edge.is_dummy = data.data.is_dummy;
             let (source, target, source_slot, target_slot, state) = match pair {
                 HedgePair::Paired { source, sink } => (
@@ -464,7 +460,9 @@ mod tests {
         .unwrap();
         let graph = graph.with_global_numerator_only(
             "typst_full_num".to_string(),
-            function!(GS.uv_truncate, Atom::num(1)),
+            crate::numerator::AppliedFeynmanRule::new(function!(GS.uv_truncate, Atom::num(1)))
+                .unwrap()
+                .expr,
         );
         let dot = graph
             .to_dot_graph_with_settings(&DotExportSettings {

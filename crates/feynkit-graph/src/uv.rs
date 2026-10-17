@@ -68,8 +68,8 @@ impl FeynmanDiagram {
             Some(numerator) => numerator,
             None => {
                 local_numerator =
-                    self.numerator_of(&selected, &self.graph.empty_subgraph::<SuBitGraph>());
-                &local_numerator
+                    self.numerator_of(&selected, &self.graph.empty_subgraph::<SuBitGraph>())?;
+                local_numerator.expression()
             }
         };
         let metric = Minkowski {}.new_rep(symbols::dimension());

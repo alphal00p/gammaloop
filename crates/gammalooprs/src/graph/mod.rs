@@ -1,4 +1,5 @@
 use feynkit_graph::expressions::evaluate_overall_factor;
+use idenso::tensor::SymbolicTensor;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Index,
@@ -23,6 +24,7 @@ use tracing::debug;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
 use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::structure::partial::PartialStructure;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::warn;
 use typed_index_collections::TiVec;
@@ -33,7 +35,7 @@ use crate::{
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder, SamplingChannelId},
     model::Model,
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
-    numerator::GlobalPrefactor,
+    numerator::{GetSingleAtom, GlobalPrefactor},
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, Length, ose_atom_from_index},
@@ -126,16 +128,20 @@ pub(crate) enum ThresholdPinchStatus {
 }
 
 impl Graph {
-    pub(crate) fn with_global_numerator_only(&self, name: String, numerator: Atom) -> Self {
+    pub(crate) fn with_global_numerator_only(
+        &self,
+        name: String,
+        numerator: SymbolicTensor<PartialStructure>,
+    ) -> Self {
         let mut graph = self.clone();
         graph.name = name;
         graph.overall_factor = Atom::one();
         graph.global_prefactor.num = numerator;
-        graph.global_prefactor.projector = Atom::one();
         graph.polarizations.clear();
         let unit = crate::numerator::AppliedFeynmanRule::new(Atom::one())
             .expect("literal one is a scalar tensor")
             .expr;
+        graph.global_prefactor.projector = unit.clone();
         graph.underlying = self.underlying.map_data_ref(
             |_, _, vertex| {
                 let mut vertex = vertex.clone();
@@ -186,19 +192,35 @@ impl Graph {
         )
     }
 
-    pub(crate) fn global_atom(&self) -> Atom {
-        &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * evaluate_overall_factor(self.overall_factor.as_view())
+    pub(crate) fn global_numerator(&self) -> color_eyre::Result<SymbolicTensor<PartialStructure>> {
+        let factor = SymbolicTensor::infer(evaluate_overall_factor(self.overall_factor.as_view()))?;
+        eyre::ensure!(
+            factor.is_scalar(),
+            "the overall graph factor must be scalar"
+        );
+        Ok(self
+            .global_prefactor
+            .num
+            .multiply(&self.global_prefactor.projector)?
+            .multiply(&factor)?)
     }
 
     pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
         let reduced = self.full_filter().subtract(&self.initial_state_cut);
-        self.numerator(&reduced, &self.empty_subgraph())
+        let numerator = self
+            .numerator(&reduced, &self.empty_subgraph())
             .expect("validated graph numerator must have a compatible tensor interface")
+            .state
+            .expr
+            .multiply(
+                &self
+                    .global_numerator()
+                    .expect("validated global numerator must be a tensor"),
+            )
+            .expect("the complete production numerator must have compatible ports");
+        crate::numerator::AppliedFeynmanRule::from_tensor(numerator)
             .get_single_atom()
             .expect("Graph numerator should be available")
-            * self.global_atom()
     }
 
     pub(crate) fn external_momentum_edge_order(&self) -> Vec<EdgeIndex> {

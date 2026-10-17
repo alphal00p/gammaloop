@@ -23,14 +23,12 @@ use feynkit_graph::{
     DiagramEndpoint as FeynkitDiagramEndpoint, DiagramHalfEdge as FeynkitDiagramHalfEdge,
     FeynmanDiagram,
 };
-use idenso::{CookMode, CookSettings, color::ColorSimplifySettings, tensor::SymbolicTensor};
+use idenso::{color::ColorSimplifySettings, tensor::SymbolicTensor};
 use spenso::{
-    shadowing::{IntoAtom, TensorCollectFilter, symbolica_utils::LogPrint},
+    shadowing::{TensorCollectFilter, symbolica_utils::LogPrint},
     structure::{
-        abstract_index::AbstractIndex,
-        partial::{OpenPortId, PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, Minkowski, Representation},
-        slot::{Slot, SlotMatcher},
+        partial::{PartialStructure, PartialStructureExt},
+        representation::{Minkowski, Representation},
     },
 };
 
@@ -40,7 +38,7 @@ use eyre::{Context, Ok, eyre};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        HedgeGraph,
+        HedgeGraph, NodeIndex,
         involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair},
         nodestore::NodeStorageVec,
         subgraph::{ModifySubSet, OrientedCut, SuBitGraph, SubSetOps},
@@ -49,7 +47,6 @@ use linnet::{
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet, HedgeParseError},
     permutation::Permutation,
 };
-use spenso::structure::slot::IsAbstractSlot;
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::id::ConditionResult;
 use tracing::instrument;
@@ -93,97 +90,7 @@ where
 type NumGraph = HedgeGraph<ParseEdge, ParseVertex, HedgeData>;
 type UnderlyingGraph = HedgeGraph<Edge, Vertex, HedgeData>;
 
-/// Optional source-artifact ports that cannot be recovered from a numerator's
-/// expression alone, notably the rank of a computed zero. Entries are written
-/// in logical order; compact representations denote distinct unresolved ports.
-#[derive(Clone, Debug)]
-pub(crate) struct NumeratorInterface(pub(crate) Vec<Atom>);
-
-impl NumeratorInterface {
-    pub(crate) fn parse(source: &str) -> Result<Self> {
-        let ports: Vec<String> = serde_json::from_str(source)
-            .wrap_err("num_interface must be a JSON array of tensor port expressions")?;
-        Ok(Self(
-            ports
-                .into_iter()
-                .map(|port| port.strip_parse())
-                .collect::<Result<_>>()?,
-        ))
-    }
-
-    pub(crate) fn to_json(&self) -> String {
-        serde_json::to_string(
-            &self
-                .0
-                .iter()
-                .map(|port| port.to_canonical_string())
-                .collect::<Vec<_>>(),
-        )
-        .expect("strings always serialize to JSON")
-    }
-
-    pub(crate) fn admit(
-        expression: Atom,
-        interface: Option<Self>,
-    ) -> Result<SymbolicTensor<PartialStructure>> {
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
-        let expression = cooking.try_cook(expression.as_view())?;
-        let Some(interface) = interface else {
-            return Ok(SymbolicTensor::infer(expression)?);
-        };
-        let mut matcher = SlotMatcher::default();
-        let ports = interface
-            .0
-            .into_iter()
-            .map(|port| {
-                let port = cooking.try_cook(port.as_view())?;
-                if matcher.compact_representation(port.as_view()).is_some() {
-                    Ok(matcher
-                        .parse_representation::<LibraryRep>(port.as_view())?
-                        .slot(PartialIndex::Open(OpenPortId(0))))
-                } else {
-                    let slot = matcher.parse::<LibraryRep, AbstractIndex>(port.as_view())?;
-                    Ok(slot.rep().slot(PartialIndex::Explicit(slot.aind)))
-                }
-            })
-            .collect::<Result<Vec<_>>>()?;
-        Ok(SymbolicTensor::from_declared_parts(
-            expression,
-            PartialStructure::from_logical_slots(ports),
-        )?)
-    }
-
-    pub(crate) fn export(tensor: &SymbolicTensor<PartialStructure>) -> (Atom, Option<Self>) {
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
-        let expression = cooking.uncook(tensor.expression().as_view());
-        // Keep established artifact text when its expression already carries the
-        // complete interface. This check belongs to export, not generation.
-        if Self::admit(expression.clone(), None).is_ok_and(|restored| {
-            restored.structure().logical_slots() == tensor.structure().logical_slots()
-        }) {
-            return (expression, None);
-        }
-        let ports = tensor
-            .structure()
-            .logical_slots()
-            .into_iter()
-            .map(|slot| {
-                let port = match slot.aind {
-                    PartialIndex::Explicit(index) => {
-                        slot.rep().slot::<AbstractIndex, _>(index).to_atom()
-                    }
-                    PartialIndex::Open(_) => slot.rep().to_symbolic([]),
-                };
-                cooking.uncook(port.as_view())
-            })
-            .collect();
-        (expression, Some(Self(ports)))
-    }
-}
+pub(crate) use feynkit_graph::NumeratorInterface;
 
 pub mod string_utils;
 pub use string_utils::{FromStripedStr, StripParse, ToQuoted};
@@ -253,8 +160,8 @@ impl ParseGraph {
             .collect()
     }
 
-    /// Attach runtime parse payloads to the finalized half-edge storage.
-    /// The map retains every vertex, edge, half-edge, orientation and expression.
+    /// Attach runtime metadata to the finalized half-edge storage. The retained
+    /// tensor fragments are transferred directly when runtime values are built.
     fn from_feynkit_diagram(diagram: &FeynmanDiagram) -> Result<Self> {
         let underlying = diagram.underlying();
         let graph = underlying.map_data_ref_result(
@@ -263,15 +170,14 @@ impl ParseGraph {
                     name: Some(vertex.name.clone()),
 
                     vertex_rule: vertex.interaction,
-                    num: Some(vertex.numerator.clone()),
+                    num: None,
                     num_interface: None,
                     dod: None,
                 })
             },
             |_, edge_id, pair, data| {
-                let mut edge = ParseEdge::new(data.data.particle)
-                    .with_label(format!("e{}", edge_id.0))
-                    .with_num(data.data.numerator.clone());
+                let mut edge =
+                    ParseEdge::new(data.data.particle).with_label(format!("e{}", edge_id.0));
                 edge.is_dummy = data.data.is_dummy;
                 edge.lmb_id = diagram
                     .loop_momentum_basis()
@@ -303,8 +209,6 @@ impl ParseGraph {
             global_data: ParseData {
                 name: diagram.name().to_owned(),
                 overall_factor: diagram.overall_factor().clone(),
-                projectors: Some(diagram.projector().clone()),
-                num: diagram.numerator_prefactor().clone(),
                 ..Default::default()
             },
             graph,
@@ -441,12 +345,6 @@ impl Graph {
                     for (node, _, vertex) in parsed.iter_nodes() {
                         if let Some(dod) = vertex.statements.get("dod") {
                             graph.underlying[node].dod = Autogen::explicit(dod.strip_parse()?);
-                        }
-                        if let Some(interface) = vertex.statements.get("num_interface") {
-                            let expression = NumeratorInterface::export(&graph.underlying[node].num.value).0;
-                            graph.underlying[node].num.value = NumeratorInterface::admit(
-                                expression, Some(NumeratorInterface::parse(interface)?),
-                            )?;
                         }
                     }
                     if parsed.iter_nodes().any(|(_, _, vertex)| vertex.statements.contains_key("num_interface"))
@@ -605,13 +503,6 @@ impl Graph {
         let mut overridden_masses = Vec::new();
         for (target, attributes) in edge_metadata {
             let edge = &mut self.underlying[target];
-            if let Some(interface) = attributes.get("num_interface") {
-                let expression = NumeratorInterface::export(&edge.num.value).0;
-                edge.num.value = NumeratorInterface::admit(
-                    expression,
-                    Some(NumeratorInterface::parse(interface)?),
-                )?;
-            }
             if let Some(name) = attributes.get("name") {
                 edge.name = Autogen::explicit(name.clone());
             }
@@ -696,9 +587,9 @@ impl Graph {
     /// canonical topology, symbolic fragments, factors, projector, and routing.
     /// It never canonicalizes again, resolves a vertex rule, generates a
     /// numerator, or chooses a second loop-momentum basis.
-    /// Canonical FeynKit diagrams still store source-expression atoms. Each
-    /// instantiated local fragment is admitted into its runtime tensor carrier
-    /// here; subsequent subgraph numerators compose those retained carriers.
+    /// Transfer finalized tensor fragments and global factors directly. The
+    /// metadata map preserves the native frame without exporting or re-admitting
+    /// its already checked numerator values.
     pub(crate) fn from_feynkit(
         diagram: &FeynmanDiagram,
         group_id: Option<GroupId>,
@@ -715,8 +606,13 @@ impl Graph {
         let mut parsed = ParseGraph::from_feynkit_diagram(diagram)?;
         parsed.global_data.group_id = group_id;
         parsed.global_data.is_group_master = is_group_master;
-        let (initial_data, graph) =
+        let (mut initial_data, graph) =
             Self::extract_initial_data(&parsed, model, NumeratorIndexSource::Feynkit)?;
+        initial_data.global_prefactor = GlobalPrefactor {
+            num: diagram.numerator_prefactor().clone(),
+            projector: diagram.projector().clone(),
+        };
+        initial_data.add_polarizations = false;
 
         let filter = |half_edges: &[FeynkitDiagramHalfEdge]| -> Result<SuBitGraph> {
             let mut filter: SuBitGraph = graph.empty_subgraph();
@@ -797,6 +693,8 @@ impl Graph {
             model,
             &param_builder,
             &initial_data.name,
+            |vertex, _| Ok(diagram.underlying()[vertex].numerator.clone()),
+            |edge, _| Ok(diagram.underlying()[edge].numerator.clone()),
         )
         .with_context(|| {
             format!(
@@ -834,17 +732,11 @@ impl Graph {
             initial_data.additional_params,
         )?;
         let runtime = result.numerator(&result.full_filter(), &result.empty_subgraph())?;
-        let runtime_numerator = runtime.get_single_atom()?;
-        if runtime_numerator != diagram.numerator() {
-            let cooking = CookSettings::indices()
-                .with_mode(CookMode::ReversibleEncoding)
-                .with_representation_payloads(true, true);
-            let runtime = runtime.state.expr;
-            let finalized =
-                SymbolicTensor::infer(cooking.try_cook(diagram.numerator().as_view())?)?;
+        let runtime = runtime.state.expr;
+        if !runtime.same_value(diagram.numerator()) {
             // Keep graph numerators factorized, including at this validation
             // boundary. Only an exact coefficient proof certifies a rewrite.
-            if runtime.coefficients_equal(&finalized, TensorCollectFilter::<0>::Tensors)?
+            if runtime.coefficients_equal(diagram.numerator(), TensorCollectFilter::<0>::Tensors)?
                 != ConditionResult::True
             {
                 return Err(eyre!(
@@ -937,11 +829,31 @@ impl Graph {
             initial_data.additional_params.clone(),
         )?;
 
-        let underlying =
-            Self::build_underlying_graph(graph, model, &param_builder, &initial_data.name)
-                .with_context(|| {
-                    format!("Failed to build underlying graph {}", initial_data.name)
+        let underlying = Self::build_underlying_graph(
+            graph,
+            model,
+            &param_builder,
+            &initial_data.name,
+            |vertex, data| {
+                let expression = data.num.clone().ok_or_else(|| {
+                    eyre!("finalized graph is missing the numerator for vertex {vertex}")
                 })?;
+                Ok(NumeratorInterface::admit(
+                    expression,
+                    data.num_interface.clone(),
+                )?)
+            },
+            |edge, data| {
+                let expression = data.num.clone().ok_or_else(|| {
+                    eyre!("finalized graph is missing the numerator for edge {edge}")
+                })?;
+                Ok(NumeratorInterface::admit(
+                    expression,
+                    data.num_interface.clone(),
+                )?)
+            },
+        )
+        .with_context(|| format!("Failed to build underlying graph {}", initial_data.name))?;
 
         let mut full_without_initials = underlying.full_filter();
         full_without_initials.subtract_with(&initial_state_cut.left);
@@ -1004,11 +916,10 @@ impl Graph {
         let n_edges = self.underlying.n_edges();
         let full_num = self
             .numerator(&self.full_filter(), &self.empty_subgraph())?
-            .get_single_atom()?
-            * &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * &self.overall_factor;
-        Self::validate_spatial_momentum_expression(&full_num, n_edges, &self.name)
+            .state
+            .expr
+            .multiply(&self.global_numerator()?)?;
+        Self::validate_spatial_momentum_expression(full_num.expression(), n_edges, &self.name)
     }
 
     fn validate_spatial_momentum_expression(
@@ -1127,15 +1038,7 @@ impl Graph {
             .numerator(&self.full_filter(), &self.empty_subgraph())?
             .state
             .expr;
-        let prefactor =
-            &self.global_prefactor.num * &self.global_prefactor.projector * &self.overall_factor;
-        let cooking =
-            idenso::CookSettings::indices().with_mode(idenso::CookMode::ReversibleEncoding);
-        let prefactor = idenso::tensor::SymbolicTensor::infer(
-            cooking
-                .try_cook(prefactor.as_view())
-                .map_err(|error| eyre!("{error}"))?,
-        )?;
+        let prefactor = self.global_numerator()?;
         let full_num = numerator.multiply(&prefactor)?;
         let color_simplified = full_num
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
@@ -1171,13 +1074,31 @@ impl Graph {
     ) -> Result<(InitialGraphData, NumGraph)> {
         let hedge_order = parse_graph.hedge_order()?;
         let global_data = &parse_graph.global_data;
+        Self::validate_spatial_momentum_expression(
+            &global_data.num,
+            parse_graph.graph.n_edges(),
+            &global_data.name,
+        )?;
+        if let Some(projector) = &global_data.projectors {
+            Self::validate_spatial_momentum_expression(
+                projector,
+                parse_graph.graph.n_edges(),
+                &global_data.name,
+            )?;
+        }
 
         let initial_data = InitialGraphData {
             additional_params: global_data.parameters.clone(),
             overall_factor: global_data.overall_factor.clone(),
             global_prefactor: GlobalPrefactor {
-                num: global_data.num.clone(),
-                projector: global_data.projectors.clone().unwrap_or(Atom::one()),
+                num: NumeratorInterface::admit(
+                    global_data.num.clone(),
+                    global_data.num_interface.clone(),
+                )?,
+                projector: NumeratorInterface::admit(
+                    global_data.projectors.clone().unwrap_or(Atom::one()),
+                    global_data.projector_interface.clone(),
+                )?,
             },
             add_polarizations: global_data.projectors.is_none(),
             group_id: global_data.group_id,
@@ -1255,6 +1176,14 @@ impl Graph {
         model: &Model,
         param_builder: &ParamBuilder,
         name: &str,
+        mut vertex_numerator: impl FnMut(
+            NodeIndex,
+            &ParseVertex,
+        ) -> Result<SymbolicTensor<PartialStructure>>,
+        mut edge_numerator: impl FnMut(
+            EdgeIndex,
+            &ParseEdge,
+        ) -> Result<SymbolicTensor<PartialStructure>>,
     ) -> Result<UnderlyingGraph> {
         // Diagnose malformed momentum syntax while these are still source
         // expressions. Tensor admission is the following, distinct boundary;
@@ -1272,15 +1201,12 @@ impl Graph {
         }
         let intermediate: UnderlyingGraph = graph.map_result(
             |_, i, v| {
-                let expression = v.num.ok_or_else(|| {
-                    eyre!("finalized graph is missing the numerator for vertex {i}")
-                })?;
-
+                let numerator = vertex_numerator(i, &v)?;
                 let dod = match v.dod {
                     Some(dod) => Autogen::explicit(dod),
-                    None => Autogen::generated(expression.all_dod(GS.emr_mom)?),
+                    None => Autogen::generated(numerator.expression().all_dod(GS.emr_mom)?),
                 };
-                let num = Autogen::explicit(NumeratorInterface::admit(expression, v.num_interface)?);
+                let num = Autogen::explicit(numerator);
 
                 Ok(Vertex {
                     name: Autogen::from_option_or_generate(v.name, || i.to_string()),
@@ -1306,15 +1232,12 @@ impl Graph {
 
                 let mass = EdgeMass::from_atom(e.particle.mass_atom(model), model, param_builder)?;
 
-                let expression = e.num.ok_or_else(|| {
-                    eyre!("finalized graph is missing the numerator for edge {eid}")
-                })?;
-
+                let numerator = edge_numerator(eid, &e)?;
                 let dod = match e.dod {
                     Some(dod) => Autogen::explicit(dod),
-                    None => Autogen::generated(expression.edge_dod(GS.emr_mom, usize::from(eid))? - 2),
+                    None => Autogen::generated(numerator.expression().edge_dod(GS.emr_mom, usize::from(eid))? - 2),
                 };
-                let num = Autogen::explicit(NumeratorInterface::admit(expression, e.num_interface)?);
+                let num = Autogen::explicit(numerator);
 
                 Ok(EdgeData::new(
                     Edge {

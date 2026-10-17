@@ -17,7 +17,10 @@ use feynkit_graph::{
 };
 use feynkit_model::{Model, ModelError, ParameterType, ParticleId};
 use idenso::{
-    IndexTooling, dirac::GammaSimplifySettings, representations::Bispinor, tensor::SymbolicTensor,
+    CookMode, CookSettings,
+    dirac::GammaSimplifySettings,
+    representations::Bispinor,
+    tensor::{SymbolicTensor, inference::TensorInferenceError},
 };
 use linnet::half_edge::involution::HedgePair;
 use spenso::{
@@ -69,6 +72,18 @@ pub enum AmplitudeError {
     Spin(#[from] SpinSumError),
     #[error(transparent)]
     Color(#[from] ColorSumError),
+}
+
+impl From<TensorInferenceError> for AmplitudeError {
+    fn from(error: TensorInferenceError) -> Self {
+        Self::Tensor(error.to_string())
+    }
+}
+
+impl From<idenso::AdjointError> for AmplitudeError {
+    fn from(error: idenso::AdjointError) -> Self {
+        Self::Tensor(error.to_string())
+    }
 }
 
 /// Choices shared by every term. Model-declared real parameters and physical
@@ -124,7 +139,7 @@ impl AmplitudeLeg {
 #[derive(Clone, Debug)]
 pub struct Amplitude {
     diagrams: Vec<Arc<FeynmanDiagram>>,
-    terms: Vec<Atom>,
+    terms: Vec<SymbolicTensor<PartialStructure>>,
     legs: Vec<AmplitudeLeg>,
     options: AmplitudeOptions,
     conjugated: bool,
@@ -179,7 +194,7 @@ impl Amplitude {
     pub fn diagrams(&self) -> &[Arc<FeynmanDiagram>] {
         &self.diagrams
     }
-    pub fn terms(&self) -> &[Atom] {
+    pub fn terms(&self) -> &[SymbolicTensor<PartialStructure>] {
         &self.terms
     }
     pub fn legs(&self) -> &[AmplitudeLeg] {
@@ -195,8 +210,10 @@ impl Amplitude {
         self.conjugated
     }
 
-    pub fn expression(&self) -> Atom {
-        Atom::add_many(&self.terms)
+    pub fn expression(&self) -> Result<SymbolicTensor<PartialStructure>, AmplitudeError> {
+        let (first, rest) = self.terms.split_first().ok_or(AmplitudeError::Empty)?;
+        rest.iter()
+            .try_fold(first.clone(), |sum, term| Ok(sum.try_add(term)?))
     }
 
     /// Open tensor slots in physical external-leg order, retaining graph identities.
@@ -228,13 +245,11 @@ impl Amplitude {
             .terms
             .iter()
             .map(|term| {
-                let adjoint = term
-                    .dirac_adjoint::<AbstractIndex>(true)
-                    .map_err(|e| AmplitudeError::Tensor(e.to_string()))?;
-                let adjoint = self.apply_reality(&adjoint);
+                let adjoint = term.dirac_adjoint(true)?;
+                let adjoint = self.apply_reality(&adjoint)?;
                 // Physical leg labels and their declared order belong to the
                 // amplitude. The shared scheduler owns gamma/metric cleanup.
-                SymbolicTensor::checked_parts(adjoint, interface.clone())
+                SymbolicTensor::from_declared_parts(adjoint.expression().clone(), interface.clone())
                     .and_then(|value| {
                         value.simplify_algebra(&idenso::tensor::AlgebraSettings {
                             gamma: Some(settings),
@@ -249,7 +264,6 @@ impl Amplitude {
                             ..Default::default()
                         })
                     })
-                    .map(SymbolicTensor::into_expression)
                     .map_err(|error| AmplitudeError::Tensor(error.to_string()))
             })
             .collect::<Result<_, AmplitudeError>>()?;
@@ -268,16 +282,17 @@ impl Amplitude {
         // Loop variables in two independent loop integrals must not be identified.
         let loop_index = symbol!("feynkit_amplitude::loop_");
         let args = symbol!("feynkit_amplitude::loop_args___");
-        let bra = adjoint
+        let bra = adjoint.expression()?.wrap_indices(Self::bra(), false)?;
+        let mapped = bra
             .expression()
-            .wrap_indices(Self::bra())
             .replace(function!(symbols::loop_momentum(), loop_index, args))
             .with(function!(
                 symbols::loop_momentum(),
                 Self::bra().call(loop_index),
                 args
             ));
-        let expression = amplitude.expression() * bra;
+        let bra = bra.with_checked_expression(mapped)?;
+        let expression = amplitude.expression()?.multiply(&bra)?;
         Ok(SquaredAmplitude {
             amplitude,
             expression,
@@ -290,7 +305,10 @@ impl Amplitude {
         symbol!("feynkit_amplitude::bra")
     }
 
-    fn apply_reality(&self, expression: &Atom) -> Atom {
+    fn apply_reality(
+        &self,
+        expression: &SymbolicTensor<PartialStructure>,
+    ) -> Result<SymbolicTensor<PartialStructure>, AmplitudeError> {
         let conjugate = symbol!("spenso::conj");
         let mut rules = Vec::new();
         for parameter in self
@@ -331,30 +349,37 @@ impl Amplitude {
             conjugate.call(&dimension).to_pattern(),
             dimension,
         ));
-        expression.replace_multiple(rules)
+        Ok(expression.with_checked_expression(expression.expression().replace_multiple(rules))?)
     }
 
     fn diagram_term(
         diagram: &FeynmanDiagram,
         options: &AmplitudeOptions,
-    ) -> Result<(Atom, Vec<AmplitudeLeg>), AmplitudeError> {
+    ) -> Result<(SymbolicTensor<PartialStructure>, Vec<AmplitudeLeg>), AmplitudeError> {
         if !diagram.cuts().is_empty() {
             return Err(AmplitudeError::SewnDiagram(diagram.name().to_owned()));
         }
-        let dimension = options.dimension.to_symbolic();
-        let index = symbol!("feynkit_amplitude::index_");
-        let numerator = (diagram.numerator() * diagram.numerator_prefactor())
-            .replace(Minkowski {}.new_rep(4).pattern(Atom::var(index)))
-            .with(Minkowski {}.to_symbolic([dimension, Atom::var(index)]));
+        let numerator = diagram
+            .numerator()
+            .multiply(diagram.numerator_prefactor())?
+            .with_lorentz_dimension(options.dimension)?;
         let ports = numerator
-            .list_dangling::<AbstractIndex>()
-            .map_err(|e| AmplitudeError::Tensor(e.to_string()))?
-            .iter()
-            .map(|a| {
-                LibrarySlot::<AbstractIndex>::try_from(a.as_view())
-                    .map_err(|e| AmplitudeError::Tensor(e.to_string()))
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .map(|slot| {
+                let PartialIndex::Explicit(index) = slot.aind else {
+                    return Err(AmplitudeError::ExternalPorts(
+                        diagram.name().to_owned(),
+                        "physical external ports need explicit leg identities".into(),
+                    ));
+                };
+                Ok(slot.rep().slot(index))
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
         let mut legs = BTreeMap::new();
         let mut identified = 0;
         for (pair, _, edge) in diagram.underlying().iter_edges() {
@@ -373,7 +398,11 @@ impl Amplitude {
                 tensor_index: AbstractIndex::try_from(old_index.as_view())
                     .map_err(|e| AmplitudeError::Tensor(e.to_string()))?,
             };
-            for slot in ports.iter().filter(|s| s.aind.to_atom() == old_index) {
+            for slot in ports
+                .iter()
+                .filter(|s| cooking.uncook(s.aind.to_atom().as_view()) == old_index)
+            {
+                leg.tensor_index = slot.aind;
                 leg.slots.push(*slot);
                 identified += 1;
             }
@@ -420,11 +449,20 @@ impl Amplitude {
         let factor = evaluate_overall_factor(diagram.overall_factor().as_view());
         let expression = diagram
             .model()
-            .expand_couplings(&(factor * numerator / denominator));
+            .expand_couplings(&(factor * numerator.expression() / denominator));
         let expression = basis
             .route_expression(&expression)
             .replace_multiple(momentum_rules);
-        Ok((expression, legs.into_values().collect()))
+        let numerator = numerator.with_checked_expression(expression)?;
+        let legs = legs.into_values().collect::<Vec<_>>();
+        let interface = PartialStructure::from_logical_slots(
+            legs.iter()
+                .flat_map(|leg| &leg.slots)
+                .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind))),
+        );
+        let numerator =
+            SymbolicTensor::from_declared_parts(numerator.expression().clone(), interface)?;
+        Ok((numerator, legs))
     }
 }
 
@@ -432,7 +470,7 @@ impl Amplitude {
 #[derive(Clone, Debug)]
 pub struct SquaredAmplitude {
     amplitude: Amplitude,
-    expression: Atom,
+    expression: SymbolicTensor<PartialStructure>,
     spin_summed: BTreeSet<usize>,
     color_summed: BTreeSet<usize>,
 }
@@ -444,7 +482,7 @@ impl SquaredAmplitude {
     pub fn amplitude(&self) -> &Amplitude {
         &self.amplitude
     }
-    pub fn expression(&self) -> &Atom {
+    pub fn expression(&self) -> &SymbolicTensor<PartialStructure> {
         &self.expression
     }
     pub fn spin_summed(&self) -> &BTreeSet<usize> {
@@ -488,12 +526,13 @@ impl SquaredAmplitude {
             let column = (leg.state == ExternalState::Incoming) != particle.is_antiparticle();
             let indices = if column { [ket, bra] } else { [bra, ket] };
             // Scalars contribute one; unsupported spins still report an error.
-            result.expression *= sum.expression(
+            let completeness = SymbolicTensor::infer(sum.expression(
                 &leg.momentum(),
                 indices,
                 references.get(&index),
                 spin_vectors.get(&index),
-            )?;
+            )?)?;
+            result.expression = result.expression.multiply(&completeness)?;
         }
         Ok(result)
     }
@@ -520,9 +559,13 @@ impl SquaredAmplitude {
                 left.aind = leg.tensor_index;
                 let mut right = slot;
                 right.aind = leg.tensor_index.scoped(Amplitude::bra());
-                result.expression *= ETS.metric(left.to_atom(), right.to_atom());
+                let completeness =
+                    SymbolicTensor::infer(ETS.metric(left.to_atom(), right.to_atom()))?;
+                result.expression = result.expression.multiply(&completeness)?;
                 if average_initial && leg.state == ExternalState::Incoming {
-                    result.expression /= Atom::num(particle.color.unsigned_abs());
+                    result.expression = result.expression.with_checked_expression(
+                        result.expression.expression() / Atom::num(particle.color.unsigned_abs()),
+                    )?;
                 }
             }
         }

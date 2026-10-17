@@ -17,10 +17,12 @@ const GRAPH_SPEC: AttributeSpec = AttributeSpec {
         "group_id",
         "is_group_master",
         "num",
+        "numerator_prefactor_interface",
         "overall_factor",
         "pole_part",
         "params",
         "projector",
+        "projector_interface",
         "threshold_counterterms",
     ],
     ignored: &[

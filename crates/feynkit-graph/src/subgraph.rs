@@ -84,7 +84,7 @@ impl FeynmanDiagram {
                     subgraph.includes(&hedge) || self.graph[self.graph[&hedge]].is_dummy
                 })
             {
-                vertex.numerator = Atom::one();
+                vertex.numerator = SymbolicTensor::infer(Atom::one())?;
             }
             vertices.insert(node.0, builder.add_vertex(vertex).0);
             original_vertices.push(VertexId(node.0));
@@ -121,7 +121,7 @@ impl FeynmanDiagram {
                 let mut edge = data.data.clone();
                 if !keep_paired {
                     let hedge = group[0];
-                    edge.numerator = Atom::one();
+                    edge.numerator = SymbolicTensor::infer(Atom::one())?;
                     // Sewing preserves the amplitude half-edge particle flow,
                     // so opening a carrier retains its species and orientation.
                     if !edge.is_dummy && pair.is_paired() {
@@ -259,20 +259,21 @@ impl FeynmanDiagram {
         diagram.validation.take();
         diagram.graph = diagram.graph.map_result(
             |_, id, mut vertex| {
-                vertex.numerator = translate(&vertex.numerator, Some(original_vertices[id.0]))?;
+                vertex.numerator = NumeratorInterface::translate(&vertex.numerator, |atom| {
+                    translate(atom, Some(original_vertices[id.0]))
+                })?;
                 Ok::<_, DiagramError>(vertex)
             },
             |_, _, _, _, mut data| {
-                data.data.numerator = translate(&data.data.numerator, None)?;
+                data.data.numerator =
+                    NumeratorInterface::translate(&data.data.numerator, |atom| {
+                        translate(atom, None)
+                    })?;
                 Ok(data)
             },
             |_, data| Ok(data),
         )?;
-        diagram.numerator = diagram
-            .vertices()
-            .map(|(_, vertex)| vertex.numerator.clone())
-            .chain(diagram.edges().map(|(_, _, edge)| edge.numerator.clone()))
-            .product();
+        diagram.numerator = Self::fragment_numerator(&diagram.graph)?;
         diagram.validate()?;
         Ok(diagram)
     }
@@ -308,15 +309,15 @@ mod tests {
         let rule = model.vertex_rule_id("V_1").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "bubble")
             .overall_factor(Atom::num(7))
-            .numerator_prefactor(Atom::num(11))
-            .projector(Atom::num(13))
+            .numerator_prefactor(SymbolicTensor::infer(Atom::num(11)).unwrap())
+            .projector(SymbolicTensor::infer(Atom::num(13)).unwrap())
             .symmetry_factor(2)
-            .numerator(Atom::num(6));
+            .numerator(SymbolicTensor::infer(Atom::num(6)).unwrap());
         let mut left = DiagramVertex::interaction("left", rule);
-        left.numerator = Atom::num(2);
+        left.numerator = SymbolicTensor::infer(Atom::num(2)).unwrap();
         let left = builder.add_vertex(left);
         let mut right = DiagramVertex::interaction("right", rule);
-        right.numerator = Atom::num(3);
+        right.numerator = SymbolicTensor::infer(Atom::num(3)).unwrap();
         let right = builder.add_vertex(right);
         for (index, state, source, target) in [
             (0, ExternalState::Incoming, None, Some(left)),
@@ -362,11 +363,13 @@ mod tests {
         assert!(result.loop_momentum_basis().loop_edges.is_empty());
         assert_eq!(
             result.numerator(),
-            &parent.numerator_of(&selected, &parent.graph.empty_subgraph::<SuBitGraph>())
+            &parent
+                .numerator_of(&selected, &parent.graph.empty_subgraph::<SuBitGraph>())
+                .unwrap()
         );
         assert_eq!(result.overall_factor(), &Atom::one());
-        assert_eq!(result.numerator_prefactor(), &Atom::one());
-        assert_eq!(result.projector(), &Atom::one());
+        assert_eq!(result.numerator_prefactor().expression(), &Atom::one());
+        assert_eq!(result.projector().expression(), &Atom::one());
         assert_eq!(result.symmetry_factor(), 1);
         assert!(result.cuts().is_empty());
         result.validate().unwrap();
@@ -391,7 +394,7 @@ mod tests {
         assert_eq!(result.graph.n_nodes(), 1);
         assert_eq!(result.graph.n_edges(), 3);
         assert_eq!(result.graph.n_internals(), 0);
-        assert_eq!(result.numerator(), &Atom::one());
+        assert_eq!(result.numerator().expression(), &Atom::one());
         assert!(result.edges().all(|(_, _, edge)| edge.external.is_some()));
         result.validate().unwrap();
     }
@@ -425,11 +428,18 @@ mod tests {
         let old_edge = parent.graph[&old_hedge].0;
         let old_loop = parent.loop_momentum_basis.loop_edges[0].0;
         parent.validation.take();
-        parent.graph[NodeIndex(1)].numerator = function!(symbols::hedge_index(), old_hedge.0, 1)
-            * function!(symbols::vertex_index(), 1, 2)
-            * function!(symbols::edge_index(), old_edge, 3)
-            * function!(symbols::loop_momentum(), 0);
-        parent.numerator = Atom::num(2) * &parent.graph[NodeIndex(1)].numerator;
+        parent.graph[NodeIndex(1)].numerator = NumeratorInterface::admit(
+            function!(symbols::hedge_index(), old_hedge.0, 1)
+                * function!(symbols::vertex_index(), 1, 2)
+                * function!(symbols::edge_index(), old_edge, 3)
+                * function!(symbols::loop_momentum(), 0),
+            None,
+        )
+        .unwrap();
+        parent.numerator = SymbolicTensor::infer(Atom::num(2))
+            .unwrap()
+            .multiply(&parent.graph[NodeIndex(1)].numerator)
+            .unwrap();
         let result = parent.excise(&selected, &[]).unwrap();
         let new_hedge = result.graph.iter_crown(NodeIndex(0)).last().unwrap();
         let new_edge = result.graph[&new_hedge].0;
@@ -454,7 +464,7 @@ mod tests {
             * function!(symbols::vertex_index(), 0, 2)
             * function!(symbols::edge_index(), new_edge, 3)
             * function!(symbols::momentum(), new_loop_edge);
-        assert_eq!(result.numerator(), &expected);
+        assert_eq!(NumeratorInterface::export(result.numerator()).0, expected);
         result.validate().unwrap();
     }
 
@@ -465,7 +475,7 @@ mod tests {
             builder.add_vertex(DiagramVertex {
                 name: name.into(),
                 interaction: None,
-                numerator: Atom::one(),
+                numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
             });
         }
         let parent = builder.build().unwrap();
@@ -593,12 +603,12 @@ mod tests {
         let left = builder.add_vertex(DiagramVertex {
             name: "left".into(),
             interaction: None,
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
         });
         let right = builder.add_vertex(DiagramVertex {
             name: "right".into(),
             interaction: None,
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
         });
         builder
             .add_edge(left, right, DiagramEdge::new(particle, false))

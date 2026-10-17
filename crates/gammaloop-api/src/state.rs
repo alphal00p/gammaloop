@@ -1658,7 +1658,8 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Older states from either development branch must be regenerated.
 // Version 19 retains tensor interfaces in runtime graph fragments and numerator
 // definitions. Older positional archives must be regenerated.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 19;
+// Version 20 also retains the graph's global numerator and projector interfaces.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 20;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

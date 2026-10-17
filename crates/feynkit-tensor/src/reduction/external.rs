@@ -153,12 +153,14 @@ impl TensorReducer {
                 outside,
             })?;
             for term in terms {
-                let transverse = term.tensor.replace_map(|view, _, output| {
+                let transverse = term.tensor.expression().replace_map(|view, _, output| {
                     if let Some(value) = transverse_pairs.get(&view.to_owned()) {
                         **output = value.clone();
                     }
                 });
-                let tensor = &monomial.scalar * &parallel * transverse;
+                let transverse = term.tensor.with_checked_expression(transverse)?;
+                let coefficient = SymbolicTensor::infer(&monomial.scalar * &parallel)?;
+                let tensor = coefficient.multiply(&transverse)?;
                 if !tensor.is_zero() {
                     result.push(TensorReductionTerm {
                         coefficient: term.coefficient,
@@ -212,20 +214,31 @@ mod tests {
             .with_integrated_vector(k.clone())
             .with_integrated_vector(q.clone())
             .with_external_vector(p.clone());
-        let rank_one = reducer.reduce(km.as_view()).unwrap().into_expression();
+        let rank_one = reducer
+            .reduce(&SymbolicTensor::infer((km.as_view()).to_owned()).unwrap())
+            .unwrap()
+            .into_expression()
+            .unwrap()
+            .into_expression();
         assert!(
             (rank_one - dot(&k, &p) / dot(&p, &p) * &pm)
                 .together()
                 .is_zero()
         );
-        let rank_two = reducer.reduce((&km * &qn).as_view()).unwrap();
+        let rank_two = reducer
+            .reduce(&SymbolicTensor::infer(((&km * &qn).as_view()).to_owned()).unwrap())
+            .unwrap();
         assert!(!rank_two.is_fully_contracted());
         let transverse_metric =
             function!(ETS.metric, rep.pattern(mu), rep.pattern(nu)) - &pm * &pn / dot(&p, &p);
         let expected = (dot(&k, &q) - dot(&k, &p) * dot(&q, &p) / dot(&p, &p)) / (d.to_atom() - 1)
             * transverse_metric
             + dot(&k, &p) * dot(&q, &p) / dot(&p, &p).pow(2) * pm * pn;
-        assert!((rank_two.into_expression() - expected).together().is_zero());
+        assert!(
+            (rank_two.into_expression().unwrap().into_expression() - expected)
+                .together()
+                .is_zero()
+        );
     }
 
     #[test]
@@ -255,9 +268,15 @@ mod tests {
             * (dot(&r, &r) - dot(&r, &p).pow(2) / dot(&p, &p));
         let expected = longitudinal.clone().pow(3)
             + Atom::num(3) * longitudinal * transverse / (d.to_atom() - 1);
-        let result = reducer.reduce(numerator.as_view()).unwrap();
+        let result = reducer
+            .reduce(&SymbolicTensor::infer((numerator.as_view()).to_owned()).unwrap())
+            .unwrap();
         assert!(result.is_fully_contracted());
-        assert!((result.into_expression() - expected).together().is_zero());
+        assert!(
+            (result.into_expression().unwrap().into_expression() - expected)
+                .together()
+                .is_zero()
+        );
     }
 
     #[test]
@@ -284,7 +303,9 @@ mod tests {
         };
         let numerator = indexed_vector(&k, &mu) * indexed_vector(&k, &nu);
         let result = reducer
-            .reduce(numerator.as_view())
+            .reduce(&SymbolicTensor::infer((numerator.as_view()).to_owned()).unwrap())
+            .unwrap()
+            .into_expression()
             .unwrap()
             .into_expression();
         assert!(
@@ -294,7 +315,7 @@ mod tests {
         );
         let too_many = reducer.with_external_vector(k.clone());
         assert!(matches!(
-            too_many.reduce(numerator.as_view()),
+            too_many.reduce(&SymbolicTensor::infer((numerator.as_view()).to_owned()).unwrap()),
             Err(TensorReductionError::ExternalGram(_))
         ));
     }

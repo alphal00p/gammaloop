@@ -26,7 +26,6 @@ impl TensorReducer {
     pub(super) fn reduce_blocks(
         &self,
         source: &SymbolicTensor<PartialStructure>,
-        cooking: &CookSettings,
         external: Option<&ExternalProjector>,
     ) -> Result<TensorReduction, TensorReductionError> {
         // Refuse oversized selected powers before the collector instantiates
@@ -38,11 +37,10 @@ impl TensorReducer {
                 && let Ok(exponent) = usize::try_from(power.get_exp())
             {
                 oversized_power |= sum.iter().any(|term| {
-                    self.parse_monomial(cooking.uncook(term).as_view())
-                        .is_ok_and(|term| {
-                            term.integrated.len().saturating_mul(exponent)
-                                > OrthogonalWeingarten::MAX_RANK
-                        })
+                    self.parse_monomial(term).is_ok_and(|term| {
+                        term.integrated.len().saturating_mul(exponent)
+                            > OrthogonalWeingarten::MAX_RANK
+                    })
                 });
             }
             !oversized_power
@@ -63,7 +61,7 @@ impl TensorReducer {
             if !matches!(base, AtomView::Fun(f) if f.get_symbol() == SPENSO_TAG.dot) {
                 return;
             }
-            match self.parse_monomial(cooking.uncook(value).as_view()) {
+            match self.parse_monomial(value) {
                 Ok(term) if !term.integrated.is_empty() => {
                     match value.undo_dots::<AbstractIndex>() {
                         Ok(value) => **out = value,
@@ -80,12 +78,10 @@ impl TensorReducer {
         if let Some(error) = admission_error.take() {
             return Err(error);
         }
-        let indexed = SymbolicTensor::infer(indexed)
-            .map_err(|e| TensorReductionError::TensorAlgebra(e.to_string()))?;
+        let indexed = source.with_checked_expression(indexed)?;
         let rows = indexed
             .coefficient_list_with(|value| {
-                let value = cooking.uncook(value);
-                match self.indexed_vector(value.as_view()) {
+                match self.indexed_vector(value) {
                     Ok(Some(vector)) => !self.is_integrated(&vector),
                     Err(error) => {
                         admission_error = Some(error);
@@ -94,7 +90,7 @@ impl TensorReducer {
                     Ok(None) => {
                         // Metrics rotate covariantly with the loop block. Other
                         // Lorentz tensors (including spin matrices) stay fixed.
-                        matches!(value.as_view(), AtomView::Fun(f) if f.get_symbol() != ETS.metric && f.get_symbol() != SPENSO_TAG.dot)
+                        matches!(value, AtomView::Fun(f) if f.get_symbol() != ETS.metric && f.get_symbol() != SPENSO_TAG.dot)
                             && value.contains_symbol(Minkowski::selfless_symbol())
                     }
                 }
@@ -127,31 +123,28 @@ impl TensorReducer {
                 });
             }
             let slots = slots.iter().map(|slot| slot.to_atom()).collect::<Vec<_>>();
-            let fresh = (0..rank)
-                .map(|_| minkowski_slot(&self.dimension, &state.fresh_index().to_atom()))
-                .map(|slot| cooking.cook(slot.as_view()))
+            let indices = (0..rank).map(|_| state.fresh_index()).collect::<Vec<_>>();
+            let fresh = indices
+                .iter()
+                .map(|index| minkowski_slot(&self.dimension, &index.to_atom()))
                 .collect::<Vec<_>>();
             // Inner contractions own distinct dummies even when retained inside
             // a factored sum; they must not reconnect to the outside projector.
-            let renamed = inside.expression().replace_map(|value, _, out| {
-                if let Some(position) = slots.iter().position(|slot| slot.as_view() == value) {
-                    **out = fresh[position].clone();
-                }
-            });
-            let contract = |expression: Atom| {
-                SymbolicTensor::infer(expression)
-                    .and_then(|value| {
-                        value.contract(ContractSettings {
-                            expand: false,
-                            collect_chains: false,
-                            collect_traces: false,
-                            ..Default::default()
+            let replacements = inside
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .enumerate()
+                .filter_map(|(position, slot)| {
+                    slots
+                        .iter()
+                        .position(|expected| {
+                            expected == &idenso::tensor::composition::port_atom(slot)
                         })
-                    })
-                    .and_then(|value| value.to_dots())
-                    .map(|value| value.into_expression())
-                    .map_err(|e| TensorReductionError::TensorAlgebra(e.to_string()))
-            };
+                        .map(|axis| (position, indices[axis]))
+                })
+                .collect();
+            let renamed = inside.reindex_interface_ports(&replacements)?;
             let probe = SPENSO_TAG.rank_one_tensor_symbol("FeynKit::BlockProbe");
             let probes = (0..)
                 .map(|i| {
@@ -173,12 +166,14 @@ impl TensorReducer {
                 outside: slots
                     .iter()
                     .map(|slot| {
-                        let slot = cooking.uncook(slot.as_view());
                         let AtomView::Fun(function) = slot.as_view() else {
                             unreachable!()
                         };
                         let index = function.iter().last().unwrap().to_owned();
-                        Outside::Index { slot, index }
+                        Outside::Index {
+                            slot: slot.clone(),
+                            index,
+                        }
                     })
                     .collect(),
             };
@@ -189,14 +184,10 @@ impl TensorReducer {
             } else {
                 Vec::new()
             };
-            let fresh = fresh
-                .iter()
-                .map(|slot| cooking.uncook(slot.as_view()))
-                .collect::<Vec<_>>();
             for term in projected {
                 // Apply the existing projector to a general covariant block:
                 // every probe occurrence denotes one of its open tensor ports.
-                let projector = term.tensor.replace_map(|value, _, out| {
+                let projector = term.tensor.expression().replace_map(|value, _, out| {
                     let AtomView::Fun(function) = value else {
                         return;
                     };
@@ -233,12 +224,24 @@ impl TensorReducer {
                         _ => return,
                     };
                 });
-                let tensor =
-                    contract(&renamed * outside.expression() * cooking.cook(projector.as_view()))?;
+                // The probe recipe becomes a new tensor projector with these
+                // explicit boundary slots. Existing inside/outside bodies stay typed.
+                let projector = SymbolicTensor::infer(projector)?;
+                let tensor = renamed
+                    .multiply(&outside)?
+                    .multiply(&projector)?
+                    .contract(ContractSettings {
+                        expand: false,
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
+                    .to_dots()?;
+                let tensor = source.with_checked_expression(tensor.expression().clone())?;
                 if !tensor.is_zero() {
                     terms.push(TensorReductionTerm {
                         coefficient: term.coefficient,
-                        tensor: cooking.uncook(tensor.as_view()),
+                        tensor,
                         integrated_orbit: None,
                         projector_orbit: None,
                     });
@@ -251,14 +254,14 @@ impl TensorReducer {
                 }
             }
         }
-        let fully_contracted = terms.is_empty()
-            || source
-                .structure()
-                .logical_slots()
-                .iter()
-                .all(|slot| slot.rep().rep != LibraryRep::from(Minkowski {}));
+        let fully_contracted = source
+            .structure()
+            .logical_slots()
+            .iter()
+            .all(|slot| slot.rep().rep != LibraryRep::from(Minkowski {}));
         Ok(TensorReduction {
             terms,
+            zero: source.with_checked_expression(Atom::Zero)?,
             max_rank,
             fully_contracted,
         })
@@ -291,13 +294,16 @@ mod tests {
             .with_integrated_head(k)
             .with_integrated_head(q)
             .with_output_term_limit(1)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         assert_eq!(result.terms().len(), 1);
         assert!(result.is_fully_contracted());
-        assert!(TensorReducer::has_tensor_sum(result.expression().as_view()));
+        assert!(TensorReducer::has_tensor_sum(
+            result.expression().unwrap().into_expression().as_view()
+        ));
         // Independently contract this small rank-two identity to scalar dots.
-        let actual = SymbolicTensor::infer(result.expression())
+        let actual = result
+            .expression()
             .unwrap()
             .contract(ContractSettings::default())
             .unwrap()
@@ -331,14 +337,18 @@ mod tests {
         );
         let result = TensorReducer::new(parse!("D"))
             .with_integrated_head(k)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         let expected = parse!(
             "spenso::dot(block_mixed::k(spenso::mink(D)),block_mixed::k(spenso::mink(D)))
             *spenso::g(spenso::mink(D,mu),spenso::mink(D,nu))/D
             +block_mixed::p(spenso::mink(D,mu))*block_mixed::p(spenso::mink(D,nu))"
         );
-        assert!((result.expression() - expected).expand().is_zero());
+        assert!(
+            (result.expression().unwrap().into_expression() - expected)
+                .expand()
+                .is_zero()
+        );
         assert!(!result.is_fully_contracted());
         let _ = p;
     }
