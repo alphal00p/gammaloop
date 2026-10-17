@@ -17,7 +17,7 @@ use symbolica::{coefficient::Coefficient, prelude::*};
 
 use crate::{
     cff::expression::OrientationID,
-    numerator::symbolica_ext::NumeratorAtomExt,
+    numerator::symbolica_ext::{NumeratorAtomExt, ScalarRationalSize},
     utils::{FUN_LIB, GS, TENSORLIB},
 };
 
@@ -379,7 +379,8 @@ impl NumeratorJetCache {
                     break;
                 }
             }
-            if !value.is_zero() {
+            if !value.is_zero() && ScalarRationalSize::estimate(value.as_view()).is_some() {
+                // Bound the collection before entering native monomial enumeration.
                 // Finite execution has fixed every tensor coordinate. Select
                 // those scalar coordinate atoms, not the surrounding graph,
                 // to prove identities between their retained polynomial powers.
@@ -504,6 +505,8 @@ mod tests {
         let difference =
             Atom::num(2) * a.pow(2) + Atom::num(2) * b.pow(2) - (&a + &b).pow(2) - (&a - &b).pow(2);
         let original = difference.clone();
+        let large_power = (&a + &b).pow(32);
+        assert!(ScalarRationalSize::estimate(large_power.as_view()).is_none());
         let x = Atom::var(symbol!("finite_coordinate_proof::x"; Scalar));
         let y = Atom::var(symbol!("finite_coordinate_proof::y"; Scalar));
         let u = Atom::var(symbol!("finite_coordinate_proof::u"; Scalar));
@@ -511,6 +514,17 @@ mod tests {
         let spectator = function!(symbol!("finite_coordinate_proof::opaque"; Scalar), x + y).pow(7)
             / (u + v).pow(3);
         let mut cache = NumeratorJetCache::default();
+        let refused = cache.canonicalize(&large_power).unwrap();
+        assert!(!refused.is_zero);
+        assert!(refused.key.contains(&large_power));
+        let hidden = function!(
+            symbol!("finite_coordinate_proof::opaque"; Scalar),
+            &large_power
+        );
+        assert!(ScalarRationalSize::estimate(hidden.as_view()).is_some());
+        let retained_hidden = cache.canonicalize(&hidden).unwrap();
+        assert!(!retained_hidden.is_zero);
+        assert!(retained_hidden.key.contains(&hidden));
         assert!(cache.canonicalize(&difference).unwrap().is_zero);
         assert!(
             cache
