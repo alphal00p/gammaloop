@@ -830,7 +830,10 @@ anchor = "pub struct AlgebraSettings {"
 # families. Removed tensor-coefficient alias plumbing is reflected in the GammaLoop
 # summary; evaluator scalar aliases remain separate.
 # Reviewed 2026-10-16: The architecture records independent trace/Fierz settings. Symmetric trace prerequisites respect disabled trace evaluation.
-digest = "481d0e55177bbc939325f39083db539804e145d8"
+# Reviewed 2026-10-17: Generated scalar powers reuse the existing exact opaque
+# coefficient certificate; finite trace, power-domain and zero-budget regressions
+# preserve the documented factorization and planner policies.
+digest = "ca13fb8745178a204beb9c9f50df820fc7d9b31f"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
