@@ -1,34 +1,80 @@
 = FeynKit merge readiness and performance
 
-The qualification below belongs to checkpoint `6002674d`. A subsequent
-user-requested migration retains `SymbolicTensor` through numerator processing;
-its implementation and validation are recorded at the end of this document.
-The earlier timing results do not qualify that new implementation.
+The retained-tensor checkpoint `880ad11d` passed 5,639 of 5,644 selected tests.
+Five failures remain: three generation-reference tests and two Q3 source-validation
+ordering tests. Follow-up selector and Q3 repairs still need canonical
+qualification. No paired performance result yet qualifies the retained-tensor
+migration; the `6002674d` timing results below are historical.
 
 This record follows the reconciliation of local FeynKit, remote FeynKit and
 main, then the repairs required before merge. Runtime assertions, numerical
 reference points, tolerances and the performance gate remain in force. A
 successful producer build/upload is distinct from a successful runtime suite.
 
-The implementation failures found by the frozen full-suite run are repaired:
-all 24 affected acceptance tests and the related Vakint checks pass in a
-70-test rerun. All 112 selected renormalization and UV integration tests also
-pass, followed by all 73 evaluator and scalar-factor checks. All thirteen paired
-performance gates pass with zero numerical mismatches. Ten audited
-generation-bookkeeping snapshots still await user approval. Final CI preparation
-and publication have not completed.
+== Current checkpoint, 17 October 2026
 
-== Final implementation qualification, 17 October 2026
+The full run of `880ad11dcce02724c178eac628e0f28dad6e17fa` finished in
+3,175.357 seconds with 5,639 passes, five failures, five slow cases and zero
+timeouts; 128 existing skips remain. Its actual compile-time source tree stayed
+unchanged throughout execution. The run ID is
+`ab964f08-8546-476b-9dc4-6ba4066eeb39`; the summary and JUnit identity are recorded
+in `target/symbolic-tensor-flow/native-complete3-full-summary.json`.
 
-The normal Nix CLI at `6937daf944d7dcb2b24aaf7ee7a73a9aa5773bc3` passes every
-declared performance gate against main `ff533fcd`. All production and test
-sources match the reviewed implementation; later edits only update this record.
+The three failing reference tests are `closed_ghost_loops_preserve_statistics_weights`,
+`test_generate_sm_a_ddx` and `test_vacuum_amplitude_generation_full_sm_two_loop`.
+They stop at previously audited bookkeeping references whose refreshes remain
+unapproved. Ten proposals still await review; a test stopping at its first
+snapshot does not freshly validate later proposals in the same function. The
+approved symbolic-Nc correction and its separately proved cosmetic factor-sign
+update are already included and pass this run.
+
+The other failures are `full_numerator_requires_one_q3_structure_argument` and
+`graph_set_import_enforces_the_q3_convention_without_tensor_closure`. Both expose
+production validation ordering: generic tensor admission can reject the source
+before the graph-specific Q3-first diagnostic runs. The follow-up repair uses
+the existing validator over borrowed scalar-source and retained tensor payloads,
+checks all Q3 occurrences before Q, and validates compact annotations before
+native admission. Original arity, edge-bound, dimension, component,
+same-expression cancellation and zero-annihilation checks remain. The validator
+does not cancel invalid source functions against reciprocal factors in a separate
+native payload. Its canonical qualification is pending;
+these failures are not reclassified as obsolete assertions.
+
+A separate boundary audit found two selector defects outside the completed
+suite's coverage. Against frozen `880ad11d`, graph reduction rejects the compound
+dimension `4 - 2*epsilon` through `Dimension::try_from`; direct exact-vector
+selection silently leaves the input unreduced because raw selectors and native
+encoded dimensions have different Atom spellings. The patched scratch crate,
+linked to the exact frozen dependencies, passes the same graph and exact-selector
+oracles plus an external-vector projection control. These checks retain the
+unselected same-head vector, reversed logical ports, ranked zero and unchanged
+source. They establish failure-before/success-after evidence, not canonical
+Cargo or workspace qualification. The repair admits each small source selector
+once through the shared codec, makes the two Rust vector-selector builders
+fallible, and uses the existing dimension mapper for graph promotion. Its
+implementation and identity records are under
+`target/symbolic-tensor-flow/explicit-selector-patch`.
+
+The normal Nix CLI build for `880ad11d` passed. The follow-up child includes the
+selector repair and documentation corrections; its Q3 repair, canonical checks,
+fresh CLI build and paired performance comparison still require qualification.
+Final CI preparation and publication have not completed, and this record does
+not declare the branch ready to merge.
+
+== Historical qualification at 6002674d, 17 October 2026
+
+At that checkpoint, all 24 affected acceptance tests and related Vakint checks
+passed in a 70-test rerun. All 112 selected renormalization and UV integration
+tests passed, followed by all 73 evaluator and scalar-factor checks. The normal
+Nix CLI at `6937daf944d7dcb2b24aaf7ee7a73a9aa5773bc3` passed every declared
+performance gate against main `ff533fcd`, with zero numerical mismatches. Its
+production and test sources matched the reviewed `6002674d` implementation.
 The original corpus, numerical tolerances, five-pair policy and timing limits
 are unchanged. No build or test process from this task overlapped measurement.
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr),
-  [Metric], [Main median], [Repaired median], [Paired change],
+  [Metric], [Main median], [6002674d median], [Paired change],
   [GL1 generation], [3.9653 s], [4.5784 s], [+15.4%],
   [GL1 SingleParametric runtime], [157.75 µs], [135.28 µs], [−13.0%],
   [Thermal GL1 generation], [6.8730 s], [6.8564 s], [−0.55%],
@@ -37,15 +83,16 @@ are unchanged. No build or test process from this task overlapped measurement.
 )
 
 The change column is the median of paired relative differences; it need not
-equal the ratio of the separately reported medians. GL1 construction still has
-an overhead of about 0.61 seconds. Its 15.4 percent paired increase now passes
-the original 20 percent limit with the original noise allowance. Thermal
-generation is essentially unchanged. The former runtime and memory regressions
-pass their unchanged gates; this does not imply that every metric equals main.
+equal the ratio of the separately reported medians. At that checkpoint, GL1
+construction had an overhead of about 0.61 seconds. Its 15.4 percent paired
+increase passed the original 20 percent limit with the original noise allowance.
+Thermal generation was essentially unchanged. The former runtime and memory
+regressions passed their unchanged gates; this does not imply that every metric
+equaled main or qualify the later migration.
 All thirteen sealed reports, input hashes, raw trials and the consolidated
 `performance-final-summary.json` are retained under `target/readiness-repair`.
 
-== Reproducible baseline
+== Historical reconciliation baseline
 
 The main baseline is `ff533fcd91d80577e8372c398c17a5924613e73c`.
 The reconciled comparison is `d3b91d31461e50d91dce4702d68c45294faca350`.
@@ -57,8 +104,8 @@ five paired discovery trials and, where required, five confirmation trials.
 Generation includes a fresh CLI process; runtime uses warmed fixed points.
 Timing comparisons wait for this task's own builds and tests to finish.
 
-All thirteen numerical corpora agree. Eleven cases pass their performance
-gates. Confirmed regressions are:
+All thirteen numerical corpora agreed in the initial reconciliation comparison.
+Eleven cases passed their performance gates. Its confirmed regressions were:
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr),
@@ -215,7 +262,7 @@ costs before the temporal-trace and lifetime fixes. Those reports remain
 retained, including censored confirmation trials, but censored measurements are
 not ranked as qualified performance results.
 
-== Current repair work
+== Repairs preceding the retained-tensor migration
 
 The resumed merge-readiness work incorporates the on-shell agent's separately
 named shared fixes: `3d166ca1` preserves dependent binomial relations in finite
@@ -380,8 +427,8 @@ contraction, protecting complete function calls and composite powers. It accepts
 only strictly smaller intermediate forms. All 105 native generator unit tests
 pass, including exact symbolic equality for that pair; the ttH selection test
 then passes its unchanged two-master assertion. This repair is named
-`feynkit-finite-sample-collection` (`ec4f5a19`). Normal paired generation and
-evaluation timing gates still have to qualify the complete repair stack.
+`feynkit-finite-sample-collection` (`ec4f5a19`). At that stage, the complete repair
+stack still needed its subsequent normal paired generation and evaluation gates.
 
 The GL20 comparison isolates opposite closed top-loop flows with weights -1
 and -1, while main retains one master with weight -2. Both contributions must
@@ -559,7 +606,7 @@ interface admission, preserving opaque payloads and callback boundaries. Its
 original validation record is `on-shell-review-validation-record` (`0893e362`);
 that record certifies the agent's own OS stack, not this task's final revision.
 
-== Conditional evaluator performance follow-up
+== Historical conditional evaluator performance follow-up
 
 The normal Nix producer at `c0e78d263f03f6cb16c6055230e12eaf36da347d`
 predates the last grouping changes. Its paired GL1 runtime and memory metrics
@@ -827,8 +874,10 @@ Concrete Rust API difficulties found during implementation:
   Source scalar overrides remain scalars. Full state version 20 rejects older
   positional archives; standalone scalar evaluator layouts are unchanged.
 - `with_lorentz_dimension` specifically changes four-dimensional Lorentz
-  spaces. General dimension substitutions are currently less convenient and
-  require explicit checked interface transformation.
+  spaces. `map_representation_dimensions` now owns general dimension changes
+  in both payloads and declared ports, including ranked zero. A compound raw
+  dimension is not directly representable by `Dimension::try_from`; source
+  selectors and graph promotion need their proper admission/mapping boundary.
 - A no-op reduction can establish new completion facts. Mathematical equality
   alone must not discard its returned carrier when reusing an `Arc`;
   `same_reduction_state` distinguishes that case without traversing cached graphs.
@@ -904,8 +953,9 @@ spectators and remains typed, while its generated orbit weight is scalar.
 The reduction result retains a zero with the source interface when no terms
 survive. GammaLoop transfers native diagram carriers directly instead of
 exporting them through raw parse payloads. Its `GlobalPrefactor` now keeps both
-the numerator and projector typed as well. These native changes are still under
-qualification; the earlier frozen runtime results do not qualify them.
+the numerator and projector typed as well. The completed `880ad11d` run above
+qualifies the covered native paths and records its remaining failures; the
+earlier runtime-only checkpoints did not qualify these additions.
 
 Three further API gaps required operations on their existing native owners.
 `dirac_adjoint` must dualize logical slots and retain a zero's interface;
@@ -918,9 +968,10 @@ interface, reject collisions and preserve callback validation. These are not
 safe uses of an Atom replacement followed by fresh inference. Python transfers
 reuse `TensorExpression::from_structured` to keep the same carrier.
 
-Validation and performance measurements for this migration are pending. Existing
-physics references, tolerances and performance thresholds remain unchanged.
-Artifacts and logs are retained under `target/symbolic-tensor-flow`.
+The completed `880ad11d` checkpoint and subsequent unqualified boundary repairs
+are distinguished above. Paired performance measurements of the retained-tensor
+migration remain outstanding. Artifacts and logs are retained under
+`target/symbolic-tensor-flow`.
 
 The first immutable candidate `48b8acfa` passed a fresh 533-case core sweep and
 workspace Clippy. The broader 151-case physics/state/backend run then reported
@@ -966,9 +1017,10 @@ anonymous-axis witness bug. The checked rewrite fallback attempted tensor-only
 inference on scalar product factors. It now uses the same structural filter as
 ordinary product inference, while retaining complete result/scope/multiplicity
 checks. The same frozen d76 test passes in 32.215 seconds. The two corrections
-and the subsequent native-generator migration still need fresh qualification.
+and the subsequent native-generator migration were later exercised by the
+completed `880ad11d` run recorded above.
 
-The ghost d76 timing remains under investigation. A rebuilt binary exceeded
+Earlier ghost d76 timing diagnostics were inconsistent. A rebuilt binary exceeded
 240 seconds with tracing disabled yet passed in about 35 seconds with narrow
 tracing. Neither observation establishes an unconditional algorithmic timing.
 Scalar-only diagnostic events now isolate stages without expression printers;
@@ -977,40 +1029,40 @@ the original reference and 240-second timeout remain unchanged. The incomplete
 retained. No performance result from the previous qualified implementation is
 being relabeled as a measurement of this migration.
 
-The native migration and the backend-interface corrections pass workspace-wide
-type checking, strict Clippy with warnings denied, formatting and the
-documentation check. The isolated Idenso run with `reference-cases` passes all
-1,029 selected cases in 33.492 seconds. Its four feature-gated bincode tests
-are covered by the forthcoming workspace run. The formerly failing scalar
-rescaling guard now verifies exact nonsymmetric components and rejects a
-changed anonymous matrix head; no ambiguous-axis control is removed.
+Before the `880ad11d` full run, the native migration and backend-interface
+corrections passed workspace-wide type checking, strict Clippy with warnings
+denied, formatting and the documentation check. The isolated Idenso run with
+`reference-cases` passed all 1,029 selected cases in 33.492 seconds; the later
+workspace run also included its four feature-gated bincode tests. The formerly
+failing scalar rescaling guard now verifies exact nonsymmetric components and
+rejects a changed anonymous matrix head; no ambiguous-axis control is removed.
 
 Source review also identified unmeasured costs for the next profiling pass:
 source export re-admits an expression to decide whether interface metadata may
 be omitted; identity index transport can rebuild planning state; numerical
 samples repeat some sample-independent color preparation; and diagram export
 can compute the same metadata twice. These are candidates for measurement,
-not an attribution of GL1's historical slowdown. The fresh frozen workspace
-and normal Nix CLI must qualify this implementation before new timing or
-merge-readiness claims are made.
+not an attribution of GL1's historical slowdown. The completed frozen workspace
+run and normal CLI build do not replace fresh paired timing or qualification of
+the post-checkpoint selector and Q3 repairs.
 
-Frozen native candidate `53312d8b` builds all 102 workspace test binaries and
-passes 1,519 of 1,535 selected native/interface tests. The sixteen failures
-identify boundaries still requiring qualification: a malformed toy singlet
+Frozen native candidate `53312d8b` built all 102 workspace test binaries and
+passed 1,519 of 1,535 selected native/interface tests. The sixteen failures
+identified boundaries requiring correction: a malformed toy singlet
 fixture adds a colored summand; graph artifact validation needs an exact scalar
 coefficient certificate; several tests still expect raw Python expressions;
 and the new backend controls expose encoded dimensions and invalid TOML output.
-The current repairs keep complete tensor admission, exact numerical oracles,
-and interface assertions. A broader run of these same binaries is diagnostic;
+The subsequent repairs kept complete tensor admission, exact numerical oracles,
+and interface assertions. The broader run of these same binaries was diagnostic;
 source-dependent documentation tests read the live compile-time workspace and
-must be rerun there after its review digests settle. Archive remapping alone
+needed a rerun there after its review digests settled. Archive remapping alone
 does not isolate those tests.
 
-The corrected `28f5259f` focused run passes 1,706 of 1,717 tests in 365.232
+The corrected `28f5259f` focused run passed 1,706 of 1,717 tests in 365.232
 seconds. All five Standard Model acceptance cases, the GL20 event snapshot,
 global tensor round trips, native spin-sum controls and the scalar-vacuum
-reference pass. Remaining repairs cover a toy propagator's obsolete `Slash(P)`
-spelling, typed Python comparisons, compact block-probe dimensions, and the
+reference passed. At that checkpoint, remaining repairs covered a toy propagator's
+obsolete `Slash(P)` spelling, typed Python comparisons, compact block-probe dimensions, and the
 exact malformed-input diagnostic at the reducer's external source boundary.
 The new Laurent control now requests four coefficients so that its unchanged
 epsilon-squared assertion is supported by the backend truncation. Exact rational
@@ -1018,14 +1070,15 @@ arithmetic proves the CP snapshot's only remaining change is the spelling of
 three simultaneous factor signs; that cosmetic refresh retains the count,
 source IDs and total. It is separate from the ten pending bookkeeping proposals.
 
-The subsequent native package run passes 501 of 502 tests. Its only remaining
-failure is presentation: encoded index symbols hid the original edge/vertex
+The subsequent `fd27769a` native package run passed 501 of 502 tests. Its only
+failure was presentation: encoded index symbols hid the original edge/vertex
 labels from Python's raw-index formatter. The existing display owners now
 resolve individual index payloads while keeping native identities as keys.
 Temporary presentation uses existing portable print-head tags and adds no
 callbacks or live-tensor rewrites. Both new controls and all 171 Python/tensor
 wrapper tests pass, including the original plain, LaTeX and Typst provenance
-assertions. The final application/workspace run remains pending.
+assertions. Those display fixes were included in the completed `880ad11d`
+application/workspace run.
 
 The final ownership audit found two remaining uses of fresh interface inference
 after transformations of a retained tensor. The evaluator's scalar color
@@ -1036,8 +1089,8 @@ controls cover the distinction. The native reducer likewise compares decoded
 dimension metadata while retaining the original encoded slots; it does not
 decode and re-admit the complete tensor. The runtime fermion spin-sum recipe
 now allocates its dummy through `AbstractIndex`, avoiding a legacy function-valued
-index inside an otherwise native projector. These repairs and the pending
-formal-color comparison repair still require runtime qualification.
+index inside an otherwise native projector. These repairs and the formal-color
+comparison correction were included in the completed `880ad11d` run.
 
 The formal-color probe establishes that `Nc` survives typed composition,
 algebra and canonical preparation. The exact canceled quotient contains an
@@ -1048,13 +1101,15 @@ then applies the unchanged strict scalar check and the requested symbolic or
 concrete-color option. Encoded index coefficients remain rejected. It neither
 decodes the retained tensor bodies nor changes fallback sampling policy.
 
-The first complete native run finishes with 5,344 passes and 292 failures out
-of 5,636 selected tests. Most failures stop at the same encoded-dimension or
-legacy spin-sum index boundaries; their original numerical checks were not
+The first complete native run at `53312d8b` finished with 5,344 passes and 292
+failures out of 5,636 selected tests. Most failures stopped at the same
+encoded-dimension or legacy spin-sum index boundaries; their original numerical checks were not
 reached. The remaining classes include the focused source/API cases above,
 four generation snapshot tests (including the formal-color regression), six
 source-dependent documentation failures, and one global tensor JSON round trip.
 The latter wrote display-formatted payloads beside canonical interface metadata;
 the serializer now uses canonical source strings and retains exact parse-back
-checks. The next full run must keep its actual compile-time source tree frozen
-through execution. These diagnostic failures are recorded, not counted as passes.
+checks. The later `880ad11d` full run kept its actual compile-time source tree
+frozen and reduced the failure set to the five cases listed at the start of
+this record. The earlier diagnostic failures remain recorded as failures of
+their own checkpoint.

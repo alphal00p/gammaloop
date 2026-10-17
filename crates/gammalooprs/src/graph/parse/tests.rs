@@ -1475,7 +1475,9 @@ fn full_numerator_requires_one_q3_structure_argument() {
     );
 
     let abstract_slot = Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)]);
-    graph.overall_factor = GS.emr_vec(EdgeIndex(3), abstract_slot);
+    graph.overall_factor = Atom::one();
+    graph.global_prefactor.num =
+        super::NumeratorInterface::admit(GS.emr_vec(EdgeIndex(3), abstract_slot), None).unwrap();
     let error = graph.validate_full_numerator_tensor_network().unwrap_err();
     assert!(
         error
@@ -1484,10 +1486,20 @@ fn full_numerator_requires_one_q3_structure_argument() {
         "a numeric Minkowski index must be validated as an abstract index: {error:?}",
     );
     assert!(
-        graph.overall_factor.contains_symbol(GS.emr_vec)
-            && !graph.overall_factor.contains_symbol(GS.emr_mom),
+        graph
+            .global_prefactor
+            .num
+            .expression()
+            .contains_symbol(GS.emr_vec)
+            && !graph
+                .global_prefactor
+                .num
+                .expression()
+                .contains_symbol(GS.emr_mom),
         "a numeric Minkowski index must remain an abstract Q3 label, not normalize to a Q component",
     );
+
+    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
 
     for malformed_component in [
         AIND_SYMBOLS.cind.call_args([Atom::num(-1)]),
@@ -1528,6 +1540,16 @@ fn full_numerator_requires_one_q3_structure_argument() {
         error.to_string().contains("Spatial momentum Q3"),
         "the Q3 pass must retain priority over malformed Q: {error:?}",
     );
+
+    graph.global_prefactor.num =
+        super::NumeratorInterface::admit(GS.emr_mom(out_of_range_edge, GS.cind(1)), None).unwrap();
+    graph.overall_factor = malformed_q3.clone();
+    let error = graph.validate_spatial_momentum_convention().unwrap_err();
+    assert!(
+        error.to_string().contains("Spatial momentum Q3"),
+        "Q3 source validation must precede Q bounds in a retained tensor: {error:?}",
+    );
+    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
 
     let nested_q = wrapper.call_args([scalar.pow(malformed_q)]);
     graph.overall_factor = nested_q.clone();

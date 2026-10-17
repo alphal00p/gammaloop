@@ -270,7 +270,10 @@ end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> S
 # Reviewed 2026-10-16: Import applies edge mass overrides before constructing energy definitions and mass evaluators; source-map and strict dialect ownership are unchanged.
 # Reviewed 2026-10-17: Runtime graph fragments retain typed interfaces; optional num_interface metadata preserves ranked zeros and logical port order at the source-artifact boundary.
 # Reviewed 2026-10-17: Native diagrams transfer typed fragments and global factors directly; authored DOT/JSON expressions use the shared source codec and preserve physical momentum validation.
-digest = "ac6bebeb1c08a9b197d1c5117eec27b5b52ad798"
+# Reviewed 2026-10-17: Compact annotations validate source graph-edge momentum
+# owners before native admission; graph-wide Q3-first validation borrows retained
+# tensor and scalar-factor payloads. The architecture records this boundary.
+digest = "fc058e64317d80978ebfc2ede480a29fd852a8a3"
 
 [[section.note]]
 id = "integration-dashboard"

@@ -6,7 +6,8 @@
 FeynKit reduces Lorentz-covariant tensor numerators to scalar Spenso invariants, retaining
 metric tensors when free Lorentz indices remain. Vectors carry `spenso::mink(D,index)` slots;
 compact vectors omit the index, and scalar contractions are represented by `spenso::dot`.
-The reducer's dimension must match every input slot exactly.
+The reducer's dimension must match every Lorentz slot; native encoded dimensions
+are interpreted through their scalar source payloads.
 Without an external basis, the denominator must have vacuum rotational symmetry.
 
 == Select what is integrated
@@ -62,6 +63,14 @@ under that symbol is integrated. Pass a `TensorName` or a bare Symbolica `Expres
 Ordinary generated FeynKit rules carry dimension `4`;
 a Taylor-expanded expression whose slots carry symbolic `D` requires that same `D` instead.
 
+Exact compact selectors are source inputs. The constructor admits each selector
+once into the same native index and dimension encoding used by retained
+numerators. This matters for a compound dimension such as `4 - 2*epsilon`:
+`Q(0,mink(4 - 2*epsilon))` must match the native vector for edge zero while
+leaving edge one under the same `Q` head unselected. Comparing the raw selector
+to an encoded numerator by Atom spelling would silently miss that selection.
+This admission does not decode or re-admit the numerator passed to `reduce`.
+
 == Denominators with external momenta
 
 Supply every independent external direction in the denominator through the constructor
@@ -100,7 +109,10 @@ External basis vectors take precedence over integrated-head selectors.
 
 `diagram.tensor_reduce(D)` selects the graph's internal edge momenta automatically, promotes
 four-dimensional Lorentz slots in the numerator and projector to `D`, and returns a
-`TensorExpression`. External edge momenta remain projector vectors; they do not automatically define
+`TensorExpression`. Dimension promotion uses the retained tensor's dimension
+mapper, including for a compound `D`, preserving logical axis order and ranked
+zero. The scalar dimension in projector coefficients remains the supplied
+expression. External edge momenta remain projector vectors; they do not automatically define
 the denominator's external basis. Use a configured `TensorReducer` for a
 non-vacuum denominator. The scalar numerator
 prefactor remains separate, and at least one internal edge is required.
@@ -161,6 +173,16 @@ adds vacuum-topology matching and scalar-integral evaluation with separately sel
 Spenso syntax and preserves the reducer's index and power diagnostics on rejected
 input. It does not cook source notation or perform reduction. Existing tensor
 owners call `reduce` directly; no re-admission is needed.
+
+The Rust source-selector builders `with_integrated_vector(Atom)` and
+`with_external_vector(Atom)` return `Result<Self, TensorReductionError>` because
+their one-time source admission can fail. Propagate the result, for example
+`TensorReducer::new(D).with_integrated_vector(k_compact)?`. Head selectors retain
+their existing behavior. This is a separate boundary from `TensorReducer::admit`:
+the latter expects an already converted native numerator, while selector builders
+accept compact source notation. A raw compound dimension is not itself a Spenso
+`Dimension` value; graph promotion uses the existing checked dimension mapper
+rather than requiring callers to flatten that expression to a symbol.
 
 == Rank, symmetry, and limits
 

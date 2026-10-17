@@ -118,7 +118,9 @@ impl PyTensorReducer {
             let expression = selector.extract::<PyRef<'_, PythonExpression>>()?;
             inner = match expression.expr.as_view() {
                 AtomView::Var(head) => inner.with_integrated_head(head.get_symbol()),
-                AtomView::Fun(_) => inner.with_integrated_vector(expression.expr.clone()),
+                AtomView::Fun(_) => inner
+                    .with_integrated_vector(expression.expr.clone())
+                    .map_err(error::tensor)?,
                 _ => {
                     return Err(pyo3::exceptions::PyValueError::new_err(
                         "integrated selectors must be bare symbols or compact vector expressions",
@@ -128,7 +130,9 @@ impl PyTensorReducer {
         }
         for vector in external {
             let expression = vector.extract::<PyRef<'_, PythonExpression>>()?;
-            inner = inner.with_external_vector(expression.expr.clone());
+            inner = inner
+                .with_external_vector(expression.expr.clone())
+                .map_err(error::tensor)?;
         }
         Ok(Self {
             inner: Box::new(inner),

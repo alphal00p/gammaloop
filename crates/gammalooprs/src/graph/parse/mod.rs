@@ -391,11 +391,14 @@ impl Graph {
     /// diagrams and finalized runtime literals bypass this source conversion.
     pub fn from_compact_model_dot(mut parsed: DotGraph, model: &Model) -> Result<Self> {
         use feynkit_generator::FeynmanDiagramRulesExt;
+        let n_edges = parsed.graph.n_edges();
+        let name = parsed.global_data.name.clone();
         let normalize = |value: &mut String| -> Result<()> {
             // Parse in the established GammaLoop namespace before handing the
             // canonical expression to FeynKit. Only represented half-edge
             // indices change chart; momentum and other owner tags stay literal.
             let atom: Atom = value.strip_parse()?;
+            Self::validate_spatial_momentum_expressions(&[&atom], n_edges, &name)?;
             let atom = Aind::native_hedge_slots(&atom)?;
             *value = atom.to_canonical_string();
             Ok(())
@@ -914,73 +917,90 @@ impl Graph {
     }
 
     fn validate_spatial_momentum_convention(&self) -> Result<()> {
-        let n_edges = self.underlying.n_edges();
+        let factor =
+            feynkit_graph::expressions::evaluate_overall_factor(self.overall_factor.as_view());
+        if factor.is_zero() {
+            return Ok(());
+        }
         let full_num = self
             .numerator(&self.full_filter(), &self.empty_subgraph())?
             .state
             .expr
-            .multiply(&self.global_numerator()?)?;
-        Self::validate_spatial_momentum_expression(full_num.expression(), n_edges, &self.name)
+            .multiply(&self.global_prefactor.num)?
+            .multiply(&self.global_prefactor.projector)?;
+        if full_num.is_zero() {
+            return Ok(());
+        }
+        // Keep the established tensor carrier while validating the remaining
+        // scalar source factor before its admission. Both passes borrow payloads;
+        // Q3 diagnostics retain priority across all factors without a raw mirror.
+        Self::validate_spatial_momentum_expressions(
+            &[full_num.expression(), &factor],
+            self.underlying.n_edges(),
+            &self.name,
+        )
     }
 
-    fn validate_spatial_momentum_expression(
-        expression: &Atom,
+    fn validate_spatial_momentum_expressions(
+        expressions: &[&Atom],
         n_edges: usize,
         name: &str,
     ) -> Result<()> {
         let mut invalid_q3 = None;
-        expression.visitor(&mut |view| {
-            if invalid_q3.is_none()
-                && let AtomView::Fun(q3) = view
-                && q3.get_symbol() == GS.emr_vec
-            {
-                let arguments = q3.iter().collect::<Vec<_>>();
-                let invalid_reason = match arguments.as_slice() {
-                    [edge, structure] => {
-                        let edge_id = i64::try_from(*edge)
-                            .ok()
-                            .and_then(|edge| usize::try_from(edge).ok());
-                        let is_represented = matches!(structure, AtomView::Fun(rep)
-                            if rep.get_nargs() == 1)
-                            && Representation::<Minkowski>::try_from(*structure)
+        for expression in expressions {
+            expression.visitor(&mut |view| {
+                if invalid_q3.is_none()
+                    && let AtomView::Fun(q3) = view
+                    && q3.get_symbol() == GS.emr_vec
+                {
+                    let arguments = q3.iter().collect::<Vec<_>>();
+                    let invalid_reason = match arguments.as_slice() {
+                        [edge, structure] => {
+                            let edge_id = i64::try_from(*edge)
                                 .ok()
-                                .and_then(|rep| usize::try_from(rep).ok())
-                                == Some(4);
-                        let is_indexed = matches!(structure, AtomView::Fun(rep)
-                            if rep.get_nargs() == 2)
-                            && Slot::<Minkowski, Aind>::try_from(*structure)
-                                .ok()
-                                .and_then(|slot| usize::try_from(slot.rep()).ok())
-                                == Some(4);
+                                .and_then(|edge| usize::try_from(edge).ok());
+                            let is_represented = matches!(structure, AtomView::Fun(rep)
+                                if rep.get_nargs() == 1)
+                                && Representation::<Minkowski>::try_from(*structure)
+                                    .ok()
+                                    .and_then(|rep| usize::try_from(rep).ok())
+                                    == Some(4);
+                            let is_indexed = matches!(structure, AtomView::Fun(rep)
+                                if rep.get_nargs() == 2)
+                                && Slot::<Minkowski, Aind>::try_from(*structure)
+                                    .ok()
+                                    .and_then(|slot| usize::try_from(slot.rep()).ok())
+                                    == Some(4);
 
-                        if edge_id.is_none() {
-                            Some(format!(
-                                "found non-canonical edge argument {}",
-                                edge.log_print(None)
-                            ))
-                        } else if edge_id.is_some_and(|edge| edge >= n_edges) {
-                            Some(format!(
-                                "found edge ID {} outside the valid range 0..{}",
-                                edge.log_print(None),
-                                n_edges,
-                            ))
-                        } else {
-                            (!is_represented && !is_indexed).then(|| {
-                                format!(
-                                    "found non-canonical second argument {}",
-                                    structure.log_print(None)
-                                )
-                            })
+                            if edge_id.is_none() {
+                                Some(format!(
+                                    "found non-canonical edge argument {}",
+                                    edge.log_print(None)
+                                ))
+                            } else if edge_id.is_some_and(|edge| edge >= n_edges) {
+                                Some(format!(
+                                    "found edge ID {} outside the valid range 0..{}",
+                                    edge.log_print(None),
+                                    n_edges,
+                                ))
+                            } else {
+                                (!is_represented && !is_indexed).then(|| {
+                                    format!(
+                                        "found non-canonical second argument {}",
+                                        structure.log_print(None)
+                                    )
+                                })
+                            }
                         }
+                        _ => Some(format!("found arity {}", arguments.len())),
+                    };
+                    if let Some(reason) = invalid_reason {
+                        invalid_q3 = Some((reason, view.into_atom()));
                     }
-                    _ => Some(format!("found arity {}", arguments.len())),
-                };
-                if let Some(reason) = invalid_reason {
-                    invalid_q3 = Some((reason, view.into_atom()));
                 }
-            }
-            true
-        });
+                true
+            });
+        }
         if let Some((reason, q3)) = invalid_q3 {
             return Err(eyre!(
                 "Spatial momentum Q3 in graph '{}' must have exactly two arguments, beginning with a non-negative edge ID: Q3(edge,mink(4)) for a represented vector or Q3(edge,mink(4,index)) for an indexed tensor-network image; explicit components are stored as Q(edge,cind(i)); {reason} in {}",
@@ -990,38 +1010,40 @@ impl Graph {
         }
 
         let mut invalid_q = None;
-        expression.visitor(&mut |view| {
-            if invalid_q.is_none()
-                && let AtomView::Fun(q) = view
-                && q.get_symbol() == GS.emr_mom
-            {
-                let Some(edge) = q.iter().next() else {
-                    invalid_q = Some(("found no edge argument".to_owned(), view.into_atom()));
-                    return true;
-                };
-                let edge_id = i64::try_from(edge)
-                    .ok()
-                    .and_then(|edge| usize::try_from(edge).ok());
-                let invalid_reason = if edge_id.is_none() {
-                    Some(format!(
-                        "found non-canonical edge argument {}",
-                        edge.log_print(None)
-                    ))
-                } else {
-                    edge_id.filter(|edge| *edge >= n_edges).map(|_| {
-                        format!(
-                            "found edge ID {} outside the valid range 0..{}",
-                            edge.log_print(None),
-                            n_edges,
-                        )
-                    })
-                };
-                if let Some(reason) = invalid_reason {
-                    invalid_q = Some((reason, view.into_atom()));
+        for expression in expressions {
+            expression.visitor(&mut |view| {
+                if invalid_q.is_none()
+                    && let AtomView::Fun(q) = view
+                    && q.get_symbol() == GS.emr_mom
+                {
+                    let Some(edge) = q.iter().next() else {
+                        invalid_q = Some(("found no edge argument".to_owned(), view.into_atom()));
+                        return true;
+                    };
+                    let edge_id = i64::try_from(edge)
+                        .ok()
+                        .and_then(|edge| usize::try_from(edge).ok());
+                    let invalid_reason = if edge_id.is_none() {
+                        Some(format!(
+                            "found non-canonical edge argument {}",
+                            edge.log_print(None)
+                        ))
+                    } else {
+                        edge_id.filter(|edge| *edge >= n_edges).map(|_| {
+                            format!(
+                                "found edge ID {} outside the valid range 0..{}",
+                                edge.log_print(None),
+                                n_edges,
+                            )
+                        })
+                    };
+                    if let Some(reason) = invalid_reason {
+                        invalid_q = Some((reason, view.into_atom()));
+                    }
                 }
-            }
-            true
-        });
+                true
+            });
+        }
         if let Some((reason, q)) = invalid_q {
             return Err(eyre!(
                 "Momentum Q in graph '{}' must begin with a valid non-negative graph-edge ID; {reason} in {}",
@@ -1075,14 +1097,14 @@ impl Graph {
     ) -> Result<(InitialGraphData, NumGraph)> {
         let hedge_order = parse_graph.hedge_order()?;
         let global_data = &parse_graph.global_data;
-        Self::validate_spatial_momentum_expression(
-            &global_data.num,
+        Self::validate_spatial_momentum_expressions(
+            &[&global_data.num],
             parse_graph.graph.n_edges(),
             &global_data.name,
         )?;
         if let Some(projector) = &global_data.projectors {
-            Self::validate_spatial_momentum_expression(
-                projector,
+            Self::validate_spatial_momentum_expressions(
+                &[projector],
                 parse_graph.graph.n_edges(),
                 &global_data.name,
             )?;
@@ -1198,7 +1220,7 @@ impl Graph {
                     .filter_map(|(_, _, edge)| edge.data.num.as_ref()),
             )
         {
-            Self::validate_spatial_momentum_expression(expression, graph.n_edges(), name)?;
+            Self::validate_spatial_momentum_expressions(&[expression], graph.n_edges(), name)?;
         }
         let intermediate: UnderlyingGraph = graph.map_result(
             |_, i, v| {

@@ -293,6 +293,10 @@ parser. Compact model input instantiates missing model rules and the default
 external-state projector while retaining explicitly supplied local factors,
 including literal zero or one. Native topology parsing alone does not apply
 Feynman rules; rule construction belongs to the generator's explicit extension.
+Compact and runtime source annotations pass graph-specific momentum checks
+before tensor admission. Graph-wide validation borrows the retained tensor
+payload and scalar overall factor, checking all `Q3` structures before `Q`
+edge bounds without rebuilding a raw numerator.
 Compact cross sections pair incoming/outgoing dangling legs using `is_cut` tags.
 Imported edge mass overrides are installed before the parameter and energy map
 is built; overridden mass evaluators use that completed parameter layout.
