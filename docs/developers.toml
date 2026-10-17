@@ -189,7 +189,8 @@ anchor = "pub fn generate("
 # Reviewed 2026-10-16: Paired incoming-state permutations preserve sewn partners; canonical-only comparison permits zero numerical samples. The current architecture records the label/routing contract.
 # Reviewed 2026-10-17: Generation caches retain localized typed factors; source recipes are admitted at instantiation and finalized diagrams transport the carriers directly.
 # Reviewed 2026-10-17: Only toy-model fixtures change: singlet summands have matching scalar color factors, the dedicated colored test retains matching color tensors, and incompatible sums remain rejected before caching.
-digest = "c70b57aece2102d1060a47ad9698413b19d5b47f"
+# Reviewed 2026-10-17: The toy fermion propagator now uses standard UFO PSlash with valid spinor and contracted Lorentz ports; its original graph/sign/cut assertions remain intact.
+digest = "321e265243c2baded7aefc3c8958695e19bf55db"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -1025,7 +1026,8 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-16: Dot conversion visits normalized dot powers once while reserving existing indices and preserving independent powered-sum scopes; native/FORM dispatch and scalar evaluation policy are unchanged.
 # Reviewed 2026-10-16: Reserve numeric source slots as well as generated dummy labels; bind native compact representations in the common converter; retain explicit k/p source-slot provenance through native projection. Existing backend dispatch and factorization remain unchanged.
 # Reviewed 2026-10-17: Vakint tensor reduction admits a typed tensor for the native reducer and explicitly exports its result to the backend Atom ABI; tensor metadata belongs to the retained caller.
-digest = "9700e39a1072552bc54344a5cf7bd31bcc521caa"
+# Reviewed 2026-10-17: The real raw-to-native adapter calls TensorReducer::admit once, retaining precise domain diagnostics on rejected source input while the typed reduce path remains unique.
+digest = "31f7ae5b6494963367647cdf7f0b186b74845b66"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"

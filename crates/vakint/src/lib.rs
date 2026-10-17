@@ -3060,12 +3060,11 @@ impl VakintTerm {
         let cooking = idenso::CookSettings::indices()
             .with_mode(idenso::CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let numerator = idenso::tensor::SymbolicTensor::infer(
+        let numerator = reducer.admit(
             cooking
                 .try_cook(numerator.as_view())
                 .map_err(|error| VakintError::SymbolicaError(error.to_string()))?,
-        )
-        .map_err(feynkit_tensor::TensorReductionError::from)?;
+        )?;
         let reduced = reducer.reduce(&numerator)?.into_expression()?;
         let reduced = cooking.uncook(reduced.expression().as_view());
         let reduced = Self::bridge_opaque_projectors(reduced.as_view(), next_bridge_dummy);

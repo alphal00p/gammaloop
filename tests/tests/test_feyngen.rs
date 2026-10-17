@@ -1332,7 +1332,7 @@ fn cp_fix_from_symbolica()->Result<()>{
 
     // Group IDs here use the explicitly requested CP canonicalization;
     // default forward-side generation has a different label assignment.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
 

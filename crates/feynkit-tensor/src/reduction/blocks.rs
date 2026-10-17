@@ -128,6 +128,10 @@ impl TensorReducer {
                 .zip(&indices)
                 .map(|(slot, index)| slot.rep().slot::<AbstractIndex, _>(*index).to_atom())
                 .collect::<Vec<_>>();
+            let representations = slots
+                .iter()
+                .map(|slot| slot.rep().to_symbolic([]))
+                .collect::<Vec<_>>();
             let slots = slots.iter().map(|slot| slot.to_atom()).collect::<Vec<_>>();
             // Inner contractions own distinct dummies even when retained inside
             // a factored sum; they must not reconnect to the outside projector.
@@ -147,19 +151,23 @@ impl TensorReducer {
                 .collect();
             let renamed = inside.reindex_interface_ports(&replacements)?;
             let probe = SPENSO_TAG.rank_one_tensor_symbol("FeynKit::BlockProbe");
-            let probes = (0..)
-                .map(|i| {
-                    FunctionBuilder::new(probe)
-                        .add_arg(i)
-                        .add_arg(
-                            FunctionBuilder::new(Minkowski::selfless_symbol())
-                                .add_arg(&self.dimension)
-                                .finish(),
-                        )
-                        .finish()
+            // Probe vectors use the same native representation as the block
+            // ports; the raw scalar dimension belongs only to projector weights.
+            let mut probe_index = 0;
+            let probes = representations
+                .iter()
+                .map(|representation| {
+                    loop {
+                        let candidate = FunctionBuilder::new(probe)
+                            .add_arg(probe_index)
+                            .add_arg(representation)
+                            .finish();
+                        probe_index += 1;
+                        if !self.external_vectors.contains(&candidate) {
+                            break candidate;
+                        }
+                    }
                 })
-                .filter(|probe| !self.external_vectors.contains(probe))
-                .take(rank)
                 .collect::<Vec<_>>();
             let monomial = TensorMonomial {
                 scalar: Atom::one(),

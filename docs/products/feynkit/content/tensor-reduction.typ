@@ -40,7 +40,8 @@ numerator = (
 reducer = fk.TensorReducer(D, integrated=[k_compact])
 scalar = reducer.reduce(numerator)
 expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
-assert scalar == expected
+assert scalar.rank == 0 and scalar.axes == ()
+assert scalar.to_expression() == expected
 ```
 
 Compact contractions can be passed directly: the same reducer gives zero for
@@ -73,7 +74,8 @@ then be nonzero.
 
 // docs-example: compile feynkit-tensor-external-basis
 ```python
-from symbolica import S, E
+from symbolica import S
+from symbolica.community.tensor import TensorExpression
 import symbolica.community.hepkit as fk
 
 D, k, p, mu = S("external_docs::D", "external_docs::k", "external_docs::p", "external_docs::mu")
@@ -81,8 +83,9 @@ mink, dot = S("spenso::mink", "spenso::dot")
 kc, pc = k(mink(D)), p(mink(D))
 reducer = fk.TensorReducer(D, integrated=[kc], external=[pc])
 result = reducer.reduce(k(mink(D, mu)))
-expected = dot(kc, pc) / dot(pc, pc) * p(mink(D, mu))
-assert (result - expected).together() == E("0")
+expected = TensorExpression(dot(kc, pc) / dot(pc, pc) * p(mink(D, mu)))
+assert result.rank == 1 and result.axes == expected.axes
+assert (result - expected).together().is_zero()
 ```
 
 The Gram determinant must remain nonzero after imposing kinematics. For a
@@ -123,6 +126,12 @@ interfaces and data identities preserved: `expand`, `expand_num`, `factor`, `col
 `together`, `cancel`, and `apart`. Python's `copy.copy` also preserves tensor metadata.
 Trusted algebraic rearrangements retain the established interface; collection callbacks
 require checking the resulting interface and reject incompatible changes.
+Tensor equality compares the ordered interface as well as the expression, so a raw
+Symbolica expression is not equal to a `TensorExpression`. For a scalar oracle, check
+that the result has no open axes and compare `result.to_expression()` with the raw
+expected expression. For tensor-valued oracles, construct a typed expected value and
+compare its axes; use `is_zero()` to test the exact difference.
+
 `TensorExpression` subclasses Symbolica's `Expression`: inspection, matching, conversion,
 and evaluation remain available directly. The tensor overrides of `replace`,
 `replace_multiple`, `map`, and `derivative` preserve the ordered interface and reject
@@ -147,6 +156,11 @@ The Rust facade exposes `TensorReducer` and `FeynmanDiagramTensorExt` with the s
 boundary. Import the extension trait to call diagram reduction methods. FORM is not required
 for this native projection; #product-link("vakint", page: "guides/evaluation/", label: "Vakint")
 adds vacuum-topology matching and scalar-integral evaluation with separately selected backends.
+
+`TensorReducer::admit` admits an external expression already converted to native
+Spenso syntax and preserves the reducer's index and power diagnostics on rejected
+input. It does not cook source notation or perform reduction. Existing tensor
+owners call `reduce` directly; no re-admission is needed.
 
 == Rank, symmetry, and limits
 

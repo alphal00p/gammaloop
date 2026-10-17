@@ -10893,7 +10893,8 @@ class TensorReducer:
         >>> reducer = hep.TensorReducer(D, integrated=[k_compact])
         >>> reduced = reducer.reduce(numerator)
         >>> expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
-        >>> assert reduced == expected
+        >>> assert reduced.rank == 0 and reduced.axes == ()
+        >>> assert reduced.to_expression() == expected
 
         Parameters
         ----------

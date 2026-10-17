@@ -4993,7 +4993,7 @@ mod tests {
                      "charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}
                 ],
                 "propagators":[
-                    {"name":"f_prop","particle":"f","numerator":"Slash(P)","denominator":"P^2"},
+                    {"name":"f_prop","particle":"f","numerator":"PSlash(2,1)","denominator":"P^2"},
                     {"name":"a_prop","particle":"a","numerator":"1","denominator":"P^2"}
                 ],
                 "lorentz_structures":[{

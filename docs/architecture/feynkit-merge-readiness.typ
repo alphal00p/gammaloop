@@ -1006,6 +1006,18 @@ source-dependent documentation tests read the live compile-time workspace and
 must be rerun there after its review digests settle. Archive remapping alone
 does not isolate those tests.
 
+The corrected `28f5259f` focused run passes 1,706 of 1,717 tests in 365.232
+seconds. All five Standard Model acceptance cases, the GL20 event snapshot,
+global tensor round trips, native spin-sum controls and the scalar-vacuum
+reference pass. Remaining repairs cover a toy propagator's obsolete `Slash(P)`
+spelling, typed Python comparisons, compact block-probe dimensions, and the
+exact malformed-input diagnostic at the reducer's external source boundary.
+The new Laurent control now requests four coefficients so that its unchanged
+epsilon-squared assertion is supported by the backend truncation. Exact rational
+arithmetic proves the CP snapshot's only remaining change is the spelling of
+three simultaneous factor signs; that cosmetic refresh retains the count,
+source IDs and total. It is separate from the ten pending bookkeeping proposals.
+
 The final ownership audit found two remaining uses of fresh interface inference
 after transformations of a retained tensor. The evaluator's scalar color
 invariant rewrite now uses `with_checked_expression`. Final specialization

@@ -422,6 +422,31 @@ impl TensorReducer {
         &self.dimension
     }
 
+    /// Admit a newly constructed numerator at an external source boundary.
+    ///
+    /// The expression must already use native Spenso representation syntax,
+    /// with compound dimensions and indices encoded by their source adapter.
+    /// This method does not cook source notation or reduce a tensor. Native
+    /// admission remains authoritative; rejected inputs receive the reducer's
+    /// established index and power diagnostics when its parser can refine them.
+    pub fn admit(
+        &self,
+        expression: Atom,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
+        SymbolicTensor::infer(expression.clone())
+            .map_err(|error| self.input_error(expression.as_view(), error))
+    }
+
+    fn input_error(
+        &self,
+        expression: AtomView<'_>,
+        error: idenso::tensor::inference::TensorInferenceError,
+    ) -> TensorReductionError {
+        self.parse_monomial(expression)
+            .err()
+            .unwrap_or_else(|| TensorReductionError::TensorAlgebra(error.to_string()))
+    }
+
     /// Reduce a tensor expression to compact invariant terms.
     ///
     /// Explicit Spenso metric contractions are normalized first with Idenso.
@@ -477,14 +502,9 @@ impl TensorReducer {
                 expand: false,
                 ..Default::default()
             })
-            .map_err(|error| {
-                // Contract validates the input through the shared cached owner.
-                // Refine failures with the reducer's established multiplicity
-                // and power diagnostics without accepting rejected tensors.
-                self.parse_monomial(source.expression().as_view())
-                    .err()
-                    .unwrap_or_else(|| TensorReductionError::TensorAlgebra(error.to_string()))
-            })?;
+            // Contract validates through the shared cached owner; diagnostic
+            // refinement never accepts a source that native validation rejects.
+            .map_err(|error| self.input_error(source.expression().as_view(), error))?;
         let normalized = normalized
             .to_dots()
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
@@ -1864,6 +1884,45 @@ mod tests {
     }
 
     #[test]
+    fn source_admission_preserves_domain_errors_without_accepting_invalid_tensors() {
+        let (k, q, p, _) = vectors();
+        let dimension = Atom::num(4);
+        let mu = Atom::var(symbol!("feynkit_tensor_test::admission_mu"));
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        let vector = indexed(k, 1, &dimension, &mu);
+        let source = reducer.admit(vector.clone()).unwrap();
+        assert_eq!(source.rank(), 1);
+        assert_eq!(source.expression(), &vector);
+        let odd = reducer.reduce(&source).unwrap().into_expression().unwrap();
+        assert!(odd.is_zero());
+        assert_eq!(odd.structure(), source.structure());
+
+        let malformed = vector * indexed(p, 1, &dimension, &mu) * indexed(q, 1, &dimension, &mu);
+        assert!(SymbolicTensor::infer(malformed.clone()).is_err());
+        assert!(matches!(
+            reducer.admit(malformed),
+            Err(TensorReductionError::AmbiguousIndex {
+                index,
+                integrated: 1,
+                outside: 2,
+            }) if index == mu
+        ));
+        let invalid_rank_one = FunctionBuilder::new(
+            SPENSO_TAG.rank_one_tensor_symbol("feynkit_tensor_test::invalid_admission_vector"),
+        )
+        .add_arg(1)
+        .finish();
+        assert!(
+            matches!(
+                reducer.admit(invalid_rank_one),
+                Err(TensorReductionError::TensorAlgebra(message))
+                    if message.contains("requires exactly one final structural port")
+            ),
+            "a successful monomial parse must never override failed native admission"
+        );
+    }
+
+    #[test]
     fn encoded_dimensions_keep_native_slots_and_scalar_projector_coefficients() {
         let (k, q, _, _) = vectors();
         let epsilon = Atom::var(symbol!("feynkit_tensor_test::encoded_epsilon"));
@@ -1886,12 +1945,13 @@ mod tests {
             indexed(k, 1, &dimension, &nu),
             indexed(k, 1, &dimension, &nu) + indexed(q, 1, &dimension, &nu),
         ] {
-            let source = SymbolicTensor::infer(
-                cooking
-                    .try_cook((indexed(k, 1, &dimension, &mu) * second).as_view())
-                    .unwrap(),
-            )
-            .unwrap();
+            let source = reducer
+                .admit(
+                    cooking
+                        .try_cook((indexed(k, 1, &dimension, &mu) * second).as_view())
+                        .unwrap(),
+                )
+                .unwrap();
             let result = reducer.reduce(&source).unwrap().into_expression().unwrap();
             assert_eq!(
                 result.structure().logical_slots(),
