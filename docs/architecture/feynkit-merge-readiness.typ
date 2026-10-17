@@ -121,6 +121,24 @@ assertions; disabling checks or expanding the graph numerator is not a remedy.
 The exact boundary pairs are retained under
 `ghost-performance-audit/runs/current-d53-inputs-1/boundary-comparison`.
 
+The combined `58ab7be2` checkpoint passes all 1,045 selected Idenso tests,
+strict workspace Clippy and the documentation check. Its d53 and d76 numerical
+assertions also pass. In that bounded stage capture, d53's largest cleaned
+coefficient returns to the earlier 309,148 bytes; d76 still reaches 7,517,268
+bytes. Those test durations overlap build work and are not timing qualification.
+
+d76's remaining growth first appears at color simplification in
+`current=1680`, `given=sLI`, `reduced=Dmi`. A two-matrix adjoint chain retains an
+internal endpoint/side contraction where the baseline trace reduces immediately.
+An exact native local replay proves
+`chain(A,B; F(B),F(C)) = C_A g(A,C)`, with only A and C public. The baseline
+`Tr(F(C) F(A))` has the opposite sign; the captured overall imaginary factors
+compensate. The follow-up uses the existing two-f owner inside chain
+simplification. A shared edge guard distinguishes summed indices from fixed
+components; the latter are not evidence for a color-index sum. Its new tests and
+repaired-build performance still need qualification. The matched inputs, local
+proof and independent review are retained under `ghost-performance-audit`.
+
 == Measured GL1 preparation cost and proof reuse
 
 The existing instrumentation at `8f24069f` attributes about 0.915 seconds of
@@ -141,8 +159,8 @@ follow-up keeps the mapper and callback checks, then uses the existing
 unchanged. This preserves established facts while still validating unchecked
 inputs and finishing pending product normalization. A zero whose represented
 dimension changes takes the normal changed-value path. This is a separate
-optimization; its regression tests and contribution to GL1 timing still need
-qualification. Evidence and the validation plan are in
+optimization; its regression tests pass in the 1,045-test run, while its
+contribution to GL1 timing still needs qualification. Evidence and the validation plan are in
 `target/symbolic-tensor-flow/dimension-noop-proposal`.
 
 == Historical qualification at 6002674d, 17 October 2026
@@ -187,6 +205,15 @@ inputs to both binaries. Gammabench is pinned by
 five paired discovery trials and, where required, five confirmation trials.
 Generation includes a fresh CLI process; runtime uses warmed fixed points.
 Timing comparisons wait for this task's own builds and tests to finish.
+
+The frozen main uses the registry release of Symbolica 3.0.1; the later
+`8f24069f` candidate uses community revision `c78cffc`. Sealed CLI timings
+compare those complete binaries. Replaying both captured sources through one
+community compiler instead isolates source structure and optimization settings;
+it does not by itself separate their contribution from upstream compiler
+changes. A measured runtime improvement remains valid even when that causal
+split is unresolved. The separate ghost comparison from `16787f71` to
+`8f24069f` uses the same community compiler revision on both sides.
 
 All thirteen numerical corpora agreed in the initial reconciliation comparison.
 Eleven cases passed their performance gates. Its confirmed regressions were:
@@ -332,10 +359,12 @@ Three causes have been investigated separately:
   same community compiler reproduces the main operation counts and the
   candidate difference. Candidate static instructions fall from 16,375 to
   14,981, but arithmetic outside the first guard increases. A diagnostic
-  interpreter with the exact production selector IDs counts more executed
-  operations for each candidate orientation. This supports branch locality as
-  the remaining runtime cause; synthetic diagnostic inputs are not a physics
-  certificate. At that earlier, uncollected-component checkpoint, disabling
+  interpreter uses the exact production selector IDs with synthetic nonzero
+  scalar parameters and counts more interpreter operations for each candidate
+  orientation. This supports a branch-locality hypothesis; it does not measure
+  instruction execution on the physical corpus or establish the whole runtime
+  cause. The separate CLI corpus comparisons and timing gates provide the
+  numerical and runtime evidence. At that earlier, uncollected-component checkpoint, disabling
   common-pair elimination or selecting Horner optimization did not reduce the
   counted arithmetic cost. The later thermal investigation below repeats the
   comparison after component collection and identifies a separate remaining
@@ -374,15 +403,19 @@ creates new repeated factors after the earlier source-expression collection.
 An identical-input compiler replay isolates the benefit to function bodies:
 collecting only the outer root changes no operations. Compact collection changes
 7,853 additions and 10,491 multiplications to 5,710 and 7,951, preserving all
-299 inversions and 76 calls. The diagnostic interpreter counts 3,564--4,042
-executed instructions across nine orientations, versus 4,682--5,249 before the
-change and 3,187--3,847 on main. These instruction counts are diagnostic, not
-elapsed-time gates. Scalar powers, lazy guards and numerator products remain
+299 inversions and 76 calls. With synthetic nonzero scalar parameters and the
+nine production selector assignments, the diagnostic interpreter takes
+3,564--4,042 steps, versus 4,682--5,249 before the change and 3,187--3,847 on
+main. These are synthetic program-replay counts, not instruction measurements
+on the physical corpus or elapsed-time gates. The partial diagnostic interpreter
+tolerates nonfinite synthetic intermediates, so these counts are heuristic work
+estimates. Scalar powers, lazy guards and numerator products remain
 factorized; no compiler optimization setting or benchmark threshold changes.
 Counting each n-ary addition/multiplication by its number of binary operations
-and every other executed instruction once gives ranges of 3,556--4,344 on main,
-5,072--5,814 before component collection, and 3,789--4,392 afterward. This second
-diagnostic records operand cost as well as control flow; it is not a cycle model.
+and every other instruction visited by that synthetic replay once gives ranges
+of 3,556--4,344 on main, 5,072--5,814 before component collection, and
+3,789--4,392 afterward. This second diagnostic records synthetic operand cost
+and control flow; it is not a physical-corpus execution count or cycle model.
 The source captures, replay programs and per-orientation counts are retained in
 `target/readiness-repair`. Normal CLI measurements remain required.
 
@@ -705,10 +738,13 @@ The two complete thermal pipelines produce the same 32 orientation selectors
 and thermal function calls. Their scalar compiler inputs first differ in the
 factorized numerator bodies. The candidate has fewer static instructions, but
 common-pair elimination moves repeated arithmetic outside mutually exclusive
-residue branches. A replay of the exact programs with their production
-selectors executes 86,001 additions and 82,155 multiplications on the candidate,
-against 43,619 and 64,865 on main. The replay uses synthetic nonzero scalar
-inputs to count work; it is not a physics oracle.
+residue branches. A diagnostic replay of the exact programs uses all 32
+production selector assignments with synthetic nonzero scalar parameters. It
+visits 86,001 additions and 82,155 multiplications on the candidate, against
+43,619 and 64,865 on main. These synthetic program counts are neither a physics
+oracle nor measured instruction execution on the thermal corpus. The separate
+normal-Nix corpus comparisons and paired runtime gates below remain the
+correctness and performance evidence.
 
 Disabling common-pair elimination in that replay reduces the candidate totals
 to 38,684 additions and 54,551 multiplications, with the same thermal calls.
