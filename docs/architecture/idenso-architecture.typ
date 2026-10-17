@@ -222,6 +222,13 @@ may also have both endpoint orders reversed: its product is the transpose of
 the ordinary equal-argument product and has the same metric coefficient.
 This local contraction preserves the original spin representation, including
 formal spin dimensions, and never treats a mixed-orientation pair as equal.
+The same local owner handles equal abstract-index gammas on either side of
+physical `gamma0` in a four-dimensional spin representation. Since `gamma0`
+is symmetric, transposing the contracted sandwich preserves `(2-D)*gamma0`;
+an extra neighboring `gamma0` gives `(2-D)` times the spin metric. The summed
+Lorentz dimension remains formal. Fixed/vector arguments, mixed orientations,
+incompatible representations and generic spin dimensions keep their existing
+rules, and the global parser still leaves reversed open words opaque.
 
 Fixed components of the physical Minkowski basis have a separate local rule.
 Their metric contractions use the physical signature while retaining the

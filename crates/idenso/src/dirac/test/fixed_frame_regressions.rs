@@ -127,7 +127,6 @@ fn reversed_adjacent_gamma_pairs_keep_orientation_and_argument_guards() {
                 chain!(&start, &end, &reverse_mu, gamma!(&mu)),
                 chain!(&start, &end, gamma!(&mu), &reverse_mu),
                 chain!(&start, &end, &reverse_mu, &reverse_nu),
-                chain!(&start, &end, &reverse_mu, gamma0!(), &reverse_mu),
             ] {
                 assert_eq!(simplify(&word, settings), word);
             }
@@ -156,6 +155,330 @@ fn reversed_adjacent_gamma_pairs_keep_orientation_and_argument_guards() {
         simplify(&cross_space, GammaSimplifySettings::canonical()),
         cross_space
     );
+}
+
+#[test]
+fn reversed_temporal_sandwich_retains_dimension_and_factored_coefficients() {
+    use spenso::shadowing::IntoAtom;
+    use symbolica::{function, symbol};
+
+    let r = test_initialize();
+    let tags = &spenso::network::tags::SPENSO_TAG;
+    let d = Atom::var(symbol!("reversed_temporal::d"));
+    let epsilon = symbol!("reversed_temporal::epsilon");
+    let start = slot!(r.bis4, a).into_atom();
+    let end = slot!(r.bis4, b).into_atom();
+    let x = Atom::var(symbol!("reversed_temporal::x"));
+    let y = Atom::var(symbol!("reversed_temporal::y"));
+    let power = (&x + &y).pow(7);
+    let inverse = (&x - &y).pow(-3);
+    let spectator = function!(symbol!("reversed_temporal::opaque"), &x + &y) * &power * &inverse;
+    for dimension in [d.clone(), Atom::num(4)] {
+        let mu =
+            Minkowski {}.to_symbolic([&dimension, &Atom::var(symbol!("reversed_temporal::mu"))]);
+        let reversed = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+        for settings in [
+            GammaSimplifySettings::canonical(),
+            GammaSimplifySettings::repeated_pairs(),
+        ] {
+            // Transpose the complete Clifford identity. Physical gamma0 is
+            // symmetric, so the reversed sandwich retains (2-D)*gamma0.
+            let triple = chain!(&start, &end, &reversed, gamma0!(), &reversed);
+            let actual = simplify(&(&spectator * &triple), settings);
+            let expected =
+                &spectator * (Atom::num(2) - &dimension) * chain!(&start, &end, gamma0!());
+            assert_eq!(actual, expected);
+            assert!(actual.contains(power.as_view()) && actual.contains(inverse.as_view()));
+            assert_eq!(simplify(&actual, settings), actual);
+
+            for padded in [
+                chain!(&start, &end, gamma0!(), &reversed, gamma0!(), &reversed),
+                chain!(&start, &end, &reversed, gamma0!(), &reversed, gamma0!()),
+            ] {
+                assert_eq!(
+                    simplify(&padded, settings),
+                    (Atom::num(2) - &dimension) * g!(&start, &end),
+                );
+                // The evanescent numerator must precede either Laurent pole.
+                for pole in [1, 2] {
+                    let input =
+                        (&dimension - Atom::num(4)) * &padded / Atom::var(epsilon).pow(pole);
+                    let finite = simplify(&input, settings)
+                        .replace(d.to_pattern())
+                        .with(Atom::num(4) - Atom::num(2) * Atom::var(epsilon))
+                        .series(epsilon, 0, 0)
+                        .unwrap()
+                        .to_atom();
+                    let metric = g!(&start, &end);
+                    // Compare the independent Laurent coefficients in the
+                    // same termwise form emitted by the scalar series owner.
+                    let expected = if dimension != d {
+                        Atom::Zero
+                    } else if pole == 1 {
+                        Atom::num(4) * &metric
+                    } else {
+                        Atom::num(4) * &metric / Atom::var(epsilon) - Atom::num(4) * &metric
+                    };
+                    assert_eq!(finite, expected);
+                }
+            }
+            let closed = trace!(
+                r.bis4.to_symbolic([]),
+                gamma0!(),
+                &reversed,
+                gamma0!(),
+                &reversed
+            );
+            assert_eq!(
+                simplify(&closed, settings),
+                Atom::num(4) * (Atom::num(2) - &dimension)
+            );
+            assert_eq!(
+                simplify(
+                    &closed,
+                    GammaSimplifySettings {
+                        evaluate_traces: false,
+                        ..settings
+                    }
+                ),
+                closed,
+            );
+        }
+    }
+}
+
+#[test]
+fn reversed_temporal_sandwich_keeps_unsupported_words_opaque() {
+    use spenso::{
+        network::library::symbolic::ETS, shadowing::IntoAtom,
+        structure::abstract_index::AIND_SYMBOLS,
+    };
+    use symbolica::{function, symbol};
+
+    let r = test_initialize();
+    let tags = &spenso::network::tags::SPENSO_TAG;
+    let d = Atom::var(symbol!("reversed_temporal_guards::d"));
+    let start = slot!(r.bis4, a).into_atom();
+    let end = slot!(r.bis4, b).into_atom();
+    for dimension in [d.clone(), Atom::num(4)] {
+        let rep = Minkowski {}.to_symbolic([&dimension]);
+        let mu = Minkowski {}.to_symbolic([
+            &dimension,
+            &Atom::var(symbol!("reversed_temporal_guards::mu")),
+        ]);
+        let nu = Minkowski {}.to_symbolic([
+            &dimension,
+            &Atom::var(symbol!("reversed_temporal_guards::nu")),
+        ]);
+        let reversed = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+        let reverse_nu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &nu);
+        let compact = function!(
+            tags.rank_one_tensor_symbol("reversed_temporal_guards::p"),
+            &rep
+        );
+        let reverse_compact = function!(AGS.gamma, tags.chain_out, tags.chain_in, &compact);
+        for settings in [
+            GammaSimplifySettings::canonical(),
+            GammaSimplifySettings::repeated_pairs(),
+        ] {
+            for word in [
+                chain!(&start, &end, &reversed, gamma0!(), gamma!(&mu)),
+                chain!(&start, &end, gamma!(&mu), gamma0!(), &reversed),
+                chain!(&start, &end, &reversed, gamma0!(), &reverse_nu),
+                chain!(&start, &end, &reverse_compact, gamma0!(), &reverse_compact),
+                chain!(
+                    slot!(r.bis_d, a),
+                    slot!(r.bis_d, b),
+                    &reversed,
+                    gamma0!(),
+                    &reversed
+                ),
+            ] {
+                assert_eq!(simplify(&word, settings), word);
+            }
+            for component in 0..4 {
+                let fixed = function!(ETS.delta, function!(AIND_SYMBOLS.cind, component), &rep);
+                let reverse_fixed = function!(AGS.gamma, tags.chain_out, tags.chain_in, fixed);
+                let word = chain!(&start, &end, &reverse_fixed, gamma0!(), &reverse_fixed);
+                // Temporal-basis normalization was already supported. Spatial
+                // fixed arguments must not acquire the summed (2-D) rule.
+                let expected = if component == 0 {
+                    chain!(&start, &end, gamma0!())
+                } else {
+                    word.clone()
+                };
+                assert_eq!(simplify(&word, settings), expected);
+            }
+        }
+    }
+    let mu = Atom::var(symbol!("reversed_temporal_guards::same_label"));
+    let left = Minkowski {}.to_symbolic([&d, &mu]);
+    let right = Minkowski {}.to_symbolic([&Atom::num(4), &mu]);
+    let cross_space = chain!(
+        &start,
+        &end,
+        function!(AGS.gamma, tags.chain_out, tags.chain_in, left),
+        gamma0!(),
+        function!(AGS.gamma, tags.chain_out, tags.chain_in, right),
+    );
+    for settings in [
+        GammaSimplifySettings::canonical(),
+        GammaSimplifySettings::repeated_pairs(),
+    ] {
+        assert_eq!(simplify(&cross_space, settings), cross_space);
+    }
+}
+
+#[test]
+fn captured_expanded_temporal_word_is_independent_of_internal_dummy_order() {
+    use crate::tensor::{SymbolicNetExt, SymbolicNetParse};
+    use spenso::{
+        network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+        structure::{abstract_index::AbstractIndex, partial::PartialStructureExt},
+    };
+    use std::collections::BTreeMap;
+    use symbolica::{function, id::Replacement, symbol};
+
+    test_initialize();
+    // Literal uncooked D11 chain from the rejected analytic numerator. Rebuild
+    // native index metadata before using the existing chain expander.
+    let raw = Atom::parse(
+        include_str!("../../../tests/fixtures/d11_contracted_temporal_chain.sym"),
+        "idenso",
+        Default::default(),
+    )
+    .unwrap();
+    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+    let chain = cooking.try_cook(raw.as_view()).unwrap();
+    assert_eq!(cooking.uncook(chain.as_view()), raw);
+    let captured = chain
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
+            shorthand_parsing: ShorthandParsing::Expand {
+                schoonschip: SchoonschipExpansionMode::full(),
+                trace: false,
+                chain: true,
+            },
+            ..Default::default()
+        })
+        .unwrap()
+        .simple_execute::<()>()
+        .unwrap();
+    let AtomView::Mul(product) = captured.as_view() else {
+        panic!("captured product");
+    };
+    assert_eq!(product.get_nargs(), 4);
+    let mut counts = BTreeMap::<Atom, usize>::new();
+    let mut gammas = Vec::new();
+    for factor in product.iter() {
+        let AtomView::Fun(matrix) = factor else {
+            panic!("matrix factor");
+        };
+        assert!([AGS.gamma, AGS.gamma0].contains(&matrix.get_symbol()));
+        for slot in matrix.iter().take(2) {
+            *counts.entry(slot.to_owned()).or_default() += 1;
+        }
+        if matrix.get_symbol() == AGS.gamma {
+            gammas.push(matrix);
+        }
+    }
+    assert_eq!(gammas.len(), 2);
+    let external = counts
+        .iter()
+        .filter_map(|(slot, count)| (*count == 1).then_some(slot.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(external.len(), 2);
+    assert_eq!(counts.values().filter(|count| **count == 2).count(), 3);
+    let first = gammas
+        .iter()
+        .find(|gamma| external.contains(&gamma.get(1).to_owned()))
+        .unwrap();
+    let r = first.get(1).to_owned();
+    let a = first.get(0).to_owned();
+    let other = gammas
+        .iter()
+        .find(|gamma| gamma.get(1) != r.as_view())
+        .unwrap();
+    let b = other.get(1).to_owned();
+    let c = other.get(0).to_owned();
+    let mu = first.get(2).to_owned();
+    assert_eq!(other.get(2), mu.as_view());
+    let s = external.iter().find(|slot| **slot != r).unwrap().clone();
+    let AtomView::Fun(chain) = chain.as_view() else {
+        panic!("captured chain");
+    };
+    assert_eq!(chain.get(0), r.as_view());
+    assert_eq!(chain.get(1), s.as_view());
+    assert_eq!(
+        captured,
+        function!(AGS.gamma, &a, &r, &mu)
+            * function!(AGS.gamma, &c, &b, &mu)
+            * function!(AGS.gamma0, &b, &a)
+            * function!(AGS.gamma0, &c, &s)
+    );
+    let d = Atom::var(symbol!("gammalooprs::dim"));
+    let reference = (Atom::num(2) - d) * g!(&s, &r);
+    let fresh = ["a", "b", "c"].map(|name| {
+        Bispinor {}.to_symbolic([
+            Atom::num(4),
+            Atom::var(symbol!(&format!("captured_reversed_temporal::{name}"))),
+        ])
+    });
+    let power = (Atom::var(symbol!("captured_reversed_temporal::x"))
+        + Atom::var(symbol!("captured_reversed_temporal::y")))
+    .pow(7);
+    let spectator = function!(symbol!("captured_reversed_temporal::opaque"), &power)
+        / (Atom::var(symbol!("captured_reversed_temporal::u"))
+            + Atom::var(symbol!("captured_reversed_temporal::v")))
+        .pow(3);
+    for permutation in [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let forward = [&a, &b, &c]
+            .into_iter()
+            .zip(permutation)
+            .map(|(old, new)| Replacement::new(old.to_pattern(), fresh[new].to_pattern()))
+            .collect::<Vec<_>>();
+        let backward = [&a, &b, &c]
+            .into_iter()
+            .zip(permutation)
+            .map(|(old, new)| Replacement::new(fresh[new].to_pattern(), old.to_pattern()))
+            .collect::<Vec<_>>();
+        let word = captured.replace_multiple(&forward);
+        assert_eq!(word.replace_multiple(&backward), captured);
+        for factor in [Atom::one(), spectator.clone()] {
+            let input = &word * &factor;
+            let expected = &reference * &factor;
+            assert_eq!(
+                SymbolicTensor::infer(input.clone())
+                    .unwrap()
+                    .structure()
+                    .slots()
+                    .unwrap(),
+                SymbolicTensor::infer(expected.clone())
+                    .unwrap()
+                    .structure()
+                    .slots()
+                    .unwrap()
+            );
+            for settings in [
+                GammaSimplifySettings::canonical(),
+                GammaSimplifySettings::repeated_pairs(),
+            ] {
+                let actual = simplify(&input, settings);
+                assert_eq!(actual, expected, "dummy permutation {permutation:?}");
+                assert_eq!(simplify(&actual, settings), actual);
+                assert!(!actual.contains_symbol(AGS.gamma));
+                if !factor.is_one() {
+                    assert!(actual.contains(power.as_view()));
+                }
+            }
+        }
+    }
 }
 
 #[test]
