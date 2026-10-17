@@ -769,6 +769,24 @@ sweep is included in this qualification.
 
 == Validation graphs and support boundaries
 
+The retained-tensor complete three-loop uniform-soft case is compiled and
+listed at source `c0aaace381705b33a21fb3a8507c726080716243`. It requires the
+production Wood's eight local forest histories and the six certified physical
+and component-owned massless planes. Its declared matrix has twenty affine
+flats of ranks one through three, two rays per flat and five radii, plus three
+rest-center controls: 230 evaluations and 92 tail bounds with radial measure
+$rho^(3r-1)$. The fixed-rest, off-shell test uses external points $(5,0,0,0)$
+and $(5,1,2,3)$ at mass $m=12$. It does not include finite integrated prefixes,
+hierarchical approaches or an all-angle integrability claim.
+
+This current case has *not been executed*. Its native inventory confirms the
+ordinary-lane exclusion and existing 7200-second full-main selection. Execution
+is deferred until the final batched/hierarchy source and fresh route-cost
+review. Compilation and source-owner checks are recorded under
+`target/os-feynkit/retained-tensor-os-rebase/17-three-loop-geometry/`; they do
+not transfer a historical uniform-matrix pass to this source.
+
+
 #import "../assets/typst/portal-graphs/layout.typ": layout as draw-graphs
 
 // Draw the actual fixture incidence. Splitting the invisible external node is
