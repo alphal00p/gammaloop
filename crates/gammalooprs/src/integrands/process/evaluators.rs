@@ -891,6 +891,18 @@ impl EvaluatorStack {
             elapsed_ms = admission_started.elapsed().as_secs_f64() * 1000.0,
             "Admitted scalar evaluator root before tensor preprocessing"
         );
+        // Family calls have been replaced by their component shadows before
+        // this boundary. Lower finite dots inside scalar arguments as well;
+        // the component parser deliberately keeps those arguments opaque.
+        let components_started = std::time::Instant::now();
+        let tensor = tensor.expand_dots()?;
+        crate::debug_tags!(#generation, #profile, #numerator, #compile, #summary;
+            stage = "evaluator_stack_raw_root_scalar_components",
+            atom_index,
+            output_bytes = tensor.expression().as_view().get_byte_size(),
+            elapsed_ms = components_started.elapsed().as_secs_f64() * 1000.0,
+            "Lowered finite dot components in scalar evaluator arguments"
+        );
         Self::preprocess_tensor(
             &tensor,
             atom_index,
@@ -4122,6 +4134,97 @@ mod tests {
         .unwrap();
         assert!(atoms[0].get_root().is_zero());
         assert!(prepared.reps.is_empty());
+    }
+
+    #[test]
+    fn scalar_argument_dots_lower_after_shared_tensor_interfaces_are_resolved() {
+        test_initialise().unwrap();
+        let family = symbol!("evaluator_test::scalar_dot_argument_family");
+        let index = parse_lit!(spenso::mink(4, 719));
+        let definitions = [Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 0),
+                rhs: GS.energy_delta(index.as_view()),
+                tags: vec![Atom::num(0)],
+                args: vec![],
+            })
+            .unwrap(),
+        )];
+        assert_eq!(definitions[0].rhs.rank(), 1);
+        let momentum = GS.emr_mom(EdgeIndex(8), parse_lit!(spenso::mink(4)));
+        let squared = function!(SPENSO_TAG.dot, &momentum, &momentum);
+        let scalar = function!(GS.tree_denom_wrapper, (&squared - 4).pow(-1))
+            + function!(GS.on_shell_energy, 7, &squared + 9);
+        let call = function!(family, 0);
+        let mut builder = ParamBuilder::new_empty();
+        let argument = symbol!("evaluator_test::scalar_dot_argument");
+        builder
+            .add_function(GS.tree_denom_wrapper, vec![argument], Atom::var(argument))
+            .unwrap();
+        builder
+            .add_function(
+                GS.on_shell_energy,
+                vec![symbol!("evaluator_test::scalar_dot_owner"), argument],
+                Atom::var(argument).pow((1, 2)),
+            )
+            .unwrap();
+        builder.pairs.additional_params = (0..4)
+            .map(|component| GS.emr_mom(EdgeIndex(8), GS.cind(component)))
+            .collect();
+        builder.pairs.update_ranges();
+        for do_algebra in [false, true] {
+            let settings = EvaluatorSettings {
+                do_algebra,
+                ..Default::default()
+            };
+            let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
+                &[&call * GS.energy_delta(index.as_view()) * &scalar],
+                &builder,
+                &definitions,
+                &settings,
+                symbol!("evaluator_test::scalar_dot_alias"),
+                InliningPolicy::Never,
+            )
+            .unwrap();
+            assert!(
+                std::iter::once(atoms[0].get_root())
+                    .chain(atoms[0].get_aliases().values())
+                    .chain(prepared.reps.iter().map(|entry| &entry.rhs))
+                    .all(|body| !body.contains_symbol(SPENSO_TAG.dot))
+            );
+            let mut evaluator = GenericEvaluator::new_from_builder(
+                atoms,
+                &prepared,
+                None,
+                settings.optimization_settings(),
+                &settings,
+            )
+            .unwrap();
+            // q^2 = 25 - 1 - 4 - 4 = 16, so the two scalar arguments
+            // independently give 1/(16-4) and sqrt(16+9).
+            let values = [5.0, 1.0, 2.0, 2.0].map(|value| Complex::new_re(F(value)));
+            let actual =
+                <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut evaluator)(&values);
+            assert!((actual.re.0 - 61.0 / 12.0).abs() < 1e-12);
+            assert_eq!(actual.im.0, 0.0);
+
+            let error = EvaluatorStack::preprocess_numerator_families(
+                &[&call * &scalar],
+                &builder,
+                &definitions,
+                &settings,
+                symbol!("evaluator_test::scalar_dot_open_alias"),
+                InliningPolicy::Never,
+            )
+            .err()
+            .expect("lowering scalar arguments must retain the unclosed family port");
+            assert!(
+                error.to_string().contains("retains 1 tensor ports"),
+                "{error:?}"
+            );
+        }
     }
 
     #[test]

@@ -56,7 +56,18 @@ impl FinalIntegrands {
         mut map: impl FnMut(&Atom) -> Result<Atom>,
     ) -> Result<Self> {
         Ok(Self(self.0.fallible_map(&mut map)?.map_numerators(
-            |tensor| Ok(tensor.with_checked_expression(map(tensor.expression())?)?),
+            |tensor| {
+                let mapped = map(tensor.expression())?;
+                debug_tags!(#uv, #final_integrand, #tensor, #trace;
+                    stage = "final_integrand_tensor_map",
+                    mapper = std::any::type_name_of_val(&map),
+                    source_interface = ?tensor.structure(),
+                    file.source = %tensor.expression().to_plain_string(),
+                    file.mapped = %mapped.to_plain_string(),
+                    "Mapped a retained final numerator before interface validation"
+                );
+                Ok(tensor.with_checked_expression(mapped)?)
+            },
         )?))
     }
 
@@ -612,6 +623,52 @@ mod tests {
         structure::representation::{Minkowski, RepName},
     };
     use symbolica::{parse, symbol};
+
+    #[test]
+    fn final_color_collection_preserves_encoded_open_ports_and_dispatch_roots() -> Result<()> {
+        use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+
+        test_initialise()?;
+        let raw = parse!(
+            "1/3*gammalooprs::u(0,spenso::bis(4,gammalooprs::hedge(0,1)))*gammalooprs::ubar(1,spenso::bis(4,gammalooprs::hedge(1,1)))*spenso::g(spenso::cof(3,gammalooprs::hedge(1,1)),spenso::dind(spenso::cof(3,gammalooprs::hedge(0,1))))"
+        );
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let native = cooking.try_cook(raw.as_view())?;
+        assert_ne!(native, raw);
+        let tensor = SymbolicTensor::infer(native.clone())?;
+        assert_eq!(tensor.rank(), 4);
+        let tag = Atom::var(symbol!("final_color_collection_scope"));
+        let lhs = symbol!("gammalooprs::uv::numerator_family").call_args([tag.clone()]);
+        let entry = Arc::new(FnMapEntry {
+            lhs: lhs.clone(),
+            rhs: tensor.clone(),
+            args: Vec::new(),
+            tags: vec![tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
+        });
+        let source = FinalIntegrands(
+            Integrands::from_iter([(CutCFFIndex::new_all_none(), OrientationID(3).atom() * lhs)])
+                .with_numerators([entry])?,
+        );
+        let collected = source.collect(TensorCollectFilter::Reps([
+            ColorAdjoint {}.into(),
+            ColorFundamental {}.into(),
+            ColorSextet {}.into(),
+        ]))?;
+        assert_eq!(
+            collected.0.iter().collect::<Vec<_>>(),
+            source.0.iter().collect::<Vec<_>>(),
+        );
+        assert_eq!(collected.0.numerators().len(), 1);
+        let retained = &collected.0.numerators()[0].rhs;
+        assert_eq!(retained.structure(), tensor.structure());
+        assert_eq!(retained.expression(), &native);
+        assert_eq!(cooking.uncook(retained.expression().as_view()), raw);
+        Ok(())
+    }
 
     #[test]
     fn final_energy_copy_coalesces_owners_and_even_powers_after_taylor() -> Result<()> {

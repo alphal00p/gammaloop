@@ -25,6 +25,7 @@ use crate::{
         expression::{OrientationID, energy_map_replacements_gs},
         surface::LinearEnergyExpr,
     },
+    debug_tags,
     graph::Graph,
     integrands::process::param_builder::{FnMapEntry, NumeratorDefinition},
     numerator::symbolica_ext::NumeratorAtomExt,
@@ -336,6 +337,14 @@ impl DirectResidueBranches {
                 .filter_map(|(argument, used)| used.then_some(argument))
                 .collect();
         }
+        debug_tags!(#uv, #local, #trace;
+            stage = "direct_3d_prepared_numerator",
+            scope,
+            source_interface = ?numerator.structure(),
+            file.source = %numerator.expression().to_plain_string(),
+            file.mapped = %mapped.to_plain_string(),
+            "Prepared a shared numerator before checking its retained tensor interface"
+        );
         Ok((numerator.with_checked_expression(mapped)?, parameters, rows))
     }
 

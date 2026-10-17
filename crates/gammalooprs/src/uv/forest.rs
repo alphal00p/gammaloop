@@ -419,22 +419,12 @@ impl Forest {
                 log.graph = %graph.dot_lmb_of(&n.data.spinney.subgraph,&n.data.spinney.lmb),
                 simple = %n.data.simple_display(graph),"Terms"
             );
-            let terms = n
-                .data
-                .final_integrand(graph)?
-                .map_expressions(|integrand| {
-                    let color = TensorCollectFilter::Reps([
-                        ColorAdjoint {}.into(),
-                        ColorFundamental {}.into(),
-                        ColorSextet {}.into(),
-                    ]);
-                    let cooking = CookSettings::indices()
-                        .with_mode(CookMode::ReversibleEncoding)
-                        .with_representation_payloads(true, true);
-                    let collected = SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
-                        .collect(color)?;
-                    Ok(cooking.uncook(collected.expression().as_view()))
-                })?;
+            let color = TensorCollectFilter::Reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ]);
+            let terms = n.data.final_integrand(graph)?.collect(color)?;
             sum = Some(match sum {
                 Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                     format!(
