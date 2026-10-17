@@ -98,10 +98,7 @@ impl IndexAliases {
         display
             .map(|label| label.to_native_string())
             .unwrap_or_else(|| {
-                index.format_string(
-                    &display_options_with_settings(TensorDisplayMode::Plain, settings),
-                    PrintState::new(),
-                )
+                format_atom_with_settings(&index, TensorDisplayMode::Plain, settings)
             })
     }
 

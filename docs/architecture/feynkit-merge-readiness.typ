@@ -1018,6 +1018,15 @@ arithmetic proves the CP snapshot's only remaining change is the spelling of
 three simultaneous factor signs; that cosmetic refresh retains the count,
 source IDs and total. It is separate from the ten pending bookkeeping proposals.
 
+The subsequent native package run passes 501 of 502 tests. Its only remaining
+failure is presentation: encoded index symbols hid the original edge/vertex
+labels from Python's raw-index formatter. The existing display owners now
+resolve individual index payloads while keeping native identities as keys.
+Temporary presentation uses existing portable print-head tags and adds no
+callbacks or live-tensor rewrites. Both new controls and all 171 Python/tensor
+wrapper tests pass, including the original plain, LaTeX and Typst provenance
+assertions. The final application/workspace run remains pending.
+
 The final ownership audit found two remaining uses of fresh interface inference
 after transformations of a retained tensor. The evaluator's scalar color
 invariant rewrite now uses `with_checked_expression`. Final specialization
