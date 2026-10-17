@@ -623,7 +623,9 @@ impl CookSettings {
     }
 
     /// Read a portable dimension encoded by this owner, without a process-local registry.
-    pub(crate) fn dimension_payload(symbol: Symbol) -> Option<Atom> {
+    /// Returns `None` for ordinary symbols or invalid encodings. Consumers can
+    /// compare this scalar dimension while retaining native tensor slot syntax.
+    pub fn dimension_payload(symbol: Symbol) -> Option<Atom> {
         let hex = symbol
             .get_name()
             .strip_prefix("idenso::cooked_dimension_v1_")?;

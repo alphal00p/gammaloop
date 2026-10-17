@@ -433,7 +433,11 @@ mod tests {
             function!(symbols::hedge_index(), old_hedge.0, 1)
                 * function!(symbols::vertex_index(), 1, 2)
                 * function!(symbols::edge_index(), old_edge, 3)
-                * function!(symbols::loop_momentum(), 0),
+                * function!(
+                    symbols::loop_momentum(),
+                    0,
+                    function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0)
+                ),
             None,
         )
         .unwrap();
@@ -464,7 +468,11 @@ mod tests {
         let expected = function!(symbols::hedge_index(), new_hedge.0, 1)
             * function!(symbols::vertex_index(), 0, 2)
             * function!(symbols::edge_index(), new_edge, 3)
-            * function!(symbols::momentum(), new_loop_edge);
+            * function!(
+                symbols::momentum(),
+                new_loop_edge,
+                function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0)
+            );
         assert_eq!(NumeratorInterface::export(result.numerator()).0, expected);
         result.validate().unwrap();
     }

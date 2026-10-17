@@ -510,8 +510,10 @@ impl Serialize for GlobalPrefactor {
             "GlobalPrefactor",
             2 + usize::from(projector_interface.is_some()) + usize::from(num_interface.is_some()),
         )?;
-        state.serialize_field("projector", &projector.to_string())?;
-        state.serialize_field("num", &num.to_string())?;
+        // Source fields must not use the display printer, whose compact tensor
+        // notation can omit the slots retained by the interface declaration.
+        state.serialize_field("projector", &projector.to_canonical_string())?;
+        state.serialize_field("num", &num.to_canonical_string())?;
         if let Some(interface) = projector_interface {
             state.serialize_field("projector_interface", &interface.to_json())?;
         }

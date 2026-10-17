@@ -188,6 +188,15 @@ fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order()
         graph.global_prefactor.projector = metric.clone();
         let json = serde_json::to_value(&graph.global_prefactor).unwrap();
         assert!(json.get("num_interface").is_some());
+        assert_eq!(
+            symbolica::try_parse!(json["projector"].as_str().unwrap()).unwrap(),
+            NumeratorInterface::export(&metric).0,
+            "serialized tensor payloads must retain source syntax independently of display printers"
+        );
+        assert_eq!(
+            symbolica::try_parse!(json["num"].as_str().unwrap()).unwrap(),
+            Atom::Zero
+        );
         let restored_global: GlobalPrefactor = serde_json::from_value(json).unwrap();
         assert!(restored_global.num.same_value(&zero));
         assert!(restored_global.projector.same_value(&metric));

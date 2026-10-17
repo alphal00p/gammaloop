@@ -8206,8 +8206,18 @@ mod tests {
                     .call_method0(name)
                     .expect_err("malformed dot notation should return an error");
                 assert!(error.is_instance_of::<PyValueError>(py));
-                assert!(error.to_string().contains("cannot parse tensor network"));
-                assert!(error.to_string().contains("Invalid dot function"));
+                if name == "dirac_adjoint" {
+                    // The typed adjoint rejects malformed source syntax before
+                    // materializing its component network.
+                    assert!(
+                        error
+                            .to_string()
+                            .contains("dot requires exactly two operands")
+                    );
+                } else {
+                    assert!(error.to_string().contains("cannot parse tensor network"));
+                    assert!(error.to_string().contains("Invalid dot function"));
+                }
             }
             Ok(())
         })

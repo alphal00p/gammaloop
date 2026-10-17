@@ -3690,7 +3690,7 @@ impl PyFeynmanDiagram {
         TensorExpression::from_structured(py, counterterm)
     }
 
-    /// Return the request-wide numerator multiplier as a Symbolica expression.
+    /// Return the request-wide numerator multiplier with its tensor interface.
     ///
     /// Examples
     /// --------
@@ -3703,7 +3703,7 @@ impl PyFeynmanDiagram {
         TensorExpression::from_structured(py, self.inner.numerator_prefactor().clone())
     }
 
-    /// Return the external-state projector as a Symbolica expression.
+    /// Return the external-state projector with its tensor interface.
     ///
     /// Examples
     /// --------

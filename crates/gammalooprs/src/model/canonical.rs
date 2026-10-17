@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use spenso::algebra::complex::Complex;
 use spenso::structure::{
     Canonicalized, IndexLess, OrderedStructure, TensorDataLayout,
+    abstract_index::AbstractIndex,
     representation::{Euclidean, LibraryRep, Minkowski, RepName},
     slot::{DummyAind, IsAbstractSlot, Slot},
 };
@@ -915,7 +916,8 @@ impl ParticleGammaLoopExt for Particle {
         Ok(match self.spin {
             1 => None,
             2 => {
-                let mu: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
+                let mu: Slot<Minkowski, AbstractIndex> =
+                    Minkowski {}.new_rep(4).slot(AbstractIndex::new_dummy());
                 let slash = GS.emr_mom(edge, mu.to_atom())
                     * function!(AGS.gamma, W_.a_, W_.b_, mu.to_atom());
                 let rhs = sum.fermion(slash, &W_.a_.into(), &W_.b_.into())?;

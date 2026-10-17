@@ -188,7 +188,8 @@ anchor = "pub fn generate("
 # Reviewed 2026-10-16: Process projector owners are resolved from external-leg labels before native finalization; the boundary and unchanged native local-slot convention are documented in the current architecture.
 # Reviewed 2026-10-16: Paired incoming-state permutations preserve sewn partners; canonical-only comparison permits zero numerical samples. The current architecture records the label/routing contract.
 # Reviewed 2026-10-17: Generation caches retain localized typed factors; source recipes are admitted at instantiation and finalized diagrams transport the carriers directly.
-digest = "d16e3a620716f71bb96e509e8258a621dd1fd8ea"
+# Reviewed 2026-10-17: Only toy-model fixtures change: singlet summands have matching scalar color factors, the dedicated colored test retains matching color tensors, and incompatible sums remain rejected before caching.
+digest = "c70b57aece2102d1060a47ad9698413b19d5b47f"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -241,7 +242,8 @@ anchor = "pub struct FeynmanDiagram {"
 # Reviewed 2026-10-16: The architecture records explicit half-edge order and orientations in the native builder for validated runtime export.
 # Reviewed 2026-10-16: Default ordered routing roots at the outgoing sewn attachment; a physical-cut box regression preserves the center-of-mass origin and topology/numerator identity.
 # Reviewed 2026-10-17: Live graph fragments, aggregate numerator, prefactor and projector retain tensors; the shared source codec records logical ports and ranked zeros in optional metadata.
-digest = "323ce53f368cde5f1449ef6477c8b7d7c67d4217"
+# Reviewed 2026-10-17: Artifact validation uses the native coefficient visitor and exact-only scalar zero certification while preserving tensor factorization; typed source fixtures retain owner and UV-degree assertions.
+digest = "d5a349fc04a8e18dc0dd9c93f8cabe54ad6ec61d"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -792,7 +794,8 @@ anchor = "pub struct CookSettings {"
 # Reviewed 2026-10-15: Expression-local memoization preserves reversible cooking and
 # original admitted names; it does not introduce a second normalization or persistence
 # boundary.
-digest = "681ba4265136ebb3d377f7a3db015821a11491ad"
+# Reviewed 2026-10-17: The existing portable dimension decoder is public for scalar dimension comparisons without decoding native slots or complete tensors; its behavior is unchanged.
+digest = "2a68fe5999a94a287accc9516cbcf3c4db22e134"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/mod.rs"
@@ -1493,7 +1496,8 @@ anchor = "fn preprocess_numerator_families<A: AtomCore>("
 # Clippy review: copy Copy settings directly and iterate alias values; dispatch policy and iteration order are unchanged.
 # Reviewed 2026-10-17: The readiness note distinguishes previous qualified timings from the pending typed migration, including logical component layouts, retained zero-family interfaces, and separately timed raw-root admission.
 # Reviewed 2026-10-17: Scalar-argument finite dots lower after family shadows, before component parsing, with admission and scalar-component timers recorded separately.
-digest = "a22210b7f8221fd6eb621028d1b8b6728565fd8b"
+# Reviewed 2026-10-17: The scalar invariant rewrite with algebra disabled preserves the declared tensor interface via the checked finisher; reversed-axis nonzero and ranked-zero controls are retained.
+digest = "f4dccef6c82c2a3ac6dc2aaebe4bbcced04ed471"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
@@ -1510,7 +1514,8 @@ anchor = "pub(crate) fn group_diagrams("
 # Reviewed 2026-10-16: isolated color contraction, scalar conjugation, exact
 # algebraic weight cancellation and numeric content preserve factorized inputs.
 # Reviewed 2026-10-17: Grouping retains exact, sampling-source and color-valued sampled tensors; finite Lorentz component values and certified ratios remain scalar. Historical timing identities are unchanged.
-digest = "1db3fd99dc17d3837c5e634f24b806a5cc16d09b"
+# Reviewed 2026-10-17: Exact scalar ratios decode dimension metadata before the unchanged scalar predicate and respect formal versus concrete color choice; tensor bodies and numerical fallback policy remain unchanged.
+digest = "b34a38911195efb5d0809525734f67c61f5da64d"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
