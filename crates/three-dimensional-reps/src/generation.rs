@@ -389,8 +389,6 @@ mod generated_expression_persistence_tests {
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
-    #[error("LTD supports only vacuum generation; medium mode {medium_mode:?} is unsupported")]
-    LtdRequiresVacuum { medium_mode: MediumMode },
     #[error("invalid LTD residue coordinate: {0}")]
     InvalidResidueCoordinate(String),
     #[error(
@@ -464,13 +462,6 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
     graph: &G,
     options: &Generate3DExpressionOptions,
 ) -> Result<GeneratedThreeDExpression> {
-    if options.representation == RepresentationMode::Ltd
-        && options.medium_mode != MediumMode::Vacuum
-    {
-        return Err(GenerationError::LtdRequiresVacuum {
-            medium_mode: options.medium_mode,
-        });
-    }
     let parsed = graph.to_three_d_parsed_graph()?;
     let validation = crate::validate_parsed_graph(&parsed);
     if !validation
@@ -5073,7 +5064,7 @@ mod representation_tests {
     }
 
     #[test]
-    fn ltd_rejects_equilibrium_modes_before_graph_generation() {
+    fn ltd_equilibrium_modes_keep_both_poles_and_validate_graphs() {
         for medium_mode in [
             MediumMode::ThermodynamicEquilibrium,
             MediumMode::ZeroTemperatureEquilibrium,
@@ -5084,15 +5075,36 @@ mod representation_tests {
                 medium_mode,
                 ..Default::default()
             };
-            for invalid_graph in [false, true] {
-                if invalid_graph {
-                    graph.internal_edges[0].signature.loop_signature.clear();
-                }
-                assert!(matches!(
-                    generate_3d_expression(&graph, &options),
-                    Err(GenerationError::LtdRequiresVacuum { medium_mode: rejected }) if rejected == medium_mode
-                ));
+            let generated = generate_3d_expression(&graph, &options).unwrap();
+            let weights = generated
+                .expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| {
+                    orientation
+                        .variants
+                        .iter()
+                        .map(|variant| &variant.thermal_weight)
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                weights
+                    .iter()
+                    .all(|weight| weight.medium_mode == medium_mode)
+            );
+            for sign in [-1, 1] {
+                assert!(weights.iter().any(|weight| {
+                    weight
+                        .distributions
+                        .iter()
+                        .any(|factor| factor.sign == sign)
+                }));
             }
+            graph.internal_edges[0].signature.loop_signature.clear();
+            assert!(matches!(
+                generate_3d_expression(&graph, &options),
+                Err(GenerationError::GraphIo(_))
+            ));
         }
     }
 

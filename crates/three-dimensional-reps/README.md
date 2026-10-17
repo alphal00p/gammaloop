@@ -41,8 +41,8 @@ cargo nextest run -p three-dimensional-reps -p gammaloop-workspace-hack \
 Including the workspace feature-unification package selects Symbolica's integer
 and floating-point backends, as in GammaLoop builds.
 
-Thermal CFF generation uses `Generate3DExpressionOptions::medium_mode` and supports
-uniform numerator sampling scales in both equilibrium modes. GammaLoop supplies
+Thermal CFF and LTD generation use `Generate3DExpressionOptions::medium_mode`
+and support uniform numerator sampling scales in both equilibrium modes. GammaLoop supplies
 the model-dependent distributions; the standalone `eval` feature rejects thermal
 expressions because it does not accept those inputs. See the
 [CFF architecture](../../docs/architecture/architecture-current.typ#cff-production-and-numerator-energy-ownership)
@@ -64,9 +64,12 @@ independent-occurrence normal form, multiloop high-power numerators, and uniform
 numerator sampling-scale modes. GammaLoop owns both UV orchestration orders:
 direct local 3D subtraction on CFF expressions and 4D-local UV followed by a
 complete CFF or LTD residue sum. Medium modes and optional vacuum subtraction
-support only CFF with direct local 3D subtraction; LTD rejects both equilibrium
-modes. `RepresentationMode::Ltd` retains the signed vacuum energy-residue sum
-and its explicit E/H surfaces. Simple LTD poles do not need numerator-degree
+support only CFF with direct local 3D subtraction; production and diagnostic CLI
+LTD still reject both equilibrium modes. The shared LTD generator supports them
+by reflecting each vacuum residue's cut poles and attaching thermal weights,
+including analytic distribution derivatives for raised poles.
+`RepresentationMode::Ltd` retains the signed energy-residue sum and its
+explicit E/H surfaces. Simple LTD poles do not need numerator-degree
 bounds; repeated poles require explicit bounds for exact derivative-free
 polynomial sampling (`Some([])` selects a scalar numerator).
 LTD residue terms must be summed together for their H-surface cancellation.

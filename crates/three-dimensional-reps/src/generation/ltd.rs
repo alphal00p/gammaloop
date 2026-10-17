@@ -14,7 +14,7 @@ use super::{
     solve_loop_energy_from_target_edge_exprs, solve_rational_system,
 };
 use crate::{
-    ThreeDExpression,
+    MediumMode, ThermalDistributionFactor, ThermalWeight, ThreeDExpression,
     cut_structure::{ContourClosure, EnergyResidue},
     expression::CFFVariant,
     graph_io::repeated_groups,
@@ -133,7 +133,29 @@ impl<'a> LtdBuilder<'a> {
             return Err(GenerationError::SingularBasis);
         }
         for residue in residues {
-            self.add_residue(&residue)?;
+            if self.options.medium_mode == MediumMode::Vacuum {
+                self.add_residue(&residue, &[])?;
+                continue;
+            }
+            // Thermal reflection acts only on cut energies: each uncut
+            // quadratic denominator is even in its own on-shell energy.
+            // Keep the vacuum contour coefficient and attach N(+1) to an
+            // unchanged pole, N(-1) to its reflection. The latter vanishes
+            // in vacuum, recovering exactly the original residue list.
+            for sigmas in (0..loop_count).map(|_| [1, -1]).multi_cartesian_product() {
+                let thermal_signs = sigmas
+                    .iter()
+                    .zip(&residue.sigmas)
+                    .map(|(sigma, vacuum_sigma)| sigma * vacuum_sigma)
+                    .collect::<Vec<_>>();
+                self.add_residue(
+                    &EnergyResidue {
+                        sigmas,
+                        ..residue.clone()
+                    },
+                    &thermal_signs,
+                )?;
+            }
         }
         let mut expression = self.assembly.expression.fuse_compatible_variants();
         super::assign_numerator_map_labels(&mut expression.orientations);
@@ -157,7 +179,7 @@ impl<'a> LtdBuilder<'a> {
         })
     }
 
-    fn add_residue(&mut self, residue: &EnergyResidue) -> Result<()> {
+    fn add_residue(&mut self, residue: &EnergyResidue, thermal_signs: &[i32]) -> Result<()> {
         let basis = residue
             .basis
             .iter()
@@ -294,93 +316,131 @@ impl<'a> LtdBuilder<'a> {
             {
                 continue;
             }
-            let gamma = alpha
+            for delta in alpha
                 .iter()
                 .zip(&beta)
-                .map(|(a, b)| a - b)
-                .collect::<Vec<_>>();
-            // binomial(alpha,beta)/alpha! = 1/(beta! gamma!). The
-            // denominator expansion below supplies its own gamma!.
-            let coefficient = beta
-                .iter()
-                .chain(&gamma)
-                .fold(contour.clone(), |value, order| {
-                    (1..=*order).fold(value, |value, factor| value / Rational::from(factor))
-                });
-            let denominator_terms = DenominatorFactor::differentiate_product(&factors, &gamma);
-            let mut axes = Vec::new();
-            for (axis, order) in beta
-                .iter()
-                .copied()
-                .enumerate()
-                .filter(|(_, order)| *order > 0)
-            {
-                let degree = degrees[axis];
-                let stencil = match self.stencils.entry((degree, order)) {
-                    Entry::Occupied(entry) => entry.into_mut(),
-                    Entry::Vacant(entry) => entry.insert(Self::derivative_stencil(degree, order)?),
-                };
-                axes.push((
-                    axis,
-                    self.options
-                        .numerator_sampling_scale
-                        .is_active_for_degree(degree),
-                    stencil.clone(),
-                ));
-            }
-            for samples in axes
-                .iter()
-                .map(|(_, _, samples)| samples)
+                .map(|(a, b)| {
+                    0..=if self.options.medium_mode == MediumMode::Vacuum {
+                        0
+                    } else {
+                        a - b
+                    }
+                })
                 .multi_cartesian_product()
             {
-                let mut sample_targets = targets.clone();
-                let mut sample_coefficient = coefficient.clone();
-                let mut extra_half_edges = Vec::new();
-                let mut uniform_scale_power = 0;
-                for ((axis, uniform, _), (offset, weight)) in axes.iter().zip(samples) {
-                    let edge = basis[*axis];
-                    sample_coefficient *= weight;
-                    sample_targets[edge] = sample_targets[edge].clone()
-                        + if *uniform {
-                            uniform_scale_power += beta[*axis];
-                            LinearEnergyExpr::uniform_scale(*offset)
-                        } else {
-                            extra_half_edges
-                                .extend(std::iter::repeat_n(EdgeIndex(edge), beta[*axis]));
-                            sample_coefficient *= Rational::from(2).pow_usize(beta[*axis]);
-                            LinearEnergyExpr::ose(EdgeIndex(edge), *offset)
-                        };
+                let gamma = alpha
+                    .iter()
+                    .zip(&beta)
+                    .zip(&delta)
+                    .map(|((a, b), d)| a - b - d)
+                    .collect::<Vec<_>>();
+                // The residue factorial and multinomial leave
+                // 1/(beta! gamma! delta!). Only the polynomial numerator is
+                // sampled; denominators and distributions are differentiated.
+                let mut coefficient = beta.iter().chain(&gamma).chain(&delta).fold(
+                    contour.clone(),
+                    |value, order| {
+                        (1..=*order).fold(value, |value, factor| value / Rational::from(factor))
+                    },
+                );
+                let thermal_weight = ThermalWeight {
+                    medium_mode: self.options.medium_mode,
+                    numerators: Vec::new(),
+                    distributions: basis
+                        .iter()
+                        .zip(thermal_signs)
+                        .zip(&delta)
+                        .map(
+                            |((&edge, &sign), &derivative_order)| ThermalDistributionFactor {
+                                edge_id: EdgeIndex(edge),
+                                sign,
+                                derivative_order,
+                            },
+                        )
+                        .collect(),
+                };
+                // The residue coordinate is the signed cut energy q0 = sigma E;
+                // N stores ordinary derivatives with respect to positive E.
+                for (&sigma, &order) in residue.sigmas.iter().zip(&delta) {
+                    coefficient *= Rational::from(sigma).pow_usize(order);
                 }
-                let loop_map = solve_loop_energy_from_target_edge_exprs(
-                    &self.signatures,
-                    &basis,
-                    &sample_targets,
-                )?;
-                let mut edge_map = edge_q0_from_loop_exprs(&self.signatures, &loop_map);
-                apply_initial_state_cut_edge_energy_exprs(self.parsed, &mut edge_map);
-                for term in &denominator_terms {
-                    let mut half_edges = term.half_edges.clone();
-                    half_edges.extend(extra_half_edges.iter().copied());
-                    self.assembly.push_variant_for_maps(
-                        loop_map.clone(),
-                        edge_map.clone(),
-                        &pole_orientation,
-                        &identity_edges,
-                        CFFVariant {
-                            thermal_weight: Default::default(),
-                            origin: Some("ltd".to_string()),
-                            prefactor: &sample_coefficient * &term.coefficient,
-                            half_edges,
-                            denominator_edges: term.edges.clone(),
-                            denominator_surface_signs: BTreeMap::new(),
-                            denominator_edge_support_signs: BTreeMap::new(),
-                            uniform_scale_power,
-                            numerator_surfaces: Vec::new(),
-                            denominator: denominator_tree_from_chains(std::slice::from_ref(
-                                &term.chain,
-                            )),
-                        },
-                    );
+                let denominator_terms = DenominatorFactor::differentiate_product(&factors, &gamma);
+                let mut axes = Vec::new();
+                for (axis, order) in beta
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .filter(|(_, order)| *order > 0)
+                {
+                    let degree = degrees[axis];
+                    let stencil = match self.stencils.entry((degree, order)) {
+                        Entry::Occupied(entry) => entry.into_mut(),
+                        Entry::Vacant(entry) => {
+                            entry.insert(Self::derivative_stencil(degree, order)?)
+                        }
+                    };
+                    axes.push((
+                        axis,
+                        self.options
+                            .numerator_sampling_scale
+                            .is_active_for_degree(degree),
+                        stencil.clone(),
+                    ));
+                }
+                for samples in axes
+                    .iter()
+                    .map(|(_, _, samples)| samples)
+                    .multi_cartesian_product()
+                {
+                    let mut sample_targets = targets.clone();
+                    let mut sample_coefficient = coefficient.clone();
+                    let mut extra_half_edges = Vec::new();
+                    let mut uniform_scale_power = 0;
+                    for ((axis, uniform, _), (offset, weight)) in axes.iter().zip(samples) {
+                        let edge = basis[*axis];
+                        sample_coefficient *= weight;
+                        sample_targets[edge] = sample_targets[edge].clone()
+                            + if *uniform {
+                                uniform_scale_power += beta[*axis];
+                                LinearEnergyExpr::uniform_scale(*offset)
+                            } else {
+                                extra_half_edges
+                                    .extend(std::iter::repeat_n(EdgeIndex(edge), beta[*axis]));
+                                sample_coefficient *= Rational::from(2).pow_usize(beta[*axis]);
+                                LinearEnergyExpr::ose(EdgeIndex(edge), *offset)
+                            };
+                    }
+                    let loop_map = solve_loop_energy_from_target_edge_exprs(
+                        &self.signatures,
+                        &basis,
+                        &sample_targets,
+                    )?;
+                    let mut edge_map = edge_q0_from_loop_exprs(&self.signatures, &loop_map);
+                    apply_initial_state_cut_edge_energy_exprs(self.parsed, &mut edge_map);
+                    for term in &denominator_terms {
+                        let mut half_edges = term.half_edges.clone();
+                        half_edges.extend(extra_half_edges.iter().copied());
+                        self.assembly.push_variant_for_maps(
+                            loop_map.clone(),
+                            edge_map.clone(),
+                            &pole_orientation,
+                            &identity_edges,
+                            CFFVariant {
+                                thermal_weight: thermal_weight.clone(),
+                                origin: Some("ltd".to_string()),
+                                prefactor: &sample_coefficient * &term.coefficient,
+                                half_edges,
+                                denominator_edges: term.edges.clone(),
+                                denominator_surface_signs: BTreeMap::new(),
+                                denominator_edge_support_signs: BTreeMap::new(),
+                                uniform_scale_power,
+                                numerator_surfaces: Vec::new(),
+                                denominator: denominator_tree_from_chains(std::slice::from_ref(
+                                    &term.chain,
+                                )),
+                            },
+                        );
+                    }
                 }
             }
         }
@@ -911,5 +971,112 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn thermal_ltd_sunset_matches_cff_symbolically() {
+        use symbolica::{
+            atom::{Atom, AtomCore},
+            function, symbol,
+        };
+
+        use crate::{
+            MediumMode, ThermalDistributionCall, expression::AllOrientations, symbols::S,
+            thermal::VACUUM_SUBTRACTION,
+        };
+
+        let mut parsed = test_graphs::sunrise_pow4_graph();
+        parsed.internal_edges.truncate(3);
+        parsed.internal_edges[2].head = 1;
+        parsed.node_name_to_internal =
+            BTreeMap::from([("v0".to_string(), 0), ("v1".to_string(), 1)]);
+        assert!(crate::validate_parsed_graph(&parsed).ok);
+
+        // Independent occupations at each signed pole certify the identity
+        // without assuming a temperature, statistics, or chemical potential.
+        let occupations = [
+            [symbol!("sunset_n0_minus"), symbol!("sunset_n0_plus")],
+            [symbol!("sunset_n1_minus"), symbol!("sunset_n1_plus")],
+            [symbol!("sunset_n2_minus"), symbol!("sunset_n2_plus")],
+        ];
+        let contour_expression = |representation, medium_mode, subtract_vacuum| {
+            let generated = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    representation,
+                    medium_mode,
+                    energy_degree_bounds: Some(Vec::new()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let frame = if representation == RepresentationMode::Ltd {
+                1
+            } else {
+                generated
+                    .energy_factor_components
+                    .iter()
+                    .map(|component| {
+                        CffGlobalPrefactorSign::from_exponent(component.internal_edge_ids.len())
+                            .product(component.source_frame)
+                            .factor()
+                    })
+                    .product::<i64>()
+            };
+            let value = generated.expression.to_atom(AllOrientations);
+            let value = if subtract_vacuum {
+                value.replace_multiple(&*VACUUM_SUBTRACTION)
+            } else {
+                value
+            };
+            let value = generated
+                .expression
+                .surfaces
+                .substitute_energies(&value, &[]);
+            let weight = symbol!("sunset_thermal_weight_");
+            let value = value
+                .replace(function!(S.thermal_weight_wrapper, weight))
+                .with(weight)
+                .replace_map(|term, _context, out| {
+                    if let Ok(call) = ThermalDistributionCall::try_from(term) {
+                        assert_eq!(call.derivative_order, 0);
+                        let pole = i64::try_from(call.orientation_sign.as_view()).unwrap();
+                        assert!(matches!(pole, -1 | 1));
+                        **out = (Atom::one() + call.thermal_sign) / Atom::num(2)
+                            + Atom::var(occupations[call.edge.0][usize::from(pole > 0)]);
+                    }
+                });
+            Atom::num(frame) * value
+        };
+        let ltd = contour_expression(
+            RepresentationMode::Ltd,
+            MediumMode::ThermodynamicEquilibrium,
+            false,
+        );
+        let cff = contour_expression(
+            RepresentationMode::Cff,
+            MediumMode::ThermodynamicEquilibrium,
+            false,
+        );
+        let difference = (&ltd - cff).expand().together();
+        assert!(
+            difference.is_zero(),
+            "thermal sunset differs for symbolic energies and signed occupations: {difference}"
+        );
+
+        let vacuum = contour_expression(RepresentationMode::Ltd, MediumMode::Vacuum, false);
+        let vacuum_limit = occupations
+            .iter()
+            .flatten()
+            .fold(ltd.clone(), |value, occupation| {
+                value.replace(*occupation).with(Atom::Zero)
+            });
+        assert!((vacuum_limit - &vacuum).expand().together().is_zero());
+        let subtracted = contour_expression(
+            RepresentationMode::Ltd,
+            MediumMode::ThermodynamicEquilibrium,
+            true,
+        );
+        assert!((subtracted - ltd + vacuum).expand().together().is_zero());
     }
 }

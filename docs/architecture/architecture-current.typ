@@ -239,10 +239,37 @@ complete residue summation, including when
 the same build also contains CFF. Generation and runtime reject orientation
 filters, orientation Monte Carlo and individual-orientation inspection or
 profiling for these builds. CFF-only orientation-local operation remains available.
-LTD supports only `medium.mode = "vacuum"` without vacuum subtraction.
+Production LTD supports only `medium.mode = "vacuum"` without vacuum subtraction.
 Finite-temperature and finite-density requests, including mixed CFF/LTD lists,
 fail before process mutation or representation generation. Runtime validation uses
 the persisted graph medium, independently of later global-settings changes.
+
+The shared representation generator also supports thermal LTD. It retains every
+vacuum residue basis and contour coefficient, reflects each cut pole through both
+signs, and attaches one distribution factor per cut edge. If the vacuum pole has
+sign `rho` and the reflected physical pole has sign `sigma`, the factor is
+`N(edge, 0, t, rho*sigma, sigma)`. Thus an unchanged pole carries its vacuum
+weight plus the occupation, while a reflected pole carries only the occupation;
+the occupation has the existing Bose/Fermi sign. Uncut quadratic denominators
+are even in their own on-shell energies, so no additional distribution belongs
+to them. Zero occupation recovers the original vacuum LTD residue sum.
+
+At a raised cut pole, the residue product rule distributes derivatives among the
+graph numerator, rational denominators, and thermal weight. Numerator derivatives
+keep the existing exact polynomial samples; distribution derivatives are analytic
+and use the physical pole energy. Their conversion from the signed residue
+coordinate to positive on-shell energy supplies `sigma^r` at derivative order
+`r`. Temperature, chemical potential, and pole direction remain fixed.
+CFF comparisons use complete sums with matching energy-contour prescriptions:
+a free odd tadpole is energy divergent, and symmetric CFF versus directed LTD
+already differ in vacuum. The shared generator's thermal extension does not
+change that convention.
+
+This support is currently confined to the shared generator. Production and
+`3drep build` keep their medium-LTD guards until thermal UV ownership and
+runtime integration are validated. Zero-temperature derivative factors retain
+the existing symbolic distribution format; generating them does not certify
+their production Fermi-surface localization.
 
 Ordinary LTD determines complete affine loop-energy maps without CFF capacity
 analysis. Raised propagators use exact polynomial sampling with numerator-degree

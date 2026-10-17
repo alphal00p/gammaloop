@@ -1076,6 +1076,9 @@ impl DeterministicRng {
 #[cfg(test)]
 impl crate::GeneratedThreeDExpression {
     fn source_conversion(&self) -> f64 {
+        if self.representation == crate::RepresentationMode::Ltd {
+            return 1.0;
+        }
         // Evaluation already includes positive 1/(2E) factors. Each rational
         // component needs (-1)^N and its source frame,
         // exactly as in the typed GammaLoop source adapter.
@@ -3863,7 +3866,7 @@ mod thermal_reference_tests {
     use super::*;
     use crate::{
         Generate3DExpressionOptions, MediumMode, MomentumSignature, NumeratorSamplingScaleMode,
-        generate_3d_expression,
+        RepresentationMode, generate_3d_expression,
         graph_io::{
             ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge,
         },
@@ -4039,7 +4042,8 @@ mod thermal_reference_tests {
                 external_names: Vec::new(),
                 node_name_to_internal: (0..n_nodes).map(|i| (format!("v{i}"), i)).collect(),
             };
-            for (medium_mode, sampling_mode, uniform_scale) in itertools::iproduct!(
+            for (representation, medium_mode, sampling_mode, uniform_scale) in itertools::iproduct!(
+                [RepresentationMode::Cff, RepresentationMode::Ltd],
                 [
                     MediumMode::Vacuum,
                     MediumMode::ThermodynamicEquilibrium,
@@ -4059,6 +4063,7 @@ mod thermal_reference_tests {
                 let generated = generate_3d_expression(
                     &parsed,
                     &Generate3DExpressionOptions {
+                        representation,
                         medium_mode,
                         energy_degree_bounds: Some(bounds.clone()),
                         numerator_sampling_scale: sampling_mode,
@@ -4072,9 +4077,11 @@ mod thermal_reference_tests {
                 // cloning every other residue for every scalar contribution.
                 let mut branch = expression.clone();
                 branch.orientations.clear();
-                let uses_uniform_scale = bounds
-                    .iter()
-                    .any(|(_, degree)| sampling_mode.is_active_for_degree(*degree));
+                let uses_uniform_scale = (representation == RepresentationMode::Cff
+                    || !crate::graph_io::repeated_groups(&parsed).is_empty())
+                    && bounds
+                        .iter()
+                        .any(|(_, degree)| sampling_mode.is_active_for_degree(*degree));
                 assert_eq!(
                     expression
                         .orientations
@@ -4082,7 +4089,7 @@ mod thermal_reference_tests {
                         .flat_map(|orientation| &orientation.edge_energy_map)
                         .any(LinearEnergyExpr::uses_uniform_scale),
                     uses_uniform_scale,
-                    "{name}, {medium_mode:?}, {sampling_mode:?}: numerator sampling nodes"
+                    "{name}, {representation:?}, {medium_mode:?}, {sampling_mode:?}: numerator sampling nodes"
                 );
                 assert_eq!(
                     expression
@@ -4091,7 +4098,7 @@ mod thermal_reference_tests {
                         .flat_map(|orientation| &orientation.variants)
                         .any(|variant| variant.uniform_scale_power != 0),
                     uses_uniform_scale,
-                    "{name}, {medium_mode:?}, {sampling_mode:?}: compensating M powers"
+                    "{name}, {representation:?}, {medium_mode:?}, {sampling_mode:?}: compensating M powers"
                 );
                 let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
                 let energies = &evaluator.internal_energies;
@@ -4203,7 +4210,7 @@ mod thermal_reference_tests {
                         let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
                         assert!(
                             (actual - expected).abs() <= 2.0e-10 * scale,
-                            "{name}, {medium_mode:?}, {sampling_mode:?}, M={uniform_scale}, vacuum_limit={vacuum_limit}, numerator={numerator}: actual={actual:.17e}, exact={expected:.17e}"
+                            "{name}, {representation:?}, {medium_mode:?}, {sampling_mode:?}, M={uniform_scale}, vacuum_limit={vacuum_limit}, numerator={numerator}: actual={actual:.17e}, exact={expected:.17e}"
                         );
                     }
                 }
@@ -4578,11 +4585,14 @@ mod thermal_reference_tests {
                 masses: edges.iter().map(|edge| edge.4).collect(),
                 uniform_scale: None,
             };
-            for medium_mode in [
-                MediumMode::Vacuum,
-                MediumMode::ThermodynamicEquilibrium,
-                MediumMode::ZeroTemperatureEquilibrium,
-            ] {
+            for (representation, medium_mode) in itertools::iproduct!(
+                [RepresentationMode::Cff, RepresentationMode::Ltd],
+                [
+                    MediumMode::Vacuum,
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ]
+            ) {
                 for (bound, sampling_mode, uniform_scale) in [
                     (None, NumeratorSamplingScaleMode::None, None),
                     (Some(2), NumeratorSamplingScaleMode::None, None),
@@ -4620,6 +4630,7 @@ mod thermal_reference_tests {
                     let generated = generate_3d_expression(
                         &parsed,
                         &Generate3DExpressionOptions {
+                            representation,
                             medium_mode,
                             energy_degree_bounds: bound.map(|degree| {
                                 if inherited_contact {
@@ -4636,7 +4647,7 @@ mod thermal_reference_tests {
                     )
                     .unwrap_or_else(|error| {
                         panic!(
-                            "{name}, {medium_mode:?}, bound={bound:?}, {sampling_mode:?}, M={uniform_scale:?}: {error}"
+                            "{name}, {representation:?}, {medium_mode:?}, bound={bound:?}, {sampling_mode:?}, M={uniform_scale:?}: {error}"
                         )
                     });
                     let expression = &generated.expression;
@@ -4705,7 +4716,14 @@ mod thermal_reference_tests {
                         for (degree, loop_numerator) in
                             itertools::iproduct!(0..=max_degree, [false, true])
                         {
-                            if loop_numerator && (edges[numerator_edge].3 == 0 || degree == 0) {
+                            if (loop_numerator && (edges[numerator_edge].3 == 0 || degree == 0))
+                                || (representation == RepresentationMode::Ltd
+                                    && !inherited_contact
+                                    && factors[0].len() == 1
+                                    && degree != 0)
+                            {
+                                // A free odd tadpole uses a symmetric CFF contour,
+                                // unlike the directed vacuum LTD prescription.
                                 continue;
                             }
                             let moment = if loop_numerator {
@@ -4738,7 +4756,7 @@ mod thermal_reference_tests {
                                         Orientation::Reversed => -1,
                                         Orientation::Undirected => {
                                             panic!(
-                                                "{name}, {medium_mode:?}, bound={bound:?}, {sampling_mode:?}, M={uniform_scale:?}: unoriented thermal pole on edge {edge}"
+                                                "{name}, {representation:?}, {medium_mode:?}, bound={bound:?}, {sampling_mode:?}, M={uniform_scale:?}: unoriented thermal pole on edge {edge}"
                                             )
                                         }
                                     };
@@ -4757,7 +4775,7 @@ mod thermal_reference_tests {
                                             .value;
                                     assert!(
                                         term.is_finite(),
-                                        "{name}, {medium_mode:?}, numerator={numerator}"
+                                        "{name}, {representation:?}, {medium_mode:?}, numerator={numerator}"
                                     );
                                     actual += term;
                                 }
@@ -4816,7 +4834,7 @@ mod thermal_reference_tests {
                             let scale = actual.abs().max(expected.abs()).max(1.0);
                             assert!(
                                 (actual - expected).abs() <= 2.0e-11 * scale,
-                                "{name}, {medium_mode:?}, bound={bound:?}, {sampling_mode:?}, M={uniform_scale:?}, fermion={fermion}, mu={mu}, vacuum_limit={vacuum_limit}, numerator={numerator}: actual={actual:.17e}, contour={expected:.17e}"
+                                "{name}, {representation:?}, {medium_mode:?}, bound={bound:?}, {sampling_mode:?}, M={uniform_scale:?}, fermion={fermion}, mu={mu}, vacuum_limit={vacuum_limit}, numerator={numerator}: actual={actual:.17e}, contour={expected:.17e}"
                             );
                             if inherited_contact && vacuum_limit && degree == 1 {
                                 // Literal inherited Below residue: -N(E1)/(2E1).
@@ -5156,7 +5174,152 @@ mod thermal_reference_tests {
     }
 
     #[test]
+    fn thermal_fermi_mass_cycle_matches_cff_for_both_charge_signs_and_routings() {
+        use linnet::half_edge::involution::{EdgeIndex, Orientation};
+
+        for (reversed, repeated) in itertools::iproduct!([false, true], [false, true]) {
+            let parsed = ParsedGraph {
+                internal_edges: (0..2)
+                    .map(|edge_id| ParsedGraphInternalEdge {
+                        edge_id,
+                        tail: if reversed { 1 - edge_id } else { edge_id },
+                        head: if reversed { edge_id } else { 1 - edge_id },
+                        label: format!("q{edge_id}"),
+                        mass_key: Some(format!("m{}", if repeated { 0 } else { edge_id })),
+                        signature: MomentumSignature {
+                            loop_signature: vec![if reversed { -1 } else { 1 }],
+                            external_signature: Vec::new(),
+                        },
+                        had_pow: false,
+                    })
+                    .collect(),
+                external_edges: Vec::new(),
+                initial_state_cut_edges: Vec::new(),
+                loop_names: vec!["k".to_string()],
+                external_names: Vec::new(),
+                node_name_to_internal: BTreeMap::from([
+                    ("v0".to_string(), 0),
+                    ("v1".to_string(), 1),
+                ]),
+            };
+            let input = EvaluationInput {
+                external_momenta: Vec::new(),
+                loop_spatial_momenta: vec![[0.6, 0.0, 0.0]],
+                masses: vec![1.0, if repeated { 1.0 } else { 2.0 }],
+                uniform_scale: Some(0.73),
+            };
+            for representation in [RepresentationMode::Cff, RepresentationMode::Ltd] {
+                let generated = generate_3d_expression(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        representation,
+                        medium_mode: MediumMode::ThermodynamicEquilibrium,
+                        energy_degree_bounds: Some(vec![(0, 1)]),
+                        numerator_sampling_scale: NumeratorSamplingScaleMode::All,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                let expression = &generated.expression;
+                assert_eq!(
+                    expression
+                        .orientations
+                        .iter()
+                        .flat_map(|orientation| &orientation.variants)
+                        .flat_map(|variant| &variant.thermal_weight.distributions)
+                        .any(|factor| factor.derivative_order == 1),
+                    repeated,
+                    "{representation:?}, repeated={repeated}: distribution derivative"
+                );
+                let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
+                let energies = &evaluator.internal_energies;
+                let mut branch = expression.clone();
+                branch.orientations.clear();
+                for (beta, mu, odd) in
+                    itertools::iproduct!([0.7_f64, 2.0], [-1.5_f64, 0.0, 1.5], [false, true])
+                {
+                    let numerator =
+                        NumeratorExpr::parse(if odd { "edges[0][0]" } else { "1" }).unwrap();
+                    let mut actual = 0.0;
+                    for orientation in &expression.orientations {
+                        branch.orientations = vec![orientation.clone()].into();
+                        let distribution = |edge: usize, sign: i32, order| {
+                            assert!(order <= usize::from(repeated));
+                            let pole = match orientation.data.orientation[EdgeIndex(edge)] {
+                                Orientation::Default => 1.0,
+                                Orientation::Reversed => -1.0,
+                                Orientation::Undirected => panic!("unoriented thermal pole"),
+                            };
+                            let occupation =
+                                1.0 / ((beta * (energies[edge] - pole * mu)).exp() + 1.0);
+                            match order {
+                                0 => (1.0 + f64::from(sign)) / 2.0 - occupation,
+                                1 => beta * occupation * (1.0 - occupation),
+                                _ => unreachable!(),
+                            }
+                        };
+                        for variant in &orientation.variants {
+                            branch.orientations[OrientationID(0)].variants = vec![variant.clone()];
+                            actual += variant.thermal_weight.evaluate(distribution)
+                                * ExpressionEvaluator::new(&parsed, &branch, &input)
+                                    .evaluate(&numerator)
+                                    .unwrap()
+                                    .value;
+                        }
+                    }
+                    actual *= generated.source_conversion();
+                    // Partial fractions for distinct masses; differentiating the
+                    // single-propagator contour in m^2 gives the doubled pole.
+                    // Odd moments distinguish particle and antiparticle derivatives.
+                    let expected = if repeated {
+                        let energy = energies[0];
+                        let particle = 1.0 / ((beta * (energy - mu)).exp() + 1.0);
+                        let antiparticle = 1.0 / ((beta * (energy + mu)).exp() + 1.0);
+                        let particle_derivative = -beta * particle * (1.0 - particle);
+                        let antiparticle_derivative = -beta * antiparticle * (1.0 - antiparticle);
+                        if odd {
+                            (particle_derivative - antiparticle_derivative) / (4.0 * energy)
+                        } else {
+                            (1.0 - particle - antiparticle) / (4.0 * energy.powi(3))
+                                + (particle_derivative + antiparticle_derivative)
+                                    / (4.0 * energy.powi(2))
+                        }
+                    } else {
+                        (0..2)
+                            .map(|edge| {
+                                let energy = energies[edge];
+                                let particle = 1.0 / ((beta * (energy - mu)).exp() + 1.0);
+                                let antiparticle = 1.0 / ((beta * (energy + mu)).exp() + 1.0);
+                                let moment = if odd {
+                                    (particle - antiparticle) / 2.0
+                                } else {
+                                    -(1.0 - particle - antiparticle) / (2.0 * energy)
+                                };
+                                moment
+                                    / (input.masses[edge].powi(2) - input.masses[1 - edge].powi(2))
+                            })
+                            .sum::<f64>()
+                    };
+                    assert!(
+                        (actual - expected).abs() <= 2.0e-11 * expected.abs().max(1.0 / 3.0),
+                        "{representation:?}, reversed={reversed}, repeated={repeated}, beta={beta}, mu={mu}, odd={odd}: {actual:.17e} != {expected:.17e}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn thermal_scalar_bose_references() {
+        use linnet::half_edge::involution::EdgeIndex;
+        use symbolica::{
+            atom::{Atom, AtomCore},
+            domains::float::Float,
+            function, symbol,
+        };
+
+        use crate::{ThermalDistributionCall, expression::AllOrientations, symbols::S};
+
         // The ring and bugblatter references were cross-checked by evaluating
         // their factorized CFF expressions at 50 and 80 decimal digits from exact
         // decimal momenta. Both agree within binary64 rounding; the larger
@@ -5430,6 +5593,16 @@ mod thermal_reference_tests {
             )
             .unwrap();
             let expression = &generated.expression;
+            let ltd = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    representation: RepresentationMode::Ltd,
+                    medium_mode: MediumMode::ThermodynamicEquilibrium,
+                    energy_degree_bounds: Some(Vec::new()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
             assert_eq!(
                 expression.orientations.len(),
                 1 << parsed.internal_edges.len(),
@@ -5487,6 +5660,94 @@ mod thermal_reference_tests {
                 assert!(
                     difference < tolerance,
                     "{name}, point {point}: {result:e} != {reference:e} (difference {difference:e} is larger than relative tolerance {tolerance:e})",
+                );
+                // LTD retains more cancelling dual denominators than CFF.
+                // Check the same momenta at 128 bits, including the on-shell
+                // energies and occupations, rather than relaxing this oracle.
+                let precision = 128;
+                let mut constants = std::collections::HashMap::<Atom, Float>::new();
+                let empty = std::collections::HashMap::<Atom, Float>::new();
+                for edge in &parsed.internal_edges {
+                    let mut energy_squared = Atom::num(
+                        Float::with_val(precision, input.masses[edge.edge_id]).to_rational(),
+                    )
+                    .pow(2);
+                    for axis in 0..3 {
+                        let momentum = edge.signature.loop_signature.iter().enumerate().fold(
+                            Atom::Zero,
+                            |sum, (loop_id, coefficient)| {
+                                sum + Atom::num(*coefficient)
+                                    * Atom::num(
+                                        Float::with_val(
+                                            precision,
+                                            input.loop_spatial_momenta[loop_id][axis],
+                                        )
+                                        .to_rational(),
+                                    )
+                            },
+                        );
+                        let momentum = edge.signature.external_signature.iter().enumerate().fold(
+                            momentum,
+                            |sum, (external_id, coefficient)| {
+                                sum + Atom::num(*coefficient)
+                                    * Atom::num(
+                                        Float::with_val(
+                                            precision,
+                                            input.external_momenta[external_id][axis + 1],
+                                        )
+                                        .to_rational(),
+                                    )
+                            },
+                        );
+                        energy_squared += momentum.pow(2);
+                    }
+                    constants.insert(
+                        S.ose(EdgeIndex(edge.edge_id)),
+                        energy_squared
+                            .sqrt()
+                            .evaluate_with_prec(&empty, precision)
+                            .unwrap(),
+                    );
+                }
+                for (index, momentum) in input.external_momenta.iter().enumerate() {
+                    constants.insert(
+                        LinearEnergyExpr::external(EdgeIndex(index), 1).to_atom(&[]),
+                        Float::with_val(precision, momentum[0]),
+                    );
+                }
+                let weight = symbol!("thermal_scalar_weight_");
+                let energy = symbol!("thermal_scalar_energy");
+                let occupation = (Atom::var(energy).exp() - Atom::one()).pow(-1);
+                let atom = ltd
+                    .expression
+                    .surfaces
+                    .substitute_energies(&ltd.expression.to_atom(AllOrientations), &[])
+                    .replace(function!(S.thermal_weight_wrapper, weight))
+                    .with(weight)
+                    .replace_map(|term, _, out| {
+                        if let Ok(call) = ThermalDistributionCall::try_from(term) {
+                            let distribution = if call.derivative_order == 0 {
+                                (Atom::one() + call.thermal_sign) / Atom::num(2) + &occupation
+                            } else {
+                                (0..call.derivative_order)
+                                    .fold(occupation.clone(), |value, _| value.derivative(energy))
+                            };
+                            **out = distribution.replace(energy).with(S.ose(call.edge));
+                        }
+                    });
+                let contour = atom
+                    .evaluate_with_prec(&constants, precision)
+                    .unwrap()
+                    .to_rational()
+                    .to_f64();
+                let expected = reference
+                    * crate::CffGlobalPrefactorSign::from_exponent(
+                        parsed.denominator_internal_edge_ids().len(),
+                    )
+                    .factor() as f64;
+                assert!(
+                    (contour - expected).abs() <= 2.0e-10 * expected.abs(),
+                    "{name}, point {point}: LTD contour {contour:e} != {expected:e}"
                 );
             }
         }
