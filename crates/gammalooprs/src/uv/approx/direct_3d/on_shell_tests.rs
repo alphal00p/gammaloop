@@ -1039,6 +1039,214 @@ impl DirectForestFixture {
     }
 
     pub(super) fn full_forest_evaluator(self, route: usize) -> Result<ForestTensorEvaluator> {
+        if matches!(self, Self::OsQuarkInQuarkWithSpectator) {
+            assert_eq!(
+                route, 2,
+                "complete three-loop radial checks use the validated projected route"
+            );
+            use crate::{
+                settings::global::GenerationSettings,
+                uv::{
+                    ApproximationType, RenormalizationPrescriptionSettings, UVOrchestrator,
+                    UltravioletGraph,
+                    approx::{
+                        CutStructure, ForestNodeLike, OrientationProjection,
+                        local_4d::on_shell_forest_tests::three_loop_quark_fixture,
+                    },
+                    hedge_poset::Wood,
+                },
+            };
+            use linnet::half_edge::{
+                involution::Flow,
+                subgraph::{SubSetLike, SubSetOps},
+            };
+            use std::collections::BTreeSet;
+
+            // The fixture tag selects the same three-loop graph used by the proper
+            // two-loop tests. Its manual two-node assembler is deliberately not
+            // used here: the production wood must include the outer OS operation.
+            let (mut graph, _, _, root) = three_loop_quark_fixture()?;
+            assert_eq!(
+                graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
+                [EdgeIndex(2), EdgeIndex(3), EdgeIndex(4)],
+                "the radial chart is e2=p, e3=k, e4=l",
+            );
+            let model = graph.model.clone();
+            let settings = GenerationSettings {
+                explicit_orientation_sum_only: true,
+                uv: UVgenerationSettings {
+                    generate_integrated: false,
+                    add_marker: false,
+                    local_uv_cts_from_expanded_4d_integrands: true,
+                    orchestrator: UVOrchestrator::HedgePoset,
+                    renormalization_prescription: RenormalizationPrescriptionSettings {
+                        massive_power_divergent: ApproximationType::OS,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let full = graph.full_filter();
+            let spinneys = graph.classified_spinneys(
+                &full,
+                &model,
+                &settings.uv,
+                &graph.loop_momentum_basis,
+            )?;
+            assert!(spinneys.iter().all(|spinney| spinney.n_components() <= 1));
+            let components = spinneys
+                .iter()
+                .filter(|spinney| spinney.n_components() == 1)
+                .map(|spinney| {
+                    assert_eq!(spinney.dod, 1);
+                    assert_eq!(spinney.renormalization_scheme, ApproximationType::OS);
+                    graph
+                        .paired_edges(spinney.filter())
+                        .into_iter()
+                        .map(usize::from)
+                        .collect::<BTreeSet<_>>()
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                components,
+                [
+                    vec![4, 5],
+                    vec![3, 4, 5, 6, 7],
+                    vec![2, 3, 4, 5, 6, 7, 8, 9],
+                ]
+                .into_iter()
+                .map(|edges| edges.into_iter().collect::<BTreeSet<_>>())
+                .collect::<BTreeSet<_>>()
+            );
+            // Certify the six soft planes from the stored physical routing and
+            // the same fixed-point definition used by on_shell_branches. Only
+            // these small linear vector payloads are inspected; no denominator
+            // or numerator is modified to create a soft center.
+            let velocity = settings.uv.on_shell_velocity()?;
+            assert_eq!(velocity, [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero]);
+            for (gluon, carrier, external, owned) in [
+                (5, 4, 3, vec![4, 5]),
+                (7, 3, 2, vec![3, 4, 5, 6, 7]),
+                (9, 2, 0, vec![2, 3, 4, 5, 6, 7, 8, 9]),
+            ] {
+                let gluon = EdgeIndex(gluon);
+                assert!(graph[gluon].mass_atom(&model).is_zero());
+                let physical =
+                    graph
+                        .loop_momentum_basis
+                        .loop_atom::<Atom>(gluon, GS.emr_mom, &[], true)
+                        + graph
+                            .loop_momentum_basis
+                            .ext_atom::<Atom>(gluon, GS.emr_mom, &[], true);
+                let expected = function!(GS.emr_mom, carrier) - function!(GS.emr_mom, external);
+                // Expand only this linear routing identity: an overall minus
+                // on a two-term sum need not have the same literal AST.
+                assert!(
+                    (&physical - &expected).expand().is_zero()
+                        || (&physical + &expected).expand().is_zero(),
+                    "physical massless edge {gluon:?} must carry the stated plane: {physical}",
+                );
+                let owned = owned.into_iter().collect::<BTreeSet<_>>();
+                let component = spinneys
+                    .iter()
+                    .find(|spinney| {
+                        graph
+                            .paired_edges(spinney.filter())
+                            .into_iter()
+                            .map(usize::from)
+                            .collect::<BTreeSet<_>>()
+                            == owned
+                    })
+                    .expect("the certified OS component is present");
+                let hard = component
+                    .lmb
+                    .loop_atom::<Atom>(gluon, GS.emr_mom, &[], true);
+                let expected_hard = function!(GS.emr_mom, carrier);
+                assert!(hard == expected_hard || hard == -&expected_hard);
+                let soft = component.lmb.ext_atom::<Atom>(gluon, GS.emr_mom, &[], true);
+                let crown = graph.dummy_less_full_crown(component.filter());
+                let boundary = crown.included_iter().collect::<Vec<_>>();
+                assert_eq!(boundary.len(), 2);
+                assert!(
+                    boundary.iter().any(|hedge| {
+                        let coordinate = function!(GS.emr_mom, usize::from(graph[hedge]));
+                        soft == coordinate || soft == -coordinate
+                    }),
+                    "the gluon soft part must be an actual component crown momentum: {soft}"
+                );
+                let incoming = boundary
+                    .iter()
+                    .find(|hedge| graph.flow(**hedge) == Flow::Sink)
+                    .expect("the component has one incoming fermion port");
+                let owner = graph[incoming];
+                let mass = graph[owner].mass_atom(&model);
+                // Both signed OS branches set the spatial crown momentum to
+                // zero. With the certified hard rows above this gives l=0,
+                // k=0 and p=0, separately from the three physical planes.
+                for sign in [1, -1] {
+                    let point = GS.on_shell_momentum(owner, &(Atom::num(sign) * &mass), &velocity);
+                    for axis in 1..4 {
+                        let index = GS.cind(axis);
+                        assert!(
+                            GS.resolve_os_momenta(&GS.indexed_momentum(&point, &[index]))
+                                .is_zero()
+                        );
+                    }
+                }
+                crate::debug_tags!(#uv, #local, #soft, #summary;
+                    stage = "three_loop_soft_plane_inventory",
+                    gluon = usize::from(gluon), carrier, point_owner = usize::from(owner),
+                    file.physical = %physical, file.hard = %hard, file.soft = %soft,
+                    "Native massless physical plane and component-owned rest center"
+                );
+            }
+            assert_eq!(
+                Wood::new(CutStructure::empty(&graph), &graph, &model, &settings)?
+                    .unfold()
+                    .graph
+                    .n_nodes(),
+                8,
+                "the complete local chain has all eight ordered forest families",
+            );
+            let numerator = graph.numerator(&full, root.subgraph())?.state.expr;
+            let options = graph.denominator_only_cff_3d_expression_options();
+            let surfaces = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+            let contract_edges =
+                graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
+            let production = graph.generate_3d_expression_for_integrand(
+                &contract_edges,
+                &surfaces,
+                &options,
+                Some(numerator.expression()),
+            )?;
+            let cuts = CutStructure::empty(&graph);
+            let mut generated = UVOrchestrator::HedgePoset.parametric_integrands(
+                &mut graph,
+                &model,
+                cuts,
+                crate::utils::vakint()?,
+                OrientationProjection::exact_expression(
+                    &production,
+                    &options,
+                    &settings.orientation_pattern,
+                    true,
+                ),
+                &settings,
+            )?;
+            assert_eq!(
+                generated.len(),
+                1,
+                "the uncut amplitude has one complete forest sum"
+            );
+            let generated = generated.pop().unwrap();
+            return ForestTensorEvaluator::new_shared(self, &graph, route, &generated.integrands);
+        }
         let (graph, expressions) = self.assemble(
             DirectForestTerms::CompleteForest,
             false,
