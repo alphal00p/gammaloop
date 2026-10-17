@@ -24,6 +24,171 @@ fn collect(expression: &Atom) -> Atom {
 }
 
 #[test]
+fn uniformly_reversed_adjacent_gamma_pairs_preserve_metric_and_spin_dimension() {
+    use spenso::{network::library::symbolic::ETS, structure::abstract_index::AIND_SYMBOLS};
+    use symbolica::{function, symbol};
+
+    test_initialize();
+    let tags = &spenso::network::tags::SPENSO_TAG;
+    let d = Atom::var(symbol!("reversed_pair::d"));
+    let spin_d = Atom::var(symbol!("reversed_pair::spin_dimension"));
+    let epsilon = symbol!("reversed_pair::epsilon");
+    let retained_power =
+        (Atom::var(symbol!("reversed_pair::x")) + Atom::var(symbol!("reversed_pair::y"))).pow(7);
+    let spectator = function!(symbol!("reversed_pair::opaque"), &retained_power)
+        / (Atom::var(symbol!("reversed_pair::u")) + Atom::var(symbol!("reversed_pair::v"))).pow(3);
+    for dimension in [d.clone(), Atom::num(4)] {
+        let rep = Minkowski {}.to_symbolic([&dimension]);
+        let mu = Minkowski {}.to_symbolic([&dimension, &Atom::var(symbol!("reversed_pair::mu"))]);
+        let compact = function!(tags.rank_one_tensor_symbol("reversed_pair::p"), &rep);
+        let mut arguments = vec![
+            (mu.clone(), dimension.clone()),
+            (compact.clone(), function!(tags.dot, &compact, &compact)),
+        ];
+        for i in 0..4 {
+            arguments.push((
+                function!(ETS.delta, function!(AIND_SYMBOLS.cind, i), &rep),
+                Atom::num(if i == 0 { 1 } else { -1 }),
+            ));
+        }
+        for spin in [Atom::num(4), spin_d.clone()] {
+            let start = Bispinor {}.to_symbolic([&spin, &Atom::var(symbol!("reversed_pair::a"))]);
+            let end = Bispinor {}.to_symbolic([&spin, &Atom::var(symbol!("reversed_pair::b"))]);
+            for settings in [
+                GammaSimplifySettings::canonical(),
+                GammaSimplifySettings::repeated_pairs(),
+            ] {
+                for (argument, metric) in &arguments {
+                    let reversed = function!(AGS.gamma, tags.chain_out, tags.chain_in, argument);
+                    let word = chain!(&start, &end, &reversed, &reversed);
+                    let reduced = simplify(&(&spectator * word), settings);
+                    let dotted = SymbolicTensor::infer(reduced.clone())
+                        .unwrap()
+                        .to_dots()
+                        .unwrap()
+                        .into_expression();
+                    assert_eq!(dotted, &spectator * metric * g!(&start, &end));
+                    assert!(reduced.contains(retained_power.as_view()));
+                    assert_eq!(simplify(&reduced, settings), reduced);
+                }
+                let reversed = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+                let padded = chain!(&start, &end, gamma0!(), &reversed, &reversed, gamma0!());
+                let expected =
+                    &dimension * simplify(&chain!(&start, &end, gamma0!(), gamma0!()), settings);
+                assert_eq!(simplify(&padded, settings), expected);
+                if spin == spin_d {
+                    assert!(expected.contains_symbol(AGS.gamma0));
+                }
+                let pair = chain!(&start, &end, &reversed, &reversed);
+                let evanescent = (&dimension - Atom::num(4)) / Atom::var(epsilon) * pair;
+                let finite = simplify(&evanescent, settings)
+                    .replace(d.to_pattern())
+                    .with(Atom::num(4) - Atom::num(2) * Atom::var(epsilon))
+                    .series(epsilon, 0, 0)
+                    .unwrap()
+                    .to_atom();
+                assert_eq!(
+                    finite,
+                    if dimension == d {
+                        -Atom::num(8) * g!(&start, &end)
+                    } else {
+                        Atom::Zero
+                    }
+                );
+                let closed = trace!(Bispinor {}.to_symbolic([&spin]), &reversed, &reversed);
+                assert_eq!(simplify(&closed, settings), &spin * &dimension);
+            }
+        }
+    }
+}
+
+#[test]
+fn reversed_adjacent_gamma_pairs_keep_orientation_and_argument_guards() {
+    use spenso::shadowing::IntoAtom;
+    use symbolica::{function, symbol};
+
+    let r = test_initialize();
+    let tags = &spenso::network::tags::SPENSO_TAG;
+    let d = Atom::var(symbol!("reversed_pair_guards::d"));
+    let start = slot!(r.bis4, a).into_atom();
+    let end = slot!(r.bis4, b).into_atom();
+    let mu_name = Atom::var(symbol!("reversed_pair_guards::mu"));
+    for dimension in [d.clone(), Atom::num(4)] {
+        let mu = Minkowski {}.to_symbolic([&dimension, &mu_name]);
+        let nu =
+            Minkowski {}.to_symbolic([&dimension, &Atom::var(symbol!("reversed_pair_guards::nu"))]);
+        let reverse_mu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &mu);
+        let reverse_nu = function!(AGS.gamma, tags.chain_out, tags.chain_in, &nu);
+        for settings in [
+            GammaSimplifySettings::canonical(),
+            GammaSimplifySettings::repeated_pairs(),
+        ] {
+            for word in [
+                chain!(&start, &end, &reverse_mu, gamma!(&mu)),
+                chain!(&start, &end, gamma!(&mu), &reverse_mu),
+                chain!(&start, &end, &reverse_mu, &reverse_nu),
+                chain!(&start, &end, &reverse_mu, gamma0!(), &reverse_mu),
+            ] {
+                assert_eq!(simplify(&word, settings), word);
+            }
+            let closed = trace!(r.bis4.to_symbolic([]), &reverse_mu, &reverse_mu);
+            assert_eq!(
+                simplify(
+                    &closed,
+                    GammaSimplifySettings {
+                        evaluate_traces: false,
+                        ..settings
+                    }
+                ),
+                closed
+            );
+        }
+    }
+    let left = Minkowski {}.to_symbolic([&d, &mu_name]);
+    let right = Minkowski {}.to_symbolic([&Atom::num(4), &mu_name]);
+    let cross_space = chain!(
+        &start,
+        &end,
+        function!(AGS.gamma, tags.chain_out, tags.chain_in, left),
+        function!(AGS.gamma, tags.chain_out, tags.chain_in, right)
+    );
+    assert_eq!(
+        simplify(&cross_space, GammaSimplifySettings::canonical()),
+        cross_space
+    );
+}
+
+#[test]
+fn captured_uniformly_reversed_gamma_pair_from_vacuum_projection_reduces_exactly() {
+    use symbolica::{function, symbol};
+    test_initialize();
+    let tags = &spenso::network::tags::SPENSO_TAG;
+    let d = Atom::var(symbol!("gammalooprs::dim"));
+    let start = function!(
+        symbol!("spenso::bis"),
+        4,
+        function!(symbol!("gammalooprs::hedge"), 0, 1)
+    );
+    let end = function!(
+        symbol!("spenso::bis"),
+        4,
+        function!(symbol!("gammalooprs::hedge"), 1, 1)
+    );
+    let mu = function!(
+        symbol!("spenso::mink"),
+        &d,
+        function!(symbol!("gammalooprs::dummy"), 1000013)
+    );
+    let reversed = function!(AGS.gamma, tags.chain_out, tags.chain_in, mu);
+    let captured = chain!(&start, &end, gamma0!(), &reversed, &reversed, gamma0!());
+    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+    let cooked = cooking.try_cook(captured.as_view()).unwrap();
+    assert_eq!(cooking.uncook(cooked.as_view()), captured);
+    let reduced = cooking.uncook(simplify(&cooked, GammaSimplifySettings::canonical()).as_view());
+    assert_eq!(reduced, d * g!(&start, &end));
+}
+
+#[test]
 fn mixed_temporal_traces_reduce_without_fixing_formal_dimensions() {
     use spenso::{
         network::library::symbolic::ETS, shadowing::IntoAtom,

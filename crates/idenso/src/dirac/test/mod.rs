@@ -1583,7 +1583,7 @@ fn special_matrices_have_the_physical_dirac_adjoints() {
 }
 
 #[test]
-fn mixed_transposed_gamma_words_and_open_chains_remain_opaque() {
+fn mixed_transposed_gamma_words_preserve_orientation() {
     test_initialize();
     let tags = &*spenso::network::tags::SPENSO_TAG;
     let left = bis!(4, transposed_i);
@@ -1625,11 +1625,16 @@ fn mixed_transposed_gamma_words_and_open_chains_remain_opaque() {
                         })
                         .unwrap()
                         .into_expression();
-                // A closed, uniformly transposed word is the transpose of
-                // the reversed ordinary word. Its trace is unchanged.
+                // A uniformly transposed equal pair has the ordinary metric
+                // coefficient in open and closed words. Mixed orientations and
+                // distinct arguments retain the exact original word.
                 let expected =
                     if expression == trace!(&spin; vec![transposed.clone(), transposed.clone()]) {
                         Atom::num(16)
+                    } else if expression
+                        == chain!(&left, &right; vec![transposed.clone(), transposed.clone()])
+                    {
+                        Atom::num(4) * id_atom(left.clone(), right.clone())
                     } else {
                         expression
                     };
