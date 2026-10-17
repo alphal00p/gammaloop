@@ -84,9 +84,10 @@ exact reference are identical. Preserved binaries, hashes, environments and
 trial records are under `target/symbolic-tensor-flow/ghost-performance-audit`.
 
 The three bubble UV wrappers remain near their earlier 150-second whole-test
-times. d76's slower full-suite observation remains a separate follow-up because
-that run overlapped other heavy ghost tests. Neither these whole-suite durations
-nor the old GL1 measurements replace isolated comparisons.
+times. A separate two-pair d76 comparison also confirms extra computation:
+`16787f71` takes 31.688/31.758 seconds and `8f24069f` takes 70.197/62.732 seconds.
+All four exact assertions pass. Both ghost cases require repaired-build timing;
+whole-suite durations and the old GL1 measurements do not replace those checks.
 
 The d53 diagnostic traces have the same stage call counts. Coefficient sizes
 grow before the unchanged Laurent-series engine, which accounts for about
@@ -108,12 +109,41 @@ labels limits exact text comparison of that larger replay.
 The implemented repair belongs to Idenso's product-color owner. It exposes one
 connected adjoint chain through the existing reserved dummy allocator and
 commits the result only when an existing cross-factor identity reduces it.
-Unrelated chains and spectator factors remain intact. Combined unit, integration
-and timing qualification is still pending; the removed d53 cost is not yet
-claimed. The comparison preserves numerator factorization and the original
+Unrelated chains and spectator factors remain intact. The production change
+passes all 1,040 existing selected Idenso tests. After correcting construction
+of chain placeholders in the new test fixtures, all six selected adjoint-chain
+tests pass, including the three new controls. These runs include the shared
+on-shell fixes `428558eb`, `2c3d3260` and `4138873d`, imported as separate commits
+`036dcfac`, `07b3cecc` and `5d06ad55`. Integration and repaired-build timing remain
+pending; the removed d53 cost is not yet claimed. The comparison preserves
+numerator factorization and the original
 assertions; disabling checks or expanding the graph numerator is not a remedy.
 The exact boundary pairs are retained under
 `ghost-performance-audit/runs/current-d53-inputs-1/boundary-comparison`.
+
+== Measured GL1 preparation cost and proof reuse
+
+The existing instrumentation at `8f24069f` attributes about 0.915 seconds of
+additional GL1 work to tensor preparation, offset by about 0.270 seconds less in
+scalar compilation. Within preparation, the nineteen normalization calls add
+about 0.402 seconds. Work after normalization adds about 0.392 seconds, including
+0.320 seconds of finite-component factor collection; those figures overlap and
+must not be added together. Raw-root admission adds about 0.139 seconds, root
+dot conversion 0.038 seconds, and family combination saves about 0.061 seconds.
+Sampling supports substantial inference/validation cost but does not isolate
+each validation substage. These diagnostic intervals explain the work performed;
+the sealed paired timings above remain the performance comparison.
+
+An unchanged `map_representation_dimensions` previously rebuilt checked parts,
+discarding the carrier's completed reductions and cached observations. Its
+follow-up keeps the mapper and callback checks, then uses the existing
+`finish_parts` owner when both the payload and complete logical structure are
+unchanged. This preserves established facts while still validating unchecked
+inputs and finishing pending product normalization. A zero whose represented
+dimension changes takes the normal changed-value path. This is a separate
+optimization; its regression tests and contribution to GL1 timing still need
+qualification. Evidence and the validation plan are in
+`target/symbolic-tensor-flow/dimension-noop-proposal`.
 
 == Historical qualification at 6002674d, 17 October 2026
 

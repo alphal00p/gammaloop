@@ -305,6 +305,14 @@ restores scalar-engine results against the retained interface. `expand_dots`
 returns the tensor carrier, preserving untouched open ports while checking
 transformations that could change them.
 
+An identity dimension mapping retains completed reductions and cached
+observations through `finish_parts`, after running the mapper and checking the
+whole payload and logical layout. Unchecked carriers still undergo validation;
+an unchanged zero expression alone does not establish an unchanged interface.
+The color-construction macros have a separate syntax trap: a bare `object.field`
+is representation-pattern shorthand. Literal chain placeholder symbols must use
+`Atom::var`, rather than that field shorthand.
+
 The typed coefficient collector is not a drop-in replacement for every scalar
 parser. GammaLoop's rational UV shell must keep positive-power numerator blocks
 such as `(den + x)^5` factorized while extracting inverse denominator factors.
