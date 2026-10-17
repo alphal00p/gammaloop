@@ -117,9 +117,11 @@ The consuming `into_network` handoff returns the existing component network with
 its `CanonicalLayout`. Consumers must apply that layout to component coordinates
 and shadow axes. A ranked zero becomes an empty sparse tensor with the declared
 ports. The parser still materializes component tensors; this is not a parse-free
-handoff. Optional decoding there applies only to indices. Representation
-dimension changes belong to their own checked operation, and formal dimensions
-do not acquire concrete component tables through decoding.
+handoff. The optional configuration selects reversible index capture; that
+source filter controls cooking, while inverse restoration also exposes portable
+dimension payloads such as scalar dimension coefficients. Representation
+dimensions need their own checked specialization before finite component
+execution; formal dimensions do not acquire component tables through decoding.
 
 The carrier does not implement Symbolica's sealed `AtomCore` trait. Checked
 `TensorRule` replacement, fallible tensor arithmetic and explicit expression

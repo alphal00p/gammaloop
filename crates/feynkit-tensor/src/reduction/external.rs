@@ -213,8 +213,11 @@ mod tests {
         ];
         let reducer = TensorReducer::new(d.to_atom())
             .with_integrated_vector(k.clone())
+            .unwrap()
             .with_integrated_vector(q.clone())
-            .with_external_vector(p.clone());
+            .unwrap()
+            .with_external_vector(p.clone())
+            .unwrap();
         let rank_one = reducer
             .reduce(&SymbolicTensor::infer((km.as_view()).to_owned()).unwrap())
             .unwrap()
@@ -254,7 +257,9 @@ mod tests {
         .map(|head| rep.vector(head.to_atom().as_view(), []));
         let reducer = TensorReducer::new(d.to_atom())
             .with_integrated_vector(k.clone())
-            .with_external_vector(p.clone());
+            .unwrap()
+            .with_external_vector(p.clone())
+            .unwrap();
         let mut numerator = Atom::one();
         for name in [
             "external_rank3::mu",
@@ -293,8 +298,11 @@ mod tests {
         let nu = symbol!("external_full::nu").to_atom();
         let reducer = TensorReducer::new(Atom::num(2))
             .with_integrated_vector(k.clone())
+            .unwrap()
             .with_external_vector(p.clone())
-            .with_external_vector(r.clone());
+            .unwrap()
+            .with_external_vector(r.clone())
+            .unwrap();
         let determinant = dot(&p, &p) * dot(&r, &r) - dot(&p, &r).pow(2);
         let parallel = |index: &Atom| {
             ((dot(&k, &p) * dot(&r, &r) - dot(&k, &r) * dot(&p, &r)) * indexed_vector(&p, index)
@@ -314,7 +322,7 @@ mod tests {
                 .together()
                 .is_zero()
         );
-        let too_many = reducer.with_external_vector(k.clone());
+        let too_many = reducer.with_external_vector(k.clone()).unwrap();
         assert!(matches!(
             too_many.reduce(&SymbolicTensor::infer((numerator.as_view()).to_owned()).unwrap()),
             Err(TensorReductionError::ExternalGram(_))

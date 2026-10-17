@@ -267,9 +267,13 @@ The consuming `SymbolicTensor<PartialStructure>::into_network` specialization
 hands off to the existing Spenso component parser. It validates the retained
 interface, materializes unresolved ports, and releases its own planning-cache
 references before parsing components. Other shared owners can still retain the
-same caches. Optional reversible decoding here is index-only; dimension decoding
-is rejected and dimension changes belong to the dimension owner. This handoff
-still parses and materializes component tensors. The result includes
+same caches. The optional configuration must select reversible index capture;
+its `dimensions=false` source filter controls cooking, not inverse restoration.
+`uncook` also restores portable dimension payloads, including dimensions that
+have become scalar coefficients. Actual representation dimensions must be
+specialized through the checked dimension owner before finite component
+execution. Restoring a symbolic dimension does not provide a component table.
+This handoff still parses and materializes component tensors. The result includes
 `CanonicalLayout`, which downstream code must use
 for component coordinates and shadow axes; matching only the port multiset does
 not preserve logical axis order. A ranked zero becomes an empty sparse tensor
@@ -303,6 +307,16 @@ while retaining the original native slots; a scalar-ratio validator can expose
 `Nc^2 - 1` after all tensor factors cancel. Neither use requires decoding the
 complete tensor. Mapping represented dimensions and interpreting an encoded
 dimension that has become a scalar coefficient are distinct boundaries.
+
+Exact compact vector selectors have their own authored-source boundary. FeynKit's
+`with_integrated_vector` and `with_external_vector` admit each small selector once
+through the shared source codec and return a fallible result. The retained
+numerator goes directly to `reduce`; matching must not compare a raw compound
+dimension against its encoded native spelling. Graph reduction promotes source
+Lorentz dimensions through `map_representation_dimensions`, retaining ordered
+ports and ranked zero, while projector coefficients use the supplied scalar
+dimension. This selector admission is distinct from numerator re-inference and
+from a finite component-execution boundary.
 
 == Rewrite families and execution flow
 
