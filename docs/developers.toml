@@ -882,7 +882,9 @@ end_anchor = "    /// Adjacent pairs remain cheapest."
 # recurrence directly; formal dimensions and disabled trace evaluation retain
 # their boundary. This prevents component-only execution of reducible traces.
 # Reviewed 2026-10-16: The architecture records weighted Dirac trace recurrence and strict physical gamma0 dimensions, preserving spectator powers.
-digest = "ebfe09fc2626bc76c1f50ea399ec96b818045492"
+# Reviewed 2026-10-17: shared named fixes preserve formal dimensions in temporal
+# sandwiches and uniformly reversed adjacent pairs; mixed-orientation guards remain.
+digest = "95ebfc105ffb0f9e506105642a6e1629b0e28ae8"
 
 [[section.note.scope]]
 path = "crates/idenso/src/color/simplify.rs"
@@ -897,7 +899,10 @@ anchor = "    fn simplify_product("
 # color and collision assertions.
 # Reviewed 2026-10-16: The architecture records complete SU(N) invariant projection, local cubic contractions and adjoint endpoint zero reduction.
 # Reviewed 2026-10-16: adjacent raw adjoint pairs now reduce to their signed Casimir before scalar evaluation; explicit-product orientation controls pass.
-digest = "08f1e1c43c75271f84402e3c1d9ce0ed26ef25c4"
+# Reviewed 2026-10-17: connected adjoint chains expose explicit structure constants
+# only when an existing product identity reduces them; spectator factorization,
+# reserved dummy identities and ranked-zero ports remain with their native owners.
+digest = "9cc58e6c7453793e3958275efa00961fa1aa4aaf"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"

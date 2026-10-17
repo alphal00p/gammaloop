@@ -1123,6 +1123,7 @@ impl ColorAlgebraSimplifier {
                     .flatten()
                     .inspect(|_| self.certificate.expansion.set(true))
             })
+            .or_else(|| self.simplify_adjoint_chain_connection(&product))
             .or_else(|| self.distribute_color_sum_factor(&product, complete, whole_term))
             .or_else(|| self.simplify_embedded_color_node(&product, complete, whole_term))
             .or_else(|| {
@@ -1130,6 +1131,79 @@ impl ColorAlgebraSimplifier {
                     .then(|| self.simplify_invariant_fundamental_product(&product))
                     .flatten()
             })
+    }
+
+    fn simplify_adjoint_chain_connection(&self, product: &ProductView) -> Option<Atom> {
+        for (index, factor) in product.factors.iter().enumerate() {
+            let Some(chain) = &factor.chain else {
+                continue;
+            };
+            let Some(dimension) = color_adjoint_dimension(&chain.start) else {
+                continue;
+            };
+            if color_adjoint_dimension(&chain.end).as_ref() != Some(&dimension)
+                || chain.factors.is_empty()
+            {
+                continue;
+            }
+            let representation = adjoint_rep(dimension);
+            if chain
+                .factors
+                .iter()
+                .any(|&matrix| adjoint_generator(representation.as_view(), matrix).is_none())
+            {
+                continue;
+            }
+            let ports = SlotCounts::of(factor.atom);
+            let outside = SlotCounts::of_factors(
+                product
+                    .factors
+                    .iter()
+                    .enumerate()
+                    .filter(|(other, _)| *other != index)
+                    .map(|(_, factor)| factor.atom),
+            );
+            if ports.opaque
+                || outside.opaque
+                || ports
+                    .ports()
+                    .filter(|port| outside.get(port) == Some(1))
+                    .take(2)
+                    .count()
+                    < 2
+            {
+                continue;
+            }
+            let AtomView::Fun(chain) = factor.atom else {
+                continue;
+            };
+            let Ok(explicit) = self.dummies.materialize_indexed_chain(chain) else {
+                continue;
+            };
+            let candidate = product.replacing_one(index, explicit);
+            let candidate = ProductView::parse(candidate.as_view());
+            // Expose only this connected colour factor, using the source's
+            // reserved dummy state. Commit an existing cross-factor identity,
+            // never a notation-only opening that the contractor could recollect.
+            // These local identities do not promote complete/whole-term context.
+            let reduced = Self::simplify_symmetric_prefix_structure_product(&candidate)
+                .or_else(|| {
+                    self.settings
+                        .evaluate_traces
+                        .then(|| {
+                            Self::simplify_cubic_trace_contraction(&candidate)
+                                .or_else(|| self.simplify_trace_structure_product(&candidate))
+                        })
+                        .flatten()
+                })
+                .or_else(|| self.simplify_chain_structure_product(&candidate))
+                .or_else(|| Self::simplify_symmetric_structure_product(&candidate))
+                .or_else(|| Self::simplify_symmetric_structure_pair_product(&candidate));
+            if reduced.is_some() {
+                return reduced;
+            }
+        }
+        None
     }
 
     // Preserve main's exact singlet/adjoint projection after the local colour
@@ -4401,6 +4475,188 @@ mod reconstruction_tests {
             ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(first)]),
             spenso::dind!(ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(first + 1)])),
         )
+    }
+
+    #[test]
+    fn adjoint_chain_connections_reduce_traces_and_retain_ranked_zero() {
+        use crate::tensor::AlgebraSettings;
+        crate::test_support::test_initialize();
+        let [a, b, c, x, y, u, v] =
+            adjoint_slots("adjoint_connection", ["a", "b", "c", "x", "y", "u", "v"]);
+        let rep = fundamental_rep(Atom::num(3));
+        let first = trace!(&rep; [&a, &b, &c].map(|slot| color_t!(slot)));
+        let second = trace!(&rep; [&a, &c, &b].map(|slot| color_t!(slot)));
+        let explicit = color_f!(&u, &v, &y) * color_f!(&u, &a, &x) * color_f!(&v, &b, &c);
+        // f(U,A,X) = -f(A,U,X), including the orientation of the open chain.
+        let compact = -chain!(
+            &a,
+            &b,
+            color_f!(T.chain_in, T.chain_out, &x),
+            color_f!(T.chain_in, T.chain_out, &y),
+            color_f!(T.chain_in, T.chain_out, &c),
+        );
+        let coefficient = Atom::i() / Atom::num(2)
+            * adjoint_casimir_for_dimension(Atom::num(8)).pow(2)
+            * quadratic_index(rep)
+            * color_metric(x.clone(), y.clone());
+        for (word, expected) in [
+            (first.clone(), coefficient.clone()),
+            (second.clone(), -coefficient),
+            (first + second, Atom::Zero),
+        ] {
+            let source = SymbolicTensor::infer(&word * &compact).unwrap();
+            let indexed =
+                SymbolicTensor::from_declared_parts(&word * &explicit, source.structure().clone())
+                    .unwrap();
+            for source in [source, indexed] {
+                let mut reversed = source.structure().logical_slots();
+                reversed.reverse();
+                let reversed = SymbolicTensor::from_declared_parts(
+                    source.expression().clone(),
+                    PartialStructure::from_logical_slots(reversed),
+                )
+                .unwrap();
+                for source in [source, reversed] {
+                    for color in [
+                        ColorSimplifySettings::default(),
+                        ColorSimplifySettings::default().without_one_shot_traces(),
+                    ] {
+                        let settings = AlgebraSettings {
+                            color: Some(color),
+                            ..Default::default()
+                        };
+                        let result = source.simplify_algebra(&settings).unwrap();
+                        assert_eq!(result.expression(), &expected);
+                        assert_eq!(result.rank(), 2);
+                        assert_eq!(
+                            result.structure().logical_slots(),
+                            source.structure().logical_slots()
+                        );
+                        assert!(result.same_value(&result.simplify_algebra(&settings).unwrap()));
+                        if !expected.is_zero() {
+                            assert_ne!(result.expression(), &(-&expected));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn adjoint_chain_exposure_requires_a_product_identity() {
+        crate::test_support::test_initialize();
+        let [a, b, c, x, y, u, v] = adjoint_slots(
+            "adjoint_connection_guard",
+            ["a", "b", "c", "x", "y", "u", "v"],
+        );
+        let rep = fundamental_rep(Atom::num(3));
+        let compact = chain!(
+            &a,
+            &b,
+            color_f!(T.chain_in, T.chain_out, &x),
+            color_f!(T.chain_in, T.chain_out, &y),
+            color_f!(T.chain_in, T.chain_out, &c),
+        );
+        let unrelated = trace!(&rep, color_t!(&u), color_t!(&v));
+        let single_connection = trace!(&rep, color_t!(&a), color_t!(&u));
+        let foreign = spenso::tensor_symbol!("adjoint_connection_guard::foreign");
+        let foreign_matrix = chain!(&a, &b, function!(foreign, T.chain_in, T.chain_out, &c),);
+        let (start, end) = fundamental_endpoints(98241);
+        let fundamental = chain!(&start, &end, color_t!(&a), color_t!(&b));
+        let [other_a, other_b, other_c] = [&a, &b, &c].map(|slot| {
+            let AtomView::Fun(slot) = slot.as_view() else {
+                unreachable!()
+            };
+            ColorAdjoint {}.to_symbolic([Atom::num(15), slot.iter().nth(1).unwrap().to_owned()])
+        });
+        let other_dimension = trace!(
+            fundamental_rep(Atom::num(4)),
+            color_t!(other_a),
+            color_t!(other_b),
+            color_t!(other_c),
+        );
+        for expression in [
+            compact.clone(),
+            &compact * unrelated,
+            &compact * single_connection,
+            &compact * other_dimension,
+            &compact * function!(foreign, &a, &b),
+            foreign_matrix * trace!(&rep, color_t!(&b), color_t!(&c)),
+            fundamental * color_f!(&a, &b, &c),
+        ] {
+            SymbolicTensor::infer(expression.clone()).unwrap();
+            let dummies = ParseState::default();
+            dummies.reserve_indices(expression.as_view());
+            let simplifier = ColorAlgebraSimplifier::new(Default::default(), dummies);
+            // Even two shared ports do not authorize a notation-only opening
+            // when the neighbouring tensor has no applicable colour identity.
+            assert!(
+                simplifier
+                    .simplify_adjoint_chain_connection(&ProductView::parse(expression.as_view()))
+                    .is_none(),
+                "{expression}"
+            );
+        }
+        let retained = compact * trace!(&rep, color_t!(&a), color_t!(&b), color_t!(&c));
+        let dummies = ParseState::default();
+        dummies.reserve_indices(retained.as_view());
+        let simplifier = ColorAlgebraSimplifier::new(
+            ColorSimplifySettings::default().without_trace_evaluation(),
+            dummies,
+        );
+        assert!(
+            simplifier
+                .simplify_adjoint_chain_connection(&ProductView::parse(retained.as_view()))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn adjoint_chain_connections_preserve_spectators_and_explicit_dummy_ports() {
+        use crate::tensor::AlgebraSettings;
+        crate::test_support::test_initialize();
+        let [a, b, c] = adjoint_slots("adjoint_connection_spectator", ["a", "b", "c"]);
+        // Explicit dummy-labelled public ports must survive opening the chain.
+        // The global allocator position is deliberately not assumed here.
+        let [x, y] = [0, 1].map(|index| {
+            ColorAdjoint {}.to_symbolic([Atom::num(8), Atom::from(AbstractIndex::Dummy(index))])
+        });
+        let rep = fundamental_rep(Atom::num(3));
+        let word = trace!(&rep, color_t!(&a), color_t!(&b), color_t!(&c));
+        let compact = -chain!(
+            &a,
+            &b,
+            color_f!(T.chain_in, T.chain_out, &x),
+            color_f!(T.chain_in, T.chain_out, &y),
+            color_f!(T.chain_in, T.chain_out, &c),
+        );
+        let scalar = (Atom::var(symbol!("adjoint_connection_spectator::r"))
+            + Atom::var(symbol!("adjoint_connection_spectator::s")))
+        .pow(17);
+        let foreign = function!(
+            spenso::tensor_symbol!("adjoint_connection_spectator::vector"),
+            spenso::mink!(4, 98255),
+        );
+        let source = SymbolicTensor::infer(&scalar * &foreign * word * compact).unwrap();
+        let result = source
+            .simplify_algebra(&AlgebraSettings {
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap();
+        let expected = &scalar * &foreign * Atom::i() / Atom::num(2)
+            * adjoint_casimir_for_dimension(Atom::num(8)).pow(2)
+            * quadratic_index(rep)
+            * color_metric(x, y);
+        assert_eq!(result.expression(), &expected);
+        assert!(result.expression().contains(scalar.as_view()));
+        assert!(result.expression().contains(foreign.as_view()));
+        assert_eq!(result.rank(), 3);
+        assert_eq!(
+            result.structure().logical_slots(),
+            source.structure().logical_slots()
+        );
+        SymbolicTensor::validate_atom(result.expression()).unwrap();
     }
 
     #[test]

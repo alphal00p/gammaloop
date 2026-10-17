@@ -1,65 +1,119 @@
 = FeynKit merge readiness and performance
 
-The retained-tensor checkpoint `880ad11d` passed 5,639 of 5,644 selected tests.
-Five failures remain: three generation-reference tests and two Q3 source-validation
-ordering tests. Follow-up selector and Q3 repairs still need canonical
-qualification. No paired performance result yet qualifies the retained-tensor
-migration; the `6002674d` timing results below are historical.
+The five failures recorded at retained-tensor checkpoint `880ad11d` are now
+addressed by the `8f24069f` source/interface repairs and the ten user-approved
+bookkeeping references at `79c95409`. Merge readiness remains blocked by the
+confirmed d53 performance regression: isolated runs take about 166.8 seconds
+against 19.5 seconds at the earlier retained-tensor checkpoint `16787f71`.
+The historical `6002674d` performance results below do not qualify this migration.
 
 This record follows the reconciliation of local FeynKit, remote FeynKit and
-main, then the repairs required before merge. Runtime assertions, numerical
-reference points, tolerances and the performance gate remain in force. A
-successful producer build/upload is distinct from a successful runtime suite.
+main, then the repairs required before merge. Exact assertions, numerical
+tolerances, sample budgets and performance limits remain enforced. Individually
+justified reference corrections are recorded below, including the historical
+six-photon binary64 update checked independently with arbitrary precision.
+A successful build or focused rerun is distinct from a complete runtime or
+performance qualification.
 
 == Current checkpoint, 17 October 2026
 
 The full run of `880ad11dcce02724c178eac628e0f28dad6e17fa` finished in
 3,175.357 seconds with 5,639 passes, five failures, five slow cases and zero
-timeouts; 128 existing skips remain. Its actual compile-time source tree stayed
-unchanged throughout execution. The run ID is
-`ab964f08-8546-476b-9dc4-6ba4066eeb39`; the summary and JUnit identity are recorded
-in `target/symbolic-tensor-flow/native-complete3-full-summary.json`.
+timeouts; 128 existing skips remain. Its compile-time source tree stayed
+unchanged throughout execution. Run `ab964f08-8546-476b-9dc4-6ba4066eeb39` and its
+JUnit identity are recorded in
+`target/symbolic-tensor-flow/native-complete3-full-summary.json`.
 
-The three failing reference tests are `closed_ghost_loops_preserve_statistics_weights`,
-`test_generate_sm_a_ddx` and `test_vacuum_amplitude_generation_full_sm_two_loop`.
-They stop at previously audited bookkeeping references whose refreshes remain
-unapproved. Ten proposals still await review; a test stopping at its first
-snapshot does not freshly validate later proposals in the same function. The
-approved symbolic-Nc correction and its separately proved cosmetic factor-sign
-update are already included and pass this run.
+`8f24069f3eb8dee3b71883d294e87a9e529a8168` passes all 126 focused source/interface
+tests, strict workspace Clippy, formatting and the documentation check. This
+covers the two Q3 validation-order failures and the subsequently identified
+selector boundary. Q3 source validation now precedes generic tensor admission
+without cancelling invalid source functions across separate payloads; the
+original arity, edge-bound, dimension, component and cancellation guards remain.
 
-The other failures are `full_numerator_requires_one_q3_structure_argument` and
-`graph_set_import_enforces_the_q3_convention_without_tensor_closure`. Both expose
-production validation ordering: generic tensor admission can reject the source
-before the graph-specific Q3-first diagnostic runs. The follow-up repair uses
-the existing validator over borrowed scalar-source and retained tensor payloads,
-checks all Q3 occurrences before Q, and validates compact annotations before
-native admission. Original arity, edge-bound, dimension, component,
-same-expression cancellation and zero-annihilation checks remain. The validator
-does not cancel invalid source functions against reciprocal factors in a separate
-native payload. Its canonical qualification is pending;
-these failures are not reclassified as obsolete assertions.
+The selector repair admits exact integrated/external vector selectors once
+through the shared source codec. Their Rust builders are fallible; graph
+promotion uses `map_representation_dimensions`. Raw compound dimensions and
+native encoded dimensions can then identify the same vector without re-inferring
+the retained numerator. Frozen failure/isolated repair evidence and canonical
+controls preserve the unselected same-head vector, declared logical axes,
+ranked zero and unchanged source.
 
-A separate boundary audit found two selector defects outside the completed
-suite's coverage. Against frozen `880ad11d`, graph reduction rejects the compound
-dimension `4 - 2*epsilon` through `Dimension::try_from`; direct exact-vector
-selection silently leaves the input unreduced because raw selectors and native
-encoded dimensions have different Atom spellings. The patched scratch crate,
-linked to the exact frozen dependencies, passes the same graph and exact-selector
-oracles plus an external-vector projection control. These checks retain the
-unselected same-head vector, reversed logical ports, ranked zero and unchanged
-source. They establish failure-before/success-after evidence, not canonical
-Cargo or workspace qualification. The repair admits each small source selector
-once through the shared codec, makes the two Rust vector-selector builders
-fallible, and uses the existing dimension mapper for graph promotion. Its
-implementation and identity records are under
-`target/symbolic-tensor-flow/explicit-selector-patch`.
+The user approved all ten remaining bookkeeping updates, applied at
+`79c954094b97adba6927cfc4054f5f434603ae68`. The three complete generation test
+functions pass in 53.346 seconds, covering all ten exact assertions, rather than
+stopping at the first snapshot in each function. This commit changes only those
+reference strings; its production code is identical to `8f24069f`. The approval
+scope and the limits of the supporting proofs are recorded below. These focused
+results address all five failures of the earlier full run; they are not reported
+as a new complete post-fix workspace run.
 
-The normal Nix CLI build for `880ad11d` passed. The follow-up child includes the
-selector repair and documentation corrections; its Q3 repair, canonical checks,
-fresh CLI build and paired performance comparison still require qualification.
-Final CI preparation and publication have not completed, and this record does
-not declare the branch ready to merge.
+The normal Nix CLI and main/`8f24069f` sealed performance corpus have completed.
+All thirteen cases preserve their numerical references; twelve pass their
+performance gates. The remaining GL16 alias case is inconclusive: its
+single-parametric runtime has a 7.4 percent median paired increase, below the
+15 percent limit, but its uncertainty interval crosses that limit. This requires
+a further isolated comparison, not a relaxed threshold. Final CI preparation
+and publication have not completed.
+
+The same run measures GL1 generation at 3.996 to 4.569 seconds (14.1 percent
+paired increase) and single-parametric evaluation at 159.49 to 135.81 microseconds
+(15.5 percent paired decrease). Thermal GL1 generation improves from 7.040 to
+6.371 seconds and its single-parametric evaluation from 834.27 to 743.19
+microseconds. Peak memory increases from 81.37 to 99.12 MB for GL1 and from
+117.92 to 145.91 MB for thermal GL1; both remain within the unchanged gates.
+These costs remain part of the performance review even when a gate passes.
+
+The separate topology check preserves all 66 diagram inventory entries in every
+pair. Its fresh-process median time changes from 0.907 to 0.953 seconds, with a
+5.6 percent median paired increase. This includes model import and saving the
+generated state, excludes integrand construction, and is not a full numerator
+equivalence certificate. All thirteen gate reports, binary identities and the
+five topology pairs are retained in
+`target/symbolic-tensor-flow/performance-source-boundary-8f24069f-1`.
+
+== Current performance blocker: integrated ghost d53
+
+Two isolated quiet pairs, in alternating `16787f71`/`8f24069f` order, pass the
+unchanged exact d53 reference within the original 240-second deadline. Median
+wall time rises from 19.515 to 166.810 seconds, about 8.5 times; median child CPU
+time rises from 19.373 to 165.514 seconds. This is a confirmed computation cost,
+not an explanation based solely on the earlier concurrent full-suite timings.
+The relevant test macro, settings, 78-diagram source, Standard Model input and
+exact reference are identical. Preserved binaries, hashes, environments and
+trial records are under `target/symbolic-tensor-flow/ghost-performance-audit`.
+
+The three bubble UV wrappers remain near their earlier 150-second whole-test
+times. d76's slower full-suite observation remains a separate follow-up because
+that run overlapped other heavy ghost tests. Neither these whole-suite durations
+nor the old GL1 measurements replace isolated comparisons.
+
+The d53 diagnostic traces have the same stage call counts. Coefficient sizes
+grow before the unchanged Laurent-series engine, which accounts for about
+75.6 percent of the sampled candidate CPU profile. For the matched
+`current=16C4`, `given=sXg`, `reduced=DeO` context, the first observed growth is
+at color simplification before Lorentz projection or scalar vacuum evaluation.
+The earlier path closes the color traces into Casimirs and indices; the current
+path retains traces and structure constants. Three matched projected numerators
+subsequently grow from 1,422/2,864/2,017 to 23,298/25,744/49,858 raw string bytes.
+Small native controls now prove the signed explicit-product/adjoint-chain
+equivalence with identical external ports. Each individual trace should give
+the same nonzero Casimir coefficient, while their symmetric sum must be a
+rank-two zero. The explicit forms reduce correctly; the chains remain unresolved
+through both retained and freshly checked second passes. Opening only the small
+chain restores the exact expected results. The full captured input reproduces
+the same unreduced color inventory; missing process-local data in legacy cooked
+labels limits exact text comparison of that larger replay.
+
+The implemented repair belongs to Idenso's product-color owner. It exposes one
+connected adjoint chain through the existing reserved dummy allocator and
+commits the result only when an existing cross-factor identity reduces it.
+Unrelated chains and spectator factors remain intact. Combined unit, integration
+and timing qualification is still pending; the removed d53 cost is not yet
+claimed. The comparison preserves numerator factorization and the original
+assertions; disabling checks or expanding the graph numerator is not a remedy.
+The exact boundary pairs are retained under
+`ghost-performance-audit/runs/current-d53-inputs-1/boundary-comparison`.
 
 == Historical qualification at 6002674d, 17 October 2026
 
@@ -718,18 +772,26 @@ The photonic binary64 reference follows the changed compiler operation order;
 fresh arbitrary-precision evaluation still equals main's exact stored value,
 and both equality assertions remain enforced.
 
-== Pending generation-reference review
+== Approved generation bookkeeping references
 
-Ten prepared snapshot updates remain unapplied. They retain every diagram
-count and exact assertion. The audit is in
-`target/readiness-repair/feyngen-boundary-proposal/remaining-reference-proposal.json`,
-with the original and proposed strings and reproducible evidence for each case.
+The ten updates approved by the user are applied at `79c95409`: two ghost
+provenance ledgers, one asymmetric scalar-weight ledger, six vacuum
+representative/normalization snapshots, and one four-loop representative-weight
+snapshot. All diagram counts, exact snapshot assertions, numerical references,
+tolerances and comparison sample budgets remain unchanged. The original/proposed
+strings and supporting evidence are in
+`target/readiness-repair/feyngen-boundary-proposal/remaining-reference-proposal.json`;
+that historical proposal remains labelled as prepared, while the applied-site
+manifest and successful three-function rerun are under
+`target/symbolic-tensor-flow`.
 
-All sixteen closed-ghost colored masters retain exactly the same individual
+For the ghost updates, all sixteen colored masters retain their individual
 weights. Two provenance entries of weight minus two become four entries of
-weight minus one; the total remains minus 29/2. The asymmetric twelve-master
-case also has the same complete scalar-weight ledger after exact Casimir
-normalization. These changes do not alter a physical contribution.
+weight minus one; the total remains minus 29/2. This certifies the colored-master
+inventory and scalar-weight bookkeeping. It is not an independent full-numerator
+or kinematic equivalence proof for every ghost contribution. The separate
+physical acceptance references remain enforced. The asymmetric twelve-master
+case has the same complete scalar-weight ledger after exact Casimir normalization.
 
 The vacuum snapshots select different representatives of equivalent massless
 current classes. A down-quark photon numerator is one quarter of the former
@@ -968,9 +1030,9 @@ interface, reject collisions and preserve callback validation. These are not
 safe uses of an Atom replacement followed by fresh inference. Python transfers
 reuse `TensorExpression::from_structured` to keep the same carrier.
 
-The completed `880ad11d` checkpoint and subsequent unqualified boundary repairs
-are distinguished above. Paired performance measurements of the retained-tensor
-migration remain outstanding. Artifacts and logs are retained under
+The completed `880ad11d` checkpoint, qualified `8f24069f` boundary repairs and
+approved `79c95409` references are distinguished above. Sealed main comparisons
+remain separate from the confirmed isolated d53 regression and its ongoing repair. Artifacts and logs are retained under
 `target/symbolic-tensor-flow`.
 
 The first immutable candidate `48b8acfa` passed a fresh 533-case core sweep and
@@ -1043,8 +1105,8 @@ be omitted; identity index transport can rebuild planning state; numerical
 samples repeat some sample-independent color preparation; and diagram export
 can compute the same metadata twice. These are candidates for measurement,
 not an attribution of GL1's historical slowdown. The completed frozen workspace
-run and normal CLI build do not replace fresh paired timing or qualification of
-the post-checkpoint selector and Q3 repairs.
+run and normal CLI build do not replace fresh paired timing. The selector and
+Q3 repairs have since passed their canonical focused checks recorded above.
 
 Frozen native candidate `53312d8b` built all 102 workspace test binaries and
 passed 1,519 of 1,535 selected native/interface tests. The sixteen failures
@@ -1068,7 +1130,8 @@ The new Laurent control now requests four coefficients so that its unchanged
 epsilon-squared assertion is supported by the backend truncation. Exact rational
 arithmetic proves the CP snapshot's only remaining change is the spelling of
 three simultaneous factor signs; that cosmetic refresh retains the count,
-source IDs and total. It is separate from the ten pending bookkeeping proposals.
+source IDs and total. It is separate from the ten bookkeeping proposals later
+approved and validated as recorded above.
 
 The subsequent `fd27769a` native package run passed 501 of 502 tests. Its only
 failure was presentation: encoded index symbols hid the original edge/vertex
@@ -1110,6 +1173,6 @@ source-dependent documentation failures, and one global tensor JSON round trip.
 The latter wrote display-formatted payloads beside canonical interface metadata;
 the serializer now uses canonical source strings and retains exact parse-back
 checks. The later `880ad11d` full run kept its actual compile-time source tree
-frozen and reduced the failure set to the five cases listed at the start of
-this record. The earlier diagnostic failures remain recorded as failures of
+frozen and reduced the failure set to the five cases subsequently addressed by
+the focused source/interface and approved-reference runs at the start of this record. The earlier diagnostic failures remain recorded as failures of
 their own checkpoint.
