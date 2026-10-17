@@ -296,11 +296,20 @@ impl DotNormalizer {
 
     fn normalize_nested_vector(&mut self, function: FunView<'_>) -> Option<Atom> {
         let inner = self.slots.vector_argument(function)?;
-        let AtomView::Fun(inner_function) = inner else {
-            return None;
+        let compact = match inner {
+            AtomView::Fun(inner_function) => self.slots.vector_argument(inner_function)?.to_owned(),
+            AtomView::Add(_) | AtomView::Mul(_) => {
+                // The materializer already owns same-space vector sums and
+                // scalar-weighted products. Keep the complete operand intact;
+                // only expose the contraction hidden in the outer vector.
+                let (_, representation) = self
+                    .slots
+                    .compact_vector_sequence::<AbstractIndex>(std::iter::once((0, inner)), false)?;
+                representation.to_symbolic([])
+            }
+            _ => return None,
         };
-        let compact = self.slots.vector_argument(inner_function)?;
-        let representation = self.slots.compact_representation(compact)?;
+        let representation = self.slots.compact_representation(compact.as_view())?;
         if !representation.is_base() {
             return None;
         }
@@ -327,7 +336,7 @@ impl DotNormalizer {
         }
         // The compact final argument identifies even an untagged inner vector;
         // the outer function must have the rank-one tag checked by the caller.
-        let outer = Self::replace_last_argument(function, compact.to_owned());
+        let outer = Self::replace_last_argument(function, compact);
         Some(function!(self.metric, outer, inner))
     }
 

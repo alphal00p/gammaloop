@@ -179,6 +179,9 @@ factor with the remaining tensor witnesses fixed.
 Before power and interface admission, the existing dot normalizer lowers
 nested rank-one notation such as `δ(cind(0),p(mink(d)))` to
 `g(δ(cind(0),mink(d)),p(mink(d)))`, retaining the symbolic dimension.
+The same contraction accepts scalar-weighted vector sums when the existing
+materializer certifies one compatible compact axis and a scalar coefficient.
+It retains the summed operand and its scalar spectators without distributing them.
 This admission pass leaves explicit metrics, dots, indexed contractions and
 scalar payloads unchanged. Callback-sensitive ancestors and metadata remain
 on the existing checked path; the deterministic fixed-component delta is a
