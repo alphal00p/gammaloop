@@ -1190,11 +1190,20 @@ mod slow {
                 "parametric color changes a primitive at N_c = 3"
             );
         };
+        let parametrize_tensor = |tensor: &mut idenso::tensor::SymbolicTensor<
+            spenso::structure::partial::PartialStructure,
+        >| {
+            let mut expression = tensor.expression().clone();
+            parametrize(&mut expression);
+            // Color dimensions change at this boundary, so infer the new
+            // interface instead of certifying the old one unchanged.
+            *tensor = tensor.with_transformed_expression(expression).unwrap().0;
+        };
 
         for index in [21, 24] {
             let graph = &mut amp.graphs[index];
             for (_, _, vertex) in graph.graph.underlying.iter_nodes_mut() {
-                parametrize(&mut vertex.num.value);
+                parametrize_tensor(&mut vertex.num.value);
             }
             let edges: Vec<_> = graph
                 .graph
@@ -1203,7 +1212,7 @@ mod slow {
                 .map(|(_, index, _)| index)
                 .collect();
             for edge in edges {
-                parametrize(&mut graph.graph.underlying[edge].num.value);
+                parametrize_tensor(&mut graph.graph.underlying[edge].num.value);
             }
             parametrize(&mut graph.graph.global_prefactor.num);
             parametrize(&mut graph.graph.global_prefactor.projector);

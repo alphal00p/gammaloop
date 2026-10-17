@@ -10,7 +10,18 @@ use super::{Canonicalized, OrderedStructure, StructureError, TensorStructure};
 ///
 /// Open port identifiers are metadata only. They are canonicalized in logical
 /// port order and are never serialized into a Symbolica atom.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 pub struct OpenPortId(pub usize);
 
 impl Display for OpenPortId {
@@ -20,7 +31,22 @@ impl Display for OpenPortId {
 }
 
 /// An explicit abstract index or an unresolved occurrence-local port.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+#[cfg_attr(
+    feature = "shadowing",
+    trait_decode(trait = symbolica::state::HasStateMap),
+)]
 pub enum PartialIndex<A> {
     Explicit(A),
     Open(OpenPortId),

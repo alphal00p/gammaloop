@@ -481,7 +481,7 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
         let completed = localized.multiply_key_mapped(
             localizer.orientation,
             &graph,
-            &numerator,
+            &crate::numerator::AppliedFeynmanRule::new(numerator.clone())?.expr,
             DirectResidueBranches::numerator_scope(),
         )?;
         // Compare the exact production expression after lowering only the
@@ -1705,7 +1705,7 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
             integrands
                 .numerators()
                 .iter()
-                .all(|entry| !entry.rhs.contains_symbol(GS.ct_marker))
+                .all(|entry| !entry.rhs.expression().contains_symbol(GS.ct_marker))
         );
         let mapped = integrands.resolved()?;
         for operation in [
@@ -1737,18 +1737,54 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         .multiply_key_mapped(
             localizer.orientation,
             &graph,
-            &cograph,
+            &crate::numerator::AppliedFeynmanRule::new(cograph.clone())?.expr,
             DirectResidueBranches::numerator_scope(),
         )?;
     let baseline_all = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
+    let matrix_interfaces = [
+        idenso::gamma0!(&left, &middle),
+        idenso::gamma0!(&middle, &right),
+    ]
+    .into_iter()
+    .map(|matrix| {
+        Ok(crate::numerator::AppliedFeynmanRule::new(matrix)?
+            .expr
+            .structure()
+            .clone())
+    })
+    .collect::<Result<Vec<_>>>()?;
     for (key, integrands) in completed.iter_keys() {
         assert!(
             integrands.numerators().len() >= 2,
             "finite and cograph matrices keep their shared owners"
         );
-        for (_, scalar) in integrands.iter() {
+        for expected in &matrix_interfaces {
             assert!(
-                idenso::tensor::SymbolicTensor::infer(scalar.clone())?.is_scalar(),
+                integrands
+                    .numerators()
+                    .iter()
+                    .any(|entry| entry.rhs.structure() == expected)
+            );
+        }
+        assert!(
+            integrands
+                .numerators()
+                .iter()
+                .all(|entry| matrix_interfaces.contains(entry.rhs.structure()))
+        );
+        for (_, scalar) in integrands.iter() {
+            // The calls have the interfaces of their separately retained
+            // tensor bodies. Inspect only the CFF coefficient, not the calls
+            // themselves, at this scalar boundary.
+            let coefficient = scalar.replace_map(|view, _, output| {
+                if let symbolica::atom::AtomView::Fun(call) = view
+                    && call.get_symbol() == symbolica::symbol!("gammalooprs::uv::numerator_family")
+                {
+                    **output = Atom::one();
+                }
+            });
+            assert!(
+                idenso::tensor::SymbolicTensor::infer(coefficient)?.is_scalar(),
                 "the CFF weight must not contain an inline finite tensor"
             );
         }

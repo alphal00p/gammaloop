@@ -435,21 +435,18 @@ mod tests {
         assert_eq!(runtime.overall_factor, atom("kept_overall"));
         assert_eq!(runtime.global_prefactor.num, atom("kept_prefactor"));
         assert_eq!(runtime.global_prefactor.projector, atom("kept_projector"));
-        assert!(
-            runtime
-                .underlying
-                .iter_nodes()
-                .any(|(_, _, vertex)| vertex.num.value == atom("kept_vertex_fragment"))
-        );
-        assert!(
-            runtime
-                .underlying
-                .iter_edges()
-                .any(|(_, _, edge)| { edge.data.num.value == atom("kept_edge_fragment") })
-        );
+        assert!(runtime.underlying.iter_nodes().any(|(_, _, vertex)| {
+            crate::graph::parse::NumeratorInterface::export(&vertex.num.value).0
+                == atom("kept_vertex_fragment")
+        }));
+        assert!(runtime.underlying.iter_edges().any(|(_, _, edge)| {
+            crate::graph::parse::NumeratorInterface::export(&edge.data.num.value).0
+                == atom("kept_edge_fragment")
+        }));
         assert_eq!(
             runtime
                 .numerator(&runtime.full_filter(), &runtime.empty_subgraph())
+                .unwrap()
                 .get_single_atom()
                 .unwrap()
                 .expand(),
@@ -641,7 +638,10 @@ mod tests {
             .iter_nodes()
             .find(|(_, _, vertex)| vertex.name.value == "left")
             .expect("the left FeynKit vertex must survive runtime enrichment");
-        assert_eq!(left.num.value, Atom::from(left_node.aind(0)));
+        assert_eq!(
+            crate::graph::parse::NumeratorInterface::export(&left.num.value).0,
+            Atom::from(left_node.aind(0))
+        );
     }
 
     #[test]

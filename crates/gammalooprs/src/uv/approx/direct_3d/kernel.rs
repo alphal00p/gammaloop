@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::{CookMode, CookSettings, color::ColorSimplifySettings, tensor::SymbolicTensor};
+use idenso::color::ColorSimplifySettings;
 use itertools::Itertools;
 use linnet::half_edge::subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::{
@@ -348,22 +348,13 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         .as_ref()
         .map(|active| active.intersection(current.subgraph()));
     let reduced = current.reduced_subgraph(given);
-    let numerator = ctx
-        .graph
-        .numerator(&reduced, given.subgraph())
-        .get_single_atom()
-        .expect("graph numerator should be available");
-    let cooking = CookSettings::indices()
-        .with_mode(CookMode::ReversibleEncoding)
-        .with_representation_payloads(true, true);
-    let numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?
-        .simplify_algebra(&idenso::tensor::AlgebraSettings {
-            color: Some(ColorSimplifySettings {
-                ..Default::default()
-            }),
+    let numerator = ctx.graph.numerator(&reduced, given.subgraph())?.state.expr;
+    let mut numerator = numerator.simplify_algebra(&idenso::tensor::AlgebraSettings {
+        color: Some(ColorSimplifySettings {
             ..Default::default()
-        })?;
-    let mut numerator = cooking.uncook(numerator.expression().as_view());
+        }),
+        ..Default::default()
+    })?;
     let lmb_id = lmb
         .loop_edges
         .first()
@@ -384,7 +375,18 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     // same model mass in the accumulated CFF atom would also tag a disjoint
     // sibling that happens to use the same particle species.
     for mass in physical_masses {
-        numerator = numerator.replace(mass.clone()).with(mass * &mass_scope);
+        let tagged = numerator
+            .expression()
+            .replace(mass.clone())
+            .with(&mass * &mass_scope);
+        debug_tags!(#uv, #local, #trace;
+            stage = "direct_3d_numerator_mass_scope",
+            mass = %mass,
+            file.source = %numerator.expression().to_plain_string(),
+            file.tagged = %tagged.to_plain_string(),
+            "Scoped a physical numerator mass before its Taylor operation"
+        );
+        numerator = numerator.with_checked_expression(tagged)?;
     }
     // Every local UV kernel starts from the vacuum-explicit reduced graph, including
     // thermal runs; the medium dependence lives in the unreduced observable.
@@ -892,16 +894,17 @@ impl Direct3dApproximation<'_> {
                 )
             })?
             .map_numerators(|entry| {
-                Self::t_rescale(
+                let rescaled = Self::t_rescale(
                     deformation,
                     ctx,
                     current,
                     given,
-                    &entry.rhs,
+                    entry.rhs.expression(),
                     active_subgraph,
                     lmb,
                     false,
-                )
+                )?;
+                Ok(entry.rhs.with_checked_expression(rescaled)?)
             })?;
         let endpoint = match deformation {
             Local3DDeformation::Ordinary => 0,

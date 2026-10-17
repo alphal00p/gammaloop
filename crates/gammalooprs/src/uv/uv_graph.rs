@@ -53,7 +53,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         &self,
         subgraph: &S,
         without: &S,
-    ) -> Numerator<AppliedFeynmanRule>;
+    ) -> Result<Numerator<AppliedFeynmanRule>>;
     fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
         subgraph: &S,
@@ -555,7 +555,7 @@ impl UltravioletGraph for Graph {
         &self,
         subgraph: &S,
         without: &S,
-    ) -> Numerator<AppliedFeynmanRule> {
+    ) -> Result<Numerator<AppliedFeynmanRule>> {
         let num = Numerator::default();
 
         num.fill_in_reduced(self, subgraph, without)
@@ -580,7 +580,9 @@ impl UltravioletGraph for Graph {
         }
         let integrand = self
             .numerator(subgraph, &empty)
+            .expect("graph numerator must have a valid tensor interface")
             .to_d_dim(GS.dim)
+            .expect("UV power-counting dimension conversion must preserve tensor interfaces")
             .get_single_atom()
             .unwrap()
             / denominator;

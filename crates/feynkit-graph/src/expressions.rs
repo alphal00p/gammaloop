@@ -71,7 +71,34 @@ pub trait GraphExpressions<E, V> {
         vertex_numerator: impl Fn(NodeIndex, &V) -> Atom,
         edge_numerator: impl Fn(&E) -> Atom,
         is_dummy: impl Fn(&E) -> bool,
-    ) -> Atom;
+    ) -> Atom {
+        match self.try_fold_numerator(
+            subgraph,
+            without,
+            Atom::one(),
+            vertex_numerator,
+            edge_numerator,
+            is_dummy,
+            |left, right| Ok::<_, std::convert::Infallible>(left * right),
+        ) {
+            Ok(numerator) => numerator,
+            Err(never) => match never {},
+        }
+    }
+
+    /// Compose selected local fragments without erasing their owning value type.
+    /// Selection and dummy-edge rules are identical for source atoms and retained tensors.
+    #[allow(clippy::too_many_arguments)]
+    fn try_fold_numerator<S: SubGraphLike + SubSetOps, N, Error>(
+        &self,
+        subgraph: &S,
+        without: &S,
+        unit: N,
+        vertex_numerator: impl Fn(NodeIndex, &V) -> N,
+        edge_numerator: impl Fn(&E) -> N,
+        is_dummy: impl Fn(&E) -> bool,
+        product: impl FnMut(N, N) -> Result<N, Error>,
+    ) -> Result<N, Error>;
 
     /// Only edges paired inside the selection contribute a propagator. Powers
     /// may be negative or zero, and the factor callback is not run for zero powers.
@@ -84,15 +111,18 @@ pub trait GraphExpressions<E, V> {
 }
 
 impl<E, V, H> GraphExpressions<E, V> for HedgeGraph<E, V, H> {
-    fn numerator_of<S: SubGraphLike + SubSetOps>(
+    #[allow(clippy::too_many_arguments)]
+    fn try_fold_numerator<S: SubGraphLike + SubSetOps, N, Error>(
         &self,
         subgraph: &S,
         without: &S,
-        vertex_numerator: impl Fn(NodeIndex, &V) -> Atom,
-        edge_numerator: impl Fn(&E) -> Atom,
+        unit: N,
+        vertex_numerator: impl Fn(NodeIndex, &V) -> N,
+        edge_numerator: impl Fn(&E) -> N,
         is_dummy: impl Fn(&E) -> bool,
-    ) -> Atom {
-        let mut numerator = Atom::one();
+        mut product: impl FnMut(N, N) -> Result<N, Error>,
+    ) -> Result<N, Error> {
+        let mut numerator = unit;
         let mut seen: SubSet<NodeIndex> = SubSet::empty(self.n_nodes());
         for (node, _, _) in self.iter_nodes_of(without) {
             seen.add(node);
@@ -103,10 +133,10 @@ impl<E, V, H> GraphExpressions<E, V> for HedgeGraph<E, V, H> {
                 for node in [self.node_id(source), self.node_id(sink)] {
                     if !seen[node] {
                         seen.add(node);
-                        numerator *= vertex_numerator(node, &self[node]);
+                        numerator = product(numerator, vertex_numerator(node, &self[node]))?;
                     }
                 }
-                numerator *= edge_numerator(edge.data);
+                numerator = product(numerator, edge_numerator(edge.data))?;
             }
         }
         let unseen = !seen;
@@ -117,10 +147,10 @@ impl<E, V, H> GraphExpressions<E, V> for HedgeGraph<E, V, H> {
                 .iter_crown(node)
                 .all(|hedge| subgraph.includes(&hedge) || is_dummy(&self[self[&hedge]]))
             {
-                numerator *= vertex_numerator(node, &self[node]);
+                numerator = product(numerator, vertex_numerator(node, &self[node]))?;
             }
         }
-        numerator
+        Ok(numerator)
     }
 
     fn denominator_of<S: SubGraphLike, Error>(

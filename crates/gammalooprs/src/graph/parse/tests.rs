@@ -63,6 +63,93 @@ fn parse_triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> Grap
 }
 
 #[test]
+fn numerator_interface_source_roundtrip_keeps_two_identical_open_axes() {
+    use super::NumeratorInterface;
+    use idenso::tensor::SymbolicTensor;
+    use spenso::structure::partial::{
+        OpenPortId, PartialIndex, PartialStructure, PartialStructureExt,
+    };
+    test_initialise().unwrap();
+    let representation = Minkowski {}.new_rep(4).to_lib();
+    let interface = PartialStructure::from_logical_slots([
+        representation.slot(PartialIndex::Open(OpenPortId(0))),
+        representation.slot(PartialIndex::Open(OpenPortId(1))),
+    ]);
+    let zero = SymbolicTensor::from_declared_parts(Atom::Zero, interface).unwrap();
+    let (expression, metadata) = NumeratorInterface::export(&zero);
+    let metadata = metadata.expect("a ranked zero requires interface metadata");
+    let restored = NumeratorInterface::admit(
+        expression,
+        Some(NumeratorInterface::parse(&metadata.to_json()).unwrap()),
+    )
+    .unwrap();
+    assert!(restored.same_value(&zero));
+    let slots = restored.structure().logical_slots();
+    assert_eq!(slots.len(), 2);
+    assert_eq!(slots[0].aind, PartialIndex::Open(OpenPortId(0)));
+    assert_eq!(slots[1].aind, PartialIndex::Open(OpenPortId(1)));
+    assert!(
+        NumeratorInterface::admit(Atom::one(), None)
+            .unwrap()
+            .is_scalar()
+    );
+    assert!(
+        NumeratorInterface::admit(Atom::Zero, None)
+            .unwrap()
+            .is_scalar()
+    );
+    assert!(NumeratorInterface::admit(Atom::one(), Some(metadata)).is_err());
+}
+
+#[test]
+fn runtime_and_canonical_dot_preserve_ranked_zero_fragments() {
+    use super::NumeratorInterface;
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let canonical = Graph::import_dot(
+        include_str!("../../../../../tests/resources/graphs/ir_safe_thresholds/no_directive_cross_section.dot"),
+        &model,
+    ).unwrap().remove(0);
+    let metric = symbolica::function!(
+        spenso::network::library::symbolic::ETS.metric,
+        Minkowski {}.new_rep(4).to_symbolic([Atom::num(37)]),
+        Minkowski {}.new_rep(4).to_symbolic([Atom::num(41)])
+    );
+    let metric = NumeratorInterface::admit(metric, None).unwrap();
+    let zero = metric.with_algebra_result(Atom::Zero).unwrap();
+    for (mut graph, edge) in [
+        (parse_triangle_fixture(3, None), EdgeIndex(3)),
+        (canonical, EdgeIndex(2)),
+    ] {
+        assert!(
+            !graph
+                .dot_serialize(&DotExportSettings::default())
+                .contains("num_interface")
+        );
+        let vertex = graph.underlying.iter_nodes().next().unwrap().0;
+        graph.underlying[vertex].num.value = zero.clone();
+        graph.underlying[edge].num.value = metric.clone();
+        let serialized = graph.dot_serialize(&DotExportSettings::default());
+        assert!(serialized.contains("num_interface"));
+        let restored = Graph::import_dot(&serialized, &model).unwrap().remove(0);
+        assert!(restored.underlying[vertex].num.value.same_value(&zero));
+        assert!(restored.underlying[edge].num.value.same_value(&metric));
+        assert_eq!(restored.finalized_cuts.len(), graph.finalized_cuts.len());
+        assert_eq!(restored.overall_factor, graph.overall_factor);
+        let numerator = restored
+            .numerator(&restored.full_filter(), &restored.empty_subgraph())
+            .unwrap()
+            .state
+            .expr;
+        assert!(numerator.is_zero());
+        assert!(
+            numerator.is_scalar(),
+            "the zero fragment must still close its paired ports"
+        );
+    }
+}
+
+#[test]
 fn legacy_internal_order_key_recovers_pre_normalized_fermion_flow() {
     let model = crate::utils::load_generic_model("sm");
     let forward = DiagramEdge::new(model.particle_id("u").unwrap(), true);
@@ -470,7 +557,10 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
         let (runtime_data, runtime_pair) = &runtime.underlying[&edge];
         assert_eq!(*runtime_pair, pair);
         assert_eq!(runtime.underlying.orientation(edge), data.orientation);
-        assert_eq!(runtime_data.num.value, data.data.numerator);
+        assert_eq!(
+            super::NumeratorInterface::export(&runtime_data.num.value).0,
+            data.data.numerator
+        );
         assert_eq!(runtime_data.is_dummy, data.data.is_dummy);
     }
     for index in 0..source.n_hedges() {
@@ -492,6 +582,7 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
     assert_eq!(
         runtime
             .numerator(&full, &empty)
+            .unwrap()
             .get_single_atom()
             .unwrap()
             .expand(),
@@ -504,6 +595,7 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
         assert_eq!(
             runtime
                 .numerator(&selected, &empty)
+                .unwrap()
                 .get_single_atom()
                 .unwrap(),
             diagram.numerator_of(&selected, &empty)
@@ -830,6 +922,7 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
     let graph = Graph::import_dot(source, &model).unwrap().remove(0);
     let numerator = graph
         .numerator(&graph.full_filter(), &graph.empty_subgraph())
+        .unwrap()
         .get_single_atom()
         .unwrap();
     let mut source_ports = numerator.parse_into_net().unwrap().graph.dangling_indices();
@@ -895,13 +988,21 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
     literal.underlying = graph.underlying.map_data_ref(
         |_, _, vertex| {
             let mut vertex = vertex.clone();
-            vertex.num.value = reindex(&vertex.num);
+            vertex.num.value = super::NumeratorInterface::admit(
+                reindex(&super::NumeratorInterface::export(&vertex.num.value).0),
+                None,
+            )
+            .unwrap();
             vertex
         },
         |_, _, _, edge| {
             edge.map(|edge| {
                 let mut edge = edge.clone();
-                edge.num.value = reindex(&edge.num);
+                edge.num.value = super::NumeratorInterface::admit(
+                    reindex(&super::NumeratorInterface::export(&edge.num.value).0),
+                    None,
+                )
+                .unwrap();
                 edge
             })
         },
@@ -919,6 +1020,7 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
         assert!(
             restored
                 .numerator(&restored.full_filter(), &restored.empty_subgraph())
+                .unwrap()
                 .get_single_atom()
                 .unwrap()
                 .contains(port.to_atom())
@@ -949,13 +1051,13 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
     literal.underlying = literal.underlying.map_data_ref(
         |_, _, vertex| {
             let mut vertex = vertex.clone();
-            vertex.num.value = Atom::one();
+            vertex.num.value = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
             vertex
         },
         |_, _, _, edge| {
             edge.map(|edge| {
                 let mut edge = edge.clone();
-                edge.num.value = Atom::one();
+                edge.num.value = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
                 edge
             })
         },
@@ -1057,6 +1159,7 @@ fn compact_qcd_import_instantiates_rules_and_retains_explicit_fragments() {
     assert_eq!(
         imported
             .numerator(&imported.full_filter(), &imported.empty_subgraph())
+            .unwrap()
             .get_single_atom()
             .unwrap(),
         *reference.numerator()
@@ -1075,10 +1178,17 @@ fn compact_qcd_import_instantiates_rules_and_retains_explicit_fragments() {
     assert_eq!(
         explicit.underlying[linnet::half_edge::NodeIndex(0)]
             .num
-            .value,
-        Atom::num(7)
+            .value
+            .expression(),
+        &Atom::num(7)
     );
-    assert!(!explicit.underlying[EdgeIndex(1)].num.value.is_one());
+    assert!(
+        !explicit.underlying[EdgeIndex(1)]
+            .num
+            .value
+            .expression()
+            .is_one()
+    );
 }
 
 #[test]
@@ -1157,10 +1267,12 @@ fn compact_sewn_projector_uses_the_source_half_edge_chart() {
     assert_eq!(
         explicit
             .numerator(&explicit.full_filter(), &explicit.empty_subgraph())
+            .unwrap()
             .get_single_atom()
             .unwrap(),
         automatic
             .numerator(&automatic.full_filter(), &automatic.empty_subgraph())
+            .unwrap()
             .get_single_atom()
             .unwrap()
     );

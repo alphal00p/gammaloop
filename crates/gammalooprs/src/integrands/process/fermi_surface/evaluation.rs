@@ -20,7 +20,7 @@ use crate::{
             evaluators::{
                 EvaluatorStack, GenericEvaluator, SingleOrAllOrientations, evaluate_evaluator,
             },
-            param_builder::FnMapEntry,
+            param_builder::NumeratorDefinition,
         },
     },
     momentum::sample::{LoopMomenta, MomentumSample},
@@ -48,7 +48,7 @@ impl FermiSurfaceEvaluator {
         graph: &Graph,
         sector: FermiSurfaceSector,
         param_builder: &ParamBuilder,
-        numerator_definitions: &[Arc<FnMapEntry>],
+        numerator_definitions: &[Arc<NumeratorDefinition>],
         orientation_catalog: Option<(&[EdgeVec<Orientation>], &[OrientationID])>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {

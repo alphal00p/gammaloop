@@ -1656,7 +1656,9 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // they are combined into one persisted integrand before evaluator construction.
 // Version 18 combines the canonical FeynKit model and current compact runtime layout.
 // Older states from either development branch must be regenerated.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 18;
+// Version 19 retains tensor interfaces in runtime graph fragments and numerator
+// definitions. Older positional archives must be regenerated.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 19;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

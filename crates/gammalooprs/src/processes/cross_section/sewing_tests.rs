@@ -21,7 +21,7 @@ use symbolica::{
 };
 
 use crate::{
-    graph::Graph,
+    graph::{Graph, parse::NumeratorInterface},
     initialisation::test_initialise,
     model::{Model, ModelGammaLoopExt, UFOSymbol, VertexRuleIdGammaLoopExt},
     numerator::{ParsingNet, aind::Aind},
@@ -117,7 +117,7 @@ fn vertex_matrix(
         }
     }
     let mut expression = model
-        .expand_couplings(&vertex.num.value)
+        .expand_couplings(&NumeratorInterface::export(&vertex.num.value).0)
         .replace_multiple(&index_rules);
     // Fix the two quark colors to the same component: delta_00=1. This
     // color-singlet metric otherwise remains symbolic in the tensor library.
@@ -577,7 +577,7 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
                 .is_some_and(|rule| rule.resolve(&model).name == "V_26")
         })
         .unwrap();
-    let mut expression = model.expand_couplings(&vertex.num.value);
+    let mut expression = model.expand_couplings(&NumeratorInterface::export(&vertex.num.value).0);
     let mut antighost_edge = None;
     for hedge in graph.underlying.iter_crown(node) {
         match graph.underlying[hedge].ufo_order.value {
@@ -740,7 +740,7 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
         let HedgePair::Paired { source, sink } = pair else {
             panic!("the vector exchange must be internal");
         };
-        let mut numerator = edge.data.num.value.clone();
+        let mut numerator = NumeratorInterface::export(&edge.data.num.value).0;
         for (order, hedge) in [source, sink].into_iter().enumerate() {
             for slot in graphs[0].underlying[hedge]
                 .num_indices
@@ -768,7 +768,8 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
             .iter_edges()
             .find(|(_, _, edge)| edge.data.name.value == "exchange")
             .unwrap();
-        assert_eq!(scalar_edge.data.num.value, Atom::i());
+        let scalar_numerator = NumeratorInterface::export(&scalar_edge.data.num.value).0;
+        assert_eq!(scalar_numerator, Atom::i());
         assert_eq!(
             scalar_edge.data.particle.mass_atom(&model),
             edge.data.particle.mass_atom(&model)
@@ -799,8 +800,7 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
                         / &denominator;
             }
         }
-        let scalar_exchange =
-            scalar_left * &scalar_edge.data.num.value * scalar_right / denominator;
+        let scalar_exchange = scalar_left * &scalar_numerator * scalar_right / denominator;
         let expected_vector = if charged { (1, 100) } else { (63, 1250) };
         let expected_scalar = if charged { (-1, 72) } else { (-25, 144) };
         let expected_total = if charged { (-7, 1800) } else { (-11089, 90000) };

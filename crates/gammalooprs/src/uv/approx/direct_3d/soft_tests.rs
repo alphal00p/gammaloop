@@ -232,7 +232,7 @@ fn one_orientation_cff_hard_charts_match_direct_external_jets() -> Result<()> {
         &current,
         oriented_cff,
         &graph
-            .numerator(&current.reduced_subgraph(&root), root.subgraph())
+            .numerator(&current.reduced_subgraph(&root), root.subgraph())?
             .get_single_atom()
             .unwrap(),
         None,
@@ -279,7 +279,7 @@ fn one_orientation_cff_hard_charts_match_direct_external_jets() -> Result<()> {
     let active_with_numerator = &active_started * &homogeneous_numerator;
     let expanded =
         SymbolicTensor::infer(cooking.try_cook(active_with_numerator.as_view())?)?.expand_dots()?;
-    let active_with_numerator = cooking.uncook(expanded.as_view());
+    let active_with_numerator = cooking.uncook(expanded.expression().as_view());
     let started = &active_with_numerator * &tree_denominator;
 
     let reduced = current.reduced_subgraph(&root);
@@ -1015,7 +1015,7 @@ fn soft_laurent_projection_expands_materialized_internal_energy() -> Result<()> 
         let difference = actual - expected;
         let expanded =
             SymbolicTensor::infer(cooking.try_cook(difference.as_view())?)?.expand_dots()?;
-        let difference = cooking.uncook(expanded.as_view()).expand();
+        let difference = cooking.uncook(expanded.expression().as_view()).expand();
         assert!(
             difference.is_zero(),
             "unexpected degree-{dod} materialized internal-energy soft projection: {difference}"
@@ -1521,7 +1521,7 @@ fn production_ir_dispatch_composes_h_for_d0_d1_d2() -> Result<()> {
                 &ir,
                 &integrand,
                 &graph
-                    .numerator(&ir.reduced_subgraph(&ir), ir.subgraph())
+                    .numerator(&ir.reduced_subgraph(&ir), ir.subgraph())?
                     .get_single_atom()
                     .unwrap(),
                 None,
@@ -1644,7 +1644,7 @@ fn one_orientation_ir_dispatch_stores_one_combined_h_atom_per_residue() -> Resul
             &current,
             &input_atom,
             &graph
-                .numerator(&current.reduced_subgraph(&root), root.subgraph())
+                .numerator(&current.reduced_subgraph(&root), root.subgraph())?
                 .get_single_atom()
                 .unwrap(),
             Some(&active_subgraph),

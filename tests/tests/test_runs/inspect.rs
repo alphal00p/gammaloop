@@ -2286,16 +2286,13 @@ fn scalar_sunrise_inspect() -> Result<()> {
             parameters.len()
         );
         let mut markers = std::collections::HashSet::new();
-        for expression in amplitude_graph
-            .derived_data
-            .representations
-            .values()
-            .flat_map(|data| {
-                data.all_mighty_integrand
-                    .iter()
-                    .map(|(_, expression)| expression)
-            })
-        {
+        for expression in std::iter::once(&amplitude_graph.derived_data.all_mighty_integrand).chain(
+            amplitude_graph
+                .derived_data
+                .all_mighty_numerators
+                .iter()
+                .map(|entry| entry.rhs.expression()),
+        ) {
             assert!(!expression.contains_symbol(GS.uv_integrate));
             let _ = expression.replace_map(|view, _, _| {
                 if let AtomView::Fun(function) = view

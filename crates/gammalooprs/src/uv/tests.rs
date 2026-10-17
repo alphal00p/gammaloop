@@ -199,7 +199,7 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
     let body = (&x + &y).pow(3) * (&x + Atom::num(1));
     let entry = Arc::new(FnMapEntry {
         lhs: function!(family, &scope, &x),
-        rhs: body.clone(),
+        rhs: crate::numerator::AppliedFeynmanRule::new(body.clone())?.expr,
         args: vec![parameter.into()],
         tags: vec![scope.clone()],
         inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -239,12 +239,15 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
     for (actual, expected) in products {
         assert_eq!(actual.numerators().len(), 1);
         assert!(Arc::ptr_eq(&actual.numerators()[0], &entry));
-        assert_eq!(actual.numerators()[0].rhs, body);
+        assert_eq!(actual.numerators()[0].rhs.expression(), &body);
         let resolved = actual.resolved()?;
         assert!(resolved.numerators().is_empty());
         assert_eq!(resolved, Integrands::from_iter([(cut, expected)]));
     }
-    let changed = roots.map_numerators(|rhs| Ok(rhs.replace(y.to_pattern()).with(Atom::num(3))))?;
+    let changed = roots.map_numerators(|rhs| {
+        Ok(rhs
+            .with_checked_expression(rhs.expression().replace(y.to_pattern()).with(Atom::num(3)))?)
+    })?;
     assert_eq!(changed.iter().next().unwrap().1, &call);
     assert_eq!(
         changed.resolved()?,
@@ -286,7 +289,7 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
     let call = function!(family, &scope);
     let entry = Arc::new(FnMapEntry {
         lhs: call.clone(),
-        rhs: Atom::num(2),
+        rhs: crate::numerator::AppliedFeynmanRule::new(Atom::num(2))?.expr,
         args: Vec::new(),
         tags: vec![scope],
         inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -296,7 +299,7 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
     let roots = Integrands::from_iter([(cut, call.clone())]);
     let first = roots.clone().with_numerators([Arc::clone(&entry)])?;
     let conflicting = Arc::new(FnMapEntry {
-        rhs: Atom::num(3),
+        rhs: entry.rhs.with_checked_expression(Atom::num(3))?,
         ..entry.as_ref().clone()
     });
     let second = roots.clone().with_numerators([Arc::clone(&conflicting)])?;
@@ -312,7 +315,7 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
         roots
             .clone()
             .with_numerators([Arc::new(FnMapEntry {
-                rhs: call.clone(),
+                rhs: entry.rhs.with_checked_expression(call.clone())?,
                 ..entry.as_ref().clone()
             })])
             .is_err()
@@ -321,7 +324,11 @@ fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
     let unknown_call = function!(family, symbol!("uv_definition_test::unknown_scope"));
     assert!(roots.resolved().is_err());
     assert!(first.map(|atom| atom + &unknown_call).resolved().is_err());
-    assert!(first.map_numerators(|_| Ok(unknown_call.clone())).is_err());
+    assert!(
+        first
+            .map_numerators(|rhs| Ok(rhs.with_checked_expression(unknown_call.clone())?))
+            .is_err()
+    );
     Ok(())
 }
 
@@ -347,7 +354,7 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
     ] {
         let entry = Arc::new(FnMapEntry {
             lhs: family.call_args(std::iter::once(tag.clone()).chain(parameters.iter().cloned())),
-            rhs: parameters[0].clone(),
+            rhs: crate::numerator::AppliedFeynmanRule::new(parameters[0].clone())?.expr,
             args: parameters
                 .into_iter()
                 .map(|p| Indeterminate::try_from(p).unwrap())
@@ -363,7 +370,7 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
     let parameter = function!(head, &scope, 0);
     let entry = Arc::new(FnMapEntry {
         lhs: function!(family, &scope, &parameter),
-        rhs: parameter.clone(),
+        rhs: crate::numerator::AppliedFeynmanRule::new(parameter.clone())?.expr,
         args: vec![Indeterminate::try_from(parameter).unwrap()],
         tags: vec![scope.clone()],
         inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -537,7 +544,10 @@ fn integrands_resolve_nested_scalar_arguments_and_scalar_numerator_coefficients(
     let family = symbol!("gammalooprs::uv::numerator_family");
     let numerator = Arc::new(FnMapEntry {
         lhs: function!(family, &scope, &p),
-        rhs: function!(head, &scope, &p) * (&p + Atom::num(2)).pow(5),
+        rhs: crate::numerator::AppliedFeynmanRule::new(
+            function!(head, &scope, &p) * (&p + Atom::num(2)).pow(5),
+        )?
+        .expr,
         args: vec![parameter.into()],
         tags: vec![scope.clone()],
         inlining: symbolica::evaluate::InliningPolicy::Always,

@@ -360,9 +360,11 @@ impl SymbolicTensor<PartialStructure> {
     /// scalar payloads. Symbolic dimensions stay unchanged. This is distinct
     /// from `undo_dots`, which only opens symbolic indices, and from `contract`.
     /// Neither the surrounding expression nor its numerator is expanded.
-    /// The result is a raw component expression, not a symbolic tensor proof:
-    /// concretized heads may carry `cind` arguments instead of symbolic ports.
-    pub fn expand_dots(&self) -> Result<Atom, TensorInferenceError> {
+    /// The resulting scalar components retain the surrounding tensor interface.
+    /// Concrete `cind` arguments are observed as components; callback results
+    /// must preserve the original logical ports, including the rank of zero.
+    pub fn expand_dots(&self) -> Result<Self, TensorInferenceError> {
+        self.ensure_validated()?;
         let settings =
             ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
         let compact = DotNormalizer::metric_shorthand_to_dot(self.expression().as_view());
@@ -426,7 +428,7 @@ impl SymbolicTensor<PartialStructure> {
         if let Some(error) = failure.lock().unwrap().take() {
             return Err(TensorInferenceError::Invalid(error));
         }
-        Ok(expression)
+        self.with_checked_expression(expression)
     }
 
     fn component_batch_is_intrinsic(value: AtomView<'_>) -> bool {
@@ -708,11 +710,11 @@ mod test {
             * (parse_lit!(finite_dot_scope::x) + parse_lit!(finite_dot_scope::y));
         let value = SymbolicTensor::infer(source.clone()).unwrap();
         let result = value.expand_dots().unwrap();
-        assert_eq!(result, independent_components(&source));
+        assert_eq!(result.expression(), &independent_components(&source));
         let finite_result = independent_components(&finite);
         assert_eq!(
-            result,
-            (function!(wrapper, &finite_result, &symbolic)
+            result.expression(),
+            &(function!(wrapper, &finite_result, &symbolic)
                 * (parse_lit!(finite_dot_scope::x) + parse_lit!(finite_dot_scope::y)))
         );
         assert_eq!(value.expand_dots().unwrap(), result);
@@ -770,7 +772,7 @@ mod test {
         let expected = independent_components(&source);
         let expected_events = std::mem::take(&mut *events.lock().unwrap());
         let result = value.expand_dots().unwrap();
-        assert_eq!(result, expected);
+        assert_eq!(result.expression(), &expected);
         assert_eq!(*events.lock().unwrap(), expected_events);
         assert!(expected_events.iter().any(|(kind, _)| *kind == "outer"));
         let concrete_calls = expected_events
@@ -785,7 +787,7 @@ mod test {
             .collect::<Vec<_>>();
         assert_eq!(concrete_calls.len(), 2);
         assert_eq!(concrete_calls[0], concrete_calls[1]);
-        assert!(!result.to_string().contains("mink"));
+        assert!(!result.expression().to_string().contains("mink"));
         assert!(!SymbolicTensor::component_batch_is_intrinsic(
             dot(callback, 1).as_view()
         ));
@@ -806,16 +808,25 @@ mod test {
         let ordered = spenso::bracket!(function!(b, &rep), function!(a, &rep));
         let value = SymbolicTensor::infer(&scalar * &ordered).unwrap();
         let result = value.expand_dots().unwrap();
-        assert_eq!(result, independent_components(&scalar) * &ordered);
+        assert_eq!(
+            result.expression(),
+            &(independent_components(&scalar) * &ordered)
+        );
+        assert_eq!(result.structure(), value.structure());
+        assert_eq!(result.expand_dots().unwrap(), result);
+        let reversed = independent_components(&scalar)
+            * spenso::bracket!(function!(a, &rep), function!(b, &rep));
+        assert!(value.with_checked_expression(reversed).is_err());
         assert_eq!(value.expression(), &(&scalar * &ordered));
         let zero = SymbolicTensor::from_normalized_parts(Atom::Zero, value.structure().clone());
         let result = zero.expand_dots().unwrap();
-        assert_eq!(result, Atom::Zero);
+        assert_eq!(result.expression(), &Atom::Zero);
+        assert_eq!(result.structure(), value.structure());
         assert_eq!(zero.structure(), value.structure());
     }
 
     #[test]
-    fn finite_dots_keep_raw_callback_output_at_materialization_boundary() {
+    fn finite_dots_reject_callback_rank_loss_at_materialization_boundary() {
         test_initialize();
         let p = spenso::vector_symbol!("finite_dot_rank::p");
         let q = spenso::vector_symbol!("finite_dot_rank::q");
@@ -835,11 +846,8 @@ mod test {
         let dot = function!(SPENSO_TAG.dot, function!(p, &rep), function!(q, &rep));
         let source = function!(head, &dot, parse_lit!(spenso::mink(2, finite_dot_rank::i)));
         let value = SymbolicTensor::infer(source.clone()).unwrap();
-        assert_eq!(
-            value.expand_dots().unwrap(),
-            independent_components(&source)
-        );
-        assert_eq!(value.expand_dots().unwrap(), Atom::num(1));
+        assert_eq!(independent_components(&source), Atom::num(1));
+        assert!(value.expand_dots().is_err());
         assert_eq!(value.expression(), &source);
         assert_eq!(value.structure().canonical().order(), 1);
     }
@@ -933,7 +941,7 @@ mod test {
 
         let a = parse_lit!(P(label, spenso::mink(4, 2)) * P(spenso::mink(4, 2))).to_dots();
         insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(P(label,mink(4)),P(mink(4)))");
-        insta::assert_snapshot!(SymbolicTensor::infer(a).unwrap().expand_dots().unwrap().to_bare_ordered_string(),@"-1*P(cind(1))*P(label,cind(1))+-1*P(cind(2))*P(label,cind(2))+-1*P(cind(3))*P(label,cind(3))+P(cind(0))*P(label,cind(0))");
+        insta::assert_snapshot!(SymbolicTensor::infer(a).unwrap().expand_dots().unwrap().expression().to_bare_ordered_string(),@"-1*P(cind(1))*P(label,cind(1))+-1*P(cind(2))*P(label,cind(2))+-1*P(cind(3))*P(label,cind(3))+P(cind(0))*P(label,cind(0))");
 
         let a = parse_lit!(Q(spenso::mink(4, mu1)) ^ 2).to_dots();
         insta::assert_snapshot!(a.to_bare_ordered_string(),@"dot(Q(mink(4)),Q(mink(4)))");

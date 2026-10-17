@@ -16,6 +16,48 @@ Historical revision comparisons, temporary log locations, and
 external-reference convention tables belong in tests or investigation
 records rather than in the current architecture.
 
+== Symbolic values and backend boundaries
+<symbolic-values-and-backend-boundaries>
+Runtime edge and vertex numerators enter UV construction as
+`SymbolicTensor<PartialStructure>`. `FourDSector::atom`, aggregate local-4D
+values, `FourDTerm::numerator` and canonical projection numerators retain the
+same carrier. Denominator classes, source incidence and momentum provenance
+remain separate ownership data. Typed addition and multiplication preserve
+logical ports and the rank of zero results.
+
+Direct-3D `Integrands` keeps an Atom coefficient program beside shared
+`FnMapEntry<SymbolicTensor<PartialStructure>>` definitions. The program's
+numerator-family calls stand for those tensors; treating their opaque syntax
+as evidence of a scalar interface would erase that distinction. Root
+prefactors, markers and scalar energy substitutions remain separate from body
+algebra. Final evaluator preparation combines the referenced interfaces before
+lowering them through `SymbolicTensor::into_network` to finite components.
+Only completed component functions become scalar `FnMapEntry<Atom>` entries.
+
+Symbolica's series engine and the exact CFF energy mapper borrow Atom payloads.
+The caller retains the source tensor and checks each returned coefficient or
+mapped expression against its interface. Vakint is an explicit Atom backend
+boundary: export decodes native index syntax, and returned projected tensors
+receive checked admission before dimensional algebra resumes. Integrated
+Laurent coefficients retain the existing `Series<AtomField>` backend format.
+These boundaries do not authorize distributing a graph numerator.
+
+Symbolica seals `AtomCore`, so a downstream `SymbolicTensor` cannot implement
+that trait and inherit its generic operation surface. Tensor-preserving
+operations must be explicit in Idenso's API; broader trait interoperability
+would require an upstream Symbolica change.
+
+The rewriting APIs distinguish scalar algebra (`with_algebra_result`), checked
+interface-preserving substitutions (`with_checked_expression`) and a genuinely
+changed interface (`with_transformed_expression`). Matching ranks alone cannot
+certify the identity of repeated anonymous ports. Custom tensor-valued heads
+must declare their tensor semantics in addition to Symbolica linearity. Shared
+definitions reuse their Arc only when both value and `same_reduction_state`
+agree: a no-op contraction can establish a new completion certificate without
+changing the expression. Typed stage handoffs keep those facts instead of
+exporting and admitting the expression again. Timing evidence belongs in the
+merge-readiness record; this ownership contract makes no speedup guarantee.
+
 == Physical loop measure
 <physical-loop-measure>
 The amplitude measure is $product_ell d^4 k_ell \/ \( 2 pi \)^4$. Signed CFF contours use $d q^0 \/ \( 2 pi i \)$, so each remaining CFF loop contributes $i \/ \( 2 pi \)^3$. Integrated UV subgraphs use the same Minkowski convention: `VakintSettings::additional_normalization` defaults to `"1"`; the historical `"-1"` inserted an extra minus sign per integrated loop. The standard Vakint normalization, forest subtraction signs, and causal prescriptions retain their separate meanings. A graph with $L$ loops consequently receives the same phase whether a loop is represented by CFF or by an integrated UV term.
@@ -24,7 +66,7 @@ The amplitude measure is $product_ell d^4 k_ell \/ \( 2 pi \)^4$. Signed CFF con
 <dimensional-numerator-algebra>
 The covariant `Local4dCts` representation retains symbolic Lorentz dimension `d`; its name does not mean that spin algebra has been evaluated at four. Analytic UV preparation reconstructs the subgraph's Feynman-rule numerator and changes its Minkowski slots to `d` before contracting metrics or evaluating ordinary closed fermion traces. The spinor trace normalization remains four. Expansion is permitted within the subgraph being analytically integrated, while the retained cograph and numerical-production numerator remain factorized.
 
-GammaLoop owns the Dirac algebra. Vakint sees the Lorentz slots of opaque spin tensors and performs vacuum tensor projection in `d = 4 - 2 epsilon`. Projection can create new contractions between those slots. GammaLoop must restore and simplify the projected tensors in symbolic `d`, expose their scalar dimension dependence, and only then let Vakint select scalar backend orders and form Laurent coefficients. Merely collecting the resulting gamma chains does not evaluate their contractions. No hidden dimension-dependent trace may be deferred to final four-dimensional numerical assembly. The completed analytic result is expanded before its Laurent coefficients are stored and reinserted into the cograph, so equivalent scalar-master groupings produce the same counterterm. This normalization never expands the cograph.
+GammaLoop invokes Idenso's Dirac algebra before and after tensor projection. Vakint sees the Lorentz slots of opaque spin tensors and performs vacuum tensor projection in `d = 4 - 2 epsilon`. Projection can create new contractions between those slots. GammaLoop must restore and simplify the projected tensors in symbolic `d`, expose their scalar dimension dependence, and only then let Vakint select scalar backend orders and form Laurent coefficients. Merely collecting the resulting gamma chains does not evaluate their contractions. No hidden dimension-dependent trace may be deferred to final four-dimensional numerical assembly. The completed analytic result is expanded before its Laurent coefficients are stored and reinserted into the cograph, so equivalent scalar-master groupings produce the same counterterm. This normalization never expands the cograph.
 
 Restoration reattaches the Minkowski representation to numeric backend labels and symbolic native labels. Only numeric labels acquire the topology-local index chart; native abstract labels retain their source identity. Already represented slots keep their complete interface.
 
@@ -37,7 +79,9 @@ Unresolved closed spin/Lorentz traces and internal contractions between open spi
 
 The required backend depth includes epsilon poles in numerator coefficients and loop-normalization factors. Positive epsilon orders needed by enclosing UV operations are retained using the forest's loop-order bound. A backend that cannot supply the required depth must report an error instead of silently returning a shallower expansion. The Laurent-series boundary also verifies integer powers and epsilon-independent coefficients. Supported scalar mathematical functions are expanded there; unresolved opaque epsilon dependence produces an error.
 
-When integrated counterterms are enabled, the shared UV entry checks the raw edge and vertex numerators of the current UV subgraph before simplification. Gamma5 and chiral projectors are rejected with graph, subgraph and source context, including gamma5 pairs that could subsequently cancel. A dimensional gamma5 prescription is not implemented. Gamma5 belonging only to the cograph or an external-state projector is outside this check.
+When integrated counterterms are enabled, the shared UV entry inspects the
+source payloads of the retained edge and vertex tensors of the current UV
+subgraph before simplification. Gamma5 and chiral projectors are rejected with graph, subgraph and source context, including gamma5 pairs that could subsequently cancel. A dimensional gamma5 prescription is not implemented. Gamma5 belonging only to the cograph or an external-state projector is outside this check.
 
 The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defaults to `true`. It selects Vakint's universal tensor kernels and isolated scalar coefficients; `false` supplies the complete numerator to the selected tensor backend. This choice is independent of backend selection: the native FeynKit tensor reducer is the default, while AlphaLoop uses FORM. Scalar-master evaluation has its own backend policy. After tensor reduction, both projection modes use the same scalar coefficient kernel, retaining loop-independent factors outside the analytic backend and restoring them before final Laurent projection. Distinct denominator topologies remain separate; both projection modes use the same GammaLoop dimensional-algebra boundaries and conservative forest epsilon depth. Positive epsilon prefactors do not reduce that depth, and final truncation removes any excess orders.
 

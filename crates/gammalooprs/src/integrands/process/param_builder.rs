@@ -758,16 +758,16 @@ impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T
 }
 
 #[derive(Clone, bincode_trait_derive::Encode, Debug, PartialEq, Eq, Hash)]
-pub struct FnMapEntry {
+pub struct FnMapEntry<E = Atom> {
     pub lhs: Atom,
-    pub rhs: Atom,
+    pub rhs: E,
     pub args: Vec<Indeterminate>,
     pub tags: Vec<Atom>,
     pub inlining: InliningPolicy,
     pub is_alias: bool,
 }
 
-impl<C: GammaLoopContext> Decode<C> for FnMapEntry {
+impl<C: GammaLoopContext, E: Decode<C>> Decode<C> for FnMapEntry<E> {
     fn decode<D: bincode::de::Decoder<Context = C>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
@@ -793,6 +793,46 @@ impl<C: GammaLoopContext> Decode<C> for FnMapEntry {
 }
 
 pub type SerializedFnMapEntry<T> = (T, T, Vec<T>, Vec<T>, InliningPolicy, bool);
+
+/// Retained numerator functions keep their tensor interface until component lowering.
+pub type NumeratorDefinition =
+    FnMapEntry<idenso::tensor::SymbolicTensor<spenso::structure::partial::PartialStructure>>;
+
+impl<E> FnMapEntry<E> {
+    pub fn with_rhs<T>(&self, rhs: T) -> FnMapEntry<T> {
+        FnMapEntry {
+            lhs: self.lhs.clone(),
+            rhs,
+            args: self.args.clone(),
+            tags: self.tags.clone(),
+            inlining: self.inlining,
+            is_alias: self.is_alias,
+        }
+    }
+}
+
+impl NumeratorDefinition {
+    /// Materialize a replacement only for consumers requesting an explicit expression.
+    pub fn replacement(&self) -> Replacement {
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        self.with_rhs(cooking.uncook(self.rhs.expression().as_view()))
+            .replacement()
+    }
+}
+
+impl TryFrom<FnMapEntry> for NumeratorDefinition {
+    type Error = eyre::Report;
+
+    fn try_from(entry: FnMapEntry) -> Result<Self, Self::Error> {
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let tensor = idenso::tensor::SymbolicTensor::infer(cooking.try_cook(entry.rhs.as_view())?)?;
+        Ok(entry.with_rhs(tensor))
+    }
+}
 
 impl FnMapEntry {
     /// Keep registration policy and caller-scope aliases intact when rebuilding a map.
@@ -2478,7 +2518,7 @@ mod tests {
             .param_builder
             .reps
             .iter()
-            .map(FnMapEntry::replacement)
+            .map(|entry| entry.replacement())
             .collect::<Vec<_>>();
         for explicit_replacements in [false, true] {
             let expression = if explicit_replacements {

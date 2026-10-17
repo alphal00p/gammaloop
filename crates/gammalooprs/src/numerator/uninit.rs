@@ -1,6 +1,10 @@
 use std::sync::atomic::AtomicUsize;
 
+use color_eyre::Result;
+use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetOps};
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use symbolica::atom::Atom;
 use symbolica_utils::AtomPrintExt;
 use tracing::debug;
 use tracing::instrument;
@@ -18,7 +22,7 @@ impl Numerator<UnInit> {
         self,
         graph: &Graph,
         subgraph: &S,
-    ) -> Numerator<AppliedFeynmanRule> {
+    ) -> Result<Numerator<AppliedFeynmanRule>> {
         for (_, eid, _) in graph.underlying.iter_edges_of(subgraph) {
             let i = MAXEDGECOUNTER.fetch_max(eid.0, std::sync::atomic::Ordering::Relaxed);
             if i == eid.0 {
@@ -42,23 +46,25 @@ impl Numerator<UnInit> {
         let mut selected: linnet::half_edge::subgraph::SuBitGraph =
             graph.underlying.empty_subgraph();
         selected.union_with_iter(subgraph.included_iter());
-        let num = feynkit_graph::expressions::GraphExpressions::numerator_of(
+        let num = feynkit_graph::expressions::GraphExpressions::try_fold_numerator(
             &graph.underlying,
             &selected,
             &graph.underlying.empty_subgraph(),
+            SymbolicTensor::from_normalized_parts(
+                Atom::one(),
+                PartialStructure::from_logical_slots([]),
+            ),
             |_, vertex| vertex.get_num(),
             |edge| edge.num.value.clone(),
             |edge| edge.is_dummy,
-        );
+            |left, right| left.multiply(&right),
+        )?;
 
-        debug!( numerator = %num.to_bare_ordered_string(),"Numerator constructed",);
+        debug!( numerator = %num.expression().to_bare_ordered_string(),"Numerator constructed",);
 
-        Numerator {
-            state: AppliedFeynmanRule {
-                expr: num,
-                state: Default::default(),
-            },
-        }
+        Ok(Numerator {
+            state: AppliedFeynmanRule::from_tensor(num),
+        })
     }
     #[instrument(skip_all, fields(graph=%graph.name,debug_dot=%graph.debug_dot(),subgraph_dot=%graph.dot(subgraph)))]
     #[allow(clippy::wrong_self_convention)]
@@ -67,23 +73,25 @@ impl Numerator<UnInit> {
         graph: &Graph,
         subgraph: &S,
         ignore: &S,
-    ) -> Numerator<AppliedFeynmanRule> {
-        let num = feynkit_graph::expressions::GraphExpressions::numerator_of(
+    ) -> Result<Numerator<AppliedFeynmanRule>> {
+        let num = feynkit_graph::expressions::GraphExpressions::try_fold_numerator(
             &graph.underlying,
             subgraph,
             ignore,
+            SymbolicTensor::from_normalized_parts(
+                Atom::one(),
+                PartialStructure::from_logical_slots([]),
+            ),
             |_, vertex| vertex.get_num(),
             |edge| edge.num.value.clone(),
             |edge| edge.is_dummy,
-        );
+            |left, right| left.multiply(&right),
+        )?;
 
-        debug!( numerator = %num.to_bare_ordered_string(),"Numerator constructed",);
+        debug!( numerator = %num.expression().to_bare_ordered_string(),"Numerator constructed",);
 
-        Numerator {
-            state: AppliedFeynmanRule {
-                expr: num,
-                state: Default::default(),
-            },
-        }
+        Ok(Numerator {
+            state: AppliedFeynmanRule::from_tensor(num),
+        })
     }
 }

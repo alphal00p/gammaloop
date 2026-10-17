@@ -73,6 +73,19 @@ the former Spynso `StructuredAtom`; Python bindings retain argument conversion, 
 error translation, and presentation metadata. `PartialStructure` does not pretend to implement
 the canonical-storage `TensorStructure` contract.
 
+GammaLoop now retains this carrier through instantiated graph fragments, numerator
+states, UV sectors and shared numerator definitions. Borrowing `expression()` for
+a scalar algorithm leaves the source interface available; rebuilding an unrelated
+tensor from the returned Atom would lose that interface and its reduction facts.
+Mathematical equality alone cannot decide whether an old shared carrier may be
+reused: `same_reduction_state` also compares its validation and completion state.
+
+External declared interfaces enter through `from_declared_parts`, which checks
+the payload against the logical slots once. Bincode stores the payload, logical
+slots and operation flags, remapping symbols on decode. It never stores proof or
+planner caches. This preserves ranked zero and unresolved axis order while
+rejecting a nonzero payload with an unrelated declared interface.
+
 Canonical singleton `cind(n)` and `find(n)` markers select a concrete component,
 so a rank-one leaf ending in one of these markers has a scalar interface. The
 shared slot matcher validates a nonnegative integer component and its final
@@ -195,6 +208,24 @@ structural consumers which need owned tensors. Symbolic contraction instead
 reads Spenso's borrowed operation graph. Public tensor transformations return
 the shared typed tensor; raw `Atom` utilities are
 explicit lower-level boundaries.
+
+The consuming `SymbolicTensor<PartialStructure>::into_network` specialization
+hands off to the existing Spenso component parser. It validates the retained
+interface, materializes unresolved ports, and releases its owned planning caches
+before parsing components. Reversible index decoding is confined to this
+boundary. The result includes `CanonicalLayout`, which downstream code must use
+for component coordinates and shadow axes; matching only the port multiset does
+not preserve logical axis order. A ranked zero becomes an empty sparse tensor
+with its original ports. Concrete components and contraction execution remain
+Spenso responsibilities.
+
+The Atom-like API has deliberate checked boundaries and some ergonomic gaps.
+Symbolica seals `AtomCore`, preventing a downstream implementation on this
+carrier. `replace` accepts a checked `TensorRule`; arbitrary substitutions need
+explicit expression mapping and validation. There is no typed Taylor-series API
+yet, so GammaLoop restores each scalar-engine coefficient against the retained
+interface. `expand_dots` returns the tensor carrier, preserving untouched open
+ports while checking transformations that could change them.
 
 == Rewrite families and execution flow
 

@@ -133,16 +133,19 @@ impl Graph {
         graph.global_prefactor.num = numerator;
         graph.global_prefactor.projector = Atom::one();
         graph.polarizations.clear();
+        let unit = crate::numerator::AppliedFeynmanRule::new(Atom::one())
+            .expect("literal one is a scalar tensor")
+            .expr;
         graph.underlying = self.underlying.map_data_ref(
             |_, _, vertex| {
                 let mut vertex = vertex.clone();
-                vertex.num = autogen::Autogen::explicit(Atom::one());
+                vertex.num = autogen::Autogen::explicit(unit.clone());
                 vertex
             },
             |_, _, _, edge| {
                 edge.map(|edge| {
                     let mut edge = edge.clone();
-                    edge.num = autogen::Autogen::explicit(Atom::one());
+                    edge.num = autogen::Autogen::explicit(unit.clone());
                     edge
                 })
             },
@@ -164,8 +167,22 @@ impl Graph {
             &self.full_filter(),
             "",
             &|_a| None,
-            &|e| Some(format!("label=\"{}\"", e.num.log_print(None))),
-            &|v| Some(format!("label=\"{}\"", v.num.log_print(None))),
+            &|e| {
+                Some(format!(
+                    "label=\"{}\"",
+                    parse::NumeratorInterface::export(&e.num.value)
+                        .0
+                        .log_print(None)
+                ))
+            },
+            &|v| {
+                Some(format!(
+                    "label=\"{}\"",
+                    parse::NumeratorInterface::export(&v.num.value)
+                        .0
+                        .log_print(None)
+                ))
+            },
         )
     }
 
@@ -178,6 +195,7 @@ impl Graph {
     pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
         let reduced = self.full_filter().subtract(&self.initial_state_cut);
         self.numerator(&reduced, &self.empty_subgraph())
+            .expect("validated graph numerator must have a compatible tensor interface")
             .get_single_atom()
             .expect("Graph numerator should be available")
             * self.global_atom()

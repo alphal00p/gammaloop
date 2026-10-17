@@ -9,7 +9,9 @@ use std::{
 
 use color_eyre::Result;
 use eyre::{ensure, eyre};
+use idenso::tensor::SymbolicTensor;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
+use spenso::structure::partial::PartialStructure;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol, SymbolAttribute, SymbolBuilder},
     domains::{atom::AtomField, rational::Rational},
@@ -24,7 +26,7 @@ use crate::{
         surface::LinearEnergyExpr,
     },
     graph::Graph,
-    integrands::process::param_builder::FnMapEntry,
+    integrands::process::param_builder::{FnMapEntry, NumeratorDefinition},
     numerator::symbolica_ext::NumeratorAtomExt,
     utils::{GS, external_energy_atom_from_index, ose_atom_from_index},
     uv::{
@@ -181,9 +183,13 @@ impl DirectResidueBranches {
         &self,
         orientation: OrientationProjection<'_>,
         graph: &Graph,
-        numerator: &Atom,
+        numerator: &SymbolicTensor<PartialStructure>,
         scope: usize,
-    ) -> Result<(Atom, Vec<Atom>, Vec<(DirectResidueKey, Vec<Atom>)>)> {
+    ) -> Result<(
+        SymbolicTensor<PartialStructure>,
+        Vec<Atom>,
+        Vec<(DirectResidueKey, Vec<Atom>)>,
+    )> {
         let orientations = orientation.exact_orientations()?;
         let maps = self
             .iter_keys()
@@ -208,7 +214,7 @@ impl DirectResidueBranches {
 
         let coefficient = symbol!("gammalooprs::uv::numerator_coefficient"; Scalar);
         let mut captured = false;
-        for atom in std::iter::once(numerator).chain(
+        for atom in std::iter::once(numerator.expression()).chain(
             self.iter_keys()
                 .flat_map(|(_, integrands)| integrands.iter().map(|(_, atom)| atom)),
         ) {
@@ -281,13 +287,15 @@ impl DirectResidueBranches {
                 arguments.push(value);
             }
         }
-        let numerator = numerator.replace_multiple(energy_map_replacements_gs(energies, graph));
+        let mapped = numerator
+            .expression()
+            .replace_multiple(energy_map_replacements_gs(energies, graph));
         // Forest-history markers remain visible to enclosing Approx/prefix
         // operations. Hiding them in the shared body would create a second,
         // incomplete CT history on the outer scalar weight. Pass each complete
         // marker as an actual argument, just like the affine map coefficients.
         let mut markers = BTreeMap::<Atom, Atom>::new();
-        let numerator = numerator.replace_map(|view, _, output| {
+        let mapped = mapped.replace_map(|view, _, output| {
             if let AtomView::Fun(function) = view
                 && function.get_symbol() == GS.ct_marker
             {
@@ -305,7 +313,7 @@ impl DirectResidueBranches {
             }
         });
         let mut used = vec![false; parameters.len()];
-        let _ = numerator.replace_map(|view, _, _| {
+        let _ = mapped.replace_map(|view, _, _| {
             if let AtomView::Fun(function) = view
                 && function.get_symbol() == coefficient
                 && function.get_nargs() == 2
@@ -328,7 +336,7 @@ impl DirectResidueBranches {
                 .filter_map(|(argument, used)| used.then_some(argument))
                 .collect();
         }
-        Ok((numerator, parameters, rows))
+        Ok((numerator.with_checked_expression(mapped)?, parameters, rows))
     }
 
     /// Build the multiplicative identity on this branch family's exact cut
@@ -430,9 +438,9 @@ impl DirectResidueBranches {
     /// Transform each shared definition once, preserving its formal binding.
     pub(crate) fn map_numerators(
         &self,
-        mut map: impl FnMut(&FnMapEntry) -> Result<Atom>,
+        mut map: impl FnMut(&NumeratorDefinition) -> Result<SymbolicTensor<PartialStructure>>,
     ) -> Result<Self> {
-        let mut definitions: BTreeMap<Atom, Arc<FnMapEntry>> = BTreeMap::new();
+        let mut definitions: BTreeMap<Atom, Arc<NumeratorDefinition>> = BTreeMap::new();
         let mut transformed = BTreeMap::new();
         for (_, integrands) in self.iter_keys() {
             for entry in integrands.numerators() {
@@ -447,7 +455,7 @@ impl DirectResidueBranches {
                 let rhs = map(entry)?;
                 transformed.insert(
                     entry.lhs.clone(),
-                    if rhs == entry.rhs {
+                    if rhs == entry.rhs && rhs.same_reduction_state(&entry.rhs) {
                         Arc::clone(entry)
                     } else {
                         Arc::new(FnMapEntry {
@@ -481,19 +489,23 @@ impl DirectResidueBranches {
         &self,
         mut map: impl FnMut(&Atom) -> Result<Atom>,
     ) -> Result<Self> {
-        self.map_numerators(|entry| map(&entry.rhs))?
-            .fallible_map(|_, atom| map(atom))
+        self.map_numerators(|entry| {
+            Ok(entry
+                .rhs
+                .with_checked_expression(map(entry.rhs.expression())?)?)
+        })?
+        .fallible_map(|_, atom| map(atom))
     }
 
     pub(crate) fn multiply_key_mapped(
         &self,
         orientation: OrientationProjection<'_>,
         graph: &Graph,
-        factor: &Atom,
+        factor: &SymbolicTensor<PartialStructure>,
         scope: (usize, Atom),
     ) -> Result<Self> {
-        if matches!(factor.as_view(), AtomView::Num(_)) || factor.is_zero() {
-            return Ok(self.map(|atom| atom * factor));
+        if factor.is_scalar() && matches!(factor.expression().as_view(), AtomView::Num(_)) {
+            return Ok(self.map(|atom| atom * factor.expression()));
         }
         let (rhs, parameters, rows) =
             self.prepare_numerator(orientation, graph, factor, scope.0)?;
@@ -627,9 +639,13 @@ impl DirectResidueBranches {
                 .flat_map(|(_, roots)| roots.scalar_definitions().iter().cloned()),
         )?;
         let family = symbol!("gammalooprs::uv::numerator_family");
-        let mut scalar_sources = BTreeMap::<Atom, Arc<FnMapEntry>>::new();
+        let mut scalar_sources = BTreeMap::<Atom, Arc<NumeratorDefinition>>::new();
         let mut scalar_families = BTreeSet::new();
-        let sources = self.map_numerators(|entry| resolve(&entry.rhs))?;
+        let sources = self.map_numerators(|entry| {
+            Ok(entry
+                .rhs
+                .with_checked_expression(resolve(entry.rhs.expression())?)?)
+        })?;
         let sources = Self::from_keyed(
             sources
                 .iter_keys()
@@ -650,6 +666,15 @@ impl DirectResidueBranches {
                                         Ok(rhs) => rhs,
                                         Err(err) => {
                                             error = Some(err);
+                                            return;
+                                        }
+                                    };
+                                    // Admit an actual scalar arithmetic definition here;
+                                    // the opaque numerator call is never inferred as scalar.
+                                    let rhs = match SymbolicTensor::infer(rhs) {
+                                        Ok(rhs) => rhs,
+                                        Err(err) => {
+                                            error = Some(err.into());
                                             return;
                                         }
                                     };
@@ -755,7 +780,7 @@ impl DirectResidueBranches {
                 |atom: AtomView<'_>| parameters.iter().any(|parameter| atom.contains(parameter));
             let mut invalid = None;
             let mut inert_heads = std::collections::BTreeSet::new();
-            entry.rhs.visitor(&mut |atom| {
+            entry.rhs.expression().visitor(&mut |atom| {
                 if invalid.is_some()
                     || parameters
                         .iter()
@@ -811,14 +836,17 @@ impl DirectResidueBranches {
             }
             // Normalize only multilinear argument slots, never distribute the
             // surrounding numerator product or expand projector permutations.
-            let normalized = entry.rhs.replace_map_bottom_up(|atom, _, out| {
-                if let AtomView::Fun(call) = atom
-                    && atom.contains_symbol(variable)
-                    && let Some(linear) = linear_heads.get(&call.get_symbol())
-                {
-                    **out = linear.call_args(call.iter());
-                }
-            });
+            let normalized = entry
+                .rhs
+                .expression()
+                .replace_map_bottom_up(|atom, _, out| {
+                    if let AtomView::Fun(call) = atom
+                        && atom.contains_symbol(variable)
+                        && let Some(linear) = linear_heads.get(&call.get_symbol())
+                    {
+                        **out = linear.call_args(call.iter());
+                    }
+                });
             let normalized = normalized.replace_map_bottom_up(|atom, _, out| {
                 if let AtomView::Fun(call) = atom
                     && let Some((original, _)) = linear_heads
@@ -870,7 +898,7 @@ impl DirectResidueBranches {
             }
             crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
                 stage = "shared_taylor_body_probe_start", scope = %scope, index,
-                source_bytes = entry.rhs.as_view().get_byte_size(),
+                source_bytes = entry.rhs.expression().as_view().get_byte_size(),
                 normalized_bytes = normalized.as_view().get_byte_size(),
                 independent_bytes = independent.as_view().get_byte_size(),
                 dependent_bytes = dependent.as_view().get_byte_size(),
@@ -893,15 +921,13 @@ impl DirectResidueBranches {
                 probe.absolute_order() - probe.relative_order()
             };
             probes.push(
-                FnMapEntry {
-                    rhs: if normalized.is_zero() {
+                entry
+                    .with_rhs(if normalized.is_zero() {
                         Atom::Zero
                     } else {
                         &entry.lhs * delta.pow(Atom::num(bound.clone()))
-                    },
-                    ..entry.as_ref().clone()
-                }
-                .replacement(),
+                    })
+                    .replacement(),
             );
             bodies.push((independent, dependent, bound, probe));
         }
@@ -1072,20 +1098,14 @@ impl DirectResidueBranches {
                 rhs += &lhs * delta.pow(Atom::num(&exponent - &bound));
                 retained.push(Arc::new(FnMapEntry {
                     lhs,
-                    rhs: coefficient,
+                    rhs: entry.rhs.with_checked_expression(coefficient)?,
                     args: entry.args.clone(),
                     tags: vec![tag],
                     inlining: entry.inlining,
                     is_alias: entry.is_alias,
                 }));
             }
-            replacements.push(
-                FnMapEntry {
-                    rhs,
-                    ..entry.as_ref().clone()
-                }
-                .replacement(),
-            );
+            replacements.push(entry.with_rhs(rhs).replacement());
             coefficients.insert(entry.lhs.clone(), retained);
         }
         crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
@@ -1093,8 +1113,8 @@ impl DirectResidueBranches {
             source_families = definitions.len(),
             residue_rows = self.0.len(),
             coefficient_families = coefficients.values().map(Vec::len).sum::<usize>(),
-            source_body_bytes = definitions.iter().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
-            coefficient_body_bytes = coefficients.values().flatten().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
+            source_body_bytes = definitions.iter().map(|entry| entry.rhs.expression().as_view().get_byte_size()).sum::<usize>(),
+            coefficient_body_bytes = coefficients.values().flatten().map(|entry| entry.rhs.expression().as_view().get_byte_size()).sum::<usize>(),
             "Retained shared Taylor coefficients before residue specialization"
         );
         let result = Self::from_keyed(
@@ -1207,6 +1227,109 @@ mod tests {
     };
 
     use super::*;
+    use crate::numerator::AppliedFeynmanRule;
+
+    #[test]
+    fn no_op_contraction_keeps_retained_completion_certificates() -> Result<()> {
+        test_initialise()?;
+        let body = Atom::var(symbol!("retained_tensor_proof_test::x"; Scalar));
+        let tag = DirectResidueBranches::numerator_scope().1;
+        let lhs = symbol!("gammalooprs::uv::numerator_family").call_args([tag.clone()]);
+        let definition = Arc::new(NumeratorDefinition::try_from(FnMapEntry {
+            lhs: lhs.clone(),
+            rhs: body,
+            args: vec![],
+            tags: vec![tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
+        })?);
+        assert!(!definition.rhs.contraction_complete());
+        let roots = Integrands::from_iter([(CutCFFIndex::new_all_none(), lhs)])
+            .with_numerators([Arc::clone(&definition)])?;
+        let rows = DirectResidueBranches::from_keyed((0..2).map(|row| {
+            (
+                DirectResidueKey::production(OrientationID(row)),
+                roots.clone(),
+            )
+        }))?;
+        let contracted_rows =
+            rows.map_numerators(|entry| Ok(entry.rhs.contract(Default::default())?))?;
+        assert!(Arc::ptr_eq(
+            &contracted_rows.0[0].1.numerators()[0],
+            &contracted_rows.0[1].1.numerators()[0],
+        ));
+        for contracted in [
+            roots.map_numerators(|tensor| Ok(tensor.contract(Default::default())?))?,
+            contracted_rows.0[0].1.clone(),
+        ] {
+            let retained = &contracted.numerators()[0];
+            assert_eq!(retained.rhs, definition.rhs, "the scalar body is unchanged");
+            assert!(retained.rhs.contraction_complete());
+            assert!(!Arc::ptr_eq(retained, &definition));
+            let unchanged = contracted.map_numerators(|tensor| Ok(tensor.clone()))?;
+            assert!(Arc::ptr_eq(retained, &unchanged.numerators()[0]));
+        }
+        assert!(!definition.rhs.contraction_complete());
+        Ok(())
+    }
+
+    #[test]
+    fn retained_tensor_bodies_keep_interfaces_and_shared_identity() -> Result<()> {
+        test_initialise()?;
+        let variable = symbol!("retained_tensor_body_test::t");
+        let t = Atom::var(variable);
+        let port = spenso::mink!(4, symbol!("retained_tensor_body_test::mu"));
+        let vector = GS.emr_vec(EdgeIndex(0), &port);
+        let tensor = AppliedFeynmanRule::new((Atom::one() + &t) * &vector)?.expr;
+        assert_eq!(tensor.rank(), 1);
+        let tag = DirectResidueBranches::numerator_scope().1;
+        let lhs = symbol!("gammalooprs::uv::numerator_family").call_args([tag.clone()]);
+        let definition = Arc::new(NumeratorDefinition {
+            lhs: lhs.clone(),
+            rhs: tensor,
+            args: vec![],
+            tags: vec![tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
+        });
+        let branches = DirectResidueBranches::from_keyed(
+            (0..2)
+                .map(|row| {
+                    Ok((
+                        DirectResidueKey::production(OrientationID(row)),
+                        Integrands::from_iter([(CutCFFIndex::new_all_none(), lhs.clone())])
+                            .with_numerators([Arc::clone(&definition)])?,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?,
+        )?;
+        let unchanged = branches.map_expressions(|atom| Ok(atom.clone()))?;
+        for (_, roots) in unchanged.iter_keys() {
+            assert!(Arc::ptr_eq(&definition, &roots.numerators()[0]));
+        }
+
+        let zero = branches
+            .map_numerators(|entry| Ok(entry.rhs.with_checked_expression(Atom::Zero)?))?;
+        let first_zero = &zero.0[0].1.numerators()[0];
+        assert!(first_zero.rhs.is_zero());
+        assert_eq!(first_zero.rhs.structure(), definition.rhs.structure());
+        assert!(Arc::ptr_eq(first_zero, &zero.0[1].1.numerators()[0]));
+
+        let coefficients = branches.series_preserving_numerators(
+            variable,
+            Atom::Zero.as_view(),
+            1,
+            DirectResidueBranches::numerator_scope().1,
+        )?;
+        for (_, roots) in coefficients.iter_keys() {
+            assert_eq!(roots.numerators().len(), 2);
+            for coefficient in roots.numerators() {
+                assert_eq!(coefficient.rhs.structure(), definition.rhs.structure());
+                assert_eq!(coefficient.rhs.expression(), &vector);
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn scalar_resolution_shares_bindings_and_numerator_bodies_across_residue_rows() -> Result<()> {
@@ -1230,7 +1353,7 @@ mod tests {
         });
         let numerator_definition = Arc::new(FnMapEntry {
             lhs: function!(family, &numerator_tag, parameter),
-            rhs: nested(&Atom::var(parameter)),
+            rhs: AppliedFeynmanRule::new(nested(&Atom::var(parameter)))?.expr,
             args: vec![parameter.into()],
             tags: vec![numerator_tag.clone()],
             inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -1261,7 +1384,10 @@ mod tests {
                 roots.iter().next().unwrap().1,
                 &(function!(family, &numerator_tag, argument) * expected(argument) + expected(&x))
             );
-            assert_eq!(roots.numerators()[0].rhs, expected(&Atom::var(parameter)));
+            assert_eq!(
+                roots.numerators()[0].rhs.expression(),
+                &expected(&Atom::var(parameter))
+            );
             assert!(Arc::ptr_eq(
                 &resolved.0[0].1.numerators()[0],
                 &roots.numerators()[0]
@@ -1308,7 +1434,7 @@ mod tests {
             LibraryRep::from(idenso::representations::Bispinor {}).symbol(),
             4
         );
-        let linear = symbol!("shared_multilinear_test::linear"; Linear);
+        let linear = spenso::tensor_symbol!("shared_multilinear_test::linear"; Linear);
         for (head, closed) in [
             (GS.dot, false),
             (*CYCLIC, false),
@@ -1343,7 +1469,7 @@ mod tests {
                 let tag = DirectResidueBranches::numerator_scope().1;
                 let definition = Arc::new(FnMapEntry {
                     lhs: function!(family, &tag, s, z),
-                    rhs: body,
+                    rhs: AppliedFeynmanRule::new(body)?.expr,
                     args: vec![s.into(), z.into()],
                     tags: vec![tag.clone()],
                     inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -1385,9 +1511,9 @@ mod tests {
                     assert_eq!(expanded.0.len(), rows.len());
                     for ((_, integrands), [sign, node]) in expanded.iter_keys().zip(rows) {
                         for entry in integrands.numerators() {
-                            assert!(!entry.rhs.contains_symbol(Symbol::DERIVATIVE));
-                            assert!(entry.rhs.contains_symbol(head));
-                            entry.rhs.visitor(&mut |atom| {
+                            assert!(!entry.rhs.expression().contains_symbol(Symbol::DERIVATIVE));
+                            assert!(entry.rhs.expression().contains_symbol(head));
+                            entry.rhs.expression().visitor(&mut |atom| {
                                 if let AtomView::Fun(call) = atom {
                                     assert!(
                                         !call
@@ -1471,7 +1597,7 @@ mod tests {
             );
         let definition = Arc::new(FnMapEntry {
             lhs: function!(family, &tag, parameter),
-            rhs: body,
+            rhs: AppliedFeynmanRule::new(body)?.expr,
             args: vec![parameter.into()],
             tags: vec![tag.clone()],
             inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -1499,12 +1625,11 @@ mod tests {
                 .is_zero()
         );
         assert!(
-            expanded.0[0]
-                .1
-                .numerators()
-                .iter()
-                .all(|entry| entry.rhs.contains_symbol(occupied)
-                    && entry.rhs.contains_symbol(alias_owner))
+            expanded.0[0].1.numerators().iter().all(|entry| entry
+                .rhs
+                .expression()
+                .contains_symbol(occupied)
+                && entry.rhs.expression().contains_symbol(alias_owner))
         );
         Ok(())
     }
@@ -1535,7 +1660,7 @@ mod tests {
             let body = &g * (&a + &b * &delta) * (&c + &d * &delta);
             let definition = Arc::new(FnMapEntry {
                 lhs: call.clone(),
-                rhs: body.clone(),
+                rhs: AppliedFeynmanRule::new(body.clone())?.expr,
                 args: vec![],
                 tags: vec![tag],
                 inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -1558,7 +1683,7 @@ mod tests {
                     integrands
                         .numerators()
                         .iter()
-                        .map(|entry| entry.rhs.clone())
+                        .map(|entry| entry.rhs.expression().clone())
                         .collect::<std::collections::BTreeSet<_>>(),
                     expected_coefficients,
                     "independent tensor sums must remain factored in every shared coefficient",
@@ -1568,7 +1693,7 @@ mod tests {
                 let expected = Atom::add_many(integrands.numerators().iter().map(|entry| {
                     let order = [&g * &a * &c, &g * (&a * &d + &b * &c), &g * &b * &d]
                         .iter()
-                        .position(|coefficient| *coefficient == entry.rhs)
+                        .position(|coefficient| *coefficient == *entry.rhs.expression())
                         .expect("each body is an explicit polynomial coefficient");
                     &entry.lhs * delta.pow(order as i64 - 2)
                 }));
@@ -1598,7 +1723,7 @@ mod tests {
                 OrientationID(0),
                 Integrands::from_iter([(cut, &call / delta.pow(2))]).with_numerators([
                     Arc::new(FnMapEntry {
-                        rhs: zero_body,
+                        rhs: definition.rhs.with_checked_expression(zero_body)?,
                         ..definition.as_ref().clone()
                     }),
                 ])?,
@@ -1647,7 +1772,7 @@ mod tests {
                         lhs: family.call_args(
                             std::iter::once(tags[index].clone()).chain(parameters.iter().cloned()),
                         ),
-                        rhs,
+                        rhs: AppliedFeynmanRule::new(rhs).unwrap().expr,
                         args: parameters
                             .iter()
                             .cloned()
@@ -1780,7 +1905,7 @@ mod tests {
         assert!(probe_derivatives > 0);
         let entry = Arc::new(FnMapEntry {
             lhs: call,
-            rhs: Atom::one() + &t + t.pow(2),
+            rhs: AppliedFeynmanRule::new(Atom::one() + &t + t.pow(2))?.expr,
             args: vec![],
             tags: vec![tag],
             inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -1828,7 +1953,7 @@ mod tests {
             let call = family.call_args([tag.clone()]);
             let entry = Arc::new(FnMapEntry {
                 lhs: call.clone(),
-                rhs: body,
+                rhs: AppliedFeynmanRule::new(body)?.expr,
                 args: vec![],
                 tags: vec![tag],
                 inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -1886,7 +2011,7 @@ mod tests {
                 Integrands::from_iter([(cut, &spectator * &lhs / t.pow(2))]).with_numerators([
                     Arc::new(FnMapEntry {
                         lhs,
-                        rhs: body.clone(),
+                        rhs: AppliedFeynmanRule::new(body.clone())?.expr,
                         args: Vec::new(),
                         tags: vec![tag],
                         inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -1947,7 +2072,7 @@ mod tests {
                 Integrands::from_iter([(cut, &lhs * scalar)]).with_numerators([Arc::new(
                     FnMapEntry {
                         lhs,
-                        rhs: body,
+                        rhs: AppliedFeynmanRule::new(body)?.expr,
                         args: Vec::new(),
                         tags: vec![tag],
                         inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -1997,7 +2122,7 @@ mod tests {
         for (rhs, root) in cases {
             let entry = Arc::new(FnMapEntry {
                 lhs: lhs.clone(),
-                rhs,
+                rhs: AppliedFeynmanRule::new(rhs)?.expr,
                 args: vec![parameter.into()],
                 tags: vec![tag.clone()],
                 inlining: symbolica::evaluate::InliningPolicy::Always,
@@ -2094,8 +2219,12 @@ mod tests {
         let q0 = GS.emr_mom(EdgeIndex(0), GS.cind(0));
         let numerator = (q0.clone() + Atom::var(symbol!("direct_3d_test::a")))
             * (q0 + Atom::var(symbol!("direct_3d_test::b")));
-        let (template, parameters, rows) =
-            branches.prepare_numerator(orientation, &graph, &numerator, 21)?;
+        let (template, parameters, rows) = branches.prepare_numerator(
+            orientation,
+            &graph,
+            &AppliedFeynmanRule::new(numerator.clone())?.expr,
+            21,
+        )?;
 
         assert_eq!(
             parameters.len(),
@@ -2108,9 +2237,13 @@ mod tests {
             "equal hosts must not merge different maps"
         );
         assert!(
-            matches!(template.as_view(), AtomView::Mul(product) if product.iter().count() == 2)
+            matches!(template.expression().as_view(), AtomView::Mul(product) if product.iter().count() == 2)
         );
-        assert!(template.contains_symbol(GS.numerator_sampling_scale));
+        assert!(
+            template
+                .expression()
+                .contains_symbol(GS.numerator_sampling_scale)
+        );
         for ((key, arguments), expected_key) in rows.iter().zip(&keys) {
             assert_eq!(key, expected_key);
             assert_eq!(arguments.len(), parameters.len());
@@ -2119,11 +2252,14 @@ mod tests {
                     .iter()
                     .all(|argument| matches!(argument.as_view(), AtomView::Num(_)))
             );
-            let specialized = template.replace_multiple(parameters.iter().zip(arguments).map(
-                |(parameter, argument)| {
-                    Replacement::new(parameter.to_pattern(), argument.to_pattern())
-                },
-            ));
+            let specialized =
+                template
+                    .expression()
+                    .replace_multiple(parameters.iter().zip(arguments).map(
+                        |(parameter, argument)| {
+                            Replacement::new(parameter.to_pattern(), argument.to_pattern())
+                        },
+                    ));
             assert_eq!(
                 specialized,
                 key.map_numerator(orientation, &graph, &numerator)?
@@ -2156,7 +2292,12 @@ mod tests {
         ])?;
         assert!(
             mismatched
-                .prepare_numerator(orientation, &graph, &numerator, 22)
+                .prepare_numerator(
+                    orientation,
+                    &graph,
+                    &AppliedFeynmanRule::new(numerator.clone())?.expr,
+                    22
+                )
                 .is_err()
         );
         Ok(())
@@ -2208,12 +2349,21 @@ mod tests {
         let numerator = &external
             * (GS.emr_mom(EdgeIndex(1), &index) + function!(GS.loop_mom, 0, &index))
             * function!(GS.loop_mom, 0, GS.cind(1));
-        let (template, parameters, rows) =
-            branches.prepare_numerator(orientation, &graph, &numerator, 23)?;
+        let (template, parameters, rows) = branches.prepare_numerator(
+            orientation,
+            &graph,
+            &AppliedFeynmanRule::new(numerator.clone())?.expr,
+            23,
+        )?;
         assert_eq!(parameters.len(), 1);
-        let specialized = template.replace_multiple(parameters.iter().zip(&rows[0].1).map(
-            |(parameter, argument)| Replacement::new(parameter.to_pattern(), argument.to_pattern()),
-        ));
+        let specialized =
+            template
+                .expression()
+                .replace_multiple(parameters.iter().zip(&rows[0].1).map(
+                    |(parameter, argument)| {
+                        Replacement::new(parameter.to_pattern(), argument.to_pattern())
+                    },
+                ));
         assert_eq!(
             specialized,
             rows[0].0.map_numerator(orientation, &graph, &numerator)?
@@ -2320,7 +2470,7 @@ mod tests {
         let mapped = branches.multiply_key_mapped(
             orientation,
             &graph,
-            &factor,
+            &AppliedFeynmanRule::new(factor.clone())?.expr,
             DirectResidueBranches::numerator_scope(),
         )?;
         let expected_sum = [2, 3].into_iter().fold(Atom::Zero, |sum, scale| {
@@ -2469,12 +2619,15 @@ mod tests {
         let shared = source.multiply_key_mapped(
             orientation,
             &graph,
-            &numerator,
+            &AppliedFeynmanRule::new(numerator.clone())?.expr,
             DirectResidueBranches::numerator_scope(),
         )?;
         let definition = &shared.0[0].1.numerators()[0];
         assert_eq!(definition.args.len(), 5);
-        assert!(matches!(definition.rhs.as_view(), AtomView::Mul(_)));
+        assert!(matches!(
+            definition.rhs.expression().as_view(),
+            AtomView::Mul(_)
+        ));
         let mut expected = Vec::new();
         for ((key, integrands), (id, _, weight)) in shared.iter_keys().zip(&rows) {
             assert_eq!(key.selector_host, *id);

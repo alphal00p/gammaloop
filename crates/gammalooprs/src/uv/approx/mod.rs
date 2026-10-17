@@ -1162,7 +1162,7 @@ mod tests {
                         .subtract(child.subgraph())
                         .subtract(&route_graph.initial_state_cut);
                     let resnum = route_graph
-                        .numerator(&reduced, child.subgraph())
+                        .numerator(&reduced, child.subgraph())?
                         .get_single_atom()
                         .expect("the scalar outer numerator is available")
                         * route_graph.global_atom();
@@ -1276,16 +1276,23 @@ mod tests {
     fn factorized_owned_dot_child_cff_matches_direct_3d_for_uncut_self_energy() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = finalized_runtime_dot!(digraph factorized_child_cff { graph [projector=1]
-            edge [num=1 mass=1]
+            edge [num=1 mass="UFO::mass_scalar_1"]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
             incoming -> v0 [id=0 sink="{ufo_order:0}"]
             v0 -> v1 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v0 -> v1 [id=2 num="Q(2,spenso::cind(0))^2-Q(2,spenso::cind(1))^2-Q(2,spenso::cind(2))^2-Q(2,spenso::cind(3))^2-1" source="{ufo_order:2}" sink="{ufo_order:1}"]
+            v0 -> v1 [id=2 num="Q(2,spenso::cind(0))^2-Q(2,spenso::cind(1))^2-Q(2,spenso::cind(2))^2-Q(2,spenso::cind(3))^2-UFO::mass_scalar_1^2" source="{ufo_order:2}" sink="{ufo_order:1}"]
             v1 -> outgoing [id=3 source="{ufo_order:2}"]
-        })?;
+        }, "scalars")?;
+        // Keep physical mass ownership symbolic during Taylor construction.
+        // A literal 1 is also a component label and carries no mass identity.
+        // The numerical comparison still uses the original unit-mass point.
+        let masses = graph.get_real_mass_vector::<f64>(&graph.model);
+        for edge in [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)] {
+            assert_eq!(masses[edge], F(1.0));
+        }
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = graph.production_numerator_atom_for_full_3d_expression();
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
@@ -1473,7 +1480,7 @@ mod tests {
             .expect("test-only contraction must succeed")
             .expand_dots()
             .expect("test-only component expansion must succeed");
-            cooking.uncook(value.as_view())
+            cooking.uncook(value.expression().as_view())
         };
         let expressions = vec![
             normalize(direct_expression),
@@ -1769,7 +1776,7 @@ mod tests {
                 .expect("test-only contraction must succeed")
                 .expand_dots()
                 .expect("test-only component expansion must succeed");
-                cooking.uncook(value.as_view())
+                cooking.uncook(value.expression().as_view())
             };
             let expressions = direct
                 .into_iter()
@@ -1922,8 +1929,13 @@ mod tests {
                     if outer_label == "factorized affine cubic outer numerator"
                         && vertex.name.value == "v2"
                     {
-                        vertex.num.value *= GS.emr_mom(EdgeIndex(5), GS.cind(0))
+                        let factor = GS.emr_mom(EdgeIndex(5), GS.cind(0))
                             + GS.emr_mom(EdgeIndex(0), GS.cind(0));
+                        vertex.num.value = vertex
+                            .num
+                            .value
+                            .with_checked_expression(vertex.num.value.expression() * factor)
+                            .expect("scalar vertex factors preserve the source tensor interface");
                     }
                     vertex
                 },
@@ -1939,7 +1951,11 @@ mod tests {
                             }
                             _ => Atom::one(),
                         };
-                        data.num.value *= factor;
+                        data.num.value = data
+                            .num
+                            .value
+                            .with_checked_expression(data.num.value.expression() * factor)
+                            .expect("scalar edge factors preserve the source tensor interface");
                         data
                     })
                 },
@@ -2037,8 +2053,8 @@ mod tests {
                 // powers, factorized numerator, and physical edge owners.
                 let reduced = child.reduced_subgraph(&root);
                 let t_arg = route_graph
-                    .numerator(&reduced, root.subgraph())
-                    .to_d_dim(GS.dim)
+                    .numerator(&reduced, root.subgraph())?
+                    .to_d_dim(GS.dim)?
                     .get_single_atom()
                     .expect("the scalar child numerator is available")
                     / route_graph.denominator(&reduced, &graph.model, |_| 1);
@@ -2068,7 +2084,8 @@ mod tests {
                         .to_dots()?;
                 let explicit_taylor_sum =
                     cooking.uncook(explicit_taylor_sum.expression().as_view());
-                let local_atom = child.local(&route_graph)?.atom();
+                let local_atom =
+                    cooking.uncook(child.local(&route_graph)?.atom().expression().as_view());
                 assert!(
                     (local_atom.collect_factors() + explicit_taylor_sum.collect_factors())
                         .is_zero(),
@@ -2160,7 +2177,7 @@ mod tests {
                         ..Default::default()
                     })?
                     .expand_dots()?;
-                expression = cooking.uncook(value.as_view());
+                expression = cooking.uncook(value.expression().as_view());
                 let rescale = Atom::var(GS.rescale);
                 let compact_minkowski = parse_lit!(spenso::mink(4));
                 let time_direction =
@@ -2415,7 +2432,7 @@ mod tests {
                         ..Default::default()
                     })?
                     .expand_dots()?;
-                expression = cooking.uncook(value.as_view());
+                expression = cooking.uncook(value.expression().as_view());
                 expression = scalarize(expression)?;
                 let t = Atom::var(GS.rescale);
                 let loop_components = (0..3)
