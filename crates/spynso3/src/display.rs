@@ -14,8 +14,8 @@ use spenso::{
     algebra::complex::RealOrComplexRef,
     iterators::IteratableTensor,
     network::tags::{
-        SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, prepare_tensor_print, tensor_custom_print,
-        tensor_head_print,
+        SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, TENSOR_PRINT_HEAD_PREFIX, prepare_tensor_print,
+        tensor_custom_print, tensor_head_print,
     },
     portable_payload::register_math_display_symbol,
     shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
@@ -36,7 +36,7 @@ use spenso::{
 };
 use symbolica::{
     api::python::{FormattedOutputBackend, PythonExpression, PythonFormattedOutput},
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder},
     domains::SelfRing,
     printer::{AnsiHtmlFormatter, PrintOptions, PrintState},
 };
@@ -639,6 +639,9 @@ fn display_options_with_settings(
 #[derive(Default)]
 struct IndexAliases {
     entries: HashMap<(Symbol, Atom), (Option<usize>, IndexDisplay)>,
+    // Source spellings belong only to presentation. Encoded indices remain
+    // the identity keys of both ordinary aliases and portable render records.
+    source_indices: HashMap<(Symbol, Atom), Atom>,
 }
 
 impl IndexAliases {
@@ -652,10 +655,10 @@ impl IndexAliases {
     }
 
     fn for_atom(atom: &Atom, style: &str) -> Self {
-        if style == "raw" {
-            return Self::default();
-        }
         let mut slots = Vec::new();
+        let mut source_indices = HashMap::new();
+        let cooking =
+            idenso::CookSettings::indices().with_mode(idenso::CookMode::ReversibleEncoding);
         let _ = atom.replace_map(|value, _, output| {
             let AtomView::Fun(function) = value else {
                 return;
@@ -665,17 +668,28 @@ impl IndexAliases {
             } else if function.get_symbol().has_tag(&SPENSO_TAG.representation)
                 && function.get_nargs() == 2
             {
-                slots.push((
-                    function.get_symbol(),
-                    function.iter().nth(1).unwrap().to_owned(),
-                ));
+                let representation = function.get_symbol();
+                let index = function.iter().nth(1).unwrap().to_owned();
+                // Decode only this terminal index payload, never the tensor or
+                // scalar metadata surrounding it. Keep the native key distinct.
+                let source = cooking.uncook(index.as_view());
+                if source != index {
+                    source_indices.insert((representation, index.clone()), source.clone());
+                }
+                slots.push((representation, index, source));
                 **output = value.to_owned();
             }
         });
+        if style == "raw" {
+            return Self {
+                source_indices,
+                ..Self::default()
+            };
+        }
         let scoped = slots
             .iter()
-            .filter_map(|(representation, index)| {
-                let (scopes, base) = Self::scope_parts(index.as_view());
+            .filter_map(|(representation, index, source)| {
+                let (scopes, base) = Self::scope_parts(source.as_view());
                 (!scopes.is_empty())
                     .then(|| (*representation, index.clone(), scopes, base.to_owned()))
             })
@@ -688,19 +702,23 @@ impl IndexAliases {
             .enumerate()
             .map(|(i, scope)| (scope, i + 1))
             .collect::<BTreeMap<_, _>>();
-        slots.extend(scoped.iter().map(|(rep, _, _, base)| (*rep, base.clone())));
+        slots.extend(
+            scoped
+                .iter()
+                .map(|(rep, _, _, base)| (*rep, base.clone(), base.clone())),
+        );
         let mut occupied: HashMap<Symbol, HashSet<String>> = HashMap::new();
         let mut pending = BTreeMap::new();
-        for (representation, index) in slots {
+        for (representation, index, source) in slots {
             let Some(metadata) = RepresentationMetadata::from_symbol(representation) else {
                 continue;
             };
             let IndexPalette::Cyclic { .. } = metadata.index_palette else {
                 continue;
             };
-            if Self::compound(index.as_view()).is_some()
+            if Self::compound(source.as_view()).is_some()
                 || (style == "alphabet"
-                    && index
+                    && source
                         .as_view()
                         .get_symbol()
                         .is_some_and(|symbol| symbol.has_tag(DUMMY_INDEX_TAG)))
@@ -708,15 +726,16 @@ impl IndexAliases {
                 pending.insert(
                     (
                         representation.get_name().to_owned(),
+                        source.to_canonical_string(),
                         index.to_canonical_string(),
                     ),
-                    (representation, index, metadata.index_palette),
+                    (representation, index, source, metadata.index_palette),
                 );
             } else {
-                let label = usize::try_from(index.as_view())
+                let label = usize::try_from(source.as_view())
                     .ok()
                     .and_then(|position| metadata.index_palette.resolve(position))
-                    .or_else(|| match index.as_view() {
+                    .or_else(|| match source.as_view() {
                         AtomView::Var(variable) => IndexDisplay::from_symbol(variable.get_symbol())
                             .or_else(|| {
                                 IndexDisplay::symbol(variable.get_symbol().get_stripped_name()).ok()
@@ -731,14 +750,17 @@ impl IndexAliases {
                 }
             }
         }
-        let mut aliases = Self::default();
-        for (_, (representation, index, palette)) in pending {
+        let mut aliases = Self {
+            source_indices,
+            ..Self::default()
+        };
+        for (_, (representation, index, source, palette)) in pending {
             let IndexPalette::Cyclic { start, .. } = &palette else {
                 unreachable!()
             };
             let mut position = *start;
             let display = if style == "graph" {
-                let (head, arguments) = Self::compound(index.as_view()).unwrap();
+                let (head, arguments) = Self::compound(source.as_view()).unwrap();
                 let name = match head.get_name() {
                     "gammalooprs::hedge" => "h",
                     "gammalooprs::edge" => "e",
@@ -943,7 +965,7 @@ impl IndexAliases {
     }
 
     fn presentation_atom(&self, atom: &Atom, style: &str) -> Atom {
-        if self.entries.is_empty() {
+        if self.entries.is_empty() && self.source_indices.is_empty() {
             return atom.clone();
         }
         atom.replace_map(|value, _, output| {
@@ -962,18 +984,52 @@ impl IndexAliases {
             let mut arguments = function.iter();
             let dimension = arguments.next().unwrap();
             let index = arguments.next().unwrap();
-            let Some((position, display)) =
-                self.entries.get(&(function.get_symbol(), index.to_owned()))
-            else {
-                return;
-            };
-            let replacement = if style == "graph" || position.is_none() {
-                let Ok(symbol) = register_math_display_symbol(display, "spenso::display") else {
-                    return;
-                };
+            let key = (function.get_symbol(), index.to_owned());
+            let replacement = if let Some((position, display)) = self.entries.get(&key) {
+                if style == "graph" || position.is_none() {
+                    let Ok(symbol) = register_math_display_symbol(display, "spenso::display")
+                    else {
+                        return;
+                    };
+                    Atom::var(symbol)
+                } else {
+                    Atom::num(position.unwrap() as i64)
+                }
+            } else if let Some(source) = self.source_indices.get(&key) {
+                // A presentation symbol keeps native identities distinct even
+                // when two encoding policies carry the same source spelling.
+                // Rendering the source directly as a slot could contract them
+                // while rebuilding this temporary presentation expression.
+                let identity = index
+                    .to_canonical_string()
+                    .bytes()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
+                let name =
+                    NamespacedSymbol::parse(&format!("spenso::display_source_index_{identity}"));
+                let symbol = Symbol::get_symbol(name.clone()).unwrap_or_else(|| {
+                    // The existing tensor_display wrapper reads these portable
+                    // head tags. Register no dynamic callback: formatting must
+                    // not make a subsequent Symbolica state export unportable.
+                    let mut tags = vec![SPENSO_TAG.tensor.clone(), SPENSO_TAG.index.clone()];
+                    for (backend, mode) in [
+                        ("plain", TensorDisplayMode::Plain),
+                        ("latex", TensorDisplayMode::Latex),
+                        ("typst", TensorDisplayMode::Typst),
+                    ] {
+                        tags.push(format!(
+                            "{TENSOR_PRINT_HEAD_PREFIX}{backend}:{}",
+                            format_atom_with_mode(source, mode, false)
+                        ));
+                    }
+                    SymbolBuilder::new(name)
+                        .with_tags(tags)
+                        .build()
+                        .expect("presentation names encode the complete native index")
+                });
                 Atom::var(symbol)
             } else {
-                Atom::num(position.unwrap() as i64)
+                return;
             };
             **output = FunctionBuilder::new(function.get_symbol())
                 .add_arg(dimension)
@@ -983,33 +1039,51 @@ impl IndexAliases {
     }
 
     fn typst_source(&self, style: &str) -> String {
+        let record = |representation: Symbol, index: &Atom, label: String| {
+            let (head, arguments) = match index.as_view() {
+                AtomView::Fun(function) => {
+                    let arguments = function
+                        .iter()
+                        .map(|argument| format!("{},", Self::argument_key(argument)))
+                        .collect::<String>();
+                    (function.get_symbol(), format!("({arguments})"))
+                }
+                AtomView::Var(variable) => (variable.get_symbol(), "none".to_owned()),
+                _ => unreachable!(),
+            };
+            format!(
+                "({:?},{:?},{arguments},{label}),",
+                representation.get_name(),
+                head.get_name()
+            )
+        };
         let mut records = self
             .entries
             .iter()
             .map(|((representation, index), (position, display))| {
-                let (head, arguments) = match index.as_view() {
-                    AtomView::Fun(function) => {
-                        let arguments = function
-                            .iter()
-                            .map(|argument| format!("{},", Self::argument_key(argument)))
-                            .collect::<String>();
-                        (function.get_symbol(), format!("({arguments})"))
-                    }
-                    AtomView::Var(variable) => (variable.get_symbol(), "none".to_owned()),
-                    _ => unreachable!(),
-                };
                 let label = if style == "graph" || position.is_none() {
                     format!("${}$", display.to_typst_source())
                 } else {
                     position.unwrap().to_string()
                 };
-                format!(
-                    "({:?},{:?},{arguments},{label}),",
-                    representation.get_name(),
-                    head.get_name()
-                )
+                record(*representation, index, label)
             })
             .collect::<Vec<_>>();
+        records.extend(
+            self.source_indices
+                .iter()
+                .filter(|(key, _)| !self.entries.contains_key(*key))
+                .map(|((representation, index), source)| {
+                    record(
+                        *representation,
+                        index,
+                        format!(
+                            "${}$",
+                            format_atom_with_mode(source, TensorDisplayMode::Typst, false)
+                        ),
+                    )
+                }),
+        );
         records.sort();
         format!("({})", records.join(""))
     }
@@ -3092,6 +3166,149 @@ mod tests {
             );
         }
         assert!(typst_settings_source(&settings, &atom).contains("$attach(mu,b:upright(\"h4\"))$"));
+    }
+
+    #[test]
+    fn native_index_payloads_keep_source_labels_without_changing_tensor_state() {
+        let edge = symbol!(
+            "display_native_indices::edge",
+            print = spenso::network::tags::tensor_print,
+            tags = [SPENSO_TAG.index.clone(), "spenso::index-label:e".to_owned()]
+        );
+        let vertex = symbol!(
+            "display_native_indices::vertex",
+            print = spenso::network::tags::tensor_print,
+            tags = [SPENSO_TAG.index.clone(), "spenso::index-label:v".to_owned()]
+        );
+        let raw = indexed_test_tensor([function!(edge, 7, 0), function!(vertex, 7, 0)]);
+        let cooking =
+            idenso::CookSettings::indices().with_mode(idenso::CookMode::ReversibleEncoding);
+        let encoded = cooking.try_cook(raw.as_view()).unwrap();
+        assert_ne!(encoded, raw);
+        let value = SymbolicTensor::infer(encoded.clone()).unwrap();
+        let before = value.clone();
+
+        for style in ["raw", "alphabet", "graph"] {
+            let settings = DisplaySettings {
+                index_style: style.to_owned(),
+                ..DisplaySettings::default()
+            };
+            for mode in [
+                TensorDisplayMode::Plain,
+                TensorDisplayMode::Latex,
+                TensorDisplayMode::Typst,
+            ] {
+                assert_eq!(
+                    format_structured_with_settings(&value, mode, &settings),
+                    format_atom_with_settings(&raw, mode, &settings),
+                    "{style} index style must not expose native encodings",
+                );
+            }
+            let raw_aliases = IndexAliases::for_atom(&raw, style);
+            let native_aliases = IndexAliases::for_atom(&encoded, style);
+            assert_eq!(native_aliases.source_indices.len(), 2);
+            for ((representation, index), source) in &native_aliases.source_indices {
+                assert!(index.get_symbol().is_some());
+                if style != "raw" {
+                    assert_eq!(
+                        native_aliases.entries[&(*representation, index.clone())],
+                        raw_aliases.entries[&(*representation, source.clone())],
+                    );
+                }
+            }
+            let records = native_aliases.typst_source(style);
+            for (_, index) in native_aliases.source_indices.keys() {
+                assert!(records.contains(index.get_symbol().unwrap().get_name()));
+            }
+            assert!(value.same_value(&before));
+        }
+
+        let settings = DisplaySettings {
+            index_style: "raw".to_owned(),
+            ..DisplaySettings::default()
+        };
+        let presentation =
+            IndexAliases::for_atom(&encoded, "raw").presentation_atom(&encoded, "raw");
+        let presentation_symbols = presentation
+            .get_all_symbols(true)
+            .into_iter()
+            .filter(|symbol| {
+                symbol
+                    .get_name()
+                    .starts_with("spenso::display_source_index_")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(presentation_symbols.len(), 2);
+        assert!(
+            presentation_symbols
+                .iter()
+                .all(|symbol| symbol.get_print_function().is_none())
+        );
+        for label in ["e₇.₀", "v₇.₀"] {
+            assert!(format_structured_settings(&value, &settings).contains(label));
+        }
+        for label in ["e", "v"] {
+            assert!(
+                structured_to_latex(&value, &settings, None).contains(&format!("{label}_{{7.0}}"))
+            );
+            assert!(
+                structured_to_typst_with_settings(&value, &settings)
+                    .contains(&format!("attach({label},b:(7.0))"))
+            );
+            assert!(
+                IndexAliases::for_atom(&encoded, "raw")
+                    .typst_source("raw")
+                    .contains(&format!("$attach({label},b:(7.0))$"))
+            );
+        }
+
+        let zero = value.with_checked_expression(Atom::Zero).unwrap();
+        let aliases = IndexAliases::for_descriptor(&zero, "raw");
+        assert_eq!(aliases.source_indices.len(), 2);
+        for (slot, label) in zero
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .zip(["e₇.₀", "v₇.₀"])
+        {
+            assert_eq!(aliases.port_label(slot, &settings), label);
+        }
+        assert!(zero.is_zero());
+        assert_eq!(
+            zero.structure().logical_slots(),
+            before.structure().logical_slots()
+        );
+
+        let scalar = function!(symbol!("display_native_indices::opaque"; Scalar), encoded);
+        let aliases = IndexAliases::for_atom(&scalar, "raw");
+        assert!(aliases.source_indices.is_empty());
+        assert_eq!(aliases.presentation_atom(&scalar, "raw"), scalar);
+        assert!(value.same_value(&before));
+
+        let edge_index = function!(edge, 7, 0);
+        let first = cooking
+            .cook_function(edge_index.as_fun_view().unwrap())
+            .unwrap();
+        let second = cooking
+            .clone()
+            .with_output_tags(["idenso::cooked", "display_native_indices::alternate"])
+            .cook_function(edge_index.as_fun_view().unwrap())
+            .unwrap();
+        assert_ne!(first, second);
+        let mink = LibraryRep::from(spenso::structure::representation::Minkowski {});
+        let metric = function!(
+            spenso::network::library::symbolic::ETS.metric,
+            mink.to_symbolic([Atom::num(4), first]),
+            mink.to_symbolic([Atom::num(4), second])
+        );
+        let aliases = IndexAliases::for_atom(&metric, "raw");
+        assert_eq!(aliases.source_indices.len(), 2);
+        let presentation = aliases.presentation_atom(&metric, "raw");
+        assert_eq!(
+            presentation.as_fun_view().unwrap().get_symbol(),
+            spenso::network::library::symbolic::ETS.metric,
+            "equal source spellings must not contract distinct native indices during presentation"
+        );
     }
 
     #[test]

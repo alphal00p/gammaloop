@@ -784,6 +784,9 @@ Use `index_style="alphabet"` for the compact default or `index_style="raw"` for 
 symbolic index notation. Changing the display style preserves the underlying expressions, tensor
 interfaces, and exact notebook payloads. In raw mode, endpoint labels retain their existing
 subscript notation, including distinct higher-spin and dummy slots.
+Native encoded indices retain these source labels in all three styles. The
+formatter reads individual index metadata for presentation while keeping the
+encoded identities distinct, including ports carried by a zero tensor.
 After `to_expression()`, ordinary Symbolica printing owns namespace elision and nested
 bracket highlighting. Use `format(show_namespaces=True)` to display qualified names.
 

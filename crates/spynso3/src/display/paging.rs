@@ -156,6 +156,12 @@ impl Builder<'_> {
         let atom = self.value.presentation_fragment(a);
         // Alias ownership lasts for the viewer, rather than restarting on every page.
         let discovered = IndexAliases::for_atom(&atom, &self.settings.index_style);
+        self.page_aliases
+            .source_indices
+            .extend(discovered.source_indices.clone());
+        self.aliases
+            .source_indices
+            .extend(discovered.source_indices);
         for (key, (position, display)) in discovered.entries {
             if let Some(existing) = self.aliases.entries.get(&key) {
                 self.page_aliases.entries.insert(key, existing.clone());
