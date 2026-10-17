@@ -16,6 +16,11 @@ $dif gamma / dif^3 p = S(P)/(2pi)^3$.
 The Bose factor in this conversion does not assign an equilibrium occupation
 to the probe. The forward graph has only bath fields on its internal lines.
 
+The `thermal_excess` process enables vacuum subtraction in the existing thermal weights
+and returns $Gamma_rho - Gamma_("vac")$. The production-source formula above requires
+the full `equilibrium` kernel; add the vacuum contribution back before applying KMS
+if starting from `thermal_excess`.
+
 == Independent reference
 
 `reference.py` derives the answer directly from Lorentz-invariant phase space.
@@ -61,9 +66,10 @@ python3 examples/cli/thermal_rates/scalar_sunset/reference.py --orders 64 128 25
 ```
 
 Replace `rest` by `boosted` or `fast` for $p=1$ or $p=3$.
-The `integrate` block integrates the equilibrium and vacuum kernels together.
-Its result is $Gamma_rho$, so compare with `spectral_rate` and
-`vacuum_spectral_rate` in the reference output. Use a separate integration
+The `integrate` block integrates `equilibrium`, `vacuum`, and `thermal_excess` together.
+Compare the first two with `spectral_rate` and `vacuum_spectral_rate` in the reference
+output, and the third with their difference. The vacuum-subtracted result must also
+reproduce that difference pointwise and after event selection. Use a separate integration
 workspace for each momentum; the example's `--restart` deliberately replaces
 its scratch integration. Save the card, output, sample count, seed, and numerical
 stability statistics for every comparison.
@@ -123,7 +129,8 @@ The rest and $p=1$ results agree within 0.81 quoted errors. The first $p=3$
 pilot was low by 5.62 errors thermally and 3.17 errors in vacuum; it is retained
 in the record. An independent-seed adaptive repeat agrees within 0.19 and
 0.63 errors, respectively. Its thermal and vacuum uncertainties are 2.85%
-and 2.86%: the requested 0.5% target was not reached before the sample cap.
+and 2.86%: the historical 0.5% target was not reached before the sample cap.
+That target is not a prerequisite for validating additional infrared-finite examples.
 
 The repeat's iteration record shows the central values moving towards the
 references as angular coverage improves. Its thermal uncertainty increases
@@ -172,5 +179,25 @@ Its SHA256 is `cba9ab0c65ae1e22da98b4c96f35fb2eeac6b76f4453d49a2e090cde1700fa97`
 The CLI smoke did not persist a state. The regression exercised the saved-state round trip
 with the temporary manifest number 17; the unchanged layout was subsequently assigned
 version 16, consolidating the uncommitted changes into one version bump from 15.
-The historical integrations above were not rerun, and the supported thermal physics scope
-is unchanged.
+The historical integrations above were not rerun during that refactor; its supported
+thermal physics scope was unchanged. These records predate the vacuum-subtracted extension.
+
+== Vacuum-subtraction verification
+
+The continuation started with 195 passing baseline tests on clean commit `3e73e6b07`.
+After enabling vacuum subtraction through the existing shared thermal weights, all 12
+targeted tests passed. The scalar sunset regression checks
+$Gamma_("excess") = Gamma_rho - Gamma_("vac")$ both in total and per physical event
+at $p=0,1,3$, including saved-state reload and the existing selector checks.
+An independent occupation polynomial also verifies a positive excess of approximately
+$1.7071821495 times 10^(-30)$ at $beta=200$. The vacuum constant is kept separate in
+this oracle, so the comparison remains meaningful below binary64's relative resolution
+for the full kernel.
+
+The fresh CLI rest smoke gives `thermal_excess = 5.248854262631212e-05` with four
+events. Total and per-event equilibrium-minus-vacuum identities and event closure hold
+exactly; conservation residuals are at most $2.23 times 10^(-16)$.
+Clippy, Rust formatting, and the edited documentation renders passed. Commands,
+source/executable hashes, run IDs, and local log paths are retained under
+`vacuum_subtraction_continuation` in #link("validation.json")[the validation record].
+These are focused checks; the historical integrations were not rerun.

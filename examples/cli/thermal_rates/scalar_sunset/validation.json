@@ -1072,5 +1072,291 @@
       "scope": "Fresh generation and rest-frame inspection only; -n did not save a state. The focused regression separately covers the version-17 saved-state round trip. No numerical integration reruns."
     },
     "commands_manifest": "/tmp/thermal-rates-shared-commands.json"
+  },
+  "vacuum_subtraction_continuation": {
+    "scope": "Enable finite-temperature vacuum-subtracted simple scalar xs cuts through existing shared thermal weights. No residue, radial-root, normalization, or event implementation changes. Historical integrations were not rerun.",
+    "base_commit": "3e73e6b0704d36ead2bb49cbba87b9035be86b7b",
+    "host": "itphlies",
+    "state_manifest_version": 16,
+    "source_files_sha256": {
+      "crates/gammalooprs/src/settings/global.rs": "38930119d73454b093b6ef233b8f4e70377a62ee85c28f03066ef9a5aaa1d5eb",
+      "tests/tests/test_runs/thermal_rates.rs": "64b420a1af45c8f9679a84c989565a92bc21eff14d69db51d34e236ea89e5a61",
+      "examples/cli/thermal_rates/scalar_sunset/run.toml": "da2bd671dda94cb7794e9947ca674aacf48de683a8330f2796bf767199871e6f",
+      "examples/cli/thermal_rates/scalar_sunset/model.json": "466c843b26d71403f921289c117fc2849754920100454c60710a48e809c1fd77",
+      "examples/cli/thermal_rates/scalar_sunset/reference.py": "1d0969d926ff1ec366466d6e521284cdb898ff28f3e34de55b632c9f04c2df45"
+    },
+    "baseline": {
+      "source_state": "clean base commit before changes",
+      "status": "passed",
+      "exit_code": 0,
+      "cargo_profile": "ci-optim",
+      "nextest_profile": "ci_gammaloop",
+      "run_id": "caaaf13b-1dd3-43bc-88a2-472b21e0b4a2",
+      "tests": 195,
+      "passed": 195,
+      "binaries": 25,
+      "skipped": 3491,
+      "execution_seconds": 195.122,
+      "log": "/tmp/thermal-rates-continuation-baseline.log",
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        "-c",
+        "set -o pipefail; export CARGO_BUILD_JOBS=8 NEXTEST_TEST_THREADS=4; just test -p three-dimensional-reps -p gammalooprs -p gammaloop-api -p gammaloop-integration-tests --lib --test test_runs -E \"package(three-dimensional-reps) or test(cff::radial::tests) or test(cff::esurface::tests) or test(cff::hsurface::tests) or test(hsurface_lu_) or test(signed_surface_groups_) or test(cut_groups_include_) or test(signed_cut_groups_) or test(cross_sections_validate_supported_thermal_settings) or test(thermal_scalar_sunset) or test(exact_raised_lu_cut_matches_ordinary_cff_per_residue) or test(lu_residue_selection_rejects_missing) or test(generalized_raised_cross_section_covers_derivative_components_and_roundtrips) or test(canonical_lu_host_materializes_directly_without_new_root_history) or test(sampling_state_tests) or test(state_manifest_)\" > /tmp/thermal-rates-continuation-baseline.log 2>&1; result=$?; tail -60 /tmp/thermal-rates-continuation-baseline.log; exit \"$result\""
+      ]
+    },
+    "tests": {
+      "status": "passed",
+      "exit_code": 0,
+      "cargo_profile": "ci-optim",
+      "nextest_profile": "ci_gammaloop",
+      "run_id": "bced47f4-4695-41e5-a347-a5c772800dc6",
+      "tests": 12,
+      "passed": 12,
+      "binaries": 25,
+      "skipped": 3674,
+      "execution_seconds": 20.267,
+      "log": "/tmp/thermal-rates-subtraction-tests.log",
+      "scope": "Shared subtraction and settings tests; scalar-sunset total and per-event subtraction at p=0,1,3, saved-state reload, conservation, closure, selectors with retained/hidden events, and independent stable Bose polynomial at beta=1,200.",
+      "tail_control": {
+        "inverse_temperature": 200.0,
+        "expected_thermal_excess_density": 1.7071821495004067e-30,
+        "relative_tolerance": 1e-09,
+        "requires_positive_nonzero_result": true
+      },
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        "-c",
+        "set -e; rustfmt --edition 2024 --check crates/gammalooprs/src/settings/global.rs tests/tests/test_runs/thermal_rates.rs; export CARGO_BUILD_JOBS=8 NEXTEST_TEST_THREADS=4; just test -p three-dimensional-reps -p gammalooprs -p gammaloop-api -p gammaloop-integration-tests --lib --test test_runs -E \"test(thermal_scalar_sunset) or test(generation_settings_tests) or test(vacuum_subtraction)\" > /tmp/thermal-rates-subtraction-tests.log 2>&1; result=$?; tail -60 /tmp/thermal-rates-subtraction-tests.log; exit \"$result\""
+      ]
+    },
+    "clippy": {
+      "status": "passed",
+      "exit_code": 0,
+      "warnings": 0,
+      "log": "/tmp/thermal-rates-subtraction-clippy.log",
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        "-c",
+        "export CARGO_BUILD_JOBS=8; cargo clippy -p gammalooprs -p gammaloop-integration-tests --lib --test test_runs --profile ci-optim --locked -- -D warnings > /tmp/thermal-rates-subtraction-clippy.log 2>&1; result=$?; tail -45 /tmp/thermal-rates-subtraction-clippy.log; exit \"$result\""
+      ]
+    },
+    "formatting": {
+      "status": "passed",
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "rustfmt",
+        "--edition",
+        "2024",
+        "--check",
+        "crates/gammalooprs/src/settings/global.rs",
+        "tests/tests/test_runs/thermal_rates.rs"
+      ]
+    },
+    "reference": {
+      "status": "passed",
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "uv",
+        "run",
+        "--no-project",
+        "--with",
+        "numpy",
+        "python",
+        "examples/cli/thermal_rates/scalar_sunset/reference.py",
+        "--orders",
+        "64",
+        "128",
+        "256",
+        "512",
+        "--output",
+        "/tmp/thermal-rates-continuation-reference.json"
+      ],
+      "output": "/tmp/thermal-rates-continuation-reference.json",
+      "order_512_results": [
+        {
+          "order": 512,
+          "momentum": 0,
+          "energy": 1.0,
+          "source_inverse_decay": 0.001483916795120481,
+          "source_scattering_three_channels": 0.0027451682565992975,
+          "source": 0.004229085051719778,
+          "spectral_rate": 0.007266759995377876,
+          "rate_per_d3p": 1.7049310270808712e-05,
+          "vacuum_spectral_rate": 6.299127818984276e-05,
+          "mb_source_inverse_decay": 2.317319621915422e-05,
+          "mb_source_scattering_three_channels": 0.0005561567092597012
+        },
+        {
+          "order": 512,
+          "momentum": 1,
+          "energy": 1.4142135623730951,
+          "source_inverse_decay": 0.00043583698394326865,
+          "source_scattering_three_channels": 0.0010654035432308162,
+          "source": 0.0015012405271740848,
+          "spectral_rate": 0.004673737639869001,
+          "rate_per_d3p": 6.052163819333694e-06,
+          "vacuum_spectral_rate": 4.454155996364608e-05,
+          "mb_source_inverse_decay": 1.0828798604967372e-05,
+          "mb_source_scattering_three_channels": 0.0002598911665192169
+        },
+        {
+          "order": 512,
+          "momentum": 3,
+          "energy": 3.1622776601683795,
+          "source_inverse_decay": 1.267183076371248e-05,
+          "source_scattering_three_channels": 5.722050659319826e-05,
+          "source": 6.989233735691075e-05,
+          "spectral_rate": 0.0015812682079841044,
+          "rate_per_d3p": 2.8176689061040027e-07,
+          "vacuum_spectral_rate": 1.991959118051914e-05,
+          "mb_source_inverse_decay": 8.431807498846518e-07,
+          "mb_source_scattering_three_channels": 2.0236337997231644e-05
+        }
+      ]
+    },
+    "readiness": {
+      "full_suite_run": false,
+      "nix_ci_enabled": false,
+      "artifacts_uploaded": false,
+      "final_review_requested": false,
+      "historical_integration_target_is_a_prerequisite": false
+    },
+    "cli": {
+      "status": "passed",
+      "build": {
+        "exit_code": 0,
+        "command": [
+          "nix",
+          "develop",
+          "--command",
+          "bash",
+          "-c",
+          "export CARGO_BUILD_JOBS=8; cargo build --locked -p gammaloop-api --bin gammaloop --no-default-features --features cli --profile ci-optim > /tmp/thermal-rates-subtraction-cli-build.log 2>&1; result=$?; tail -30 /tmp/thermal-rates-subtraction-cli-build.log; exit \"$result\""
+        ],
+        "log": "/tmp/thermal-rates-subtraction-cli-build.log"
+      },
+      "smoke": {
+        "command": [
+          "nix",
+          "develop",
+          "--command",
+          "target/ci-optim/gammaloop",
+          "-n",
+          "-s",
+          "/tmp/gammaloop-thermal-rates-subtraction-state",
+          "/tmp/thermal-rates-subtraction-run.toml",
+          "run",
+          "generate",
+          "rest",
+          "inspect"
+        ],
+        "exit_code": 0,
+        "binary": "/shared/codex-2/kaapo/gammaloop/gammaloop-thermal-rates/target/ci-optim/gammaloop",
+        "binary_sha256": "208b39480dab8f8ce85012f8d4a778e27209fe7a252b474cc553511c9705f4c9",
+        "card": "/tmp/thermal-rates-subtraction-run.toml",
+        "card_sha256": "4071c179b4c3496a2f49bff880380869b53f3ba9984a926fcb8f8e7a43cad538",
+        "log": "/tmp/thermal-rates-subtraction-smoke.log",
+        "results": {
+          "equilibrium": {
+            "path": "/tmp/thermal-rates-subtraction-equilibrium-inspect.json",
+            "value": {
+              "re": 5.2497393862529534e-05,
+              "im": 0.0
+            },
+            "events": 4,
+            "event_weight_sum": {
+              "re": 5.2497393862529534e-05,
+              "im": 0.0
+            },
+            "event_closure_residual": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "max_conservation_residual": 2.220446049250313e-16,
+            "is_nan": false
+          },
+          "vacuum": {
+            "path": "/tmp/thermal-rates-subtraction-vacuum-inspect.json",
+            "value": {
+              "re": 8.851236217417727e-09,
+              "im": 0.0
+            },
+            "events": 1,
+            "event_weight_sum": {
+              "re": 8.851236217417727e-09,
+              "im": 0.0
+            },
+            "event_closure_residual": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "max_conservation_residual": 2.220446049250313e-16,
+            "is_nan": false
+          },
+          "thermal_excess": {
+            "path": "/tmp/thermal-rates-subtraction-thermal-excess-inspect.json",
+            "value": {
+              "re": 5.248854262631212e-05,
+              "im": 0.0
+            },
+            "events": 4,
+            "event_weight_sum": {
+              "re": 5.248854262631212e-05,
+              "im": 0.0
+            },
+            "event_closure_residual": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "max_conservation_residual": 2.220446049250313e-16,
+            "is_nan": false
+          }
+        },
+        "thermal_excess_comparison": {
+          "expected_equilibrium_minus_vacuum": 5.248854262631212e-05,
+          "absolute_residual": 0.0,
+          "max_channel_absolute_residual": 0.0
+        }
+      },
+      "state_persisted": false,
+      "scope": "Fresh generation and rest-frame inspection. The targeted regression separately exercises saved-state reload and p=0,1,3."
+    },
+    "documentation": {
+      "status": "passed",
+      "sources": [
+        "docs/architecture/architecture-current.typ",
+        "docs/products/gammaloop/content/thermal-media.typ",
+        "examples/cli/thermal_rates/handoff.typ",
+        "examples/cli/thermal_rates/scalar_sunset/benchmark.typ"
+      ],
+      "logs": [
+        "/tmp/thermal-rates-subtraction-docs.log",
+        "/tmp/thermal-rates-subtraction-guide.log"
+      ],
+      "scope": "Standalone Typst rendering of affected sources; not the full documentation publication suite.",
+      "command": [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        "-c",
+        "set -e; typst compile --root . examples/cli/thermal_rates/scalar_sunset/benchmark.typ /tmp/thermal-rates-subtraction-benchmark.pdf; typst compile --root . examples/cli/thermal_rates/handoff.typ /tmp/thermal-rates-subtraction-handoff.pdf; typst compile --root . docs/architecture/architecture-current.typ /tmp/thermal-rates-subtraction-architecture.pdf"
+      ],
+      "guide_wrapper": "#import \"/docs/products/gammaloop/content/thermal-media.typ\": thermal-media\n#thermal-media\n",
+      "guide_command": "nix develop --command typst compile --root . - /tmp/thermal-rates-subtraction-guide.pdf < /tmp/thermal-rates-subtraction-guide.typ > /tmp/thermal-rates-subtraction-guide.log 2>&1"
+    }
   }
 }

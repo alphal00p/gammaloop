@@ -1,5 +1,5 @@
 use super::*;
-use std::f64::consts::PI;
+use std::{collections::BTreeMap, f64::consts::PI};
 
 #[test]
 fn thermal_scalar_sunset_matches_phase_space_and_conserves_events() -> Result<()> {
@@ -45,10 +45,13 @@ fn thermal_scalar_sunset_matches_phase_space_and_conserves_events() -> Result<()
             )
         };
 
+    let processes = ["equilibrium", "thermal_excess", "vacuum"];
     let mut rest_values = Vec::new();
     for block in ["rest", "boosted", "fast"] {
         cli.run_command(&format!("run {block}"))?;
-        for process in ["equilibrium", "vacuum"] {
+        let mut block_values = BTreeMap::new();
+        let mut block_event_weights = BTreeMap::new();
+        for process in processes {
             let result = evaluate(&mut cli, process, true)?;
             let evaluation = &result.sample.evaluation;
             let events = evaluation
@@ -58,12 +61,14 @@ fn thermal_scalar_sunset_matches_phase_space_and_conserves_events() -> Result<()
                 .collect_vec();
             assert!(!events.is_empty(), "{block}/{process}: missing events");
             if block == "rest" {
-                assert_eq!(events.len(), if process == "equilibrium" { 4 } else { 1 });
+                assert_eq!(events.len(), if process == "vacuum" { 1 } else { 4 });
                 rest_values.push(evaluation.integrand_result.re.0);
             }
             assert!(evaluation.integrand_result.re.0.is_finite());
             assert!(evaluation.integrand_result.re.0 > 0.0);
             assert!(evaluation.integrand_result.im.0.abs() < 1e-12);
+            block_values.insert(process, evaluation.integrand_result.re.0);
+            let mut event_weights = BTreeMap::new();
             let mut weight = Complex::new(0.0, 0.0);
             for event in events {
                 let incoming = &event.kinematic_configuration.0;
@@ -89,6 +94,10 @@ fn thermal_scalar_sunset_matches_phase_space_and_conserves_events() -> Result<()
                     residual.iter().all(|x| x.abs() < 1e-10),
                     "{block}/{process}: nonconserving event {event:?}"
                 );
+                let mut pdgs = event.cut_info.particle_pdgs.clone();
+                pdgs.0.sort_unstable();
+                pdgs.1.sort_unstable();
+                assert!(event_weights.insert(pdgs, event.weight.re.0).is_none());
                 weight += Complex::new(event.weight.re.0, event.weight.im.0);
             }
             let factor = evaluation.integrator_weight.0
@@ -98,55 +107,97 @@ fn thermal_scalar_sunset_matches_phase_space_and_conserves_events() -> Result<()
                 (weight.re - expected).abs() <= 1e-10 * expected.abs(),
                 "{block}/{process}: events do not reproduce the integrand"
             );
+            block_event_weights.insert(process, event_weights);
+        }
+        let expected = block_values["equilibrium"] - block_values["vacuum"];
+        assert!(
+            (block_values["thermal_excess"] - expected).abs() <= 1e-10 * expected.abs(),
+            "{block}: vacuum subtraction changed the thermal excess"
+        );
+        // Match physical channels rather than process-local cut IDs. Only the
+        // decay has a vacuum contribution; crossed scattering weights survive.
+        let equilibrium = &block_event_weights["equilibrium"];
+        let excess = &block_event_weights["thermal_excess"];
+        let vacuum = &block_event_weights["vacuum"];
+        assert_eq!(equilibrium.len(), excess.len());
+        assert!(vacuum.keys().all(|pdgs| equilibrium.contains_key(pdgs)));
+        for (pdgs, weight) in equilibrium {
+            let expected = weight - vacuum.get(pdgs).copied().unwrap_or(0.0);
+            let actual = excess.get(pdgs).expect("matching thermal-excess channel");
+            assert!(
+                (actual - expected).abs() <= 1e-10 * expected.abs(),
+                "{block}/{pdgs:?}: vacuum subtraction changed a physical channel"
+            );
         }
     }
 
     // Independent momentum-space phase-space density. At rest the three
     // massless lines have lengths 0.6, 0.8, 1.0 in any sunset LMB. Each physical
     // channel has t = 1 / sum(sigma_i |q_i|). No generated residue enters here.
-    let mut spectral_density = 0.0;
-    let mut vacuum_density = 0.0;
-    for absorbed in [None, Some(0), Some(1), Some(2)] {
-        let raw_energies = [0.6_f64, 0.8, 1.0];
-        let derivative: f64 = raw_energies
-            .iter()
-            .enumerate()
-            .map(|(i, e)| if absorbed == Some(i) { -e } else { *e })
-            .sum();
-        let radius = 1.0 / derivative;
-        let energies = raw_energies.map(|e| radius * e);
-        let h = 2.0 / PI.sqrt() * (2.0 - radius * radius - 1.0 / (radius * radius)).exp();
-        let measure = 2.0 * PI * radius.powi(6) * h
-            / (derivative.abs()
-                * energies.iter().map(|e| 2.0 * e).product::<f64>()
-                * (2.0 * PI).powi(6)
-                * 2.0);
-        let occupations = energies.map(|e| 1.0 / e.exp_m1());
-        let mut forward = 1.0;
-        let mut reverse = 1.0;
-        for (i, n) in occupations.into_iter().enumerate() {
-            if absorbed == Some(i) {
-                forward *= n;
-                reverse *= 1.0 + n;
-            } else {
-                forward *= 1.0 + n;
-                reverse *= n;
-            }
+    let mut reference_values = Vec::new();
+    for beta in [1.0, 200.0] {
+        let mut excess_density = 0.0;
+        let mut vacuum_density = 0.0;
+        for absorbed in [None, Some(0), Some(1), Some(2)] {
+            let raw_energies = [0.6_f64, 0.8, 1.0];
+            let derivative: f64 = raw_energies
+                .iter()
+                .enumerate()
+                .map(|(i, e)| if absorbed == Some(i) { -e } else { *e })
+                .sum();
+            let radius = 1.0 / derivative;
+            let energies = raw_energies.map(|e| radius * e);
+            let h = 2.0 / PI.sqrt() * (2.0 - radius * radius - 1.0 / (radius * radius)).exp();
+            let measure = 2.0 * PI * radius.powi(6) * h
+                / (derivative.abs()
+                    * energies.iter().map(|e| 2.0 * e).product::<f64>()
+                    * (2.0 * PI).powi(6)
+                    * 2.0);
+            let occupations = energies.map(|e| 1.0 / (beta * e).exp_m1());
+            // Expand forward-minus-reverse Bose weights analytically. Keep
+            // the vacuum constant separate so small occupations remain visible.
+            let thermal_weight = match absorbed {
+                Some(i) => {
+                    let [a, b, c] = [i, (i + 1) % 3, (i + 2) % 3].map(|j| occupations[j]);
+                    a * (1.0 + b + c) - b * c
+                }
+                None => {
+                    let [a, b, c] = occupations;
+                    vacuum_density = measure;
+                    a + b + c + a * b + a * c + b * c
+                }
+            };
+            excess_density += measure * thermal_weight;
         }
-        spectral_density += measure * (forward - reverse);
-        if absorbed.is_none() {
-            vacuum_density = measure;
-        }
+        reference_values.push([
+            excess_density + vacuum_density,
+            excess_density,
+            vacuum_density,
+        ]);
     }
-    for (actual, expected) in rest_values
-        .into_iter()
-        .zip([spectral_density, vacuum_density])
-    {
+    for (actual, expected) in rest_values.into_iter().zip(reference_values[0]) {
         assert!(
             (actual - expected).abs() <= 1e-9 * expected,
             "sunset phase-space oracle: {actual:e}, expected {expected:e}"
         );
     }
+
+    // This representable excess is too small to recover by subtracting two
+    // binary64 results containing the vacuum decay.
+    cli.run_command("run rest")?;
+    cli.run_command("set process -p thermal_excess -i LO kv general.inverse_temperature=200.0")?;
+    let tail = evaluate(&mut cli, "thermal_excess", true)?
+        .sample
+        .evaluation;
+    let actual = tail.integrand_result.re.0;
+    let expected = reference_values[1][1];
+    assert!(expected > 0.0 && expected < f64::EPSILON * reference_values[1][2]);
+    assert!(actual.is_finite() && actual > 0.0);
+    assert!(
+        (actual - expected).abs() <= 1e-9 * expected,
+        "thermal-excess tail: {actual:e}, expected {expected:e}"
+    );
+    cli.run_command("set process -p thermal_excess -i LO kv general.inverse_temperature=1.0")?;
 
     // The supported finite-temperature mode must approach the vacuum result.
     cli.run_command("run rest")?;
@@ -164,7 +215,7 @@ fn thermal_scalar_sunset_matches_phase_space_and_conserves_events() -> Result<()
     // outgoing B1s. It removes exactly the B1-absorption channel, while the
     // vacuum decay survives. Event retention must not change that selection.
     cli.run_command("set process -p equilibrium -i LO kv general.inverse_temperature=1.0")?;
-    for process in ["equilibrium", "vacuum"] {
+    for process in processes {
         let baseline = evaluate(&mut cli, process, true)?.sample.evaluation;
         assert_eq!(baseline.event_groups.len(), 1);
         let expected = baseline
@@ -207,7 +258,7 @@ max = 1
                     .iter()
                     .flat_map(|group| group.iter())
                     .collect_vec();
-                assert_eq!(events.len(), if process == "equilibrium" { 3 } else { 1 });
+                assert_eq!(events.len(), if process == "vacuum" { 1 } else { 3 });
                 assert!(
                     events
                         .iter()
@@ -220,7 +271,7 @@ max = 1
                     .as_ref()
                     .expect("selectors retain evaluation diagnostics");
                 assert!(metadata.accepted_event_count > 0);
-                if process == "equilibrium" {
+                if process != "vacuum" {
                     assert!(metadata.generated_event_count > metadata.accepted_event_count);
                 }
             }

@@ -348,9 +348,11 @@ The currently enabled thermal cross-section scope remains finite-temperature, si
 simple cuts through massless scalars without virtual propagators or chemical-potential
 assignments. The probe must be future-directed and timelike. The generation loop-momentum
 basis must route external momentum through at most one cut line that also carries loop momentum.
-Cold modes, vacuum subtraction, UV subtraction, raised thermal cuts, and surface-targeted sampling
-remain rejected by the temporary validation policy. These restrictions do not define separate
-thermal residue or event pipelines. Thermal threshold subtraction is unavailable; the runtime
+Optional vacuum subtraction uses the existing `thermal_weight(W - V(W))` transformation
+before evaluator construction, yielding the excess spectral kernel. Cold modes, UV subtraction,
+raised thermal cuts, and surface-targeted sampling remain rejected by the temporary validation
+policy. These restrictions do not define separate thermal residue or event pipelines.
+Thermal threshold subtraction is unavailable; the runtime
 also requires `subtraction.disable_threshold_subtraction = true` so canonical physical-overlap
 preparation cannot reinterpret a mixed-sign cut as a positive E-surface cut.
 No broader infrared-finiteness or thermal-rate validation follows from the shared architecture.

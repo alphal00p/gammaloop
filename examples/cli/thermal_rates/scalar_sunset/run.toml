@@ -75,10 +75,13 @@ target_relative_accuracy = 0.005
 name = "generate"
 commands = [
   "import model ./examples/cli/thermal_rates/scalar_sunset/model.json",
-  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium global.generation.medium.vacuum_subtraction=false",
   "generate xs X > B1 B2 B3 FI^2==2 [{{2}}] -p equilibrium -i LO",
   "generate existing -p equilibrium -i LO",
-  "set global kv global.generation.medium.mode=vacuum",
+  "set global kv global.generation.medium.vacuum_subtraction=true",
+  "generate xs X > B1 B2 B3 FI^2==2 [{{2}}] -p thermal_excess -i LO",
+  "generate existing -p thermal_excess -i LO",
+  "set global kv global.generation.medium.mode=vacuum global.generation.medium.vacuum_subtraction=false",
   "generate xs X > B1 B2 B3 FI^2==2 [{{2}}] -p vacuum -i LO",
   "generate existing -p vacuum -i LO",
 ]
@@ -87,6 +90,7 @@ commands = [
 name = "rest"
 commands = [
   "set process -p equilibrium -i LO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]]",
+  "set process -p thermal_excess -i LO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]]",
   "set process -p vacuum -i LO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]]",
 ]
 
@@ -94,6 +98,7 @@ commands = [
 name = "boosted"
 commands = [
   "set process -p equilibrium -i LO kv kinematics.externals.data.momenta=[[1.4142135623730951,0.0,0.0,1.0]]",
+  "set process -p thermal_excess -i LO kv kinematics.externals.data.momenta=[[1.4142135623730951,0.0,0.0,1.0]]",
   "set process -p vacuum -i LO kv kinematics.externals.data.momenta=[[1.4142135623730951,0.0,0.0,1.0]]",
 ]
 
@@ -101,6 +106,7 @@ commands = [
 name = "fast"
 commands = [
   "set process -p equilibrium -i LO kv kinematics.externals.data.momenta=[[3.1622776601683795,0.0,0.0,3.0]]",
+  "set process -p thermal_excess -i LO kv kinematics.externals.data.momenta=[[3.1622776601683795,0.0,0.0,3.0]]",
   "set process -p vacuum -i LO kv kinematics.externals.data.momenta=[[3.1622776601683795,0.0,0.0,3.0]]",
 ]
 
@@ -108,6 +114,7 @@ commands = [
 name = "inspect"
 commands = [
   "inspect -p equilibrium -i LO -m -x 0.6 0 0 0 0.8 0 --json-output /tmp/thermal-rates-sunset-equilibrium-inspect.json",
+  "inspect -p thermal_excess -i LO -m -x 0.6 0 0 0 0.8 0 --json-output /tmp/thermal-rates-sunset-thermal-excess-inspect.json",
   "inspect -p vacuum -i LO -m -x 0.6 0 0 0 0.8 0 --json-output /tmp/thermal-rates-sunset-vacuum-inspect.json",
 ]
 
@@ -115,6 +122,7 @@ commands = [
 name = "integrate"
 commands = [
   "set process -p equilibrium -i LO kv general.generate_events=false",
+  "set process -p thermal_excess -i LO kv general.generate_events=false",
   "set process -p vacuum -i LO kv general.generate_events=false",
-  "integrate -p equilibrium -i LO -p vacuum -i LO --n-cores 2 --restart --workspace-path /tmp/thermal-rates-sunset-integral",
+  "integrate -p equilibrium -i LO -p thermal_excess -i LO -p vacuum -i LO --n-cores 3 --restart --workspace-path /tmp/thermal-rates-sunset-integral",
 ]

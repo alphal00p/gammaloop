@@ -19,8 +19,9 @@ one cut-particle momentum contains both loop and external momentum; the signed r
 supports at most one distinct cut energy that scales nonhomogeneously with the radial variable.
 A runtime chemical potential of zero does not remove an adjustable assignment. This path remains
 experimental. Spacelike probes, massive or spinning
-cut particles, raised cuts, cold modes, vacuum subtraction, UV subtraction, threshold subtraction,
-and surface-targeted sampling are unavailable for thermal `xs`.
+cut particles, raised cuts, cold modes, UV subtraction, threshold subtraction,
+and surface-targeted sampling are unavailable for thermal `xs`. Optional vacuum subtraction
+uses the same distribution-weight transformation as medium amplitudes.
 These are temporary validation limits. Thermal crossings and their occupation factors use the
 shared cross-section residue, normalization, selector, event, and precision machinery.
 The internal representation of signed cuts does not by itself establish support for the
@@ -159,10 +160,17 @@ exact equality; nearly coincident poles remain a numerical issue.
 
 With
 #link("reference/cli/settings/cli/global/generation/medium/#setting-cli-global-generation-medium-vacuum-subtraction-622cb5e219356a31")[`vacuum_subtraction = true`],
-only the medium-dependent amplitude is generated: each distribution weight is replaced by its
+only the medium-dependent contribution is generated: each distribution weight is replaced by its
 difference from the vacuum limit, and UV counterterms covering all loops are omitted,
 including when bridges remain in the graph.
 This option requires a medium mode.
+
+For the supported simple scalar thermal `xs` cuts, the result is the excess spectral kernel
+$Gamma_rho(P) - Gamma_("vac")(P)$. The scalar sunset card calls this process `thermal_excess`,
+alongside the full `equilibrium` kernel and the `vacuum` control. To obtain the production
+source for an initially empty bosonic probe through KMS, use the full kernel:
+$S(P) = n_B(E) Gamma_rho(P)$. Add the vacuum contribution back before applying this relation
+if starting from `thermal_excess`.
 
 GammaLoop keeps equilibrium vacuum amplitudes in its Minkowski convention. For the complete
 connected vacuum-graph sum $A$, including model factors and counterterms, convert to the pressure
