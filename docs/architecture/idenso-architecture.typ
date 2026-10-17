@@ -385,6 +385,16 @@ cycle. This lets the same structure-constant identities act on explicit products
 and compact chains without distributing spectator factors or losing the logical
 ports of a zero result.
 
+A two-matrix adjoint word can also close a loop through its opposite endpoint:
+`chain(A,B; F(B),F(C))` represents `f(A,u,B) f(u,B,C) = C_A g(A,C)`.
+The chain owner exposes only that local word and reuses the existing two-f
+contraction, including its matrix phases. Shared structure-constant positions
+represent summed edges only when their indices are abstract; equal fixed
+components do not authorize a sum. Fixed uncontracted spectators are preserved
+by the local identity. Public symbolic tensor admission currently rejects the
+raw fixed-color chain and structure-constant forms used in these controls, so
+their fixed-index guard is tested directly at the identity owner.
+
 Settings objects are part of the semantics. Gamma ordering and trace evaluation, color Fierz and
 invariant substitutions, contraction budgets, and cooking source/tag filters can all
 change the result form. Reproducible callers record the exact settings; the

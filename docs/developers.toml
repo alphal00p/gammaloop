@@ -912,7 +912,9 @@ anchor = "    fn simplify_product("
 # Reviewed 2026-10-17: connected adjoint chains expose explicit structure constants
 # only when an existing product identity reduces them; spectator factorization,
 # reserved dummy identities and ranked-zero ports remain with their native owners.
-digest = "224c0f4a0dc959504772e34ff005879aae5d3fe7"
+# Reviewed 2026-10-17: opposite-endpoint two-matrix loops reuse the two-f identity;
+# shared loop edges exclude concrete components while preserving fixed spectators.
+digest = "fe626f331ec41d102044fcd6e02615692fcbd2a3"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"

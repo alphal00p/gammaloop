@@ -603,6 +603,20 @@ impl ColorAlgebraSimplifier {
             && color_adjoint_dimension(&end).as_ref() == Some(&dimension)
         {
             let rep = adjoint_rep(dimension.clone());
+            if let [left, right] = factors.as_slice()
+                && let Some((left_slot, _)) = adjoint_generator(rep.as_view(), left.as_view())
+                && let Some((right_slot, _)) = adjoint_generator(rep.as_view(), right.as_view())
+                && (left_slot == end.as_view() || right_slot == start.as_view())
+                && let AtomView::Fun(chain) = chain
+                && let Ok(indexed) = self.dummies.materialize_indexed_chain(chain)
+                && let Some(reduced) =
+                    self.simplify_two_f_loop_product(&ProductView::parse(indexed.as_view()))
+            {
+                // A side port can close a loop through the opposite endpoint.
+                // Reuse the two-f owner for its summed-slot, orientation and
+                // dimension checks; publish only the contraction, not an opening.
+                return Some(reduced);
+            }
             for i in 0..factors.len().saturating_sub(1) {
                 let Some((left, left_weight)) =
                     adjoint_generator(rep.as_view(), factors[i].as_view())
@@ -4101,10 +4115,19 @@ fn common_structure_positions<'a, A: AtomCore>(
     right: &'a [A; 3],
 ) -> impl Iterator<Item = CommonStructurePosition> + 'a {
     let mut right_used = [false; 3];
+    let mut matcher = SlotMatcher::default();
     left.iter().enumerate().filter_map(move |(left, left_arg)| {
         let right = right.iter().enumerate().position(|(right, right_arg)| {
             !right_used[right] && right_arg.as_atom_view() == left_arg.as_atom_view()
         })?;
+        let SlotMatch::Explicit(slot) = matcher.classify(left_arg.as_atom_view()) else {
+            return None;
+        };
+        // Equal fixed components are not summed edges. This guard belongs to
+        // the shared loop-edge owner; fixed uncontracted spectator ports remain.
+        if slot.is_concrete_index() {
+            return None;
+        }
         right_used[right] = true;
         Some(CommonStructurePosition { left, right })
     })
@@ -4475,6 +4498,142 @@ mod reconstruction_tests {
             ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(first)]),
             spenso::dind!(ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(first + 1)])),
         )
+    }
+
+    #[test]
+    fn adjoint_opposite_endpoint_loop_keeps_phases_and_logical_ports() {
+        use crate::tensor::AlgebraSettings;
+        crate::test_support::test_initialize();
+        let [a, b, c] = adjoint_slots("adjoint_endpoint_loop", ["a", "b", "c"]);
+        let casimir = adjoint_casimir_for_dimension(Atom::num(8));
+        let settings = AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        };
+        for (left, right, metric) in [
+            (&b, &c, color_metric(a.clone(), c.clone())),
+            (&c, &a, color_metric(c.clone(), b.clone())),
+        ] {
+            for reversed_matrix in [false, true] {
+                for (left_weight, right_weight) in
+                    [(Atom::one(), Atom::one()), (Atom::i(), Atom::num(-2))]
+                {
+                    let [incoming, outgoing] = if reversed_matrix {
+                        [T.chain_out, T.chain_in]
+                    } else {
+                        [T.chain_in, T.chain_out]
+                    };
+                    let source = SymbolicTensor::infer(chain!(
+                        &a,
+                        &b,
+                        &left_weight * color_f!(Atom::var(incoming), Atom::var(outgoing), left),
+                        &right_weight
+                            * color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), right),
+                    ))
+                    .unwrap();
+                    let expected = Atom::num(if reversed_matrix { -1 } else { 1 })
+                        * left_weight
+                        * right_weight
+                        * &casimir
+                        * &metric;
+                    let reverse = PartialStructure::from_logical_slots(
+                        source.structure().logical_slots().into_iter().rev(),
+                    );
+                    let reversed =
+                        SymbolicTensor::from_declared_parts(source.expression().clone(), reverse)
+                            .unwrap();
+                    for source in [source, reversed] {
+                        let result = source.simplify_algebra(&settings).unwrap();
+                        assert_eq!(result.expression(), &expected);
+                        assert_eq!(result.rank(), 2);
+                        assert_eq!(
+                            result.structure().logical_slots(),
+                            source.structure().logical_slots()
+                        );
+                        assert!(result.same_value(&result.simplify_algebra(&settings).unwrap()));
+                    }
+                }
+            }
+        }
+        let closed = SymbolicTensor::infer(chain!(
+            &a,
+            &b,
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &b),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &a),
+        ))
+        .unwrap()
+        .simplify_algebra(&settings)
+        .unwrap();
+        assert!(closed.is_scalar());
+        assert_eq!(closed.expression(), &(Atom::num(8) * casimir));
+    }
+
+    #[test]
+    fn adjoint_endpoint_loop_requires_compatible_repeated_port() {
+        crate::test_support::test_initialize();
+        let [a, b, c, other] = adjoint_slots("adjoint_endpoint_guard", ["a", "b", "c", "other"]);
+        let AtomView::Fun(b_slot) = b.as_view() else {
+            unreachable!()
+        };
+        let other_dimension =
+            ColorAdjoint {}.to_symbolic([Atom::num(15), b_slot.iter().nth(1).unwrap().to_owned()]);
+        let compact = |side: &Atom| {
+            chain!(
+                &a,
+                &b,
+                color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), side),
+                color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &c),
+            )
+        };
+        let source = SymbolicTensor::infer(compact(&b)).unwrap();
+        for side in [&other, &other_dimension] {
+            let expression = compact(side);
+            assert!(
+                SymbolicTensor::from_declared_parts(expression.clone(), source.structure().clone())
+                    .is_err()
+            );
+            let dummies = ParseState::default();
+            dummies.reserve_indices(expression.as_view());
+            let simplifier = ColorAlgebraSimplifier::new(Default::default(), dummies);
+            assert!(
+                simplifier
+                    .simplify_chain_node(expression.as_view())
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn structure_loop_shared_edges_exclude_fixed_components() {
+        crate::test_support::test_initialize();
+        let [a, b, c, u] = adjoint_slots("structure_fixed_component", ["a", "b", "c", "u"]);
+        let fixed = ColorAdjoint {}.to_symbolic([Atom::num(8), AIND_SYMBOLS.cind.call(0)]);
+        let left = StructureView {
+            args: [&a, &u, &fixed].map(Atom::as_view),
+        };
+        let right = StructureView {
+            args: [&u, &fixed, &c].map(Atom::as_view),
+        };
+        // This tests the borrowed identity owner directly: fixed-color leaves
+        // are not yet admitted by the public symbolic tensor constructor.
+        assert_eq!(
+            common_structure_positions(&left.args, &right.args).count(),
+            1
+        );
+        assert!(left.contract_loop(&right).is_none());
+        assert!(color_f!(&fixed, &u, &fixed).is_zero());
+
+        // Fixed uncontracted spectators remain valid in the local identity.
+        let left = StructureView {
+            args: [&fixed, &u, &b].map(Atom::as_view),
+        };
+        let right = StructureView {
+            args: [&u, &b, &c].map(Atom::as_view),
+        };
+        assert_eq!(
+            left.contract_loop(&right),
+            Some(adjoint_casimir_for_dimension(Atom::num(8)) * color_metric(fixed, c))
+        );
     }
 
     #[test]
