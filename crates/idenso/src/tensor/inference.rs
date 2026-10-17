@@ -1137,12 +1137,13 @@ impl SymbolicTensor<PartialStructure> {
 }
 
 impl InterfaceInference {
-    // These structural builtins cannot invoke user code themselves. Their
-    // descendants are still checked: cyclic only unwraps a sole sym projector,
-    // so a callback inside either projector must remain a refusal.
+    // These structural builtins cannot invoke user code themselves. Delta only
+    // compares fixed components; cyclic only unwraps a sole sym projector.
+    // Their descendants remain checked for user callbacks.
     pub(crate) fn intrinsic_normalization_head(symbol: Symbol) -> bool {
         symbol.get_evaluation_info().is_none()
             && (symbol == ETS.metric
+                || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
@@ -1160,6 +1161,7 @@ impl InterfaceInference {
         tests::INTRINSIC_HEAD_CHECKS.with(|count| count.set(count.get() + 1));
         symbol.get_evaluation_info().is_none()
             && (symbol == *metric.get_or_insert_with(|| ETS.metric)
+                || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
@@ -1226,7 +1228,7 @@ impl InterfaceInference {
     }
 
     /// Certify that index rewriting cannot invoke a user callback through tensor
-    /// leaves or scalar metadata. Only intrinsic metric, dual and cyclic
+    /// leaves or scalar metadata. Only intrinsic metric, delta, dual and cyclic
     /// normalizers are admitted; their descendants remain checked.
     pub fn rewrites_preserve_leaf_interfaces(&mut self, value: AtomView<'_>) -> bool {
         self.normalization_is_intrinsic_cached(value)
@@ -3233,6 +3235,97 @@ pub(crate) mod tests {
         calls.store(0, Ordering::Relaxed);
         assert_eq!(typed.expanded(None, false).unwrap(), expected);
         assert_eq!(calls.load(Ordering::Relaxed), old_calls);
+    }
+
+    #[test]
+    fn native_delta_normalization_is_intrinsic_for_fixed_components() {
+        crate::test_support::test_initialize();
+        assert!(InterfaceInference::intrinsic_normalization_head(ETS.delta));
+        let mut inference = InterfaceInference::default();
+        for dimension in [
+            Atom::num(4),
+            Atom::var(symbolica::symbol!("intrinsic_delta_d")),
+        ] {
+            for component in 0..4 {
+                let selector = symbolica::function!(AIND_SYMBOLS.cind, component);
+                let basis = symbolica::function!(
+                    ETS.delta,
+                    &selector,
+                    spenso::mink!(
+                        spenso::structure::dimension::Dimension::try_from(dimension.as_view())
+                            .unwrap()
+                    )
+                );
+                assert!(InterfaceInference::normalization_is_intrinsic(
+                    basis.as_view()
+                ));
+                assert!(inference.normalization_is_intrinsic_cached(basis.as_view()));
+                let same = symbolica::function!(ETS.delta, &selector, &selector);
+                let different = symbolica::function!(
+                    ETS.delta,
+                    &selector,
+                    symbolica::function!(AIND_SYMBOLS.cind, (component + 1) % 4)
+                );
+                assert_eq!(same, Atom::one());
+                assert!(different.is_zero());
+            }
+        }
+    }
+
+    #[test]
+    fn native_delta_normalization_keeps_descendant_callback_guards() {
+        use spenso::structure::representation::BaseRepName;
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let hook = symbolica::symbol!("intrinsic_delta_payload"; Scalar;
+            norm = move |_, _| { observed.fetch_add(1, Ordering::Relaxed); });
+        let observed = Arc::clone(&calls);
+        let custom = spenso::vector_symbol!(
+            "intrinsic_delta_custom",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let payload = symbolica::function!(hook, 7);
+        let selector = symbolica::function!(AIND_SYMBOLS.cind, 0);
+        let nested = symbolica::function!(
+            ETS.delta,
+            &selector,
+            symbolica::function!(
+                spenso::vector_symbol!("intrinsic_delta_p"),
+                &payload,
+                spenso::mink!(4)
+            )
+        );
+        let dimension = symbolica::function!(
+            ETS.delta,
+            &selector,
+            symbolica::function!(Minkowski::selfless_symbol(), &payload)
+        );
+        let custom = symbolica::function!(custom, spenso::mink!(4));
+        calls.store(0, Ordering::Relaxed);
+        let mut inference = InterfaceInference::default();
+        for value in [&nested, &dimension, &custom] {
+            assert!(!InterfaceInference::normalization_is_intrinsic(
+                value.as_view()
+            ));
+            assert!(!inference.normalization_is_intrinsic_cached(value.as_view()));
+            assert!(!inference.rewrites_preserve_leaf_interfaces(value.as_view()));
+        }
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        let source = SymbolicTensor::infer(spenso::dot!(&custom, &custom).pow(2)).unwrap();
+        calls.store(0, Ordering::Relaxed);
+        assert!(
+            source
+                .coefficient_list(spenso::shadowing::TensorCollectFilter::<0>::Tensors)
+                .is_err()
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]
