@@ -48,7 +48,8 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-15: The persisted-UV fixture now uses its declared scalar model and native
 # graph importer. Canonical printer replay and current version18 boundaries retain
 # the documented save/load behavior; exact physical and reference acceptance pass.
-digest = "e49ddcc839c22bfa13d2fe4047cda1a5a144f517"
+# Reviewed 2026-10-17: The architecture records state version 19 for retained tensor payloads, checked symbol-remapped loading, and unchanged standalone scalar evaluator versions.
+digest = "570b65f4513c98779b8d5256e3240e92e5810fe0"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -261,7 +262,8 @@ end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> S
 # Reviewed 2026-10-16: Compact half-edge slot conversion now belongs to Aind and is shared with CLI projector input; the documented compact/native frames and ownership remain unchanged.
 # Reviewed 2026-10-16: The architecture records canonical cut export and runtime metadata restoration at the native artifact boundary.
 # Reviewed 2026-10-16: Import applies edge mass overrides before constructing energy definitions and mass evaluators; source-map and strict dialect ownership are unchanged.
-digest = "8a54813c9274010cc06cc65252967b32ebffbfb5"
+# Reviewed 2026-10-17: Runtime graph fragments retain typed interfaces; optional num_interface metadata preserves ranked zeros and logical port order at the source-artifact boundary.
+digest = "77c3d95d67f4722e5ef4d7105ef510a88b0a3703"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -375,7 +377,8 @@ end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
 # only numeric backend labels acquire the topology chart. Represented ports and
 # powered spectators remain intact. The UV note records this restoration boundary.
 # Reviewed 2026-10-16: Fixed components use signed basis-vector contractions before native projection; the UV note records the formal-dimensional port contract.
-digest = "2fa9edc4de0c38667bd7285da6bd2e65440b2878"
+# Reviewed 2026-10-17: The UV note records retained tensor bodies through symbolic preparation and explicit Vakint/Laurent interchange boundaries; additional normalization is checked as scalar.
+digest = "4e73b333d2599b483ad7386228752f989f409c8f"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
@@ -458,7 +461,8 @@ anchor = "impl Localizer<'_> {"
 # owner and residue-key momentum map. Scalar CFF weights and frozen kernels
 # remain separate; later cograph factors retain independent shared definitions.
 # The exact localizer test covers scalar affine maps and open tensor products.
-digest = "acd127260f7aaf2a2b376306800e184e8d99d90b"
+# Reviewed 2026-10-17: Localized integrated coefficients retain typed shared bodies. Scalar carrier dispatch and the documented separation from the cograph remain unchanged.
+digest = "70d1145fb3cbbff13d8b7c9d90358c1f57a18fa3"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -793,7 +797,8 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # zero, declared open ports and callback validation. Reconciliation retains plain-Atom
 # storage and checked interfaces.
 # Reviewed 2026-10-16: Symbolic TensorFromExpression retains the canonical source layout; reviewed against the Idenso symbolic-target and Spenso realization descriptions.
-digest = "dbdd7eb00b2b34397b7d7d71a9ea0bc4bb5f1ccf"
+# Reviewed 2026-10-17: The Idenso note records retained reduction state, declared-interface persistence, consuming component handoff and its logical layout.
+digest = "ffa0ab2761d1963df2b783ddd8aa97a1a2e1dcb7"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/contract.rs"
@@ -833,7 +838,8 @@ anchor = "pub struct AlgebraSettings {"
 # Reviewed 2026-10-17: Generated scalar powers reuse the existing exact opaque
 # coefficient certificate; finite trace, power-domain and zero-budget regressions
 # preserve the documented factorization and planner policies.
-digest = "ca13fb8745178a204beb9c9f50df820fc7d9b31f"
+# Reviewed 2026-10-17: The Idenso note records that expand_dots retains the typed carrier and checked open interface; algebra and contraction continue to share the existing scheduler.
+digest = "af6a18a2e8511e7a79542b3df561e9678e870909"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
@@ -1473,7 +1479,8 @@ anchor = "fn preprocess_numerator_families<A: AtomCore>("
 # The investigation records exact program replays, corpus pilots and pending gates.
 # Reviewed 2026-10-16: Added structured timing for post-algebra contraction, captured-formal discovery and finite-component collection. These diagnostics do not change evaluator algebra or guarded CPE policy.
 # Clippy review: copy Copy settings directly and iterate alias values; dispatch policy and iteration order are unchanged.
-digest = "054c356e16f166c8f22f6613d9884ec6b03d5c54"
+# Reviewed 2026-10-17: The readiness note distinguishes previous qualified timings from the pending typed migration, including logical component layouts, retained zero-family interfaces, and separately timed raw-root admission.
+digest = "b25fa6107e77c82d41374c8f9ecb7122a3cc92f7"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"

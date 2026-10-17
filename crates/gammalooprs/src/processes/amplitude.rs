@@ -16,7 +16,7 @@ use color_eyre::Result;
 use momtrop::SampleGenerator;
 
 use crate::cff::EsurfaceID;
-use idenso::{CookMode, CookSettings, dirac::GammaSimplifySettings, tensor::SymbolicTensor};
+use idenso::{CookMode, CookSettings, dirac::GammaSimplifySettings};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
@@ -43,7 +43,7 @@ use crate::{
         GenericEvaluator, LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         graph_to_group_id_for_group_structure,
-        param_builder::FnMapEntry,
+        param_builder::NumeratorDefinition,
     },
     model::ParticleId,
     momentum::{
@@ -1315,15 +1315,20 @@ impl AmplitudeGraph {
 
         let mut num = self
             .graph
-            .numerator(component, &self.graph.empty_subgraph());
+            .numerator(component, &self.graph.empty_subgraph())?;
         if config.include_global_numerator {
-            num.state.expr *= &self.graph.global_prefactor.num;
+            let prefactor =
+                crate::numerator::AppliedFeynmanRule::new(self.graph.global_prefactor.num.clone())?;
+            num.state.expr = num.state.expr.multiply(&prefactor.expr)?;
         }
 
-        let before_gamma = num.to_d_dim(GS.dim).get_single_atom().unwrap();
+        let numerator = num.to_d_dim(GS.dim)?;
+        let before_gamma = numerator.get_single_atom()?;
         let before_gamma_plain = before_gamma.to_plain_string();
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let simplified = SymbolicTensor::infer(cooking.try_cook(before_gamma.as_view())?)?
+        let simplified = numerator
+            .state
+            .expr
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
@@ -1348,12 +1353,12 @@ impl AmplitudeGraph {
             "Gamma simplification before Vakint"
         );
 
-        let mut four_dimensional_integrand = four_dimensional_numerator
-            / self
-                .graph
-                .denominator(component, config.model, |e: &crate::graph::Edge| {
-                    e.extra_data.vakint_edge_power.unwrap_or(1)
-                });
+        let denominator = crate::numerator::AppliedFeynmanRule::new(self.graph.denominator(
+            component,
+            config.model,
+            |e: &crate::graph::Edge| e.extra_data.vakint_edge_power.unwrap_or(1),
+        ))?;
+        let mut four_dimensional_integrand = simplified.divide(&denominator.expr)?;
 
         // println!("Four-dimensional integrand: {}", four_dimensional_integrand);
 
@@ -1370,7 +1375,11 @@ impl AmplitudeGraph {
         // }
 
         // rewrite the inner_t as well
-        four_dimensional_integrand = four_dimensional_integrand.replace_multiple(&mom_reps);
+        four_dimensional_integrand = four_dimensional_integrand.with_checked_expression(
+            four_dimensional_integrand
+                .expression()
+                .replace_multiple(&mom_reps),
+        )?;
 
         // println!("LMB: {}", lmb);
         // let vk_mom = vakint_symbol!("k");
@@ -2487,7 +2496,7 @@ pub struct AmplitudeDerivedData {
     /// Master topology and coordinates used to interpret graph-group threshold metadata.
     pub threshold_topology: Option<(Graph, TiVec<LmbIndex, LoopMomentumBasis>)>,
     pub all_mighty_integrand: Atom,
-    pub all_mighty_numerators: Vec<Arc<FnMapEntry>>,
+    pub all_mighty_numerators: Vec<Arc<NumeratorDefinition>>,
     /// Compatibility storage used by the current homogeneous amplitude runtime.
     pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
     /// Canonical variant-indexed symbolic storage. Duplicate geometric thresholds remain distinct.

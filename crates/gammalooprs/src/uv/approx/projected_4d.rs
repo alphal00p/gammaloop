@@ -8,6 +8,7 @@ use std::{
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::subgraph::SubSetLike;
+use spenso::structure::partial::PartialStructureExt;
 use symbolica::{
     atom::{Atom, AtomCore, Indeterminate},
     id::Replacement,
@@ -64,10 +65,9 @@ impl Projected4dCts {
                 .iter()
                 .map(|sector| {
                     Ok(Projected4dSector {
-                        coefficient: sector
-                            .coefficient
-                            .fallible_map(&mut f)?
-                            .map_numerators(&mut f)?,
+                        coefficient: sector.coefficient.fallible_map(&mut f)?.map_numerators(
+                            |tensor| Ok(tensor.with_checked_expression(f(tensor.expression())?)?),
+                        )?,
                         frozen_factor: sector.frozen_factor.clone(),
                     })
                 })
@@ -223,7 +223,7 @@ impl Localizer<'_> {
                             .then_some(edge)
                         });
                     EnergyPowerAnalyzer::for_physical_emr_edges(owners)
-                        .analyze_atom(&term.source_numerator)
+                        .analyze_atom(term.source_numerator.expression())
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             debug_tags!(#generation, #profile, #uv, #local, #four_d;
@@ -304,7 +304,7 @@ impl Localizer<'_> {
                     source_scope = %source_scope.string_label(),
                     coordinate_lmb = ?coordinate_lmb,
                     denominators = ?denominators,
-                    log.numerator = &*numerator,
+                    log.numerator = numerator.expression(),
                     "Preparing shared factorized local-4D child numerator"
                 );
                 context.projected_component_requests += 1;
@@ -316,7 +316,7 @@ impl Localizer<'_> {
                     ExactUvSubLmbFrame::TaylorVacuum,
                     &child_cutset,
                     &options,
-                    numerator,
+                    numerator.expression(),
                     Some(&mut *context),
                     &active_classes,
                 )?;
@@ -370,7 +370,7 @@ impl Localizer<'_> {
                         (!carrier.is_zero()).then_some((carrier, arguments))
                     })
                     .collect();
-                *numerator = mapped;
+                *numerator = numerator.with_checked_expression(mapped)?;
                 parameters.extend(new_parameters);
                 // Equal complete argument rows share one summed carrier. Other
                 // Taylor families remain separate ordinary bodies; adding them
@@ -400,7 +400,21 @@ impl Localizer<'_> {
                 classes.retain(|class| class.component > component);
                 powers.retain(|class, _| sector.class(*class).component > component);
                 reports[component] = Default::default();
-                let key = (powers.clone(), numerator.clone(), parameters.clone());
+                // Equal scalar spellings are insufficient for ranked zeros or
+                // differently ordered open ports. The retained body remains
+                // typed; this ordered key includes its complete logical interface.
+                let interface = numerator
+                    .structure()
+                    .logical_slots()
+                    .into_iter()
+                    .map(idenso::tensor::composition::port_atom)
+                    .collect::<Vec<_>>();
+                let key = (
+                    powers.clone(),
+                    numerator.expression().clone(),
+                    interface,
+                    parameters.clone(),
+                );
                 let (_, _, _, combined_reports, _, _, combined_rows) =
                     remaining.entry(key).or_insert_with(|| {
                         (
@@ -472,7 +486,7 @@ impl Localizer<'_> {
                 continue;
             }
             let mut used = vec![false; parameters.len()];
-            let _ = numerator.replace_map(|view, _, _| {
+            let _ = numerator.expression().replace_map(|view, _, _| {
                 for (index, parameter) in parameters.iter().enumerate() {
                     used[index] |= parameter.as_view() == view;
                 }
@@ -550,7 +564,7 @@ impl Projected4dApproximation<'_> {
         // Select the typed local sectors directly. Recursive completions are
         // owned by the separately integrated branch; no cograph is attached here.
         let normalization_started = Instant::now();
-        let sectors = local.projection_sectors();
+        let sectors = local.projection_sectors()?;
         debug_tags!(#generation, #uv, #local, #four_d, #profile;
             stage = "sector_grouping",
             raw_sectors = local.active_sectors().len(),
@@ -681,7 +695,7 @@ mod tests {
         }
         let full = graph.full_filter();
         let sector = FourDSector::new(
-            coefficient,
+            crate::numerator::AppliedFeynmanRule::new(coefficient)?.expr,
             vec![(full.clone(), full, graph.loop_momentum_basis.clone())],
             Vec::new(),
         );
@@ -700,10 +714,11 @@ mod tests {
         assert_eq!(context.projected_component_requests, 1);
         assert_eq!(projected.numerators().len(), 1);
         let entry = &projected.numerators()[0];
-        assert!(entry.rhs.contains_symbol(common));
+        assert!(entry.rhs.expression().contains_symbol(common));
         assert!(
             !entry
                 .rhs
+                .expression()
                 .contains_symbol(symbol!("gammalooprs::uv::numerator_family"))
         );
         assert!(!entry.args.is_empty());
@@ -752,7 +767,7 @@ mod tests {
                 &term.denominators,
                 &cutset,
                 &options,
-                &term.numerator,
+                term.numerator.expression(),
             )?;
             let prefactor = Atom::num(cff.production_prefactor_factor());
             for term in cff.terms.values() {
@@ -835,7 +850,7 @@ mod tests {
         }
         let full = graph.full_filter();
         let raw = FourDSector::new(
-            coefficient,
+            crate::numerator::AppliedFeynmanRule::new(coefficient)?.expr,
             vec![(full.clone(), full, graph.loop_momentum_basis.clone())],
             Vec::new(),
         );
@@ -961,17 +976,29 @@ mod tests {
             quotient_lmb.clone(),
         )];
         let powered_sector = FourDSector::new(
-            (&tagged_denominator + &constant) * denominator.pow(-2),
+            crate::numerator::AppliedFeynmanRule::new(
+                (&tagged_denominator + &constant) * denominator.pow(-2),
+            )?
+            .expr,
             component.clone(),
             Vec::new(),
         );
         let cancelled_sector = FourDSector::new(
-            tagged_denominator * denominator.pow(-2),
+            crate::numerator::AppliedFeynmanRule::new(tagged_denominator * denominator.pow(-2))?
+                .expr,
             component.clone(),
             Vec::new(),
         );
-        let dotted_sector = FourDSector::new(denominator.pow(-2), component.clone(), Vec::new());
-        let one_pole_sector = FourDSector::new(denominator.pow(-1), component, Vec::new());
+        let dotted_sector = FourDSector::new(
+            crate::numerator::AppliedFeynmanRule::new(denominator.pow(-2))?.expr,
+            component.clone(),
+            Vec::new(),
+        );
+        let one_pole_sector = FourDSector::new(
+            crate::numerator::AppliedFeynmanRule::new(denominator.pow(-1))?.expr,
+            component,
+            Vec::new(),
+        );
         let pattern = OrientationPattern::default();
         let cutset = CutSet::empty(graph.n_hedges());
         // This isolated typed-sector projection consumes options, not a
@@ -1137,7 +1164,7 @@ mod tests {
             * denominator(EdgeIndex(0), EdgeIndex(0))
             * denominator(EdgeIndex(0), EdgeIndex(1));
         let sector = FourDSector::new(
-            &term_a + &term_b,
+            crate::numerator::AppliedFeynmanRule::new(&term_a + &term_b)?.expr,
             vec![(
                 full.clone(),
                 full.clone(),
@@ -1172,7 +1199,7 @@ mod tests {
                 ExactUvSubLmbFrame::TaylorVacuum,
                 &cutset,
                 &options,
-                &term.numerator,
+                term.numerator.expression(),
                 Some(&mut structural_cache),
                 &[],
             )?;
@@ -1200,7 +1227,7 @@ mod tests {
                 ExactUvSubLmbFrame::TaylorVacuum,
                 &cutset,
                 &options,
-                &term.numerator,
+                term.numerator.expression(),
                 None,
                 &[],
             )?;
@@ -1220,7 +1247,7 @@ mod tests {
         );
 
         let permuted = FourDSector::new(
-            term_b + term_a,
+            crate::numerator::AppliedFeynmanRule::new(term_b + term_a)?.expr,
             sector.active_components.clone(),
             Vec::new(),
         );
@@ -1313,7 +1340,7 @@ mod tests {
             * denominator(EdgeIndex(2));
         let raised_coefficient = &coefficient * denominator(EdgeIndex(0));
         let sector = FourDSector::new(
-            coefficient.clone(),
+            crate::numerator::AppliedFeynmanRule::new(coefficient.clone())?.expr,
             vec![
                 (
                     inner_subgraph.filter.clone(),
@@ -1375,7 +1402,7 @@ mod tests {
             ExactUvSubLmbFrame::TaylorVacuum,
             &cutset,
             &options,
-            &term.numerator,
+            term.numerator.expression(),
             None,
             &[],
         )?;
@@ -1434,7 +1461,7 @@ mod tests {
         // Both terms retain one independent inner contour and one outer frame;
         // merging their completed states must preserve the complete outer value.
         let combined = FourDSector::new(
-            &coefficient + &raised_coefficient,
+            crate::numerator::AppliedFeynmanRule::new(&coefficient + &raised_coefficient)?.expr,
             sector.active_components.clone(),
             Vec::new(),
         )
@@ -1458,9 +1485,12 @@ mod tests {
         let mut separate_context = Local4dProjectionContext::default();
         let mut separate = Atom::Zero;
         for coefficient in [coefficient, raised_coefficient] {
-            let canonical =
-                FourDSector::new(coefficient, sector.active_components.clone(), Vec::new())
-                    .canonical_projection(&graph)?;
+            let canonical = FourDSector::new(
+                crate::numerator::AppliedFeynmanRule::new(coefficient)?.expr,
+                sector.active_components.clone(),
+                Vec::new(),
+            )
+            .canonical_projection(&graph)?;
             separate += localizer
                 .project_factorized_taylor_sector(&mut graph, &canonical, &mut separate_context)
                 .and_then(|coefficient| {

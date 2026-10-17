@@ -55,6 +55,9 @@ pub(crate) use collection::CollectionMode;
 pub(crate) use collection::SELECTED_OPENS;
 pub mod composition;
 pub mod inference;
+mod network;
+#[cfg(feature = "bincode")]
+mod persistence;
 mod replacement;
 pub mod simplification;
 pub use replacement::TensorRule;
@@ -225,6 +228,12 @@ impl<S: PartialEq, E: PartialEq> PartialEq for SymbolicTensor<S, E> {
 }
 impl<S: Eq, E: Eq> Eq for SymbolicTensor<S, E> {}
 
+impl std::hash::Hash for SymbolicTensor<spenso::structure::partial::PartialStructure> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.hash_value(state);
+    }
+}
+
 impl<S, E> SymbolicTensor<S, E> {
     pub fn expression(&self) -> &E {
         &self.expression
@@ -245,6 +254,43 @@ impl<S, E> SymbolicTensor<S, E> {
     }
     pub fn into_expression(self) -> E {
         self.expression
+    }
+
+    /// Compare established reduction facts and retained cache identities.
+    ///
+    /// This is separate from tensor-value equality: an unchanged algebraic
+    /// result can carry a new completion certificate. Callers reusing shared
+    /// storage must check both. Cache identities are compared without walking
+    /// their graphs or locking their contents.
+    pub fn same_reduction_state(&self, other: &Self) -> bool {
+        self.proofs.validated.get() == other.proofs.validated.get()
+            && self.proofs.intrinsic.get() == other.proofs.intrinsic.get()
+            && self.proofs.algebra.get() == other.proofs.algebra.get()
+            && self.proofs.rewrite.get() == other.proofs.rewrite.get()
+            && self.proofs.contracted == other.proofs.contracted
+            && self.proofs.frontier == other.proofs.frontier
+            && self.proofs.reduction == other.proofs.reduction
+            && self
+                .proofs
+                .leaf_interfaces
+                .get()
+                .map(std::sync::Arc::as_ptr)
+                == other
+                    .proofs
+                    .leaf_interfaces
+                    .get()
+                    .map(std::sync::Arc::as_ptr)
+            && self.proofs.observations.get().map(std::sync::Arc::as_ptr)
+                == other.proofs.observations.get().map(std::sync::Arc::as_ptr)
+            && match (
+                self.proofs.shallow_graph.get(),
+                other.proofs.shallow_graph.get(),
+            ) {
+                (None, None) => true,
+                (Some(Ok(left)), Some(Ok(right))) => std::sync::Arc::ptr_eq(left, right),
+                (Some(Err(left)), Some(Err(right))) => left == right,
+                _ => false,
+            }
     }
 
     pub(crate) fn invalidate_proofs(&mut self) {

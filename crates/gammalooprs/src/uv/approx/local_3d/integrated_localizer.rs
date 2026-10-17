@@ -62,7 +62,7 @@ impl Localizer<'_> {
             .subtract(to_contract)
             .subtract(&graph.initial_state_cut);
         let outside_numerator = graph
-            .numerator(&reduced, to_contract)
+            .numerator(&reduced, to_contract)?
             .get_single_atom()
             .expect("Graph numerator should be available")
             * graph.global_atom();
@@ -87,7 +87,7 @@ impl Localizer<'_> {
         let mapped = DirectResidueBranches::from_transient(&active)?.multiply_key_mapped(
             self.orientation,
             graph,
-            finite_ct,
+            &crate::numerator::AppliedFeynmanRule::new(finite_ct.clone())?.expr,
             DirectResidueBranches::numerator_scope(),
         )?;
         let active = OrientationIntegrands(
@@ -101,7 +101,7 @@ impl Localizer<'_> {
                         reduced = %reduced.string_label(),
                         residue_map_key = key.selector_host.0,
                         scalar_weight_bytes = integrands.iter().map(|(_, atom)| atom.as_view().get_byte_size()).sum::<usize>(),
-                        shared_numerator_bytes = integrands.numerators().iter().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
+                        shared_numerator_bytes = integrands.numerators().iter().map(|entry| entry.rhs.expression().as_view().get_byte_size()).sum::<usize>(),
                         frozen_kernel_bytes = localizing_integrand.as_view().get_byte_size(),
                         "Factorized integrated UV CT localization size checkpoint"
                     );

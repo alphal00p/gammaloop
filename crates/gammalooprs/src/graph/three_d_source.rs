@@ -7934,16 +7934,16 @@ mod tests {
                     )
             });
             let canonical = crate::uv::approx::local_4d::FourDSector::new(
-                &denominator / poles,
+                crate::numerator::AppliedFeynmanRule::new(&denominator / poles)?.expr,
                 vec![(filter.clone(), filter, graph.loop_momentum_basis.clone())],
                 vec![],
             )
             .canonical_projection(&graph)?;
             // The production projection keeps unmatched positive blocks
             // opaque, including hard roles zero/one and untouched soft roles.
-            assert_eq!(canonical.terms[0].numerator, denominator);
+            assert_eq!(canonical.terms[0].numerator.expression(), &denominator);
             let (prepared, fixed_affine_blocks) =
-                source.prepare_affine_numerator(&canonical.terms[0].numerator)?;
+                source.prepare_affine_numerator(canonical.terms[0].numerator.expression())?;
             assert_eq!(
                 GS.erase_uv_momentum_provenance(&prepared),
                 GS.erase_uv_momentum_provenance(&denominator)

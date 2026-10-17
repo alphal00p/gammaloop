@@ -28,6 +28,8 @@ use idenso::{
     tensor::{ContractSettings, SymbolicTensor},
 };
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
+use spenso::shadowing::TensorCollectFilter;
+use spenso::structure::partial::PartialStructure;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate},
     function,
@@ -53,11 +55,23 @@ impl FinalIntegrands {
         &self,
         mut map: impl FnMut(&Atom) -> Result<Atom>,
     ) -> Result<Self> {
-        Ok(Self(self.0.fallible_map(&mut map)?.map_numerators(map)?))
+        Ok(Self(self.0.fallible_map(&mut map)?.map_numerators(
+            |tensor| Ok(tensor.with_checked_expression(map(tensor.expression())?)?),
+        )?))
     }
 
     pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
         Ok(Self(self.0.zip_add([other.0])?))
+    }
+
+    pub(crate) fn collect<const N: usize>(&self, filter: TensorCollectFilter<N>) -> Result<Self> {
+        // Dispatch roots contain opaque calls whose tensor interfaces belong to
+        // the retained definitions. Collect those typed bodies directly; do not
+        // infer a scalar interface from an opaque call's syntax.
+        Ok(Self(
+            self.0
+                .map_numerators(|tensor| Ok(tensor.collect(filter)?))?,
+        ))
     }
 
     /// Recover shared numerator factors after all selected forests are assembled.
@@ -106,27 +120,23 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // Resolve the cograph's color algebra before residue mapping repeats its
         // momentum numerator. The final pass still closes attached UV/projector
         // color indices that remain open at this boundary.
-        let resnum = graph
-            .numerator(&reduced, current.subgraph())
-            .get_single_atom()
-            .expect("graph numerator should be available");
+        let resnum = graph.numerator(&reduced, current.subgraph())?.state.expr;
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?.simplify_algebra(
-            &idenso::tensor::AlgebraSettings {
-                color: Some(ColorSimplifySettings {
-                    ..Default::default()
-                }),
+        let resnum = resnum.simplify_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings {
                 ..Default::default()
-            },
-        )?;
-        let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
+            }),
+            ..Default::default()
+        })?;
+        let global_num = SymbolicTensor::infer(cooking.try_cook(global_num.as_view())?)?;
+        let resnum = resnum.multiply(&global_num)?;
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
             graph = %graph.name,
-            numerator_bytes = resnum.as_view().get_byte_size(),
-            file.atom = %resnum.to_canonical_string(),
+            numerator_bytes = resnum.expression().as_view().get_byte_size(),
+            file.atom = %resnum.expression().to_canonical_string(),
             "Cograph numerator before residue mapping"
         );
         let localized_integrated = self
@@ -157,9 +167,17 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // The final copy also simplifies arithmetic across energy-call boundaries
         // (for example even powers), so expose scalar bodies before normalizing.
         let normalize = Self::final_normalizer(graph, &reduced);
+        let normalize_scalar = Self::scalar_normalizer(graph, &reduced);
         let finalized = final_branches
             .resolved_scalars()?
-            .map_expressions(normalize)?;
+            .fallible_map(|_, atom| {
+                Ok(normalize_scalar(atom)
+                    .replace(GS.m_uv_expansion)
+                    .with(GS.m_uv_vacuum)
+                    .replace(GS.dim_epsilon)
+                    .with(0))
+            })?
+            .map_numerators(|entry| normalize(&entry.rhs))?;
 
         // `DirectResidueBranches` is the sparse, factorization-preserving
         // representation of sum_k sigma(k) I_k while the Taylor forest is
@@ -200,28 +218,24 @@ impl<'a> FinalIntegrandBuilder<'a> {
             global_num = %global_num.log_display(),
             "Computed global numerator"
         );
-        let resnum = graph
-            .numerator(&reduced, current.subgraph())
-            .get_single_atom()
-            .expect("graph numerator should be available");
+        let resnum = graph.numerator(&reduced, current.subgraph())?.state.expr;
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?.simplify_algebra(
-            &idenso::tensor::AlgebraSettings {
-                color: Some(ColorSimplifySettings {
-                    ..Default::default()
-                }),
+        let resnum = resnum.simplify_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings {
                 ..Default::default()
-            },
-        )?;
-        let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
+            }),
+            ..Default::default()
+        })?;
+        let global_num = SymbolicTensor::infer(cooking.try_cook(global_num.as_view())?)?;
+        let resnum = resnum.multiply(&global_num)?;
         let localizer = self.localizer.with_independent_source_sum();
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
             graph = %graph.name,
-            numerator_bytes = resnum.as_view().get_byte_size(),
-            file.atom = %resnum.to_canonical_string(),
+            numerator_bytes = resnum.expression().as_view().get_byte_size(),
+            file.atom = %resnum.expression().to_canonical_string(),
             "Cograph numerator before residue mapping"
         );
         // Only the projected local-4D route reaches this assembly boundary.
@@ -323,18 +337,21 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 // Plan one product while retaining its two ordinary factors.
                 // The chosen occurrence-local route is replayed separately on
                 // the body and the small scalar carrier, never on expanded rows.
+                let source_numerator = entry.rhs.multiply(&resnum)?;
                 let (mut factors, localized) = localizer
                     .projected_cff_from_soft_momentum_proposals(
                         graph,
                         current.subgraph(),
-                        &[&entry.rhs * &resnum, carrier],
+                        &[source_numerator.expression().clone(), carrier],
                         active_edges.iter().copied(),
                         CffGenerationContext::EmbeddedCffFactor,
                     )?;
                 let carrier = factors.pop().expect("routing retains the scalar carrier");
-                let numerator = factors
-                    .pop()
-                    .expect("routing retains the ordinary numerator");
+                let numerator = source_numerator.with_checked_expression(
+                    factors
+                        .pop()
+                        .expect("routing retains the ordinary numerator"),
+                )?;
                 // A selected cut can exclude every outer source row even
                 // when the child coefficient is nonzero. Its contribution
                 // keeps the allowed cut zeros without inventing a residue map.
@@ -464,18 +481,26 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let selector_free = selector_free.ok_or_else(|| {
             eyre::eyre!("final 3D UV integrand contains no production energy maps")
         })?;
+        let normalize = Self::final_normalizer(graph, &reduced);
+        let normalize_scalar = Self::scalar_normalizer(graph, &reduced);
         Ok(FinalIntegrands(
             allowed_zero
                 .zip_add(selector_free)?
                 .resolved_scalars()?
-                .fallible_map(Self::final_normalizer(graph, &reduced))?
-                .map_numerators(Self::final_normalizer(graph, &reduced))?,
+                .fallible_map(|atom| {
+                    Ok(normalize_scalar(atom)
+                        .replace(GS.m_uv_expansion)
+                        .with(GS.m_uv_vacuum)
+                        .replace(GS.dim_epsilon)
+                        .with(0))
+                })?
+                .map_numerators(normalize)?,
         ))
     }
 
-    /// Normalize an already mapped final atom without splitting its factors. This
-    /// tail is deliberately blind to residue maps and cannot map a numerator.
-    fn final_normalizer(graph: &Graph, reduced: &SuBitGraph) -> impl Fn(&Atom) -> Result<Atom> {
+    /// Scalar kinematic substitutions act on dispatch coefficients and typed
+    /// bodies alike. They do not claim a tensor interface for opaque family calls.
+    fn scalar_normalizer(graph: &Graph, reduced: &SuBitGraph) -> impl Fn(&Atom) -> Atom {
         let energy_replacements = graph
             .as_ref()
             .iter_edges_of(reduced)
@@ -486,10 +511,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             })
             .collect::<Vec<_>>();
         move |atom| {
-            // Mass-support tags distinguish equal physical or UV masses while
-            // nested/disconnected local operators are still being composed.
-            // They are mathematically one and disappear only on this final evaluator copy.
-            let mut atom = atom
+            let atom = atom
                 .replace(function!(*LOCAL_3D_MASS_SCOPE, W_.a_))
                 .with(Atom::one())
                 .replace_multiple(&energy_replacements)
@@ -514,24 +536,31 @@ impl<'a> FinalIntegrandBuilder<'a> {
                         }
                     }
                 });
-            // Color and dot simplification are linear, but separating scalar-CFF
-            // summands can destroy their common tensor factors and materialize a
-            // disconnected outer product. The typed source keeps those factors
-            // attached to their tensor network throughout normalization.
-            // Preserve the sum of CFF denominators after residue mapping, just
-            // as the Taylor stage preserves its separate propagator topologies.
-            atom = atom.replace(GS.dim).with(4);
+            atom.replace(GS.dim).with(4)
+        }
+    }
+
+    /// Normalize a mapped tensor without splitting its numerator factors.
+    fn final_normalizer(
+        graph: &Graph,
+        reduced: &SuBitGraph,
+    ) -> impl Fn(&SymbolicTensor<PartialStructure>) -> Result<SymbolicTensor<PartialStructure>>
+    {
+        let normalize_scalar = Self::scalar_normalizer(graph, reduced);
+        move |tensor| {
+            // Dimension specialization can change port representations. Preserve
+            // the carrier while explicitly validating that interface change.
+            let tensor = tensor
+                .with_transformed_expression(normalize_scalar(tensor.expression()))?
+                .0;
             debug_tags!(#generation, #profile, #uv, #numerator, #dump;
                 stage = "final_integrand_before_color",
                 graph = %graph.name,
-                numerator_bytes = atom.as_view().get_byte_size(),
-                file.atom = %atom.to_canonical_string(),
+                numerator_bytes = tensor.expression().as_view().get_byte_size(),
+                file.atom = %tensor.expression().to_canonical_string(),
                 "Mapped factorized integrand before final color simplification"
             );
-            let cooking = CookSettings::indices()
-                .with_mode(CookMode::ReversibleEncoding)
-                .with_representation_payloads(true, true);
-            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+            let reduced = tensor
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
                     ..Default::default()
@@ -542,16 +571,18 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     ..Default::default()
                 })?
                 .expand_dots()?;
-            atom = cooking.uncook(reduced.as_view());
 
             // Exact production branches have already mapped every owned
             // numerator fragment. The former coarse export sign replacement
             // has no role here and must not remap these factors a second time.
-            Ok(atom
-                .replace(GS.m_uv_expansion)
-                .with(GS.m_uv_vacuum)
-                .replace(GS.dim_epsilon)
-                .with(0))
+            Ok(reduced.with_checked_expression(
+                reduced
+                    .expression()
+                    .replace(GS.m_uv_expansion)
+                    .with(GS.m_uv_vacuum)
+                    .replace(GS.dim_epsilon)
+                    .with(0),
+            )?)
         }
     }
 }
@@ -592,7 +623,13 @@ mod tests {
             a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
-        let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize_tensor = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize = |atom: &Atom| -> Result<Atom> {
+            let source = crate::numerator::AppliedFeynmanRule::new(atom.clone())?;
+            let result =
+                crate::numerator::AppliedFeynmanRule::from_tensor(normalize_tensor(&source.expr)?);
+            Ok(crate::numerator::GetSingleAtom::get_single_atom(&result)?)
+        };
         let mass_squared = Atom::var(symbol!("final_energy_test::mass")).pow(2);
         let momentum = Atom::var(symbol!("final_energy_test::momentum"));
         let squared = &mass_squared + momentum.pow(2);
@@ -631,7 +668,13 @@ mod tests {
             a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
-        let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize_tensor = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize = |atom: &Atom| -> Result<Atom> {
+            let source = crate::numerator::AppliedFeynmanRule::new(atom.clone())?;
+            let result =
+                crate::numerator::AppliedFeynmanRule::from_tensor(normalize_tensor(&source.expr)?);
+            Ok(crate::numerator::GetSingleAtom::get_single_atom(&result)?)
+        };
         let index = CutCFFIndex::new_all_none();
         let (a, b, d1, d2) = symbol!(
             "final_factor_test::a",
@@ -1014,7 +1057,13 @@ mod tests {
             a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
-        let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize_tensor = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize = |atom: &Atom| -> Result<Atom> {
+            let source = crate::numerator::AppliedFeynmanRule::new(atom.clone())?;
+            let result =
+                crate::numerator::AppliedFeynmanRule::from_tensor(normalize_tensor(&source.expr)?);
+            Ok(crate::numerator::GetSingleAtom::get_single_atom(&result)?)
+        };
         let index = CutCFFIndex::new_all_none();
         let raised = CutCFFIndex {
             lu_cut_order: Some(1),
@@ -1095,7 +1144,7 @@ mod tests {
                     ..Default::default()
                 })?
                 .expand_dots()?;
-            Ok(cooking.uncook(reduced.as_view()))
+            Ok(cooking.uncook(reduced.expression().as_view()))
         };
         let factored = normalize(&input)?;
         // Compare separately supplied linear branches, without distributing any

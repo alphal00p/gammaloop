@@ -79,7 +79,9 @@ impl ParametricIntegrands {
             integrands: self
                 .integrands
                 .fallible_map(&mut map)?
-                .map_numerators(map)?,
+                .map_numerators(|tensor| {
+                    Ok(tensor.with_checked_expression(map(tensor.expression())?)?)
+                })?,
             cuts: self.cuts,
         })
     }
@@ -516,7 +518,8 @@ mod tests {
             inlining: symbolica::evaluate::InliningPolicy::Always,
             is_alias: false,
             lhs: function!(family, &scope, parameter),
-            rhs: Atom::var(parameter) + &coordinate,
+            rhs: crate::numerator::AppliedFeynmanRule::new(Atom::var(parameter) + &coordinate)?
+                .expr,
             args: vec![parameter.into()],
             tags: vec![scope.clone()],
         });

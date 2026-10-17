@@ -2,10 +2,7 @@ use feynkit_graph::{
     DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex, EdgeId, ExternalLeg,
     ExternalState, FeynmanDiagram, VertexId, VertexSlot,
 };
-use idenso::{
-    CookMode, CookSettings, color::ColorSimplifySettings, dirac::GammaSimplifySettings,
-    tensor::SymbolicTensor,
-};
+use idenso::{CookMode, CookSettings, color::ColorSimplifySettings, dirac::GammaSimplifySettings};
 use linnet::{
     half_edge::{
         HedgeGraph,
@@ -24,7 +21,7 @@ use crate::{
     uv::UltravioletGraph,
 };
 
-use super::{ParseGraph, string_utils::ToQuoted};
+use super::{NumeratorInterface, ParseGraph, string_utils::ToQuoted};
 
 impl Graph {
     pub fn to_dot_graph_with_settings(
@@ -38,15 +35,17 @@ impl Graph {
         };
 
         if settings.output_full_numerator {
-            let num = self
-                .numerator(&self.full_filter(), &self.empty_subgraph())
-                .get_single_atom()
-                .unwrap()
-                * &self.global_prefactor.num
-                * &self.global_prefactor.projector
-                * &self.overall_factor;
+            let numerator = self.numerator(&self.full_filter(), &self.empty_subgraph())?;
+            let prefactor = crate::numerator::AppliedFeynmanRule::new(
+                &self.global_prefactor.num
+                    * &self.global_prefactor.projector
+                    * &self.overall_factor,
+            )?;
             let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-            let num = SymbolicTensor::infer(cooking.try_cook(num.as_view())?)?
+            let num = numerator
+                .state
+                .expr
+                .multiply(&prefactor.expr)?
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: settings
                         .do_color_algebra
@@ -119,7 +118,7 @@ impl Graph {
             let added = builder.add_vertex(DiagramVertex {
                 name: vertex.name.value.clone(),
                 interaction: vertex.vertex_rule,
-                numerator: vertex.num.value.clone(),
+                numerator: NumeratorInterface::export(&vertex.num.value).0,
             });
             eyre::ensure!(
                 added.0 == id.0,
@@ -132,7 +131,7 @@ impl Graph {
                 eyre::eyre!("canonical cross-section export requires a model particle on edge {id}")
             })?;
             let mut edge = DiagramEdge::new(particle, data.orientation != Orientation::Undirected);
-            edge.numerator = data.data.num.value.clone();
+            edge.numerator = NumeratorInterface::export(&data.data.num.value).0;
             edge.is_dummy = data.data.is_dummy;
             let (source, target, source_slot, target_slot, state) = match pair {
                 HedgePair::Paired { source, sink } => (
@@ -244,6 +243,7 @@ impl Graph {
                 "mass",
                 "momtrop_edge_power",
                 "vakint_edge_power",
+                "num_interface",
             ] {
                 if let Some(value) = data.data.statements.get(name) {
                     canonical.graph[EdgeIndex(id.0)]
@@ -253,10 +253,12 @@ impl Graph {
             }
         }
         for (id, _, vertex) in runtime.iter_nodes() {
-            if let Some(dod) = vertex.statements.get("dod") {
-                canonical.graph[id]
-                    .statements
-                    .insert("dod".into(), dod.clone());
+            for name in ["dod", "num_interface"] {
+                if let Some(value) = vertex.statements.get(name) {
+                    canonical.graph[id]
+                        .statements
+                        .insert(name.into(), value.clone());
+                }
             }
         }
         Ok(canonical)

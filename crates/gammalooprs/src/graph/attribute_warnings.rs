@@ -57,6 +57,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
         "momtrop_edge_power",
         "name",
         "num",
+        "num_interface",
         "particle",
         "particle_id",
         "pdg",
@@ -93,7 +94,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
 
 const NODE_SPEC: AttributeSpec = AttributeSpec {
     entity: "node",
-    known: &["dod", "int_id", "name", "num"],
+    known: &["dod", "int_id", "name", "num", "num_interface"],
     ignored: &[
         "color",
         "fillcolor",

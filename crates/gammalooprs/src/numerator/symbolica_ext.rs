@@ -61,7 +61,8 @@ pub trait NumeratorAtomExt {
     /// coefficient keys. These must be symbols or functions occurring linearly,
     /// outside other functions and inverses. Their definitions and all dependent
     /// energy arguments remain the caller's responsibility; this method never
-    /// makes a Taylor-dependent numerator opaque.
+    /// makes a Taylor-dependent numerator opaque. Dirac reduction preserves the
+    /// caller's existing index and dimension encoding.
     fn series_preserving_factors(
         &self,
         variable: Symbol,
@@ -797,14 +798,30 @@ impl NumeratorAtomExt for AtomView<'_> {
             let cooking = idenso::CookSettings::indices()
                 .with_mode(idenso::CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let reduced =
-                idenso::tensor::SymbolicTensor::infer(cooking.try_cook(dependent.as_view())?)?
-                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                        gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
-                        contract: idenso::tensor::AlgebraContraction::Minimal,
-                        ..Default::default()
-                    })?;
-            dependent = cooking.uncook(reduced.expression().as_view());
+            let cooked = cooking.try_cook(dependent.as_view())?;
+            let already_native = cooked == dependent;
+            let reduced = idenso::tensor::SymbolicTensor::infer(cooked)?.simplify_algebra(
+                &idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    contract: idenso::tensor::AlgebraContraction::Minimal,
+                    ..Default::default()
+                },
+            )?;
+            dependent = if already_native {
+                reduced.into_expression()
+            } else {
+                // Restore only encoding introduced by this scalar-engine
+                // boundary. Native callers already own cooked index labels;
+                // decoding those would change their retained tensor interface.
+                let original_symbols = dependent.get_all_symbols(false);
+                reduced.expression().replace_map(|view, _, out| {
+                    if let AtomView::Var(variable) = view
+                        && !original_symbols.contains(&variable.get_symbol())
+                    {
+                        **out = cooking.uncook(view);
+                    }
+                })
+            };
         }
         // Keep native whole-product precision lifting and cross-arm zero
         // detection before regrouping the surviving coefficient families.
@@ -954,6 +971,80 @@ mod tests {
     use crate::{initialisation::test_initialise, numerator::aind::Aind, utils::GS};
 
     use super::NumeratorAtomExt;
+
+    #[test]
+    fn series_dirac_reduction_preserves_raw_native_and_mixed_index_encoding() {
+        test_initialise().unwrap();
+        let t = symbol!("dirac_index_series_t");
+        let variable = Atom::var(t);
+        let spectator = parse_lit!((dirac_index_a + dirac_index_b) ^ 7);
+        let dimension = parse_lit!(4 - 2 * dirac_index_epsilon);
+        let raw_left = Minkowski {}.to_symbolic([dimension.clone(), Atom::from(Aind::Hedge(7, 1))]);
+        let raw_right = Minkowski {}.to_symbolic([dimension, Atom::from(Aind::Hedge(9, 1))]);
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let native_left = cooking.try_cook(raw_left.as_view()).unwrap();
+        let native_right = cooking.try_cook(raw_right.as_view()).unwrap();
+        let symbolica::atom::AtomView::Fun(native_slot) = native_right.as_view() else {
+            panic!("cooked Minkowski slot")
+        };
+        let native_dimension = native_slot.iter().next().unwrap().to_owned();
+        let mixed_left =
+            Minkowski {}.to_symbolic([native_dimension.clone(), Atom::from(Aind::Hedge(7, 1))]);
+        let mixed_right =
+            Minkowski {}.to_symbolic([native_dimension, Atom::from(Aind::Hedge(9, 1))]);
+
+        for (left, right, native) in [
+            (&raw_left, &raw_right, false),
+            (&native_left, &native_right, true),
+            (&native_left, &mixed_right, false),
+            (&mixed_left, &mixed_right, false),
+        ] {
+            let symbolica::atom::AtomView::Fun(right_slot) = right.as_view() else {
+                panic!("Minkowski slot")
+            };
+            let compact = Minkowski {}.to_symbolic([right_slot.iter().next().unwrap()]);
+            let source = &spectator
+                * spenso::p!(left)
+                * spenso::trace!(
+                    idenso::bis!(4),
+                    idenso::gamma!(spenso::p!(&compact)) / &variable
+                        - idenso::gamma!(spenso::q!(&compact)),
+                    idenso::gamma!(right)
+                );
+            let mut dependent_trace = false;
+            source.visitor(&mut |view| {
+                if let symbolica::atom::AtomView::Fun(fun) = view
+                    && fun.get_symbol() == SPENSO_TAG.trace
+                    && view.contains_symbol(t)
+                {
+                    dependent_trace = true;
+                }
+                true
+            });
+            assert!(
+                dependent_trace,
+                "the Dirac prepass must see the Taylor variable"
+            );
+            let result = source
+                .series_preserving_factors(t, Atom::Zero.as_view(), 0, &[])
+                .unwrap();
+            let expected = &spectator
+                * spenso::p!(left)
+                * (Atom::num(4) * spenso::p!(right) / &variable - Atom::num(4) * spenso::q!(right));
+            assert!(result.contains(&spectator));
+            assert!(
+                (&result - &expected).collect_compact_factors().is_zero(),
+                "source: {source}; actual: {result}; expected: {expected}"
+            );
+            if native {
+                let tensor = idenso::tensor::SymbolicTensor::infer(source).unwrap();
+                let transformed = tensor.with_checked_expression(result).unwrap();
+                assert_eq!(tensor.structure(), transformed.structure());
+            }
+        }
+    }
 
     #[test]
     fn compact_factors_canonicalize_only_literal_zero_precision_metadata() {

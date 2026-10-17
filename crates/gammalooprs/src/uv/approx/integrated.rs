@@ -25,6 +25,7 @@ use spenso::{
         tags::SPENSO_TAG,
     },
     structure::{
+        partial::PartialStructure,
         representation::{Minkowski, RepName},
         slot::{DummyAind, ParseableAind, SlotMatcher},
     },
@@ -149,8 +150,10 @@ impl Rooted for IntegratedCts {
     }
 }
 
-fn simplify(integrand: &Atom) -> Result<Atom> {
-    if integrand.contains_symbol(AGS.sigma) {
+fn simplify(
+    integrand: &SymbolicTensor<PartialStructure>,
+) -> Result<SymbolicTensor<PartialStructure>> {
+    if integrand.expression().contains_symbol(AGS.sigma) {
         return Err(eyre!(
             "Sigma tensors are not supported by d-dimensional analytic UV numerator algebra"
         ));
@@ -158,9 +161,9 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
     // Only the analytically integrated UV subgraph reaches this boundary. The
     // shared tensor owner keeps compact scalar products and color spectators
     // factorized while closing spin chains, so powered dots need no temporary
-    // expansion/protection registry here. Vakint consumes the resolved Atom.
-    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-    let simplified = SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
+    // expansion/protection registry here. The Vakint bridge exports the resolved
+    // expression only after this carrier has completed native tensor algebra.
+    let simplified = integrand
         .simplify_algebra(&idenso::tensor::AlgebraSettings {
             gamma: Some(GammaSimplifySettings::canonical()),
             epsilon: true,
@@ -172,13 +175,13 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
             ..Default::default()
         })?;
     let dotted = simplified.to_dots()?;
-    let dotted = cooking.uncook(dotted.expression().as_view());
     debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #gamma;
-        log.expr = dotted,
-        "Shared Dirac simplification at the analytic UV Atom boundary"
+        log.expr = dotted.expression(),
+        "Shared Dirac simplification of the retained analytic UV tensor"
     );
 
     if dotted
+        .expression()
         .replace(function!(
             SPENSO_TAG.trace,
             Bispinor {}.to_symbolic([W_.d_]),
@@ -191,6 +194,7 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
         ));
     }
     if dotted
+        .expression()
         .replace(function!(
             SPENSO_TAG.trace,
             Minkowski {}.to_symbolic([W_.d_]),
@@ -244,8 +248,10 @@ impl Integrated<'_> {
                 for sector in integrand.active_sectors() {
                     let physical = sector
                         .atom
+                        .expression()
                         .replace(GS.integrated_loop_scale)
                         .with(Atom::one());
+                    let physical = sector.atom.with_algebra_result(physical)?;
                     let simplified = simplify(&physical)?;
                     if !simplified.is_zero() {
                         integrated += self
@@ -309,7 +315,7 @@ impl Integrated<'_> {
     )]
     fn integrate<S: ForestNodeLike>(
         &self,
-        integrand: &Atom,
+        integrand: &SymbolicTensor<PartialStructure>,
         sector: &FourDSector,
         ctx: &UVCtx<'_>,
         current: &S,
@@ -321,7 +327,7 @@ impl Integrated<'_> {
         let reduced_label = reduced.string_label();
         tracing::Span::current().record("reduced", reduced_label.as_str());
         debug_tags!(#uv, #integrated, #vakint, #trace, #input;
-            log.integrand = integrand,
+            log.integrand = integrand.expression(),
             "Integrating and truncating"
         );
         // Match the vacuum result to the unintegrated CFF loop measure through
@@ -775,7 +781,7 @@ impl Integrated<'_> {
             "Raw post vakint "
         );
 
-        let mut res = Self::restore_numerator(res, current.topo_order());
+        let res = Self::restore_numerator(res, current.topo_order());
 
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         // Close internal momentum pairs before independently integrated factors
@@ -788,29 +794,27 @@ impl Integrated<'_> {
                 ..Default::default()
             })?
             .to_dots()?;
-        res = Self::dimensionally_regularized(&cooking.uncook(dotted.expression().as_view()));
+        let regulated =
+            dotted.with_algebra_result(Self::dimensionally_regularized(dotted.expression()))?;
 
         debug_tags!(#uv, #integrated, #vakint, #inspect, #trace, #replace;
-            log.res = res,
+            log.res = regulated.expression(),
             "Replaced post vakint "
         );
 
         // This strips as many dummies as possible after undoing chains and traces,
         // so that terms can merge later on.
-        let collected = SymbolicTensor::infer(cooking.try_cook(res.as_view())?)?.contract(
-            ContractSettings {
-                representations: Some(&[Bispinor {}.into()]),
-                metrics: false,
-                rank_one: false,
-                collect_chains: true,
-                collect_traces: true,
-                ..Default::default()
-            },
-        )?;
+        let collected = regulated.contract(ContractSettings {
+            representations: Some(&[Bispinor {}.into()]),
+            metrics: false,
+            rank_one: false,
+            collect_chains: true,
+            collect_traces: true,
+            ..Default::default()
+        })?;
         // Collection already returns isolated one-factor words in indexed form.
-        res = cooking.uncook(collected.expression().as_view());
         debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #collect;
-            log.expr = res,
+            log.expr = collected.expression(),
             "Integrated UV cleanup through shared chain collection"
         );
 
@@ -818,7 +822,7 @@ impl Integrated<'_> {
         // Normalize the fully integrated UV subgraph before Laurent projection
         // and reinsertion: identical scalar masters can arrive as 2*(A+B) or
         // 2*A+2*B. No cograph numerator is present at this analytic boundary.
-        Ok(res.expand())
+        Ok(cooking.uncook(collected.expression().as_view()).expand())
     }
 
     fn simplify_projected_numerator(
@@ -835,9 +839,14 @@ impl Integrated<'_> {
         // interface before contraction; the scalar-only Vakint dot parser
         // cannot account for ports carried by those native tensor leaves.
         let numerator = Self::restore_numerator(numerator.clone(), topology_order);
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
         let numerator = simplify(&numerator)?;
-        Self::ensure_resolved_lorentz_contractions(&numerator)?;
-        let numerator = Self::dimensionally_regularized(&numerator)
+        Self::ensure_resolved_lorentz_contractions(numerator.expression())?;
+        let numerator = numerator
+            .with_algebra_result(Self::dimensionally_regularized(numerator.expression()))?;
+        let materialized = cooking
+            .uncook(numerator.expression().as_view())
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
                     schoonschip: SchoonschipExpansionMode {
@@ -851,6 +860,8 @@ impl Integrated<'_> {
                 ..Default::default()
             })?
             .simple_execute::<()>()?;
+        let numerator =
+            numerator.with_checked_expression(cooking.try_cook(materialized.as_view())?)?;
         Self::to_vakint_numerator(&numerator)
     }
 
@@ -1075,14 +1086,14 @@ impl Integrated<'_> {
         res
     }
 
-    fn to_vakint_numerator(numerator: &Atom) -> Result<Atom> {
+    fn to_vakint_numerator(numerator: &SymbolicTensor<PartialStructure>) -> Result<Atom> {
         // A concrete component is a fixed-vector projection, not an Einstein
         // index. Keep repeated temporal/spatial components distinct from dummy
         // multiplicity before Vakint supplies its formal-dimensional slots.
         let representation = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
         let slots = SlotMatcher::default();
         let mut component_error = None;
-        let numerator = numerator.replace_map(|view, _, output| {
+        let expression = numerator.expression().replace_map(|view, _, output| {
             let AtomView::Fun(momentum) = view else {
                 return;
             };
@@ -1119,7 +1130,7 @@ impl Integrated<'_> {
         // their vector leaves. The shared notation owner preserves powers and
         // indexed contractions without opening the surrounding numerator.
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let dotted = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?.to_dots()?;
+        let dotted = numerator.with_checked_expression(expression)?.to_dots()?;
         let numerator = cooking.uncook(dotted.expression().as_view());
         // Vakint's existing bridge carries opaque tensor slots through its
         // Lorentz projectors. Keep the actual leaves: wrapping a duplicate body
@@ -1174,7 +1185,7 @@ pub(crate) fn to_vakint_integrand<
     S: SubGraphLike + SubSetLike<Base = SuBitGraph>,
     SS: SubGraphLike,
 >(
-    integrand: &Atom,
+    integrand: &SymbolicTensor<PartialStructure>,
     graph: &HedgeGraph<E, V, H>,
     reduced: &S,
     dependent_subgraph: &SS,
@@ -1182,6 +1193,13 @@ pub(crate) fn to_vakint_integrand<
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
 ) -> Result<VakintExpression> {
+    let additional_normalization =
+        SymbolicTensor::infer(parse!(&settings.additional_normalization))?;
+    if !additional_normalization.is_scalar() {
+        return Err(eyre!(
+            "additional_normalization must have a scalar tensor interface"
+        ));
+    }
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
     let source_lmbs = active_components
@@ -1199,8 +1217,8 @@ pub(crate) fn to_vakint_integrand<
     // distinct dummy indices during Lorentz preparation. Keep the kinematic
     // coefficients factorized throughout this independent color pass.
     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-    let input = GS.erase_uv_momentum_provenance(integrand);
-    let color = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?.simplify_algebra(
+    let input = GS.erase_uv_momentum_provenance(integrand.expression());
+    let color = integrand.with_checked_expression(input)?.simplify_algebra(
         &idenso::tensor::AlgebraSettings {
             color: Some(ColorSimplifySettings {
                 ..Default::default()
@@ -1253,13 +1271,14 @@ pub(crate) fn to_vakint_integrand<
     // Nested counterterms can expose a boundary metric next to the propagator
     // metric of the reduced graph. Contract those metric-only structures before
     // the expression is split into Vakint terms.
-    let metric_contracted = SymbolicTensor::infer(cooking.try_cook(integrand_vakint.as_view())?)?
+    let metric_contracted = color
+        .with_checked_expression(cooking.try_cook(integrand_vakint.as_view())?)?
         .contract(ContractSettings {
-        rank_one: false,
-        collect_chains: false,
-        collect_traces: false,
-        ..Default::default()
-    })?;
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?;
     integrand_vakint = cooking.uncook(metric_contracted.expression().as_view());
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_simplify_metrics",
@@ -1706,7 +1725,8 @@ pub(crate) fn to_vakint_integrand<
         let momentum_solution =
             VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
                 .wrap_err("could not solve momentum system for Vakint integrand")?;
-        t.numerator = momentum_solution.rewrite_numerator(&t.numerator)?;
+        let numerator = SymbolicTensor::infer(cooking.try_cook(t.numerator.as_view())?)?;
+        let mut numerator = momentum_solution.rewrite_numerator(&numerator)?;
         t.integral = momentum_solution.rewrite_integral(&t.integral, &add_additional_args);
         momentum_solution.ensure_free_variables_eliminated(
             term_index,
@@ -1717,7 +1737,7 @@ pub(crate) fn to_vakint_integrand<
         momentum_solution.ensure_free_variables_eliminated(
             term_index,
             "numerator",
-            &t.numerator,
+            numerator.expression(),
             &add_additional_args,
         )?;
         let retained_hard_coordinates = retained_loop_edges
@@ -1727,7 +1747,7 @@ pub(crate) fn to_vakint_integrand<
         momentum_solution.ensure_variables_eliminated(
             term_index,
             "numerator",
-            &t.numerator,
+            numerator.expression(),
             &retained_hard_coordinates,
             &add_additional_args,
         )?;
@@ -1737,7 +1757,7 @@ pub(crate) fn to_vakint_integrand<
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
             log.integral = t.integral,
-            log.numerator = t.numerator,
+            log.numerator = numerator.expression(),
             "Vakint trace"
         );
 
@@ -1747,30 +1767,30 @@ pub(crate) fn to_vakint_integrand<
         //     term
         // );
 
-        let additional_normalization = parse!(&settings.additional_normalization);
-        t.numerator *= additional_normalization.clone().pow(nloops);
+        let normalization =
+            additional_normalization.pow(&SymbolicTensor::infer(Atom::num(nloops))?)?;
+        numerator = numerator.multiply(&normalization)?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_loop_normalization",
             term_index = %term_index,
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
             nloops = nloops,
-            log.additional_normalization = additional_normalization,
-            log.numerator = t.numerator,
+            log.additional_normalization = additional_normalization.expression(),
+            log.numerator = numerator.expression(),
             "Vakint trace after loop normalization"
         );
 
         // Vakint needs explicit tensor indices; only translate metric shorthands
         // to dot notation here, without reintroducing Schoonschip rank-1 factors.
-        let dotted = SymbolicTensor::infer(cooking.try_cook(t.numerator.as_view())?)?.to_dots()?;
-        t.numerator = cooking.uncook(dotted.expression().as_view());
+        let numerator = numerator.to_dots()?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_metric_shorthand_to_dot",
             term_index = %term_index,
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
             log.integral = t.integral,
-            log.numerator = t.numerator,
+            log.numerator = numerator.expression(),
             "Vakint trace"
         );
         t.integral = t
@@ -1779,7 +1799,7 @@ pub(crate) fn to_vakint_integrand<
             .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___));
-        t.numerator = Integrated::to_vakint_numerator(&t.numerator)?;
+        t.numerator = Integrated::to_vakint_numerator(&numerator)?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_vakint_symbols",
             term_index = %term_index,
@@ -1926,21 +1946,24 @@ impl VakintMomentumSolution {
         Ok(())
     }
 
-    fn rewrite_numerator(&self, numerator: &Atom) -> Result<Atom> {
+    fn rewrite_numerator(
+        &self,
+        numerator: &SymbolicTensor<PartialStructure>,
+    ) -> Result<SymbolicTensor<PartialStructure>> {
         // Production numerators have already passed metric-only preparation.
         // Affine momentum replacement preserves port labels and introduces no
         // metric edges. Keep vectors explicit while normalizing the new products.
-        let numerator = numerator.replace_multiple(&self.replacements);
-        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let normalized = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?.contract(
-            ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            },
-        )?;
-        Ok(cooking.uncook(normalized.expression().as_view()))
+        let expression = numerator.expression().replace_multiple(&self.replacements);
+        let normalized =
+            numerator
+                .with_checked_expression(expression)?
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?;
+        Ok(normalized)
     }
 
     fn rewrite_integral(&self, integral: &Atom, add_additional_args: &[Replacement]) -> Atom {
@@ -2004,6 +2027,47 @@ mod tests {
 
     use crate::{initialisation::test_initialise, utils::symbolica_ext::Q_I};
 
+    // Fixtures enter at the source-expression boundary; production sectors
+    // already own an admitted tensor and never pass through these adapters.
+    fn simplify(expression: &Atom) -> Result<Atom> {
+        use crate::numerator::{AppliedFeynmanRule, GetSingleAtom};
+        let input = AppliedFeynmanRule::new(expression.clone())?;
+        let output = super::simplify(&input.expr)?;
+        Ok(AppliedFeynmanRule::from_tensor(output).get_single_atom()?)
+    }
+
+    fn to_vakint_numerator(expression: &Atom) -> Result<Atom> {
+        let input = crate::numerator::AppliedFeynmanRule::new(expression.clone())?;
+        Integrated::to_vakint_numerator(&input.expr)
+    }
+
+    fn to_vakint_integrand<
+        E: UVE,
+        V,
+        H,
+        S: SubGraphLike + SubSetLike<Base = SuBitGraph>,
+        SS: SubGraphLike,
+    >(
+        expression: &Atom,
+        graph: &HedgeGraph<E, V, H>,
+        reduced: &S,
+        dependent_subgraph: &SS,
+        active_components: &[(SuBitGraph, SuBitGraph, LoopMomentumBasis)],
+        settings: &VakintSettings,
+        substitute_masses_to_m_uv: bool,
+    ) -> Result<VakintExpression> {
+        let input = crate::numerator::AppliedFeynmanRule::new(expression.clone())?;
+        super::to_vakint_integrand(
+            &input.expr,
+            graph,
+            reduced,
+            dependent_subgraph,
+            active_components,
+            settings,
+            substitute_masses_to_m_uv,
+        )
+    }
+
     use super::*;
 
     #[test]
@@ -2037,7 +2101,7 @@ mod tests {
                 );
             let mut term = vakint::VakintTerm {
                 integral: vakint::vakint_parse!("topo(I1L(component_mass_squared,3))").unwrap(),
-                numerator: Integrated::to_vakint_numerator(&source).unwrap(),
+                numerator: to_vakint_numerator(&source).unwrap(),
                 vectors: vec![("k".into(), 1)],
             };
             term.tensor_reduce(vakint, &settings).unwrap();
@@ -2138,7 +2202,7 @@ mod tests {
                             * &source_contraction
                             * &second_dot
                             * function!(SPENSO_TAG.dot, left, right).pow(power);
-                        let converted = Integrated::to_vakint_numerator(&source).unwrap();
+                        let converted = to_vakint_numerator(&source).unwrap();
                         let expected = &spectator
                             * function!(vakint::symbols::S.k, 7, &reserved)
                             * function!(reserved_vector, &reserved)
@@ -2154,7 +2218,7 @@ mod tests {
                         );
                         assert!(!converted.contains_symbol(SPENSO_TAG.dot));
                         assert_eq!(
-                            Integrated::to_vakint_numerator(&Integrated::restore_numerator(
+                            to_vakint_numerator(&Integrated::restore_numerator(
                                 converted.clone(),
                                 0
                             ))
@@ -2222,7 +2286,7 @@ mod tests {
             * function!(SPENSO_TAG.dot, &k, &k)
             * (Atom::num(3) * &mass * function!(ETS.metric, &a, &c)
                 + function!(AGS.gamma, &a, &c, &p));
-        let expected = Integrated::to_vakint_numerator(&reference)?;
+        let expected = to_vakint_numerator(&reference)?;
         // FeynKit consumes the native compact fixed-vector form directly.
         // The independent cross-backend comparison also materializes exactly
         // those vector arguments, as required by AlphaLoop's existing input
@@ -2242,7 +2306,7 @@ mod tests {
                         ..VakintSettings::default().true_settings()
                     };
                     let numerator = if compact_fixed_vectors {
-                        Integrated::to_vakint_numerator(&source)?
+                        to_vakint_numerator(&source)?
                     } else {
                         source
                             .undo_dots::<Aind>()?
@@ -2376,7 +2440,7 @@ mod tests {
         let d_minus_four = Atom::var(GS.dim) - Atom::num(4);
         for power in 0..=2 {
             let numerator = &spectator * d_minus_four.pow(power) * &spin;
-            let projected = Integrated::to_vakint_numerator(&numerator)?;
+            let projected = to_vakint_numerator(&numerator)?;
             let resolved = integrated.simplify_projected_numerator(&projected, 0)?;
             let expected = &spectator * (Atom::num(-2) * &epsilon).pow(power) * &identity;
             // A literal equality certifies both slash(v)^2 = 1 and retained
@@ -2533,7 +2597,7 @@ mod tests {
                             * function!(AGS.gamma, &b, if closed { &a } else { &c }, &nu);
                         let mut term = vakint::VakintTerm {
                             integral: vakint::vakint_parse!("topo(I2L(mUVsq,1,1,1))").unwrap(),
-                            numerator: Integrated::to_vakint_numerator(&numerator).unwrap(),
+                            numerator: to_vakint_numerator(&numerator).unwrap(),
                             vectors: vec![("k".into(), 1), ("k".into(), 2)],
                         };
                         term.tensor_reduce(&vakint, &settings).unwrap();
@@ -2592,7 +2656,7 @@ mod tests {
                         * function!(AGS.gamma, &b, if closed { &a } else { &c }, &nu);
                     let mut term = vakint::VakintTerm {
                         integral: vakint::vakint_parse!("topo(I2L(mUVsq,1,1,1))").unwrap(),
-                        numerator: Integrated::to_vakint_numerator(&numerator).unwrap(),
+                        numerator: to_vakint_numerator(&numerator).unwrap(),
                         vectors: vec![("k".into(), 1), ("k".into(), 2)],
                     };
                     term.tensor_reduce(&vakint, &settings).unwrap();
@@ -2690,7 +2754,7 @@ mod tests {
                 * function!(AGS.gamma, &b, &a, &nu);
             let mut projected = vakint::VakintTerm {
                 integral: vakint::vakint_parse!("topo(I2L(mUVsq,1,1,1))").unwrap(),
-                numerator: Integrated::to_vakint_numerator(&numerator).unwrap(),
+                numerator: to_vakint_numerator(&numerator).unwrap(),
                 vectors: vec![("k".into(), 1), ("k".into(), 2)],
             };
             projected.tensor_reduce(&vakint, &settings).unwrap();
@@ -2783,11 +2847,8 @@ mod tests {
                     restored, expected,
                     "label={label:?}, represented={represented_left}"
                 );
-                let canonical_backend = Integrated::to_vakint_numerator(&expected)?;
-                assert_eq!(
-                    Integrated::to_vakint_numerator(&restored)?,
-                    canonical_backend
-                );
+                let canonical_backend = to_vakint_numerator(&expected)?;
+                assert_eq!(to_vakint_numerator(&restored)?, canonical_backend);
                 assert_eq!(
                     Integrated::restore_numerator(canonical_backend, 9),
                     expected
@@ -2908,9 +2969,9 @@ mod tests {
                 let restored = Integrated::restore_numerator(source.clone(), 0);
                 let admitted = SymbolicTensor::infer(restored.clone()).unwrap();
                 assert_eq!(admitted.expression(), &restored);
-                assert_eq!(Integrated::to_vakint_numerator(&restored).unwrap(), source);
+                assert_eq!(to_vakint_numerator(&restored).unwrap(), source);
                 assert_eq!(
-                    Integrated::to_vakint_numerator(&simplify(&restored).unwrap()).unwrap(),
+                    to_vakint_numerator(&simplify(&restored).unwrap()).unwrap(),
                     source
                 );
             }
@@ -3205,7 +3266,7 @@ mod tests {
             function!(GS.loop_mom, 1, mink.clone())
         );
 
-        let converted = Integrated::to_vakint_numerator(&numerator).unwrap();
+        let converted = to_vakint_numerator(&numerator).unwrap();
 
         assert_eq!(
             converted,
@@ -3255,10 +3316,9 @@ mod tests {
                     ..Default::default()
                 })
                 .unwrap();
-            let prepared = cooking.uncook(prepared.expression().as_view());
             let rewritten = solution.rewrite_numerator(&prepared).unwrap();
             assert_eq!(
-                rewritten,
+                cooking.uncook(rewritten.expression().as_view()),
                 &spectator * ((&k + &p) * &p + Atom::one()).pow(power)
             );
         }
@@ -3400,6 +3460,64 @@ mod tests {
         let expected = Atom::i() / 2 * color_cas!(2, coad!(8)) * index * g!(&a, &d) * coefficient;
         assert_eq!(actual.0.len(), 1);
         assert_eq!(actual.0[0].numerator, expected);
+    }
+
+    #[test]
+    fn vakint_additional_normalization_requires_a_scalar_interface() {
+        use crate::{finalized_runtime_dot, graph::Graph};
+
+        test_initialise().unwrap();
+        let graph: Graph = finalized_runtime_dot!(digraph normalization_tadpole {
+            projector=1
+            edge [num=1 mass=2]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0 sink="{ufo_order:0}"]
+            a -> a [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            a -> outgoing [id=2 source="{ufo_order:3}"]
+        })
+        .unwrap();
+        let momentum = function!(GS.emr_mom, 1);
+        let vector = function!(GS.emr_mom, 1, Minkowski {}.new_rep(GS.dim).to_symbolic([]));
+        let denominator = function!(
+            GS.den,
+            1,
+            momentum,
+            4,
+            function!(SPENSO_TAG.dot, &vector, &vector) - 4
+        );
+        let run = |normalization: &str| {
+            to_vakint_integrand(
+                &denominator.pow(-3),
+                &graph,
+                &graph.full_filter(),
+                &graph.empty_subgraph::<SuBitGraph>(),
+                &[(
+                    graph.full_filter(),
+                    graph.full_filter(),
+                    graph.loop_momentum_basis.clone(),
+                )],
+                &VakintSettings {
+                    additional_normalization: normalization.to_owned(),
+                    ..Default::default()
+                },
+                false,
+            )
+        };
+        let baseline = run("1").unwrap();
+        let normalized = run("3").unwrap();
+        assert_eq!(baseline.0.len(), 1);
+        assert_eq!(normalized.0.len(), 1);
+        assert_eq!(normalized.0[0].integral, baseline.0[0].integral);
+        assert_eq!(normalized.0[0].numerator, 3 * &baseline.0[0].numerator);
+        let error = run("spenso::g(spenso::mink(4,75101),spenso::mink(4,75103))")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("additional_normalization must have a scalar tensor interface"),
+            "{error}"
+        );
     }
 
     #[test]

@@ -13,7 +13,7 @@ use crate::{
     cff::expression::OrientationID,
     graph::{FeynmanGraph, Graph},
     initialisation::test_initialise,
-    integrands::process::param_builder::FnMapEntry,
+    integrands::process::param_builder::NumeratorDefinition,
     model::{InputParamCard, ModelGammaLoopExt},
     numerator::pole_certificate::{ScalarPoleCertificate, ScalarPoleFailure},
     settings::global::{GenerationSettings, ThresholdSubtractionSettings},
@@ -34,7 +34,7 @@ struct Capture {
     loop_edges: String,
     key: DirectResidueKey,
     cuts: Vec<String>,
-    numerators: Vec<Arc<FnMapEntry>>,
+    numerators: Vec<Arc<NumeratorDefinition>>,
     before: Atom,
     after: Atom,
 }
@@ -105,7 +105,7 @@ pub(super) fn record<S: ForestNodeLike>(
         + integrands
             .numerators()
             .iter()
-            .map(|entry| entry.rhs.as_view().get_byte_size())
+            .map(|entry| entry.rhs.expression().as_view().get_byte_size())
             .sum::<usize>();
     if recording.captures.len() == MAX_CAPTURES
         || bytes > MAX_CAPTURE_BYTES.saturating_sub(recording.bytes)
@@ -354,6 +354,10 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
     let mut removed_factor_pairs = 0usize;
     let mut zero_pairs = 0usize;
     let mut unchanged_pairs = 0usize;
+    #[allow(
+        clippy::mutable_key_type,
+        reason = "shared bindings are immutable; SymbolicTensor Hash/Eq exclude mutable proof caches"
+    )]
     let mut definitions = std::collections::HashSet::new();
     for (root_id, capture) in recording.captures.iter().enumerate() {
         assert_eq!(

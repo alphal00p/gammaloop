@@ -2129,6 +2129,9 @@ fn scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory() -> col
     // Scalar rule legs are interchangeable. Compare the colored physics graph,
     // its local factors, both sides of every initial/physical/threshold cut and its
     // overall coefficient; omit only labels, routing coordinates and UFO slots.
+    let cooking = idenso::CookSettings::indices()
+        .with_mode(idenso::CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
     let key = |graph: &Graph,
                cuts: &[FinalizedCut],
                thresholds: &[FinalizedTopologyThresholdCandidate]| {
@@ -2140,7 +2143,9 @@ fn scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory() -> col
                 let color = format!(
                     "vertex:{:?}:{}:{}",
                     data.vertex_rule,
-                    data.num.value.to_plain_string(),
+                    cooking
+                        .uncook(data.num.value.expression().as_view())
+                        .to_plain_string(),
                     data.dod.value
                 );
                 (node, colored.add_node(color))
@@ -2150,7 +2155,9 @@ fn scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory() -> col
             let color = format!(
                 "edge:{:?}:{}:{}:{}",
                 edge.data.particle_pdg_code(&graph.model),
-                edge.data.num.value.to_plain_string(),
+                cooking
+                    .uncook(edge.data.num.value.expression().as_view())
+                    .to_plain_string(),
                 edge.data.dod.value,
                 edge.data.is_dummy
             );

@@ -2202,7 +2202,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
                 .derived_data
                 .all_mighty_numerators
                 .iter()
-                .map(|entry| &entry.rhs),
+                .map(|entry| entry.rhs.expression()),
         ) {
             assert!(!expression.contains_symbol(GS.uv_integrate));
             let _ = expression.replace_map(|view, _, _| {

@@ -342,7 +342,7 @@ fn retained_scalars_compose_with_factorized_parameterized_numerators() -> Result
     let family = symbol!("gammalooprs::uv::numerator_family");
     let definition = Arc::new(FnMapEntry {
         lhs: function!(family, &tag, s),
-        rhs: &numerator * &jet,
+        rhs: crate::numerator::AppliedFeynmanRule::new(&numerator * &jet)?.expr,
         args: vec![s.into()],
         tags: vec![tag.clone()],
         inlining: InliningPolicy::Always,
@@ -381,8 +381,8 @@ fn retained_scalars_compose_with_factorized_parameterized_numerators() -> Result
                     .lhs
                     .contains_symbol(symbol!("gammalooprs::uv::scalar_series_source"))
             );
-            assert!(entry.rhs.contains(numerator.as_view()));
-            assert!(!entry.rhs.contains_symbol(Symbol::DERIVATIVE));
+            assert!(entry.rhs.expression().contains(numerator.as_view()));
+            assert!(!entry.rhs.expression().contains_symbol(Symbol::DERIVATIVE));
         }
         let resolved = integrands.resolved()?;
         let actual = resolved.iter().next().unwrap().1;

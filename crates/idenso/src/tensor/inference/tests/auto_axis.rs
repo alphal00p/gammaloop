@@ -12,6 +12,124 @@ use spenso::{
 use symbolica::function;
 
 #[test]
+fn declared_parts_check_rank_and_open_order_without_replaying_callbacks() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    crate::test_support::test_initialize();
+    let mink = LibraryRep::from(Minkowski {}).new_rep(4);
+    let euc = LibraryRep::from(Euclidean {}).new_rep(2);
+    let expression = spenso::bracket!(
+        function!(
+            spenso::vector_symbol!("declared_parts::a"),
+            euc.to_symbolic([])
+        ),
+        function!(
+            spenso::vector_symbol!("declared_parts::b"),
+            mink.to_symbolic([])
+        ),
+    );
+    let source = SymbolicTensor::infer(expression.clone()).unwrap();
+    let admitted =
+        SymbolicTensor::from_declared_parts(expression.clone(), source.structure.clone()).unwrap();
+    assert_eq!(admitted.expression(), &expression);
+    assert_eq!(admitted.structure, source.structure);
+    assert_eq!(admitted.proofs.validated.get(), Some(&true));
+    let reversed =
+        PartialStructure::from_logical_slots(source.structure.logical_slots().into_iter().rev());
+    assert!(SymbolicTensor::from_declared_parts(expression.clone(), reversed).is_err());
+    assert!(
+        SymbolicTensor::from_declared_parts(expression, PartialStructure::from_logical_slots([]))
+            .is_err()
+    );
+    assert!(SymbolicTensor::from_declared_parts(Atom::one(), source.structure.clone()).is_err());
+    let zero = SymbolicTensor::from_declared_parts(Atom::Zero, source.structure.clone()).unwrap();
+    assert_eq!(zero.structure, source.structure);
+    assert_eq!(zero.rank(), 2);
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let head = spenso::tensor_symbol!(
+        "declared_parts::callback",
+        norm = move |_, _| {
+            observed.fetch_add(1, Ordering::Relaxed);
+        }
+    );
+    let slot = mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(76311));
+    let expression = function!(head, slot.to_atom());
+    let structure = PartialStructure::from_logical_slots([slot
+        .rep()
+        .slot(PartialIndex::Explicit(slot.aind()))]);
+    calls.store(0, Ordering::Relaxed);
+    let admitted = SymbolicTensor::from_declared_parts(expression, structure).unwrap();
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+    assert_eq!(admitted.proofs.validated.get(), Some(&true));
+}
+
+#[test]
+fn one_affine_vector_rewrite_keeps_other_anonymous_ports_anchored() {
+    crate::test_support::test_initialize();
+    let dimension = Atom::var(symbolica::symbol!("affine_auto_vector::D"));
+    let rep = LibraryRep::from(Minkowski {}).to_symbolic([dimension]);
+    let q = spenso::tensor_symbol!("affine_auto_vector::Q");
+    let k = spenso::tensor_symbol!("affine_auto_vector::K");
+    let spatial = spenso::tensor_symbol!("affine_auto_vector::Q3");
+    let energy = Atom::var(symbolica::symbol!("affine_auto_vector::E"));
+    let coordinate = function!(AIND_SYMBOLS.cind, 1);
+    let external = function!(q, 0, &rep);
+    let source = SymbolicTensor::infer(
+        &external * (function!(q, 1, &rep) + function!(k, 0, &rep)) * function!(k, 0, &coordinate),
+    )
+    .unwrap();
+    assert_eq!(source.rank(), 2);
+    assert_eq!(source.structure.open_positions().len(), 2);
+
+    let slot = function!(LibraryRep::from(Minkowski {}).symbol(), crate::W_.x___);
+    let image = function!(spatial, 1, &slot)
+        + &energy * function!(ETS.delta, function!(AIND_SYMBOLS.cind, 0), &slot);
+    let map = |atom: &Atom| {
+        atom.replace(function!(q, 1, &slot))
+            .with(image.clone())
+            .replace(function!(k, 0, &slot))
+            .with(image.clone())
+            .replace(function!(k, 0, &coordinate))
+            .with(function!(q, 1, &coordinate))
+    };
+    let mapped = map(source.expression());
+    let result = source.with_checked_expression(mapped.clone()).unwrap();
+    assert_eq!(result.structure, source.structure);
+    assert_eq!(result.expression(), &mapped);
+    assert_eq!(
+        result.with_checked_expression(mapped.clone()).unwrap(),
+        result
+    );
+    let bindings = HashMap::from([
+        (0, AbstractIndex::Normal(76103)),
+        (1, AbstractIndex::Normal(76107)),
+    ]);
+    assert_eq!(
+        result.materialize_interface_ports(&bindings).unwrap(),
+        map(&source.materialize_interface_ports(&bindings).unwrap()),
+        "mapping before and after assigning the two original axes must agree",
+    );
+
+    let changed_both = mapped
+        .replace(external.to_pattern())
+        .with(function!(q, 2, &rep));
+    assert!(source.with_checked_expression(changed_both).is_err());
+    let wrong_space = mapped.replace(function!(spatial, 1, &rep)).with(function!(
+        spatial,
+        1,
+        Minkowski {}.new_rep(4).to_symbolic([])
+    ));
+    assert!(source.with_checked_expression(wrong_space).is_err());
+    let wrong_rank = mapped.replace(external.to_pattern()).with(Atom::one());
+    assert!(source.with_checked_expression(wrong_rank).is_err());
+}
+
+#[test]
 fn changed_auto_axis_order_cannot_relabel_asymmetric_components() {
     crate::test_support::test_initialize();
     type Tensor = ParamTensor<ShadowedStructure<AbstractIndex>>;

@@ -99,7 +99,7 @@ pub(crate) enum ReductionPolicy {
     },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ReductionRecord {
     // Every entry describes this exact immutable expression. A no-op
     // under another policy preserves those facts; any domain change drops them.

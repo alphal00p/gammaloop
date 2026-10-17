@@ -1083,7 +1083,7 @@ impl Forests {
                     .expect("a non-root operation has a cover"),
             ) + 1;
             return Ok((
-                Local4dCts::from_full_product(full_components),
+                Local4dCts::from_full_product(full_components)?,
                 IntegratedCts::factorized_product(integrated_components, depth)?,
             ));
         }
@@ -1316,7 +1316,7 @@ impl Forests {
                 cover = %cover,
                 source = %source,
                 is_union = self.graph.is_disjoint_union(nidx),
-                log.local_4d = local_4d.atom(),
+                log.local_4d = local_4d.atom().expression(),
                 log.integrated_pole = integrated.physical_pole_atom(),
                 log.integrated_finite = integrated.physical_finite_counterterm_atom(),
                 "Computed hedge-poset 4D node"
@@ -1416,20 +1416,11 @@ impl Forests {
                     .require(operation)?
                     .cut(operation, cutset)?
                     .final_integrands
-                    .map_expressions(|integrand| {
-                        let color = TensorCollectFilter::Reps([
-                            ColorAdjoint {}.into(),
-                            ColorFundamental {}.into(),
-                            ColorSextet {}.into(),
-                        ]);
-                        let cooking = CookSettings::indices()
-                            .with_mode(CookMode::ReversibleEncoding)
-                            .with_representation_payloads(true, true);
-                        let collected =
-                            SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
-                                .collect(color)?;
-                        Ok(cooking.uncook(collected.expression().as_view()))
-                    })?;
+                    .collect(TensorCollectFilter::Reps([
+                        ColorAdjoint {}.into(),
+                        ColorFundamental {}.into(),
+                        ColorSextet {}.into(),
+                    ]))?;
                 sum = Some(match sum {
                     Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                         format!("while aggregating hedge-poset term {operation} for cut {cutset:?}")
@@ -1518,7 +1509,7 @@ impl Forests {
                     node_key: operation.to_string(),
                     term_index: 0,
                     residue_index: crate::cff::CutCFFIndex::new_all_none(),
-                    numerator: local_4d.atom().clone(),
+                    numerator: local_4d.atom().expression().clone(),
                     forest_provenance: Some(self.node_export_4d_provenance(nidx, local_4d)),
                 })
             })
@@ -2254,7 +2245,7 @@ mod tests {
                     .into_iter()
                     .map(|component| forests.recursion_input_4d(component))
                     .collect::<Result<Vec<_>>>()?,
-            );
+            )?;
             let operation = &forests.graph[union];
             let local = forests
                 .compute_store
@@ -2263,7 +2254,11 @@ mod tests {
 
             // Compare the complete typed union expression; no per-cut parent cache
             // or component-path replay participates.
-            assert!((local.atom().collect_factors() - expected.atom().collect_factors()).is_zero());
+            assert!(
+                (local.atom().expression().collect_factors()
+                    - expected.atom().expression().collect_factors())
+                .is_zero()
+            );
         }
         Ok(())
     }
@@ -2532,14 +2527,14 @@ mod tests {
                         !completed.atom().is_zero(),
                         "each disconnected soft component must be completed before the join"
                     );
-                    Ok(product * completed.atom())
+                    Ok(product * completed.atom().expression())
                 })?;
         let operation = &forests.graph[union];
         let actual = forests
             .compute_store
             .require(operation)?
             .local_4d(operation)?;
-        assert_eq!(actual.atom(), &expected);
+        assert_eq!(actual.atom().expression(), &expected);
         let provenance = forests.node_export_4d_provenance(union, actual);
         assert_eq!(provenance.node.parent_keys.len(), 2);
         let UVForestLocalProvenance::FourD {
@@ -3438,7 +3433,7 @@ mod tests {
         let (current, given) = f.wood.current_given_pair(edge, step_order);
         let reduced = current.reduced_subgraph(&given);
         let numerator = spectacles
-            .numerator(&reduced, given.subgraph())
+            .numerator(&reduced, given.subgraph())?
             .get_single_atom()
             .expect("the scalar reduced numerator is available");
         assert!(!numerator.contains_symbol(GS.emr_mom));
@@ -3684,7 +3679,7 @@ mod tests {
             &collective_source,
             &divergent,
         )?;
-        let expected = atomic.atom() + nested.atom();
+        let expected = atomic.atom().expression() + nested.atom().expression();
         let mut forests = wood.unfold();
         forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings.uv)?;
         let actual = forests
@@ -3697,7 +3692,8 @@ mod tests {
                         .compute_store
                         .require(operation)?
                         .local_4d(operation)?
-                        .atom())
+                        .atom()
+                        .expression())
             })?;
         // These vacuum components have no nonzero crown shifts. Put both
         // complete coefficients into the same formal K coordinates, retaining
@@ -3960,7 +3956,9 @@ mod tests {
             // Their complete contributions therefore cancel even if a forest
             // representation includes or removes zero-quotient outer operations.
             let mixed_remainder = GS
-                .erase_uv_momentum_provenance(&(atomic.atom() + nested.atom()))
+                .erase_uv_momentum_provenance(
+                    &(atomic.atom().expression() + nested.atom().expression()),
+                )
                 .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
                 .with(W_.prop_)
                 .replace_multiple(&replacements);
@@ -4002,7 +4000,7 @@ mod tests {
             independent
                 .iter()
                 .map(|(_, local)| Full4dCts::from_factorized_local(local)),
-        );
+        )?;
         let collective_source = OwnedForestNode {
             spinney: Spinney::new(
                 InternalSubGraph::cleaned_filter_optimist(
@@ -4032,13 +4030,20 @@ mod tests {
                 &collective_source,
                 given,
             )?;
+            debug_tags!(#uv, #forest, #trace;
+                stage = "collective_three_component_oracle_term",
+                given = %given.subgraph().string_label(),
+                file.prefix = %local.atom().expression().to_plain_string(),
+                file.term = %term.atom().expression().to_plain_string(),
+                "Independent collective Taylor contribution"
+            );
             if given.subgraph().is_empty() {
                 assert!(
                     !term.atom().is_zero(),
                     "the full atomic Taylor term must be nonzero"
                 );
             }
-            expected += term.atom();
+            expected += term.atom().expression();
         }
         let mut forests = wood.unfold();
         forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings.uv)?;
@@ -4047,12 +4052,17 @@ mod tests {
             .iter_nodes()
             .filter(|(_, _, operation)| operation.covers().as_ref() == Some(&collective_filter))
             .try_fold(Atom::Zero, |sum, (_, _, operation)| -> Result<_> {
-                Ok(sum
-                    + forests
-                        .compute_store
-                        .require(operation)?
-                        .local_4d(operation)?
-                        .atom())
+                let term = forests
+                    .compute_store
+                    .require(operation)?
+                    .local_4d(operation)?;
+                debug_tags!(#uv, #forest, #trace;
+                    stage = "collective_three_component_forest_term",
+                    operation = %operation,
+                    file.term = %term.atom().expression().to_plain_string(),
+                    "Scheduled collective Taylor contribution"
+                );
+                Ok(sum + term.atom().expression())
             })?;
         let [actual, expected] = [actual, expected].map(|expression| -> Result<Atom> {
             let expression = GS
@@ -4069,7 +4079,11 @@ mod tests {
                     collect_chains: false,
                     collect_traces: false,
                     ..Default::default()
-                })?;
+                })?
+                // Typed composition can spell a completed scalar contraction
+                // as g(p,q). Use the same dot notation before selecting the
+                // tensor basis; no indexed contraction or finite-D value is added.
+                .to_dots()?;
             Ok(cooking.uncook(expression.expression().as_view()))
         });
         let (actual, expected) = (actual?, expected?);
@@ -4183,7 +4197,11 @@ mod tests {
         )?;
         let operation = &f.graph[child];
         let local = f.compute_store.require(operation)?.local_4d(operation)?;
-        assert!((local.atom().collect_factors() - expected.atom().collect_factors()).is_zero());
+        assert!(
+            (local.atom().expression().collect_factors()
+                - expected.atom().expression().collect_factors())
+            .is_zero()
+        );
 
         Ok(())
     }

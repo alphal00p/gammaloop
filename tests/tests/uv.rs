@@ -5377,7 +5377,7 @@ fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
                         .derived_data
                         .all_mighty_numerators
                         .iter()
-                        .map(|entry| &entry.rhs),
+                        .map(|entry| entry.rhs.expression()),
                 )
             {
                 let _ = expression.replace_map(|view, _, _| {

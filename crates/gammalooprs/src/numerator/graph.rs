@@ -401,13 +401,17 @@ mod test {
             let graph = Graph::import_dot(source, &model).unwrap().remove(0);
             let numerator = graph
                 .numerator(&graph.full_filter(), &graph.empty_subgraph())
+                .unwrap();
+            let prefactor = crate::numerator::AppliedFeynmanRule::new(
+                &graph.global_prefactor.projector
+                    * &graph.global_prefactor.num
+                    * &graph.overall_factor,
+            )
+            .unwrap();
+            let numerator = numerator
                 .state
                 .expr
-                * &graph.global_prefactor.projector
-                * &graph.global_prefactor.num
-                * &graph.overall_factor;
-            let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-            let numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view()).unwrap())
+                .multiply(&prefactor.expr)
                 .unwrap()
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(idenso::color::ColorSimplifySettings::default()),

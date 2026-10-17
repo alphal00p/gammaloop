@@ -2022,6 +2022,7 @@ impl Graph {
 
     pub fn full_numerator_atom(&self) -> Atom {
         self.numerator(&self.full_filter(), &self.empty_subgraph())
+            .expect("validated graph numerator must have a compatible tensor interface")
             .get_single_atom()
             .expect("Graph numerator should be available")
             * &self.global_prefactor.num

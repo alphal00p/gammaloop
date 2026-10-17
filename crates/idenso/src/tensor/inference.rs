@@ -395,6 +395,25 @@ impl SymbolicTensor<PartialStructure> {
         Self::from_normalized_parts(expression, structure).finish_parts()
     }
 
+    /// Admit an external expression with its declared ordered interface.
+    ///
+    /// Unlike attaching parts whose interface was established by an algebra
+    /// owner, this checks the payload, tensor scopes, index multiplicities and
+    /// declared ports together. Observation does not replay user normalizers.
+    /// Zero retains the declared rank and logical order.
+    pub fn from_declared_parts(
+        expression: Atom,
+        structure: PartialStructure,
+    ) -> InferenceResult<Self> {
+        let value = Self::from_normalized_parts(expression, structure);
+        if !value.established_interface_is_valid() {
+            return Err(TensorInferenceError::invalid(
+                "expression does not match its declared tensor interface",
+            ));
+        }
+        Ok(value)
+    }
+
     /// Finish an existing carrier without detaching its established facts.
     /// Unknown parts still undergo scope and multiplicity validation; changed
     /// product syntax or logical layout cannot inherit the original proofs.
@@ -475,6 +494,56 @@ impl SymbolicTensor<PartialStructure> {
                     LeafInference::ObserveEncoded,
                 );
             }
+        }
+        // Closed scalar factors do not identify anonymous tensor ports. Keep
+        // the ordered non-scalar factors as witnesses. One changed rank-one
+        // anonymous factor has one possible port correspondence if every other
+        // factor stays exactly in place; multiple changed factors do not have
+        // that certificate, even when their ranks and representations agree.
+        self.ensure_validated()?;
+        let tensor_factors =
+            |expression: AtomView<'_>| -> InferenceResult<Vec<(Atom, PartialStructure)>> {
+                let factors = match expression {
+                    AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                    expression => vec![expression],
+                };
+                let mut inference = InterfaceInference {
+                    leaf_inference: LeafInference::Observe,
+                    ..Default::default()
+                };
+                let mut tensors = Vec::new();
+                for factor in factors {
+                    let interface = inference.infer_view(factor)?;
+                    if !interface.canonical().is_scalar() {
+                        tensors.push((factor.to_owned(), interface));
+                    }
+                }
+                Ok(tensors)
+            };
+        let retained = tensor_factors(self.expression.as_view())?;
+        let rewritten = tensor_factors(expression.as_view())?;
+        let mut changed_vectors = 0;
+        let retained_ports = !retained.is_empty()
+            && retained.len() == rewritten.len()
+            && retained
+                .iter()
+                .zip(&rewritten)
+                .all(|((before, left), (after, right))| {
+                    if before == after {
+                        return true;
+                    }
+                    changed_vectors += 1;
+                    changed_vectors == 1
+                        && left.canonical().order() == 1
+                        && left.open_positions().len() == 1
+                        && left.logical_slots() == right.logical_slots()
+                });
+        if retained_ports {
+            return self.finish_checked_expression(
+                expression,
+                &self.structure,
+                LeafInference::Observe,
+            );
         }
         // Report invalid result syntax before refusing an otherwise valid
         // rewrite whose unresolved identities have no safe witness. This
@@ -6026,8 +6095,8 @@ pub(crate) mod tests {
                 .unwrap();
             let sign = if component == 0 { 1 } else { -1 };
             assert_eq!(
-                contracted,
-                Atom::num(sign) * symbolica::function!(vector, selector)
+                contracted.expression(),
+                &(Atom::num(sign) * symbolica::function!(vector, selector))
             );
         }
         let invalid =

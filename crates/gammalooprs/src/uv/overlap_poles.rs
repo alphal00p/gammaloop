@@ -290,7 +290,9 @@ impl PhysicalOverlapInput {
                 .replace(function!(GS.den, W_.a_, W_.b_, W_.c_, W_.d_))
                 .with(W_.d_))
         };
-        integrands.fallible_map(finish)?.map_numerators(finish)
+        integrands.fallible_map(finish)?.map_numerators(|tensor| {
+            Ok(tensor.with_checked_expression(finish(tensor.expression())?)?)
+        })
     }
 }
 

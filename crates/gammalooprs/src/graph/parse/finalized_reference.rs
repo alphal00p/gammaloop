@@ -24,14 +24,14 @@ fn snapshot(graph: &Graph, model: &crate::model::Model) -> Value {
         json!({
             "id":edge.0,"pair":format!("{pair:?}"),"orientation":format!("{:?}",data.orientation),
             "particle":data.data.particle.particle().map(|particle|particle.index()),
-            "num":data.data.num.value.to_canonical_string(),"dummy":data.data.is_dummy,
+            "num":crate::graph::parse::NumeratorInterface::export(&data.data.num.value).0.to_canonical_string(),"dummy":data.data.is_dummy,
             "mass":data.data.particle.mass_atom(model).to_canonical_string(),
             "internal":signature.internal.iter().map(|x|format!("{x:?}")).collect::<Vec<_>>(),
             "external":signature.external.iter().map(|x|format!("{x:?}")).collect::<Vec<_>>()
         })
     }).collect::<Vec<_>>();
     let vertices=graph.underlying.iter_nodes().map(|(node,_,data)| json!({
-        "id":node.0,"rule":data.vertex_rule.map(|rule|rule.index()),"num":data.num.value.to_canonical_string()
+        "id":node.0,"rule":data.vertex_rule.map(|rule|rule.index()),"num":crate::graph::parse::NumeratorInterface::export(&data.num.value).0.to_canonical_string()
     })).collect::<Vec<_>>();
     let hedges=(0..graph.underlying.n_hedges()).map(|index| {
         let hedge=Hedge(index);
@@ -43,7 +43,7 @@ fn snapshot(graph: &Graph, model: &crate::model::Model) -> Value {
         "loop_edges":graph.loop_momentum_basis.loop_edges.iter().map(|edge|edge.0).collect::<Vec<_>>(),
         "external_edges":graph.loop_momentum_basis.ext_edges.iter().map(|edge|edge.0).collect::<Vec<_>>(),
         "initial_left":selection(&graph.initial_state_cut.left),"initial_right":selection(&graph.initial_state_cut.right),
-        "num":graph.numerator(&graph.full_filter(),&graph.empty_subgraph()).get_single_atom().unwrap().to_canonical_string(),
+        "num":graph.numerator(&graph.full_filter(),&graph.empty_subgraph()).unwrap().get_single_atom().unwrap().to_canonical_string(),
         "overall":graph.overall_factor.to_canonical_string(),"prefactor":graph.global_prefactor.num.to_canonical_string(),
         "projector":graph.global_prefactor.projector.to_canonical_string(),
         "cuts":graph.finalized_cuts.iter().map(|cut|json!({"cut":selection(&cut.cut.left),"opposite":selection(&cut.cut.right),"left":selection(&cut.left),"right":selection(&cut.right)})).collect::<Vec<_>>(),

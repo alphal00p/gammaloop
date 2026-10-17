@@ -1,5 +1,10 @@
 = FeynKit merge readiness and performance
 
+The qualification below belongs to checkpoint `6002674d`. A subsequent
+user-requested migration retains `SymbolicTensor` through numerator processing;
+its implementation and validation are recorded at the end of this document.
+The earlier timing results do not qualify that new implementation.
+
 This record follows the reconciliation of local FeynKit, remote FeynKit and
 main, then the repairs required before merge. Runtime assertions, numerical
 reference points, tolerances and the performance gate remain in force. A
@@ -95,8 +100,12 @@ Three causes have been investigated separately:
   basis directly to its existing trace recurrence. The rule requires explicit
   four-dimensional spin and Lorentz representations and preserves formal
   dimensions and requests to leave traces unevaluated. It avoids a cycle through
-  temporal-slash normalization. This is shared tensor-library behavior, not a
-  GammaLoop-specific evaluator shortcut. Commit `fd1fef9f` contains the fix and
+  temporal-slash normalization. The concrete matrix already exists as
+  `spenso_hep_lib::gamma0_weyl` and is registered in the component library.
+  The missing behavior was the symbolic Idenso trace rule, which runs before
+  components are constructed. Keeping both layers lets symbolic traces reduce
+  early while component evaluation retains its independent matrix definition.
+  Commit `fd1fef9f` contains the fix and
   exact trace, dimension-boundary and idempotence regressions.
 + Symbolic admission/reduction graphs overlapped in lifetime with the component
   graph. GammaLoop now consumes the reduced carrier and drops borrowed-input
@@ -608,3 +617,167 @@ is therefore 2/7, compensating the weight change from 18/7 to 9. Exact affine
 momentum maps have determinant one and retain the sewn external pair. The raw
 weight-sum change of 90/7 is fully accounted for by those two representatives;
 their weighted physical contributions are unchanged.
+
+== Retained symbolic tensors: implementation and API notes
+
+The symbolic numerator should retain its tensor interface until finite-component
+lowering. Inspecting an immutable expression is different from replacing its
+owner with an `Atom`: the latter loses logical port order, the rank of zero,
+and reusable validation facts. Scalar coefficients, source-model recipes whose
+ports are not instantiated yet, and the final scalar evaluator have distinct
+representation requirements.
+
+The migration changes runtime edge/vertex fragments,
+`SymbolicExpression<State>.expr`, FourD sectors and projection witnesses, and
+retained numerator function bodies to `SymbolicTensor<PartialStructure>`. The existing
+`FnMapEntry` becomes generic in its body type; scalar definitions still hold
+`Atom`. Color/gamma processing, direct-3D numerator mapping, Taylor coefficients,
+final normalization and evaluator component lowering retain typed bodies.
+Opaque family calls in scalar dispatch roots must not be inferred as complete
+scalar tensor expressions: their body catalog owns the hidden interfaces.
+
+Against main `ff533fcd`, the concrete storage changes are:
+
+#table(
+  columns: (1.1fr, 1fr, 1.4fr),
+  inset: 6pt,
+  [Stage], [Main], [Retained-tensor branch],
+  [Runtime edge/vertex numerator], [`Autogen<Atom>`],
+    [`Autogen<SymbolicTensor<PartialStructure>>`],
+  [Numerator processing state], [`SymbolicExpression<State>.expr: Atom`],
+    [Same state machine, typed tensor payload],
+  [Shared numerator definition], [`Arc<FnMapEntry>` with `rhs: Atom`],
+    [`Arc<NumeratorDefinition>` with typed RHS; scalar `FnMapEntry<Atom>` remains separate],
+  [Local-4D sector and source witness], [`FourDSector.atom`, `FourDTerm.numerator`,
+    `CanonicalUvTerm.source_numerator`: `Atom`],
+    [Each retains the tensor and its logical interface],
+  [Component preparation], [Raw expression parsed into `ParsingNet`],
+    [Consuming typed `into_network` returns `Canonicalized<ParsingNet>`],
+  [Compiled evaluator], [`AliasedAtom`, scalar `FunctionMap`, Symbolica program],
+    [Same scalar execution engine after explicit component lowering],
+)
+
+This migration targets repeated interface discovery and representation conversion
+before compilation. It cannot by itself remove component contraction, scalar
+factor collection, evaluator compilation or numerical execution. Retained
+metadata also occupies memory; releasing owned planning caches at component
+lowering limits their lifetime, but does not establish a measured memory saving.
+
+Stage timings also need matching boundaries. Raw-root cooking and admission now
+precede `preprocess_tensor`, so its cumulative `normalization_done` timer omits
+that work. A separate `evaluator_stack_raw_root_admission` event records it.
+Retained family bodies actually avoid their former re-admission. The enclosing
+evaluator preprocessing interval and paired full-process generation time remain
+the comparable totals; a smaller normalization timer alone is insufficient
+evidence of a speedup. The exact timer map and outstanding traversals are in
+`target/symbolic-tensor-flow/performance-boundaries.json`.
+
+Concrete Rust API difficulties found during implementation:
+
+- Symbolica's Rust `AtomCore` trait is sealed, so a downstream tensor carrier
+  cannot implement it directly. Its checked `replace` takes
+  `TensorRule` rather than the Atom replacement builder. Arbitrary scalar or
+  kinematic substitutions currently need `expression()` followed by
+  `with_checked_expression`. Transformations which change an interface need
+  `with_transformed_expression`; `with_rewritten_expression` is reserved for
+  established tensor identities and must not bypass arbitrary-substitution
+  validation.
+- There is no tensor Taylor-series API. Direct-3D currently keeps the existing
+  scalar series engine internal and restores each coefficient through the
+  retained source interface. A zero coefficient keeps its tensor rank. This
+  boundary needs an ergonomic checked series API before eliminating the
+  remaining application-side adaptation.
+- Existing Atom helpers can hide index-transport assumptions. The Taylor
+  helper's Dirac prepass used to decode every cooked symbol on return. Native
+  input then acquired raw indices alongside retained encoded ones. The shared
+  helper now preserves existing index and dimension symbols and decodes only
+  symbols introduced by its own prepass; fully native input needs no decode
+  traversal. Raw/native/mixed-encoding controls check the same exact Dirac trace
+  identity and spectator factors, with explicit Taylor dependence inside the word.
+- The old `expand_dots` returned `Atom`, even when only a closed scalar dot
+  inside an open tensor changed. Its typed return must retain the untouched
+  open-port identities. A checker that only rediscovers a rank cannot certify
+  the order of anonymous ports; callback-induced rank changes remain errors.
+- The old `to_network` specialization only supported one ordered-index and
+  mixed-numeric tensor type. The new consuming `into_network` entry accepts the actual
+  component tensor library, function library and parsing settings. It checks
+  the resulting external ports against the retained interface and returns the
+  root's `CanonicalLayout` with the network. Component coordinates, dimensions
+  and generated shadows must use that same logical axis order; checking only
+  the port multiset is insufficient. Shorthand
+  expansion, fresh-index reservation and library materialization still belong
+  to the component parser; this change alone does not eliminate that parse.
+- GammaLoop's owner-bearing index syntax is more permissive than the native
+  `AbstractIndex` syntax. Typed bodies retain reversible encoded indices;
+  decoding occurs at component or explicit expression-export boundaries.
+  A generic uncook operation cannot silently change the carrier's index type.
+- Persistence previously had no carrier support. Archives must store payload
+  and logical interface, including ranked zero and unresolved axis order.
+  Decode remaps symbols and validates those parts once. Proof and planner
+  caches are never serialized. Existing equality also observes the metric and
+  composite flags, so those flags are retained to preserve exact round trips.
+- Declared source interfaces need `from_declared_parts`; merely attaching
+  `checked_parts` does not certify an arbitrary external payload against its
+  declared ports. Runtime DOT exports add `num_interface` only when the
+  expression cannot recover its logical interface, notably for ranked zero.
+  Source scalar overrides remain scalars. Full state version 19 rejects older
+  positional archives; standalone scalar evaluator layouts are unchanged.
+- `with_lorentz_dimension` specifically changes four-dimensional Lorentz
+  spaces. General dimension substitutions are currently less convenient and
+  require explicit checked interface transformation.
+- A no-op reduction can establish new completion facts. Mathematical equality
+  alone must not discard its returned carrier when reusing an `Arc`;
+  `same_reduction_state` distinguishes that case without traversing cached graphs.
+- A mixed-space `from_signature` example currently constructs canonical
+  argument order with different logical metadata, then fails its own admission
+  check. The standalone reproducer is
+  `target/symbolic-tensor-flow/idenso/from-signature-mixed-layout.json`.
+  Production admission uses `infer` or the checked declared-interface owner;
+  the constructor issue is recorded separately rather than bypassing validation.
+
+The component handoff releases its owned planning caches before parsing the
+component graph. Another retained definition may still share those caches;
+only the full-process RSS measurement can establish the lifetime's actual cost.
+Additional Vakint normalization is admitted and required to be scalar before
+typed multiplication, so arbitrary configured factors cannot inherit an
+unrelated tensor-interface certificate.
+
+Evaluator family preparation reads retained logical ports even when the payload
+is zero. A ranked zero keeps an empty sparse component table and a typed shadow;
+only a closed scalar zero may collapse directly to scalar zero. Standalone open
+zero and mismatched-port controls are rejected, while a matching contraction
+and an ordinary scalar zero remain accepted.
+
+The initial 530-case runtime pass exposed six failures at these new boundaries.
+Three local-4D cases identified the Taylor prepass encoding error described
+above. A temporal-component fixture used the raw shorthand `Q(edge,0)` and now
+declares the same component as `Q(edge,cind(0))`. An owned-dot fixture used
+literal mass 1: blanket mass tagging changed `cind(1)` but left the numerator's
+minus-one coefficient unchanged. The fixture now retains `mass_scalar_1` as the
+physical mass symbol and asserts that every edge still has numerical mass 1;
+its original numerical comparison remains intact.
+
+The sixth failure concerned the exact zero of four independent Taylor terms.
+Typed composition retained equivalent scalar contractions as both `g(Q,Q)`
+and `dot(Q,Q)`, which the coefficient comparison treated as different keys.
+The existing `to_dots` conversion puts these keys in the same notation before
+the original exact coefficient assertion. The formal Lorentz dimension remains
+symbolic and graph numerators remain factorized. An independent replay removes
+the literal common numerator from all four terms and proves that their scalar
+denominator weights sum to zero with zero numerical or finite-field samples;
+the frozen earlier binary passes the same original physical test. Evidence is
+in `target/symbolic-tensor-flow/collective-scalar-proof.json`.
+
+The on-shell agent's named scalar-power repair `c8ff5b8f` is included separately
+as `589e447b` (`feynkit-shared-scalar-powers-20261017`). It lets generated
+intrinsic scalar powers retain their existing certificate after an identity
+kernel, without re-admitting the complete tensor. Both original regressions pass.
+
+Canonical FeynKit diagrams and raw model recipes remain source-artifact
+representations. Runtime graph construction admits their instantiated fragments
+once; subsequent subgraph assembly composes the retained carriers through the
+shared graph-selection fold.
+
+Validation and performance measurements for this migration are pending. Existing
+physics references, tolerances and performance thresholds remain unchanged.
+Artifacts and logs are retained under `target/symbolic-tensor-flow`.

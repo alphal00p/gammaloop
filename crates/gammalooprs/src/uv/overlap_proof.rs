@@ -271,9 +271,13 @@ pub(super) fn check(input: &PhysicalOverlapInput) -> Result<()> {
             file.roots = ?terms.iter().collect_vec(),
             file.numerators = ?terms.numerators(),
             "Replayable physical-map input with separately retained numerator bodies");
-        let terms = terms
-            .fallible_map(|atom| map.apply(atom, &mut algebra))?
-            .map_numerators(|atom| map.apply(atom, &mut algebra))?;
+        let terms =
+            terms
+                .fallible_map(|atom| map.apply(atom, &mut algebra))?
+                .map_numerators(|tensor| {
+                    Ok(tensor
+                        .with_checked_expression(map.apply(tensor.expression(), &mut algebra)?)?)
+                })?;
         let branches = DirectResidueBranches::production(OrientationID::from(0), terms)?;
         let jets = branches
             .series_preserving_numerators_exact(
