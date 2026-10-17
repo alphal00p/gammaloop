@@ -38,8 +38,13 @@ Symbolica's series engine and the exact CFF energy mapper borrow Atom payloads.
 The caller retains the source tensor and checks each returned coefficient or
 mapped expression against its interface. Vakint is an explicit Atom backend
 boundary: export decodes native index syntax, and returned projected tensors
-receive checked admission before dimensional algebra resumes. Integrated
-Laurent coefficients retain the existing `Series<AtomField>` backend format.
+receive checked admission before dimensional algebra resumes. Internal
+materialization uses native `AbstractIndex` syntax; it does not decode to
+GammaLoop's legacy index type and recook the result. `IntegratedCts` retains
+typed pole and signed finite projections plus its loop-measure scale power.
+`Series<AtomField>` is temporary calculation storage. Each completed projection
+is checked against the source interface, including a vanishing projection.
+Nested forests and the localizer consume those tensors directly.
 These boundaries do not authorize distributing a graph numerator.
 
 Symbolica seals `AtomCore`, so a downstream `SymbolicTensor` cannot implement
@@ -76,6 +81,12 @@ the same topology-local dummy label in their later product. Open boundary ports
 remain available to the cograph, and its numerator is not distributed.
 
 Unresolved closed spin/Lorentz traces and internal contractions between open spin chains must report unsupported dimensional algebra. Retained free tensor slots remain a valid external basis. This avoids implicitly assigning a four-dimensional value to an evanescent operator; Sigma tensors also require a symbolic dimensional implementation before analytic UV use.
+
+The structural residual check materializes native indices with the existing
+shorthand settings and strict slot-occurrence observer. Both encoded source
+dummy names and native generated dummy names remain reserved. A genuine third
+compatible occurrence is still an error; changing parser index types does not
+relax multiplicity or unresolved-dimensional-algebra checks.
 
 The required backend depth includes epsilon poles in numerator coefficients and loop-normalization factors. Positive epsilon orders needed by enclosing UV operations are retained using the forest's loop-order bound. A backend that cannot supply the required depth must report an error instead of silently returning a shallower expansion. The Laurent-series boundary also verifies integer powers and epsilon-independent coefficients. Supported scalar mathematical functions are expanded there; unresolved opaque epsilon dependence produces an error.
 

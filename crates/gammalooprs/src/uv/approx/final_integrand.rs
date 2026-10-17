@@ -152,11 +152,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         );
         let localized_integrated = self
             .localizer
-            .localize(
-                &integrated.physical_finite_counterterm_atom(),
-                graph,
-                current,
-            )?
+            .localize(&integrated.physical_finite_counterterm()?, graph, current)?
             .combine()?;
         let localized_integrated = DirectResidueBranches::from_transient(&localized_integrated)?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
@@ -460,11 +456,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // source map even when no compatible physical-prefix host survives.
         let localized_integrated = self
             .localizer
-            .localize(
-                &integrated.physical_finite_counterterm_atom(),
-                graph,
-                current,
-            )?
+            .localize(&integrated.physical_finite_counterterm()?, graph, current)?
             .combine()?;
         // An empty integrated zero contributes no source map. The typed local
         // zero above already retains the allowed cut shape; do not invent an

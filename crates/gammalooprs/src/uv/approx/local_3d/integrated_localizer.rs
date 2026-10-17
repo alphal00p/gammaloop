@@ -1,5 +1,7 @@
 use color_eyre::Result;
+use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::subgraph::{SubSetLike, SubSetOps};
+use spenso::structure::partial::PartialStructure;
 use symbolica::atom::Atom;
 use three_dimensional_reps::CffGenerationContext;
 
@@ -18,7 +20,7 @@ use super::{FrozenActiveCt, Localizer, OrientationIntegrandBranch, OrientationIn
 impl Localizer<'_> {
     pub(crate) fn localize<S: ForestNodeLike>(
         &self,
-        expr: &Atom,
+        expr: &SymbolicTensor<PartialStructure>,
         graph: &mut Graph,
         integrated_node: &S,
     ) -> Result<FrozenActiveCt> {
@@ -61,12 +63,9 @@ impl Localizer<'_> {
             .full_filter()
             .subtract(to_contract)
             .subtract(&graph.initial_state_cut);
-        let outside_numerator = graph
-            .numerator(&reduced, to_contract)?
-            .get_single_atom()
-            .expect("Graph numerator should be available")
-            * graph.global_atom();
-        let analysis_numerator = expr * &outside_numerator;
+        let outside_numerator = graph.numerator(&reduced, to_contract)?.state.expr;
+        let global = crate::numerator::AppliedFeynmanRule::new(graph.global_atom())?.expr;
+        let analysis_numerator = expr.multiply(&outside_numerator)?.multiply(&global)?;
 
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
         // Integration replaces the contracted spinney by an independent
@@ -75,7 +74,7 @@ impl Localizer<'_> {
         let mut active = self.with_independent_source_sum().projected_cff(
             graph,
             to_contract,
-            [&analysis_numerator],
+            [analysis_numerator.expression()],
             CffGenerationContext::Standalone,
         )?;
         active = active.map(|localized| localized * &fourddenoms);
@@ -87,7 +86,7 @@ impl Localizer<'_> {
         let mapped = DirectResidueBranches::from_transient(&active)?.multiply_key_mapped(
             self.orientation,
             graph,
-            &crate::numerator::AppliedFeynmanRule::new(finite_ct.clone())?.expr,
+            finite_ct,
             DirectResidueBranches::numerator_scope(),
         )?;
         let active = OrientationIntegrands(

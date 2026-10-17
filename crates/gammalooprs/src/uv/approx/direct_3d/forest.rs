@@ -2,7 +2,9 @@ use std::{collections::BTreeMap, ops::Neg};
 
 use color_eyre::Result;
 use eyre::eyre;
+use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
+use spenso::structure::partial::PartialStructure;
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
@@ -294,7 +296,7 @@ impl<'a> Direct3dApproximation<'a> {
     /// its branch and therefore governs every later factor in that branch.
     fn localize_integrated<S: ForestNodeLike>(
         &mut self,
-        expr: &Atom,
+        expr: &SymbolicTensor<PartialStructure>,
         integrated_node: &S,
     ) -> Result<(DirectResidueBranches, Integrands)> {
         let FrozenActiveCt {
@@ -323,7 +325,7 @@ impl<'a> Direct3dApproximation<'a> {
         // are independent; each replay method supplies its own minus and marker.
         // A sequential zero addback is omitted, while an explicit integrated
         // replay keeps its typed zero sector for disconnected descendants.
-        let finite_counterterm = integrated.physical_finite_counterterm_atom();
+        let finite_counterterm = integrated.physical_finite_counterterm()?;
         let integrated = (!finite_counterterm.is_zero())
             .then(|| {
                 self.run_integrated(
@@ -450,7 +452,7 @@ impl<'a> Direct3dApproximation<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn run_integrated<S: ForestNodeLike, I: ForestNodeLike, M: ForestNodeLike>(
         &mut self,
-        finite_counterterms: &[(&Atom, &I)],
+        finite_counterterms: &[(&SymbolicTensor<PartialStructure>, &I)],
         integrated_node: &I,
         current: &S,
         given: &S,
@@ -460,37 +462,39 @@ impl<'a> Direct3dApproximation<'a> {
         // Each finite effective vertex retains its connected source owner.
         // Equal masses in disjoint integrated prefixes must remain distinct
         // until an enclosing operation contains their respective components.
-        let finite_counterterm =
-            finite_counterterms
-                .iter()
-                .fold(Atom::one(), |product, (coefficient, component)| {
-                    let mass_scope =
-                        function!(*LOCAL_3D_MASS_SCOPE, usize::from(component.lmb_id()) as i64);
-                    // Preserve each completed component's vacuum mass before multiplying
-                    // coefficients. A disjoint Taylor operation leaves it fixed;
-                    // an enclosing operation gives it the same hard weight as
-                    // the component's loop momenta. The one-argument mUV head
-                    // retains the ordinary mass attributes and no Taylor-dependent
-                    // payload.
-                    let mut coefficient = coefficient
-                        .replace(GS.m_uv_vacuum)
-                        .with(function!(GS.m_uv_vacuum, component.subgraph().symbol()));
-                    let mut masses = Vec::new();
-                    for (pair, _, edge) in self.graph.iter_edges_of(component.subgraph()) {
-                        let mass = edge.data.mass_atom(&self.graph.model);
-                        if pair.is_paired() && !mass.is_zero() && !masses.contains(&mass) {
-                            // The soft jet holds scalar mass logarithms fixed.
-                            // Only algebraic mass factors carry the effective
-                            // vertex's engineering weight in the hard-dual chart.
-                            coefficient = coefficient
-                                .replace(mass.clone())
-                                .max_level(0)
-                                .with(&mass * &mass_scope);
-                            masses.push(mass);
-                        }
+        let finite_counterterm = finite_counterterms.iter().try_fold(
+            SymbolicTensor::infer(Atom::one())?,
+            |product, (coefficient, component)| -> Result<_> {
+                let mass_scope =
+                    function!(*LOCAL_3D_MASS_SCOPE, usize::from(component.lmb_id()) as i64);
+                // Preserve each completed component's vacuum mass before multiplying
+                // coefficients. A disjoint Taylor operation leaves it fixed;
+                // an enclosing operation gives it the same hard weight as
+                // the component's loop momenta. The one-argument mUV head
+                // retains the ordinary mass attributes and no Taylor-dependent
+                // payload.
+                let mut expression = coefficient
+                    .expression()
+                    .replace(GS.m_uv_vacuum)
+                    .with(function!(GS.m_uv_vacuum, component.subgraph().symbol()));
+                let mut masses = Vec::new();
+                for (pair, _, edge) in self.graph.iter_edges_of(component.subgraph()) {
+                    let mass = edge.data.mass_atom(&self.graph.model);
+                    if pair.is_paired() && !mass.is_zero() && !masses.contains(&mass) {
+                        // The soft jet holds scalar mass logarithms fixed.
+                        // Only algebraic mass factors carry the effective
+                        // vertex's engineering weight in the hard-dual chart.
+                        expression = expression
+                            .replace(mass.clone())
+                            .max_level(0)
+                            .with(&mass * &mass_scope);
+                        masses.push(mass);
                     }
-                    product * coefficient
-                });
+                }
+                let coefficient = coefficient.with_checked_expression(expression)?;
+                Ok(product.multiply(&coefficient)?)
+            },
+        )?;
         let (active, frozen_integrands) =
             self.localize_integrated(&finite_counterterm, integrated_node)?;
         let ctx = UVCtx::new(self.graph, &self.graph.model, self.settings);

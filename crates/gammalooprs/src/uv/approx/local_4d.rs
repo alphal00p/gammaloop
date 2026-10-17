@@ -1018,16 +1018,10 @@ impl Full4dCts {
             has_soft_ancestry: local.0.has_soft_ancestry,
             ..FourDSector::new(atom, Vec::new(), vec![lmb.clone()])
         };
-        // Laurent coefficients re-enter from Vakint's explicit scalar-series
-        // boundary. Admit that external payload once before retaining it again.
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
+        // Integrated projections already own their admitted tensor interfaces.
         let mut projected = match scheme {
             ApproximationType::MUV | ApproximationType::IR => {
-                let integrated = SymbolicTensor::infer(
-                    cooking.try_cook(integrated.finite_counterterm_atom().as_view())?,
-                )?;
+                let integrated = integrated.finite_counterterm()?;
                 Ok(Self(FourDSectors::with_atom(
                     local.0.active.clone(),
                     local
@@ -1045,8 +1039,7 @@ impl Full4dCts {
                 )))
             }
             ApproximationType::PolePart if !is_root => {
-                let integrated =
-                    SymbolicTensor::infer(cooking.try_cook(integrated.pole_atom().as_view())?)?;
+                let integrated = integrated.pole()?;
                 Ok(Self(FourDSectors::with_atom(
                     Vec::new(),
                     vec![completed(integrated.clone())],
@@ -1054,8 +1047,7 @@ impl Full4dCts {
                 )))
             }
             ApproximationType::PolePart => {
-                let integrated =
-                    SymbolicTensor::infer(cooking.try_cook(integrated.pole_atom().as_view())?)?;
+                let integrated = integrated.pole()?;
                 Ok(Self(FourDSectors::with_atom(
                     local.0.active.clone(),
                     local
@@ -1360,7 +1352,18 @@ impl FourDTerm {
                 denominators: Vec::new(),
             }]);
         }
-        Self::from_view(tensor.expression().as_view())
+        // The rational-shell parser still uses temporary symbolic arithmetic.
+        // Its fresh inference cannot replace the source's logical port order.
+        // Restore each complete numerator through the original carrier once the
+        // scalar denominator topology has been separated, preserving typed zero.
+        Self::from_view(tensor.expression().as_view())?
+            .into_iter()
+            .map(|mut term| {
+                term.numerator =
+                    tensor.with_checked_expression(term.numerator.into_expression())?;
+                Ok(term)
+            })
+            .collect()
     }
 
     pub(super) fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
@@ -5627,22 +5630,22 @@ mod tests {
         let ordinary = integrate_branch(ordinary)?;
         let overlap = integrate_branch(overlap)?;
         let completed = integrator.run(&local, &ctx, &current, &given, &current, &given)?;
-        assert!(soft.physical_pole_atom().is_zero());
-        assert!(soft.physical_finite_counterterm_atom().is_zero());
-        assert!(!completed.physical_pole_atom().is_zero());
+        assert!(soft.physical_pole()?.is_zero());
+        assert!(soft.physical_finite_counterterm()?.is_zero());
+        assert!(!completed.physical_pole()?.is_zero());
         assert!(
-            !overlap.physical_pole_atom().is_zero()
-                || !overlap.physical_finite_counterterm_atom().is_zero(),
+            !overlap.physical_pole()?.is_zero()
+                || !overlap.physical_finite_counterterm()?.is_zero(),
             "the integrated US overlap must contribute to the completed counterterm"
         );
         // Eq. (5.6) removes the integrated S contribution, not H or its US
         // overlap. All branches here carry the same production forest sign.
         for difference in [
-            completed.physical_pole_atom() - ordinary.physical_pole_atom()
-                + overlap.physical_pole_atom(),
-            completed.physical_finite_counterterm_atom()
-                - ordinary.physical_finite_counterterm_atom()
-                + overlap.physical_finite_counterterm_atom(),
+            completed.physical_pole()?.expression() - ordinary.physical_pole()?.expression()
+                + overlap.physical_pole()?.expression(),
+            completed.physical_finite_counterterm()?.expression()
+                - ordinary.physical_finite_counterterm()?.expression()
+                + overlap.physical_finite_counterterm()?.expression(),
         ] {
             assert!(difference.together().cancel().is_zero());
         }
@@ -5653,25 +5656,17 @@ mod tests {
             false,
             current.lmb(),
         )?;
-        // The integrated scalar series exports source notation; compare the
-        // retained local tensors in that same notation at this oracle boundary.
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
+        // Compare retained expressions directly at this exact algebra oracle.
         assert_eq!(
-            cooking.uncook(recursive.atom().expression().as_view()),
-            cooking.uncook(local.atom().expression().as_view())
-                + completed.finite_counterterm_atom()
+            recursive.atom().expression(),
+            &(local.atom().expression() + completed.finite_counterterm()?.expression())
         );
         assert_eq!(recursive.0.active, local.0.active);
         assert!(recursive.0.has_soft_ancestry);
         let [finite] = recursive.0.recursive_completion.as_slice() else {
             panic!("the nonzero integrated soft completion must occur exactly once");
         };
-        assert_eq!(
-            cooking.uncook(finite.atom.expression().as_view()),
-            completed.finite_counterterm_atom()
-        );
+        assert!(finite.atom.same_value(&completed.finite_counterterm()?));
         assert_eq!(finite.frozen_lmbs, vec![current.lmb.clone()]);
         Ok(())
     }
@@ -5720,12 +5715,13 @@ mod tests {
             &vakint_settings,
         )
         .run(&soft, &ctx, &current, &given, &current, &given)?;
-        let pole = integrated.physical_pole_atom();
+        let pole = integrated.physical_pole()?;
+        let pole = pole.expression();
         assert!(
             !pole.is_zero(),
             "a massive scalar soft tadpole is not scaleless"
         );
-        assert!(paper_has_pattern(&pole, physical_mass.clone()));
+        assert!(paper_has_pattern(pole, physical_mass.clone()));
         assert!(!pole.contains_symbol(GS.m_uv_vacuum));
         // The one-loop tadpole pole has mass dimension two. Evaluating at
         // m_phys=2*mUV also distinguishes retained m_phys² from a second square.
@@ -5813,28 +5809,30 @@ mod tests {
         // In dimensional regularization the massless tadpole vanishes, so
         // [1/(q²(q²-M²))] = T_1/M² and its derivative in M² is
         // [1/(q²(q²-M²)²)] = T_2/M² - T_1/M⁴. Check both Laurent projections;
-        // finite_counterterm_atom includes its own additive forest sign.
+        // finite_counterterm includes its own additive forest sign.
         for finite in [false, true] {
             let tadpoles = tadpoles
                 .iter()
                 .map(|integrated| {
-                    if finite {
-                        integrated.physical_finite_counterterm_atom()
+                    let projection = if finite {
+                        integrated.physical_finite_counterterm()
                     } else {
-                        integrated.physical_pole_atom()
-                    }
+                        integrated.physical_pole()
+                    }?;
+                    Ok(projection.into_expression())
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
             let bubbles = bubbles
                 .iter()
                 .map(|integrated| {
-                    if finite {
-                        integrated.physical_finite_counterterm_atom()
+                    let projection = if finite {
+                        integrated.physical_finite_counterterm()
                     } else {
-                        integrated.physical_pole_atom()
-                    }
+                        integrated.physical_pole()
+                    }?;
+                    Ok(projection.into_expression())
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
             for difference in [
                 &bubbles[0] - &tadpoles[0] / &mass_squared,
                 &bubbles[1] - &tadpoles[1] / &mass_squared + &tadpoles[0] / mass_squared.pow(2),
@@ -5847,11 +5845,11 @@ mod tests {
                     .all(|atom| !atom.contains_symbol(GS.m_uv_vacuum))
             );
         }
-        assert!(!bubbles[0].physical_pole_atom().is_zero());
-        assert!(bubbles[1].physical_pole_atom().is_zero());
-        let finite = bubbles[1].physical_finite_counterterm_atom();
+        assert!(!bubbles[0].physical_pole()?.is_zero());
+        assert!(bubbles[1].physical_pole()?.is_zero());
+        let finite = bubbles[1].physical_finite_counterterm()?;
         assert!(!finite.is_zero());
-        assert!(paper_has_pattern(&finite, physical_mass));
+        assert!(paper_has_pattern(finite.expression(), physical_mass));
         Ok(())
     }
 
@@ -5945,13 +5943,14 @@ mod tests {
             let values = integrals
                 .iter()
                 .map(|integrated| {
-                    if finite {
-                        integrated.physical_finite_counterterm_atom()
+                    let projection = if finite {
+                        integrated.physical_finite_counterterm()
                     } else {
-                        integrated.physical_pole_atom()
-                    }
+                        integrated.physical_pole()
+                    }?;
+                    Ok(projection.into_expression())
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
             let expected = &values[1] / &mass_squared - &values[2] / mass_squared.pow(2)
                 + &values[3] / mass_squared.pow(2);
             let difference = &values[0] - expected;
@@ -6063,8 +6062,8 @@ mod tests {
                 let integrated =
                     integrator.run(&local, &ctx, &current, &given, &current, &given)?;
                 expansions.push(
-                    (integrated.physical_pole_atom()
-                        - integrated.physical_finite_counterterm_atom())
+                    (integrated.physical_pole()?.expression()
+                        - integrated.physical_finite_counterterm()?.expression())
                     .series(GS.dim_epsilon, Atom::Zero, 3)?,
                 );
             }
@@ -8528,6 +8527,77 @@ mod tests {
                 "{mass_label}, simultaneous two-loop hard ray"
             );
         }
+    }
+
+    #[test]
+    fn rational_shell_retains_source_ports_and_positive_denominator_factors() -> Result<()> {
+        use spenso::structure::{
+            abstract_index::AbstractIndex,
+            partial::PartialIndex,
+            representation::{Euclidean, Minkowski, RepName},
+            slot::IsAbstractSlot,
+        };
+
+        test_initialise()?;
+        let (a, b, x) = symbol!(
+            "uv_typed_shell::a",
+            "uv_typed_shell::b",
+            "uv_typed_shell::x"
+        );
+        let denominator = GS.den(0, function!(GS.emr_mom, 0), 1, Atom::var(x));
+        // Positive denominator polynomials belong to the numerator. Selecting
+        // every denominator head with a monomial collector would expand this.
+        let spectator = (&denominator + x).pow(5) * (Atom::var(a) + b);
+        let shell = Atom::var(a) / denominator.pow(2) + Atom::var(b) / denominator.pow(3);
+        let head = spenso::tensor_symbol!("uv_typed_shell::matrix");
+        let mink = Minkowski {}.new_rep(4).to_lib();
+        let euc = Euclidean {}.new_rep(2).to_lib();
+        for ports in [
+            vec![mink.to_symbolic([]), euc.to_symbolic([])],
+            vec![mink.to_symbolic([]), mink.to_symbolic([])],
+        ] {
+            let numerator = FunctionBuilder::new(head).add_args(ports).finish() * &spectator;
+            let source = SymbolicTensor::infer(&numerator * &shell)?;
+            assert_eq!(source.rank(), 2);
+            let terms = FourDTerm::from_tensor(&source)?;
+            assert_eq!(terms.len(), 2);
+            for term in terms {
+                let expected = match term.denominators.len() {
+                    2 => Atom::var(a) * &numerator,
+                    3 => Atom::var(b) * &numerator,
+                    count => panic!("unexpected denominator multiplicity {count}"),
+                };
+                assert_eq!(term.numerator.expression(), &expected);
+                assert_eq!(
+                    term.numerator.structure().logical_slots(),
+                    source.structure().logical_slots(),
+                );
+            }
+            let zero = source.with_checked_expression(Atom::Zero)?;
+            let zero_terms = FourDTerm::from_tensor(&zero)?;
+            assert_eq!(zero_terms.len(), 1);
+            assert!(zero_terms[0].numerator.same_value(&zero));
+            assert!(zero_terms[0].denominators.is_empty());
+        }
+
+        // Explicit identities permit a declared logical order different from
+        // the expression's argument order. Extraction must retain that layout.
+        let index = AbstractIndex::Normal(76127);
+        let ports = [mink, euc].map(|rep| rep.slot::<AbstractIndex, _>(index).to_atom());
+        let numerator = FunctionBuilder::new(head).add_args(ports).finish() * spectator;
+        let declared = PartialStructure::from_logical_slots(
+            [euc, mink].map(|rep| rep.slot(PartialIndex::Explicit(index))),
+        );
+        let source =
+            SymbolicTensor::from_declared_parts(&numerator / denominator.pow(2), declared)?;
+        let terms = FourDTerm::from_tensor(&source)?;
+        assert_eq!(terms.len(), 1);
+        assert_eq!(terms[0].numerator.expression(), &numerator);
+        assert_eq!(
+            terms[0].numerator.structure().logical_slots(),
+            source.structure().logical_slots(),
+        );
+        Ok(())
     }
 
     #[test]

@@ -352,32 +352,38 @@ impl Forest {
             let integrated = n.data.integrated(graph)?;
             let physical = match n.data.renormalization_scheme() {
                 ApproximationType::MUV | ApproximationType::IR => {
-                    integrated.physical_finite_counterterm_atom()
+                    integrated.physical_finite_counterterm()?
                 }
-                ApproximationType::PolePart => integrated.physical_pole_atom(),
+                ApproximationType::PolePart => integrated.physical_pole()?,
                 scheme => return Err(eyre!("No terminal counterterm projection for {scheme}")),
             };
-            let atom = marker.prefix(&graph.full_filter(), n.data.subgraph(), &physical);
+            let marked = marker.prefix(
+                &graph.full_filter(),
+                n.data.subgraph(),
+                physical.expression(),
+            );
+            let physical = physical.with_checked_expression(marked)?;
 
             debug_tags!(#generation, #uv, #graph, #term;
                 forest_term = %n.data.simple_display(graph),
-                log.expr = atom,
+                log.expr = physical.expression(),
                 "Term before simplification"
             );
 
-            let atom = &atom
-                * &graph.global_prefactor.projector
+            let prefactor = &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
                 * &graph.overall_factor;
-            debug_tags!(#generation, #uv, #inspect, #dump;
-                log.expression = atom,
-                dod = n.data.spinney.dod,
-                "Dumped pole part color simplification input"
-            );
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+            let prefactor = SymbolicTensor::infer(cooking.try_cook(prefactor.as_view())?)?;
+            let physical = physical.multiply(&prefactor)?;
+            debug_tags!(#generation, #uv, #inspect, #dump;
+                log.expression = physical.expression(),
+                dod = n.data.spinney.dod,
+                "Dumped pole part color simplification input"
+            );
+            let reduced = physical
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default()),
                     ..Default::default()

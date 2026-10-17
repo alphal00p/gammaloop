@@ -1179,7 +1179,7 @@ impl Forests {
                                 .require(operation)?
                                 .integrated(operation)?;
                             Ok((
-                                integrated.physical_finite_counterterm_atom(),
+                                integrated.physical_finite_counterterm()?,
                                 ForestNode {
                                     spinney: self.source_spinney(component),
                                     topo_order: operation.key.op_count(),
@@ -1317,8 +1317,8 @@ impl Forests {
                 source = %source,
                 is_union = self.graph.is_disjoint_union(nidx),
                 log.local_4d = local_4d.atom().expression(),
-                log.integrated_pole = integrated.physical_pole_atom(),
-                log.integrated_finite = integrated.physical_finite_counterterm_atom(),
+                log.integrated_pole = integrated.physical_pole()?.expression(),
+                log.integrated_finite = integrated.physical_finite_counterterm()?.expression(),
                 "Computed hedge-poset 4D node"
             );
             let computed = self.compute_store.entry(operation).or_default();
@@ -1585,8 +1585,8 @@ impl Forests {
                 vec![node]
             };
             let physical = components.into_iter().try_fold(
-                Atom::one(),
-                |product, component| -> Result<Atom> {
+                SymbolicTensor::infer(Atom::one())?,
+                |product, component| -> Result<_> {
                     let component_key = &self.graph[component];
                     let integrated = self
                         .compute_store
@@ -1594,29 +1594,35 @@ impl Forests {
                         .integrated(component_key)?;
                     let projection = match self.source_spinney(component).renormalization_scheme {
                         ApproximationType::MUV | ApproximationType::IR => {
-                            integrated.physical_finite_counterterm_atom()
+                            integrated.physical_finite_counterterm()?
                         }
-                        ApproximationType::PolePart => integrated.physical_pole_atom(),
+                        ApproximationType::PolePart => integrated.physical_pole()?,
                         scheme => {
                             return Err(eyre!("No terminal counterterm projection for {scheme}"));
                         }
                     };
-                    Ok(product * projection)
+                    Ok(product.multiply(&projection)?)
                 },
             )?;
-            let atom = marker.prefix(&graph.full_filter(), forest_node.subgraph(), &physical);
+            let marked = marker.prefix(
+                &graph.full_filter(),
+                forest_node.subgraph(),
+                physical.expression(),
+            );
+            let physical = physical.with_checked_expression(marked)?;
             debug!(
                 key=%key,
-               expr = % atom.log_print(None),"Term before simplification"
+               expr = % physical.expression().log_print(None),"Term before simplification"
             );
-            let atom = &atom
-                * &graph.global_prefactor.projector
+            let prefactor = &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
                 * &graph.overall_factor;
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+            let prefactor = SymbolicTensor::infer(cooking.try_cook(prefactor.as_view())?)?;
+            let reduced = physical
+                .multiply(&prefactor)?
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default()),
                     ..Default::default()
@@ -1825,8 +1831,8 @@ mod tests {
                     "4D coefficients must be constructed exactly when the projected route needs them for {operation}"
                 );
                 let integrated = computed.integrated(operation)?;
-                assert!(integrated.physical_pole_atom().is_zero());
-                assert!(integrated.physical_finite_counterterm_atom().is_zero());
+                assert!(integrated.physical_pole()?.is_zero());
+                assert!(integrated.physical_finite_counterterm()?.is_zero());
                 assert!(
                     !computed.cuts.is_empty(),
                     "both routes must compute a cut for {operation}"
@@ -2776,33 +2782,38 @@ mod tests {
         assert!(schemes.contains(&ApproximationType::MUV));
         assert!(schemes.contains(&ApproximationType::PolePart));
 
-        let expected =
-            components
-                .iter()
-                .try_fold(Atom::one(), |product, &component| -> Result<Atom> {
-                    let component_key = &forests.graph[component];
-                    let integrated = forests
-                        .compute_store
-                        .require(component_key)?
-                        .integrated(component_key)?;
-                    let projection = match forests.source_spinney(component).renormalization_scheme
-                    {
-                        ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
-                        ApproximationType::PolePart => integrated.physical_pole_atom(),
-                        scheme => panic!("unexpected component scheme {scheme}"),
-                    };
-                    Ok(product * projection)
-                })?;
+        let expected = components.iter().try_fold(
+            SymbolicTensor::infer(Atom::one())?,
+            |product, &component| -> Result<_> {
+                let component_key = &forests.graph[component];
+                let integrated = forests
+                    .compute_store
+                    .require(component_key)?
+                    .integrated(component_key)?;
+                let projection = match forests.source_spinney(component).renormalization_scheme {
+                    ApproximationType::MUV => integrated.physical_finite_counterterm()?,
+                    ApproximationType::PolePart => integrated.physical_pole()?,
+                    scheme => panic!("unexpected component scheme {scheme}"),
+                };
+                Ok(product.multiply(&projection)?)
+            },
+        )?;
         let terminal_key = &forests.graph[terminal];
         let aggregate = forests
             .compute_store
             .require(terminal_key)?
             .integrated(terminal_key)?;
         assert_ne!(
-            expected.expand(),
-            aggregate.physical_finite_counterterm_atom().expand()
+            expected.expression().expand(),
+            aggregate
+                .physical_finite_counterterm()?
+                .expression()
+                .expand()
         );
-        assert_ne!(expected.expand(), aggregate.physical_pole_atom().expand());
+        assert_ne!(
+            expected.expression().expand(),
+            aggregate.physical_pole()?.expression().expand()
+        );
 
         let wild = Atom::var(W_.x___);
         let replacements =
@@ -2810,7 +2821,7 @@ mod tests {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let expected = SymbolicTensor::infer(cooking.try_cook(expected.as_view())?)?
+        let expected = expected
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(ColorSimplifySettings::default()),
                 ..Default::default()

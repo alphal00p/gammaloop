@@ -5,6 +5,7 @@ use crate::{
     finalized_runtime_dot,
     graph::{FeynmanGraph, Graph, cuts::CutSet},
     initialisation::test_initialise,
+    numerator::AppliedFeynmanRule,
     settings::global::OrientationPattern,
     utils::GS,
     uv::{
@@ -526,7 +527,8 @@ fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> 
     let orientation =
         OrientationProjection::exact_expression(&production, &options, &orientation_pattern, false);
     let localizer = Localizer::new(&cutset, orientation);
-    let unprojected = localizer.localize(&coefficient, &mut graph, &child)?;
+    let coefficient_tensor = AppliedFeynmanRule::new(coefficient.clone())?.expr;
+    let unprojected = localizer.localize(&coefficient_tensor, &mut graph, &child)?;
     let active_subgraph = current.reduced_subgraph(&child);
     let expected = {
         let ctx = UVCtx::new(&graph, &graph.model, &settings);
@@ -567,7 +569,7 @@ fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> 
         expected
     };
     let actual = Direct3dApproximation::new(localizer, &mut graph, &settings).run_integrated(
-        &[(&coefficient, &child)],
+        &[(&coefficient_tensor, &child)],
         &child,
         &current,
         &child,
@@ -673,8 +675,11 @@ fn disconnected_finite_mass_vertex_keeps_its_sibling_mass_inert() -> Result<()> 
     let orientation =
         OrientationProjection::exact_expression(&production, &options, &orientation_pattern, false);
     let localizer = Localizer::new(&cutset, orientation);
+    let mass_tensor = AppliedFeynmanRule::new(mass.clone())?.expr;
+    let sibling_tensor = AppliedFeynmanRule::new(sibling_coefficient.clone())?.expr;
+    let one_tensor = AppliedFeynmanRule::new(one.clone())?.expr;
     let actual = Direct3dApproximation::new(localizer, &mut graph, &settings).run_integrated(
-        &[(&mass, &inside), (&sibling_coefficient, &outside)],
+        &[(&mass_tensor, &inside), (&sibling_tensor, &outside)],
         &prefix,
         &current,
         &inside,
@@ -682,7 +687,7 @@ fn disconnected_finite_mass_vertex_keeps_its_sibling_mass_inert() -> Result<()> 
         &inside,
     )?;
     let control = Direct3dApproximation::new(localizer, &mut graph, &settings).run_integrated(
-        &[(&mass, &inside), (&one, &outside)],
+        &[(&mass_tensor, &inside), (&one_tensor, &outside)],
         &prefix,
         &current,
         &inside,
