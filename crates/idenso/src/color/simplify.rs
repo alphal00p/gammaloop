@@ -4491,9 +4491,9 @@ mod reconstruction_tests {
         let compact = -chain!(
             &a,
             &b,
-            color_f!(T.chain_in, T.chain_out, &x),
-            color_f!(T.chain_in, T.chain_out, &y),
-            color_f!(T.chain_in, T.chain_out, &c),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &x),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &y),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &c),
         );
         let coefficient = Atom::i() / Atom::num(2)
             * adjoint_casimir_for_dimension(Atom::num(8)).pow(2)
@@ -4553,9 +4553,9 @@ mod reconstruction_tests {
         let compact = chain!(
             &a,
             &b,
-            color_f!(T.chain_in, T.chain_out, &x),
-            color_f!(T.chain_in, T.chain_out, &y),
-            color_f!(T.chain_in, T.chain_out, &c),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &x),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &y),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &c),
         );
         let unrelated = trace!(&rep, color_t!(&u), color_t!(&v));
         let single_connection = trace!(&rep, color_t!(&a), color_t!(&u));
@@ -4626,16 +4626,16 @@ mod reconstruction_tests {
         let compact = -chain!(
             &a,
             &b,
-            color_f!(T.chain_in, T.chain_out, &x),
-            color_f!(T.chain_in, T.chain_out, &y),
-            color_f!(T.chain_in, T.chain_out, &c),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &x),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &y),
+            color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &c),
         );
         let scalar = (Atom::var(symbol!("adjoint_connection_spectator::r"))
             + Atom::var(symbol!("adjoint_connection_spectator::s")))
         .pow(17);
         let foreign = function!(
             spenso::tensor_symbol!("adjoint_connection_spectator::vector"),
-            spenso::mink!(4, 98255),
+            spenso::mink!(4, 98255)
         );
         let source = SymbolicTensor::infer(&scalar * &foreign * word * compact).unwrap();
         let result = source

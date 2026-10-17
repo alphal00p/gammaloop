@@ -902,7 +902,7 @@ anchor = "    fn simplify_product("
 # Reviewed 2026-10-17: connected adjoint chains expose explicit structure constants
 # only when an existing product identity reduces them; spectator factorization,
 # reserved dummy identities and ranked-zero ports remain with their native owners.
-digest = "9cc58e6c7453793e3958275efa00961fa1aa4aaf"
+digest = "224c0f4a0dc959504772e34ff005879aae5d3fe7"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"
