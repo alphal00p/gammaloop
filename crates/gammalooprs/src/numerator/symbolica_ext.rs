@@ -120,10 +120,11 @@ impl NumeratorAtomExt for Atom {
     }
 }
 
-/// Upper bounds before rational polynomial conversion, including the expanded
+/// Upper bounds before scalar polynomial conversion or finite-coordinate collection,
+/// including the expanded
 /// denominator of a sum. Saturating arithmetic makes compact high powers cheap
 /// to reject; a post-conversion byte limit would be too late.
-struct ScalarRationalSize {
+pub(crate) struct ScalarRationalSize {
     numerator_terms: usize,
     denominator_terms: usize,
     numerator_degree: usize,
@@ -131,7 +132,7 @@ struct ScalarRationalSize {
 }
 
 impl ScalarRationalSize {
-    fn estimate(atom: AtomView<'_>) -> Option<Self> {
+    pub(crate) fn estimate(atom: AtomView<'_>) -> Option<Self> {
         let leaf = Self {
             numerator_terms: 1,
             denominator_terms: 1,
