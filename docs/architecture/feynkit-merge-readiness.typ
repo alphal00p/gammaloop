@@ -735,6 +735,8 @@ Against main `ff533fcd`, the concrete storage changes are:
   [Local-4D sector and source witness], [`FourDSector.atom`, `FourDTerm.numerator`,
     `CanonicalUvTerm.source_numerator`: `Atom`],
     [Each retains the tensor and its logical interface],
+  [Integrated counterterm], [`Series<AtomField>`],
+    [Typed pole and signed finite projections; scalar Laurent series is temporary],
   [Component preparation], [Raw expression parsed into `ParsingNet`],
     [Consuming typed `into_network` returns `Canonicalized<ParsingNet>`],
   [Compiled evaluator], [`AliasedAtom`, scalar `FunctionMap`, Symbolica program],
@@ -750,6 +752,10 @@ lowering limits their lifetime, but does not establish a measured memory saving.
 Stage timings also need matching boundaries. Raw-root cooking and admission now
 precede `preprocess_tensor`, so its cumulative `normalization_done` timer omits
 that work. A separate `evaluator_stack_raw_root_admission` event records it.
+After family shadows are installed, finite dots inside scalar function
+arguments are lowered before the component parser, which treats those
+arguments as opaque. `evaluator_stack_raw_root_scalar_components` records this
+additional root boundary separately.
 Retained family bodies actually avoid their former re-admission. The enclosing
 evaluator preprocessing interval and paired full-process generation time remain
 the comparable totals; a smaller normalization timer alone is insufficient
@@ -771,6 +777,11 @@ Concrete Rust API difficulties found during implementation:
   retained source interface. A zero coefficient keeps its tensor rank. This
   boundary needs an ergonomic checked series API before eliminating the
   remaining application-side adaptation.
+- Tensor composition is fallible: `multiply`, `try_add`, `try_sub` and `pow`
+  must check compatible interfaces and index multiplicities. Replacing these
+  calls with ordinary Atom operators would discard those checks. Component
+  tensor containers have Atom-like forwarding APIs, but those APIs do not
+  establish the symbolic carrier's contraction and logical-layout invariants.
 - Existing Atom helpers can hide index-transport assumptions. The Taylor
   helper's Dirac prepass used to decode every cooked symbol on return. Native
   input then acquired raw indices alongside retained encoded ones. The shared
@@ -795,6 +806,9 @@ Concrete Rust API difficulties found during implementation:
   `AbstractIndex` syntax. Typed bodies retain reversible encoded indices;
   decoding occurs at component or explicit expression-export boundaries.
   A generic uncook operation cannot silently change the carrier's index type.
+  Internal symbolic materialization and the integrated residual-contraction
+  observer now use `AbstractIndex` directly, removing their legacy decode,
+  parse and recook detour while retaining all structural checks.
 - Persistence previously had no carrier support. Archives must store payload
   and logical interface, including ranked zero and unresolved axis order.
   Decode remaps symbols and validates those parts once. Proof and planner
@@ -883,6 +897,31 @@ which still exported native indices, and a diagnostic parser's dummy-name
 collision. The scalar-argument and diagnostic-collision repairs passed focused
 production cases; the native port-order repair passed the full Idenso package.
 Further application validation is pending.
+
+The follow-up frozen boundary candidate `65a1b835` passes all ten selected
+application/regression controls, including projected GL00, the quark local-IR
+profile, both UV wrappers, scalar-argument lowering and the two ghost cases.
+The d76 test passes with numeric-only stage logging in 32.418 seconds and with
+both log sinks disabled in 32.718 seconds on that same frozen binary. The
+earlier 240-second failure belongs to a different candidate and remains an
+unresolved intermittent observation; these passing controls do not justify
+changing the deadline or declaring a measured performance improvement.
+
+The end-to-end audit found two additional retained-representation gaps after
+that checkpoint. `IntegratedCts` now retains typed pole and signed finite
+projections instead of a persistent `Series<AtomField>`; its existing consumers
+need only these projections. The same native series engine performs temporary
+Laurent arithmetic and truncation. Completed projections retain the source
+interface even when they vanish, and nested forests/localizers consume them
+without re-admission. This change still requires application qualification.
+
+Local-4D denominator decomposition now restores every completed numerator
+through the original carrier, preserving its logical layout. The parser still
+performs temporary expression arithmetic and re-inference. Selecting every
+`den` with the native tensor collector can distribute positive denominator
+polynomials which belong to the factorized numerator; it cannot replace the
+existing rational-shell parser without an API extension. The regression keeps
+the exact positive polynomial factor, open-port order and ranked-zero checks.
 
 The ghost d76 timing remains under investigation. A rebuilt binary exceeded
 240 seconds with tracing disabled yet passed in about 35 seconds with narrow

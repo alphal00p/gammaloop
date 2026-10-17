@@ -25,6 +25,7 @@ use spenso::{
         tags::SPENSO_TAG,
     },
     structure::{
+        abstract_index::AbstractIndex,
         partial::PartialStructure,
         representation::{Minkowski, RepName},
         slot::{DummyAind, ParseableAind, SlotMatcher},
@@ -60,15 +61,28 @@ use crate::{
 
 /// Laurent projections of an integrated counterterm.
 ///
-/// Connected values store their canonical expansion. Factorized values encode
-/// componentwise pole and signed nonnegative-power products under the same accessors.
+/// The native series engine computes the Laurent projections transiently. Both
+/// retained projections keep the completed tensor's logical interface, including zero.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct IntegratedCts {
-    expansion: Series<AtomField>,
+    pole: SymbolicTensor<PartialStructure>,
+    finite_counterterm: SymbolicTensor<PartialStructure>,
     scale_power: i64,
 }
 
 impl IntegratedCts {
+    fn from_series(
+        source: &SymbolicTensor<PartialStructure>,
+        expansion: &Series<AtomField>,
+        scale_power: i64,
+    ) -> Result<Self> {
+        Ok(Self {
+            pole: source.with_checked_expression(truncate(expansion, false))?,
+            finite_counterterm: source.with_checked_expression(-truncate(expansion, true))?,
+            scale_power,
+        })
+    }
+
     pub(crate) fn factorized_product<'a>(
         factors: impl IntoIterator<Item = &'a Self>,
         depth: usize,
@@ -77,51 +91,62 @@ impl IntegratedCts {
         let first = factors
             .next()
             .ok_or_else(|| eyre!("a factorized integrated counterterm cannot be empty"))?;
-        let mut pole = truncate(&first.expansion, false);
-        let mut finite_counterterm = -truncate(&first.expansion, true);
+        let mut pole = first.pole.clone();
+        let mut finite_counterterm = first.finite_counterterm.clone();
         let mut scale_power = first.scale_power;
 
         for factor in factors {
-            pole *= truncate(&factor.expansion, false);
-            finite_counterterm *= -truncate(&factor.expansion, true);
+            pole = pole.multiply(&factor.pole)?;
+            finite_counterterm = finite_counterterm.multiply(&factor.finite_counterterm)?;
             scale_power += factor.scale_power;
         }
 
-        Ok(Self {
-            // The public projections add the finite-counterterm sign, so store
-            // its negative while keeping the pole product unchanged.
-            expansion: series(&(pole - finite_counterterm), depth)?,
-            scale_power,
-        })
+        // Native Laurent truncation owns precision and powers. Its retained
+        // projections inherit the complete product interface, even if both vanish.
+        let combined = pole.try_sub(&finite_counterterm)?;
+        let expansion = series(combined.expression(), depth)?;
+        Self::from_series(&combined, &expansion, scale_power)
     }
 
-    fn projected_atom(&self, finite: bool) -> Atom {
+    fn projected(&self, finite: bool) -> Result<SymbolicTensor<PartialStructure>> {
         // The enclosing forest Taylor operation rescales the vacuum mass in
         // this coefficient along with its active momenta. The bookkeeping
         // factor restores only consumed loop measures; physical projections
         // and the next integration set it to one.
-        truncate(&self.expansion, finite)
-            * Atom::var(GS.integrated_loop_scale).pow(self.scale_power)
+        let projection = if finite {
+            &self.finite_counterterm
+        } else {
+            &self.pole
+        };
+        Ok(projection.with_checked_expression(
+            projection.expression() * Atom::var(GS.integrated_loop_scale).pow(self.scale_power),
+        )?)
     }
 
-    pub(crate) fn pole_atom(&self) -> Atom {
-        self.projected_atom(false)
+    pub(crate) fn pole(&self) -> Result<SymbolicTensor<PartialStructure>> {
+        self.projected(false)
     }
 
-    pub(crate) fn finite_counterterm_atom(&self) -> Atom {
-        -self.projected_atom(true)
+    pub(crate) fn finite_counterterm(&self) -> Result<SymbolicTensor<PartialStructure>> {
+        self.projected(true)
     }
 
-    pub(crate) fn physical_pole_atom(&self) -> Atom {
-        self.pole_atom()
-            .replace(GS.integrated_loop_scale)
-            .with(Atom::one())
+    pub(crate) fn physical_pole(&self) -> Result<SymbolicTensor<PartialStructure>> {
+        Ok(self.pole.with_checked_expression(
+            self.pole
+                .expression()
+                .replace(GS.integrated_loop_scale)
+                .with(Atom::one()),
+        )?)
     }
 
-    pub(crate) fn physical_finite_counterterm_atom(&self) -> Atom {
-        self.finite_counterterm_atom()
-            .replace(GS.integrated_loop_scale)
-            .with(Atom::one())
+    pub(crate) fn physical_finite_counterterm(&self) -> Result<SymbolicTensor<PartialStructure>> {
+        Ok(self.finite_counterterm.with_checked_expression(
+            self.finite_counterterm
+                .expression()
+                .replace(GS.integrated_loop_scale)
+                .with(Atom::one()),
+        )?)
     }
 }
 
@@ -143,8 +168,10 @@ fn truncate(series: &Series<AtomField>, finite: bool) -> Atom {
 
 impl Rooted for IntegratedCts {
     fn root() -> Self {
+        let zero = SymbolicTensor::infer(Atom::Zero).expect("zero has a scalar tensor interface");
         Self {
-            expansion: series(&Atom::Zero, 1).expect("zero has a Laurent expansion"),
+            pole: zero.clone(),
+            finite_counterterm: zero,
             scale_power: 0,
         }
     }
@@ -256,7 +283,7 @@ impl Integrated<'_> {
                 // Integrate the complete signed operator in each retained frame.
                 // Linearity permits this sector sum; no soft branch is discarded
                 // before the nested forest has supplied its completed coefficient.
-                let mut integrated = Atom::Zero;
+                let mut integrated = integrand.atom().with_checked_expression(Atom::Zero)?;
                 for sector in integrand.active_sectors() {
                     let physical = sector
                         .atom
@@ -266,7 +293,7 @@ impl Integrated<'_> {
                     let physical = sector.atom.with_algebra_result(physical)?;
                     let simplified = simplify(&physical)?;
                     if !simplified.is_zero() {
-                        integrated += self
+                        let coefficient = self
                             .integrate(&simplified, sector, ctx, current, given)
                             .wrap_err_with(|| {
                                 format!(
@@ -275,28 +302,29 @@ impl Integrated<'_> {
                                     sector.active_components,
                                 )
                             })?;
+                        integrated = integrated.try_add(&coefficient)?;
                     }
                 }
                 let marker = UvMarker::new(ctx.settings);
-                let integrated = marker.apply(
+                let marked = marker.apply(
                     UvOperation::Integrate,
                     marker_current.subgraph(),
                     marker_given.subgraph(),
-                    &integrated,
+                    integrated.expression(),
                 );
+                let integrated = integrated.with_checked_expression(marked)?;
                 let expansion_depth =
                     usize::try_from(self.vakint_settings.number_of_terms_in_epsilon_expansion)
                         .wrap_err("Vakint epsilon expansion depth must be nonnegative")?;
-                let expanded = series(&integrated, expansion_depth.max(n_loops + 1))?.map_coeff(
-                    |coefficient| {
+                let expanded = series(integrated.expression(), expansion_depth.max(n_loops + 1))?
+                    .map_coeff(|coefficient| {
                         marker.apply(
                             UvOperation::Series,
                             marker_current.subgraph(),
                             marker_given.subgraph(),
                             coefficient,
                         )
-                    },
-                );
+                    });
                 let expansion = expanded.map_coeff(|coefficient| {
                     marker.apply(
                         UvOperation::Truncate,
@@ -308,10 +336,7 @@ impl Integrated<'_> {
 
                 // Retain the consumed loop measures for subsequent UV rescalings. Keep this
                 // marker independent of mUV so enclosing limits still rescale the vacuum mass.
-                Ok(IntegratedCts {
-                    expansion,
-                    scale_power: 4 * n_loops as i64,
-                })
+                IntegratedCts::from_series(&integrated, &expansion, 4 * n_loops as i64)
             }
             ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
             ApproximationType::Unsubtracted => {
@@ -332,7 +357,7 @@ impl Integrated<'_> {
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
-    ) -> Result<Atom> {
+    ) -> Result<SymbolicTensor<PartialStructure>> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
         let settings = ctx.settings;
@@ -814,11 +839,14 @@ impl Integrated<'_> {
         );
         let res = Self::restore_numerator(res, current.topo_order());
 
-        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
         // Close internal momentum pairs before independently integrated factors
         // are multiplied. Their local UV dummy labels can coincide; completed
         // scalar products must not expose those labels to the next factor.
-        let dotted = SymbolicTensor::infer(cooking.try_cook(res.as_view())?)?
+        let dotted = integrand
+            .with_checked_expression(cooking.try_cook(res.as_view())?)?
             .contract(ContractSettings {
                 collect_chains: false,
                 collect_traces: false,
@@ -853,11 +881,11 @@ impl Integrated<'_> {
         // Normalize the fully integrated UV subgraph before Laurent projection
         // and reinsertion: identical scalar masters can arrive as 2*(A+B) or
         // 2*A+2*B. No cograph numerator is present at this analytic boundary.
-        let result = cooking.uncook(collected.expression().as_view()).expand();
+        let result = collected.expanded(None, false)?;
         debug_tags!(#uv, #integrated, #diagnostic_stage;
             stage = 3u8, finished = true,
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            output_bytes = result.as_view().get_byte_size(),
+            output_bytes = result.expression().as_view().get_byte_size(),
             "Completed integrated coefficient cleanup"
         );
         Ok(result)
@@ -890,9 +918,9 @@ impl Integrated<'_> {
         Self::ensure_resolved_lorentz_contractions(numerator.expression())?;
         let numerator = numerator
             .with_algebra_result(Self::dimensionally_regularized(numerator.expression()))?;
-        let materialized = cooking
-            .uncook(numerator.expression().as_view())
-            .parse_to_symbolic_net::<Aind>(&ParseSettings {
+        let materialized = numerator
+            .expression()
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
                     schoonschip: SchoonschipExpansionMode {
                         inner_products: false,
@@ -905,8 +933,7 @@ impl Integrated<'_> {
                 ..Default::default()
             })?
             .simple_execute::<()>()?;
-        let numerator =
-            numerator.with_checked_expression(cooking.try_cook(materialized.as_view())?)?;
+        let numerator = numerator.with_checked_expression(materialized)?;
         let result = Self::to_vakint_numerator(&numerator)?;
         debug_tags!(#uv, #integrated, #diagnostic_stage;
             stage = 4u8, finished = true,
@@ -917,6 +944,7 @@ impl Integrated<'_> {
         Ok(result)
     }
 
+    /// Inspect a borrowed native expression without changing its retained owner.
     fn ensure_resolved_lorentz_contractions(numerator: &Atom) -> Result<()> {
         let minkowski = Minkowski {}.to_symbolic([GS.dim]).get_symbol().unwrap();
         if !numerator.contains_symbol(minkowski) {
@@ -931,15 +959,11 @@ impl Integrated<'_> {
         // Expose compact inter-chain contractions, retaining every analytic
         // branch and scalar coefficient. The shared occurrence observer checks
         // branch-local pairs without distributing products of sums.
-        // This diagnostic uses the legacy Aind materializer, whose fresh-name
-        // reservations must see the source spelling of existing dummy indices.
-        // A cooked dummy otherwise appears distinct from a newly allocated raw
-        // dummy until the validation input is cooked again. Keep this decoded
-        // temporary local; the retained numerator remains native and unchanged.
-        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let source = cooking.uncook(numerator.as_view());
-        let explicit = source
-            .parse_to_symbolic_net::<Aind>(&ParseSettings {
+        // Native index allocation reserves the existing encoded identities.
+        // Neither source indices nor newly materialized dummy names cross an
+        // encoding boundary, so distinct labels stay distinct during the check.
+        let explicit = numerator
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
                     schoonschip: SchoonschipExpansionMode::full(),
                     trace: false,
@@ -959,7 +983,7 @@ impl Integrated<'_> {
                 && view.contains_symbol(minkowski)
                 && !function
                     .iter()
-                    .all(|argument| slots.parse::<Minkowski, Aind>(argument).is_ok())
+                    .all(|argument| slots.parse::<Minkowski, AbstractIndex>(argument).is_ok())
             {
                 // Full shorthand parsing must expose compact Lorentz products
                 // before excluded momentum leaves can hide their ports.
@@ -973,12 +997,11 @@ impl Integrated<'_> {
                 "an unresolved compact Lorentz inner product remains after d-dimensional UV numerator algebra"
             ));
         }
-        let explicit = cooking.try_cook(explicit.as_view())?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "residual_lorentz_contraction_materialization",
-            file.source = %source.to_plain_string(),
+            file.source = %numerator.to_plain_string(),
             file.explicit = %explicit.to_plain_string(),
-            "Check residual contractions in a source-aware dummy scope"
+            "Check residual contractions in the native index scope"
         );
         if InterfaceInference::has_explicit_index_pairs(
             explicit.as_view(),
@@ -2102,6 +2125,98 @@ mod tests {
 
     use crate::{initialisation::test_initialise, utils::symbolica_ext::Q_I};
 
+    #[test]
+    fn integrated_projections_preserve_open_ports_when_a_laurent_part_vanishes() -> Result<()> {
+        test_initialise()?;
+        let vector = crate::numerator::AppliedFeynmanRule::new(parse!(
+            "gammalooprs::Q(0,spenso::mink(4,1))"
+        ))?
+        .expr;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let source = vector.with_checked_expression(vector.expression() * epsilon.pow(-1))?;
+        let integrated = IntegratedCts::from_series(&source, &series(source.expression(), 2)?, 4)?;
+        assert_eq!(integrated.pole()?.structure(), vector.structure());
+        assert_eq!(
+            integrated.pole()?.expression(),
+            &(vector.expression() * epsilon.pow(-1) * Atom::var(GS.integrated_loop_scale).pow(4)),
+        );
+        assert_eq!(
+            integrated.physical_pole()?.expression(),
+            source.expression()
+        );
+        let finite = integrated.physical_finite_counterterm()?;
+        assert!(finite.is_zero());
+        assert_eq!(finite.rank(), 1);
+        assert_eq!(finite.structure(), vector.structure());
+
+        let zero = vector.with_checked_expression(Atom::Zero)?;
+        let integrated_zero = IntegratedCts::from_series(&zero, &series(zero.expression(), 2)?, 4)?;
+        for projection in [
+            integrated_zero.pole()?,
+            integrated_zero.finite_counterterm()?,
+            integrated_zero.physical_pole()?,
+            integrated_zero.physical_finite_counterterm()?,
+        ] {
+            assert!(projection.is_zero());
+            assert_eq!(projection.structure(), vector.structure());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn integrated_products_keep_contracted_and_zero_tensor_interfaces() -> Result<()> {
+        test_initialise()?;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let left = crate::numerator::AppliedFeynmanRule::new(parse!(
+            "gammalooprs::Q(0,spenso::mink(4,1))"
+        ))?
+        .expr;
+        let left_source =
+            left.with_checked_expression(left.expression() * (epsilon.pow(-1) + 2))?;
+        let left_ct =
+            IntegratedCts::from_series(&left_source, &series(left_source.expression(), 2)?, 4)?;
+        for (index, expected_rank) in [(1, 0), (2, 2)] {
+            let right = crate::numerator::AppliedFeynmanRule::new(parse!(&format!(
+                "gammalooprs::Q(1,spenso::mink(4,{index}))"
+            )))?
+            .expr;
+            let right_source =
+                right.with_checked_expression(right.expression() * (epsilon.pow(-1) + 3))?;
+            let right_ct = IntegratedCts::from_series(
+                &right_source,
+                &series(right_source.expression(), 2)?,
+                4,
+            )?;
+            let tensor_product = left.multiply(&right)?;
+            assert_eq!(tensor_product.rank(), expected_rank);
+            let product = IntegratedCts::factorized_product([&left_ct, &right_ct], 2)?;
+            let pole = product.physical_pole()?;
+            let finite = product.physical_finite_counterterm()?;
+            assert_eq!(pole.structure(), tensor_product.structure());
+            assert_eq!(finite.structure(), tensor_product.structure());
+            assert_eq!(
+                pole.expression(),
+                &(tensor_product.expression() * epsilon.pow(-2))
+            );
+            assert_eq!(
+                finite.expression(),
+                &(tensor_product.expression() * Atom::num(6))
+            );
+
+            let zero = left.with_checked_expression(Atom::Zero)?;
+            let zero_ct = IntegratedCts::from_series(&zero, &series(zero.expression(), 2)?, 4)?;
+            let zero_product = IntegratedCts::factorized_product([&zero_ct, &right_ct], 2)?;
+            for projection in [
+                zero_product.physical_pole()?,
+                zero_product.physical_finite_counterterm()?,
+            ] {
+                assert!(projection.is_zero());
+                assert_eq!(projection.structure(), tensor_product.structure());
+            }
+        }
+        Ok(())
+    }
+
     // Fixtures enter at the source-expression boundary; production sectors
     // already own an admitted tensor and never pass through these adapters.
     fn simplify(expression: &Atom) -> Result<Atom> {
@@ -2991,6 +3106,7 @@ mod tests {
     #[test]
     fn analytic_uv_spin_algebra_rejects_unsupported_residual_contractions() {
         test_initialise().unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let bis = Bispinor {}.new_rep(4);
         let a = bis.to_symbolic([Aind::new_dummy().to_atom()]);
         let b = bis.to_symbolic([Aind::new_dummy().to_atom()]);
@@ -3025,12 +3141,21 @@ mod tests {
         }
         let residual = function!(SPENSO_TAG.chain, &a, &b, &gamma, &unknown, &gamma);
         assert!(
-            Integrated::ensure_resolved_lorentz_contractions(&simplify(&residual).unwrap())
-                .is_err()
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking
+                    .try_cook(simplify(&residual).unwrap().as_view())
+                    .unwrap()
+            )
+            .is_err()
         );
         // An open gamma is a valid d-dimensional tensor basis element.
         let open = simplify(&function!(AGS.gamma, &a, &b, &mu)).unwrap();
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&open).is_ok());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(open.as_view()).unwrap()
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -3054,60 +3179,69 @@ mod tests {
     }
 
     #[test]
-    fn residual_lorentz_check_reserves_decoded_color_dummy_indices() -> Result<()> {
+    fn residual_lorentz_check_preserves_native_color_dummy_indices() -> Result<()> {
         test_initialise()?;
         let adjoint = idenso::representations::ColorAdjoint {}.new_rep(8);
-        let [a, b, c, x, y] = [0, 1, 2, 1_000_000, 1_000_001]
-            .map(|index| adjoint.to_symbolic([Aind::Dummy(index).to_atom()]));
-        let word = spenso::chain!(
-            &a,
-            &b,
-            function!(
-                idenso::color::CS.f,
-                SPENSO_TAG.chain_in,
-                SPENSO_TAG.chain_out,
-                &x
-            ),
-            function!(
-                idenso::color::CS.f,
-                SPENSO_TAG.chain_in,
-                SPENSO_TAG.chain_out,
-                &y
-            )
-        );
-        let momentum = GS.emr_mom(
-            EdgeIndex(0),
-            Minkowski {}
-                .new_rep(GS.dim)
-                .to_symbolic([Aind::Hedge(9, 1).to_atom()]),
-        );
-        let source = word * idenso::color_f!(&x, &y, &c) * momentum;
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let native = SymbolicTensor::infer(cooking.try_cook(source.as_view())?)?;
-        Integrated::ensure_resolved_lorentz_contractions(&source)?;
-        Integrated::ensure_resolved_lorentz_contractions(native.expression())?;
-        assert_eq!(cooking.uncook(native.expression().as_view()), source);
+        for native_dummy_names in [false, true] {
+            let [a, b, c, x, y] = [0, 1, 2, 1_000_000, 1_000_001].map(|index| {
+                adjoint.to_symbolic([if native_dummy_names {
+                    AbstractIndex::new_dummy_at(index).to_atom()
+                } else {
+                    Aind::Dummy(index).to_atom()
+                }])
+            });
+            let word = spenso::chain!(
+                &a,
+                &b,
+                function!(
+                    idenso::color::CS.f,
+                    SPENSO_TAG.chain_in,
+                    SPENSO_TAG.chain_out,
+                    &x
+                ),
+                function!(
+                    idenso::color::CS.f,
+                    SPENSO_TAG.chain_in,
+                    SPENSO_TAG.chain_out,
+                    &y
+                )
+            );
+            let momentum = GS.emr_mom(
+                EdgeIndex(0),
+                Minkowski {}
+                    .new_rep(GS.dim)
+                    .to_symbolic([Aind::Hedge(9, 1).to_atom()]),
+            );
+            let source = word * idenso::color_f!(&x, &y, &c) * momentum;
+            let encoded = cooking.try_cook(source.as_view())?;
+            let native = SymbolicTensor::infer(encoded.clone())?;
+            Integrated::ensure_resolved_lorentz_contractions(&encoded)?;
+            Integrated::ensure_resolved_lorentz_contractions(native.expression())?;
+            assert_eq!(cooking.uncook(native.expression().as_view()), source);
 
-        // An actual third occurrence still fails after the parser has reserved
-        // both encoded source dummies. The fix only prevents invented collisions.
-        let extra = idenso::color_f!(
-            &x,
-            adjoint.to_symbolic([Aind::Hedge(10, 1).to_atom()]),
-            adjoint.to_symbolic([Aind::Hedge(11, 1).to_atom()])
-        );
-        let malformed = native.expression() * cooking.try_cook(extra.as_view())?;
-        assert!(
-            Integrated::ensure_resolved_lorentz_contractions(&malformed)
-                .unwrap_err()
-                .to_string()
-                .contains("more than two compatible tensor ports")
-        );
+            // An actual third occurrence still fails after reserving native and
+            // encoded source dummies. Only invented collisions are prevented.
+            let extra = idenso::color_f!(
+                &x,
+                adjoint.to_symbolic([Aind::Hedge(10, 1).to_atom()]),
+                adjoint.to_symbolic([Aind::Hedge(11, 1).to_atom()])
+            );
+            let malformed = native.expression() * cooking.try_cook(extra.as_view())?;
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(&malformed)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("more than two compatible tensor ports")
+            );
+        }
         Ok(())
     }
 
     #[test]
     fn residual_tensor_contractions_are_checked_per_analytic_branch() {
         test_initialise().unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let bis = Bispinor {}.new_rep(4);
         let [a, b, c, d] =
             std::array::from_fn::<_, 4, _>(|_| bis.to_symbolic([Aind::new_dummy().to_atom()]));
@@ -3116,7 +3250,12 @@ mod tests {
             std::array::from_fn::<_, 3, _>(|_| mink.to_symbolic([Aind::new_dummy().to_atom()]));
         let left = function!(AGS.gamma, &a, &b, &mu);
         let right = function!(AGS.gamma, &c, &d, &mu);
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&(&left * &right)).is_err());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook((&left * &right).as_view()).unwrap()
+            )
+            .is_err()
+        );
         // Compact metrics contract Lorentz axes while retaining spinor ports;
         // dot is reserved for rank-one operands in the typed tensor API.
         let compact = function!(
@@ -3124,7 +3263,12 @@ mod tests {
             function!(AGS.gamma, &a, &b, mink.to_symbolic([])),
             function!(AGS.gamma, &c, &d, mink.to_symbolic([]))
         );
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&compact).is_err());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(compact.as_view()).unwrap()
+            )
+            .is_err()
+        );
         let same_chain = function!(
             ETS.metric,
             function!(AGS.gamma, &a, &b, mink.to_symbolic([])),
@@ -3137,13 +3281,27 @@ mod tests {
                 .is_zero(),
             "a compact contraction within one gamma chain must close to d times its spinor identity: {same_chain}"
         );
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&same_chain).is_ok());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(same_chain.as_view()).unwrap()
+            )
+            .is_ok()
+        );
         let free =
             &left * function!(AGS.gamma, &c, &d, &nu) + function!(AGS.gamma, &a, &b, &nu) * &right;
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&free).is_ok());
         assert!(
-            Integrated::ensure_resolved_lorentz_contractions(&function!(ETS.metric, &mu, &nu))
-                .is_ok()
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(free.as_view()).unwrap()
+            )
+            .is_ok()
+        );
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking
+                    .try_cook(function!(ETS.metric, &mu, &nu).as_view())
+                    .unwrap()
+            )
+            .is_ok()
         );
         let ambiguous = function!(
             ETS.metric,
@@ -3162,14 +3320,24 @@ mod tests {
                 mink.to_symbolic([])
             )
         );
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&ambiguous).is_err());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(ambiguous.as_view()).unwrap()
+            )
+            .is_err()
+        );
         let slash = function!(
             AGS.gamma,
             &a,
             &b,
             function!(GS.emr_mom, 0, mink.to_symbolic([]))
         );
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&slash).is_ok());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(slash.as_view()).unwrap()
+            )
+            .is_ok()
+        );
         let slash_product = &slash
             * function!(
                 AGS.gamma,
@@ -3177,10 +3345,17 @@ mod tests {
                 &d,
                 function!(GS.emr_mom, 1, mink.to_symbolic([]))
             );
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&slash_product).is_ok());
         assert!(
             Integrated::ensure_resolved_lorentz_contractions(
-                &(&left / (Atom::var(GS.dim) - Atom::one()))
+                &cooking.try_cook(slash_product.as_view()).unwrap()
+            )
+            .is_ok()
+        );
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking
+                    .try_cook((&left / (Atom::var(GS.dim) - Atom::one())).as_view())
+                    .unwrap()
             )
             .is_ok()
         );
@@ -3205,7 +3380,12 @@ mod tests {
             &factors[1],
             &factors[2]
         );
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&operator).is_err());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(operator.as_view()).unwrap()
+            )
+            .is_err()
+        );
         let closed = function!(
             SPENSO_TAG.trace,
             bis.to_symbolic([]),
@@ -3227,6 +3407,7 @@ mod tests {
     #[test]
     fn residual_lorentz_diagnostic_keeps_factored_weighted_branches() {
         test_initialise().unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let bis = Bispinor {}.new_rep(4);
         let [a, b, c, d] =
             std::array::from_fn::<_, 4, _>(|_| bis.to_symbolic([Aind::new_dummy().to_atom()]));
@@ -3243,7 +3424,12 @@ mod tests {
                 function!(AGS.gamma, &c, &d, mink.to_symbolic([]))
             )
         );
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&metadata).is_ok());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(metadata.as_view()).unwrap()
+            )
+            .is_ok()
+        );
         let coefficient = parse!("(residual_x-residual_y)*(residual_x+residual_y)^30");
         let alternative = function!(
             SPENSO_TAG.tensor_symbol("residual_lorentz_alternative"),
@@ -3254,17 +3440,24 @@ mod tests {
         let factored = &coefficient * (&left + alternative) * &right;
         let original = factored.clone();
         assert!(
-            Integrated::ensure_resolved_lorentz_contractions(&factored)
-                .unwrap_err()
-                .to_string()
-                .contains("unresolved internal Lorentz tensor contraction")
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(factored.as_view()).unwrap()
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("unresolved internal Lorentz tensor contraction")
         );
         assert_eq!(factored, original);
         let free = &coefficient
             * (&left * function!(AGS.gamma, &c, &d, &nu)
                 + function!(AGS.gamma, &a, &b, &nu) * &right);
         let original = free.clone();
-        assert!(Integrated::ensure_resolved_lorentz_contractions(&free).is_ok());
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(
+                &cooking.try_cook(free.as_view()).unwrap()
+            )
+            .is_ok()
+        );
         assert_eq!(free, original);
     }
 
@@ -3281,23 +3474,28 @@ mod tests {
             2,
         )
         .unwrap();
-        let integrated = IntegratedCts {
-            expansion,
-            scale_power: 4,
-        };
+        let source = SymbolicTensor::infer(expansion.to_atom()).unwrap();
+        let integrated = IntegratedCts::from_series(&source, &expansion, 4).unwrap();
         let scale = Atom::var(GS.integrated_loop_scale).pow(4);
 
         assert_eq!(
-            integrated.pole_atom().expand(),
+            integrated.pole().unwrap().expression().expand(),
             ((Atom::num(2) * epsilon.pow(-2) + Atom::num(3) * epsilon.pow(-1)) * &scale).expand()
         );
         assert_eq!(
-            integrated.finite_counterterm_atom().expand(),
+            integrated
+                .finite_counterterm()
+                .unwrap()
+                .expression()
+                .expand(),
             (-(Atom::num(5) + Atom::num(7) * epsilon) * scale).expand()
         );
         assert_eq!(
-            integrated.physical_finite_counterterm_atom(),
-            -(Atom::num(5) + Atom::num(7) * Atom::var(GS.dim_epsilon))
+            integrated
+                .physical_finite_counterterm()
+                .unwrap()
+                .expression(),
+            &(-(Atom::num(5) + Atom::num(7) * Atom::var(GS.dim_epsilon)))
         );
     }
 
@@ -3305,37 +3503,43 @@ mod tests {
     fn finite_projection_retains_child_epsilon_terms_until_parent_poles_multiply() {
         test_initialise().unwrap();
         let epsilon = Atom::var(GS.dim_epsilon);
-        let child = IntegratedCts {
-            expansion: series(
-                &(Atom::num(2) + Atom::num(3) * &epsilon + Atom::num(5) * epsilon.pow(2)),
-                3,
-            )
-            .unwrap(),
-            scale_power: 4,
-        };
-        let parent_poles = epsilon.pow(-2) + Atom::num(7) * epsilon.pow(-1);
-        let nested = IntegratedCts {
-            expansion: series(
-                &(child.physical_finite_counterterm_atom() * parent_poles),
-                1,
-            )
-            .unwrap(),
-            scale_power: 8,
-        };
+        let child_source = SymbolicTensor::infer(
+            Atom::num(2) + Atom::num(3) * &epsilon + Atom::num(5) * epsilon.pow(2),
+        )
+        .unwrap();
+        let child = IntegratedCts::from_series(
+            &child_source,
+            &series(child_source.expression(), 3).unwrap(),
+            4,
+        )
+        .unwrap();
+        let parent_poles =
+            SymbolicTensor::infer(epsilon.pow(-2) + Atom::num(7) * epsilon.pow(-1)).unwrap();
+        let nested_source = child
+            .physical_finite_counterterm()
+            .unwrap()
+            .multiply(&parent_poles)
+            .unwrap();
+        let nested = IntegratedCts::from_series(
+            &nested_source,
+            &series(nested_source.expression(), 1).unwrap(),
+            8,
+        )
+        .unwrap();
         // The finite projection retains nonnegative powers for further nesting.
-        let finite = nested.physical_finite_counterterm_atom();
+        let finite = nested.physical_finite_counterterm().unwrap();
         assert_eq!(
-            finite.replace(GS.dim_epsilon).with(Atom::Zero),
+            finite.expression().replace(GS.dim_epsilon).with(Atom::Zero),
             Atom::num(26)
         );
         assert!(
-            (finite - Atom::num(26) - Atom::num(35) * &epsilon)
+            (finite.expression() - Atom::num(26) - Atom::num(35) * &epsilon)
                 .expand()
                 .is_zero()
         );
         assert_eq!(
-            nested.physical_pole_atom(),
-            -Atom::num(2) * epsilon.pow(-2) - Atom::num(17) * epsilon.pow(-1),
+            nested.physical_pole().unwrap().expression(),
+            &(-Atom::num(2) * epsilon.pow(-2) - Atom::num(17) * epsilon.pow(-1)),
         );
     }
 
@@ -3344,18 +3548,31 @@ mod tests {
         test_initialise().unwrap();
 
         let epsilon = Atom::var(GS.dim_epsilon);
-        let factors = [2, 3, 5].map(|finite| IntegratedCts {
-            expansion: series(&(epsilon.pow(-1) + Atom::num(finite)), 1).unwrap(),
-            scale_power: 0,
+        let factors = [2, 3, 5].map(|finite| {
+            let source = SymbolicTensor::infer(epsilon.pow(-1) + Atom::num(finite)).unwrap();
+            IntegratedCts::from_series(&source, &series(source.expression(), 1).unwrap(), 0)
+                .unwrap()
         });
         let product = IntegratedCts::factorized_product(&factors[..2], 1).unwrap();
 
-        assert_eq!(product.physical_pole_atom(), epsilon.pow(-2));
-        assert_eq!(product.physical_finite_counterterm_atom(), Atom::num(6));
+        assert_eq!(
+            product.physical_pole().unwrap().expression(),
+            &epsilon.pow(-2)
+        );
+        assert_eq!(
+            product.physical_finite_counterterm().unwrap().expression(),
+            &Atom::num(6)
+        );
 
         let product = IntegratedCts::factorized_product(&factors, 1).unwrap();
-        assert_eq!(product.physical_pole_atom(), epsilon.pow(-3));
-        assert_eq!(product.physical_finite_counterterm_atom(), Atom::num(-30));
+        assert_eq!(
+            product.physical_pole().unwrap().expression(),
+            &epsilon.pow(-3)
+        );
+        assert_eq!(
+            product.physical_finite_counterterm().unwrap().expression(),
+            &Atom::num(-30)
+        );
     }
 
     // #[test]

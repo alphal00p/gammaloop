@@ -202,6 +202,10 @@ are Symbolica atoms, and whose function keys are Symbolica symbols. `SymbolicNet
 Spenso's `ContainsReps` tensor filter, so representation-bearing functions can become tensor
 leaves even without a separate tensor tag. `SymbolicNetExt::simple_execute` uses sequential
 Spenso execution and reconstructs the final atom from zero, one, or the result tensor.
+Native symbolic consumers can select `AbstractIndex` directly. A legacy index
+type is not needed merely to materialize compact notation for a structural
+check; decoding and recooking can otherwise introduce collisions between
+generated dummies and encoded source names.
 
 The owned network remains the boundary for concrete component execution and
 structural consumers which need owned tensors. Symbolic contraction instead

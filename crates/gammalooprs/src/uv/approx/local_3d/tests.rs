@@ -11,6 +11,7 @@ use crate::{
     finalized_runtime_dot,
     graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet},
     initialisation::test_initialise,
+    numerator::AppliedFeynmanRule,
     settings::global::OrientationPattern,
     utils::GS,
     uv::{
@@ -1572,7 +1573,11 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
         topo_order: 0,
     };
 
-    let localized = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
+    let localized = localizer.localize(
+        &AppliedFeynmanRule::new(Atom::one())?.expr,
+        &mut graph,
+        &integrated_node,
+    )?;
 
     assert!(localized.active.iter().any(|(_, atom)| !atom.is_zero()));
     Ok(())
@@ -1645,8 +1650,13 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         topo_order: 0,
     };
 
-    let baseline = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
-    let localized = localizer.localize(&finite_ct, &mut graph, &integrated_node)?;
+    let one = AppliedFeynmanRule::new(Atom::one())?.expr;
+    let baseline = localizer.localize(&one, &mut graph, &integrated_node)?;
+    let localized = localizer.localize(
+        &AppliedFeynmanRule::new(finite_ct.clone())?.expr,
+        &mut graph,
+        &integrated_node,
+    )?;
     let frozen_kernel = baseline.frozen_integrands.clone();
     let baseline = baseline
         .active
@@ -1682,7 +1692,11 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         &graph.empty_subgraph(),
         &tensor_ct,
     );
-    let marked_localized = localizer.localize(&marked, &mut graph, &integrated_node)?;
+    let marked_localized = localizer.localize(
+        &AppliedFeynmanRule::new(marked.clone())?.expr,
+        &mut graph,
+        &integrated_node,
+    )?;
     let marked_branches = DirectResidueBranches::from_transient(&marked_localized.active)?;
     let marker_variable = symbolica::symbol!("marker_series_boundary::t");
     let series = marked_branches.series_preserving_numerators(
@@ -1731,7 +1745,11 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         assert_eq!(integrands.map(prefix).resolved()?, mapped.map(prefix));
     }
     let cograph = (&finite_ct + Atom::one()) * idenso::gamma0!(&middle, &right);
-    let tensor_localized = localizer.localize(&tensor_ct, &mut graph, &integrated_node)?;
+    let tensor_localized = localizer.localize(
+        &AppliedFeynmanRule::new(tensor_ct.clone())?.expr,
+        &mut graph,
+        &integrated_node,
+    )?;
     assert_eq!(tensor_localized.frozen_integrands, frozen_kernel);
     let completed = DirectResidueBranches::from_transient(&tensor_localized.active)?
         .multiply_key_mapped(
@@ -1740,7 +1758,7 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
             &crate::numerator::AppliedFeynmanRule::new(cograph.clone())?.expr,
             DirectResidueBranches::numerator_scope(),
         )?;
-    let baseline_all = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
+    let baseline_all = localizer.localize(&one, &mut graph, &integrated_node)?;
     let matrix_interfaces = [
         idenso::gamma0!(&left, &middle),
         idenso::gamma0!(&middle, &right),
