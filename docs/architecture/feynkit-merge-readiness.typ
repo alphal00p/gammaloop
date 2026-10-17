@@ -1,11 +1,12 @@
 = FeynKit merge readiness and performance
 
-The five failures recorded at retained-tensor checkpoint `880ad11d` are now
-addressed by the `8f24069f` source/interface repairs and the ten user-approved
-bookkeeping references at `79c95409`. Merge readiness remains blocked by the
-confirmed d53 performance regression: isolated runs take about 166.8 seconds
-against 19.5 seconds at the earlier retained-tensor checkpoint `16787f71`.
-The historical `6002674d` performance results below do not qualify this migration.
+The frozen `e6a3bb46` checkpoint passes the complete 5,661-test workspace run,
+all 1,048 selected Idenso tests, strict workspace Clippy, the documentation check
+and the normal Nix CLI build. Its color repairs remove the large intermediate
+coefficients identified in the earlier d53/d76 regressions. Quiet repaired-build
+ghost comparisons, the final thirteen-case CLI performance qualification, final
+CI, cache upload and publication remain pending. Historical `6002674d` and
+`8f24069f` timings do not qualify this final checkpoint.
 
 This record follows the reconciliation of local FeynKit, remote FeynKit and
 main, then the repairs required before merge. Exact assertions, numerical
@@ -17,7 +18,38 @@ performance qualification.
 
 == Current checkpoint, 17 October 2026
 
-The full run of `880ad11dcce02724c178eac628e0f28dad6e17fa` finished in
+`e6a3bb4664d6927c46b0e463eee0850fc6285fa4` passes 1,048 of 1,048 selected Idenso
+tests, with all 24 existing skips preserved. Strict workspace Clippy completed
+in 23.57 seconds and the documentation check passed. The exact d53 and d76
+assertions pass in the repaired diagnostic capture. These results are recorded
+in `internal-chain-tests-2.log`, `loop-square-clippy-1.log`,
+`loop-square-docs-1.log` and `ghost-performance-audit/loop-square-stage-analysis.json`
+under `target/symbolic-tensor-flow`.
+
+The complete e6 workspace run passes all 5,661 tests with 128 unchanged test
+skips, four slow cases and zero timeouts, in 3,176.327 seconds. Its source tree
+remained unchanged through execution; the post-run diff is empty. Run
+`237e15f9-d4a7-46e8-a39a-38c920b739a2`, the JUnit hash and complete result inventory
+are recorded in `target/symbolic-tensor-flow/color-proof-full3-summary.json`.
+The four slow cases are the jet-generation test and three bubble-UV wrappers,
+also present in the earlier slow category. d75 is not an additional slow case:
+it takes 108.600 seconds versus 115.907 seconds in the earlier `880ad11d` run.
+This run overlapped normal Nix CLI and local CI artifact preparation. Its
+durations establish correctness and timeout evidence, not isolated performance
+qualification.
+
+The normal e6 Nix CLI build also passes. Its binary SHA-256 is
+`9423734bfb3f42b948053654295d4d8691fe7073038d4bad339ad094d0c70a31`, and it reports
+`gammaLoop 0.1.0`. The exact source revision, build exit status, binary hash and
+version receipts are retained in
+`target/symbolic-tensor-flow/native-adjoint-loops-cli`.
+
+Quiet repaired-build d53/d76 comparisons, the final thirteen-case sealed CLI
+performance checks, final CI, cache upload and publication remain pending.
+Completed build/runtime checks do not promote diagnostic stage durations to
+performance gates or establish final merge readiness.
+
+The earlier full run of `880ad11dcce02724c178eac628e0f28dad6e17fa` finished in
 3,175.357 seconds with 5,639 passes, five failures, five slow cases and zero
 timeouts; 128 existing skips remain. Its compile-time source tree stayed
 unchanged throughout execution. Run `ab964f08-8546-476b-9dc4-6ba4066eeb39` and its
@@ -48,11 +80,12 @@ scope and the limits of the supporting proofs are recorded below. These focused
 results address all five failures of the earlier full run; they are not reported
 as a new complete post-fix workspace run.
 
-The normal Nix CLI and main/`8f24069f` sealed performance corpus have completed.
-All thirteen cases preserve their numerical references; twelve pass their
+At the earlier `8f24069f` checkpoint, the normal Nix CLI build and its sealed
+performance corpus against main completed. All thirteen cases preserve their
+numerical references; twelve pass their
 performance gates. The remaining GL16 alias case is inconclusive: its
 single-parametric runtime has a 7.4 percent median paired increase, below the
-15 percent limit, but its uncertainty interval crosses that limit. This requires
+15 percent limit, but its paired-noise screen crosses that limit. This requires
 a further isolated comparison, not a relaxed threshold. Final CI preparation
 and publication have not completed.
 
@@ -72,7 +105,7 @@ equivalence certificate. All thirteen gate reports, binary identities and the
 five topology pairs are retained in
 `target/symbolic-tensor-flow/performance-source-boundary-8f24069f-1`.
 
-== Current performance blocker: integrated ghost d53
+== Integrated ghost regressions and repairs
 
 Two isolated quiet pairs, in alternating `16787f71`/`8f24069f` order, pass the
 unchanged exact d53 reference within the original 240-second deadline. Median
@@ -94,8 +127,8 @@ grow before the unchanged Laurent-series engine, which accounts for about
 75.6 percent of the sampled candidate CPU profile. For the matched
 `current=16C4`, `given=sXg`, `reduced=DeO` context, the first observed growth is
 at color simplification before Lorentz projection or scalar vacuum evaluation.
-The earlier path closes the color traces into Casimirs and indices; the current
-path retains traces and structure constants. Three matched projected numerators
+The earlier path closes the color traces into Casimirs and indices; the
+unrepaired `8f24069f` path retains traces and structure constants. Three matched projected numerators
 subsequently grow from 1,422/2,864/2,017 to 23,298/25,744/49,858 raw string bytes.
 Small native controls now prove the signed explicit-product/adjoint-chain
 equivalence with identical external ports. Each individual trace should give
@@ -114,10 +147,10 @@ passes all 1,040 existing selected Idenso tests. After correcting construction
 of chain placeholders in the new test fixtures, all six selected adjoint-chain
 tests pass, including the three new controls. These runs include the shared
 on-shell fixes `428558eb`, `2c3d3260` and `4138873d`, imported as separate commits
-`036dcfac`, `07b3cecc` and `5d06ad55`. Integration and repaired-build timing remain
-pending; the removed d53 cost is not yet claimed. The comparison preserves
-numerator factorization and the original
-assertions; disabling checks or expanding the graph numerator is not a remedy.
+`036dcfac`, `07b3cecc` and `5d06ad55`. These initial controls preceded the combined
+checkpoints below. Quiet repaired-build timing remains pending. The comparison
+preserves numerator factorization and the original assertions; disabling checks
+or expanding the graph numerator is not a remedy.
 The exact boundary pairs are retained under
 `ghost-performance-audit/runs/current-d53-inputs-1/boundary-comparison`.
 
@@ -135,15 +168,28 @@ An exact native local replay proves
 `Tr(F(C) F(A))` has the opposite sign; the captured overall imaginary factors
 compensate. The follow-up uses the existing two-f owner inside chain
 simplification. A shared edge guard distinguishes summed indices from fixed
-components; the latter are not evidence for a color-index sum. Its new tests and
-repaired-build performance still need qualification. The matched inputs, local
-proof and independent review are retained under `ghost-performance-audit`.
+components; the latter are not evidence for a color-index sum. The matched
+inputs, local proof and independent review are retained under
+`ghost-performance-audit`; the completed native checks and pending timing
+qualification are distinguished below.
 
-The first full Idenso run of that follow-up passes 1,047 of 1,048 tests; its new
-scalar-closure control exposes a normalized `f^2` form. The correction routes
+The first full Idenso run of that follow-up passed 1,047 of 1,048 tests; its new
+scalar-closure control exposed a normalized `f^2` form. The correction routes
 both the separate and squared structure constants through the same guarded
 contraction. The exact `8*C_A` assertion is retained and extended with weighted
-closures and fixed-index controls. Qualification of this correction is pending.
+closures and fixed-index controls. The combined e6 correction now passes all
+1,048 selected tests and both exact ghost assertions.
+
+In the repaired e6 stage capture, the largest cleaned coefficients are 309,148
+bytes for d53 and 255,806 bytes for d76. The previously observed 18,059,032-byte
+d53 coefficient at `8f24069f` and 7,517,268-byte d76 coefficient at `58ab7be2`
+are absent. Stage call counts match the paired `16787f71` baseline:
+47/36/11/36/36 for d53 and 33/26/7/26/26 for d76 across stages one through five.
+All four exact assertions in that baseline/candidate capture pass. These are
+expression-size and correctness observations from stage logging, not quiet
+performance samples; the unchanged timing gates still require the pending
+repaired-build comparisons. The stage-only log does not establish per-call
+symbolic input equivalence or a full-source performance certificate.
 
 == Measured GL1 preparation cost and proof reuse
 
@@ -165,8 +211,9 @@ follow-up keeps the mapper and callback checks, then uses the existing
 unchanged. This preserves established facts while still validating unchecked
 inputs and finishing pending product normalization. A zero whose represented
 dimension changes takes the normal changed-value path. This is a separate
-optimization; its regression tests pass in the 1,045-test run, while its
-contribution to GL1 timing still needs qualification. Evidence and the validation plan are in
+optimization; its regression tests remain passing in the e6 1,048-test run,
+while its contribution to GL1 timing still needs qualification. Evidence and
+the validation plan are in
 `target/symbolic-tensor-flow/dimension-noop-proposal`.
 
 == Historical qualification at 6002674d, 17 October 2026
@@ -1102,10 +1149,11 @@ interface, reject collisions and preserve callback validation. These are not
 safe uses of an Atom replacement followed by fresh inference. Python transfers
 reuse `TensorExpression::from_structured` to keep the same carrier.
 
-The completed `880ad11d` checkpoint, qualified `8f24069f` boundary repairs and
-approved `79c95409` references are distinguished above. Sealed main comparisons
-remain separate from the confirmed isolated d53 regression and its ongoing repair. Artifacts and logs are retained under
-`target/symbolic-tensor-flow`.
+The completed `880ad11d` checkpoint, qualified `8f24069f` boundary repairs,
+approved `79c95409` references and completed e6 native/full-runtime and normal
+CLI checks are distinguished above. Quiet ghost and final sealed performance
+qualification, final CI, cache upload and publication remain pending. Artifacts
+and logs are retained under `target/symbolic-tensor-flow`.
 
 The first immutable candidate `48b8acfa` passed a fresh 533-case core sweep and
 workspace Clippy. The broader 151-case physics/state/backend run then reported
