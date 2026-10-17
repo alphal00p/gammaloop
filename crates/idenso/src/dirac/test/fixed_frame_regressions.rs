@@ -129,6 +129,128 @@ fn fixed_temporal_slash_uses_gamma_zero_without_fixing_lorentz_dimension() {
 }
 
 #[test]
+fn fixed_vector_sums_remain_admissible_after_formal_dirac_reduction() {
+    use crate::tensor::{SymbolicNetExt, SymbolicNetParse};
+    use spenso::{
+        network::{
+            library::symbolic::ETS,
+            parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+            tags::SPENSO_TAG,
+        },
+        structure::abstract_index::{AIND_SYMBOLS, AbstractIndex},
+    };
+    use symbolica::function;
+
+    let r = test_initialize();
+    let a = r.bis4.to_symbolic([Atom::num(98201)]);
+    let b = r.bis4.to_symbolic([Atom::num(98202)]);
+    let c = r.bis4.to_symbolic([Atom::num(98203)]);
+    let e = r.bis4.to_symbolic([Atom::num(98204)]);
+    let q = SPENSO_TAG.rank_one_tensor_symbol("fixed_vector_sum::q");
+    let mass = Atom::var(symbol!("fixed_vector_sum::M"));
+    let spectator = function!(
+        symbol!("fixed_vector_sum::opaque"; Scalar),
+        (Atom::var(symbol!("fixed_vector_sum::x")) + Atom::var(symbol!("fixed_vector_sum::y")))
+            .pow(11)
+    );
+    let settings = crate::tensor::AlgebraSettings {
+        gamma: Some(GammaSimplifySettings::canonical()),
+        ..Default::default()
+    };
+    let expose = |value: &Atom| {
+        value
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
+                shorthand_parsing: ShorthandParsing::Expand {
+                    schoonschip: SchoonschipExpansionMode {
+                        inner_products: true,
+                        expand_inside_chains: true,
+                        expand_schoonship: true,
+                    },
+                    trace: false,
+                    chain: false,
+                },
+                ..Default::default()
+            })
+            .unwrap()
+            .simple_execute::<()>()
+            .unwrap()
+    };
+    for dimension in [Atom::var(symbol!("fixed_vector_sum::D")), Atom::num(4)] {
+        let compact = Minkowski {}.to_symbolic([&dimension]);
+        let mu = Minkowski {}.to_symbolic([&dimension, &Atom::num(98205)]);
+        let nu = Minkowski {}.to_symbolic([&dimension, &Atom::num(98206)]);
+        let fixed = |i, port: &Atom| function!(ETS.delta, function!(AIND_SYMBOLS.cind, i), port);
+        let momentum = function!(q, &compact);
+        let spatial = (1..4).map(|i| fixed(i, &nu)).sum::<Atom>();
+        let velocity = (0..4).map(|i| fixed(i, &compact)).sum::<Atom>();
+        for component in 0..4 {
+            let selected = function!(
+                ETS.delta,
+                function!(AIND_SYMBOLS.cind, component),
+                &mass * &velocity
+            );
+            let selected = SymbolicTensor::infer(selected).unwrap().to_dots().unwrap();
+            let sign = Atom::num(if component == 0 { 1 } else { -1 });
+            assert_eq!(expose(selected.expression()), &sign * &mass);
+            let weighted = function!(
+                ETS.delta,
+                function!(AIND_SYMBOLS.cind, component),
+                &spectator * &mass * &velocity
+            );
+            let weighted = SymbolicTensor::infer(weighted).unwrap().to_dots().unwrap();
+            assert!(weighted.expression().contains(spectator.as_view()));
+            assert_eq!(expose(weighted.expression()), &sign * &mass * &spectator);
+        }
+        let prefix = spatial * gamma!(&a, &c, &nu) + function!(AGS.gamma0, &c, &a);
+        let word = chain!(
+            &c,
+            &e,
+            gamma!(&momentum),
+            gamma!(&mu),
+            gamma!(&momentum),
+            gamma!(&(&mass * &velocity))
+        );
+        let source =
+            SymbolicTensor::infer(&spectator * prefix * gamma!(&e, &b, &mu) * word).unwrap();
+        assert_eq!(source.rank(), 2);
+        let result = source.simplify_algebra(&settings).unwrap();
+        assert_eq!(result.structure(), source.structure());
+        assert!(result.expression().contains(spectator.as_view()));
+        assert_eq!(
+            SymbolicTensor::infer(result.expression().clone())
+                .unwrap()
+                .structure(),
+            source.structure()
+        );
+
+        assert_eq!(result.simplify_algebra(&settings).unwrap(), result);
+        if dimension != Atom::num(4) {
+            let evanescent = (&dimension - Atom::num(4)) * g!(&a, &b);
+            assert_eq!(
+                SymbolicTensor::infer(evanescent.clone())
+                    .unwrap()
+                    .simplify_algebra(&settings)
+                    .unwrap()
+                    .expression(),
+                &evanescent
+            );
+        }
+        let other = Minkowski {}.to_symbolic([Atom::num(7)]);
+        let mismatched = function!(
+            ETS.delta,
+            function!(AIND_SYMBOLS.cind, 0),
+            fixed(0, &compact) + fixed(0, &other)
+        );
+        assert!(SymbolicTensor::infer(mismatched).is_err());
+        let invalid = function!(ETS.delta, function!(AIND_SYMBOLS.cind, 0), g!(&mu, &nu));
+        assert!(
+            SymbolicTensor::infer(invalid).is_err(),
+            "a rank-two operand is not a compact vector"
+        );
+    }
+}
+
+#[test]
 fn fixed_spatial_slashes_anticommute_with_gamma_zero_in_symbolic_dimension() {
     use spenso::{
         network::library::symbolic::ETS, shadowing::IntoAtom,
