@@ -929,6 +929,12 @@ impl SlotContraction {
                     .collect::<Option<Vec<_>>>()?;
                 tape.group(children.into_iter(), false)
             }
+            // Identity kernels may publish a terminal polynomial without
+            // enumerating its scalar leaves. A new coefficient power therefore
+            // need not have a regional observation yet. Reuse the existing
+            // intrinsic scalar certificate and keep the whole power opaque;
+            // indexed or callback-sensitive powers retain the scoped path.
+            AtomView::Pow(_) if sum.scalar_spectator(value) => tape.leaf(InputLeaf::Scalar(value)),
             AtomView::Pow(_) => None,
             _ => tape.leaf(InputLeaf::Atom(value)),
         }
@@ -2386,6 +2392,53 @@ mod lazy_tests {
         assert_eq!(result.status, ReductionStatus::Complete);
         assert_eq!(result.root.expand(), expected.expand());
         assert!(scope.opened.values().all(|entry| entry.get().is_none()));
+    }
+
+    #[test]
+    fn unobserved_powers_require_intrinsic_scalar_certificates() {
+        use super::super::tests::{input, setup};
+        let contractor = setup();
+        let opaque = symbolica::symbol!("unobserved_power::opaque"; Scalar);
+        for value in [
+            input("m^2"),
+            input("(m+n)^-2"),
+            input("(m+n)^(1/3)"),
+            opaque.call(input("(m+n)^11")).pow(2),
+        ] {
+            let mut slots = SlotMatcher::default();
+            let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+            let mut tape = TermTape::default();
+            contractor
+                .compile_arithmetic(value.as_view(), &mut tape, &mut sum)
+                .unwrap();
+            assert_eq!(tape.leaves().len(), 1);
+            assert!(
+                matches!(tape.leaves()[0], InputLeaf::Scalar(original) if original == value.as_view())
+            );
+        }
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = std::sync::Arc::clone(&calls);
+        let callback = symbolica::symbol!("unobserved_power::callback"; Scalar; norm=move|_,_| {
+            observed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        });
+        let rounded = Atom::num(symbolica::domains::float::Float::parse("0.1", Some(11)).unwrap());
+        for value in [
+            input("p(mink(4,a))^2"),
+            input("(p(mink(4,a))*q(mink(4,a))+m)^2"),
+            callback.call(input("m")).pow(2),
+            (rounded + input("m")).pow(2),
+        ] {
+            calls.store(0, std::sync::atomic::Ordering::Relaxed);
+            let mut slots = SlotMatcher::default();
+            let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
+            let mut tape = TermTape::default();
+            assert!(
+                contractor
+                    .compile_arithmetic(value.as_view(), &mut tape, &mut sum)
+                    .is_none()
+            );
+            assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 0);
+        }
     }
 
     #[test]

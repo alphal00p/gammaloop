@@ -612,6 +612,111 @@ mod tests {
     };
 
     #[test]
+    fn gamma_reduction_finishes_new_lorentz_sum_connections() {
+        use spenso::network::tags::SPENSO_TAG;
+        use spenso::structure::representation::Minkowski;
+        crate::test_support::test_initialize();
+        let dimension = symbol!("generated_lorentz_sums::d");
+        let d = Atom::var(dimension);
+        let rep = Minkowski {}.new_rep(dimension);
+        let slots = (0..6)
+            .map(|index| rep.to_symbolic([Atom::num(700 + index)]))
+            .collect::<Vec<_>>();
+        let momentum = SPENSO_TAG.rank_one_tensor_symbol("generated_lorentz_sums::momentum");
+        let vector =
+            |owner: usize, slot: usize| momentum.call_args([Atom::num(owner), slots[slot].clone()]);
+        let gamma = |left: usize, right: usize, slot: usize| {
+            crate::gamma!(
+                crate::bis!(4, left + 800),
+                crate::bis!(4, right + 800),
+                &slots[slot]
+            )
+        };
+        let identity = |left: usize, right: usize| {
+            spenso::g!(crate::bis!(4, left + 800), crate::bis!(4, right + 800))
+        };
+        let mass_parameter = symbol!("generated_lorentz_sums::M");
+        let mass = Atom::var(mass_parameter);
+        let tensor_sum = vector(1, 0) * spenso::g!(&slots[1], &slots[2])
+            + vector(1, 1) * spenso::g!(&slots[0], &slots[2]);
+        let source = (vector(0, 3) * gamma(0, 1, 3) + identity(0, 1))
+            * gamma(1, 2, 0)
+            * (vector(2, 4) * gamma(2, 3, 4) + &mass * identity(2, 3))
+            * gamma(3, 4, 1)
+            * (vector(3, 5) * gamma(4, 5, 5) + &mass * identity(4, 5))
+            * gamma(5, 0, 2)
+            * tensor_sum;
+        // Contracting the two metric terms first gives this independent
+        // finite trace through gamma_mu pslash gamma^mu = (2-d) pslash.
+        let dot = |left: usize, right: usize| {
+            rep.inner_product(&momentum.call(left), &momentum.call(right))
+        };
+        let expected = Atom::num(8)
+            * ((Atom::num(2) - &d) * dot(0, 3) * dot(1, 2)
+                + mass.pow(2) * dot(0, 1)
+                + &d * &mass * dot(1, 2)
+                + &mass * dot(1, 3));
+        let opaque = symbol!("generated_lorentz_sums::opaque"; Scalar);
+        let spectator = opaque.call(
+            (Atom::var(symbol!("generated_lorentz_sums::x"))
+                + Atom::var(symbol!("generated_lorentz_sums::y")))
+            .pow(11),
+        );
+        for coefficient in [
+            mass.clone(),
+            mass.pow(-1),
+            mass.pow(Atom::num((1, 3))),
+            opaque.call(&mass),
+        ] {
+            let expected = expected.replace(mass_parameter).with(coefficient.clone());
+            let source = source.replace(mass_parameter).with(coefficient);
+            for spectator in [Atom::one(), spectator.clone()] {
+                let input = SymbolicTensor::infer(&source * &spectator).unwrap();
+                let settings = AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::canonical()),
+                    ..Default::default()
+                };
+                let capped = input
+                    .simplify_algebra(&AlgebraSettings {
+                        max_passes: Some(0),
+                        ..settings.clone()
+                    })
+                    .unwrap();
+                assert_eq!(capped.reduction_status(), ReductionStatus::Capped);
+                assert_eq!(capped.expression, input.expression);
+
+                let reduced = input.simplify_algebra(&settings).unwrap();
+                let result = reduced.contract(Default::default()).unwrap();
+                let readmitted = SymbolicTensor::infer(result.expression.clone()).unwrap();
+                assert_eq!(readmitted.expression, result.expression);
+                let fresh = readmitted
+                    .contract(Default::default())
+                    .unwrap()
+                    .to_dots()
+                    .unwrap();
+                assert!(
+                    (&fresh.expression - &expected * &spectator)
+                        .together()
+                        .is_zero()
+                );
+                assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+                assert!(result.contraction_complete());
+                let dotted = result.to_dots().unwrap();
+                assert!(
+                    (&dotted.expression - &expected * &spectator)
+                        .together()
+                        .is_zero()
+                );
+                if !spectator.is_one() {
+                    assert!(dotted.expression.contains(spectator.as_view()));
+                }
+                assert_eq!(result.simplify_algebra(&settings).unwrap(), result);
+                assert_eq!(result.contract(Default::default()).unwrap(), result);
+            }
+        }
+    }
+
+    #[test]
     fn full_algebra_settles_mixed_single_and_long_gamma_words() {
         use crate::gamma;
         use spenso::{chain, q};

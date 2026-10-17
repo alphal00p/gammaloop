@@ -267,6 +267,15 @@ admission and dummy-reservation walks; only newly selected boundaries need
 interface discovery. Callback-sensitive rewrites discard invalidated interface
 facts and retain checked result boundaries.
 
+Identity kernels may publish a terminal polynomial without enumerating every
+new scalar coefficient. A generated power such as $M^2$ therefore need not
+have a regional observation yet. When a later contraction encounters that
+power, the existing scalar-spectator certificate checks its intrinsic metadata,
+exact coefficients and empty interface, then retains it as one opaque leaf.
+It does not re-admit the whole tensor or invalidate the domain cache. Indexed,
+callback-sensitive and inexact powers retain their existing scoped or deferred
+paths, and transformation budgets remain unchanged.
+
 == One symbolic contraction path
 
 The tensor contractor reads the shared structural graph once, keeping opaque
