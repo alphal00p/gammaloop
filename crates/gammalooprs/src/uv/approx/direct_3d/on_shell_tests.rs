@@ -2151,6 +2151,102 @@ fn direct_soft_gluon_shared_families_agree_at_identical_point() -> Result<()> {
 }
 
 #[test]
+fn boosted_rainbow_cff_outer_soft_limit_distinguishes_fixed_points() -> Result<()> {
+    use crate::utils::{ArbPrec, F};
+    use symbolica::prelude::SingleFloat;
+
+    test_initialise()?;
+    let fixture = DirectForestFixture::OsQuarkInQuark;
+    let unit = F(ArbPrec::default()).one();
+    let zero = unit.zero();
+    for (external, matched_velocity) in [
+        ([12, 0, 0, 0], ["1", "0", "0", "0"]),
+        ([15, 9, 0, 0], ["5/4", "3/4", "0", "0"]),
+        ([15, 3, 6, 6], ["5/4", "1/4", "1/2", "1/2"]),
+    ] {
+        let external = external.map(Atom::num);
+        for (matched, velocity) in [(false, ["1", "0", "0", "0"]), (true, matched_velocity)] {
+            if !matched && matched_velocity == ["1", "0", "0", "0"] {
+                continue;
+            }
+            // Include the actual finite child coefficient and its parent operation.
+            // An overall analytic addback has a regular localization kernel and
+            // cannot contribute to the negative soft powers tested here.
+            let (graph, expressions) =
+                fixture.assemble(DirectForestTerms::CompleteForest, true, velocity)?;
+            assert_eq!(
+                graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
+                [EdgeIndex(2), EdgeIndex(3)],
+                "the soft ray uses the outer quark r=e2 and hard child quark l=e3"
+            );
+            let mut evaluator =
+                ForestTensorEvaluator::new_shared(fixture, &graph, 2, &expressions[2])?;
+            for direction in [[1, 0, 0], [0, 1, 0]] {
+                let mut weighted = Vec::new();
+                for exponent in 3..=7 {
+                    let denominator = 1usize << exponent;
+                    let radius = Atom::one() / Atom::num(denominator);
+                    let loops = [
+                        std::array::from_fn(|index| {
+                            &external[index + 1] + Atom::num(direction[index]) * &radius
+                        }),
+                        [Atom::Zero, Atom::num(9), Atom::Zero],
+                    ];
+                    let values = evaluator.evaluate(&external, &loops)?;
+                    let norm = values.values().try_fold(zero.clone(), |norm, value| {
+                        let component = value.clone().norm().re;
+                        eyre::ensure!(component.is_finite(), "finite complete rainbow tensor");
+                        Ok::<_, eyre::Report>(norm.max(component))
+                    })?;
+                    assert!(norm > zero, "nonzero complete rainbow control");
+                    let numeric_radius = &unit / unit.from_usize(denominator);
+                    weighted.push(norm * numeric_radius.powi(2));
+                }
+                crate::debug_tags!(#uv, #local, #soft, #summary;
+                    stage = "boosted_rainbow_cff_outer_soft", matched,
+                    external = ?external,
+                    direction = ?direction, file.weighted = ?weighted,
+                    "Complete energy-integrated rainbow radial control"
+                );
+                let boundary = unit.from_usize(3) / unit.from_usize(2);
+                for tail in weighted[2..].windows(2) {
+                    if matched {
+                        assert!(
+                            tail[1] <= &boundary * &tail[0],
+                            "matching fixed point removes the logarithmic radial pole: {weighted:?}"
+                        );
+                    } else {
+                        assert!(
+                            tail[1] > &boundary * &tail[0]
+                                && tail[1] <= unit.from_usize(5) / unit.from_usize(2) * &tail[0],
+                            "rest-frame subtraction retains the boosted radial pole: {weighted:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn boosted_complete_rainbow_with_finite_child_agrees_across_three_routes() -> Result<()> {
+    // One fixed component point, with matching and independently chosen live
+    // external momenta. This supplements the projected-route radial matrix.
+    DirectForestFixture::OsQuarkInQuark.check_points(
+        DirectForestTerms::CompleteForest,
+        true,
+        &[[15, 3, 6, 6], [15, 9, 0, 0]],
+        ["5/4", "1/4", "1/2", "1/2"],
+    )
+}
+
+#[test]
 fn primitive_direct_massless_os_equals_soft_refined_operation() -> Result<()> {
     test_initialise()?;
     let (mut graph, current, root) = fixture(true)?;
