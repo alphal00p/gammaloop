@@ -1,5 +1,6 @@
 use super::*;
 use spenso::{
+    iterators::IteratableTensor,
     network::{
         ExecutionResult, Network, Sequential, SmallestDegree,
         library::{panicing::ErroringLibrary, symbolic::TensorLibrary},
@@ -66,6 +67,158 @@ fn declared_parts_check_rank_and_open_order_without_replaying_callbacks() {
     let admitted = SymbolicTensor::from_declared_parts(expression, structure).unwrap();
     assert_eq!(calls.load(Ordering::Relaxed), 0);
     assert_eq!(admitted.proofs.validated.get(), Some(&true));
+}
+
+#[test]
+fn explicit_ports_keep_logical_axes_when_symbolic_dimensions_reorder() {
+    crate::test_support::test_initialize();
+    type Tensor = ParamTensor<ShadowedStructure<AbstractIndex>>;
+    type Lib = TensorLibrary<ParamTensor<ExplicitKey<AbstractIndex>>, AbstractIndex>;
+    type Net = Network<NetworkStore<Tensor, Atom>, ExplicitKey<AbstractIndex>, Symbol>;
+
+    let dimension = symbolica::symbol!("explicit_axis_reorder::D");
+    let symbolic = LibraryRep::from(Minkowski {}).new_rep(dimension);
+    let physical = LibraryRep::from(Minkowski {}).new_rep(4);
+    let index = AbstractIndex::Normal(76319);
+    let symbolic_slot = symbolic.slot::<AbstractIndex, _>(index).to_atom();
+    let physical_slot = physical.slot::<AbstractIndex, _>(index).to_atom();
+    let mut heads = [
+        spenso::vector_symbol!("explicit_axis_reorder::first"),
+        spenso::vector_symbol!("explicit_axis_reorder::second"),
+        spenso::vector_symbol!("explicit_axis_reorder::third"),
+    ];
+    heads.sort_by_key(|&head| function!(head, &physical_slot));
+    let [low, middle, high] = heads;
+    let source =
+        SymbolicTensor::infer(function!(middle, &symbolic_slot) * function!(high, &physical_slot))
+            .unwrap();
+    let mapped = function!(middle, &symbolic_slot) * function!(low, &physical_slot);
+    let inferred = SymbolicTensor::infer(mapped.clone()).unwrap();
+    assert_eq!(
+        source.structure.logical_slots(),
+        [symbolic, physical]
+            .map(|rep| rep.slot::<PartialIndex<AbstractIndex>, _>(PartialIndex::Explicit(index)))
+    );
+    assert_eq!(
+        inferred.structure.logical_slots(),
+        [physical, symbolic]
+            .map(|rep| rep.slot::<PartialIndex<AbstractIndex>, _>(PartialIndex::Explicit(index)))
+    );
+    let result = source.with_checked_expression(mapped.clone()).unwrap();
+    assert_eq!(result.expression(), &mapped);
+    assert_eq!(
+        result.structure.logical_slots(),
+        source.structure.logical_slots()
+    );
+    assert_eq!(
+        result.with_checked_expression(mapped.clone()).unwrap(),
+        result
+    );
+    let zero = result.with_checked_expression(Atom::Zero).unwrap();
+    assert_eq!(
+        zero.structure.logical_slots(),
+        source.structure.logical_slots()
+    );
+
+    for wrong_slot in [
+        symbolic
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(76321))
+            .to_atom(),
+        LibraryRep::from(Minkowski {})
+            .new_rep(3)
+            .slot::<AbstractIndex, _>(index)
+            .to_atom(),
+        LibraryRep::from(Euclidean {})
+            .new_rep(dimension)
+            .slot::<AbstractIndex, _>(index)
+            .to_atom(),
+    ] {
+        assert!(
+            source
+                .with_checked_expression(
+                    mapped.replace(symbolic_slot.to_pattern()).with(wrong_slot)
+                )
+                .is_err()
+        );
+    }
+
+    let oriented =
+        LibraryRep::from(spenso::structure::representation::Lorentz {}).new_rep(dimension);
+    let source_with_variance = SymbolicTensor::infer(function!(
+        middle,
+        oriented.slot::<AbstractIndex, _>(index).to_atom()
+    ))
+    .unwrap();
+    assert!(
+        source_with_variance
+            .with_checked_expression(function!(
+                middle,
+                oriented.dual().slot::<AbstractIndex, _>(index).to_atom()
+            ))
+            .is_err()
+    );
+
+    // Specialize the formal dimension only at this finite component boundary.
+    // The two explicit ports remain distinct even though their index labels match.
+    let finite = LibraryRep::from(Minkowski {}).new_rep(2);
+    let logical = [finite, physical];
+    let mut library = Lib::new();
+    for (head, rep, components) in [
+        (middle, finite, vec![2, 3]),
+        (high, physical, vec![5, 7, 11, 13]),
+        (low, physical, vec![5, 7, 11, 13]),
+    ] {
+        library
+            .insert_explicit_sparse(
+                ExplicitKey::from_iter([rep], head, None),
+                components
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, value)| (vec![i], Atom::num(value))),
+                Atom::Zero,
+            )
+            .unwrap();
+    }
+    for (value, is_zero) in [(source, false), (result, false), (zero, true)] {
+        let value = SymbolicTensor::from_declared_parts(
+            value.expression().replace(dimension).with(2),
+            PartialStructure::from_logical_slots(
+                logical.map(|rep| rep.slot(PartialIndex::Explicit(index))),
+            ),
+        )
+        .unwrap();
+        let lowered: Canonicalized<Net> = value
+            .into_network(
+                &library,
+                &ErroringLibrary::new(),
+                &ParseSettings::default(),
+                None,
+            )
+            .unwrap();
+        let (mut network, layout) = lowered.into_parts();
+        network
+            .execute::<Sequential, SmallestDegree, _, _, _>(&library, &ErroringLibrary::new())
+            .unwrap();
+        let ExecutionResult::Val(tensor) = network.result_tensor(&library).unwrap() else {
+            panic!("an open matrix, including zero, must retain both axes");
+        };
+        assert_eq!(
+            layout.canonical_to_logical(&tensor.external_reps_iter().collect::<Vec<_>>()),
+            logical,
+        );
+        let mut entries = 0;
+        for (indices, value) in tensor.iter_expanded() {
+            let logical = layout.canonical_to_logical(&indices);
+            let expected = if is_zero {
+                Atom::Zero
+            } else {
+                Atom::num([2, 3][logical[0]] * [5, 7, 11, 13][logical[1]])
+            };
+            assert_eq!(value.to_owned(), expected);
+            entries += 1;
+        }
+        assert!(is_zero || entries == 8);
+    }
 }
 
 #[test]
