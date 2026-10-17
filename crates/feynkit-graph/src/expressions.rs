@@ -213,14 +213,23 @@ impl PropagatorSymbols {
 impl crate::FeynmanDiagram {
     /// Construct the selected local numerator using the same boundary and
     /// exclusion rules as GammaLoop. Diagram-wide factors remain separate.
-    pub fn numerator_of<S: SubGraphLike + SubSetOps>(&self, subgraph: &S, without: &S) -> Atom {
-        self.graph.numerator_of(
+    pub fn numerator_of<S: SubGraphLike + SubSetOps>(
+        &self,
+        subgraph: &S,
+        without: &S,
+    ) -> Result<
+        idenso::tensor::SymbolicTensor<spenso::structure::partial::PartialStructure>,
+        crate::DiagramError,
+    > {
+        Ok(self.graph.try_fold_numerator(
             subgraph,
             without,
+            idenso::tensor::SymbolicTensor::infer(Atom::one())?,
             |_, vertex| vertex.numerator.clone(),
             |edge| edge.numerator.clone(),
             |edge| edge.is_dummy,
-        )
+            |left, right| left.multiply(&right),
+        )?)
     }
 
     pub fn denominator_of<S: SubGraphLike>(
@@ -273,13 +282,19 @@ impl crate::FeynmanDiagram {
         let loops = self.momentum_basis_of(subgraph)?.loop_edges.len();
         let mut degree = i64::from(dimension) * loops as i64;
         for (_, _, vertex) in self.graph.iter_nodes_of(subgraph) {
-            degree += i64::from(vertex.numerator.all_dod(crate::symbols::momentum())?);
+            degree += i64::from(
+                vertex
+                    .numerator
+                    .expression()
+                    .all_dod(crate::symbols::momentum())?,
+            );
         }
         for (pair, edge_id, edge) in self.graph.iter_edges_of(subgraph) {
             if pair.is_paired() && edge.data.external.is_none() && !edge.data.is_dummy {
                 degree += i64::from(
                     edge.data
                         .numerator
+                        .expression()
                         .edge_dod(crate::symbols::momentum(), edge_id.0)?,
                 ) - 2;
             }

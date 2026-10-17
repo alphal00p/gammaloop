@@ -367,7 +367,9 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    pub(crate) fn from_structured(
+    /// Transfer an already admitted symbolic tensor without inferring its
+    /// interface again. The carrier retains logical axes and ranked zeros.
+    pub fn from_structured(
         py: Python<'_>,
         value: SymbolicTensor<PartialStructure>,
     ) -> PyResult<Py<Self>> {
@@ -2766,11 +2768,12 @@ impl TensorExpression {
         py: Python<'_>,
         preserve_indices: bool,
     ) -> PyResult<Py<Self>> {
-        let result = self_
-            .atom()
-            .dirac_adjoint::<AbstractIndex>(preserve_indices)
+        let value = self_
+            .value
+            .dirac_adjoint(preserve_indices)
             .map_err(|error| DiracAdjointError::new_err(error.to_string()))?;
-        let result = Self::from_transformed_atom(&self_, py, result)?;
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        let result = Self::from_shared(py, Arc::new(value), name, args)?;
         crate::citations::Usage::DiracAdjoint.record();
         Ok(result)
     }

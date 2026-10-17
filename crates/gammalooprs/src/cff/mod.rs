@@ -7421,8 +7421,10 @@ mod tests {
             dot.push('}');
             let physical: Graph = dot.into_finalized_runtime_graph(&model)?;
             assert_eq!(physical.get_loop_number(), loops);
-            let unit = physical
-                .with_global_numerator_only(format!("scalar_unit_phase_{loops}"), Atom::one());
+            let unit = physical.with_global_numerator_only(
+                format!("scalar_unit_phase_{loops}"),
+                crate::numerator::AppliedFeynmanRule::new(Atom::one())?.expr,
+            );
             let expected_unit = unit_phase / Atom::num(12).pow(loops as i64);
             // V=L+1 quartic vertices and I=2L scalar propagators give
             // physical phases -i,+i,-i,+i,-i for positive lambda.

@@ -138,7 +138,7 @@ impl FeynmanDiagram {
                 id.0,
                 typst_string(&vertex.name),
                 interaction,
-                typst_string(&vertex.numerator.to_canonical_string()),
+                typst_string(&crate::NumeratorInterface::export(&vertex.numerator).0.to_canonical_string()),
             )
             .expect("writing to a string cannot fail");
         }
@@ -190,7 +190,7 @@ impl FeynmanDiagram {
                 typst_string(&particle.name),
                 particle.pdg_code,
                 edge.directed,
-                typst_string(&edge.numerator.to_canonical_string()),
+                typst_string(&crate::NumeratorInterface::export(&edge.numerator).0.to_canonical_string()),
                 endpoints.source.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
                 endpoints.target.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
                 typst_string(&momentum.format_momentum()),
@@ -205,7 +205,7 @@ impl FeynmanDiagram {
             typst_string(self.name()),
             self.symmetry_factor(),
             typst_string(&self.overall_factor().to_canonical_string()),
-            typst_string(&self.numerator().to_canonical_string()),
+            typst_string(&crate::NumeratorInterface::export(self.numerator()).0.to_canonical_string()),
             self.loop_count(),
         )
         .expect("writing to a string cannot fail");
@@ -450,7 +450,8 @@ pub(crate) mod tests {
             builder.add_vertex(DiagramVertex {
                 name: name.to_owned(),
                 interaction: None,
-                numerator: symbolica::atom::Atom::one(),
+                numerator: idenso::tensor::SymbolicTensor::infer(symbolica::atom::Atom::one())
+                    .unwrap(),
             });
         }
         let diagram = builder.build().unwrap();

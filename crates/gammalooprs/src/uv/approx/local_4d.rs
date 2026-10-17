@@ -1295,7 +1295,10 @@ impl FourDTerm {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         Ok(Self {
-            numerator: SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?,
+            numerator: SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)
+                .wrap_err_with(|| {
+                    format!("invalid rational-shell numerator fragment `{numerator}`")
+                })?,
             denominators: Vec::new(),
         })
     }
@@ -9282,7 +9285,7 @@ mod tests {
         // belong to the cograph of this integration and must remain untouched.
         graph.underlying[EdgeIndex(4)].num.value = AppliedFeynmanRule::new(open.clone())?.expr;
         graph.underlying[sibling_vertex].num.value = AppliedFeynmanRule::new(open.clone())?.expr;
-        graph.global_prefactor.projector = open;
+        graph.global_prefactor.projector = AppliedFeynmanRule::new(open)?.expr;
         assert_eq!(
             run(&graph, &current, &settings)?.atom().expression(),
             expected.atom().expression()
@@ -9301,7 +9304,13 @@ mod tests {
                 .expression()
                 .contains_symbol(AGS.gamma5)
         );
-        assert!(graph.global_prefactor.projector.contains_symbol(AGS.gamma5));
+        assert!(
+            graph
+                .global_prefactor
+                .projector
+                .expression()
+                .contains_symbol(AGS.gamma5)
+        );
 
         graph.underlying[EdgeIndex(1)].num.value = AppliedFeynmanRule::new(pair)?.expr;
         let local_only = UVgenerationSettings {

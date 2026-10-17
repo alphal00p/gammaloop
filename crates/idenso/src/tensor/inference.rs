@@ -513,6 +513,12 @@ impl SymbolicTensor<PartialStructure> {
                 };
                 let mut tensors = Vec::new();
                 for factor in factors {
+                    // Scalar weights carry no anonymous-axis identity. Match
+                    // ordinary product inference here; the checked finisher
+                    // still validates the complete result's syntax and scopes.
+                    if !InterfaceInference::has_structured_syntax(factor) {
+                        continue;
+                    }
                     let interface = inference.infer_view(factor)?;
                     if !interface.canonical().is_scalar() {
                         tensors.push((factor.to_owned(), interface));
@@ -747,32 +753,114 @@ impl SymbolicTensor<PartialStructure> {
     /// Newly equal explicit indices contract; callback-sensitive results must still
     /// carry the resulting interface without replaying normalization during validation.
     pub fn with_lorentz_dimension(&self, dimension: Dimension) -> InferenceResult<Self> {
-        let expression = self
-            .expression
-            .with_lorentz_dimension(dimension.to_symbolic().as_view());
-        let mapped_structure = |structure: &PartialStructure| {
-            PartialStructure::from_logical_slots(structure.logical_slots().into_iter().map(
-                |slot| {
-                    let mut representation = slot.rep();
-                    if representation.rep == (Minkowski {}).into()
-                        && representation.dim == Dimension::Concrete(4)
-                    {
-                        representation.dim = dimension;
-                    }
-                    representation.slot(slot.aind)
-                },
-            ))
+        self.map_representation_dimensions(|representation, current| {
+            if representation == (Minkowski {}).into() && current == Atom::num(4).as_view() {
+                dimension.to_symbolic()
+            } else {
+                current.to_owned()
+            }
+        })
+    }
+
+    /// Map representation dimensions in both the payload and its logical ports.
+    /// Portable encoded dimensions are presented to the mapper in source notation;
+    /// only the resulting dimension is encoded again. Index identities are untouched.
+    /// Each distinct representation/dimension pair is mapped once, including ports
+    /// carried only by a ranked zero. Scalar coefficients outside representations
+    /// are not substituted by this operation.
+    pub fn map_representation_dimensions(
+        &self,
+        mut map: impl FnMut(LibraryRep, AtomView<'_>) -> Atom,
+    ) -> InferenceResult<Self> {
+        let cooking = crate::CookSettings::indices()
+            .with_mode(crate::CookMode::ReversibleEncoding)
+            .with_representation_payloads(false, true);
+        let mut dimensions = HashMap::<Representation<LibraryRep>, Dimension>::new();
+        let mut mapped_representation = |representation: Representation<LibraryRep>| {
+            let dimension = if let Some(dimension) = dimensions.get(&representation) {
+                *dimension
+            } else {
+                let encoded = representation.dim.to_symbolic();
+                let source = encoded
+                    .get_symbol()
+                    .and_then(crate::CookSettings::dimension_payload)
+                    .unwrap_or(encoded);
+                let mapped = map(representation.rep, source.as_view());
+                let compact = representation.rep.to_symbolic([mapped]);
+                let compact = cooking.try_cook(compact.as_view()).map_err(|error| {
+                    TensorInferenceError::invalid(format!(
+                        "cannot encode mapped dimension: {error}"
+                    ))
+                })?;
+                let dimension = Representation::<LibraryRep>::try_from(compact.as_view())
+                    .map_err(|error| {
+                        TensorInferenceError::invalid(format!("invalid mapped dimension: {error}"))
+                    })?
+                    .dim;
+                dimensions.insert(representation, dimension);
+                dimension
+            };
+            Ok::<_, TensorInferenceError>(Representation {
+                rep: representation.rep,
+                dim: dimension,
+            })
         };
-        let mut value = Self::checked_parts(expression, mapped_structure(&self.structure))?;
-        if !InterfaceInference::normalization_is_intrinsic(self.expression.as_view()) {
-            // Named signatures may encode ports in canonical storage order while
-            // exposing a different logical order. Compare the two encoded forms;
-            // retain the independently mapped public layout on the result.
+        let mut mapped_structure = |structure: &PartialStructure| {
+            structure
+                .logical_slots()
+                .into_iter()
+                .map(|slot| Ok(mapped_representation(slot.rep())?.slot(slot.aind)))
+                .collect::<InferenceResult<Vec<_>>>()
+                .map(PartialStructure::from_logical_slots)
+        };
+        let structure = mapped_structure(&self.structure)?;
+        let physical = if !InterfaceInference::normalization_is_intrinsic(self.expression.as_view())
+        {
             let (physical, _) = Self::observed_interface(&self.expression, LeafInference::Observe)?;
-            let expected =
-                InterfaceInference::merge_explicit_interface_sequence(&[mapped_structure(
-                    &physical,
-                )])?;
+            Some(InterfaceInference::merge_explicit_interface_sequence(&[
+                mapped_structure(&physical)?,
+            ])?)
+        } else {
+            None
+        };
+        let mut slots = SlotMatcher::default();
+        let mut failure = None;
+        let expression = self.expression.replace_map(|view, _, output| {
+            if failure.is_some() {
+                return;
+            }
+            let (representation, index) = if let SlotMatch::Explicit(slot) = slots.classify(view) {
+                let representation = match Representation::<LibraryRep>::try_from(view) {
+                    Ok(representation) => representation,
+                    Err(error) => {
+                        failure = Some(TensorInferenceError::invalid(format!(
+                            "invalid source representation: {error}"
+                        )));
+                        return;
+                    }
+                };
+                (representation, Some(slot.index().to_owned()))
+            } else if let Ok(representation) = slots.parse_representation::<LibraryRep>(view) {
+                (representation, None)
+            } else {
+                return;
+            };
+            match mapped_representation(representation) {
+                Ok(mapped) if mapped != representation => {
+                    **output = mapped.to_symbolic(index);
+                }
+                Ok(_) => output.set_from_view(&view),
+                Err(error) => failure = Some(error),
+            }
+        });
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        let mut value = Self::checked_parts(expression, structure)?;
+        if let Some(expected) = physical {
+            // Named signatures can encode canonical storage order while exposing
+            // a different logical order. Validate independently mapped physical
+            // ports, retaining the mapped public layout without callback replay.
             Self::validate_interface(&value.expression, &expected)?;
         }
         if value.expression == self.expression {
@@ -873,10 +961,16 @@ impl SymbolicTensor<PartialStructure> {
             .logical_slots()
             .into_iter()
             .map(|slot| {
-                if matches!(slot.aind, PartialIndex::Open(_)) {
-                    return Ok(slot);
-                }
                 let renamed = rename(composition::port_atom(slot).as_view());
+                if matches!(slot.aind, PartialIndex::Open(_)) {
+                    return Representation::<LibraryRep>::try_from(renamed.as_view())
+                        .map(|representation| representation.slot(slot.aind))
+                        .map_err(|error| {
+                            TensorInferenceError::invalid(format!(
+                                "cannot rename interface representation: {error}"
+                            ))
+                        });
+                }
                 let renamed = Slot::<LibraryRep, AbstractIndex>::try_from(renamed.as_view())
                     .map_err(|error| {
                         TensorInferenceError::invalid(format!(
@@ -890,6 +984,48 @@ impl SymbolicTensor<PartialStructure> {
             rename(self.expression.as_view()),
             PartialStructure::from_logical_slots(slots),
         ))
+    }
+
+    /// Simultaneously rename symbols without merging distinct source identities.
+    /// Swaps are allowed; an unmapped existing target or a noninjective map is not.
+    /// Logical ports, including those of zero, follow the same substitution.
+    /// Normalizers triggered by rebuilding the payload must preserve that mapped
+    /// interface; observing their result does not replay them.
+    pub fn rename_symbols(&self, renaming: &HashMap<Symbol, Symbol>) -> InferenceResult<Self> {
+        self.ensure_validated()?;
+        let mut present = self.expression.get_all_symbols(true);
+        for slot in self.structure.logical_slots() {
+            present.extend(composition::port_atom(slot).get_all_symbols(true));
+        }
+        let mut targets = HashSet::new();
+        for (source, target) in renaming {
+            if !targets.insert(*target) {
+                return Err(TensorInferenceError::invalid(
+                    "symbol renaming must be injective",
+                ));
+            }
+            if source != target && present.contains(target) && !renaming.contains_key(target) {
+                return Err(TensorInferenceError::invalid(
+                    "symbol renaming targets an existing unmapped symbol",
+                ));
+            }
+        }
+        let mut value = self.with_renamed_symbols(renaming)?;
+        if !InterfaceInference::normalization_is_intrinsic(self.expression.as_view()) {
+            let (physical, _) = Self::observed_interface(&self.expression, LeafInference::Observe)?;
+            let physical =
+                Self::from_normalized_parts(Atom::Zero, physical).with_renamed_symbols(renaming)?;
+            Self::validate_interface(&value.expression, &physical.structure)?;
+        } else {
+            // Injectivity proves the mapped interface; validate scopes and index
+            // multiplicities in the actual rebuilt expression once.
+            Self::validate_atom(&value.expression)?;
+        }
+        if value.expression == self.expression {
+            value.is_metric = self.is_metric;
+            value.is_composite = self.is_composite;
+        }
+        Ok(value)
     }
 
     /// Add tensors with compatible logical interfaces, retaining the left order.
@@ -4285,6 +4421,175 @@ pub(crate) mod tests {
         let promoted = metric.with_lorentz_dimension(dimension).unwrap();
         assert!(promoted.is_metric);
         assert!(!promoted.is_composite);
+    }
+
+    #[test]
+    fn mapped_color_dimensions_keep_encoded_ports_and_ranked_zero() {
+        crate::test_support::test_initialize();
+        let adjoint = ColorAdjoint {}.new_rep(8);
+        let fundamental = ColorFundamental {}.new_rep(3);
+        let metadata = symbolica::symbol!("mapped_color_scalar_metadata"; Scalar);
+        let coefficient = FunctionBuilder::new(metadata)
+            .add_arg(adjoint.to_symbolic([]))
+            .finish();
+        let expression = coefficient
+            * FunctionBuilder::new(spenso::tensor_symbol!("mapped_color_dimensions"))
+                .add_arg(fundamental.to_symbolic([]))
+                .add_arg(adjoint.to_symbolic([Atom::var(symbolica::symbol!("mapped_color_index"))]))
+                .add_arg(adjoint.to_symbolic([]))
+                .finish();
+        let original = SymbolicTensor::infer(expression).unwrap();
+        let zero = original.with_checked_expression(Atom::Zero).unwrap();
+        for source in [original, zero] {
+            let mut calls = HashMap::<LibraryRep, usize>::new();
+            let parametric = source
+                .map_representation_dimensions(|rep, dimension| {
+                    *calls.entry(rep).or_default() += 1;
+                    if rep == (ColorAdjoint {}).into() {
+                        Atom::var(CS.nc).pow(2) - 1
+                    } else if rep == (ColorFundamental {}).into() {
+                        Atom::var(CS.nc)
+                    } else {
+                        dimension.to_owned()
+                    }
+                })
+                .unwrap();
+            assert_eq!(calls[&(ColorAdjoint {}).into()], 1);
+            assert_eq!(calls[&(ColorFundamental {}).into()], 1);
+            assert_eq!(parametric.rank(), source.rank());
+            assert_eq!(
+                parametric.structure.open_positions(),
+                source.structure.open_positions()
+            );
+            if !source.is_zero() {
+                // Compact representation metadata must follow indexed and AUTO
+                // ports alike; the old Atom color helper only matched indexed slots.
+                let expected = FunctionBuilder::new(metadata)
+                    .add_arg(ColorAdjoint {}.to_symbolic([Atom::var(CS.nc).pow(2) - 1]))
+                    .finish();
+                let expected = crate::CookSettings::indices()
+                    .with_mode(crate::CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true)
+                    .try_cook(expected.as_view())
+                    .unwrap();
+                assert!(parametric.expression.contains(&expected));
+            }
+            assert!(
+                parametric
+                    .structure
+                    .logical_slots()
+                    .iter()
+                    .filter(|slot| slot.rep().rep == (ColorAdjoint {}).into())
+                    .all(|slot| {
+                        crate::CookSettings::dimension_payload(
+                            slot.rep().dim.to_symbolic().get_symbol().unwrap(),
+                        ) == Some(Atom::var(CS.nc).pow(2) - 1)
+                    })
+            );
+            let concrete = parametric
+                .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))
+                .unwrap();
+            assert!(concrete.same_value(&source));
+            assert!(
+                source
+                    .map_representation_dimensions(|_, _| {
+                        FunctionBuilder::new(symbolica::symbol!("invalid_dimension_function"))
+                            .add_arg(1)
+                            .finish()
+                    })
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn checked_symbol_renaming_preserves_swaps_zero_and_rejects_collisions() {
+        crate::test_support::test_initialize();
+        let a = symbolica::symbol!("checked_rename_a");
+        let b = symbolica::symbol!("checked_rename_b");
+        let dim = symbolica::symbol!("checked_rename_dimension");
+        let other_dim = symbolica::symbol!("checked_rename_other_dimension");
+        let rep = ExtendibleReps::MINKOWSKI.new_rep(dim);
+        let source = SymbolicTensor::infer(
+            FunctionBuilder::new(spenso::tensor_symbol!("checked_renaming_tensor"))
+                .add_arg(rep.to_symbolic([Atom::var(a)]))
+                .add_arg(rep.to_symbolic([Atom::var(b)]))
+                .add_arg(rep.to_symbolic([]))
+                .finish(),
+        )
+        .unwrap();
+        for value in [
+            source.clone(),
+            source.with_checked_expression(Atom::Zero).unwrap(),
+        ] {
+            let renamed = value
+                .rename_symbols(&HashMap::from([(a, b), (b, a), (dim, other_dim)]))
+                .unwrap();
+            let restored = renamed
+                .rename_symbols(&HashMap::from([(a, b), (b, a), (other_dim, dim)]))
+                .unwrap();
+            assert!(restored.same_value(&value));
+            assert_eq!(renamed.rank(), value.rank());
+            assert_eq!(
+                renamed.structure.open_positions(),
+                value.structure.open_positions()
+            );
+            assert!(
+                renamed
+                    .structure
+                    .logical_slots()
+                    .iter()
+                    .all(|slot| slot.rep().dim == Dimension::from(other_dim))
+            );
+            assert!(value.rename_symbols(&HashMap::from([(a, b)])).is_err());
+            assert!(
+                value
+                    .rename_symbols(&HashMap::from([(a, b), (b, b)]))
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn checked_symbol_renaming_rejects_callback_port_loss_without_replay() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let source_index = symbolica::symbol!("rename_callback_source");
+        let target_index = symbolica::symbol!("rename_callback_target");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let head = spenso::tensor_symbol!(
+            "rename_callback_tensor",
+            norm = move |node, out| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().next()
+                    && slot.iter().nth(1) == Some(Atom::var(target_index).as_view())
+                {
+                    **out = Atom::one();
+                }
+            }
+        );
+        let source = SymbolicTensor::infer(
+            FunctionBuilder::new(head)
+                .add_arg(
+                    ExtendibleReps::MINKOWSKI
+                        .new_rep(4)
+                        .to_symbolic([Atom::var(source_index)]),
+                )
+                .finish(),
+        )
+        .unwrap();
+        calls.store(0, Ordering::Relaxed);
+        assert!(
+            source
+                .rename_symbols(&HashMap::from([(source_index, target_index)]))
+                .is_err()
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
     }
 
     #[test]

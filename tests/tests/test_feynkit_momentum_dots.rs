@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use feynkit_generator::{GenerationFilter, GenerationOptions, ParticleSelector, Process};
 use feynkit_model::Model;
-use idenso::tensor::{ContractSettings, SymbolicTensor};
+use idenso::tensor::ContractSettings;
 use symbolica::atom::AtomCore;
 
 #[test]
@@ -44,8 +44,7 @@ fn generated_qcd_numerator_contractions_convert_to_dots() {
     assert!(momentum.has_tag("spenso::tensor"));
     assert!(momentum.has_tag("spenso::rank1"));
 
-    let contracted = SymbolicTensor::infer(numerator)
-        .unwrap()
+    let contracted = numerator
         .contract(ContractSettings::default())
         .unwrap()
         .to_dots()

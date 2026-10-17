@@ -303,7 +303,7 @@ impl PyAmplitude {
         self.inner
             .terms()
             .iter()
-            .map(|t| TensorExpression::from_atom_interface(py, t.clone(), None))
+            .map(|t| TensorExpression::from_structured(py, t.clone()))
             .collect()
     }
     /// Whether this amplitude is the physical adjoint of its source diagrams.
@@ -327,7 +327,7 @@ impl PyAmplitude {
     ///
     /// >>> operator = amplitude.expression()
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_atom_interface(py, self.inner.expression(), self.inner.structure())
+        TensorExpression::from_structured(py, self.inner.expression().map_err(error::amplitude)?)
     }
     /// Conjugate scalar coefficients, color tensors, and Dirac chains.
     ///
@@ -561,7 +561,7 @@ impl PySquaredAmplitude {
     /// >>> tensor = squared.expression()
     /// >>> tensor = tensor.contract(collect_chains=False, collect_traces=False)
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_atom_interface(py, self.inner.expression().clone(), None)
+        TensorExpression::from_structured(py, self.inner.expression().clone())
     }
     /// Sum selected physical spin states, optionally averaging incoming states.
     ///

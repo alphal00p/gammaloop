@@ -470,7 +470,10 @@ fn node_expression_to_dot(
         forest_name, term.node_index, term.term_index
     );
     let mut dot_graph = graph
-        .with_global_numerator_only(graph_name, term.numerator.clone())
+        .with_global_numerator_only(
+            graph_name,
+            crate::numerator::AppliedFeynmanRule::new(term.numerator.clone())?.expr,
+        )
         .to_dot_graph_with_settings(&DotExportSettings {
             split_xs_by_initial_states: true,
             output_full_numerator: false,

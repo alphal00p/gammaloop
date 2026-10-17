@@ -1638,7 +1638,11 @@ mod tests {
                                 {
                                     *exported_expressions
                                         .entry((forest_index, residue.clone()))
-                                        .or_insert(Atom::Zero) += exported.global_prefactor.num;
+                                        .or_insert(Atom::Zero) +=
+                                        feynkit_graph::NumeratorInterface::export(
+                                            &exported.global_prefactor.num,
+                                        )
+                                        .0;
                                 }
                             }
                             assert_eq!(&actual, expected, "a physical cut lost a residue order");

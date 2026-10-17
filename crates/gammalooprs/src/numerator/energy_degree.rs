@@ -15,6 +15,7 @@ use symbolica::domains::rational::Rational;
 use thiserror::Error;
 use three_dimensional_reps::utils::{rank_i64, solve_rational_system};
 
+use super::GetSingleAtom;
 use crate::{
     graph::Graph,
     momentum::SignOrZero,
@@ -2021,13 +2022,21 @@ impl Graph {
     }
 
     pub fn full_numerator_atom(&self) -> Atom {
-        self.numerator(&self.full_filter(), &self.empty_subgraph())
+        let numerator = self
+            .numerator(&self.full_filter(), &self.empty_subgraph())
             .expect("validated graph numerator must have a compatible tensor interface")
+            .state
+            .expr;
+        let overall_factor = idenso::tensor::SymbolicTensor::infer(self.overall_factor.clone())
+            .expect("the declared overall factor must have a valid scalar interface");
+        let numerator = numerator
+            .multiply(&self.global_prefactor.num)
+            .and_then(|value| value.multiply(&self.global_prefactor.projector))
+            .and_then(|value| value.multiply(&overall_factor))
+            .expect("the complete numerator must have compatible tensor ports");
+        super::AppliedFeynmanRule::from_tensor(numerator)
             .get_single_atom()
             .expect("Graph numerator should be available")
-            * &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * &self.overall_factor
     }
 
     pub fn numerator_energy_power_caps(

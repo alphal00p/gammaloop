@@ -1614,13 +1614,15 @@ impl Forests {
                 key=%key,
                expr = % physical.expression().log_print(None),"Term before simplification"
             );
-            let prefactor = &graph.global_prefactor.projector
-                * &graph.global_prefactor.num
-                * &graph.overall_factor;
+            let overall = SymbolicTensor::infer(graph.overall_factor.clone())?;
+            let prefactor = graph
+                .global_prefactor
+                .projector
+                .multiply(&graph.global_prefactor.num)?
+                .multiply(&overall)?;
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let prefactor = SymbolicTensor::infer(cooking.try_cook(prefactor.as_view())?)?;
             let reduced = physical
                 .multiply(&prefactor)?
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {

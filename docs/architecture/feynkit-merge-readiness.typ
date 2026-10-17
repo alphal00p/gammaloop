@@ -818,7 +818,7 @@ Concrete Rust API difficulties found during implementation:
   `checked_parts` does not certify an arbitrary external payload against its
   declared ports. Runtime DOT exports add `num_interface` only when the
   expression cannot recover its logical interface, notably for ranked zero.
-  Source scalar overrides remain scalars. Full state version 19 rejects older
+  Source scalar overrides remain scalars. Full state version 20 rejects older
   positional archives; standalone scalar evaluator layouts are unchanged.
 - `with_lorentz_dimension` specifically changes four-dimensional Lorentz
   spaces. General dimension substitutions are currently less convenient and
@@ -879,10 +879,35 @@ as `589e447b` (`feynkit-shared-scalar-powers-20261017`). It lets generated
 intrinsic scalar powers retain their existing certificate after an identity
 kernel, without re-admitting the complete tensor. Both original regressions pass.
 
-Canonical FeynKit diagrams and raw model recipes remain source-artifact
-representations. Runtime graph construction admits their instantiated fragments
-once; subsequent subgraph assembly composes the retained carriers through the
-shared graph-selection fold.
+The native audit found instantiated values still stored as Atoms before the
+runtime boundary. Live `DiagramVertex::numerator`, `DiagramEdge::numerator`,
+the aggregate `FeynmanDiagram` numerator, its prefactor and projector now retain
+the carrier. `NumeratorCache` keeps completed vertex/propagator tensors;
+`PreparedNumerator` keeps exact, sampling-source and color-valued sampled
+tensors. Finite Lorentz components and certified scalar ratios remain Atoms.
+Model templates and actual DOT/JSON strings are the source boundaries. The
+existing `NumeratorInterface` codec now belongs to `feynkit-graph` and is
+shared with GammaLoop; it records unrecoverable logical ports explicitly.
+
+Standalone `Amplitude::terms` and `SquaredAmplitude::expression` also retain
+tensors. `TensorReductionTerm::tensor` includes foreign-representation
+spectators and remains typed, while its generated orbit weight is scalar.
+The reduction result retains a zero with the source interface when no terms
+survive. GammaLoop transfers native diagram carriers directly instead of
+exporting them through raw parse payloads. Its `GlobalPrefactor` now keeps both
+the numerator and projector typed as well. These native changes are still under
+qualification; the earlier frozen runtime results do not qualify them.
+
+Three further API gaps required operations on their existing native owners.
+`dirac_adjoint` must dualize logical slots and retain a zero's interface;
+same-representation anonymous axes need the existing materialization/axis
+ownership machinery before adjunction. General representation-dimension
+mapping must update both indexed and compact metadata, including zero;
+ordinary scalar substitution cannot transform an encoded compound color
+dimension. Checked simultaneous symbol renaming must transport the explicit
+interface, reject collisions and preserve callback validation. These are not
+safe uses of an Atom replacement followed by fresh inference. Python transfers
+reuse `TensorExpression::from_structured` to keep the same carrier.
 
 Validation and performance measurements for this migration are pending. Existing
 physics references, tolerances and performance thresholds remain unchanged.
@@ -896,7 +921,7 @@ finite dots retained inside scalar function arguments, a legacy color collector
 which still exported native indices, and a diagnostic parser's dummy-name
 collision. The scalar-argument and diagnostic-collision repairs passed focused
 production cases; the native port-order repair passed the full Idenso package.
-Further application validation is pending.
+The later results below supersede those application failures.
 
 The follow-up frozen boundary candidate `65a1b835` passes all ten selected
 application/regression controls, including projected GL00, the quark local-IR
@@ -913,7 +938,7 @@ projections instead of a persistent `Series<AtomField>`; its existing consumers
 need only these projections. The same native series engine performs temporary
 Laurent arithmetic and truncation. Completed projections retain the source
 interface even when they vanish, and nested forests/localizers consume them
-without re-admission. This change still requires application qualification.
+without re-admission.
 
 Local-4D denominator decomposition now restores every completed numerator
 through the original carrier, preserving its logical layout. The parser still
@@ -922,6 +947,17 @@ performs temporary expression arithmetic and re-inference. Selecting every
 polynomials which belong to the factorized numerator; it cannot replace the
 existing rational-shell parser without an API extension. The regression keeps
 the exact positive polynomial factor, open-port order and ranked-zero checks.
+
+Frozen `16787f71` builds all 102 workspace test binaries. Its combined core,
+physics, state and backend run passes 685 of 687 tests in 805.811 seconds,
+with no timeouts; all existing tests in that selection pass. The two failures
+are new regressions: one compares indexed contractions with equivalent dot
+notation and now uses the existing exact normalization; the other exposed an
+anonymous-axis witness bug. The checked rewrite fallback attempted tensor-only
+inference on scalar product factors. It now uses the same structural filter as
+ordinary product inference, while retaining complete result/scope/multiplicity
+checks. The same frozen d76 test passes in 32.215 seconds. The two corrections
+and the subsequent native-generator migration still need fresh qualification.
 
 The ghost d76 timing remains under investigation. A rebuilt binary exceeded
 240 seconds with tracing disabled yet passed in about 35 seconds with narrow

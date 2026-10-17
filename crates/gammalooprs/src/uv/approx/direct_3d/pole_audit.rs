@@ -224,7 +224,7 @@ pub(crate) fn physical_full_h_fixture() -> Result<(Graph, GenerationSettings)> {
             .collect_vec(),
         [6, 5, 8]
     );
-    assert!(!graph.global_prefactor.projector.is_one());
+    assert!(!graph.global_prefactor.projector.expression().is_one());
     for (pair, _, edge) in graph.iter_edges_of(&graph.full_filter()) {
         if pair.is_paired() {
             assert!(
@@ -318,7 +318,7 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         orientations = production.expression.orientations.len(),
         file.settings = ?generation.uv, model = "sm-default",
         file.fixture = include_str!("../../../../../../tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot"),
-        file.projector = %graph.global_prefactor.projector.to_plain_string(),
+        file.projector = %graph.global_prefactor.projector.expression().to_plain_string(),
         loop_edges = ?graph.loop_momentum_basis.loop_edges, soft_components = ?soft_components,
         "Generate physical FullH inputs; no evaluator or certificate work"
     );

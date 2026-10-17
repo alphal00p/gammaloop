@@ -1317,9 +1317,7 @@ impl AmplitudeGraph {
             .graph
             .numerator(component, &self.graph.empty_subgraph())?;
         if config.include_global_numerator {
-            let prefactor =
-                crate::numerator::AppliedFeynmanRule::new(self.graph.global_prefactor.num.clone())?;
-            num.state.expr = num.state.expr.multiply(&prefactor.expr)?;
+            num.state.expr = num.state.expr.multiply(&self.graph.global_prefactor.num)?;
         }
 
         let numerator = num.to_d_dim(GS.dim)?;

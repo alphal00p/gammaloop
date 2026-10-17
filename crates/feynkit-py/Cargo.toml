@@ -25,6 +25,8 @@ feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features
 feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics", default-features = false }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor", default-features = false }
+idenso = { workspace = true, default-features = false }
+spenso = { workspace = true, default-features = false, features = ["shadowing"] }
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
 typst-renderer = { path = "../typst-renderer" }
 linnest = { workspace = true, features = ["svg"] }
@@ -48,8 +50,8 @@ default = ["ufo", "native"]
 # Generic Linnet graph exports are opt-in; callbacks use core Symbolica graphs.
 linnet-python = ["dep:linnet-py"]
 native = [
-  "linnet-render-py/native", "linnet-py?/native", "feynkit-amplitude/native", "spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native", "feynkit-kinematics/native"]
+  "linnet-render-py/native", "linnet-py?/native", "feynkit-amplitude/native", "spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native", "feynkit-kinematics/native", "idenso/native"]
 wasm = [
-  "linnet-render-py/wasm", "linnet-py?/wasm", "feynkit-amplitude/wasm", "spynso3/wasm", "feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm", "feynkit-kinematics/wasm"]
+  "linnet-render-py/wasm", "linnet-py?/wasm", "feynkit-amplitude/wasm", "spynso3/wasm", "feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm", "feynkit-kinematics/wasm", "idenso/wasm"]
 python_stubgen = ["linnet-render-py/python_stubgen", "linnet-py?/python_stubgen", "spynso3/python_stubgen", "dep:pyo3-stub-gen", "symbolica/python_stubgen"]
 ufo = ["dep:feynkit-ufo"]

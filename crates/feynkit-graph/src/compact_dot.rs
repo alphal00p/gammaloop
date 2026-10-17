@@ -13,23 +13,41 @@ impl FeynmanDiagram {
     ) -> Result<(Self, DiagramSourceMap), DiagramError> {
         let attributes = &parsed.global_data.statements;
         let mut builder = Self::builder(Arc::clone(&model), parsed.global_data.name.clone());
-        for (attribute, destination) in [
-            ("num", &mut builder.numerator_prefactor),
-            ("overall_factor", &mut builder.overall_factor),
-            ("projector", &mut builder.projector),
+        if let Some(value) = attributes.get("overall_factor") {
+            builder.overall_factor = Self::parse_expression("overall_factor", value.clone())?;
+        }
+        for (attribute, metadata, destination) in [
+            (
+                "num",
+                "numerator_prefactor_interface",
+                &mut builder.numerator_prefactor,
+            ),
+            ("projector", "projector_interface", &mut builder.projector),
         ] {
             if let Some(value) = attributes.get(attribute) {
-                *destination = Self::parse_expression(attribute, value.clone())?;
+                *destination = NumeratorInterface::admit(
+                    Self::parse_expression(attribute, value.clone())?,
+                    attributes
+                        .get(metadata)
+                        .map(|value| NumeratorInterface::parse(value))
+                        .transpose()?,
+                )?;
             }
         }
         let mut nodes = BTreeMap::new();
         for (node, _, data) in parsed.iter_nodes() {
-            let numerator = Self::parse_expression(
-                "vertex numerator",
+            let numerator = NumeratorInterface::admit(
+                Self::parse_expression(
+                    "vertex numerator",
+                    data.statements
+                        .get("num")
+                        .cloned()
+                        .unwrap_or_else(|| "1".into()),
+                )?,
                 data.statements
-                    .get("num")
-                    .cloned()
-                    .unwrap_or_else(|| "1".into()),
+                    .get("num_interface")
+                    .map(|value| NumeratorInterface::parse(value))
+                    .transpose()?,
             )?;
             nodes.insert(
                 node,
@@ -112,9 +130,16 @@ impl FeynmanDiagram {
                 });
             }
             let mut edge = DiagramEdge::new(particle, !model.particle_is_self_conjugate(particle));
-            edge.numerator = Self::parse_expression(
-                "edge numerator",
-                attributes.get("num").cloned().unwrap_or_else(|| "1".into()),
+            edge.numerator = NumeratorInterface::admit(
+                Self::parse_expression(
+                    "edge numerator",
+                    attributes.get("num").cloned().unwrap_or_else(|| "1".into()),
+                )?,
+                data.data
+                    .statements
+                    .get("num_interface")
+                    .map(|value| NumeratorInterface::parse(value))
+                    .transpose()?,
             )?;
             let tag = attributes
                 .get("is_cut")
@@ -324,13 +349,14 @@ impl FeynmanDiagram {
                 Ok(translated)
             };
             builder.overall_factor = translate(&builder.overall_factor)?;
-            builder.numerator_prefactor = translate(&builder.numerator_prefactor)?;
-            builder.projector = translate(&builder.projector)?;
+            builder.numerator_prefactor =
+                NumeratorInterface::translate(&builder.numerator_prefactor, &translate)?;
+            builder.projector = NumeratorInterface::translate(&builder.projector, &translate)?;
             for vertex in &mut builder.vertices {
-                vertex.numerator = translate(&vertex.numerator)?;
+                vertex.numerator = NumeratorInterface::translate(&vertex.numerator, &translate)?;
             }
             for (_, edge) in &mut builder.edges {
-                edge.numerator = translate(&edge.numerator)?;
+                edge.numerator = NumeratorInterface::translate(&edge.numerator, &translate)?;
             }
         }
         let (mut diagram, source_map) = builder.finalize()?;

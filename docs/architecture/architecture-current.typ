@@ -332,10 +332,14 @@ its runtime surface classification and numerical behavior. Integrands, compiled 
 threshold/subtraction machinery, events, observables, and histogramming
 remain downstream.
 
-Canonical `FeynmanDiagram` records and source recipes retain their raw symbolic
-artifact representation. The runtime `Graph` admits edge and vertex numerators
-into `Autogen<SymbolicTensor<PartialStructure>>`, with reversible index encoding
-and a retained logical tensor interface. `UltravioletGraph::numerator` returns
+Model recipes and DOT/JSON expression strings remain source boundaries. Live
+`FeynmanDiagram` fragments, aggregate numerators, prefactors and projectors
+retain `SymbolicTensor<PartialStructure>`, as do the generator's localized
+factor caches and prepared grouping values. Grouping samples which still carry
+color ports retain tensors; only completed scalar components and ratios are
+Atoms. Runtime `Graph` transfers these carriers directly into its edge/vertex
+`Autogen` fields and `GlobalPrefactor`, preserving reversible index encoding,
+logical interfaces and reduction state. `UltravioletGraph::numerator` returns
 `Result<Numerator<AppliedFeynmanRule>>`; its `SymbolicExpression<Local>` stores
 that same carrier. Reduced-graph composition, color algebra and later UV operations use
 it directly. `get_single_atom` is an explicit decoded expression view for
@@ -1370,8 +1374,10 @@ open-port order. Loading remaps symbols and validates the declared interface;
 reduction certificates, observed graphs and other transient caches are not
 serialized. This changes the positional runtime payload from the former Atom
 fields. Earlier full GammaLoop states must be regenerated; canonical FeynKit model,
-diagram and source-recipe artifacts keep their own unchanged raw-expression
-contract. Standalone evaluator archives contain lowered scalar programs and
+and source-recipe artifacts retain their raw-expression contract. Diagram
+DOT/JSON stores expression strings with optional logical-port metadata when
+the expression cannot recover it. Full state version 20 also encodes global
+numerator/projector interfaces. Standalone evaluator archives contain lowered scalar programs and
 neither runtime graphs nor retained tensor definitions, so this change leaves
 their amplitude version 12 and cross-section version 15 unchanged.
 

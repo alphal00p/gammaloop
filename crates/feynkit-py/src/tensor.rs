@@ -3,8 +3,11 @@ use pyo3::{
     prelude::*,
     types::{PyAny, PyModule},
 };
-use spynso3::structure::SpensoName;
-use symbolica::{api::python::PythonExpression, atom::AtomView};
+use spynso3::{expression::TensorExpression, structure::SpensoName};
+use symbolica::{
+    api::python::{ConvertibleToExpression, PythonExpression},
+    atom::AtomView,
+};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen_derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -283,15 +286,27 @@ impl PyTensorReducer {
     ///
     /// Parameters
     /// ----------
-    /// expression : Expression
+    /// expression : Expression or TensorExpression
     ///     Tensor numerator or projected tensor numerator to reduce.
-    fn reduce(&self, expression: &PythonExpression) -> PyResult<PythonExpression> {
-        self.inner
-            .reduce(expression.expr.as_view())
-            .map(|reduction| PythonExpression {
-                expr: reduction.into_expression(),
-            })
-            .map_err(error::tensor)
+    fn reduce(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.tensor.TensorExpression", imports=("symbolica", "symbolica.community.tensor")))]
+        expression: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<TensorExpression>> {
+        let expression = match expression.extract::<PyRef<'_, TensorExpression>>() {
+            Ok(value) => value.structured().clone(),
+            Err(_) => feynkit_graph::NumeratorInterface::admit(
+                expression
+                    .extract::<ConvertibleToExpression>()?
+                    .to_expression()
+                    .expr,
+                None,
+            )
+            .map_err(|error| crate::error::TensorReductionError::new_err(error.to_string()))?,
+        };
+        let reduction = self.inner.reduce(&expression).map_err(error::tensor)?;
+        TensorExpression::from_structured(py, reduction.into_expression().map_err(error::tensor)?)
     }
 
     /// Return a concise description of the reducer configuration.

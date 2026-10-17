@@ -8,10 +8,13 @@ use std::{
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError, DiagramHalfEdge,
     DiagramId, DiagramThresholdCandidate, DiagramVertex, EdgeId, ExternalState, FeynmanDiagram,
-    VertexSlot,
+    NumeratorInterface, VertexSlot,
 };
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
-use idenso::{color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bispinor};
+use idenso::{
+    color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bispinor,
+    tensor::SymbolicTensor,
+};
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
 use linnet::half_edge::{HedgeGraph, NodeIndex};
@@ -22,7 +25,10 @@ use rayon::{ThreadPoolBuilder, prelude::*};
 use serde::{Deserialize, Serialize};
 use spenso::{
     network::library::symbolic::ETS,
-    structure::representation::{Minkowski, RepName},
+    structure::{
+        partial::PartialStructure,
+        representation::{Minkowski, RepName},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder},
@@ -1316,8 +1322,8 @@ pub(crate) struct Generator {
 /// not on the rest of the diagram. Keep them for this generator's lifetime.
 #[derive(Default)]
 struct NumeratorCache {
-    interactions: RwLock<HashMap<InteractionNumeratorKey, Atom>>,
-    propagators: RwLock<HashMap<PropagatorNumeratorKey, Atom>>,
+    interactions: RwLock<HashMap<InteractionNumeratorKey, SymbolicTensor<PartialStructure>>>,
+    propagators: RwLock<HashMap<PropagatorNumeratorKey, SymbolicTensor<PartialStructure>>>,
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -1346,7 +1352,8 @@ pub trait FeynmanDiagramRulesExt {
 
     /// Construct the external wavefunctions in the finalized half-edge frame.
     /// Callers with an explicit projector retain that supplied expression.
-    fn external_state_projector(&self) -> Result<Atom, GenerationError>;
+    fn external_state_projector(&self)
+    -> Result<SymbolicTensor<PartialStructure>, GenerationError>;
 }
 
 impl FeynmanDiagramRulesExt for FeynmanDiagram {
@@ -1355,7 +1362,9 @@ impl FeynmanDiagramRulesExt for FeynmanDiagram {
         Generator::new(self.model_arc()).construct_numerators(self.clone())
     }
 
-    fn external_state_projector(&self) -> Result<Atom, GenerationError> {
+    fn external_state_projector(
+        &self,
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
         let generator = Generator::new(self.model_arc());
         let mut projector = Atom::one();
         for (edge, endpoints, data) in self.edges() {
@@ -1390,7 +1399,7 @@ impl FeynmanDiagramRulesExt for FeynmanDiagram {
                     generator.external_wavefunction(state, data.particle, edge.0, hedge)?;
             }
         }
-        Ok(projector)
+        Ok(NumeratorInterface::admit(projector, None)?)
     }
 }
 
@@ -2896,7 +2905,10 @@ impl Generator {
             .canonical_loop_momentum_basis()
             .symmetry_factor(topology.symmetry)
             .overall_factor(overall_factor)
-            .numerator_prefactor(options.numerator_prefactor.clone())
+            .numerator_prefactor(NumeratorInterface::admit(
+                options.numerator_prefactor.clone(),
+                None,
+            )?)
             .projector(projector)
             .cuts(topology.cut_partitions.clone())
             .topology_threshold_candidates(topology.topology_threshold_candidates.clone());
@@ -3031,7 +3043,7 @@ impl Generator {
         &self,
         graph: &Graph<ColoredNode, EdgeColor>,
         supplied: Option<&Atom>,
-    ) -> Result<Atom, GenerationError> {
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
         let mut projector = Atom::one();
         let mut external_indices = BTreeMap::new();
         for (vertex, node) in graph.nodes().iter().enumerate() {
@@ -3062,7 +3074,7 @@ impl Generator {
             }
         }
         let Some(supplied) = supplied else {
-            return Ok(projector);
+            return Ok(NumeratorInterface::admit(projector, None)?);
         };
         // Process-level expressions cannot know a topology's provisional IDs.
         // Resolve their external-leg owners before the finalizer transports the
@@ -3110,7 +3122,7 @@ impl Generator {
                 return Err(GenerationError::UnknownProjectorExternalIndex { index });
             }
         }
-        Ok(projector)
+        Ok(NumeratorInterface::admit(projector, None)?)
     }
 
     fn external_wavefunction(
@@ -3194,7 +3206,7 @@ impl Generator {
         &self,
         rule_id: VertexRuleId,
         instantiation: &NumeratorInstantiation<'_>,
-    ) -> Result<Atom, GenerationError> {
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
         let key = InteractionNumeratorKey {
             rule: rule_id,
             owner: instantiation.owner,
@@ -3227,6 +3239,7 @@ impl Generator {
         } else {
             Atom::add_many(terms)
         };
+        let numerator = NumeratorInterface::admit(numerator, None)?;
         self.numerators
             .interactions
             .write()
@@ -3240,7 +3253,7 @@ impl Generator {
         particle_id: ParticleId,
         edge: usize,
         hedges: [usize; 2],
-    ) -> Result<Atom, GenerationError> {
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
         let key = PropagatorNumeratorKey {
             particle: particle_id,
             edge,
@@ -3272,6 +3285,7 @@ impl Generator {
             None => spin,
             Some(color) => spin * color,
         };
+        let numerator = NumeratorInterface::admit(numerator, None)?;
         self.numerators
             .propagators
             .write()
@@ -5200,10 +5214,19 @@ mod tests {
                 feynkit_graph::symbols::v(),
                 feynkit_graph::symbols::vbar(),
             ] {
-                assert_eq!(function_count(diagram.projector(), wavefunction), 1);
+                assert_eq!(
+                    function_count(
+                        &NumeratorInterface::export(diagram.projector()).0,
+                        wavefunction
+                    ),
+                    1
+                );
             }
             assert_eq!(
-                function_count(diagram.projector(), feynkit_graph::symbols::hedge_index()),
+                function_count(
+                    &NumeratorInterface::export(diagram.projector()).0,
+                    feynkit_graph::symbols::hedge_index()
+                ),
                 4
             );
         }
@@ -5248,7 +5271,7 @@ mod tests {
             explicit
                 .diagrams
                 .iter()
-                .all(|diagram| diagram.projector() == &Atom::one())
+                .all(|diagram| diagram.projector().expression() == &Atom::one())
         );
     }
 
@@ -5577,7 +5600,7 @@ mod tests {
                     name: format!("v{vertex}"),
                     interaction: None,
 
-                    numerator: Atom::one(),
+                    numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
                 })
             })
             .collect::<Vec<_>>();
@@ -5696,6 +5719,7 @@ mod tests {
         let vector_projector = generator
             .external_state_projector(&vector_graph, None)
             .unwrap();
+        let vector_projector = NumeratorInterface::export(&vector_projector).0;
         assert_eq!(
             function_count(&vector_projector, feynkit_graph::symbols::epsilon()),
             1
@@ -5723,8 +5747,9 @@ mod tests {
         assert_eq!(
             generator
                 .external_state_projector(&scalar_graph, None)
-                .unwrap(),
-            Atom::one()
+                .unwrap()
+                .expression(),
+            &Atom::one()
         );
     }
 
@@ -6897,7 +6922,7 @@ mod tests {
             .interaction_numerator(model.vertex_rule_id("V").unwrap(), &instantiation)
             .unwrap();
 
-        let numerator = numerator.to_plain_string();
+        let numerator = NumeratorInterface::export(&numerator).0.to_plain_string();
         assert!(numerator.contains("UFO::GC_LOW"));
         assert!(numerator.contains("UFO::GC_HIGH"));
         assert!(!numerator.contains("g_low"));
@@ -7337,7 +7362,7 @@ mod tests {
             .interaction_numerator(model.vertex_rule_id("V_78").unwrap(), &instantiation)
             .unwrap();
 
-        let numerator = numerator.to_plain_string();
+        let numerator = NumeratorInterface::export(&numerator).0.to_plain_string();
         assert!(numerator.contains("spenso::bis(4"));
         assert!(numerator.contains("spenso::cof(3"));
         assert!(numerator.contains("spenso::dind"));
@@ -7416,12 +7441,24 @@ mod tests {
         ];
         let mut combined = String::new();
         for diagram in &generated.diagrams {
-            combined.push_str(&diagram.numerator().to_plain_string());
+            combined.push_str(
+                &NumeratorInterface::export(diagram.numerator())
+                    .0
+                    .to_plain_string(),
+            );
             for (_, vertex) in diagram.vertices() {
-                combined.push_str(&vertex.numerator.to_plain_string());
+                combined.push_str(
+                    &NumeratorInterface::export(&vertex.numerator)
+                        .0
+                        .to_plain_string(),
+                );
             }
             for (_, _, edge) in diagram.edges() {
-                combined.push_str(&edge.numerator.to_plain_string());
+                combined.push_str(
+                    &NumeratorInterface::export(&edge.numerator)
+                        .0
+                        .to_plain_string(),
+                );
             }
         }
         for head in residual_heads {
@@ -7447,11 +7484,11 @@ mod tests {
             }"#,
         )
         .unwrap();
-        assert_eq!(diagram.numerator(), &Atom::one());
+        assert_eq!(diagram.numerator().expression(), &Atom::one());
         let routed = diagram.loop_momentum_basis().clone();
         let id = diagram.id();
         let diagram = diagram.apply_feynman_rules().unwrap();
-        assert_eq!(diagram.numerator(), &test_atom("GC1^2"));
+        assert_eq!(diagram.numerator().expression(), &test_atom("GC1^2"));
         assert_eq!(diagram.loop_momentum_basis(), &routed);
         assert_eq!(diagram.id(), id);
         diagram.validate().unwrap();
@@ -7477,7 +7514,10 @@ mod tests {
             .unwrap();
         assert!(!generated.diagrams.is_empty());
         for diagram in generated.diagrams {
-            let topology = diagram.clone().with_numerator(Atom::one()).unwrap();
+            let topology = diagram
+                .clone()
+                .with_numerator(SymbolicTensor::infer(Atom::one()).unwrap())
+                .unwrap();
             let restored = topology.apply_feynman_rules().unwrap();
             assert_eq!(restored.to_json().unwrap(), diagram.to_json().unwrap());
             let reapplied = restored.apply_feynman_rules().unwrap();
@@ -8400,12 +8440,14 @@ mod tests {
                 &GenerationOptions::default(),
             )
             .unwrap();
-        let internal_numerator = diagram
+        let internal_numerator = &diagram
             .edges()
             .find(|(_, _, edge)| edge.external.is_none())
             .unwrap()
             .2
-            .numerator
+            .numerator;
+        let internal_numerator = NumeratorInterface::export(internal_numerator)
+            .0
             .to_plain_string();
         assert!(internal_numerator.contains("gammalooprs::Q"));
         assert!(internal_numerator.contains("gammalooprs::hedge"));
@@ -8424,12 +8466,14 @@ mod tests {
             .unwrap()
             .2
             .numerator;
-        assert_eq!(external_numerator, &Atom::one());
+        assert_eq!(external_numerator.expression(), &Atom::one());
 
-        let vertex_numerator = diagram
+        let vertex_numerator = &diagram
             .vertex(feynkit_graph::VertexId(interaction))
             .unwrap()
-            .numerator
+            .numerator;
+        let vertex_numerator = NumeratorInterface::export(vertex_numerator)
+            .0
             .to_plain_string();
         assert!(vertex_numerator.contains("gammalooprs::hedge"));
         assert!(vertex_numerator.contains("gammalooprs::hedge"));

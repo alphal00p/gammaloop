@@ -264,8 +264,9 @@ local four-dimensional limit constructs the next counterterm as a signed
 `-T(...)` operation. Nested signs therefore arise from recursive
 operation composition, not from terminal depth or parity.
 
-For a connected counterterm, integration stores a Laurent series from
-which two physical projections are obtained:
+For a connected counterterm, the native Laurent series is temporary calculation
+storage. `IntegratedCts` retains two typed physical projections with the source
+logical interface, including a vanishing projection:
 
 ```text
 pole projection:               negative powers of integral(local)
@@ -304,7 +305,7 @@ A localized integrated contribution keeps its finite coefficient in the active e
 
 The finite coefficient is stored as a shared numerator definition, using the existing residue-key owner to apply its component momentum map exactly once. Scalar CFF branch weights and the frozen kernel remain separate. A later cograph numerator is another shared factor; it does not absorb or remap the integrated tensor vertex. This permits open spinor coefficients to be added to local counterterms without asking scalar branch assembly to combine incompatible tensor interfaces. The localization regression checks both the scalar affine substitution and the exact product of separate finite and cograph matrices.
 
-The direct route retains this distinction with a transient one-argument `mUV(owner)` application of the existing vacuum-mass symbol. Each connected integrated coefficient is tagged before coefficients are multiplied. The owner uses the existing subgraph encoding: Taylor expansion scales the entire mass application for a contained owner, leaves a disjoint owner unchanged, and rejects partial overlaps. `DirectSector::combine` restores physical `mUV` on output copies; stored sectors retain their owners for further forest steps. This introduces no helper, type or symbol. Four-dimensional disconnected composition already applies the Taylor operations to their own components, so its runtime and `IntegratedCts` are unchanged.
+The direct route retains this distinction with a transient one-argument `mUV(owner)` application of the existing vacuum-mass symbol. Each connected integrated coefficient is tagged before coefficients are multiplied. The owner uses the existing subgraph encoding: Taylor expansion scales the entire mass application for a contained owner, leaves a disjoint owner unchanged, and rejects partial overlaps. `DirectSector::combine` restores physical `mUV` on output copies; stored sectors retain their owners for further forest steps. This introduces no helper, type or symbol. Four-dimensional disconnected composition already applies the Taylor operations to their own components; the retained-tensor change preserves that mass ownership and the projection signs.
 
 Consumed loop measures are recorded separately. Writing `s = uvIntegratedLoopScale`, `IntegratedCts` projects a coefficient `C` whose integration consumed `r` loops as `C(mUV) * s^(4*r)`. The enclosing four-dimensional Taylor operation transforms `s -> s*t`, supplying `t^(4*r)` to compensate consumed loop measures without cancelling the coefficient's mass rescaling. Integration and physical projection set `s = 1`. The active denominator rewrite introduces the unscaled vacuum mass for the enclosing propagator basis.
 

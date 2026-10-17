@@ -17,6 +17,8 @@ use spenso::{
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
+        abstract_index::AbstractIndex,
+        partial::{PartialStructure, PartialStructureExt},
         representation::{Euclidean, Lorentz, Minkowski, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
@@ -331,6 +333,8 @@ mod syntax_macro_tests {
 
 #[derive(Error, Debug)]
 pub enum AdjointError {
+    #[error(transparent)]
+    Composition(#[from] tensor::composition::TensorCompositionError),
     #[error("Dummies already present:{0}")]
     DummiesAlready(Atom),
     #[error(transparent)]
@@ -343,6 +347,190 @@ pub enum AdjointError {
         "cannot construct Dirac adjoint: bispinor component has {count} dangling indices (expected at most 2)"
     )]
     TooManyDanglingBispinors { count: usize },
+}
+
+impl tensor::SymbolicTensor<PartialStructure> {
+    /// Dirac adjunction with the source's ordered logical axes. The external
+    /// representations are dualized; zero retains those axes without parsing.
+    /// As for axis permutation, unresolved axes acquire independent graph labels
+    /// before the operation; their public logical order remains unchanged.
+    pub fn dirac_adjoint(&self, preserve_indices: bool) -> Result<Self, AdjointError> {
+        self.ensure_validated()?;
+        let materialized;
+        let source = if self.structure().open_positions().is_empty() {
+            self
+        } else {
+            materialized = self.materialized()?;
+            &materialized
+        };
+        let interface = PartialStructure::from_logical_slots(
+            source
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.dual()),
+        );
+        if source.is_zero() {
+            return Ok(Self::from_declared_parts(Atom::Zero, interface)?);
+        }
+        let (expression, has_spinor_edges) = Self::prepare_dirac_adjoint::<AbstractIndex>(
+            source.expression().as_view(),
+            preserve_indices,
+        )?;
+        let expression = if has_spinor_edges {
+            expression.chainify(Bispinor {}.into())
+        } else {
+            expression
+        };
+        let value = Self::from_declared_parts(expression, interface)?;
+        if has_spinor_edges {
+            Ok(value.finish_dirac_adjoint(preserve_indices)?)
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn finish_dirac_adjoint(
+        self,
+        preserve_indices: bool,
+    ) -> Result<Self, tensor::inference::TensorInferenceError> {
+        if preserve_indices {
+            self.simplify_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(dirac::GammaSimplifySettings {
+                    gamma0: true,
+                    evaluate_traces: false,
+                    ..Default::default()
+                }),
+                epsilon: true,
+                ..Default::default()
+            })?
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+        } else {
+            self.contract(Default::default())
+        }
+    }
+
+    // The boolean records whether the prepared value needs Dirac cleanup.
+    // Pure scalar/color conjugation keeps the raw entry point's existing form.
+    fn prepare_dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(
+        source: AtomView<'_>,
+        preserve_indices: bool,
+    ) -> Result<(Atom, bool), AdjointError> {
+        let net = source
+            .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                shorthand_parsing: ShorthandParsing::Expand {
+                    schoonschip: SchoonschipExpansionMode {
+                        inner_products: false,
+                        expand_inside_chains: true,
+                        expand_schoonship: true,
+                    },
+                    trace: true,
+                    chain: true,
+                },
+                ..Default::default()
+            })
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
+
+        // Non-spinor words need only their existing conjugation. Retain compact
+        // color chains and scalar spectators after the same checked parse.
+        // Closed Dirac traces still carry internal bispinor edges.
+        if !net.graph.graph.iter_edges().any(|(_, _, edge)| {
+            matches!(edge.data, NetworkEdge::Slot(slot)
+                if slot.rep_name() == Bispinor {}.into())
+        }) {
+            return Ok((source.spenso_conj(), false));
+        }
+
+        let bis_dangling: Vec<_> = net
+            .graph
+            .dangling_indices()
+            .into_iter()
+            .filter(|a| a.rep_name() == Bispinor {}.into())
+            .collect();
+
+        // println!("{}", net.dot_pretty());
+
+        let mut transpositions = Vec::new();
+        // Only transposed output indices require a choice of matrix channels.
+        // A physical adjoint keeps every external leg, including sums whose
+        // alternatives pair those legs differently.
+        if !preserve_indices {
+            let bis_graph = SuBitGraph::from_filter(&net.graph.graph, |e| {
+                if let NetworkEdge::Slot(s) = e {
+                    s.rep_name() == Bispinor {}.into()
+                } else {
+                    false
+                }
+            });
+
+            let con = net.graph.graph.connected_components(&bis_graph);
+
+            for c in con {
+                let mut dangling: SuBitGraph = net.graph.graph.empty_subgraph();
+                for i in c.included_iter() {
+                    if net.graph.graph.is_dangling(i) {
+                        dangling.add(i);
+                    }
+                }
+
+                match dangling.n_included() {
+                    0 => {}
+                    1 => {}
+                    2 => {
+                        let mut iter = dangling.included_iter();
+                        let NetworkEdge::Slot(i) =
+                            net.graph.graph[net.graph.graph[&iter.next().unwrap()]]
+                        else {
+                            break;
+                        };
+
+                        let NetworkEdge::Slot(j) =
+                            net.graph.graph[net.graph.graph[&iter.next().unwrap()]]
+                        else {
+                            break;
+                        };
+
+                        transpositions.push((i, j));
+                    }
+                    _ => {
+                        return Err(AdjointError::TooManyDanglingBispinors {
+                            count: dangling.n_included(),
+                        });
+                    }
+                }
+            }
+        }
+        // Materialize matrix channels in this same parse before conjugation.
+        // Scalar inner products stay compact, and every sum branch is retained.
+        let explicit = net.simple_execute::<()>()?;
+        // Include the parser's newly materialized channel indices, then share
+        // one collision-free allocator across boundary and matrix conjugation.
+        let dummies = ParseState::<Aind>::default();
+        dummies.reserve_indices(explicit.as_view());
+        let mut a = explicit.spenso_conj();
+        for i in bis_dangling {
+            let mut dummy = i;
+            dummy.aind = dummies.fresh_index();
+            a = a
+                .replace(Pattern::Literal(i.to_atom()))
+                .with(Pattern::Literal(dummy.to_atom()))
+                * function!(AGS.gamma0, i.to_atom(), dummy.to_atom());
+        }
+        for (i, j) in transpositions {
+            a = a.replace_multiple(&[
+                Replacement::new(Pattern::Literal(i.to_atom()), Pattern::Literal(j.to_atom())),
+                Replacement::new(Pattern::Literal(j.to_atom()), Pattern::Literal(i.to_atom())),
+            ]);
+        }
+        a = dirac::DiracSimplifier::conjugate_matrices::<Aind>(a.as_view(), &dummies);
+        Ok((dirac::DiracSimplifier::factor_gamma_zero(a.as_view()), true))
+    }
 }
 
 impl IndexTooling for AtomView<'_> {
@@ -525,119 +713,17 @@ impl IndexTooling for AtomView<'_> {
         &self,
         preserve_indices: bool,
     ) -> Result<Atom, AdjointError> {
-        let net = self
-            .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                shorthand_parsing: ShorthandParsing::Expand {
-                    schoonschip: SchoonschipExpansionMode {
-                        inner_products: false,
-                        expand_inside_chains: true,
-                        expand_schoonship: true,
-                    },
-                    trace: true,
-                    chain: true,
-                },
-                ..Default::default()
-            })
-            .map_err(|error| NetworkToolingError::Parse {
-                reason: error.to_string(),
-            })?;
-
-        // Non-spinor words need only their existing conjugation. Retain compact
-        // color chains and scalar spectators after the same checked parse.
-        // Closed Dirac traces still carry internal bispinor edges.
-        if !net.graph.graph.iter_edges().any(|(_, _, edge)| {
-            matches!(edge.data, NetworkEdge::Slot(slot)
-                if slot.rep_name() == Bispinor {}.into())
-        }) {
-            return Ok(self.spenso_conj());
+        let (factored, has_spinor_edges) =
+            tensor::SymbolicTensor::<PartialStructure>::prepare_dirac_adjoint::<Aind>(
+                *self,
+                preserve_indices,
+            )?;
+        if !has_spinor_edges {
+            return Ok(factored);
         }
-
-        let bis_dangling: Vec<_> = net
-            .graph
-            .dangling_indices()
-            .into_iter()
-            .filter(|a| a.rep_name() == Bispinor {}.into())
-            .collect();
-
-        // println!("{}", net.dot_pretty());
-
-        let mut transpositions = Vec::new();
-        // Only transposed output indices require a choice of matrix channels.
-        // A physical adjoint keeps every external leg, including sums whose
-        // alternatives pair those legs differently.
-        if !preserve_indices {
-            let bis_graph = SuBitGraph::from_filter(&net.graph.graph, |e| {
-                if let NetworkEdge::Slot(s) = e {
-                    s.rep_name() == Bispinor {}.into()
-                } else {
-                    false
-                }
-            });
-
-            let con = net.graph.graph.connected_components(&bis_graph);
-
-            for c in con {
-                let mut dangling: SuBitGraph = net.graph.graph.empty_subgraph();
-                for i in c.included_iter() {
-                    if net.graph.graph.is_dangling(i) {
-                        dangling.add(i);
-                    }
-                }
-
-                match dangling.n_included() {
-                    0 => {}
-                    1 => {}
-                    2 => {
-                        let mut iter = dangling.included_iter();
-                        let NetworkEdge::Slot(i) =
-                            net.graph.graph[net.graph.graph[&iter.next().unwrap()]]
-                        else {
-                            break;
-                        };
-
-                        let NetworkEdge::Slot(j) =
-                            net.graph.graph[net.graph.graph[&iter.next().unwrap()]]
-                        else {
-                            break;
-                        };
-
-                        transpositions.push((i, j));
-                    }
-                    _ => {
-                        return Err(AdjointError::TooManyDanglingBispinors {
-                            count: dangling.n_included(),
-                        });
-                    }
-                }
-            }
-        }
-        // Materialize matrix channels in this same parse before conjugation.
-        // Scalar inner products stay compact, and every sum branch is retained.
-        let explicit = net.simple_execute::<()>()?;
-        // Include the parser's newly materialized channel indices, then share
-        // one collision-free allocator across boundary and matrix conjugation.
-        let dummies = ParseState::<Aind>::default();
-        dummies.reserve_indices(explicit.as_view());
-        let mut a = explicit.spenso_conj();
-        for i in bis_dangling {
-            let mut dummy = i;
-            dummy.aind = dummies.fresh_index();
-            a = a
-                .replace(Pattern::Literal(i.to_atom()))
-                .with(Pattern::Literal(dummy.to_atom()))
-                * function!(AGS.gamma0, i.to_atom(), dummy.to_atom());
-        }
-        for (i, j) in transpositions {
-            a = a.replace_multiple(&[
-                Replacement::new(Pattern::Literal(i.to_atom()), Pattern::Literal(j.to_atom())),
-                Replacement::new(Pattern::Literal(j.to_atom()), Pattern::Literal(i.to_atom())),
-            ]);
-        }
-        a = dirac::DiracSimplifier::conjugate_matrices::<Aind>(a.as_view(), &dummies);
         // The generic index encoding is reversible; shared algebra sees the
         // same strict slot grammar as every other SymbolicTensor operation.
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let factored = dirac::DiracSimplifier::factor_gamma_zero(a.as_view());
         let cooked =
             cooking
                 .try_cook(factored.as_view())
@@ -648,25 +734,7 @@ impl IndexTooling for AtomView<'_> {
         // gamma0 factoring have already acted on explicit matrices; normalize
         // their channels before the same strict typed admission used elsewhere.
         let tensor = tensor::SymbolicTensor::infer(cooked.chainify(Bispinor {}.into()))?;
-        let resolved = if preserve_indices {
-            tensor
-                .simplify_algebra(&crate::tensor::AlgebraSettings {
-                    gamma: Some(dirac::GammaSimplifySettings {
-                        gamma0: true,
-                        evaluate_traces: false,
-                        ..Default::default()
-                    }),
-                    epsilon: true,
-                    ..Default::default()
-                })?
-                .contract(crate::tensor::ContractSettings {
-                    collect_chains: false,
-                    collect_traces: false,
-                    ..Default::default()
-                })?
-        } else {
-            tensor.contract(Default::default())?
-        };
+        let resolved = tensor.finish_dirac_adjoint(preserve_indices)?;
         let expression = cooking.uncook(resolved.expression.as_view());
         if preserve_indices {
             Ok(expression.undo_chain::<Aind>()?)
@@ -714,6 +782,202 @@ pub mod test {
         AdjointError, CanonicalizationError, Cookable, IndexTooling, NetworkToolingError, gamma,
         test_support::test_initialize, u,
     };
+
+    #[test]
+    fn typed_adjoint_keeps_native_logical_axes_and_ranked_zero() {
+        use crate::{CookMode, CookSettings, representations::Bispinor, tensor::SymbolicTensor};
+        use spenso::{
+            iterators::IteratableTensor,
+            network::{
+                ExecutionResult, Network, Sequential, SmallestDegree,
+                library::{
+                    panicing::ErroringLibrary,
+                    symbolic::{ExplicitKey, TensorLibrary},
+                },
+                parsing::{ParseSettings, ShadowedStructure},
+                store::NetworkStore,
+            },
+            structure::{
+                Canonicalized, TensorStructure,
+                partial::{PartialStructure, PartialStructureExt},
+                representation::{LibraryRep, RepName},
+                slot::DualSlotTo,
+            },
+            tensors::parametric::ParamTensor,
+        };
+        use std::collections::BTreeMap;
+        type Tensor = ParamTensor<ShadowedStructure<AbstractIndex>>;
+        type Lib = TensorLibrary<ParamTensor<ExplicitKey<AbstractIndex>>, AbstractIndex>;
+        type Net = Network<
+            NetworkStore<Tensor, Atom>,
+            ExplicitKey<AbstractIndex>,
+            symbolica::atom::Symbol,
+        >;
+
+        test_initialize();
+        let matrix = spenso::tensor_symbol!("typed_adjoint::matrix"; Real);
+        let label = symbol!("typed_adjoint::index", tags = [SPENSO_TAG.index.clone()]);
+        let bis = LibraryRep::from(Bispinor {}).new_rep(4);
+        let raw = function!(
+            matrix,
+            bis.to_symbolic([function!(label, 3, 0)]),
+            bis.to_symbolic([function!(label, 3, 1)]),
+        );
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let native = cooking.try_cook(raw.as_view()).unwrap();
+        assert_ne!(native, raw);
+        let inferred = SymbolicTensor::infer(native).unwrap();
+        let mut slots = inferred.structure().logical_slots();
+        slots.reverse();
+        let source = SymbolicTensor::from_declared_parts(
+            inferred.expression().clone(),
+            PartialStructure::from_logical_slots(slots),
+        )
+        .unwrap();
+        let interface = PartialStructure::from_logical_slots(
+            source
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.dual()),
+        );
+        let mut library = Lib::new();
+        library
+            .insert_explicit_sparse(
+                ExplicitKey::from_iter([bis, bis], matrix, None),
+                (0usize..4).flat_map(|row| {
+                    (0usize..4)
+                        .map(move |column| (vec![row, column], Atom::num(1 + row * 4 + column)))
+                }),
+                Atom::Zero,
+            )
+            .unwrap();
+        library
+            .insert_explicit_sparse(
+                ExplicitKey::from_iter([bis, bis], crate::dirac::AGS.gamma0, None),
+                [(0, 2), (1, 3), (2, 0), (3, 1)]
+                    .into_iter()
+                    .map(|(row, column)| (vec![row, column], Atom::one())),
+                Atom::Zero,
+            )
+            .unwrap();
+        let components = |value: SymbolicTensor<PartialStructure>| {
+            let lowered: Canonicalized<Net> = value
+                .into_network(
+                    &library,
+                    &ErroringLibrary::new(),
+                    &ParseSettings::default(),
+                    None,
+                )
+                .unwrap();
+            let (mut network, layout) = lowered.into_parts();
+            network
+                .execute::<Sequential, SmallestDegree, _, _, _>(&library, &ErroringLibrary::new())
+                .unwrap();
+            let ExecutionResult::Val(tensor) = network.result_tensor(&library).unwrap() else {
+                panic!("an open adjoint, including zero, retains two axes");
+            };
+            assert_eq!(
+                tensor.external_reps_iter().collect::<Vec<_>>(),
+                vec![bis, bis]
+            );
+            let mut entries = (0..4)
+                .flat_map(|row| (0..4).map(move |column| (vec![row, column], Atom::Zero)))
+                .collect::<BTreeMap<_, _>>();
+            for (indices, value) in tensor.iter_expanded() {
+                entries.insert(layout.canonical_to_logical(&indices), value.to_owned());
+            }
+            entries
+        };
+        let mut nonzero = Vec::new();
+        for preserve_indices in [false, true] {
+            let expected = raw
+                .dirac_adjoint::<AbstractIndex>(preserve_indices)
+                .unwrap();
+            let expected = SymbolicTensor::from_declared_parts(
+                cooking.try_cook(expected.as_view()).unwrap(),
+                interface.clone(),
+            )
+            .unwrap();
+            let actual = source.dirac_adjoint(preserve_indices).unwrap();
+            assert_eq!(actual.structure(), &interface);
+            let entries = components(actual);
+            assert_eq!(entries, components(expected));
+            nonzero.push(entries);
+            let zero = source
+                .with_checked_expression(Atom::Zero)
+                .unwrap()
+                .dirac_adjoint(preserve_indices)
+                .unwrap();
+            assert_eq!(zero.structure(), &interface);
+            assert!(components(zero).values().all(|value| value.is_zero()));
+        }
+        assert_ne!(
+            nonzero[0], nonzero[1],
+            "the matrix control must distinguish endpoint transposition"
+        );
+
+        let anonymous =
+            SymbolicTensor::infer(function!(matrix, bis.to_symbolic([]), bis.to_symbolic([]),))
+                .unwrap();
+        assert_eq!(anonymous.structure().open_positions().len(), 2);
+        let named = anonymous.materialized().unwrap();
+        let named_dual = PartialStructure::from_logical_slots(
+            named
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.dual()),
+        );
+        for preserve_indices in [false, true] {
+            let expected = named
+                .expression()
+                .dirac_adjoint::<AbstractIndex>(preserve_indices)
+                .unwrap();
+            let expected =
+                SymbolicTensor::from_declared_parts(expected, named_dual.clone()).unwrap();
+            let actual = anonymous.dirac_adjoint(preserve_indices).unwrap();
+            assert_eq!(actual.rank(), 2);
+            assert_eq!(components(actual), components(expected));
+            let zero = anonymous
+                .with_checked_expression(Atom::Zero)
+                .unwrap()
+                .dirac_adjoint(preserve_indices)
+                .unwrap();
+            assert_eq!(zero.rank(), 2);
+            assert!(components(zero).values().all(|value| value.is_zero()));
+        }
+        assert_eq!(anonymous.structure().open_positions().len(), 2);
+
+        for raw in [
+            Atom::i() * Atom::num(2),
+            parse_lit!(spenso::g(
+                spenso::cof(3, 1),
+                spenso::dind(spenso::cof(3, 2))
+            )),
+        ] {
+            let source = SymbolicTensor::infer(raw.clone()).unwrap();
+            for preserve_indices in [false, true] {
+                let actual = source.dirac_adjoint(preserve_indices).unwrap();
+                assert_eq!(
+                    actual.expression(),
+                    &raw.dirac_adjoint::<AbstractIndex>(preserve_indices)
+                        .unwrap()
+                );
+                assert_eq!(
+                    actual.structure().logical_slots(),
+                    source
+                        .structure()
+                        .logical_slots()
+                        .into_iter()
+                        .map(|slot| slot.dual())
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+    }
 
     #[test]
     fn dirac_adjoint_retains_nonspinor_conjugation_and_reduces_closed_spinor_words() {

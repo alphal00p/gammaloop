@@ -879,8 +879,12 @@ fn build_tta_uv_graph() -> Graph {
     .unwrap();
     assert_eq!(graphs.len(), 1);
     let mut graph = graphs.remove(0);
-    graph.global_prefactor.num *=
-        graph.underlying[Hedge(0)].color_kronekers(&graph.underlying[Hedge(1)]);
+    let color = crate::numerator::AppliedFeynmanRule::new(
+        graph.underlying[Hedge(0)].color_kronekers(&graph.underlying[Hedge(1)]),
+    )
+    .unwrap()
+    .expr;
+    graph.global_prefactor.num = graph.global_prefactor.num.multiply(&color).unwrap();
     graph.validate_full_numerator_tensor_network().unwrap();
     graph
 }
@@ -2137,7 +2141,9 @@ fn production_energy_gate_includes_factorized_global_numerator() {
     let convergent_numerator = (&q0 + Atom::one()) * (&q0 + Atom::num(2));
     let convergent = graph.with_global_numerator_only(
         "factorized_global_quadratic".to_string(),
-        convergent_numerator.clone(),
+        crate::numerator::AppliedFeynmanRule::new(convergent_numerator.clone())
+            .unwrap()
+            .expr,
     );
     let cycle = convergent
         .all_cycle_unions(&convergent.no_dummy())
@@ -2154,7 +2160,10 @@ fn production_energy_gate_includes_factorized_global_numerator() {
     convergent
         .ensure_energy_convergent_cycles(&convergent.no_dummy())
         .unwrap();
-    assert_eq!(convergent.global_prefactor.num, convergent_numerator);
+    assert_eq!(
+        convergent.global_prefactor.num.expression(),
+        &convergent_numerator
+    );
     assert_eq!(
         convergent.production_numerator_atom_for_full_3d_expression(),
         convergent_numerator,
@@ -2163,7 +2172,9 @@ fn production_energy_gate_includes_factorized_global_numerator() {
     let divergent_numerator = convergent_numerator * (&q0 + Atom::num(3));
     let divergent = graph.with_global_numerator_only(
         "factorized_global_cubic".to_string(),
-        divergent_numerator.clone(),
+        crate::numerator::AppliedFeynmanRule::new(divergent_numerator.clone())
+            .unwrap()
+            .expr,
     );
     let error = divergent
         .ensure_energy_convergent_cycles(&divergent.no_dummy())
@@ -2171,7 +2182,10 @@ fn production_energy_gate_includes_factorized_global_numerator() {
         .to_string();
     assert!(error.contains("DOD_4D=3"), "{error}");
     assert!(error.contains("DOD_E=0"), "{error}");
-    assert_eq!(divergent.global_prefactor.num, divergent_numerator);
+    assert_eq!(
+        divergent.global_prefactor.num.expression(),
+        &divergent_numerator
+    );
     let production_numerator = divergent.production_numerator_atom_for_full_3d_expression();
     assert_eq!(production_numerator, divergent_numerator);
 
@@ -2189,11 +2203,20 @@ fn four_d_renormalization_without_cff_preserves_source_energy_gate() {
     let model = load_generic_model("scalars");
     let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
     let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
-    let convergent = graph.with_global_numerator_only("four_d_unit_bubble".into(), Atom::one());
+    let convergent = graph.with_global_numerator_only(
+        "four_d_unit_bubble".into(),
+        crate::numerator::AppliedFeynmanRule::new(Atom::one())
+            .unwrap()
+            .expr,
+    );
     let q0 = function!(GS.emr_mom, 2, GS.cind(0));
     let divergent = graph.with_global_numerator_only(
         "four_d_energy_divergent_bubble".into(),
-        (&q0 + Atom::one()) * (&q0 + Atom::num(2)) * (&q0 + Atom::num(3)),
+        crate::numerator::AppliedFeynmanRule::new(
+            (&q0 + Atom::one()) * (&q0 + Atom::num(2)) * (&q0 + Atom::num(3)),
+        )
+        .unwrap()
+        .expr,
     );
 
     // A 4D forest does not need a stored CFF, but this does not remove the
@@ -2268,7 +2291,9 @@ fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
     let q0 = function!(GS.emr_mom, 1, GS.cind(0));
     let divergent = graph.with_global_numerator_only(
         "diagnostic_denominator_cancelling_r_contact".to_string(),
-        q0.pow(2) - r0.pow(2),
+        crate::numerator::AppliedFeynmanRule::new(q0.pow(2) - r0.pow(2))
+            .unwrap()
+            .expr,
     );
 
     let error = divergent
@@ -2326,7 +2351,12 @@ fn production_energy_gate_checks_nonlocal_edge_numerator_on_each_cycle() {
 
     // The same nonlocal input stored globally is already rejected. Rehosting
     // this factor cannot change convergence of the complete rational source.
-    let global = graph.with_global_numerator_only("global_r_squared".to_string(), r_squared);
+    let global = graph.with_global_numerator_only(
+        "global_r_squared".to_string(),
+        crate::numerator::AppliedFeynmanRule::new(r_squared)
+            .unwrap()
+            .expr,
+    );
     let global_error = global
         .ensure_energy_convergent_cycles(&global.no_dummy())
         .unwrap_err();

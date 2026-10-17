@@ -1494,8 +1494,9 @@ impl CrossSectionGraph {
                     else {
                         continue;
                     };
-                    self.graph.global_prefactor.projector =
-                        self.graph.global_prefactor.projector.replace_multiple(&[p]);
+                    let projector = &self.graph.global_prefactor.projector;
+                    self.graph.global_prefactor.projector = projector
+                        .with_checked_expression(projector.expression().replace_multiple(&[p]))?;
                 }
                 Helicity::SummedAveraged => {
                     let Some(p) = p.resolve(model).polarization_sum(
@@ -1507,8 +1508,9 @@ impl CrossSectionGraph {
                     else {
                         continue;
                     };
-                    self.graph.global_prefactor.projector =
-                        self.graph.global_prefactor.projector.replace_multiple(&[p]);
+                    let projector = &self.graph.global_prefactor.projector;
+                    self.graph.global_prefactor.projector = projector
+                        .with_checked_expression(projector.expression().replace_multiple(&[p]))?;
                 }
                 _ => {}
             }
@@ -4727,8 +4729,9 @@ mod tests {
         };
         let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
         let particle = model.particle_id("scalar_0").unwrap();
-        let mut builder =
-            FeynmanDiagram::builder(model, "scalar_cut_line").numerator_prefactor(Atom::i());
+        let mut builder = FeynmanDiagram::builder(model, "scalar_cut_line").numerator_prefactor(
+            feynkit_graph::NumeratorInterface::admit(Atom::i(), None).unwrap(),
+        );
         let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
         let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 0);
         let left = builder.add_vertex(DiagramVertex {

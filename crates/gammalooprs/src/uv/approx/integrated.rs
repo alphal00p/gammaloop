@@ -2194,6 +2194,23 @@ mod tests {
             let finite = product.physical_finite_counterterm()?;
             assert_eq!(pole.structure(), tensor_product.structure());
             assert_eq!(finite.structure(), tensor_product.structure());
+            // Native Laurent collection can restore an indexed closed pair.
+            // Compare the exact coefficients in the shared contraction notation.
+            let tensor_product = tensor_product.to_dots()?;
+            let pole = pole
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .to_dots()?;
+            let finite = finite
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .to_dots()?;
             assert_eq!(
                 pole.expression(),
                 &(tensor_product.expression() * epsilon.pow(-2))

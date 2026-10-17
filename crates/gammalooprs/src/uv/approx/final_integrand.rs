@@ -22,11 +22,9 @@ use crate::{
 };
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
-use idenso::{
-    CookMode, CookSettings,
-    color::ColorSimplifySettings,
-    tensor::{ContractSettings, SymbolicTensor},
-};
+#[cfg(test)]
+use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
+use idenso::{color::ColorSimplifySettings, tensor::ContractSettings};
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::shadowing::TensorCollectFilter;
 use spenso::structure::partial::PartialStructure;
@@ -122,9 +120,9 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .subtract(&graph.initial_state_cut);
         let full_graph = graph.full_filter();
 
-        let global_num = graph.global_atom();
+        let global_num = graph.global_numerator()?;
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            global_num = %global_num.log_display(),
+            global_num = %global_num.expression().log_display(),
             "Computed global numerator"
         );
 
@@ -132,16 +130,12 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // momentum numerator. The final pass still closes attached UV/projector
         // color indices that remain open at this boundary.
         let resnum = graph.numerator(&reduced, current.subgraph())?.state.expr;
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
         let resnum = resnum.simplify_algebra(&idenso::tensor::AlgebraSettings {
             color: Some(ColorSimplifySettings {
                 ..Default::default()
             }),
             ..Default::default()
         })?;
-        let global_num = SymbolicTensor::infer(cooking.try_cook(global_num.as_view())?)?;
         let resnum = resnum.multiply(&global_num)?;
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
@@ -220,22 +214,18 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .subtract(&graph.initial_state_cut);
         let full_graph = graph.full_filter();
 
-        let global_num = graph.global_atom();
+        let global_num = graph.global_numerator()?;
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            global_num = %global_num.log_display(),
+            global_num = %global_num.expression().log_display(),
             "Computed global numerator"
         );
         let resnum = graph.numerator(&reduced, current.subgraph())?.state.expr;
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
         let resnum = resnum.simplify_algebra(&idenso::tensor::AlgebraSettings {
             color: Some(ColorSimplifySettings {
                 ..Default::default()
             }),
             ..Default::default()
         })?;
-        let global_num = SymbolicTensor::infer(cooking.try_cook(global_num.as_view())?)?;
         let resnum = resnum.multiply(&global_num)?;
         let localizer = self.localizer.with_independent_source_sum();
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
