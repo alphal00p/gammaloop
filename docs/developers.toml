@@ -80,7 +80,9 @@ anchor = "load_state_manifest(&save_path)?"
 # exact detached residue maps; state16 rejects prior incompatible medium/representation layouts.
 # Reviewed 2026-10-15: State16 also retains representation-specific cross-section
 # source-denominator catalogues for runtime coincident-pole validation.
-digest = "fbe3c42460cd0986be68856b6a88d1968d873dba"
+# Reviewed 2026-10-18: State17 persists each Fermi evaluator's representation;
+# architecture-current.typ documents the changed layout and required regeneration.
+digest = "e58ae77f5d3ffcc77066ce808ed8d4e4a2d479fa"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -426,7 +428,10 @@ anchor = "impl UVOrchestrator {"
 # full mode options, and each compute call reports only its shared-time delta.
 # Reviewed 2026-10-15: Complete generation settings and the medium guard retain
 # shared preparation before representation-specific projection.
-digest = "d7e02e0b7d9e265248420f2a1dffdd75dc4397d2"
+# Reviewed 2026-10-18: Equilibrium media now allow projected 4D UV in either
+# representation; shared validation still rejects LTD with direct 3D UV.
+# Vacuum UV-child ownership and medium cographs are documented in Current Boundaries.
+digest = "64a32efce1d069c9f8f3ca848a618aa920df1ba4"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/mod.rs"
@@ -457,7 +462,10 @@ anchor = "pub(crate) struct Local4dProjectionContext {"
 # full mode options, and each compute call reports only its shared-time delta.
 # Reviewed 2026-10-15: Borrowed projection options are cloned at the existing
 # ownership boundary; exact reconstruction and dispatch are unchanged.
-digest = "9183d692e8325791c41c69ff455b66f2c7ca46f4"
+# Reviewed 2026-10-18: Projected UV children use vacuum medium mode in CFF and
+# LTD while outer cographs retain the requested medium; reconstruction is unchanged.
+# The current architecture and UV boundaries document this ownership.
+digest = "90e96c6b6eaf9bd0778e5e67fc410863443c3ee7"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/final_integrand.rs"

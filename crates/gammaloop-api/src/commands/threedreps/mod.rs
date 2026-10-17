@@ -320,14 +320,6 @@ impl Validate {
 impl Build {
     fn run(&self, state: &State, global_cli_settings: &CLISettings) -> Result<()> {
         let representation = self.representation;
-        let medium = &global_cli_settings.global.generation.medium;
-        if representation == RepresentationMode::Ltd
-            && (medium.mode != MediumMode::Vacuum || medium.vacuum_subtraction)
-        {
-            return Err(eyre!(
-                "LTD does not support finite-temperature or finite-density media or vacuum subtraction; use `3drep build --representation cff`"
-            ));
-        }
         let selected = select_graph(state, &self.selection)?;
         let parsed = selected.graph.to_three_d_parsed_graph()?;
         let numerator_sampling_scale_mode = CliNumeratorSamplesNormalization::resolve(

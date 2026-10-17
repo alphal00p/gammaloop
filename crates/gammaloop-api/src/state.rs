@@ -1625,6 +1625,8 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 17 records the representation owning each localized Fermi evaluator.
+// Earlier amplitude layouts must be regenerated rather than decoded without it.
 // Version 16 combines representation-indexed factorized programs and exact residue rows
 // with medium parameters, Fermi sectors, representation-specific amplitude/cross-section
 // denominator catalogues and the common source frame. Regenerate
@@ -1658,7 +1660,7 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // regenerated rather than decoded as the new expression type.
 // Local UV forest contributions remain compatible with this layout because
 // they are combined into one persisted integrand before evaluator construction.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 16;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 17;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

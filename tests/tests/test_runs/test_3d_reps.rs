@@ -518,14 +518,14 @@ fn cff_cli_validate_and_build_use_gammaloop_graph_state() -> Result<()> {
 }
 
 #[test]
-fn ltd_diagnostic_rejects_medium_before_creating_artifacts() -> Result<()> {
+fn diagnostic_build_preserves_medium_for_cff_and_ltd() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     use gammalooprs::settings::global::MediumMode;
-    let root = get_tests_workspace_path().join("ltd_diagnostic_medium_rejection");
+    let root = get_tests_workspace_path().join("diagnostic_build_medium");
     let mut cli = get_test_cli(
         None,
         root.join("state"),
-        Some("ltd_diagnostic_medium_rejection".into()),
+        Some("diagnostic_build_medium".into()),
         true,
     )?;
     cli.run_command("import model scalars-default.json")?;
@@ -535,37 +535,32 @@ fn ltd_diagnostic_rejects_medium_before_creating_artifacts() -> Result<()> {
         MediumMode::ZeroTemperatureEquilibrium,
     ] {
         cli.cli_settings.global.generation.medium.mode = mode;
-        for vacuum_subtraction in [false, true] {
-            cli.cli_settings.global.generation.medium.vacuum_subtraction = vacuum_subtraction;
-            let output = root.join("unsupported.json");
-            let workspace = root.join("diagnostic");
-            let error = cli.run_command(&format!("3drep build -p box -i scalar -g 0 --representation ltd --workspace-path {} --json-out {} --no-pretty", workspace.display(), output.display())).unwrap_err();
-            assert!(
-                error.to_string().contains("LTD does not support"),
-                "{error}"
-            );
-            assert!(!output.exists() && !workspace.exists());
+        for representation in ["cff", "ltd"] {
+            for vacuum_subtraction in [false, true] {
+                cli.cli_settings.global.generation.medium.vacuum_subtraction = vacuum_subtraction;
+                let name = format!("{representation}-{mode:?}-{vacuum_subtraction}");
+                let output = root.join(format!("{name}.json"));
+                let workspace = root.join(&name);
+                cli.run_command(&format!(
+                    "3drep build -p box -i scalar -g 0 --representation {representation} --workspace-path {} --json-out {} --no-pretty",
+                    workspace.display(),
+                    output.display()
+                ))?;
+                let artifact: JsonValue = serde_json::from_str(&fs::read_to_string(&output)?)?;
+                assert_eq!(artifact["family"], representation);
+                assert_eq!(artifact["medium_mode"], serde_json::to_value(mode)?);
+                let expression: ThreeDExpression<OrientationID> =
+                    serde_json::from_value(artifact["expression"].clone())?;
+                assert!(!expression.orientations.is_empty());
+                assert!(
+                    expression
+                        .orientations
+                        .iter()
+                        .flat_map(|residue| &residue.variants)
+                        .all(|variant| variant.thermal_weight.medium_mode == mode)
+                );
+            }
         }
-        cli.cli_settings.global.generation.medium.vacuum_subtraction = false;
-        let output = root.join(format!("{mode:?}.json"));
-        let workspace = root.join(format!("cff-{mode:?}"));
-        cli.run_command(&format!(
-            "3drep build -p box -i scalar -g 0 --representation cff --workspace-path {} --json-out {} --no-pretty",
-            workspace.display(),
-            output.display()
-        ))?;
-        let artifact: JsonValue = serde_json::from_str(&fs::read_to_string(&output)?)?;
-        assert_eq!(artifact["family"], "cff");
-        assert_eq!(artifact["medium_mode"], serde_json::to_value(mode)?);
-        let expression: ThreeDExpression<OrientationID> =
-            serde_json::from_value(artifact["expression"].clone())?;
-        assert!(
-            expression
-                .orientations
-                .iter()
-                .flat_map(|residue| &residue.variants)
-                .all(|variant| variant.thermal_weight.medium_mode == mode)
-        );
     }
     clean_test(&root);
     Ok(())

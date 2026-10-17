@@ -63,11 +63,13 @@ The vacuum production boundary covers affine CFF, bounded-energy CFF with
 independent-occurrence normal form, multiloop high-power numerators, and uniform
 numerator sampling-scale modes. GammaLoop owns both UV orchestration orders:
 direct local 3D subtraction on CFF expressions and 4D-local UV followed by a
-complete CFF or LTD residue sum. Medium modes and optional vacuum subtraction
-support only CFF with direct local 3D subtraction; production and diagnostic CLI
-LTD still reject both equilibrium modes. The shared LTD generator supports them
-by reflecting each vacuum residue's cut poles and attaching thermal weights,
-including analytic distribution derivatives for raised poles.
+complete CFF or LTD residue sum. Both equilibrium modes and optional vacuum
+subtraction support either representation with projected local 4D UV; direct
+local 3D subtraction remains CFF-only. UV subgraphs use vacuum generation while
+their cographs retain the requested medium. The shared LTD generator reflects
+each vacuum residue's cut poles and attaches thermal weights, including analytic
+distribution derivatives for raised poles. GammaLoop localizes zero-temperature
+Fermi-surface derivatives for both representations.
 `RepresentationMode::Ltd` retains the signed energy-residue sum and its
 explicit E/H surfaces. Simple LTD poles do not need numerator-degree
 bounds; repeated poles require explicit bounds for exact derivative-free

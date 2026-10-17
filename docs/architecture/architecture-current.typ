@@ -239,10 +239,11 @@ complete residue summation, including when
 the same build also contains CFF. Generation and runtime reject orientation
 filters, orientation Monte Carlo and individual-orientation inspection or
 profiling for these builds. CFF-only orientation-local operation remains available.
-Production LTD supports only `medium.mode = "vacuum"` without vacuum subtraction.
-Finite-temperature and finite-density requests, including mixed CFF/LTD lists,
-fail before process mutation or representation generation. Runtime validation uses
-the persisted graph medium, independently of later global-settings changes.
+Both representations support vacuum, finite-temperature, and zero-temperature
+dense amplitudes. Medium modes allow optional vacuum subtraction. LTD always
+requires projected local-4D UV, while CFF also supports direct local-3D UV.
+Runtime validation uses the persisted graph medium, independently of later
+global-settings changes.
 
 The shared representation generator also supports thermal LTD. It retains every
 vacuum residue basis and contour coefficient, reflects each cut pole through both
@@ -265,11 +266,14 @@ a free odd tadpole is energy divergent, and symmetric CFF versus directed LTD
 already differ in vacuum. The shared generator's thermal extension does not
 change that convention.
 
-This support is currently confined to the shared generator. Production and
-`3drep build` keep their medium-LTD guards until thermal UV ownership and
-runtime integration are validated. Zero-temperature derivative factors retain
-the existing symbolic distribution format; generating them does not certify
-their production Fermi-surface localization.
+Projected local-4D UV children are generated in vacuum mode, with the parent's
+representation and numerator reconstruction. The cograph retains the requested
+medium. Integrated UV coefficients are also vacuum quantities. Vacuum subtraction
+therefore acts on the medium-dependent cograph, and full-observable UV spinneys
+are omitted. Zero-temperature derivative factors in either representation use
+the production Fermi-surface localization described below. The diagnostic
+`3drep build` command also forwards both equilibrium modes to either generator;
+its symbolic output does not apply production UV or vacuum subtraction.
 
 Ordinary LTD determines complete affine loop-energy maps without CFF capacity
 analysis. Raised propagators use exact polynomial sampling with numerator-degree
@@ -422,10 +426,9 @@ Vacuum builders register no thermal distribution functions.
 `integrands::process::fermi_surface::FermiSurfaceProduct` localizes zero-temperature
 distribution derivatives. Production amplitude evaluation separates these
 distributions from the completed UV-subtracted expression before compiling
-numerical evaluators. Each positive-order
-thermal factor belongs to an independent cyclic chain: a derivative of order
-`r` represents `delta^(r-1)(E - sigma*mu)`, while the CFF coefficient retains its
-existing cyclic-chain sign and factorial. The constructor checks the selected
+numerical evaluators. A derivative of order `r` represents
+`delta^(r-1)(E - sigma*mu)`, while the smooth coefficient retains the originating
+CFF cyclic-chain or LTD residue sign and factorial. The constructor checks the selected
 edge routing and chooses a loop basis containing one momentum per factor.
 Repeated or dependent constraints within a product are malformed expressions;
 fixed external shifts do not make dependent loop directions independent.
@@ -459,7 +462,10 @@ and threshold subtraction remain rejected by the existing settings validation.
 Production sector extraction collects the tagged thermal functions while
 retaining factorized smooth coefficients and shared numerator definitions.
 It runs after vacuum subtraction and both local and integrated UV contributions
-have been assembled. Parametric orientation branches select the complete residue
+have been assembled, including factorized parametric rows from projected local-4D
+UV. Sectors belong to their originating representation, so runtime CFF/LTD
+selection adds only that representation's localized contributions.
+Parametric orientation branches select the complete residue
 key before fixing orientation signs; explicit orientation sums are extracted
 once. Each parametric sector compiles only its originating orientation, with
 local evaluator index zero mapped to that orientation's production residue-map ID.
@@ -1452,7 +1458,10 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 16` currently).
+- State format is versioned with `state_manifest.toml` (`version = 17` currently).
+- Version 17 records the originating representation for each amplitude Fermi-surface
+  evaluator. Earlier generated states must be regenerated before symbolic import
+  because the positional binary layout changed.
 - Version 16 combines ordered representation payloads, factorized numerator rows
   and auxiliary programs with medium parameters, Fermi sectors and one source-frame
   sign. Amplitude and cross-section graph terms retain representation-specific source

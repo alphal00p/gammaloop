@@ -202,6 +202,9 @@ impl Localizer<'_> {
         // reopening equivalent closures: one deterministic Below representative
         // is then the complete integral.
         let mut options = self.orientation.cff_options()?.clone();
+        // UV coefficients have vacuum poles and weights; only the untouched
+        // cograph retains the physical medium during final assembly.
+        options.medium_mode = three_dimensional_reps::MediumMode::Vacuum;
         options.cff_generation_context = CffGenerationContext::EmbeddedCffFactor;
         let excluded_report_owners = graph
             .iter_edges_of(&graph.initial_state_cut)
@@ -936,12 +939,20 @@ mod tests {
                 context.preparations =
                     crate::cff::generation::GenerationCache::new(48 * 1024 * 1024, 1);
             }
-            for representation in [
-                three_dimensional_reps::RepresentationMode::Cff,
-                three_dimensional_reps::RepresentationMode::Ltd,
-            ] {
+            for (representation, medium_mode) in itertools::iproduct!(
+                [
+                    three_dimensional_reps::RepresentationMode::Cff,
+                    three_dimensional_reps::RepresentationMode::Ltd,
+                ],
+                [
+                    three_dimensional_reps::MediumMode::Vacuum,
+                    three_dimensional_reps::MediumMode::ThermodynamicEquilibrium,
+                    three_dimensional_reps::MediumMode::ZeroTemperatureEquilibrium,
+                ]
+            ) {
                 let options = three_dimensional_reps::Generate3DExpressionOptions {
                     representation,
+                    medium_mode,
                     ..graph.denominator_only_cff_3d_expression_options()
                 };
                 let localizer = Localizer::new(
@@ -955,12 +966,13 @@ mod tests {
                         Ok(coefficient.resolved()?.iter().next().unwrap().1.clone())
                     })?
                     .collect_factors();
+                assert!(!coefficient.contains_symbol(GS.thermal_distribution));
                 assert_eq!(
                     expected
                         .entry(representation)
                         .or_insert_with(|| coefficient.clone()),
                     &coefficient,
-                    "{phase} {representation:?}"
+                    "{phase} {representation:?} {medium_mode:?}"
                 );
                 if matches!(phase, "cold" | "warm") {
                     assert_eq!(context.canonical_preparation_builds, 1);

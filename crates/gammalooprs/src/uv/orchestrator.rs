@@ -48,7 +48,7 @@ impl UVOrchestrator {
         }
         validate_local_counterterm_schemes(graph, &cut_structure, &settings.uv)?;
 
-        settings.validate_medium_uv_compatibility()?;
+        settings.validate_explicit_orientation_sum_options()?;
 
         let result = match self {
             Self::LegacyDagForest => legacy_parametric_integrands(

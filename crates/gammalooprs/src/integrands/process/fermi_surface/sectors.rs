@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use color_eyre::eyre::{Result, ensure, eyre};
 use linnet::half_edge::involution::EdgeIndex;
@@ -6,8 +6,11 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 use three_dimensional_reps::{ThermalDistributionCall, ThermalDistributionFactor};
 
 use crate::{
-    graph::Graph, momentum::SignOrZero, numerator::symbolica_ext::NumeratorAtomExt, utils::GS,
-    uv::uv_graph::UVE,
+    graph::Graph,
+    momentum::SignOrZero,
+    numerator::symbolica_ext::NumeratorAtomExt,
+    utils::GS,
+    uv::{ParametricIntegrandRow, ParametricIntegrandTerm, uv_graph::UVE},
 };
 
 use super::FermiSurfaceProduct;
@@ -19,6 +22,7 @@ pub(crate) struct FermiSurfaceSector {
     pub(crate) product: FermiSurfaceProduct,
     pub(crate) orientations: Vec<i32>,
     pub(crate) coefficient: Atom,
+    pub(crate) parametric_terms: Vec<ParametricIntegrandTerm>,
 }
 
 impl FermiSurfaceSector {
@@ -80,8 +84,51 @@ impl FermiSurfaceSector {
 
     /// Separate regular terms and Fermi supports after residue and physical
     /// orientation selection. The fifth N argument must be a definite sign;
-    /// distinct signs in an explicit sum remain distinct supports.
-    pub(crate) fn extract(graph: &Graph, expression: &Atom) -> Result<(Atom, Vec<Self>)> {
+    /// distinct signs in an explicit sum remain distinct supports. Parametric
+    /// carriers retain their regular parts in place; localized rows keep the
+    /// same factorized numerator, coefficient assignment, and source keys.
+    pub(crate) fn extract(
+        graph: &Graph,
+        expression: &Atom,
+        parametric_terms: &mut [ParametricIntegrandTerm],
+    ) -> Result<(Atom, Vec<Self>)> {
+        let mut sectors: Vec<Self> = Vec::new();
+        for term in parametric_terms {
+            for row in &mut term.rows {
+                // The recursive call receives no parametric terms: it splits only
+                // this scalar carrier, leaving its numerator and source map intact.
+                let (bulk, row_sectors) = Self::extract(graph, &row.carrier, &mut [])?;
+                row.carrier = bulk;
+                for mut sector in row_sectors {
+                    let carrier = std::mem::replace(&mut sector.coefficient, Atom::Zero);
+                    let target = if let Some(index) = sectors.iter().position(|existing| {
+                        existing.product.factors() == sector.product.factors()
+                            && existing.orientations == sector.orientations
+                    }) {
+                        &mut sectors[index]
+                    } else {
+                        sectors.push(sector);
+                        sectors.last_mut().unwrap()
+                    };
+                    let projected_row = ParametricIntegrandRow {
+                        carrier,
+                        ..row.clone()
+                    };
+                    if let Some(existing) = target
+                        .parametric_terms
+                        .iter_mut()
+                        .find(|existing| Arc::ptr_eq(&existing.numerator, &term.numerator))
+                    {
+                        existing.rows.push(projected_row);
+                    } else {
+                        target.parametric_terms.push(ParametricIntegrandTerm::new(
+                            Arc::clone(&term.numerator),
+                            vec![projected_row],
+                        )?);
+                    }
+                }
+            }
+        }
         // Only fermions with a chemical potential can have a zero-temperature
         // Fermi surface. A missing chemical potential is zero, and warm-up
         // restricts bosons to |mu| < m or m = mu = 0. Either occupation is then
@@ -124,7 +171,7 @@ impl FermiSurfaceSector {
             ));
         }
         if active.is_empty() || expression.is_zero() {
-            return Ok((expression, Vec::new()));
+            return Ok((expression, sectors));
         }
         let contains_active = |expression: AtomView<'_>| {
             let mut found = false;
@@ -190,7 +237,7 @@ impl FermiSurfaceSector {
             support.sort();
             *grouped.entry(support).or_insert(Atom::Zero) += coefficient;
         }
-        let mut sectors = Vec::with_capacity(grouped.len());
+        sectors.reserve(grouped.len());
         for (support, coefficient) in grouped {
             if coefficient.is_zero() {
                 continue;
@@ -225,11 +272,19 @@ impl FermiSurfaceSector {
                     step.edge
                 );
             }
-            sectors.push(Self {
-                product,
-                orientations,
-                coefficient,
-            });
+            if let Some(existing) = sectors.iter_mut().find(|existing| {
+                existing.product.factors() == product.factors()
+                    && existing.orientations == orientations
+            }) {
+                existing.coefficient += coefficient;
+            } else {
+                sectors.push(Self {
+                    product,
+                    orientations,
+                    coefficient,
+                    parametric_terms: Vec::new(),
+                });
+            }
         }
         Ok((bulk, sectors))
     }
@@ -237,12 +292,16 @@ impl FermiSurfaceSector {
 
 #[cfg(test)]
 mod tests {
-    use symbolica::{function, symbol};
+    use symbolica::{evaluate::InliningPolicy, function, symbol};
 
     use super::*;
     use crate::{
-        dot, graph::parse::IntoGraph, initialisation::test_initialise,
-        integrands::process::fermi_surface::routing,
+        cff::expression::OrientationID,
+        dot,
+        graph::parse::IntoGraph,
+        initialisation::test_initialise,
+        integrands::process::{fermi_surface::routing, param_builder::FnMapEntry},
+        uv::approx::direct_3d::DirectResidueKey,
     };
 
     #[test]
@@ -261,7 +320,8 @@ mod tests {
                     + function!(GS.thermal_weight_wrapper, &delta)
                         * &coefficient
                         * &independent_step;
-                let (actual_bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+                let (actual_bulk, sectors) =
+                    FermiSurfaceSector::extract(&graph, &expression, &mut [])?;
                 assert_eq!(actual_bulk, bulk);
                 assert_eq!(sectors.len(), 1);
                 assert_eq!(sectors[0].coefficient, &coefficient * &independent_step);
@@ -286,6 +346,64 @@ mod tests {
     }
 
     #[test]
+    fn fermi_sectors_preserve_parametric_rows_and_numerator_definitions() -> Result<()> {
+        let graph = routing::test_graph()?;
+        let x = Atom::var(symbol!("fermi_parametric_coefficient"));
+        let numerator = Arc::new(FnMapEntry {
+            lhs: function!(symbol!("fermi_parametric_numerator"), &x),
+            rhs: (&x + Atom::one()) * (GS.ose(EdgeIndex(1)) + Atom::num(2)),
+            args: vec![x.try_into().unwrap()],
+            tags: Vec::new(),
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+        });
+        let delta = ThermalDistributionCall::atom(1, 2, 0, 1, 1);
+        let step = ThermalDistributionCall::atom(3, 0, 0, -1, -1);
+        let mut terms = vec![ParametricIntegrandTerm::new(
+            Arc::clone(&numerator),
+            [2_i64, 3]
+                .into_iter()
+                .map(|value| ParametricIntegrandRow {
+                    coefficients: vec![value.into()],
+                    carrier: Atom::num(7) + &delta * &step * Atom::num(value),
+                    source_keys: vec![DirectResidueKey::production(OrientationID(value as usize))],
+                })
+                .collect(),
+        )?];
+        let original = terms.clone();
+        let (bulk, sectors) =
+            FermiSurfaceSector::extract(&graph, &(Atom::num(11) + &delta), &mut terms)?;
+        assert_eq!(bulk, Atom::num(11));
+        assert_eq!(sectors.len(), 1);
+        assert_eq!(sectors[0].coefficient, Atom::one());
+        let localized = &sectors[0].parametric_terms;
+        assert_eq!(localized.len(), 1);
+        assert!(Arc::ptr_eq(&localized[0].numerator, &numerator));
+        for ((source, bulk), localized) in original[0]
+            .rows
+            .iter()
+            .zip(&terms[0].rows)
+            .zip(&localized[0].rows)
+        {
+            assert_eq!(bulk.carrier, Atom::num(7));
+            assert_eq!(localized.coefficients, source.coefficients);
+            assert_eq!(localized.source_keys, source.source_keys);
+            assert_eq!(&bulk.carrier + &delta * &localized.carrier, source.carrier);
+        }
+        // Repeated extraction is idempotent after distribution support is removed.
+        let (again, sectors) = FermiSurfaceSector::extract(&graph, &bulk, &mut terms)?;
+        assert_eq!(again, bulk);
+        assert!(sectors.is_empty());
+        let mut terms = original;
+        let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &Atom::Zero, &mut terms)?;
+        assert!(bulk.is_zero());
+        assert_eq!(sectors.len(), 1);
+        assert!(sectors[0].coefficient.is_zero());
+        assert_eq!(sectors[0].parametric_terms[0].rows.len(), 2);
+        Ok(())
+    }
+
+    #[test]
     fn fermi_sectors_keep_opposite_chemical_supports_and_independent_products() -> Result<()> {
         let graph = routing::test_graph()?;
         let plus = ThermalDistributionCall::atom(1, 1, 0, 1, 1);
@@ -293,7 +411,7 @@ mod tests {
         let second = ThermalDistributionCall::atom(3, 2, 0, -1, -1);
         let expression =
             Atom::num(2) * &plus + Atom::num(3) * &minus + Atom::num(5) * &plus * &second;
-        let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+        let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression, &mut [])?;
         assert!(bulk.is_zero());
         assert_eq!(sectors.len(), 3);
         let reconstructed = sectors.iter().fold(bulk, |sum, sector| {
@@ -327,13 +445,13 @@ mod tests {
         let graph = routing::test_graph()?;
         let unresolved = ThermalDistributionCall::atom(1, 1, 0, 1, GS.sign(EdgeIndex(1)));
         assert!(FermiSurfaceSector::is_present(&unresolved)?);
-        assert!(FermiSurfaceSector::extract(&graph, &unresolved).is_err());
+        assert!(FermiSurfaceSector::extract(&graph, &unresolved, &mut []).is_err());
         for expression in [
             ThermalDistributionCall::atom(1, 0, 0, 1, 1),
             ThermalDistributionCall::atom(1, 2, 1, 1, 1),
         ] {
             assert!(!FermiSurfaceSector::is_present(&expression)?);
-            let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+            let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression, &mut [])?;
             assert_eq!(bulk, expression);
             assert!(sectors.is_empty());
         }
@@ -341,6 +459,7 @@ mod tests {
             let (bulk, sectors) = FermiSurfaceSector::extract(
                 &graph,
                 &ThermalDistributionCall::atom(4, derivative_order, 0, 1, 1),
+                &mut [],
             )?;
             assert!(bulk.is_zero());
             assert!(sectors.is_empty());
@@ -360,7 +479,7 @@ mod tests {
         assert!(graph[EdgeIndex(0)].chemical_potential_atom().is_some());
         let step = ThermalDistributionCall::atom(1, 0, 0, 1, 1);
         let expression = ThermalDistributionCall::atom(0, 2, 0, 1, 1) * &step + &step;
-        let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+        let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression, &mut [])?;
         assert_eq!(bulk, step);
         assert!(sectors.is_empty());
         Ok(())
@@ -380,7 +499,7 @@ mod tests {
             for derivative_order in [1, 3] {
                 let expression =
                     ThermalDistributionCall::atom(1, derivative_order, 0, 1, 1) + Atom::num(7);
-                let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+                let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression, &mut [])?;
                 assert_eq!(bulk, Atom::num(7));
                 assert!(sectors.is_empty());
                 let factor = ThermalDistributionFactor {
@@ -401,7 +520,7 @@ mod tests {
         let delta = ThermalDistributionCall::atom(1, 1, 0, 1, 1);
         // Only polynomial expansion exposes this square.
         let expanded = (&delta + Atom::var(symbol!("fermi_sector_x"))) * (&delta + Atom::num(2));
-        let Err(error) = FermiSurfaceSector::extract(&graph, &expanded) else {
+        let Err(error) = FermiSurfaceSector::extract(&graph, &expanded, &mut []) else {
             panic!("accepted {expanded}");
         };
         assert!(
@@ -425,7 +544,7 @@ mod tests {
             function!(GS.thermal_distribution, 1, 1, 0, 1),
         ] {
             assert!(
-                FermiSurfaceSector::extract(&graph, &malformed).is_err(),
+                FermiSurfaceSector::extract(&graph, &malformed, &mut []).is_err(),
                 "accepted {malformed}"
             );
         }

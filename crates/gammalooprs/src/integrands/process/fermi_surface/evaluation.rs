@@ -64,7 +64,7 @@ impl FermiSurfaceEvaluator {
             &sector.coefficient,
             param_builder,
             numerator_definitions,
-            &[],
+            &sector.parametric_terms,
             orientation_catalog,
             Some(sector.product.shape.clone()),
             settings,
@@ -224,7 +224,7 @@ impl FermiSurfaceEvaluator {
 #[cfg(test)]
 mod tests {
     use linnet::half_edge::{involution::EdgeIndex, subgraph::subset::SubSet};
-    use symbolica::atom::AtomCore;
+    use symbolica::{atom::AtomCore, evaluate::InliningPolicy, function, symbol};
     use three_dimensional_reps::ThermalDistributionFactor;
     use typed_index_collections::TiVec;
 
@@ -274,9 +274,9 @@ mod tests {
         let mut runtime = RuntimeSettings::default();
         runtime.lu_h_function.function = HFunction::Exponential;
         runtime.lu_h_function.sigma = 1.0;
-        for orientation in [-1, 1] {
+        for (orientation, parametric) in itertools::iproduct!([-1, 1], [false, true]) {
             let mut builder = graph.param_builder.clone();
-            let sector = FermiSurfaceSector {
+            let mut sector = FermiSurfaceSector {
                 product: FermiSurfaceProduct::new(
                     &graph,
                     &[ThermalDistributionFactor {
@@ -287,7 +287,33 @@ mod tests {
                 )?,
                 orientations: vec![orientation],
                 coefficient: GS.ose(EdgeIndex(1)).pow(2),
+                parametric_terms: Vec::new(),
             };
+            if parametric {
+                let formal = Atom::var(symbol!("fermi_evaluation_row_coefficient"));
+                let numerator = Arc::new(FnMapEntry {
+                    lhs: function!(symbol!("fermi_evaluation_row_numerator"), &formal),
+                    rhs: &formal * &sector.coefficient,
+                    args: vec![formal.try_into().unwrap()],
+                    tags: Vec::new(),
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                });
+                sector.coefficient = Atom::Zero;
+                sector
+                    .parametric_terms
+                    .push(crate::uv::ParametricIntegrandTerm::new(
+                        numerator,
+                        [1_i64, 2]
+                            .into_iter()
+                            .map(|value| crate::uv::ParametricIntegrandRow {
+                                coefficients: vec![value.into()],
+                                carrier: Atom::num((1, 3)),
+                                source_keys: Vec::new(),
+                            })
+                            .collect(),
+                    )?);
+            }
             let (mut evaluator, _) = FermiSurfaceEvaluator::new(
                 &graph,
                 sector,
@@ -339,7 +365,7 @@ mod tests {
                     };
                     assert!(
                         (actual.re.0 - expected).abs() < 2e-13,
-                        "orientation={orientation}, mu={mu}, compiled={compile}: {actual:?} != {expected}"
+                        "orientation={orientation}, mu={mu}, parametric={parametric}, compiled={compile}: {actual:?} != {expected}"
                     );
                     assert_eq!(actual.im, F(0.0));
                 }

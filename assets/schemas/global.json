@@ -330,7 +330,7 @@
           }
         },
         "medium": {
-          "description": "Medium for amplitude generation; non-vacuum modes require local 3D UV subtraction\nand disabled threshold subtraction.",
+          "description": "Medium for amplitude generation; non-vacuum modes require disabled threshold subtraction.",
           "$ref": "#/$defs/MediumSettings"
         },
         "orientation_pattern": {

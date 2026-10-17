@@ -431,11 +431,12 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   only. `FourD` is used by integrated renormalization internally but is
   rejected by the parametric orchestrator.
 - The parametric orchestrator receives the full generation settings so
-  wood construction can see the medium. It rejects
-  `local_uv_cts_from_expanded_4d_integrands` for medium modes and vacuum
-  subtraction; their thermal-weight ownership is documented in
+  wood construction can see the medium. Projected local-4D UV spinneys use
+  vacuum generation, while the cograph retains the requested medium and optional
+  vacuum subtraction. Integrated counterterms also use vacuum coefficients;
+  their thermal-weight ownership is documented in
   #link("architecture-current.typ#3-2-three-dimensional-representations-and-numerator-energy-ownership")[the current architecture].
-- LTD is vacuum-only and uses the projected local-4D route. Direct local-3D Taylor
+- LTD uses the projected local-4D route in vacuum and both equilibrium media. Direct local-3D Taylor
   subtraction and orientation-local evaluation remain CFF-only.
 - The legacy DAG executor constructs union-shaped nodes but does not
   execute multi-parent unions. Disconnected generation therefore

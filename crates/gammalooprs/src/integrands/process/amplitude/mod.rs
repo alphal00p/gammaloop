@@ -11,7 +11,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
 
 use colored::Colorize;
-use eyre::{Context, ensure, eyre};
+use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
@@ -106,7 +106,11 @@ use super::{
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
     pub original_integrand: BTreeMap<RepresentationMode, EvaluatorStack>,
-    pub(crate) fermi_surfaces: Vec<(Option<OrientationID>, FermiSurfaceEvaluator)>,
+    pub(crate) fermi_surfaces: Vec<(
+        RepresentationMode,
+        Option<OrientationID>,
+        FermiSurfaceEvaluator,
+    )>,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
     production_orientation_keys: Vec<String>,
     pub orientation_filter: SubSet<OrientationID>,
@@ -336,18 +340,12 @@ impl AmplitudeGraphTerm {
                 .clone();
             let mut fermi_timings = crate::processes::EvaluatorBuildTimings::default();
             let mut fermi_count = 0;
-            if FermiSurfaceSector::is_present(&bulk_integrand)? {
-                ensure!(
-                    *representation == RepresentationMode::Cff,
-                    "Fermi-surface localization requires the CFF representation"
-                );
-                ensure!(
-                    source
-                        .all_mighty_integrand
-                        .parametric_terms(&cut)
-                        .is_empty(),
-                    "Fermi-surface localization requires the local-3D scalar lane"
-                );
+            let mut parametric_terms = source.all_mighty_integrand.parametric_terms(&cut).to_vec();
+            let mut has_fermi_surface = FermiSurfaceSector::is_present(&bulk_integrand)?;
+            for row in parametric_terms.iter().flat_map(|term| &term.rows) {
+                has_fermi_surface |= FermiSurfaceSector::is_present(&row.carrier)?;
+            }
+            if has_fermi_surface {
                 let branches = if settings.generation.requires_complete_orientation_sum() {
                     vec![(None, bulk_integrand.clone())]
                 } else {
@@ -368,7 +366,8 @@ impl AmplitudeGraphTerm {
                     let selector = orientation_id
                         .map(|id| ids[id.0].atom())
                         .unwrap_or_else(Atom::one);
-                    let (bulk, sectors) = FermiSurfaceSector::extract(&graph.graph, &branch)?;
+                    let (bulk, sectors) =
+                        FermiSurfaceSector::extract(&graph.graph, &branch, &mut parametric_terms)?;
                     bulk_integrand += bulk * &selector;
                     let catalogue = orientation_id.map(|id| {
                         (
@@ -388,7 +387,7 @@ impl AmplitudeGraphTerm {
                         )?;
                         fermi_timings += timings;
                         fermi_count += evaluator.generic_evaluator_count();
-                        fermi_surfaces.push((orientation_id, evaluator));
+                        fermi_surfaces.push((*representation, orientation_id, evaluator));
                     }
                 }
             }
@@ -396,7 +395,7 @@ impl AmplitudeGraphTerm {
                 &bulk_integrand,
                 &graph.graph.param_builder,
                 source.all_mighty_integrand.numerators(),
-                source.all_mighty_integrand.parametric_terms(&cut),
+                &parametric_terms,
                 (!settings.generation.requires_complete_orientation_sum())
                     .then_some((directions.as_slice().as_ref(), ids.as_slice())),
                 None,
@@ -736,7 +735,7 @@ impl AmplitudeGraphTerm {
         runtime_graph.param_builder.initialize_duals(
             fermi_surfaces
                 .iter()
-                .map(|(_, sector)| sector.dual_len())
+                .map(|(_, _, sector)| sector.dual_len())
                 .max()
                 .unwrap_or(1),
         );
@@ -834,11 +833,11 @@ impl AmplitudeGraphTerm {
             frozen_mode,
         )?);
 
-        for (index, (_, sector)) in self.fermi_surfaces.iter_mut().enumerate() {
+        for (index, (representation, _, sector)) in self.fermi_surfaces.iter_mut().enumerate() {
             let started = Instant::now();
             sector.compile(format!("fermi_surface_{index}"), &graph_path, frozen_mode)?;
             let elapsed = started.elapsed();
-            let mode_stats = stats.representation_mut(RepresentationMode::Cff);
+            let mode_stats = stats.representation_mut(*representation);
             mode_stats.total_time += elapsed;
             mode_stats.evaluator_compile_time += elapsed;
         }
@@ -859,10 +858,9 @@ impl AmplitudeGraphTerm {
             evaluator
                 .for_each_generic_evaluator_mut(|evaluator| f(Some(*representation), evaluator))?;
         }
-        for (_, sector) in &mut self.fermi_surfaces {
-            sector.for_each_generic_evaluator_mut(|evaluator| {
-                f(Some(RepresentationMode::Cff), evaluator)
-            })?;
+        for (representation, _, sector) in &mut self.fermi_surfaces {
+            sector
+                .for_each_generic_evaluator_mut(|evaluator| f(Some(*representation), evaluator))?;
         }
         self.threshold_counterterm
             .for_each_generic_evaluator_mut(&mut f)?;
@@ -877,7 +875,7 @@ impl AmplitudeGraphTerm {
             + self
                 .fermi_surfaces
                 .iter()
-                .map(|(_, sector)| sector.generic_evaluator_count())
+                .map(|(_, _, sector)| sector.generic_evaluator_count())
                 .sum::<usize>()
             + self.threshold_counterterm.generic_evaluator_count()
     }
@@ -1105,7 +1103,10 @@ impl AmplitudeGraphTerm {
             .unwrap_real();
         static SECTOR_ORIENTATION_FILTER: LazyLock<SubSet<OrientationID>> =
             LazyLock::new(|| SubSet::full(1));
-        for (orientation_id, sector) in &mut self.fermi_surfaces {
+        for (representation, orientation_id, sector) in &mut self.fermi_surfaces {
+            if *representation != context.representation {
+                continue;
+            }
             let sector_orientations = if let Some(id) = *orientation_id {
                 let selected = match orientations {
                     SingleOrAllOrientations::Single { id: selected, .. } => selected == id,
@@ -1256,13 +1257,6 @@ impl GraphTerm for AmplitudeGraphTerm {
           err
     )]
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
-        ensure!(
-            self.graph.param_builder.medium_mode == three_dimensional_reps::MediumMode::Vacuum
-                || !self
-                    .original_integrand
-                    .contains_key(&RepresentationMode::Ltd),
-            "LTD supports only vacuum calculations; regenerate this medium integrand with CFF"
-        );
         self.multi_channeling_setup.master_edge_masses.invalidate();
         self.multi_channeling_setup.invalidate_sampling();
         if self.explicit_orientation_sum_only {
@@ -3064,14 +3058,6 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
         );
 
         for a in self.data.graph_terms.iter_mut() {
-            ensure!(
-                a.graph.param_builder.medium_mode == three_dimensional_reps::MediumMode::Vacuum
-                    || !self
-                        .data
-                        .three_d_representations
-                        .contains(&RepresentationMode::Ltd),
-                "LTD supports only vacuum calculations; regenerate this medium integrand with CFF"
-            );
             a.warm_up(&self.settings, model)?;
         }
         for group in &self.data.graph_group_structure {
@@ -3753,17 +3739,6 @@ sampling_channels = "summed"
         let ProcessIntegrand::Amplitude(generated) = amplitude.integrand.take().unwrap() else {
             unreachable!()
         };
-        for mode in [
-            three_dimensional_reps::MediumMode::ThermodynamicEquilibrium,
-            three_dimensional_reps::MediumMode::ZeroTemperatureEquilibrium,
-        ] {
-            let mut invalid = generated.clone();
-            for term in &mut invalid.data.graph_terms {
-                term.graph.param_builder.medium_mode = mode;
-            }
-            let error = invalid.warm_up(&model).unwrap_err();
-            assert!(error.to_string().contains("LTD supports only vacuum"));
-        }
         for enable_cache in [false, true] {
             let mut generated = generated.clone();
             // Runtime temperature values do not change the generated vacuum mode.

@@ -191,10 +191,12 @@ representation for stability levels that omit `three_dimensional_representation`
 LTD requires `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` and automatically
 selects complete residue sums. Generation orientation filters and runtime selection or sampling of
 individual orientations are unavailable for these integrands: LTD's cancellation of H-surfaces
-requires summing its residues. LTD is supported only with `medium.mode = "vacuum"`
-and `vacuum_subtraction = false`; finite-temperature and finite-density modes require CFF alone,
-including when the requested list contains both representations. Both vacuum representations share the generated graph, physical cuts,
-threshold geometry, and four-dimensional UV counterterms.
+requires summing its residues. Both representations support vacuum and equilibrium
+media, including vacuum subtraction in medium modes. Projected four-dimensional
+UV counterterms use the vacuum limit of the UV subgraph while retaining the
+medium dependence of the cograph. Direct three-dimensional UV remains CFF-only.
+Both representations share the generated graph and four-dimensional UV counterterms;
+vacuum generation also shares physical cuts and threshold geometry.
 
 Integrand generation validates these options and the initial runtime settings before generating
 diagrams or clearing existing processes. Requests with `--only-diagrams` skip runtime evaluator

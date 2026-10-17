@@ -12,9 +12,14 @@ Medium modes generate fixed-order amplitudes only; cross sections are rejected. 
 graphs, which give the pressure, are the only amplitudes validated against literature values.
 Higher-point amplitudes are supported but remain experimental.
 
-Medium modes require `global.generation.three_dimensional_representations = ["cff"]`.
-LTD supports vacuum integrands only; requests containing LTD, including mixed CFF/LTD
-generation, are rejected.
+Medium modes support CFF, LTD, and mixed CFF/LTD generation. CFF supports direct 3D
+or projected 4D UV subtraction. LTD requires
+`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` and complete
+residue summation. For CFF-only generation with projected 4D UV, also set
+`global.generation.explicit_orientation_sum_only = true`.
+The UV subgraphs and integrated counterterm coefficients use their vacuum limit;
+the remaining cograph retains the requested medium. These rules apply with or
+without vacuum subtraction, including zero-temperature Fermi-surface terms.
 
 #boundary("Infrared safety and thresholds", [
   GammaLoop has no thermal infrared subtraction or resummation, so only infrared-safe
@@ -26,9 +31,6 @@ generation, are rejected.
 
 The following are also unsupported:
 
-- local UV counterterms from expanded 4D integrands
-  (#link("reference/cli/settings/cli/global/generation/uv/#setting-cli-global-generation-uv-local-uv-cts-from-expanded-4d-integrands-7def650172e108c5")[`local_uv_cts_from_expanded_4d_integrands`]);
-  medium modes use 3D local subtraction;
 - external momenta or distinct mass parameters with values equal up to sign that make otherwise
   distinct propagator poles coincide, leaving unresolved `0/0` thermal factors. Generation uses the
   derivative treatment below only when propagators share one mass parameter and the same

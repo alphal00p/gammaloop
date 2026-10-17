@@ -2307,13 +2307,14 @@ mod tests {
     }
 
     #[test]
-    fn ltd_medium_generation_is_rejected_before_mutating_processes() -> Result<()> {
+    fn ltd_direct_3d_generation_is_rejected_before_mutating_processes() -> Result<()> {
         use gammalooprs::{
             processes::ProcessCollection,
             settings::global::{MediumMode, RepresentationMode},
         };
         let temp = tempfile::tempdir()?;
         for mode in [
+            MediumMode::Vacuum,
             MediumMode::ThermodynamicEquilibrium,
             MediumMode::ZeroTemperatureEquilibrium,
         ] {
@@ -2334,6 +2335,11 @@ mod tests {
                 });
                 let mut settings = GlobalSettings::default();
                 settings.generation.medium.mode = mode;
+                settings.generation.threshold_subtraction.enable_thresholds = false;
+                settings
+                    .generation
+                    .uv
+                    .local_uv_cts_from_expanded_4d_integrands = false;
                 settings.generation.three_dimensional_representations = representations;
                 for command in [
                     "generate amp invalid --clear-existing-processes",
@@ -2357,7 +2363,9 @@ mod tests {
                         )
                         .unwrap_err();
                     assert!(
-                        error.to_string().contains("LTD does not support"),
+                        error
+                            .to_string()
+                            .contains("local_uv_cts_from_expanded_4d_integrands = true"),
                         "{command}: {error}"
                     );
                     assert_eq!(state.process_list.processes.len(), 1);

@@ -2006,7 +2006,7 @@ mod tests {
             settings::global::MediumMode,
         };
         use symbolica::atom::AtomView;
-        use three_dimensional_reps::thermal::OCCUPATION_FORM;
+        use three_dimensional_reps::{RepresentationMode, thermal::OCCUPATION_FORM};
         test_initialise()?;
         let graphs: Vec<Graph> = dot!(
             digraph nested {
@@ -2026,94 +2026,106 @@ mod tests {
                 MediumMode::ThermodynamicEquilibrium,
                 MediumMode::ZeroTemperatureEquilibrium,
             ] {
-                for generate_integrated in [false, true] {
-                    let mut settings = GenerationSettings::default();
-                    settings.medium.mode = medium;
-                    settings.medium.vacuum_subtraction = true;
-                    settings.uv.softct = false;
-                    settings.uv.generate_integrated = generate_integrated;
-                    let mut graph = graph.clone();
-                    let options = graph.production_3d_expression_options(
-                        &settings,
-                        three_dimensional_reps::RepresentationMode::Cff,
-                    )?;
-                    let contract =
-                        graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
-                    let production = graph
-                        .generate_3d_expression_for_integrand(&contract, &None, &options, None)?;
-                    let mut results = Vec::new();
-                    for early_subtraction in [false, true] {
-                        let projection = OrientationProjection::exact_expression(
-                            &production,
-                            &options,
-                            &settings.orientation_pattern,
-                            true,
-                        )
-                        .with_vacuum_subtraction(early_subtraction);
-                        // Both routes use precisely the same proper forests. Only the
-                        // boundary where the full vacuum projection acts is different.
-                        let mut forests =
-                            Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
-                        forests.compute(
-                            &mut graph,
-                            crate::utils::vakint()?,
-                            projection,
-                            &settings.uv,
-                            true,
-                            &mut Local4dProjectionContext::default(),
+                for (representation, project_local_4d) in [
+                    (RepresentationMode::Cff, false),
+                    (RepresentationMode::Cff, true),
+                    (RepresentationMode::Ltd, true),
+                ] {
+                    for generate_integrated in [false, true] {
+                        let mut settings = GenerationSettings {
+                            three_dimensional_representations: vec![representation],
+                            explicit_orientation_sum_only: true,
+                            ..Default::default()
+                        };
+                        settings.medium.mode = medium;
+                        settings.medium.vacuum_subtraction = true;
+                        settings.uv.softct = false;
+                        settings.uv.generate_integrated = generate_integrated;
+                        settings.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+                        let mut graph = graph.clone();
+                        let options =
+                            graph.production_3d_expression_options(&settings, representation)?;
+                        let contract = graph
+                            .paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
+                        let production = graph.generate_3d_expression_for_integrand(
+                            &contract, &None, &options, None,
                         )?;
-                        results.push(forests.orientation_parametric_exprs(&graph, &settings.uv)?);
-                    }
-                    assert_eq!(results[0].len(), results[1].len());
-                    for (late, early) in results[0].iter().zip(&results[1]) {
-                        let late = late.integrands.resolved()?;
-                        let early = early.integrands.resolved()?;
-                        assert_eq!(late.iter().count(), early.iter().count());
-                        for ((late_key, raw), (early_key, actual)) in late.iter().zip(early.iter())
-                        {
-                            assert_eq!(late_key, early_key);
-                            let vacuum = graph.make_thermal_distributions_explicit(
-                                raw,
-                                MediumMode::Vacuum,
-                                graph.iter_edges().map(|(_, edge, _)| edge),
+                        let mut results = Vec::new();
+                        for early_subtraction in [false, true] {
+                            let projection = OrientationProjection::exact_expression(
+                                &production,
+                                &options,
+                                &settings.orientation_pattern,
+                                true,
+                            )
+                            .with_vacuum_subtraction(early_subtraction);
+                            // Both routes use precisely the same proper forests. Only the
+                            // boundary where the full vacuum projection acts is different.
+                            let mut forests =
+                                Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
+                            forests.compute(
+                                &mut graph,
+                                crate::utils::vakint()?,
+                                projection,
+                                &settings.uv,
+                                true,
+                                &mut Local4dProjectionContext::default(),
                             )?;
-                            assert!(
-                                raw.is_zero() || raw.contains_symbol(GS.thermal_weight_wrapper)
-                            );
-                            assert!(
-                                actual.is_zero()
-                                    || actual.contains_symbol(GS.thermal_weight_wrapper)
-                            );
-                            // Resolve only this scalar comparison. Final energy factors can
-                            // group as E^-5 or E^-1/P^2, with E^2 = P, after the two routes.
-                            let difference = (actual - (raw - vacuum))
-                                .replace(function!(GS.thermal_weight_wrapper, W_.a_))
-                                .with(W_.a_)
-                                .replace_multiple(&*OCCUPATION_FORM)
-                                .expand();
-                            // Certify each occupation coefficient separately so unrelated
-                            // energy denominators do not multiply the proof's term budget.
-                            let mut occupations = BTreeSet::new();
-                            difference.visitor(&mut |view| {
-                                if let AtomView::Fun(call) = view
-                                    && call.get_symbol() == GS.thermal_distribution
-                                {
-                                    occupations.insert(view.to_owned());
-                                    return false;
-                                }
-                                true
-                            });
-                            let coefficients = difference
-                                .coefficient_list_exact(&occupations.into_iter().collect_vec())
-                                .expect("scalar difference must be polynomial in occupations");
-                            for (occupation, coefficient) in coefficients {
-                                let certificate =
-                                    SoftEnergyAlgebra::default().scalar_zero(&coefficient)?;
+                            results
+                                .push(forests.orientation_parametric_exprs(&graph, &settings.uv)?);
+                        }
+                        assert_eq!(results[0].len(), results[1].len());
+                        for (late, early) in results[0].iter().zip(&results[1]) {
+                            let late = late.integrands.resolved()?;
+                            let early = early.integrands.resolved()?;
+                            assert_eq!(late.iter().count(), early.iter().count());
+                            for ((late_key, raw), (early_key, actual)) in
+                                late.iter().zip(early.iter())
+                            {
+                                assert_eq!(late_key, early_key);
+                                let vacuum = graph.make_thermal_distributions_explicit(
+                                    raw,
+                                    MediumMode::Vacuum,
+                                    graph.iter_edges().map(|(_, edge, _)| edge),
+                                )?;
                                 assert!(
-                                    matches!(certificate, EnergyZeroOutcome::Zero(_)),
-                                    "{}: {medium:?}, integrated={generate_integrated}, residue={late_key:?}, occupation={occupation}: {certificate:?}: {coefficient}",
-                                    graph.name
+                                    raw.is_zero() || raw.contains_symbol(GS.thermal_weight_wrapper)
                                 );
+                                assert!(
+                                    actual.is_zero()
+                                        || actual.contains_symbol(GS.thermal_weight_wrapper)
+                                );
+                                // Resolve only this scalar comparison. Final energy factors can
+                                // group as E^-5 or E^-1/P^2, with E^2 = P, after the two routes.
+                                let difference = (actual - (raw - vacuum))
+                                    .replace(function!(GS.thermal_weight_wrapper, W_.a_))
+                                    .with(W_.a_)
+                                    .replace_multiple(&*OCCUPATION_FORM)
+                                    .expand();
+                                // Certify each occupation coefficient separately so unrelated
+                                // energy denominators do not multiply the proof's term budget.
+                                let mut occupations = BTreeSet::new();
+                                difference.visitor(&mut |view| {
+                                    if let AtomView::Fun(call) = view
+                                        && call.get_symbol() == GS.thermal_distribution
+                                    {
+                                        occupations.insert(view.to_owned());
+                                        return false;
+                                    }
+                                    true
+                                });
+                                let coefficients = difference
+                                    .coefficient_list_exact(&occupations.into_iter().collect_vec())
+                                    .expect("scalar difference must be polynomial in occupations");
+                                for (occupation, coefficient) in coefficients {
+                                    let certificate =
+                                        SoftEnergyAlgebra::default().scalar_zero(&coefficient)?;
+                                    assert!(
+                                        matches!(certificate, EnergyZeroOutcome::Zero(_)),
+                                        "{}: {medium:?}, {representation:?}, projected_4d={project_local_4d}, integrated={generate_integrated}, residue={late_key:?}, occupation={occupation}: {certificate:?}: {coefficient}",
+                                        graph.name
+                                    );
+                                }
                             }
                         }
                     }

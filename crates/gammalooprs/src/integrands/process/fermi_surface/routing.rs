@@ -332,7 +332,7 @@ mod tests {
                 graph.underlying[edge].particle = particle.into();
                 assert!(graph[edge].chemical_potential_atom().is_none());
             }
-            let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+            let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression, &mut [])?;
             assert!(bulk.is_zero());
             assert_eq!(sectors.len(), 1);
             assert_eq!(sectors[0].coefficient, step);

@@ -125,8 +125,26 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
         .stack_size(256 * 1024 * 1024)
         .build()?;
     let mut reference = None;
-    for (explicit, compile) in itertools::iproduct!([false, true], [false, true]) {
+    for ((explicit, projected_4d, representations), compile) in itertools::iproduct!(
+        [
+            (false, false, vec![RepresentationMode::Cff]),
+            (true, false, vec![RepresentationMode::Cff]),
+            (true, true, vec![RepresentationMode::Cff]),
+            (true, true, vec![RepresentationMode::Ltd]),
+            (
+                true,
+                true,
+                vec![RepresentationMode::Cff, RepresentationMode::Ltd],
+            ),
+        ],
+        [false, true],
+    ) {
         global.generation.explicit_orientation_sum_only = explicit;
+        global
+            .generation
+            .uv
+            .local_uv_cts_from_expanded_4d_integrands = projected_4d;
+        global.generation.three_dimensional_representations = representations.clone();
         // Summed and iterative evaluators require the orientation catalogue.
         let evaluator = &mut global.generation.evaluator;
         evaluator.compile = compile;
@@ -148,6 +166,14 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
             unreachable!()
         };
         assert!(!generated.data.graph_terms[0].fermi_surfaces.is_empty());
+        for representation in &representations {
+            assert!(
+                generated.data.graph_terms[0]
+                    .fermi_surfaces
+                    .iter()
+                    .any(|(mode, _, _)| mode == representation)
+            );
+        }
         let orientation_count = generated.data.graph_terms[0].orientations.len();
         assert_eq!(
             generated.data.graph_terms[0]
@@ -176,7 +202,9 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
         let mut last_point = None;
         // Reversing mu moves the Fermi sea to the opposite orientation; the
         // orientation sum is unchanged. Finish at mu > 0 for the round trip.
-        for (method, mu_sign) in itertools::iproduct!(methods, [-1.0, 1.0]) {
+        for (method, mu_sign, representation) in
+            itertools::iproduct!(methods, [-1.0, 1.0], &representations)
+        {
             let mut signed_model = model.clone();
             let mut signed_card = card.clone();
             signed_card.insert(
@@ -184,6 +212,9 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
                 Complex::new_re(F(mu_sign * 3.0 * chemical_potential)),
             );
             signed_model.apply_param_card(&signed_card)?;
+            for level in &mut runtime.get_mut_settings().stability.levels {
+                level.three_dimensional_representation = Some(*representation);
+            }
             runtime.warm_up(&signed_model)?;
             for (profile, sigma) in [
                 (HFunction::Exponential, 1.0_f64),
@@ -227,7 +258,7 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
                     assert!(
                         value.re.0.abs() < 1e-12 * expected_imaginary.abs()
                             && (value.im.0 / expected_imaginary - 1.0).abs() < 1e-11,
-                        "explicit={explicit}, compile={compile}, method={method:?}, mu_sign={mu_sign}, profile={profile:?}, sigma={sigma}, momentum={coordinates:?}: {value:?} != i*{expected_imaginary}"
+                        "{representation:?}, projected_4d={projected_4d}, explicit={explicit}, compile={compile}, method={method:?}, mu_sign={mu_sign}, profile={profile:?}, sigma={sigma}, momentum={coordinates:?}: {value:?} != i*{expected_imaginary}"
                     );
                     if !explicit && *method == EvaluatorMethod::SingleParametric {
                         let mut selected_sum = Complex::new(F(0.0), F(0.0));

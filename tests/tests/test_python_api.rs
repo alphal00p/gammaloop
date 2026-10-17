@@ -1049,12 +1049,12 @@ payload = {"native_counts": counts, "max_denominator_poles": max_poles,
 }
 
 #[test]
-fn python_residue_map_preserves_thermal_weights_and_rejects_ltd() -> Result<()> {
+fn python_residue_map_preserves_cff_and_ltd_thermal_weights() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let graph = workspace_root().join("tests/resources/graphs/scalar_box.dot");
     let commands = vec![
         "import model scalars-default.json".to_string(),
-        "set global kv global.display_directive=warn global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.evaluator.compile=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.tropical_subgraph_table.disable_tropical_generation=true".to_string(),
+        "set global kv global.display_directive=warn global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.uv.local_uv_cts_from_expanded_4d_integrands=true global.generation.explicit_orientation_sum_only=true global.generation.threshold_subtraction.enable_thresholds=false global.generation.evaluator.compile=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.tropical_subgraph_table.disable_tropical_generation=true".to_string(),
         format!("import graphs '{}' -p thermal_residue_box -i scalar", graph.display()),
     ];
     let payload = run_python_case(
@@ -1081,37 +1081,37 @@ def weights(snapshot):
 
 modes = ["thermodynamic_equilibrium", "zero_temperature_equilibrium"]
 for mode in modes:
-    api.run("set global kv global.generation.three_dimensional_representations='[\"cff\"]' global.generation.medium.mode=" + mode)
+    api.run("set global kv global.generation.three_dimensional_representations='[\"cff\",\"ltd\"]' global.generation.medium.mode=" + mode)
     api.run("generate existing -p thermal_residue_box -i scalar")
-    snapshot = api.get_residue_map("scalar_box")
-    before = weights(snapshot)
-    assert before and snapshot.representation == "cff"
-    values = [weight for rows in before.values() for weight in rows]
-    assert values and all(weight[0] == mode for weight in values)
-    assert any(weight[1] or weight[2] for weight in values)
+    snapshots = {representation: api.get_residue_map("scalar_box", three_dimensional_representation=representation)
+                 for representation in ("cff", "ltd")}
+    before = {representation: weights(snapshot) for representation, snapshot in snapshots.items()}
+    for representation, snapshot in snapshots.items():
+        assert before[representation] and snapshot.representation == representation
+        values = [weight for rows in before[representation].values() for weight in rows]
+        assert values and all(weight[0] == mode for weight in values)
+        assert any(weight[1] or weight[2] for weight in values)
+    api.run("set global kv global.generation.uv.local_uv_cts_from_expanded_4d_integrands=false")
     for representations in ("[\"ltd\"]", "[\"cff\",\"ltd\"]", "[\"ltd\",\"cff\"]"):
         api.run("set global kv global.generation.three_dimensional_representations='" + representations + "'")
         try:
             api.run("generate existing -p thermal_residue_box -i scalar")
         except Exception as error:
-            assert "LTD does not support" in str(error)
+            assert "local_uv_cts_from_expanded_4d_integrands = true" in str(error)
         else:
-            raise AssertionError("thermal LTD generation succeeded")
-        assert weights(api.get_residue_map("scalar_box")) == before
-    api.run("set global kv global.generation.medium.mode=vacuum global.generation.three_dimensional_representations='[\"cff\"]'")
+            raise AssertionError("LTD generation with direct 3D UV succeeded")
+        for representation in snapshots:
+            assert weights(api.get_residue_map("scalar_box", three_dimensional_representation=representation)) == before[representation]
+    api.run("set global kv global.generation.uv.local_uv_cts_from_expanded_4d_integrands=true global.generation.medium.mode=vacuum global.generation.three_dimensional_representations='[\"cff\"]'")
     api.run("save state -o")
     loaded = gammaloop.GammaLoopAPI(state_folder=STATE_DIR, read_only_state=True)
-    assert weights(loaded.get_residue_map("scalar_box")) == before
-    try:
-        loaded.get_residue_map("scalar_box", three_dimensional_representation="ltd")
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("unavailable thermal LTD map was returned")
+    for representation in snapshots:
+        assert weights(loaded.get_residue_map("scalar_box", three_dimensional_representation=representation)) == before[representation]
+    snapshot = snapshots["cff"]
     detached = next(iter(snapshot.entries.values()))[0].variants[0].thermal_weight
     detached.numerators.clear()
     detached.distributions.clear()
-    assert weights(snapshot) == before
+    assert weights(snapshot) == before["cff"]
     try:
         detached.medium_mode = "vacuum"
     except AttributeError:

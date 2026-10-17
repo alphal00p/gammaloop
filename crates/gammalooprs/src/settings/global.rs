@@ -74,8 +74,7 @@ pub struct GenerationSettings {
     /// Sum all generated residue branches explicitly, removing runtime orientation selectors.
     #[serde(skip_serializing_if = "is_false")]
     pub explicit_orientation_sum_only: bool,
-    /// Medium for amplitude generation; non-vacuum modes require local 3D UV subtraction
-    /// and disabled threshold subtraction.
+    /// Medium for amplitude generation; non-vacuum modes require disabled threshold subtraction.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub medium: MediumSettings,
 }
@@ -187,7 +186,6 @@ impl GenerationSettings {
                 "Programmatically constructed `global.generation.three_dimensional_representations` must be normalized to unique representations, preserving the first occurrence of each mode"
             ));
         }
-        self.validate_medium_uv_compatibility()?;
         if self
             .three_dimensional_representations
             .contains(&RepresentationMode::Ltd)
@@ -208,27 +206,6 @@ impl GenerationSettings {
         if self.requires_complete_orientation_sum() && self.orientation_pattern.pat.is_some() {
             return Err(eyre!(
                 "For complete residue summation, `global.generation.orientation_pattern` must be unset (explicit_orientation_sum_only or LTD generation)"
-            ));
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn validate_medium_uv_compatibility(&self) -> EyreResult<()> {
-        if self
-            .three_dimensional_representations
-            .contains(&RepresentationMode::Ltd)
-            && (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
-        {
-            return Err(eyre!(
-                "LTD does not support finite-temperature or finite-density media or vacuum subtraction; use only `cff` in `global.generation.three_dimensional_representations`, or select `medium.mode = \"vacuum\"` without vacuum subtraction"
-            ));
-        }
-        if (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
-            && self.uv.local_uv_cts_from_expanded_4d_integrands
-        {
-            return Err(eyre!(
-                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is unsupported for finite-medium modes or vacuum subtraction; use local 3D subtraction instead"
             ));
         }
 
@@ -318,7 +295,7 @@ mod generation_settings_tests {
     }
 
     #[test]
-    fn finite_medium_supports_only_local_3d_subtraction() {
+    fn finite_medium_cff_supports_both_uv_routes() {
         for (mode, vacuum_subtraction) in [
             (MediumMode::ThermodynamicEquilibrium, false),
             (MediumMode::ZeroTemperatureEquilibrium, false),
@@ -335,14 +312,9 @@ mod generation_settings_tests {
 
             settings.explicit_orientation_sum_only = true;
             settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
-            let error = settings
+            settings
                 .validate_for_process(GenerationType::Amplitude)
-                .unwrap_err();
-            assert!(
-                error
-                    .to_string()
-                    .contains("use local 3D subtraction instead")
-            );
+                .unwrap();
         }
     }
 
@@ -457,7 +429,7 @@ mod generation_settings_tests {
     }
 
     #[test]
-    fn ltd_rejects_all_medium_modes_before_uv_validation() {
+    fn ltd_requires_four_d_uv_in_every_medium() {
         for representations in [
             vec![RepresentationMode::Ltd],
             vec![RepresentationMode::Cff, RepresentationMode::Ltd],
@@ -479,28 +451,39 @@ mod generation_settings_tests {
                             ..Default::default()
                         };
                         settings.uv.local_uv_cts_from_expanded_4d_integrands = from_four_d;
-                        if mode == MediumMode::Vacuum && !vacuum_subtraction {
-                            assert_eq!(
-                                settings
-                                    .validate_for_process(GenerationType::Amplitude)
-                                    .is_ok(),
-                                from_four_d
+                        settings.threshold_subtraction.enable_thresholds = false;
+                        if !from_four_d {
+                            for kind in [GenerationType::Amplitude, GenerationType::CrossSection] {
+                                let error = settings.validate_for_process(kind).unwrap_err();
+                                assert!(
+                                    error.to_string().contains(
+                                        "local_uv_cts_from_expanded_4d_integrands = true"
+                                    ),
+                                    "{error}"
+                                );
+                            }
+                            let error = settings
+                                .validate_for_runtime(&crate::settings::RuntimeSettings::default())
+                                .unwrap_err();
+                            assert!(
+                                error
+                                    .to_string()
+                                    .contains("local_uv_cts_from_expanded_4d_integrands = true"),
+                                "{error}"
                             );
                             continue;
                         }
-                        for kind in [GenerationType::Amplitude, GenerationType::CrossSection] {
-                            let error = settings.validate_for_process(kind).unwrap_err();
-                            assert!(
-                                error.to_string().contains("LTD does not support"),
-                                "{error}"
-                            );
-                        }
-                        let error = settings
-                            .validate_for_runtime(&crate::settings::RuntimeSettings::default())
-                            .unwrap_err();
-                        assert!(
-                            error.to_string().contains("LTD does not support"),
-                            "{error}"
+                        assert_eq!(
+                            settings
+                                .validate_for_process(GenerationType::Amplitude)
+                                .is_ok(),
+                            mode != MediumMode::Vacuum || !vacuum_subtraction,
+                        );
+                        assert_eq!(
+                            settings
+                                .validate_for_process(GenerationType::CrossSection)
+                                .is_ok(),
+                            mode == MediumMode::Vacuum && !vacuum_subtraction,
                         );
                     }
                 }
