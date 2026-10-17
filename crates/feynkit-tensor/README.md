@@ -81,9 +81,12 @@ use feynkit_tensor::TensorReducer;
 use idenso::tensor::SymbolicTensor;
 use symbolica::parse;
 
+// Register the vector heads in the same caller namespace used by parse!.
+let k = spenso::vector_symbol!("K");
+let _ = spenso::vector_symbol!("P");
 let dimension = parse!("D");
 let numerator = SymbolicTensor::infer(parse!("K(1,spenso::mink(D,mu))*K(1,spenso::mink(D,nu))*P(spenso::mink(D,mu))*P(spenso::mink(D,nu))"))?;
-let reducer = TensorReducer::new(dimension).with_integrated_head_name("K");
+let reducer = TensorReducer::new(dimension).with_integrated_head(k);
 let scalar = reducer.reduce(&numerator)?.into_expression()?;
 println!("{scalar}");
 # Ok::<(), feynkit_tensor::TensorReductionError>(())

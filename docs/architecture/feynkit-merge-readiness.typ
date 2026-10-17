@@ -1059,6 +1059,13 @@ Concrete Rust API difficulties found during implementation:
   in both payloads and declared ports, including ranked zero. A compound raw
   dimension is not directly representable by `Dimension::try_from`; source
   selectors and graph promotion need their proper admission/mapping boundary.
+- Custom vector heads must be registered before native admission. Head-name
+  selectors require the qualified Symbolica name; a bare string can silently
+  select no vector. The tensor README now registers its vectors in the parser's
+  caller namespace and passes the registered symbol to `with_integrated_head`.
+  Its isolated example check distinguishes the intended `K.K*P.P/D` result
+  from an unreduced `(K.P)^2`, using the frozen e6 libraries. Evidence is in
+  `target/symbolic-tensor-flow/tensor-readme-example`.
 - A no-op reduction can establish new completion facts. Mathematical equality
   alone must not discard its returned carrier when reusing an `Arc`;
   `same_reduction_state` distinguishes that case without traversing cached graphs.
