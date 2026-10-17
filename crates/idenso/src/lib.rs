@@ -821,7 +821,7 @@ pub mod test {
         let raw = function!(
             matrix,
             bis.to_symbolic([function!(label, 3, 0)]),
-            bis.to_symbolic([function!(label, 3, 1)]),
+            bis.to_symbolic([function!(label, 3, 1)])
         );
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
@@ -920,7 +920,7 @@ pub mod test {
         );
 
         let anonymous =
-            SymbolicTensor::infer(function!(matrix, bis.to_symbolic([]), bis.to_symbolic([]),))
+            SymbolicTensor::infer(function!(matrix, bis.to_symbolic([]), bis.to_symbolic([])))
                 .unwrap();
         assert_eq!(anonymous.structure().open_positions().len(), 2);
         let named = anonymous.materialized().unwrap();

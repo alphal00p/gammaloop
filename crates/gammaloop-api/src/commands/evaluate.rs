@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::settings::RuntimeSettings;
+use idenso::tensor::SymbolicTensor;
+use spenso::structure::partial::PartialStructure;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::{info, warn};
 
@@ -102,7 +104,7 @@ impl Evaluate {
             true_settings.number_of_terms_in_epsilon_expansion = n_terms as i64;
         }
 
-        let mut full_evaluation = Atom::Zero;
+        let mut full_evaluation: Option<SymbolicTensor<PartialStructure>> = None;
 
         for graph_term in amplitude.graphs.iter() {
             let g = &graph_term.graph;
@@ -110,7 +112,7 @@ impl Evaluate {
                 true_settings.number_of_terms_in_epsilon_expansion =
                     g.n_loops(&g.no_dummy()) as i64 + 1;
             }
-            let mut complete_evaluation_for_this_graph = Atom::num(1);
+            let mut complete_evaluation_for_this_graph = SymbolicTensor::infer(Atom::one())?;
             if g.n_externals() != 0 {
                 return Err(color_eyre::eyre::eyre!(
                     "Graph named: {} has external legs. Analytical evaluation in gammaloop only supports vacuum graphs.",
@@ -118,12 +120,12 @@ impl Evaluate {
                 ));
             }
             let connected_components = g.connected_components(&g.full_filter());
-            if connected_components.len() > 1 && g.global_prefactor.num != Atom::num(1) {
+            if connected_components.len() > 1 && !g.global_prefactor.num.expression().is_one() {
                 warn!(
                     "Graph named: {} has more than one ({}) connected components and its expression contains a global numerator ({}), which will only be applied to the first connected component. Make sure this is intended.",
                     graph_term.graph.name,
                     connected_components.len(),
-                    g.global_prefactor.num
+                    feynkit_graph::NumeratorInterface::export(&g.global_prefactor.num).0
                 );
             }
             for (i_gc, gc) in connected_components.iter().enumerate() {
@@ -132,7 +134,7 @@ impl Evaluate {
                     i_gc + 1,
                     graph_term.graph.name.blue()
                 );
-                complete_evaluation_for_this_graph *= graph_term.analytical_evaluation(
+                let component = graph_term.analytical_evaluation(
                     gc,
                     AnalyticalEvaluationConfig {
                         model: &model,
@@ -145,11 +147,24 @@ impl Evaluate {
                         include_global_numerator: i_gc == 0,
                     },
                 )?;
+                complete_evaluation_for_this_graph =
+                    complete_evaluation_for_this_graph.multiply(&component)?;
             }
-            complete_evaluation_for_this_graph *= &g.global_prefactor.projector * &g.overall_factor;
-
-            full_evaluation += complete_evaluation_for_this_graph;
+            let overall_factor = SymbolicTensor::infer(g.overall_factor.clone())?;
+            let complete = complete_evaluation_for_this_graph
+                .multiply(&g.global_prefactor.projector)?
+                .multiply(&overall_factor)?;
+            full_evaluation = Some(match full_evaluation {
+                Some(sum) => sum.try_add(&complete)?,
+                None => complete,
+            });
         }
+
+        // The command returns and optionally writes a source expression. Tensor
+        // interfaces remain attached until this explicit presentation boundary.
+        let full_evaluation = full_evaluation
+            .map(|tensor| feynkit_graph::NumeratorInterface::export(&tensor).0)
+            .unwrap_or(Atom::Zero);
 
         if let Some(p) = self.result_path.clone() {
             info!(
@@ -206,6 +221,144 @@ mod tests {
         settings::{global::MediumMode, RuntimeSettings},
     };
     use std::path::PathBuf;
+
+    #[test]
+    fn evaluate_vacuum_tensor_restores_numeric_ports_before_global_projection(
+    ) -> color_eyre::Result<()> {
+        use feynkit_graph::NumeratorInterface;
+        use gammalooprs::{
+            processes::{AnalyticalEvaluationConfig, ProcessCollection},
+            utils::{vakint, GS},
+        };
+        use idenso::tensor::ContractSettings;
+        use spenso::structure::{
+            partial::PartialStructureExt,
+            representation::{Minkowski, RepName},
+            slot::IsAbstractSlot,
+        };
+        use symbolica::{
+            atom::{Atom, AtomCore},
+            parse,
+        };
+
+        test_initialise()?;
+        let temp = tempfile::tempdir()?;
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.state.folder = temp.path().join("state");
+        ImportModel {
+            path: "scalars-default.json".into(),
+            simplify_model: true,
+        }
+        .run(&mut state)?;
+        // Both sources have the same scalar vacuum integral. The first keeps
+        // its two explicit numeric D-dimensional ports until its projector.
+        for (name, numerator, projector) in [
+            (
+                "tensor",
+                "spenso::g(spenso::mink(gammalooprs::dim,0),spenso::mink(gammalooprs::dim,1))",
+                "spenso::g(spenso::mink(gammalooprs::dim,0),spenso::mink(gammalooprs::dim,1))/gammalooprs::dim",
+            ),
+            ("scalar", "1", "1"),
+        ] {
+            Import::Graphs {
+                source: None,
+                inline_dot: Some(format!(
+                    r#"digraph {name} {{
+                        num="{numerator}"; projector="{projector}";
+                        overall_factor=1; overall_factor_evaluated=1;
+                        node [num=1];
+                        a:0 -> a:1 [particle="scalar_1" num=1 id=0 lmb_id=0,
+                            lmb_rep="K(0,a___)", source="{{ufo_order:0}}", sink="{{ufo_order:1}}"];
+                    }}"#
+                )),
+                process_spec: None,
+                process: Some(crate::state::ProcessRef::Name("vacuum_tensor".into())),
+                integrand_name: Some(name.into()),
+                overwrite: false,
+                append: false,
+            }
+            .run(&mut state, &cli_settings)?;
+        }
+        let runtime = RuntimeSettings::default();
+        let model = state.resolve_model_for_integrand(0, "tensor")?;
+        let ProcessCollection::Amplitudes(amplitudes) = &state.process_list.processes[0].collection
+        else {
+            unreachable!("vacuum fixtures are amplitudes")
+        };
+        let graph = &amplitudes["tensor"].graphs[0];
+        let settings = &cli_settings.global.generation.uv.vakint;
+        let true_settings = settings.true_settings();
+        let evaluate = |graph: &gammalooprs::processes::AmplitudeGraph| {
+            graph.analytical_evaluation(
+                &graph.graph.full_filter(),
+                AnalyticalEvaluationConfig {
+                    model: &model,
+                    evaluate_numerically: false,
+                    vakint: vakint()?,
+                    true_settings: &true_settings,
+                    settings,
+                    run_time_settings: &runtime,
+                    include_global_numerator: true,
+                },
+            )
+        };
+        let component = evaluate(graph)?;
+        let source = &graph.graph.global_prefactor.num;
+        assert_eq!(component.rank(), 2);
+        assert_eq!(
+            component.structure().logical_slots(),
+            source.structure().logical_slots()
+        );
+        for slot in component.structure().logical_slots() {
+            assert_eq!(slot.rep(), Minkowski {}.new_rep(GS.dim).to_lib());
+        }
+        assert!(!component.is_zero());
+        let closed = component.multiply(&graph.graph.global_prefactor.projector)?;
+        assert!(
+            closed.is_scalar(),
+            "the declared projector must close both ports"
+        );
+        let mut zero_graph = graph.clone();
+        zero_graph.graph.global_prefactor.num = source.with_checked_expression(Atom::Zero)?;
+        let zero = evaluate(&zero_graph)?;
+        assert!(zero.is_zero());
+        assert_eq!(
+            zero.structure().logical_slots(),
+            source.structure().logical_slots()
+        );
+
+        let mut results = Vec::new();
+        for name in ["tensor", "scalar"] {
+            let output = Evaluate {
+                process: Some(crate::state::ProcessRef::Id(0)),
+                graphs_group_name: Some(name.into()),
+                result_path: Some(temp.path().join(format!("{name}.toml"))),
+                numerical: false,
+                number_of_terms_in_epsilon_expansion: Some(2),
+            }
+            .run(&mut state, &cli_settings, &runtime)?;
+            let output =
+                NumeratorInterface::admit(output, None)?.contract(ContractSettings::default())?;
+            assert!(output.is_scalar());
+            results.push(output.into_expression());
+        }
+        assert!(!results[1].is_zero());
+        assert!((&results[0] - &results[1]).together().is_zero());
+        // Exact contraction happens in D, with no physical-dimension shortcut.
+        let source_metric = NumeratorInterface::admit(
+            parse!("spenso::g(spenso::mink(gammalooprs::dim,0),spenso::mink(gammalooprs::dim,1))"),
+            None,
+        )?;
+        assert_eq!(
+            source_metric
+                .multiply(&source_metric)?
+                .contract(ContractSettings::default())?
+                .expression(),
+            &Atom::var(GS.dim)
+        );
+        Ok(())
+    }
 
     #[test]
     fn evaluate_rejects_generated_thermal_graphs_after_defaults_change() -> color_eyre::Result<()> {

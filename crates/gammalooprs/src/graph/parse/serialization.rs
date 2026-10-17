@@ -21,7 +21,7 @@ use crate::{
     uv::UltravioletGraph,
 };
 
-use super::{NumeratorInterface, ParseGraph, string_utils::ToQuoted};
+use super::{ParseGraph, string_utils::ToQuoted};
 
 impl Graph {
     pub fn to_dot_graph_with_settings(

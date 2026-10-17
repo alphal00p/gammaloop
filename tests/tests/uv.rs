@@ -5050,10 +5050,12 @@ fn local_ir_disconnected_completed_components_form_nonzero_union() -> Result<()>
             for term in export.node_terms {
                 let graph: gammalooprs::graph::Graph =
                     term.dot.as_str().into_finalized_runtime_graph(&spectacles.state.model)?;
+                let numerator =
+                    feynkit_graph::NumeratorInterface::export(&graph.global_prefactor.num).0;
                 nodes
                     .entry(term.node_key)
-                    .and_modify(|sum| *sum += &graph.global_prefactor.num)
-                    .or_insert(graph.global_prefactor.num);
+                    .and_modify(|sum| *sum += &numerator)
+                    .or_insert(numerator);
             }
             assert_eq!(
                 nodes.len(),
@@ -6612,13 +6614,14 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
                     else {
                         return Err(eyre::eyre!("top-bubble fixture must be an amplitude"));
                     };
-                    let color_closure = amplitudes
+                    let color_closure = feynkit_graph::NumeratorInterface::export(&amplitudes
                         .get(integrand)
                         .ok_or_else(|| eyre::eyre!("missing integrand {integrand}"))?
                         .graphs[0]
                         .graph
                         .global_prefactor
-                        .num
+                        .num)
+                        .0
                         .to_canonical_string();
                     assert!(
                         color_closure.contains("1/3")

@@ -414,7 +414,7 @@ impl PyAmplitude {
             .iter()
             .take(limit)
             .map(|term| {
-                TensorExpression::from_atom_interface(py, term.clone(), None)?
+                TensorExpression::from_structured(py, term.clone())?
                     .bind(py)
                     .call_method("to_html", (), Some(&kwargs))?
                     .extract::<String>()

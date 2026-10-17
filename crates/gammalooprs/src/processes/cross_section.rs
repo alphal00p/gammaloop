@@ -4737,18 +4737,18 @@ mod tests {
         let left = builder.add_vertex(DiagramVertex {
             name: "left".into(),
             interaction: None,
-            numerator: Atom::one(),
+            numerator: feynkit_graph::NumeratorInterface::admit(Atom::one(), None).unwrap(),
         });
         let right = builder.add_vertex(DiagramVertex {
             name: "right".into(),
             interaction: None,
-            numerator: Atom::one(),
+            numerator: feynkit_graph::NumeratorInterface::admit(Atom::one(), None).unwrap(),
         });
         builder
             .add_edge(incoming, left, DiagramEdge::new(particle, false))
             .unwrap();
         let mut propagator = DiagramEdge::new(particle, false);
-        propagator.numerator = Atom::i();
+        propagator.numerator = feynkit_graph::NumeratorInterface::admit(Atom::i(), None).unwrap();
         builder.add_edge(left, right, propagator).unwrap();
         builder
             .add_edge(right, outgoing, DiagramEdge::new(particle, false))

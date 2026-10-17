@@ -454,7 +454,7 @@ const FEYNKIT_CFF: &[RustExampleSpec] = &[example!(
 const FEYNKIT_TENSOR: &[RustExampleSpec] = &[example!(
     "TensorReducer",
     "rust",
-    "use feynkit_tensor::TensorReducer;\nuse symbolica::{parse, symbol};\nlet reducer = TensorReducer::new(parse!(\"D\")).with_integrated_head(symbol!(\"k\"));\nlet reduced = reducer.reduce(parse!(\"k(spenso::mink(D,mu))*k(spenso::mink(D,nu))\").as_view())?;\nassert_eq!(reduced.terms().len(), 1);"
+    "use feynkit_tensor::TensorReducer;\nuse idenso::tensor::SymbolicTensor;\nuse symbolica::{parse, symbol};\nlet _ = spenso::vector_symbol!(\"k\");\nlet reducer = TensorReducer::new(parse!(\"D\")).with_integrated_head(symbol!(\"k\"));\nlet numerator = SymbolicTensor::infer(parse!(\"k(spenso::mink(D,mu))*k(spenso::mink(D,nu))\"))?;\nlet reduced = reducer.reduce(&numerator)?;\nassert_eq!(reduced.terms().len(), 1);"
 )];
 
 const GAMMALOOPRS: &[RustExampleSpec] = &[

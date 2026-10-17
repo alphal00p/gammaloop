@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spenso::structure::{
     abstract_index::AbstractIndex,
     partial::{OpenPortId, PartialIndex, PartialStructure, PartialStructureExt},
-    representation::{LibraryRep, RepName},
+    representation::LibraryRep,
     slot::{IsAbstractSlot, SlotMatcher},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView};
@@ -16,7 +16,11 @@ use crate::{DiagramError, FeynmanDiagram};
 /// notably a computed zero's rank. Entries retain logical axis order; compact
 /// representations denote distinct unresolved ports.
 #[derive(Clone, Debug)]
-pub struct NumeratorInterface(Vec<Atom>);
+pub struct NumeratorInterface(
+    /// Source port declarations in logical order. `admit` validates them before
+    /// they become the interface of a retained tensor.
+    pub Vec<Atom>,
+);
 
 impl NumeratorInterface {
     pub fn parse(source: &str) -> Result<Self, DiagramError> {
@@ -198,7 +202,7 @@ impl<'de> Deserialize<'de> for NumeratorInterface {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spenso::structure::representation::{Euclidean, Minkowski};
+    use spenso::structure::representation::{Euclidean, Minkowski, RepName};
     use symbolica::{function, id::Replacement};
 
     #[test]

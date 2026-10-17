@@ -223,6 +223,17 @@ sum branches reuse the same written index. External-vector syntax is retained
 inside `pure_scalar` metadata, so it does not add an extra tensor port and can
 be restored after projection.
 
+The raw Vakint adapter admits each converted selected numerator once as a
+`SymbolicTensor<PartialStructure>` and calls `TensorReducer::reduce` with that
+retained value. `TensorReductionTerm` keeps its tensor body in the same carrier;
+its separate Atom coefficient is the exact scalar orbit or projector weight.
+Foreign-representation spectators remain tensors during selected Lorentz
+reduction and composition. `TensorReduction` also retains the source interface
+for an empty or identically vanishing result, including odd-rank moments.
+Typed addition and multiplication preserve declared logical ports. Only the
+adapter's return to Vakint's raw projector/index ABI decodes the completed
+result; raw `VakintTerm` storage remains that backend boundary.
+
 GammaLoop passes its actual spin tensors through the existing opaque-slot bridge. Their Lorentz
 ports stay connected to the projected metrics, and GammaLoop completes the d-dimensional Dirac
 algebra before Laurent truncation. Duplicating a tensor body and its port list in a frontend wrapper
@@ -293,6 +304,27 @@ leaves. Only after
 completed dimensional tensor algebra and residual-contraction checks does the
 bridge replace scalar dimension dependence for Laurent expansion. A retained
 external basis keeps its representation metadata.
+
+GammaLoop's vacuum-only `AmplitudeGraph::analytical_evaluation` uses the same
+`Integrated::restore_numerator` owner on its backend result. Before exporting,
+it and `Integrated::integrate` use `Integrated::protect_numeric_ports` to
+transport explicit numeric public ports to collision-free native labels with
+`reserved_dummies` and `reindex_interface_ports`. Raw numeric backend
+dummies can then acquire their topology-local labels without capturing an
+original public port. Restoration recovers native tensor notation, checks the
+result against the retained protected interface, and inverse-transports the
+public labels in their original logical order. A zero result keeps that
+interface; source Lorentz dimension is not silently specialized to four.
+Scalar inputs need no public-index transport.
+
+The analytical command still canonicalizes, tensor-reduces and evaluates each
+component in that order. Its numerical option invokes Vakint's scalar numerical
+evaluator at the same per-component stage, before the global projector; this
+does not provide general numerical evaluation of open tensor components.
+The command combines component results, projector and overall factor as
+tensors, sums graph contributions, and exports source notation only for its
+final return value or output file. No performance conclusion follows from
+this ownership change without separate measurements.
 
 The Python adapter accepts complex mass/numerator substitutions as `numerical_parameters`; the
 PySecDec boundary requires real pole masses and external momenta, with complex numerator coefficients

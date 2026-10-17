@@ -170,7 +170,7 @@ fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order()
         symbolica::function!(
             spenso::network::library::symbolic::ETS.metric,
             representation.to_symbolic([Atom::num(37)]),
-            representation.to_symbolic([Atom::num(41)]),
+            representation.to_symbolic([Atom::num(41)])
         ),
         None,
     )
@@ -1531,13 +1531,15 @@ fn full_numerator_requires_one_q3_structure_argument() {
     graph.overall_factor = Atom::one();
     for attribute in ["num", "projector"] {
         let mut source =
-            linnet::parser::DotGraph::from_string(&graph.dot_serialize(&Default::default()))
+            linnet::parser::DotGraph::from_string(graph.dot_serialize(&Default::default()))
                 .unwrap();
         source
             .global_data
             .statements
             .insert(attribute.into(), nested_q.to_canonical_string());
-        let error = Graph::from_finalized_runtime_dot(source, &graph.model).unwrap_err();
+        let error = Graph::from_finalized_runtime_dot(source, &graph.model)
+            .err()
+            .expect("malformed raw global momentum must be rejected");
         assert!(
             error.to_string().contains("found no edge argument"),
             "malformed raw global {attribute} must retain source validation: {error:?}"

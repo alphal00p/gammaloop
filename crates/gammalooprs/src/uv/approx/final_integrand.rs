@@ -23,8 +23,11 @@ use crate::{
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 #[cfg(test)]
-use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
-use idenso::{color::ColorSimplifySettings, tensor::ContractSettings};
+use idenso::{CookMode, CookSettings};
+use idenso::{
+    color::ColorSimplifySettings,
+    tensor::{ContractSettings, SymbolicTensor},
+};
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::shadowing::TensorCollectFilter;
 use spenso::structure::partial::PartialStructure;

@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Idenso source on
-2026-09-29.
+2026-10-17. This date records source review; qualification is recorded separately below.
 
 This note covers the `idenso` Rust crate: representation-aware Symbolica transformations built
 on Spenso's tensor syntax and network parser. It does not describe concrete tensor-component
@@ -53,8 +53,9 @@ must not treat printed names alone as a complete serialized registry.
 
 - the structure `S`, defaulting to `OrderedStructure<LibraryRep, AbstractIndex>`;
 - the symbolic payload `E`, normally an owned Symbolica `Atom`;
-- `is_metric`, used by contraction-specialized identities;
-- `is_composite`, distinguishing a direct tensor function from an expression-backed leaf;
+- `is_metric` and `is_composite`, retaining operation classification independently of the
+  current Atom's outer syntax; these flags participate in equality and serialization,
+  and are not interface certificates;
 - private interface, observation and completion proofs, invalidated when the operation cannot
   justify carrying them to its result.
 
@@ -73,8 +74,11 @@ the former Spynso `StructuredAtom`; Python bindings retain argument conversion, 
 error translation, and presentation metadata. `PartialStructure` does not pretend to implement
 the canonical-storage `TensorStructure` contract.
 
-GammaLoop now retains this carrier through instantiated graph fragments, numerator
-states, UV sectors and shared numerator definitions. Borrowing `expression()` for
+FeynKit retains this carrier through instantiated graph fragments, diagram
+numerators, projectors, amplitudes and tensor-reduction results. GammaLoop retains
+it through runtime graph fragments, numerator states, UV sectors and shared
+numerator definitions. Model recipes and genuinely scalar coefficients remain
+Atoms. Borrowing `expression()` for
 a scalar algorithm leaves the source interface available; rebuilding an unrelated
 tensor from the returned Atom would lose that interface and its reduction facts.
 Mathematical equality alone cannot decide whether an old shared carrier may be
@@ -85,6 +89,17 @@ the payload against the logical slots once. Bincode stores the payload, logical
 slots and operation flags, remapping symbols on decode. It never stores proof or
 planner caches. This preserves ranked zero and unresolved axis order while
 rejecting a nonzero payload with an unrelated declared interface.
+
+The shared `feynkit_graph::NumeratorInterface` codec owns source admission and
+export. Diagram DTOs and DOT use ordinary expression strings with optional
+`num_interface`, `numerator_prefactor_interface` and `projector_interface`
+metadata. The declaration preserves axes that cannot be recovered from source
+text alone, especially ranked zero and unresolved logical order. Admission
+validates the declaration; it is not a way to certify an arbitrary payload.
+Ordinary source text remains unchanged when no metadata is needed. Whole-payload
+decoding belongs at an explicit source or backend boundary. Graph transport
+instead decodes individual encoded index names, computes their simultaneous
+rename and uses the native checked tensor operation.
 
 Canonical singleton `cind(n)` and `find(n)` markers select a concrete component,
 so a rank-one leaf ending in one of these markers has a scalar interface. The
@@ -150,6 +165,17 @@ ports, checks every sum branch, and retains necessary multiplicity checks. Uncha
 are borrowed; changed exact sums and products use bulk construction when callback ordering
 permits it.
 
+Fully explicit external ports can be compared by their complete slot identities
+when normalized factor order changes. This retains the source logical layout
+without treating syntax order as axis order. Representation, dimension,
+variance, index identity and multiplicity must all agree. Anonymous axes retain
+their stricter ordered correspondence: equal rank or equal representations alone
+do not justify swapping them. The checked-expression fallback collects tensor
+witnesses while leaving unstructured scalar weights opaque, just as ordinary
+product inference does. Its final scope and multiplicity validation still runs.
+The special affine rank-one rewrite requires a uniquely identified changed
+factor with the remaining tensor witnesses fixed.
+
 Before power and interface admission, the existing dot normalizer lowers
 nested rank-one notation such as `δ(cind(0),p(mink(d)))` to
 `g(δ(cind(0),mink(d)),p(mink(d)))`, retaining the symbolic dimension.
@@ -190,12 +216,36 @@ with each fixed physical spatial slash. These identities preserve ordered
 spinor multiplication and do not set the Lorentz dimension to four. Formal
 spin dimensions and unsupported component representations retain their word.
 
-Lorentz-dimension changes map both the Atom and its declared interface here. Newly coincident
-explicit indices contract; excess occurrences fail. Callback validation compares the encoded
-interfaces before and after the change, separately from the retained logical layout. A no-op
-normalizer must accept mixed representations stored in a different order, while a normalizer
-that removes a nonzero tensor's ports must fail. Python only converts the requested dimension,
-translates errors, and updates presentation metadata if the rank changes.
+`map_representation_dimensions` maps representation dimensions in both the
+payload and the logical interface, including ports carried only by a ranked
+zero. Its callback receives the representation kind and the decoded dimension;
+portable dimension payloads are decoded and encoded individually. It does not
+substitute unrelated scalar coefficients. `with_lorentz_dimension` delegates to
+this owner for its physical-four-dimensional Lorentz replacement. Newly
+coincident explicit indices contract; excess occurrences fail. Callback
+validation compares the encoded interfaces before and after the change,
+separately from the retained logical layout. A no-op normalizer must accept
+mixed representations stored in a different order, while a normalizer that
+removes a nonzero tensor's ports must fail. This operation does not provide
+component tables for a new formal dimension.
+
+`rename_symbols` applies an injective simultaneous map to the native payload and
+its logical interface, including encoded dimensions and zero-only labels.
+Swaps are allowed; collisions with existing targets that are not themselves
+renamed are rejected. Callback-sensitive results are checked without replaying
+the callback. Existing trusted internal renaming retains its private fast path;
+the public entry point does not expose an unchecked proof transfer.
+
+The native `dirac_adjoint(preserve_indices)` shares preparation and cleanup with
+the raw expression operation while retaining the tensor carrier. It dualizes
+the external slots and preserves their logical order. Anonymous axes first
+become explicit fresh indices through `materialized()`, including for ranked
+zero, so their identity survives adjunction. The option retains the historical
+boundary-endpoint transpose convention; it does not relax interface validation.
+Spinor words receive the required gamma-zero construction and cleanup. Pure
+scalar and color expressions retain the existing conjugation semantics. The
+typed operation uses `AbstractIndex` directly without a whole-payload
+decode-and-reinfer round trip.
 
 `SymbolicNet<Aind>` is a Spenso `Network` whose local tensors are `SymbolicTensor`, whose scalars
 are Symbolica atoms, and whose function keys are Symbolica symbols. `SymbolicNetParse` forces
@@ -215,9 +265,12 @@ explicit lower-level boundaries.
 
 The consuming `SymbolicTensor<PartialStructure>::into_network` specialization
 hands off to the existing Spenso component parser. It validates the retained
-interface, materializes unresolved ports, and releases its owned planning caches
-before parsing components. Reversible index decoding is confined to this
-boundary. The result includes `CanonicalLayout`, which downstream code must use
+interface, materializes unresolved ports, and releases its own planning-cache
+references before parsing components. Other shared owners can still retain the
+same caches. Optional reversible decoding here is index-only; dimension decoding
+is rejected and dimension changes belong to the dimension owner. This handoff
+still parses and materializes component tensors. The result includes
+`CanonicalLayout`, which downstream code must use
 for component coordinates and shadow axes; matching only the port multiset does
 not preserve logical axis order. A ranked zero becomes an empty sparse tensor
 with its original ports. Concrete components and contraction execution remain
@@ -226,10 +279,22 @@ Spenso responsibilities.
 The Atom-like API has deliberate checked boundaries and some ergonomic gaps.
 Symbolica seals `AtomCore`, preventing a downstream implementation on this
 carrier. `replace` accepts a checked `TensorRule`; arbitrary substitutions need
-explicit expression mapping and validation. There is no typed Taylor-series API
-yet, so GammaLoop restores each scalar-engine coefficient against the retained
-interface. `expand_dots` returns the tensor carrier, preserving untouched open
-ports while checking transformations that could change them.
+explicit expression mapping and validation. Addition, multiplication and powers
+use fallible tensor operations rather than inherited Atom arithmetic.
+`with_algebra_result` and other retained-interface finishers require an owned
+algebraic invariant; they are not general substitutes for checked admission.
+There is no typed Taylor-series or general derivative API yet, so GammaLoop
+restores scalar-engine results against the retained interface. `expand_dots`
+returns the tensor carrier, preserving untouched open ports while checking
+transformations that could change them.
+
+The typed coefficient collector is not a drop-in replacement for every scalar
+parser. GammaLoop's rational UV shell must keep positive-power numerator blocks
+such as `(den + x)^5` factorized while extracting inverse denominator factors.
+Its existing scalar parser still uses temporary Atoms and intermediate
+inference; `FourDTerm::from_tensor` checks each completed numerator against the
+original carrier to restore its logical interface. That residual conversion is
+an API limitation, not a claim that all tensor work now avoids parsing.
 
 == Rewrite families and execution flow
 
@@ -420,8 +485,11 @@ initialization; its `python_stubgen` feature adds metadata for the unified Spens
 `reference-cases` exposes the otherwise test-only curated identity cases.
 
 Binary encoding is always derived for Idenso's zero-sized representation marker types.
-`SymbolicTensor`, rewrite settings, symbol registries, networks,
-and cooked expressions do not form an Idenso checkpoint format. Reversible cooking stores the
+The optional `bincode` implementation for `SymbolicTensor<PartialStructure>`
+reconstructs and validates its payload, logical slots and operation flags using
+the caller's state map. That wire implementation, rewrite settings, symbol
+registries, networks and cooked expressions do not together define an Idenso
+checkpoint format. Reversible cooking stores the
 source atom in Symbolica symbol user data and derives a stable-looking hash name, but recovery
 still depends on the matching Symbolica registry and cooking settings. Printed or binary names
 alone are not a portable physics-result archive.
@@ -469,6 +537,14 @@ The historical gamma and alias-domain measurement, including its exact-output
 qualification protocol, is preserved with the optional alias implementation on
 `tensor-aliases-preserved`.
 
+An earlier full Idenso qualification passed 1,028 tests across five binaries,
+with 24 existing skips. It predates the native adjoint, public dimension and
+rename operations, anonymous scalar-witness correction and frontend retention
+changes described here. It therefore does not qualify those additions. Current
+source identities, commands and subsequent results belong to the
+#link("feynkit-merge-readiness.typ")[FeynKit merge-readiness record]; the source
+review date above does not imply a completed test run.
+
 Domain simplifiers usually leave unmatched syntax unchanged rather than diagnosing it as an
 error. A successful return therefore means the configured rewrite reached its fixed point, not
 that every physics object was recognized or eliminated. Verification should inspect residual
@@ -478,8 +554,9 @@ representation-bearing factors when completeness matters.
 
 - Tensor structure is inferred from tagged representation arguments, including dimension and
   dual orientation; function spelling alone is insufficient.
-- `SymbolicTensor.structure` and the slot atoms inside `expression` must describe the same
-  external indices. Permutation operations rewrite both sides together.
+- For a nonzero tensor, `SymbolicTensor.structure` and the slot atoms inside `expression`
+  describe the same external indices. Ranked zero retains its declared interface without
+  payload slots. Permutation operations preserve the logical correspondence in either case.
 - Dummy indices introduced by parsing or shorthand expansion are fresh only within that parse
   state. Cross-expression hygiene remains explicit through wrapping or canonicalization.
 - Dimension-specific identities fire only when the required representation dimension can be

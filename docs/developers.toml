@@ -49,7 +49,8 @@ anchor = "load_state_manifest(&save_path)?"
 # graph importer. Canonical printer replay and current version18 boundaries retain
 # the documented save/load behavior; exact physical and reference acceptance pass.
 # Reviewed 2026-10-17: The architecture records state version 19 for retained tensor payloads, checked symbol-remapped loading, and unchanged standalone scalar evaluator versions.
-digest = "570b65f4513c98779b8d5256e3240e92e5810fe0"
+# Reviewed 2026-10-17: Full state version 20 retains global numerator/projector interfaces in addition to version19 runtime tensors; standalone evaluator formats remain unchanged.
+digest = "cc4e9e814602593d69aa5e36d2cb8cc0dbf1f532"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -186,7 +187,8 @@ anchor = "pub fn generate("
 # are unchanged. The endpoint-sampling convention is documented separately.
 # Reviewed 2026-10-16: Process projector owners are resolved from external-leg labels before native finalization; the boundary and unchanged native local-slot convention are documented in the current architecture.
 # Reviewed 2026-10-16: Paired incoming-state permutations preserve sewn partners; canonical-only comparison permits zero numerical samples. The current architecture records the label/routing contract.
-digest = "1b3b142bc66f6cd6f7b232eeeb0996a09f9cf401"
+# Reviewed 2026-10-17: Generation caches retain localized typed factors; source recipes are admitted at instantiation and finalized diagrams transport the carriers directly.
+digest = "d16e3a620716f71bb96e509e8258a621dd1fd8ea"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -238,7 +240,8 @@ anchor = "pub struct FeynmanDiagram {"
 # importer scope owns compact GammaLoop frame conversion.
 # Reviewed 2026-10-16: The architecture records explicit half-edge order and orientations in the native builder for validated runtime export.
 # Reviewed 2026-10-16: Default ordered routing roots at the outgoing sewn attachment; a physical-cut box regression preserves the center-of-mass origin and topology/numerator identity.
-digest = "d3cf42d49c9dcbe52078162ec9e3e0cae7f6df16"
+# Reviewed 2026-10-17: Live graph fragments, aggregate numerator, prefactor and projector retain tensors; the shared source codec records logical ports and ranked zeros in optional metadata.
+digest = "323ce53f368cde5f1449ef6477c8b7d7c67d4217"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -263,7 +266,8 @@ end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> S
 # Reviewed 2026-10-16: The architecture records canonical cut export and runtime metadata restoration at the native artifact boundary.
 # Reviewed 2026-10-16: Import applies edge mass overrides before constructing energy definitions and mass evaluators; source-map and strict dialect ownership are unchanged.
 # Reviewed 2026-10-17: Runtime graph fragments retain typed interfaces; optional num_interface metadata preserves ranked zeros and logical port order at the source-artifact boundary.
-digest = "77c3d95d67f4722e5ef4d7105ef510a88b0a3703"
+# Reviewed 2026-10-17: Native diagrams transfer typed fragments and global factors directly; authored DOT/JSON expressions use the shared source codec and preserve physical momentum validation.
+digest = "ac6bebeb1c08a9b197d1c5117eec27b5b52ad798"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -380,7 +384,8 @@ end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
 # Reviewed 2026-10-16: Fixed components use signed basis-vector contractions before native projection; the UV note records the formal-dimensional port contract.
 # Reviewed 2026-10-17: The UV note records retained tensor bodies through symbolic preparation and explicit Vakint/Laurent interchange boundaries; additional normalization is checked as scalar.
 # Reviewed 2026-10-17: Native AbstractIndex materialization removes the decode/recook detour while retaining checked projected interfaces and strict residual/multiplicity guards.
-digest = "126aa6180a43d8e36da1f6644cad3e1b76e99861"
+# Reviewed 2026-10-17: Completed pole and signed finite projections retain their source interface; native projected cleanup and backend restoration preserve ports and ranked zeros.
+digest = "29051ba367ad602449730b06c8adb14b552b6b19"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
@@ -465,7 +470,8 @@ anchor = "impl Localizer<'_> {"
 # The exact localizer test covers scalar affine maps and open tensor products.
 # Reviewed 2026-10-17: Localized integrated coefficients retain typed shared bodies. Scalar carrier dispatch and the documented separation from the cograph remain unchanged.
 # Reviewed 2026-10-17: Integrated pole/finite tensors reach localization directly; typed composition owns the complete CFF capacity input and finite-body mapping.
-digest = "df343cbd46ca49a797ffbc6301ac95136a7a38d5"
+# Reviewed 2026-10-17: The localizer consumes retained pole/finite tensor projections; scalar dispatch does not erase the coefficient body interface.
+digest = "b71a0049900250e5c9a23ccc8112af32961c269d"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -627,7 +633,8 @@ anchor = "pub trait IndexTooling {"
 # match the maintained notes; the former tensor-alias implementation remains archived.
 # Evaluator scalar aliases are a separate downstream owner.
 # Reviewed 2026-10-16: Index canonicalization preserves dual wrappers; raw queries reject unbound chain endpoints and ignore scalar metadata. Idenso architecture and shared syntax now describe these contracts.
-digest = "fa7352f63c6af806f937fa23093fcc950cf41d6d"
+# Reviewed 2026-10-17: IndexTooling dimension transforms now receive fallible callbacks from the retained tensor owner; the syntax and Idenso notes describe native index/dimension transport and checked API boundaries.
+digest = "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -771,7 +778,8 @@ anchor = "pub trait IndexTooling {"
 # match the maintained notes; the former tensor-alias implementation remains archived.
 # Evaluator scalar aliases are a separate downstream owner.
 # Reviewed 2026-10-16: Index canonicalization preserves dual wrappers; raw queries reject unbound chain endpoints and ignore scalar metadata. Idenso architecture and shared syntax now describe these contracts.
-digest = "fa7352f63c6af806f937fa23093fcc950cf41d6d"
+# Reviewed 2026-10-17: IndexTooling dimension transforms now receive fallible callbacks from the retained tensor owner; the syntax and Idenso notes describe native index/dimension transport and checked API boundaries.
+digest = "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
@@ -1013,7 +1021,8 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-16: No architecture impact: the numerical unit fixture invokes the public parser to initialize the existing typed symbols before parsing.
 # Reviewed 2026-10-16: Dot conversion visits normalized dot powers once while reserving existing indices and preserving independent powered-sum scopes; native/FORM dispatch and scalar evaluation policy are unchanged.
 # Reviewed 2026-10-16: Reserve numeric source slots as well as generated dummy labels; bind native compact representations in the common converter; retain explicit k/p source-slot provenance through native projection. Existing backend dispatch and factorization remain unchanged.
-digest = "db28bf12d2e98a21bc0774f0d3341a592384d80d"
+# Reviewed 2026-10-17: Vakint tensor reduction admits a typed tensor for the native reducer and explicitly exports its result to the backend Atom ABI; tensor metadata belongs to the retained caller.
+digest = "9700e39a1072552bc54344a5cf7bd31bcc521caa"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -1500,7 +1509,8 @@ symbol = "group_diagrams"
 anchor = "pub(crate) fn group_diagrams("
 # Reviewed 2026-10-16: isolated color contraction, scalar conjugation, exact
 # algebraic weight cancellation and numeric content preserve factorized inputs.
-digest = "0ed73194dd53a6b6e84c72fe4ef2f40a76632de9"
+# Reviewed 2026-10-17: Grouping retains exact, sampling-source and color-valued sampled tensors; finite Lorentz component values and certified ratios remain scalar. Historical timing identities are unchanged.
+digest = "1db3fd99dc17d3837c5e634f24b806a5cc16d09b"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

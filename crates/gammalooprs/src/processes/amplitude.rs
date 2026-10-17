@@ -16,12 +16,13 @@ use color_eyre::Result;
 use momtrop::SampleGenerator;
 
 use crate::cff::EsurfaceID;
-use idenso::{CookMode, CookSettings, dirac::GammaSimplifySettings};
+use idenso::{CookMode, CookSettings, dirac::GammaSimplifySettings, tensor::SymbolicTensor};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::algebra::complex::Complex;
+use spenso::structure::partial::PartialStructure;
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
@@ -65,7 +66,10 @@ use crate::{
     utils::{F, GS, Length, W_},
     uv::{
         Integrands, RenormalizationPart, UVgenerationSettings, UltravioletGraph,
-        approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
+        approx::{
+            CutStructure, OrientationProjection,
+            integrated::{Integrated, to_vakint_integrand},
+        },
         settings::VakintSettings,
     },
 };
@@ -1225,7 +1229,7 @@ impl AmplitudeGraph {
         &self,
         component: &S,
         config: AnalyticalEvaluationConfig<'_>,
-    ) -> Result<Atom> {
+    ) -> Result<SymbolicTensor<PartialStructure>> {
         if self.graph.param_builder.medium_mode != MediumMode::Vacuum {
             return Err(eyre!(
                 "Analytical evaluation with Vakint does not support thermal modes (graph '{}', mode {:?}); use inspect or integrate for medium-dependent results",
@@ -1323,7 +1327,9 @@ impl AmplitudeGraph {
         let numerator = num.to_d_dim(GS.dim)?;
         let before_gamma = numerator.get_single_atom()?;
         let before_gamma_plain = before_gamma.to_plain_string();
-        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
         let simplified = numerator
             .state
             .expr
@@ -1393,8 +1399,13 @@ impl AmplitudeGraph {
         //         .with(function!(vk_mom, i as i64 + 1, W_.x___));
         // }
 
+        // Vakint uses raw numeric labels for generated projector dummies. Keep
+        // identically written public source ports distinct before crossing that
+        // ABI, then restore their original identities through the tensor owner.
+        let (backend_integrand, source_ports) =
+            Integrated::protect_numeric_ports(&four_dimensional_integrand)?;
         let mut vakint_integrand = to_vakint_integrand(
-            &four_dimensional_integrand,
+            &backend_integrand,
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
@@ -1418,8 +1429,8 @@ impl AmplitudeGraph {
         //     "\nVakint analytical evaluation:\n{:#}",
         //     analytical_evaluation
         // );
-        if !config.evaluate_numerically {
-            Ok(analytical_evaluation)
+        let evaluation = if !config.evaluate_numerically {
+            analytical_evaluation
         } else {
             let (numerical_evaluation, _error) = config
                 .vakint
@@ -1434,10 +1445,15 @@ impl AmplitudeGraph {
 
             // println!("\nVakint numerical evaluation:\n{:#}", numerical_evaluation);
 
-            let numerical_evaluation_atom =
-                numerical_evaluation.to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()));
-
-            Ok(numerical_evaluation_atom)
+            numerical_evaluation.to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()))
+        };
+        let restored = Integrated::restore_numerator(evaluation, 0);
+        let result =
+            backend_integrand.with_checked_expression(cooking.try_cook(restored.as_view())?)?;
+        if source_ports.is_empty() {
+            Ok(result)
+        } else {
+            Ok(result.reindex_interface_ports(&source_ports)?)
         }
     }
 

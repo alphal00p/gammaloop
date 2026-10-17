@@ -38,13 +38,17 @@ Symbolica's series engine and the exact CFF energy mapper borrow Atom payloads.
 The caller retains the source tensor and checks each returned coefficient or
 mapped expression against its interface. Vakint is an explicit Atom backend
 boundary: export decodes native index syntax, and returned projected tensors
-receive checked admission before dimensional algebra resumes. Internal
-materialization uses native `AbstractIndex` syntax; it does not decode to
-GammaLoop's legacy index type and recook the result. `IntegratedCts` retains
+are restored and checked against their retained source interface before
+dimensional algebra resumes. Projected-numerator cleanup materializes native
+`AbstractIndex` syntax directly. `IntegratedCts` retains
 typed pole and signed finite projections plus its loop-measure scale power.
 `Series<AtomField>` is temporary calculation storage. Each completed projection
 is checked against the source interface, including a vanishing projection.
 Nested forests and the localizer consume those tensors directly.
+Disconnected products use typed multiplication before the temporary Laurent
+projection, so contracted ports and vanishing products keep the product's
+established interface. Scalar marker and loop-measure coefficients do not
+replace that tensor ownership.
 These boundaries do not authorize distributing a graph numerator.
 
 Symbolica seals `AtomCore`, so a downstream `SymbolicTensor` cannot implement

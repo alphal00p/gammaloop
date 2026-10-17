@@ -79,7 +79,9 @@ use linnet::{
     parser::{DotGraph, set::DotGraphSet},
 };
 use serde::{Deserialize, Serialize};
-use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::partial::PartialStructure;
+#[cfg(test)]
+use spenso::structure::partial::PartialStructureExt;
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
     atom::{Atom, AtomCore, UserData},
@@ -4704,7 +4706,11 @@ mod tests {
                 .vertices()
                 .all(|(_, vertex)| vertex.name.starts_with("mapped_"))
         );
-        assert!(mapped.edges().all(|(_, _, edge)| !edge.numerator.is_one()));
+        assert!(
+            mapped
+                .edges()
+                .all(|(_, _, edge)| !edge.numerator.expression().is_one())
+        );
     }
 
     #[test]

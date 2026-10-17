@@ -289,22 +289,6 @@ impl TensorExpression {
         self.value.structure()
     }
 
-    pub(crate) fn from_transformed_atom(
-        self_: &PyRef<'_, TensorExpression>,
-        py: Python<'_>,
-        atom: Atom,
-    ) -> PyResult<Py<TensorExpression>> {
-        let (value, contracted) = Self::structured(self_)
-            .with_transformed_expression(atom)
-            .map_err(Self::inference_error)?;
-        let (name, args) = if contracted {
-            (None, Vec::new())
-        } else {
-            Self::transformed_descriptor(self_, value.expression())
-        };
-        Self::from_shared(py, Arc::new(value), name, args)
-    }
-
     fn with_cooked_indices(
         self_: &PyRef<'_, Self>,
         py: Python<'_>,
@@ -8375,19 +8359,21 @@ mod tests {
                 2,
                 "the fixture must expose an intermediate port pair"
             );
-            let result =
-                TensorExpression::from_transformed_atom(&original.borrow(py), py, diagonal)?;
+            let result = TensorExpression::from_known_parts(
+                py,
+                diagonal,
+                raw,
+                original.borrow(py).name,
+                original.borrow(py).name_args.clone(),
+            )?;
             let result = result.borrow(py);
             assert_eq!(result.interface().canonical().order(), 0);
             assert!(result.name.is_none());
             assert!(result.name_args.is_empty());
 
             // A scalar rewrite with no port contraction retains explicitly assigned identity.
-            let scalar = TensorExpression::from_transformed_atom(
-                &original.borrow(py),
-                py,
-                x + Atom::num(2),
-            )?;
+            let scalar =
+                TensorExpression::from_algebra_atom(&original.borrow(py), py, x + Atom::num(2))?;
             let scalar = scalar.borrow(py);
             assert_eq!(scalar.name, Some(name));
             assert_eq!(scalar.name_args, vec![Atom::num(7)]);

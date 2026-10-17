@@ -21,7 +21,7 @@ use idenso::{
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     shadowing::symbolica_utils::LogPrint,
-    structure::abstract_index::AbstractIndex,
+    structure::{abstract_index::AbstractIndex, representation::RepName},
 };
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -1173,31 +1173,58 @@ mod slow {
         let adjoint_dimension = parse!("rqft_dA");
         let fundamental = function!(CS.fundamental_rep, &fundamental_dimension);
         let adjoint = function!(CS.adjoint_rep, &adjoint_dimension);
-        let parametrize = |atom: &mut Atom| {
-            let original = atom.clone();
-            *atom = atom
-                .to_parametric_color()
+        let parametrize_tensor = |tensor: &mut idenso::tensor::SymbolicTensor<
+            spenso::structure::partial::PartialStructure,
+        >| {
+            let original = tensor.clone();
+            let mapped = tensor
+                .map_representation_dimensions(|representation, dimension| {
+                    if representation.base()
+                        == (idenso::representations::ColorFundamental {}).into()
+                    {
+                        fundamental_dimension.clone()
+                    } else if representation.base()
+                        == (idenso::representations::ColorAdjoint {}).into()
+                    {
+                        adjoint_dimension.clone()
+                    } else {
+                        dimension.to_owned()
+                    }
+                })
+                .unwrap();
+            let expression = mapped
+                .expression()
                 .replace(CS.nc * CS.nc - 1)
                 .with(adjoint_dimension.clone())
                 .replace(CS.nc)
                 .with(fundamental_dimension.clone());
+            let mapped = mapped.with_checked_expression(expression).unwrap();
+            let restored = mapped
+                .map_representation_dimensions(|_, dimension| {
+                    dimension
+                        .replace(fundamental_dimension.as_view().to_pattern())
+                        .with(Atom::num(3))
+                        .replace(adjoint_dimension.as_view().to_pattern())
+                        .with(Atom::num(8))
+                })
+                .unwrap();
+            let restored = restored
+                .with_checked_expression(
+                    restored
+                        .expression()
+                        .replace(fundamental_dimension.as_view().to_pattern())
+                        .with(Atom::num(3))
+                        .replace(adjoint_dimension.as_view().to_pattern())
+                        .with(Atom::num(8)),
+                )
+                .unwrap();
             assert_eq!(
-                atom.replace(fundamental_dimension.as_view().to_pattern())
-                    .with(Atom::num(3))
-                    .replace(adjoint_dimension.as_view().to_pattern())
-                    .with(Atom::num(8)),
-                original,
+                restored.expression(),
+                original.expression(),
                 "parametric color changes a primitive at N_c = 3"
             );
-        };
-        let parametrize_tensor = |tensor: &mut idenso::tensor::SymbolicTensor<
-            spenso::structure::partial::PartialStructure,
-        >| {
-            let mut expression = tensor.expression().clone();
-            parametrize(&mut expression);
-            // Color dimensions change at this boundary, so infer the new
-            // interface instead of certifying the old one unchanged.
-            *tensor = tensor.with_transformed_expression(expression).unwrap().0;
+            assert_eq!(restored.structure(), original.structure());
+            *tensor = mapped;
         };
 
         for index in [21, 24] {
@@ -1214,13 +1241,17 @@ mod slow {
             for edge in edges {
                 parametrize_tensor(&mut graph.graph.underlying[edge].num.value);
             }
-            parametrize(&mut graph.graph.global_prefactor.num);
-            parametrize(&mut graph.graph.global_prefactor.projector);
+            parametrize_tensor(&mut graph.graph.global_prefactor.num);
+            parametrize_tensor(&mut graph.graph.global_prefactor.projector);
             // RQFT projects in d=4-2ε, using the same open Lorentz domain as
             // the integrated tensor. A fixed four-dimensional projector would
             // lose its ε-dependent contribution to the finite coefficient.
-            graph.graph.global_prefactor.projector =
-                graph.graph.global_prefactor.projector.map_mink_dim(GS.dim);
+            graph.graph.global_prefactor.projector = graph
+                .graph
+                .global_prefactor
+                .projector
+                .with_lorentz_dimension(GS.dim.into())
+                .unwrap();
 
             let renormalized = graph.renormalization_part(&model, &settings).unwrap();
             // Contract only this completed integrated tensor and its projector;

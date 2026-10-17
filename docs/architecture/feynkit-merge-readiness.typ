@@ -737,6 +737,8 @@ Against main `ff533fcd`, the concrete storage changes are:
     [Each retains the tensor and its logical interface],
   [Integrated counterterm], [`Series<AtomField>`],
     [Typed pole and signed finite projections; scalar Laurent series is temporary],
+  [Global graph numerator/projector], [`Atom`],
+    [Typed global factors; direct native-to-runtime transport],
   [Component preparation], [Raw expression parsed into `ParsingNet`],
     [Consuming typed `into_network` returns `Canonicalized<ParsingNet>`],
   [Compiled evaluator], [`AliasedAtom`, scalar `FunctionMap`, Symbolica program],
@@ -772,6 +774,10 @@ Concrete Rust API difficulties found during implementation:
   `with_transformed_expression`; `with_rewritten_expression` is reserved for
   established tensor identities and must not bypass arbitrary-substitution
   validation.
+- A tensor is not an ordered Atom key. Exact inventory comparisons use an
+  explicit exported-expression key together with its ordered interface
+  metadata; inventing `Ord` from the expression alone would ignore ranked zero
+  and logical axes.
 - There is no tensor Taylor-series API. Direct-3D currently keeps the existing
   scalar series engine internal and restores each coefficient through the
   retained source interface. A zero coefficient keeps its tensor rank. This
@@ -880,7 +886,10 @@ intrinsic scalar powers retain their existing certificate after an identity
 kernel, without re-admitting the complete tensor. Both original regressions pass.
 
 The native audit found instantiated values still stored as Atoms before the
-runtime boundary. Live `DiagramVertex::numerator`, `DiagramEdge::numerator`,
+runtime boundary in the reconciled FeynKit implementation. These native
+FeynKit owners are absent from main `ff533fcd`; their before/after comparison
+is against the pre-migration FeynKit repair `6002674d`.
+Live `DiagramVertex::numerator`, `DiagramEdge::numerator`,
 the aggregate `FeynmanDiagram` numerator, its prefactor and projector now retain
 the carrier. `NumeratorCache` keeps completed vertex/propagator tensors;
 `PreparedNumerator` keeps exact, sampling-source and color-valued sampled
@@ -967,3 +976,20 @@ the original reference and 240-second timeout remain unchanged. The incomplete
 48b8 CLI build was stopped as superseded, with completed shared Nix outputs
 retained. No performance result from the previous qualified implementation is
 being relabeled as a measurement of this migration.
+
+The native migration and the backend-interface corrections pass workspace-wide
+type checking, strict Clippy with warnings denied, formatting and the
+documentation check. The isolated Idenso run with `reference-cases` passes all
+1,029 selected cases in 33.492 seconds. Its four feature-gated bincode tests
+are covered by the forthcoming workspace run. The formerly failing scalar
+rescaling guard now verifies exact nonsymmetric components and rejects a
+changed anonymous matrix head; no ambiguous-axis control is removed.
+
+Source review also identified unmeasured costs for the next profiling pass:
+source export re-admits an expression to decide whether interface metadata may
+be omitted; identity index transport can rebuild planning state; numerical
+samples repeat some sample-independent color preparation; and diagram export
+can compute the same metadata twice. These are candidates for measurement,
+not an attribution of GL1's historical slowdown. The fresh frozen workspace
+and normal Nix CLI must qualify this implementation before new timing or
+merge-readiness claims are made.

@@ -1119,12 +1119,13 @@ mod tests {
                 for term in &exported.node_terms {
                     for parsed in Graph::from_finalized_runtime_string(&term.dot, &model)? {
                         actual += UvMarker::new(&settings.generation.uv).finish(
-                            &parsed
-                                .global_prefactor
-                                .num
-                                .replace_multiple(&split)
-                                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
-                                .with(W_.d_),
+                            &feynkit_graph::NumeratorInterface::export(
+                                &parsed.global_prefactor.num,
+                            )
+                            .0
+                            .replace_multiple(&split)
+                            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                            .with(W_.d_),
                         );
                     }
                 }

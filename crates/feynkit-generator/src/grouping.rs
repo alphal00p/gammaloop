@@ -35,7 +35,7 @@ use spenso::{
         parsing::{ParseSettings as TensorParseSettings, ShadowedStructure, ShorthandParsing},
         store::NetworkStore,
     },
-    shadowing::TensorCollectFilter,
+    shadowing::{Collectable, TensorCollectFilter},
     structure::{
         Canonicalized,
         partial::{PartialStructure, PartialStructureExt},
@@ -521,9 +521,9 @@ pub(crate) fn group_diagrams(
             let complete = diagram
                 .numerator()
                 .multiply(diagram.numerator_prefactor())
-                .map_err(&color_error)?
+                .map_err(|error| color_error(error.into()))?
                 .multiply(diagram.projector())
-                .map_err(&color_error)?;
+                .map_err(|error| color_error(error.into()))?;
             let complete = complete
                 .with_checked_expression(model.expand_couplings(complete.expression()))
                 .map_err(&color_error)?;
@@ -1297,9 +1297,7 @@ fn evaluate_tensor_sample(
         Replacement::new(Atom::var(CS.nc), Atom::num(3)),
         Replacement::new(color_idx!(2, cof!(RS.d_)), Atom::num(1) / Atom::num(2)),
     ];
-    let cooking = CookSettings::indices()
-        .with_mode(CookMode::ReversibleEncoding)
-        .with_representation_payloads(true, true);
+    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
     let sectors = numerator
         .coefficient_list(TensorCollectFilter::Reps([
             ColorAdjoint {}.into(),

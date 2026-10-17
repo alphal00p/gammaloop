@@ -2203,6 +2203,10 @@ fn scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory() -> col
             }
         }
         let canonical = colored.canonize().graph;
+        let (numerator, numerator_interface) =
+            feynkit_graph::NumeratorInterface::export(&graph.global_prefactor.num);
+        let (projector, projector_interface) =
+            feynkit_graph::NumeratorInterface::export(&graph.global_prefactor.projector);
         (
             canonical
                 .nodes()
@@ -2215,8 +2219,8 @@ fn scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory() -> col
                 .map(|edge| (edge.vertices, edge.directed, edge.data.clone()))
                 .collect::<Vec<_>>(),
             evaluate_overall_factor(graph.overall_factor.as_view()),
-            graph.global_prefactor.num.clone(),
-            graph.global_prefactor.projector.clone(),
+            (numerator, numerator_interface.map(|ports| ports.to_json())),
+            (projector, projector_interface.map(|ports| ports.to_json())),
         )
     };
     let mut actual = BTreeMap::new();
