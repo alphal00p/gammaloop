@@ -2,9 +2,11 @@ use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         CutCFFIndex,
-        esurface::{Esurface, EsurfaceRay},
+        esurface::Esurface,
         expression::OrientationID,
+        hsurface::{Hsurface, HsurfaceID},
         orientations::GraphOrientation,
+        radial::EnergySurfaceRay,
         surface::HybridSurfaceID,
     },
     graph::{
@@ -604,6 +606,7 @@ pub struct CrossSectionGraphTerm {
     pub integrand: TiVec<CutGroupId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
+    pub hsurfaces: TiVec<HsurfaceID, Hsurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
     pub covariant_cut_representatives: BTreeMap<isize, isize>,
     pub topological_threshold_esurfaces: TiVec<TopologicalThresholdId, Esurface>,
@@ -734,10 +737,13 @@ impl CrossSectionGraphTerm {
             .map(|cut_id| graph.cut_esurface_id_map[*cut_id])
             .chain(
                 cut_group
-                    .related_esurface_group
-                    .esurface_ids
+                    .residue
+                    .surface_ids
                     .iter()
-                    .copied(),
+                    .filter_map(|id| match id {
+                        HybridSurfaceID::Esurface(id) => Some(*id),
+                        _ => None,
+                    }),
             )
             .collect::<BTreeSet<_>>();
         for variant_id in variant_ids {
@@ -875,19 +881,9 @@ impl CrossSectionGraphTerm {
             ));
         }
 
-        let selected_generation_esurfaces = selected_generation_orientations
+        let selected_generation_surfaces = selected_generation_orientations
             .iter()
-            .flat_map(|orientation| {
-                orientation
-                    .iter_denominator_nodes()
-                    .filter_map(|tree_node| {
-                        if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
-                            Some(esurface_id)
-                        } else {
-                            None
-                        }
-                    })
-            })
+            .flat_map(|orientation| orientation.iter_denominator_nodes().map(|node| node.data))
             .collect::<HashSet<_>>();
 
         let active_cut_groups: TiVec<CutGroupId, bool> = graph
@@ -896,11 +892,12 @@ impl CrossSectionGraphTerm {
             .cut_groups
             .iter()
             .map(|cut_group| {
-                cut_group
-                    .related_esurface_group
-                    .esurface_ids
-                    .iter()
-                    .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
+                cut_group.residue.max_occurrence() > 0
+                    && cut_group
+                        .residue
+                        .surface_ids
+                        .iter()
+                        .any(|id| selected_generation_surfaces.contains(id))
             })
             .collect();
 
@@ -931,7 +928,8 @@ impl CrossSectionGraphTerm {
                     active_cut_groups[cut_group_id]
                         && (settings.generation.explicit_orientation_sum_only
                             || raised_group.esurface_ids.iter().any(|esurface_id| {
-                                selected_generation_esurfaces.contains(esurface_id)
+                                selected_generation_surfaces
+                                    .contains(&HybridSurfaceID::Esurface(*esurface_id))
                             }))
                 })
                 .collect();
@@ -942,7 +940,8 @@ impl CrossSectionGraphTerm {
                     active_cut_groups[cut_group_id]
                         && (settings.generation.explicit_orientation_sum_only
                             || raised_group.esurface_ids.iter().any(|esurface_id| {
-                                selected_generation_esurfaces.contains(esurface_id)
+                                selected_generation_surfaces
+                                    .contains(&HybridSurfaceID::Esurface(*esurface_id))
                             }))
                 })
                 .collect();
@@ -1209,8 +1208,8 @@ impl CrossSectionGraphTerm {
             let (evaluators, evaluator_timings) = LUCounterTermEvaluators::from_atoms(
                 ct_data,
                 graph.derived_data.cut_group_data.cut_groups[cut_group_id]
-                    .related_esurface_group
-                    .max_occurence,
+                    .residue
+                    .max_occurrence(),
                 threshold_helpers,
                 threshold_multipliers,
                 &graph.graph.param_builder,
@@ -1260,10 +1259,7 @@ impl CrossSectionGraphTerm {
             .iter()
             .map(|cut_group| {
                 generate_rstar_t_dependence_evaluator(
-                    cut_group
-                        .related_esurface_group
-                        .max_occurence
-                        .saturating_sub(1),
+                    cut_group.residue.max_occurrence().saturating_sub(1),
                 )
             })
             .collect::<Result<TiVec<CutGroupId, _>>>()?;
@@ -1407,6 +1403,15 @@ impl CrossSectionGraphTerm {
                 integrand,
                 graph: graph.graph.clone(),
                 cut_esurface: graph.cut_esurface.clone(),
+                hsurfaces: graph
+                    .derived_data
+                    .global_cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .expression
+                    .surfaces
+                    .hsurface_cache
+                    .clone(),
                 cuts: graph.cuts.clone(),
                 covariant_cut_representatives: graph
                     .derived_data
@@ -1526,6 +1531,7 @@ impl CrossSectionGraphTerm {
         momentum_sample: &MomentumSample<T>,
         cut_id: CutId,
         cut: &CrossSectionCut,
+        absorbed_edges: &[EdgeIndex],
     ) -> Result<GenericEvent<T>> {
         let rescaled_momenta =
             momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
@@ -1628,7 +1634,7 @@ impl CrossSectionGraphTerm {
                 eyre!("Cut legs in Local Unitarity must have a particle specifier.")
             })?;
 
-            let cut_pdg = match cut_flow {
+            let mut cut_pdg = match cut_flow {
                 Flow::Source => edge_pdg,
                 Flow::Sink => {
                     edge_spatial_momentum = -edge_spatial_momentum;
@@ -1653,6 +1659,15 @@ impl CrossSectionGraphTerm {
                     None
                 };
 
+            let absorbed = absorbed_edges.contains(&eid);
+            if absorbed {
+                edge_spatial_momentum = -edge_spatial_momentum;
+                cut_pdg = event_context
+                    .model
+                    .get_particle_from_pdg(cut_pdg)
+                    .get_anti_particle(event_context.model)
+                    .pdg_code;
+            }
             let cut_four_momentum = edge_spatial_momentum.into_on_shell_four_momentum(mass_value);
 
             debug!(
@@ -1660,13 +1675,18 @@ impl CrossSectionGraphTerm {
                 d.data.name, p, d.orientation, cut_flow, cut_pdg, cut_four_momentum,
             );
 
-            new_event.kinematic_configuration.1.push(cut_four_momentum);
-            new_event.cut_info.particle_pdgs.1.push(
-                self.covariant_cut_representatives
-                    .get(&cut_pdg)
-                    .copied()
-                    .unwrap_or(cut_pdg),
-            );
+            let physical_pdg = self
+                .covariant_cut_representatives
+                .get(&cut_pdg)
+                .copied()
+                .unwrap_or(cut_pdg);
+            if absorbed {
+                new_event.kinematic_configuration.0.push(cut_four_momentum);
+                new_event.cut_info.particle_pdgs.0.push(physical_pdg);
+            } else {
+                new_event.kinematic_configuration.1.push(cut_four_momentum);
+                new_event.cut_info.particle_pdgs.1.push(physical_pdg);
+            }
         }
 
         Ok(new_event)
@@ -1729,6 +1749,11 @@ impl GraphTerm for CrossSectionGraphTerm {
                 .iter()
                 .any(|block| !block.target.energy_edge_sets().is_empty())
         }) {
+            if self.graph.param_builder.medium_mode != crate::settings::global::MediumMode::Vacuum {
+                return Err(eyre!(
+                    "Surface-targeted sampling is not supported for thermal `xs` yet; use ordinary loop-momentum sampling"
+                ));
+            }
             if self.graph.loop_momentum_basis
                 != self.multi_channeling_setup.graph.loop_momentum_basis
             {
@@ -1819,9 +1844,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .physical_cut_max_occurrences
                         .entry(edges)
                         .and_modify(|order| {
-                            *order = (*order).max(cut_group.related_esurface_group.max_occurence)
+                            *order = (*order).max(cut_group.residue.max_occurrence())
                         })
-                        .or_insert(cut_group.related_esurface_group.max_occurence);
+                        .or_insert(cut_group.residue.max_occurrence());
                 }
             }
             let mut host_plans: BTreeMap<CutGroupId, Arc<SamplingLUHostPlan>> = BTreeMap::new();
@@ -2551,6 +2576,38 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.graph.param_builder.update_model_values(model)?;
         self.graph
             .validate_medium_parameters(model, settings.general.inverse_temperature)?;
+        if self.graph.param_builder.medium_mode != crate::settings::global::MediumMode::Vacuum {
+            if !settings.subtraction.disable_threshold_subtraction {
+                return Err(eyre!(
+                    "Thermal `xs` currently requires subtraction.disable_threshold_subtraction=true"
+                ));
+            }
+            let external = settings.kinematics.externals.get_indep_externals();
+            let [probe] = external.as_slice() else {
+                return Err(eyre!("Thermal `xs` currently requires one timelike probe"));
+            };
+            if probe.temporal.value <= F(0.0) || probe.dot(probe) <= F(0.0) {
+                return Err(eyre!(
+                    "Thermal `xs` currently requires a future-directed timelike probe; spacelike and lightlike probes are not supported yet"
+                ));
+            }
+            if self
+                .cut_esurface
+                .iter()
+                .flat_map(|surface| &surface.energies)
+                .any(|edge| {
+                    !matches!(self.graph[*edge].mass, crate::graph::edge::EdgeMass::Zero)
+                        && self.graph[*edge]
+                            .mass
+                            .value::<f64>(model, &self.graph.param_builder)
+                            .is_none_or(|mass| !mass.re.is_zero() || !mass.im.is_zero())
+                })
+            {
+                return Err(eyre!(
+                    "Thermal `xs` currently requires massless cut particles"
+                ));
+            }
+        }
 
         self.param_builder = self.graph.param_builder.clone();
         self.multi_channeling_setup
@@ -2608,6 +2665,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     sample,
                     cut_id,
                     &self.cuts[cut_id],
+                    &[],
                 )?;
                 if !runtime.process_event_for_selectors(&mut event) {
                     continue;
@@ -2898,7 +2956,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     // second half-budget is a generic on-cut requirement, not
                     // a replacement of either equation by a cut identity or a
                     // bound on arbitrary CT multipliers/raised derivative jets.
-                    EsurfaceRay::<T>::verify_normal_alignment(
+                    EnergySurfaceRay::<T>::verify_normal_alignment(
                         [original(targets[0])?, original(targets[1])?],
                         [materialized(targets[0])?, materialized(targets[1])?],
                         materialized(surface)?,
@@ -2940,23 +2998,30 @@ impl GraphTerm for CrossSectionGraphTerm {
             if !self.counterterm.cut_group_is_active(cut_group_id) {
                 continue;
             }
-            let representative_esurface = &self.cut_esurface[cut_group.cuts[0]];
-
-            crate::debug_tags!(#integration, #cut, #inspect;
-                "representative esurface: {:#?}",
-                representative_esurface
-            );
-
-            // A physical LU cut needs an isolated positive root with a finite, positive
-            // Jacobian. Validate the bracket and root before constructing any cut kinematics.
             let identity = RadialRootIdentity::new(format!(
                 "LU cut graph '{}' cut group {} probe rotation {}",
                 self.graph.name, cut_group_id.0, context.rotation.method,
             ));
-            let prepared_cut = if let Some(prepared) = adopted_hosts.remove(&cut_group_id) {
-                prepared
-            } else {
-                match representative_esurface.solve_lu_cut(
+            let prepared = match cut_group.residue.surface_ids[0] {
+                HybridSurfaceID::Esurface(_) => {
+                    if let Some((ray, solution)) = adopted_hosts.remove(&cut_group_id) {
+                        Ok((ray, vec![solution]))
+                    } else {
+                        self.cut_esurface[cut_group.cuts[0]]
+                            .solve_lu_cut(
+                                momentum_sample.loop_moms(),
+                                momentum_sample.external_moms(),
+                                &masses,
+                                &self.graph.loop_momentum_basis,
+                                &F::from_f64(context.settings.kinematics.e_cm),
+                                &mut context.evaluation_metadata.radial_root_diagnostics,
+                                &identity,
+                            )
+                            .map(|(ray, solution)| (ray, vec![solution]))
+                            .map_err(|error| eyre!("{identity}: {error:?}"))
+                    }
+                }
+                HybridSurfaceID::Hsurface(id) => self.hsurfaces[id].positive_radius_roots(
                     momentum_sample.loop_moms(),
                     momentum_sample.external_moms(),
                     &masses,
@@ -2964,37 +3029,24 @@ impl GraphTerm for CrossSectionGraphTerm {
                     &F::from_f64(context.settings.kinematics.e_cm),
                     &mut context.evaluation_metadata.radial_root_diagnostics,
                     &identity,
-                ) {
-                    Ok(solution) => solution,
-                    Err(error) => {
-                        crate::debug_tags!(#integration, #cut, #solver;
-                            graph = %self.graph.name,
-                            cut_group_id = cut_group_id.0,
-                            edges = ?representative_esurface.energies,
-                            error = ?error,
-                            "LU radial root requires precision escalation"
-                        );
-                        // Use the existing residue-failure path so a recoverable numerical
-                        // failure is retried at higher precision and remains marked NaN at the
-                        // final level, without exposing invalid cut kinematics to the evaluator.
-                        lu_root_errors.push(format!(
-                            "Could not solve LU cut group {} of graph '{}', edges {:?}: {:?}",
-                            cut_group_id.0,
-                            self.graph.name,
-                            representative_esurface.energies,
-                            error,
-                        ));
-                        continue;
-                    }
-                }
+                ),
+                _ => unreachable!("LU residue groups contain E- or H-surfaces"),
             };
-
-            crate::debug_tags!(#integration, #cut, #solver;
-                "solution: {:?}",
-                prepared_cut
-            );
-
-            lu_solutions.insert(cut_group_id, prepared_cut);
+            match prepared {
+                Ok(prepared) => {
+                    lu_solutions.insert(cut_group_id, prepared);
+                }
+                Err(error) => {
+                    crate::debug_tags!(#integration, #cut, #solver;
+                        graph = %self.graph.name,
+                        cut_group_id = cut_group_id.0,
+                        surfaces = ?cut_group.residue.surface_ids,
+                        error = ?error,
+                        "LU radial root requires precision escalation"
+                    );
+                    lu_root_errors.push(format!("{identity}: {error}"));
+                }
+            }
         }
         if !lu_root_errors.is_empty() {
             context
@@ -3005,7 +3057,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         }
 
         for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            let max_occurrence = cut_group.related_esurface_group.max_occurence;
+            let max_occurrence = cut_group.residue.max_occurrence();
             if !self.counterterm.cut_group_is_active(cut_group_id) {
                 let zero = Complex::new_re(momentum_sample.zero());
                 for _ in 1..=max_occurrence {
@@ -3018,215 +3070,229 @@ impl GraphTerm for CrossSectionGraphTerm {
                 "\n =====START EVALUATION FOR CUT GROUP {}=====",
                 cut_group_id.0
             );
-            let (ray, solution) = lu_solutions
+            let (ray, roots) = lu_solutions
                 .remove(&cut_group_id)
                 .expect("all active LU cut roots were validated before evaluation");
-
-            let prepared_event = prepare_buffered_event(
-                context.settings,
-                context.rotation,
-                context.event_processing_runtime.as_deref_mut(),
-                || {
-                    let mut generated = self.generate_event_for_cut::<T>(
-                        CutEventGenerationContext {
-                            model: context.model,
-                            // Mapped sampling channels have already been mapped into the
-                            // parent frame; preserve their canonical id in event
-                            // metadata without routing the momenta through the
-                            // default-sampling LMB reinterpretation path.
-                            channel_id: context.sampling_channel,
-                        },
-                        &solution,
-                        momentum_sample,
-                        self.cut_group_data.cut_groups[cut_group_id].cuts[0],
-                        &self.cuts[self.cut_group_data.cut_groups[cut_group_id].cuts[0]],
-                    )?;
-                    generated.inverse_rotate(context.rotation);
-                    Ok(generated)
-                },
-            )?;
-            differential_result.generated_event_count += prepared_event.generated_event_count;
-            differential_result.accepted_event_count += prepared_event.accepted_event_count;
-            differential_result.event_processing_time += prepared_event.event_processing_time;
-
-            if !prepared_event.selectors_pass {
-                let zero = Complex::new_re(momentum_sample.zero());
-                for _ in 1..=max_occurrence {
-                    cut_results[cut_group_id].push(zero.clone());
-                }
-                cut_threshold_counterterms[cut_group_id] = zero;
-                continue;
-            }
-
-            let accepted_event = prepared_event.buffered_event;
-            let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
-            let threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
-            let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
-            // The sampling partition multiplies the fully subtracted graph
-            // outside this LU calculation, after raised-residue derivatives.
-            // It is distinct from overlap-group multichanneling internal to
-            // threshold subtraction and is common to every cut at this point.
-            for num_esurfaces in 1..=max_occurrence {
-                let dual_shape = if num_esurfaces > 1 {
-                    Some(HyperDual::<F<T>>::new(
-                        self.cut_group_data.dual_shapes[num_esurfaces - 2].clone(),
-                    ))
-                } else {
-                    None
-                };
-
-                let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
-                    if let Some(dual_shape) = dual_shape {
-                        let dual_t_for_integrand =
-                            dual_shape.variable(0, solution.solution.clone());
-                        let dual_h_function = h_dual(
-                            &dual_t_for_integrand,
-                            None,
-                            None,
-                            &context.settings.lu_h_function,
-                        );
-                        let dual_momenta_for_integrand = momentum_sample
-                            .loop_moms()
-                            .rescale_with_hyper_dual(&dual_t_for_integrand, None);
-
-                        let dual_shape_for_esurface =
-                            HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
-
-                        let dual_t_for_esurface =
-                            dual_shape_for_esurface.variable(0, solution.solution.clone());
-                        // Reuse the exact represented equation whose root was
-                        // accepted above. Integrand momentum jets remain on their
-                        // existing independent shape and kinematic owner.
-                        let dual_e_surface = ray.evaluate_dual(&dual_t_for_esurface);
-
-                        let mut momentum_sample_with_duals = momentum_sample.clone();
-                        momentum_sample_with_duals.sample.dual_loop_moms =
-                            Some(dual_momenta_for_integrand);
-
-                        (
-                            DualOrNot::Dual(dual_t_for_integrand),
-                            DualOrNot::Dual(dual_h_function),
-                            DualOrNot::Dual(dual_e_surface),
-                            momentum_sample_with_duals,
-                        )
+            let absorbed_edges: &[EdgeIndex] = match cut_group.residue.surface_ids[0] {
+                HybridSurfaceID::Esurface(_) => &[],
+                HybridSurfaceID::Hsurface(id) => {
+                    let surface = &self.hsurfaces[id];
+                    if cut_group.surface_sign > 0 {
+                        &surface.negative_energies
                     } else {
-                        let h_function = h(
-                            &solution.solution,
-                            None,
-                            None,
-                            &context.settings.lu_h_function,
-                        );
-                        let rescaled_momenta = momentum_sample
-                            .rescaled_loop_momenta(&solution.solution, Subspace::None);
+                        &surface.positive_energies
+                    }
+                }
+                _ => unreachable!("LU residue groups contain E- or H-surfaces"),
+            };
+            for solution in roots {
+                let prepared_event = prepare_buffered_event(
+                    context.settings,
+                    context.rotation,
+                    context.event_processing_runtime.as_deref_mut(),
+                    || {
+                        let mut generated = self.generate_event_for_cut::<T>(
+                            CutEventGenerationContext {
+                                model: context.model,
+                                // Mapped sampling channels have already been mapped into the
+                                // parent frame; preserve their canonical id in event
+                                // metadata without routing the momenta through the
+                                // default-sampling LMB reinterpretation path.
+                                channel_id: context.sampling_channel,
+                            },
+                            &solution,
+                            momentum_sample,
+                            self.cut_group_data.cut_groups[cut_group_id].cuts[0],
+                            &self.cuts[self.cut_group_data.cut_groups[cut_group_id].cuts[0]],
+                            absorbed_edges,
+                        )?;
+                        generated.inverse_rotate(context.rotation);
+                        Ok(generated)
+                    },
+                )?;
+                differential_result.generated_event_count += prepared_event.generated_event_count;
+                differential_result.accepted_event_count += prepared_event.accepted_event_count;
+                differential_result.event_processing_time += prepared_event.event_processing_time;
 
-                        (
-                            DualOrNot::NonDual(solution.solution.clone()),
-                            DualOrNot::NonDual(h_function),
-                            DualOrNot::NonDual(solution.derivative_at_solution.clone()),
-                            rescaled_momenta,
-                        )
+                if !prepared_event.selectors_pass {
+                    let zero = Complex::new_re(momentum_sample.zero());
+                    for _ in 1..=max_occurrence {
+                        cut_results[cut_group_id].push(zero.clone());
+                    }
+                    cut_threshold_counterterms[cut_group_id] = zero;
+                    continue;
+                }
+
+                let accepted_event = prepared_event.buffered_event;
+                let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
+                let threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
+                let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
+                // The sampling partition multiplies the fully subtracted graph
+                // outside this LU calculation, after raised-residue derivatives.
+                // It is distinct from overlap-group multichanneling internal to
+                // threshold subtraction and is common to every cut at this point.
+                for num_esurfaces in 1..=max_occurrence {
+                    let dual_shape = if num_esurfaces > 1 {
+                        Some(HyperDual::<F<T>>::new(
+                            self.cut_group_data.dual_shapes[num_esurfaces - 2].clone(),
+                        ))
+                    } else {
+                        None
                     };
 
-                debug!("tstar: {}", tstar);
-                debug!("h(tstar): {}", h_function);
-                debug!("esurface derivative at tstar: {}", esurface_derivatives);
+                    let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
+                        if let Some(dual_shape) = dual_shape {
+                            let dual_t_for_integrand =
+                                dual_shape.variable(0, solution.solution.clone());
+                            let dual_h_function = h_dual(
+                                &dual_t_for_integrand,
+                                None,
+                                None,
+                                &context.settings.lu_h_function,
+                            );
+                            let dual_momenta_for_integrand = momentum_sample
+                                .loop_moms()
+                                .rescale_with_hyper_dual(&dual_t_for_integrand, None);
 
-                let lu_params = LUParams { h_function, tstar };
+                            let dual_shape_for_esurface =
+                                HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
 
-                if !context.settings.subtraction.disable_threshold_subtraction {
-                    kinematic_point
-                        .dualized_momentum_sample_cache
-                        .push(rescaled_momenta.clone());
-                    kinematic_point
-                        .lu_cut_parameter_cache
-                        .push(lu_params.clone());
-                    kinematic_point
-                        .lu_cut_esurface_values
-                        .push(esurface_derivatives.clone());
-                }
+                            let dual_t_for_esurface =
+                                dual_shape_for_esurface.variable(0, solution.solution.clone());
+                            // Reuse the exact represented equation whose root was
+                            // accepted above. Integrand momentum jets remain on their
+                            // existing independent shape and kinematic owner.
+                            let dual_e_surface = ray.evaluate_dual(&dual_t_for_esurface);
 
-                let params = T::get_parameters(
-                    &mut self.param_builder,
-                    (
-                        context.settings.general.enable_cache,
-                        context.settings.general.debug_cache,
-                    ),
-                    &self.graph,
-                    &rescaled_momenta,
-                    hel,
-                    &context.settings.additional_params(),
-                    None,
-                    None,
-                    Some(&lu_params),
-                );
-                let cut_index = CutCFFIndex {
-                    lu_cut_order: Some(num_esurfaces),
-                    left_threshold_order: None,
-                    right_threshold_order: None,
-                };
+                            let mut momentum_sample_with_duals = momentum_sample.clone();
+                            momentum_sample_with_duals.sample.dual_loop_moms =
+                                Some(dual_momenta_for_integrand);
 
-                let result = self.integrand[cut_group_id]
-                    .get_mut(&cut_index)
-                    .unwrap()
-                    .evaluate(
-                        params,
-                        orientations,
-                        context.settings,
+                            (
+                                DualOrNot::Dual(dual_t_for_integrand),
+                                DualOrNot::Dual(dual_h_function),
+                                DualOrNot::Dual(dual_e_surface),
+                                momentum_sample_with_duals,
+                            )
+                        } else {
+                            let h_function = h(
+                                &solution.solution,
+                                None,
+                                None,
+                                &context.settings.lu_h_function,
+                            );
+                            let rescaled_momenta = momentum_sample
+                                .rescaled_loop_momenta(&solution.solution, Subspace::None);
+
+                            (
+                                DualOrNot::NonDual(solution.solution.clone()),
+                                DualOrNot::NonDual(h_function),
+                                DualOrNot::NonDual(solution.derivative_at_solution.abs()),
+                                rescaled_momenta,
+                            )
+                        };
+
+                    debug!("tstar: {}", tstar);
+                    debug!("h(tstar): {}", h_function);
+                    debug!("esurface derivative at tstar: {}", esurface_derivatives);
+
+                    let lu_params = LUParams { h_function, tstar };
+
+                    if !context.settings.subtraction.disable_threshold_subtraction {
+                        kinematic_point
+                            .dualized_momentum_sample_cache
+                            .push(rescaled_momenta.clone());
+                        kinematic_point
+                            .lu_cut_parameter_cache
+                            .push(lu_params.clone());
+                        kinematic_point
+                            .lu_cut_esurface_values
+                            .push(esurface_derivatives.clone());
+                    }
+
+                    let params = T::get_parameters(
+                        &mut self.param_builder,
+                        (
+                            context.settings.general.enable_cache,
+                            context.settings.general.debug_cache,
+                        ),
+                        &self.graph,
+                        &rescaled_momenta,
+                        hel,
+                        &context.settings.additional_params(),
+                        None,
+                        None,
+                        Some(&lu_params),
+                    );
+                    let cut_index = CutCFFIndex {
+                        lu_cut_order: Some(num_esurfaces),
+                        left_threshold_order: None,
+                        right_threshold_order: None,
+                    };
+
+                    let result = self.integrand[cut_group_id]
+                        .get_mut(&cut_index)
+                        .unwrap()
+                        .evaluate(
+                            params,
+                            orientations,
+                            context.settings,
+                            context.evaluation_metadata,
+                        )?
+                        .pop()
+                        .ok_or_else(|| eyre!("Evaluator returned no cut result"))?;
+
+                    debug!("pass 1 result {}", result);
+
+                    let mut params_for_pass_two = vec![];
+                    match result {
+                        DualOrNot::Dual(dual_result) => {
+                            params_for_pass_two
+                                .extend_from_slice(&extract_t_derivatives_complex(dual_result));
+                        }
+                        DualOrNot::NonDual(non_dual_result) => {
+                            params_for_pass_two.push(non_dual_result);
+                        }
+                    }
+
+                    match esurface_derivatives {
+                        DualOrNot::Dual(dual_e_surface) => {
+                            extract_t_derivatives(dual_e_surface)[1..]
+                                .iter()
+                                .for_each(|v| {
+                                    params_for_pass_two.push(Complex::new_re(v.clone()));
+                                });
+                        }
+                        DualOrNot::NonDual(non_dual_e_surface) => {
+                            params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
+                        }
+                    }
+
+                    let pass_two_evaluator =
+                        &mut self.cut_group_data.pass_two_evaluators[num_esurfaces - 1];
+
+                    let pass_two_result = evaluate_evaluator_single(
+                        pass_two_evaluator,
+                        &params_for_pass_two,
                         context.evaluation_metadata,
-                    )?
-                    .pop()
-                    .ok_or_else(|| eyre!("Evaluator returned no cut result"))?;
+                    );
 
-                debug!("pass 1 result {}", result);
+                    debug!("pass_two_result: {:+16e}", pass_two_result);
+                    //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                let mut params_for_pass_two = vec![];
-                match result {
-                    DualOrNot::Dual(dual_result) => {
-                        params_for_pass_two
-                            .extend_from_slice(&extract_t_derivatives_complex(dual_result));
-                    }
-                    DualOrNot::NonDual(non_dual_result) => {
-                        params_for_pass_two.push(non_dual_result);
-                    }
+                    let bare_contribution = pass_two_result;
+                    bare_cut_total += bare_contribution.clone();
+                    cut_results[cut_group_id].push(bare_contribution);
                 }
 
-                match esurface_derivatives {
-                    DualOrNot::Dual(dual_e_surface) => {
-                        extract_t_derivatives(dual_e_surface)[1..]
-                            .iter()
-                            .for_each(|v| {
-                                params_for_pass_two.push(Complex::new_re(v.clone()));
-                            });
-                    }
-                    DualOrNot::NonDual(non_dual_e_surface) => {
-                        params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
-                    }
-                }
-
-                let pass_two_evaluator =
-                    &mut self.cut_group_data.pass_two_evaluators[num_esurfaces - 1];
-
-                let pass_two_result = evaluate_evaluator_single(
-                    pass_two_evaluator,
-                    &params_for_pass_two,
-                    context.evaluation_metadata,
-                );
-
-                debug!("pass_two_result: {:+16e}", pass_two_result);
-                //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
-
-                let bare_contribution = pass_two_result;
-                bare_cut_total += bare_contribution.clone();
-                cut_results[cut_group_id].push(bare_contribution);
+                deferred_cut_evaluations.push(DeferredCutEvaluation {
+                    cut_group_id,
+                    kinematic_point,
+                    bare_cut_total,
+                    threshold_counterterm_weights,
+                    accepted_event,
+                });
             }
-
-            deferred_cut_evaluations.push(DeferredCutEvaluation {
-                cut_group_id,
-                kinematic_point,
-                bare_cut_total,
-                threshold_counterterm_weights,
-                accepted_event,
-            });
         }
 
         let shared_overlaps = if context.settings.subtraction.disable_threshold_subtraction {

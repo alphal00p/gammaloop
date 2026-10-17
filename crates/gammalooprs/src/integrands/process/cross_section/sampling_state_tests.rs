@@ -11,7 +11,8 @@
 //! The caller authenticates the state/build/input hashes before and after this
 //! test. This gate neither saves the state nor regenerates a failed draw.
 
-use super::{EsurfaceRay, SamplingCatalogueEntry};
+use super::SamplingCatalogueEntry;
+use crate::cff::radial::EnergySurfaceRay;
 use crate::{
     GammaLoopContextContainer,
     graph::FeynmanGraph,
@@ -355,7 +356,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
                                 "source_host_residual": format!("{host_residual:?}")}));
                             // The existing certificate uses the actual H/Z
                             // normal radius, including when it is very small.
-                            EsurfaceRay::<ArbPrec>::verify_normal_alignment(
+                            EnergySurfaceRay::<ArbPrec>::verify_normal_alignment(
                                 original_normals,
                                 source_normals,
                                 host_residual,

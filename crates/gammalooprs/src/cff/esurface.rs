@@ -8,7 +8,7 @@ use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
 use linnet::half_edge::subgraph::OrientedCut;
 use ref_ops::RefNeg;
-use rug::{Float, float::Round};
+use rug::Float;
 use serde::{Deserialize, Serialize};
 
 use symbolica::atom::{Atom, AtomCore};
@@ -30,25 +30,25 @@ use crate::{GammaLoopContext, define_index};
 
 use crate::integrands::process::sampling::maps::SamplingEvaluationError;
 use crate::integrands::process::{GenericEvaluator, ImplicitSurfaceRadialMap};
+use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
-use crate::momentum::{Rotatable, Rotation, ThreeMomentum};
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::newton_solver::{
     NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity, SafeguardedNewtonError,
 };
 use crate::utils::{
-    ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS,
-    Length, compute_loop_part, compute_loop_part_subspace, compute_shift_part,
-    compute_shift_part_subspace, compute_t_part_of_shift_part, cut_energy,
-    external_energy_atom_from_index, ose_atom_from_index,
+    DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS, Length,
+    compute_loop_part, compute_loop_part_subspace, compute_shift_part, compute_shift_part_subspace,
+    compute_t_part_of_shift_part, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
 };
 use crate::uv::uv_graph::UVE;
 use color_eyre::Result;
 
 use super::generation::ShiftRewrite;
+use super::radial::EnergySurfaceRay;
 
 /// Core esurface struct
 #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, bincode::Decode)]
@@ -58,556 +58,6 @@ pub struct Esurface {
     pub vertex_set: VertexSet,
     //#[bincode(with_serde)]
     //pub subspace_graph: InternalSubGraph,
-}
-
-// Edge identity, radial velocity, constant spatial offset, and mass.
-type EsurfaceRayEnergy<T> = (EdgeIndex, ThreeMomentum<F<T>>, ThreeMomentum<F<T>>, F<T>);
-// Ephemeral endpoint tuples for the same affine energy fold, with no stored ray.
-type EnclosedRayEnergy = ([[Float; 2]; 3], [[Float; 2]; 3], [Float; 2]);
-
-/// One represented affine energy equation, retaining its ordered edge occurrences.
-/// This is native geometry, not a cross-precision or selected-host transport record.
-#[derive(Debug, Clone)]
-pub(crate) struct EsurfaceRay<T: FloatLike> {
-    // A Vec deliberately preserves repeated energy occurrences; an edge-keyed
-    // map would not. The tuple's fields are documented on EsurfaceRayEnergy.
-    energies: Vec<EsurfaceRayEnergy<T>>,
-    shift: F<T>,
-}
-
-impl EsurfaceRay<ArbPrec> {
-    /// Retain the canonical ordered equation while materializing its native
-    /// coefficients. Physical adoption still authenticates and checks the ray.
-    pub(crate) fn materialize<T: FloatLike>(&self) -> Result<EsurfaceRay<T>> {
-        let spatial = |p: &ThreeMomentum<F<ArbPrec>>| -> Result<ThreeMomentum<F<T>>> {
-            Ok(ThreeMomentum::new(
-                F::from_arb(&p.px.0)?,
-                F::from_arb(&p.py.0)?,
-                F::from_arb(&p.pz.0)?,
-            ))
-        };
-        Ok(EsurfaceRay {
-            energies: self
-                .energies
-                .iter()
-                .map(|(edge, velocity, offset, mass)| {
-                    Ok((
-                        *edge,
-                        spatial(velocity)?,
-                        spatial(offset)?,
-                        F::from_arb(&mass.0)?,
-                    ))
-                })
-                .collect::<Result<_>>()?,
-            shift: F::from_arb(&self.shift.0)?,
-        })
-    }
-}
-
-impl<T: FloatLike> EsurfaceRay<T> {
-    /// Embed the represented equation exactly, preserving each ordered energy
-    /// occurrence. No routing, coefficient reconstruction or root solve occurs.
-    pub(crate) fn to_arb_exact(&self) -> Result<EsurfaceRay<ArbPrec>> {
-        let spatial = |p: &ThreeMomentum<F<T>>| -> Result<ThreeMomentum<F<ArbPrec>>> {
-            Ok(ThreeMomentum::new(
-                p.px.to_arb_exact()?,
-                p.py.to_arb_exact()?,
-                p.pz.to_arb_exact()?,
-            ))
-        };
-        Ok(EsurfaceRay {
-            energies: self
-                .energies
-                .iter()
-                .map(|(edge, velocity, offset, mass)| {
-                    Ok((
-                        *edge,
-                        spatial(velocity)?,
-                        spatial(offset)?,
-                        mass.to_arb_exact()?,
-                    ))
-                })
-                .collect::<Result<_>>()?,
-            shift: self.shift.to_arb_exact()?,
-        })
-    }
-
-    const ENCLOSURE_PRECISION: u32 = 2048;
-
-    // These directed operations serve the represented and original-routed
-    // affine-energy checks; they do not introduce a second certificate engine.
-    fn enclosed_add(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
-        [
-            Float::with_val_round(Self::ENCLOSURE_PRECISION, &a[0] + &b[0], Round::Down).0,
-            Float::with_val_round(Self::ENCLOSURE_PRECISION, &a[1] + &b[1], Round::Up).0,
-        ]
-    }
-    fn enclosed_mul(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
-        let lower = a
-            .iter()
-            .flat_map(|x| {
-                b.iter().map(move |y| {
-                    Float::with_val_round(Self::ENCLOSURE_PRECISION, x * y, Round::Down).0
-                })
-            })
-            .reduce(|a, b| a.min(&b))
-            .unwrap();
-        let upper = a
-            .iter()
-            .flat_map(|x| {
-                b.iter().map(move |y| {
-                    Float::with_val_round(Self::ENCLOSURE_PRECISION, x * y, Round::Up).0
-                })
-            })
-            .reduce(|a, b| a.max(&b))
-            .unwrap();
-        [lower, upper]
-    }
-    fn enclosed_square(a: &[Float; 2]) -> [Float; 2] {
-        let upper = a[0].clone().abs().max(&a[1].clone().abs());
-        let lower = if a[0] <= 0 && a[1] >= 0 {
-            Float::with_val(Self::ENCLOSURE_PRECISION, 0)
-        } else {
-            a[0].clone().abs().min(&a[1].clone().abs())
-        };
-        [
-            Float::with_val_round(Self::ENCLOSURE_PRECISION, &lower * &lower, Round::Down).0,
-            Float::with_val_round(Self::ENCLOSURE_PRECISION, &upper * &upper, Round::Up).0,
-        ]
-    }
-    fn enclosed_divide(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
-        debug_assert!(b[0] > 0);
-        let reciprocal = [
-            Float::with_val_round(Self::ENCLOSURE_PRECISION, b[1].recip_ref(), Round::Down).0,
-            Float::with_val_round(Self::ENCLOSURE_PRECISION, b[0].recip_ref(), Round::Up).0,
-        ];
-        Self::enclosed_mul(a, &reciprocal)
-    }
-
-    fn enclosed_native(value: &F<T>) -> [Float; 2] {
-        let (lo, hi) = value.0.mpfr_enclosure(Self::ENCLOSURE_PRECISION);
-        [lo, hi]
-    }
-
-    fn enclosed_sum(terms: impl Iterator<Item = (i64, [Float; 2])>) -> [Float; 2] {
-        let zero = Float::with_val(Self::ENCLOSURE_PRECISION, 0);
-        terms.fold([zero.clone(), zero], |sum, (coefficient, value)| {
-            let coefficient = Float::with_val(Self::ENCLOSURE_PRECISION, coefficient);
-            Self::enclosed_add(
-                &sum,
-                &Self::enclosed_mul(&[coefficient.clone(), coefficient], &value),
-            )
-        })
-    }
-
-    fn evaluate_enclosed(
-        energies: impl Iterator<Item = EnclosedRayEnergy>,
-        shift: [Float; 2],
-        radius: &[Float; 2],
-        with_derivative: bool,
-    ) -> Result<([Float; 2], [Float; 2])> {
-        let zero = Float::with_val(Self::ENCLOSURE_PRECISION, 0);
-        let point = |x: &Float| [x.clone(), x.clone()];
-        let uncertain = |detail: &str| SamplingEvaluationError::UncertainGeometry {
-            detail: format!("LU host adoption: {detail}"),
-        };
-        let mut value = shift;
-        let mut slope = point(&zero);
-        for (velocity, offset, mass) in energies {
-            let mut norm = Self::enclosed_square(&mass);
-            let mut dot = point(&zero);
-            for (v, b) in velocity.into_iter().zip(offset) {
-                let q = Self::enclosed_add(&Self::enclosed_mul(&v, radius), &b);
-                norm = Self::enclosed_add(&norm, &Self::enclosed_square(&q));
-                dot = Self::enclosed_add(&dot, &Self::enclosed_mul(&v, &q));
-            }
-            if norm.iter().chain(&dot).any(|x| !x.is_finite()) {
-                return Err(SamplingEvaluationError::Unrepresentable {
-                    operation: "LU host certificate",
-                    detail: "nonfinite directed energy or numerator".into(),
-                }
-                .into());
-            }
-            let energy = [
-                Float::with_val_round(Self::ENCLOSURE_PRECISION, norm[0].sqrt_ref(), Round::Down).0,
-                Float::with_val_round(Self::ENCLOSURE_PRECISION, norm[1].sqrt_ref(), Round::Up).0,
-            ];
-            value = Self::enclosed_add(&value, &energy);
-            if with_derivative {
-                if energy[0] <= 0 {
-                    return Err(uncertain(
-                        "energy lower bound touches zero on the fixed candidate interval",
-                    )
-                    .into());
-                }
-                slope = Self::enclosed_add(&slope, &Self::enclosed_divide(&dot, &energy));
-            }
-        }
-        if value.iter().chain(&slope).any(|x| !x.is_finite()) {
-            return Err(SamplingEvaluationError::Unrepresentable {
-                operation: "LU host certificate",
-                detail: "nonfinite directed residual or derivative".into(),
-            }
-            .into());
-        }
-        Ok((value, slope))
-    }
-
-    /// Compare original isotropic normal equations on the actual completed
-    /// canonical/native LU points. Half the relative budget controls their
-    /// displacement; half controls the native point's host constraint defect.
-    /// This does not certify arbitrary multiplier functions or raised jets.
-    pub(crate) fn verify_normal_alignment(
-        canonical_normals: [[Float; 2]; 2],
-        native_normals: [[Float; 2]; 2],
-        native_host_residual: [Float; 2],
-        tolerance: f64,
-    ) -> Result<()> {
-        if !tolerance.is_finite() || tolerance <= 0.0 {
-            return Err(eyre!(
-                "hosted normal alignment requires a finite positive budget"
-            ));
-        }
-        let bounds = canonical_normals
-            .iter()
-            .chain(&native_normals)
-            .chain(std::iter::once(&native_host_residual));
-        for bound in bounds {
-            if bound.iter().any(|x| !x.is_finite()) {
-                return Err(SamplingEvaluationError::Unrepresentable {
-                    operation: "hosted normal alignment",
-                    detail: "nonfinite directed normal or host residual".into(),
-                }
-                .into());
-            }
-            if bound[0] > bound[1] {
-                return Err(eyre!("hosted normal alignment requires ordered bounds"));
-            }
-        }
-        let radius_squared = Self::enclosed_add(
-            &Self::enclosed_square(&canonical_normals[0]),
-            &Self::enclosed_square(&canonical_normals[1]),
-        );
-        let radius_lower = Float::with_val_round(
-            Self::ENCLOSURE_PRECISION,
-            radius_squared[0].sqrt_ref(),
-            Round::Down,
-        )
-        .0;
-        if radius_lower <= 0 {
-            return Err(SamplingEvaluationError::UncertainGeometry {
-                detail: "hosted normal alignment has no strictly positive canonical radius bound"
-                    .into(),
-            }
-            .into());
-        }
-        let difference: [_; 2] = std::array::from_fn(|axis| {
-            let canonical = &canonical_normals[axis];
-            Self::enclosed_add(
-                &native_normals[axis],
-                &[-canonical[1].clone(), -canonical[0].clone()],
-            )
-        });
-        let error_squared = Self::enclosed_add(
-            &Self::enclosed_square(&difference[0]),
-            &Self::enclosed_square(&difference[1]),
-        );
-        let error_upper = Float::with_val_round(
-            Self::ENCLOSURE_PRECISION,
-            error_squared[1].sqrt_ref(),
-            Round::Up,
-        )
-        .0;
-        let budget = Float::with_val(Self::ENCLOSURE_PRECISION, tolerance);
-        let half_budget =
-            Float::with_val_round(Self::ENCLOSURE_PRECISION, &budget / 2, Round::Down).0;
-        let allowed = Float::with_val_round(
-            Self::ENCLOSURE_PRECISION,
-            &half_budget * &radius_lower,
-            Round::Down,
-        )
-        .0;
-        let host_upper = native_host_residual[0]
-            .clone()
-            .abs()
-            .max(&native_host_residual[1].clone().abs());
-        if [&radius_lower, &error_upper, &host_upper, &allowed]
-            .iter()
-            .any(|x| !x.is_finite())
-        {
-            return Err(SamplingEvaluationError::Unrepresentable {
-                operation: "hosted normal alignment",
-                detail: "nonfinite directed comparison".into(),
-            }
-            .into());
-        }
-        if error_upper > allowed || host_upper > allowed {
-            return Err(SamplingEvaluationError::UncertainGeometry {
-                detail: "original normal displacement or completed host defect exceeds its half sampling budget".into(),
-            }.into());
-        }
-        Ok(())
-    }
-
-    #[inline]
-    pub(crate) fn evaluate(&self, radius: &F<T>) -> (F<T>, F<T>) {
-        let zero = radius.zero();
-        let (derivative, energy_sum) = self
-            .energies
-            .iter()
-            .map(|(_, velocity, offset, mass)| {
-                let momentum = velocity * radius + offset;
-                let energy = (momentum.norm_squared() + mass * mass).sqrt();
-                // At a massless endpoint E(r)=r|v| the radial right derivative is
-                // |v|, whereas the two-sided formula q.v/E would evaluate 0/0.
-                // Share this convention with sampling charts, using exact source
-                // zeros: a computed E=0 can instead be numerical underflow.
-                let derivative = if radius == &zero
-                    && mass == &zero
-                    && momentum.px == zero
-                    && momentum.py == zero
-                    && momentum.pz == zero
-                {
-                    velocity.norm_squared().sqrt()
-                } else {
-                    momentum * velocity / &energy
-                };
-                (derivative, energy)
-            })
-            .fold(
-                (zero.clone(), zero.clone()),
-                |(der_sum, en_sum), (der, en)| (der_sum + der, en_sum + en),
-            );
-        (energy_sum + &self.shift, derivative)
-    }
-
-    /// The sole LU seed/Newton policy, also used by native partial host rays.
-    pub(crate) fn solve_lu_cut(
-        &self,
-        e_cm: &F<T>,
-        diagnostics: &mut RadialRootDiagnostics,
-        identity: &RadialRootIdentity,
-    ) -> std::result::Result<NewtonIterationResult<T>, SafeguardedNewtonError<T>> {
-        let guess = Esurface::radius_guess_from_terms(
-            &self.shift,
-            self.energies
-                .iter()
-                .map(|(_, v, b, _)| (v.norm_squared(), v.clone() * b)),
-        );
-        crate::debug_tags!(#integration, #cut, #solver;
-            radial_root = %identity,
-            initial_guess = %guess,
-            residual_tolerance = %(e_cm * guess.epsilon() * guess.from_i64((4 * self.energies.len() + 1) as i64)),
-            "LU radial root setup"
-        );
-        // The energy equation is a sum of on-shell square roots.  Include a
-        // small forward-error budget for the momentum norm, square root, and
-        // accumulation of each edge instead of treating the whole sum as one
-        // elementary operation.  This remains a caller-specific tolerance;
-        // generic safeguarded-Newton users retain their original tolerance.
-        let residual_tolerance = guess.from_i64((4 * self.energies.len() + 1) as i64);
-        diagnostics.solve(
-            identity,
-            &guess.zero(),
-            &guess,
-            |t| self.evaluate(t),
-            &residual_tolerance,
-            2000,
-            64,
-            e_cm,
-        )
-    }
-
-    /// Certify this retained candidate against both represented rays. This is
-    /// a fixed directed check, not another root solve. The exponent bounds all
-    /// pulled-back host-null dimensions; it need not be the actual map dimension.
-    /// Higher raised jets and complete conditional densities are not enclosed.
-    pub(crate) fn verify_lu_candidate(
-        &self,
-        completed: &Self,
-        solution: &NewtonIterationResult<T>,
-        dimension_bound: usize,
-        tolerance: &F<T>,
-    ) -> Result<()> {
-        let precision = Self::ENCLOSURE_PRECISION;
-        let uncertain = |detail: &str| SamplingEvaluationError::UncertainGeometry {
-            detail: format!("LU host adoption: {detail}"),
-        };
-        if self
-            .energies
-            .iter()
-            .map(|entry| entry.0)
-            .ne(completed.energies.iter().map(|entry| entry.0))
-        {
-            return Err(eyre!(
-                "LU host adoption has incompatible ordered energy occurrences"
-            ));
-        }
-        for ray in [self, completed] {
-            if !ray.shift.0.is_finite()
-                || ray.energies.iter().any(|(_, v, b, m)| {
-                    [&v.px, &v.py, &v.pz, &b.px, &b.py, &b.pz, m]
-                        .iter()
-                        .any(|x| !x.0.is_finite())
-                })
-            {
-                return Err(SamplingEvaluationError::Unrepresentable {
-                    operation: "LU host adoption",
-                    detail: "nonfinite represented ray coefficients".into(),
-                }
-                .into());
-            }
-        }
-        let t = &solution.solution;
-        let derivative = &solution.derivative_at_solution;
-        if [t, derivative, tolerance].iter().any(|x| !x.0.is_finite()) {
-            return Err(SamplingEvaluationError::Unrepresentable {
-                operation: "LU host adoption",
-                detail: "nonfinite candidate, derivative or budget".into(),
-            }
-            .into());
-        }
-        if t <= &t.zero() || derivative <= &t.zero() || tolerance <= &t.zero() {
-            return Err(uncertain("candidate, derivative and budget must be positive").into());
-        }
-        let native = Self::enclosed_native;
-        let point = |x: &Float| [x.clone(), x.clone()];
-        let zero = Float::with_val(precision, 0);
-        let one = Float::with_val(precision, 1);
-        let evaluate = |ray: &Self, radius: &[Float; 2], with_derivative: bool| {
-            Self::evaluate_enclosed(
-                ray.energies.iter().map(|(_, velocity, offset, mass)| {
-                    (
-                        [&velocity.px, &velocity.py, &velocity.pz].map(native),
-                        [&offset.px, &offset.py, &offset.pz].map(native),
-                        native(mass),
-                    )
-                }),
-                native(&ray.shift),
-                radius,
-                with_derivative,
-            )
-        };
-        let delta = native(tolerance)[0]
-            .clone()
-            .min(&(Float::with_val(precision, 1) >> 2));
-        let divisor = Float::with_val(precision, 4 * (dimension_bound + 1));
-        let r = Float::with_val_round(precision, &delta / &divisor, Round::Down).0;
-        let t0 = native(t);
-        let lo_factor = Float::with_val_round(precision, &one - &r, Round::Down).0;
-        let hi_factor = Float::with_val_round(precision, &one + &r, Round::Up).0;
-        let interval = [
-            Float::with_val_round(precision, &t0[0] * &lo_factor, Round::Down).0,
-            Float::with_val_round(precision, &t0[1] * &hi_factor, Round::Up).0,
-        ];
-        if interval
-            .iter()
-            .chain(&t0)
-            .chain([&delta, &r])
-            .any(|x| !x.is_finite())
-        {
-            return Err(SamplingEvaluationError::Unrepresentable {
-                operation: "LU host certificate",
-                detail: "nonfinite directed candidate interval".into(),
-            }
-            .into());
-        }
-        if interval[0] <= 0 || interval[0] >= interval[1] {
-            return Err(uncertain("fixed candidate interval is not positive and distinct").into());
-        }
-        let allowed = [
-            Float::with_val_round(precision, &one - &delta, Round::Up).0,
-            Float::with_val_round(precision, &one + &delta, Round::Down).0,
-        ];
-        let residual_budget = Float::with_val_round(precision, &t0[0] * &r, Round::Down).0;
-        for ray in [self, completed] {
-            if evaluate(ray, &point(&zero), false)?.0[1] >= 0
-                || evaluate(ray, &point(&interval[0]), false)?.0[1] >= 0
-                || evaluate(ray, &point(&interval[1]), false)?.0[0] <= 0
-            {
-                return Err(uncertain("origin/interior/exterior signs are not certified on the fixed candidate interval").into());
-            }
-            let (_, slope) = evaluate(ray, &interval, true)?;
-            if slope[0] <= 0 {
-                return Err(uncertain(
-                    "radial derivative is not certified positive throughout the interval",
-                )
-                .into());
-            }
-            let residual = evaluate(ray, &t0, false)?.0;
-            let residual = residual[0].clone().abs().max(&residual[1].clone().abs());
-            if Float::with_val_round(precision, &residual / &slope[0], Round::Up).0
-                > residual_budget
-            {
-                return Err(uncertain(
-                    "candidate error exceeds its allocated relative root budget",
-                )
-                .into());
-            }
-            let ratio = Self::enclosed_divide(&slope, &native(derivative));
-            if ratio.iter().any(|x| !x.is_finite())
-                || ratio[0] < allowed[0]
-                || ratio[1] > allowed[1]
-            {
-                return Err(
-                    uncertain("first derivative variation exceeds the sampling budget").into(),
-                );
-            }
-        }
-        // Bound implemented/exact and its reciprocal explicitly, so the
-        // statement does not depend on the chosen relative-error denominator.
-        for ratio in [
-            Self::enclosed_divide(&interval, &t0),
-            Self::enclosed_divide(&t0, &interval),
-        ] {
-            let mut determinant_ratio = point(&one);
-            for _ in 0..dimension_bound {
-                determinant_ratio = Self::enclosed_mul(&determinant_ratio, &ratio);
-            }
-            if determinant_ratio.iter().any(|x| !x.is_finite())
-                || determinant_ratio[0] < allowed[0]
-                || determinant_ratio[1] > allowed[1]
-            {
-                return Err(uncertain(
-                    "worst-case LU inverse-volume variation exceeds the sampling budget",
-                )
-                .into());
-            }
-        }
-        Ok(())
-    }
-
-    /// Original eta jet at the same represented coefficients used by the root.
-    /// The caller retains the existing dual shape and factorial convention.
-    #[inline]
-    pub(crate) fn evaluate_dual(&self, radius: &HyperDual<F<T>>) -> HyperDual<F<T>> {
-        let energy_sum = self
-            .energies
-            .iter()
-            .map(|(_, velocity, offset, mass)| {
-                let momentum = velocity.map_ref(&|v| new_constant(radius, v) * radius)
-                    + offset.map_ref(&|b| new_constant(radius, b));
-                (momentum.norm_squared() + mass * mass).sqrt()
-            })
-            .reduce(|sum, energy| sum + energy)
-            .unwrap_or_else(|| radius.zero());
-        energy_sum + new_constant(radius, &self.shift)
-    }
-}
-
-impl<T: FloatLike> Rotatable for EsurfaceRay<T> {
-    fn rotate(&self, rotation: &Rotation) -> Self {
-        Self {
-            energies: self
-                .energies
-                .iter()
-                .map(|(edge, v, b, mass)| {
-                    (*edge, v.rotate(rotation), b.rotate(rotation), mass.clone())
-                })
-                .collect(),
-            shift: self.shift.clone(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2114,7 +1564,7 @@ impl Esurface {
             SignOrZero::Zero => 0,
         };
         let spatial = |p: &ThreeMomentum<F<T>>, axis| {
-            EsurfaceRay::<T>::enclosed_native([&p.px, &p.py, &p.pz][axis])
+            EnergySurfaceRay::<T>::enclosed_native([&p.px, &p.py, &p.pz][axis])
         };
         let mut energies = Vec::with_capacity(self.energies.len());
         for &edge in &self.energies {
@@ -2130,7 +1580,7 @@ impl Esurface {
             }
             let signature = &lmb.edge_signatures[edge];
             let velocity = std::array::from_fn(|axis| {
-                EsurfaceRay::<T>::enclosed_sum(
+                EnergySurfaceRay::<T>::enclosed_sum(
                     signature
                         .internal
                         .iter()
@@ -2139,7 +1589,7 @@ impl Esurface {
                 )
             });
             let offset = std::array::from_fn(|axis| {
-                EsurfaceRay::<T>::enclosed_sum(
+                EnergySurfaceRay::<T>::enclosed_sum(
                     signature
                         .external
                         .iter()
@@ -2147,11 +1597,16 @@ impl Esurface {
                         .map(|(sign, p)| (coefficient(sign), spatial(&p.spatial, axis))),
                 )
             });
-            energies.push((velocity, offset, EsurfaceRay::<T>::enclosed_native(mass)));
+            energies.push((
+                1,
+                velocity,
+                offset,
+                EnergySurfaceRay::<T>::enclosed_native(mass),
+            ));
         }
         let shift =
-            EsurfaceRay::<T>::enclosed_sum(self.external_shift.iter().map(|(edge, scale)| {
-                let temporal = EsurfaceRay::<T>::enclosed_sum(
+            EnergySurfaceRay::<T>::enclosed_sum(self.external_shift.iter().map(|(edge, scale)| {
+                let temporal = EnergySurfaceRay::<T>::enclosed_sum(
                     lmb.edge_signatures[*edge]
                         .external
                         .iter()
@@ -2159,16 +1614,16 @@ impl Esurface {
                         .map(|(sign, p)| {
                             (
                                 coefficient(sign),
-                                EsurfaceRay::<T>::enclosed_native(&p.temporal.value),
+                                EnergySurfaceRay::<T>::enclosed_native(&p.temporal.value),
                             )
                         }),
                 );
                 (*scale, temporal)
             }));
-        Ok(EsurfaceRay::<T>::evaluate_enclosed(
+        Ok(EnergySurfaceRay::<T>::evaluate_enclosed(
             energies.into_iter(),
             shift,
-            &EsurfaceRay::<T>::enclosed_native(radius),
+            &EnergySurfaceRay::<T>::enclosed_native(radius),
             false,
         )?
         .0)
@@ -2185,27 +1640,16 @@ impl Esurface {
         external_moms: &ExternalFourMomenta<F<T>>,
         masses: &EdgeVec<F<T>>,
         lmb: &LoopMomentumBasis,
-    ) -> EsurfaceRay<T> {
-        let spatial: ExternalThreeMomenta<F<T>> = external_moms
-            .iter()
-            .map(|momentum| momentum.spatial.clone())
-            .collect();
-        EsurfaceRay {
-            energies: self
-                .energies
-                .iter()
-                .map(|&edge| {
-                    let signature = &lmb.edge_signatures[edge];
-                    (
-                        edge,
-                        compute_loop_part(&signature.internal, velocity),
-                        signature.compute_momentum(center, &spatial),
-                        masses[edge].clone(),
-                    )
-                })
-                .collect(),
-            shift: self.compute_shift_part_from_momenta(external_moms, lmb),
-        }
+    ) -> EnergySurfaceRay<T> {
+        EnergySurfaceRay::routed(
+            self.energies.iter().map(|&edge| (edge, 1)),
+            &self.external_shift,
+            velocity,
+            center,
+            external_moms,
+            masses,
+            lmb,
+        )
     }
 
     /// Solve the physical LU scaling about zero generation momentum. Sampling
@@ -2221,8 +1665,10 @@ impl Esurface {
         e_cm: &F<T>,
         diagnostics: &mut RadialRootDiagnostics,
         identity: &RadialRootIdentity,
-    ) -> std::result::Result<(EsurfaceRay<T>, NewtonIterationResult<T>), SafeguardedNewtonError<T>>
-    {
+    ) -> std::result::Result<
+        (EnergySurfaceRay<T>, NewtonIterationResult<T>),
+        SafeguardedNewtonError<T>,
+    > {
         let zero = loop_momenta[LoopIndex(0)].px.zero();
         let center = LoopMomenta::from_iter(
             (0..loop_momenta.len())
@@ -2338,7 +1784,7 @@ impl Esurface {
         (guess, negative)
     }
 
-    fn radius_guess_from_terms<T: FloatLike>(
+    pub(super) fn radius_guess_from_terms<T: FloatLike>(
         shift: &F<T>,
         terms: impl Iterator<Item = (F<T>, F<T>)>,
     ) -> F<T> {
@@ -2711,68 +2157,6 @@ mod tests {
     use super::{EsurfaceExistence, add_external_shifts};
 
     #[test]
-    fn canonical_ray_embedding_preserves_ordered_occurrences_and_native_coefficients() {
-        use super::EsurfaceRay;
-        use crate::utils::SamplingFloat;
-
-        fn check<T: FloatLike>(marker: F<T>) {
-            let one = marker.one();
-            let velocity = ThreeMomentum::new(marker.clone(), -marker.clone(), one.zero());
-            let offset = ThreeMomentum::new(
-                one.from_usize(2),
-                &marker / one.from_usize(3),
-                F(T::from_f64_exact_binary(-0.0)),
-            );
-            let repeated = (EdgeIndex(4), velocity.clone(), offset.clone(), one.clone());
-            let ray = EsurfaceRay {
-                energies: vec![
-                    repeated.clone(),
-                    (EdgeIndex(7), offset, velocity, marker.clone()),
-                    repeated,
-                ],
-                shift: -marker.clone(),
-            };
-            let canonical = ray.to_arb_exact().unwrap();
-            assert_eq!(
-                canonical.energies.iter().map(|entry| entry.0).collect_vec(),
-                [EdgeIndex(4), EdgeIndex(7), EdgeIndex(4)]
-            );
-            assert_eq!(canonical.energies[0], canonical.energies[2]);
-            assert_eq!(canonical.energies[0].1.px, marker.to_arb_exact().unwrap());
-            // Preserve the native scalar's zero convention; a Quad sum need
-            // not retain the sign of the binary64 token used to construct it.
-            assert_eq!(
-                canonical.energies[0]
-                    .2
-                    .pz
-                    .0
-                    .mpfr_enclosure(1000)
-                    .0
-                    .is_sign_negative(),
-                ray.energies[0].2.pz.0.into_f64().is_sign_negative()
-            );
-            let roundtrip = canonical.materialize::<T>().unwrap();
-            assert_eq!(roundtrip.energies, ray.energies);
-            assert_eq!(roundtrip.shift, ray.shift);
-            for field in 0..4 {
-                let mut invalid = ray.clone();
-                let nonfinite = F(T::from_f64_exact_binary(f64::INFINITY));
-                match field {
-                    0 => invalid.energies[0].1.px = nonfinite,
-                    1 => invalid.energies[0].2.py = nonfinite,
-                    2 => invalid.energies[0].3 = nonfinite,
-                    _ => invalid.shift = nonfinite,
-                }
-                assert!(invalid.to_arb_exact().is_err());
-            }
-        }
-        let one = F::<QuadFloat>::default().one();
-        check(one + one.from_i64(2).powi(-80));
-        let one = F::<SamplingFloat>::default().one();
-        check(&one + one.from_i64(2).powi(-180) + one.from_i64(2).powi(-240));
-    }
-
-    #[test]
     fn joint_sampling_matches_distinct_reversed_edges_and_unequal_masses() {
         test_initialise().unwrap();
         // Splitting the kite's common line through E gives distinct edge IDs
@@ -3092,7 +2476,7 @@ mod tests {
 
     #[test]
     fn routed_enclosure_preserves_original_terms_and_native_rescale() {
-        use super::{EsurfaceRay, SamplingEvaluationError};
+        use super::{EnergySurfaceRay, SamplingEvaluationError};
         use crate::momentum::sample::LoopIndex;
         use rug::Float;
 
@@ -3163,7 +2547,7 @@ mod tests {
             );
             let center = LoopMomenta::from_iter((0..5).map(|_| vector(zero.clone())));
             let represented = surface.routed_ray(&loops, &center, &externals, &masses, &lmb);
-            assert_eq!(represented.energies[0].1.px, zero);
+            assert_eq!(represented.energies[0].velocity.px, zero);
             let old_value = represented.evaluate(&one).0;
             assert!(
                 old_value < one.from_i64(-9),
@@ -3192,7 +2576,7 @@ mod tests {
                 mathematical[0] > actual[1],
                 "the omitted epsilon^2 term must be resolved"
             );
-            let actual_native = EsurfaceRay::<T>::enclosed_native(&completed[LoopIndex(0)].px);
+            let actual_native = EnergySurfaceRay::<T>::enclosed_native(&completed[LoopIndex(0)].px);
             assert!(actual[0] <= actual_native[0] && actual[1] >= actual_native[1]);
 
             let missing = LoopMomenta::from_iter(loops.iter().take(4).cloned());
@@ -3209,224 +2593,6 @@ mod tests {
                     .downcast_ref::<SamplingEvaluationError>(),
                 Some(SamplingEvaluationError::Unrepresentable { .. })
             ));
-        }
-        check::<f64>();
-        check::<QuadFloat>();
-        check::<ArbPrec>();
-    }
-
-    #[test]
-    fn hosted_normal_alignment_enforces_directed_half_budgets() {
-        use super::{EsurfaceRay, SamplingEvaluationError};
-        use rug::Float;
-        let point = |value: i32| {
-            let x = Float::with_val(2048, value);
-            [x.clone(), x]
-        };
-        let canonical = [point(3), point(4)];
-        let half_budget: Float = Float::with_val(2048, 5) / 16;
-        let shifted: Float = Float::with_val(2048, 3) + &half_budget;
-        let native = [[shifted.clone(), shifted], point(4)];
-        let host = [-half_budget.clone(), -half_budget.clone()];
-        // R=5 and epsilon=1/8 allocate exactly 5/16 to each check.
-        EsurfaceRay::<f64>::verify_normal_alignment(
-            canonical.clone(),
-            native.clone(),
-            host.clone(),
-            0.125,
-        )
-        .unwrap();
-        let beyond: Float = Float::with_val(2048, 1) >> 1000;
-        let mut bad_normal = native;
-        bad_normal[0][1] += &beyond;
-        let mut bad_host = host;
-        bad_host[0] -= beyond;
-        for (native, host) in [(bad_normal, point(0)), (canonical.clone(), bad_host)] {
-            assert!(matches!(
-                EsurfaceRay::<f64>::verify_normal_alignment(canonical.clone(), native, host, 0.125)
-                    .unwrap_err()
-                    .downcast_ref::<SamplingEvaluationError>(),
-                Some(SamplingEvaluationError::UncertainGeometry { .. })
-            ));
-        }
-        for canonical in [
-            [point(0), point(0)],
-            [
-                [Float::with_val(2048, -1), Float::with_val(2048, 1)],
-                point(0),
-            ],
-        ] {
-            assert!(matches!(
-                EsurfaceRay::<f64>::verify_normal_alignment(
-                    canonical.clone(),
-                    canonical,
-                    point(0),
-                    0.125
-                )
-                .unwrap_err()
-                .downcast_ref::<SamplingEvaluationError>(),
-                Some(SamplingEvaluationError::UncertainGeometry { .. })
-            ));
-        }
-        assert!(
-            EsurfaceRay::<f64>::verify_normal_alignment(
-                canonical.clone(),
-                canonical.clone(),
-                point(0),
-                0.0
-            )
-            .is_err()
-        );
-        assert!(matches!(
-            EsurfaceRay::<f64>::verify_normal_alignment(
-                canonical.clone(),
-                canonical,
-                std::array::from_fn(|_| Float::with_val(2048, rug::float::Special::Infinity)),
-                0.125
-            )
-            .unwrap_err()
-            .downcast_ref::<SamplingEvaluationError>(),
-            Some(SamplingEvaluationError::Unrepresentable { .. })
-        ));
-    }
-
-    #[test]
-    fn retained_lu_candidate_requires_directed_native_agreement() {
-        use super::EsurfaceRay;
-        use crate::{
-            integrands::process::sampling::maps::SamplingEvaluationError,
-            momentum::{Rotatable, Rotation, RotationMethod},
-        };
-        fn check<T: FloatLike>() {
-            let one = F::<T>::default().one();
-            let f = |n| one.from_usize(n);
-            let vector = |x| ThreeMomentum::new(x, one.zero(), one.zero());
-            // eta(t)=sqrt((3t+1)^2+9)-6, whose positive root is
-            // (sqrt(27)-1)/3. The independent radical is not a Newton result.
-            let ray = EsurfaceRay {
-                energies: vec![(EdgeIndex(1), vector(f(3)), vector(one.clone()), f(3))],
-                shift: -f(6),
-            };
-            let solution = ray
-                .solve_lu_cut(
-                    &f(6),
-                    &mut RadialRootDiagnostics::default(),
-                    &RadialRootIdentity::new("directed native host fixture".into()),
-                )
-                .unwrap();
-            let expected = (f(27).sqrt() - &one) / f(3);
-            assert!((&solution.solution - expected).abs() < one.epsilon() * f(100));
-            let budget = &one / f(1_000_000);
-            ray.verify_lu_candidate(&ray, &solution, 6, &budget)
-                .unwrap();
-            let rotation = Rotation::new(RotationMethod::EulerAngles(0.31, -0.17, 0.23));
-            ray.rotate(&rotation)
-                .verify_lu_candidate(&ray, &solution, 6, &budget)
-                .unwrap();
-
-            // The certificate encloses represented coefficients directly. A
-            // shallow positive slope and tiny nonzero masses remain resolvable
-            // even where native squaring would underflow; no Newton claim is
-            // made for that underflowing native evaluator in this direct check.
-            let tiny = &one / f(10).powi(200);
-            let mut shallow = ray.clone();
-            for (_, v, b, mass) in &mut shallow.energies {
-                *v = &*v * &tiny;
-                *b = &*b * &tiny;
-                *mass *= &tiny;
-            }
-            shallow.shift *= &tiny;
-            let mut shallow_solution = solution.clone();
-            shallow_solution.derivative_at_solution *= &tiny;
-            shallow_solution.error_of_function *= &tiny;
-            shallow
-                .verify_lu_candidate(&shallow, &shallow_solution, 6, &budget)
-                .unwrap();
-            let mut tiny_energy = ray.clone();
-            tiny_energy
-                .energies
-                .push((EdgeIndex(2), vector(one.zero()), vector(one.zero()), tiny));
-            tiny_energy
-                .verify_lu_candidate(&tiny_energy, &solution, 6, &budget)
-                .unwrap();
-            tiny_energy.energies[1].3 = one.zero();
-            let error = tiny_energy
-                .verify_lu_candidate(&tiny_energy, &solution, 6, &budget)
-                .unwrap_err();
-            assert!(
-                matches!(
-                    error.downcast_ref::<SamplingEvaluationError>(),
-                    Some(SamplingEvaluationError::UncertainGeometry { .. })
-                ),
-                "{error:?}"
-            );
-            assert!(
-                error
-                    .to_string()
-                    .contains("energy lower bound touches zero"),
-                "{error:?}"
-            );
-
-            let mut wrong = ray.clone();
-            wrong.shift -= &one / f(100);
-            let error = ray
-                .verify_lu_candidate(&wrong, &solution, 6, &budget)
-                .unwrap_err();
-            assert!(
-                matches!(
-                    error.downcast_ref::<SamplingEvaluationError>(),
-                    Some(SamplingEvaluationError::UncertainGeometry { .. })
-                ),
-                "{error:?}"
-            );
-            let mut wrong_derivative = solution.clone();
-            wrong_derivative.derivative_at_solution *= f(11) / f(10);
-            assert!(
-                ray.verify_lu_candidate(&ray, &wrong_derivative, 6, &budget)
-                    .is_err()
-            );
-            wrong = ray.clone();
-            wrong.energies[0].0 = EdgeIndex(2);
-            assert!(
-                ray.verify_lu_candidate(&wrong, &solution, 6, &budget)
-                    .unwrap_err()
-                    .to_string()
-                    .contains("ordered energy occurrences")
-            );
-            wrong = ray.clone();
-            wrong.energies[0].3 = one.zero() / one.zero();
-            assert!(matches!(
-                ray.verify_lu_candidate(&wrong, &solution, 6, &budget)
-                    .unwrap_err()
-                    .downcast_ref::<SamplingEvaluationError>(),
-                Some(SamplingEvaluationError::Unrepresentable { .. })
-            ));
-
-            // One rounded residual value cannot certify this much smaller
-            // budget. Native Quad/Arb resolve the same irrational root, while
-            // binary64 must ask for original-source precision rescue.
-            let tight = &one / f(10).powi(25);
-            let tight_result = ray.verify_lu_candidate(&ray, &solution, 6, &tight);
-            let large = f(10).powi(20);
-            let cancellation = (&large + &one) - &large;
-            let mut completed = ray.clone();
-            completed.energies[0].1.px += &cancellation - &one;
-            let cancellation_result = ray.verify_lu_candidate(&completed, &solution, 6, &budget);
-            if T::sampling_precision() == crate::utils::SamplingPrecision::Double {
-                assert_eq!(cancellation, one.zero());
-                for result in [tight_result, cancellation_result] {
-                    assert!(matches!(
-                        result
-                            .unwrap_err()
-                            .downcast_ref::<SamplingEvaluationError>(),
-                        Some(SamplingEvaluationError::UncertainGeometry { .. })
-                    ));
-                }
-            } else {
-                assert_eq!(cancellation, one);
-                tight_result.unwrap();
-                cancellation_result.unwrap();
-            }
         }
         check::<f64>();
         check::<QuadFloat>();
@@ -3563,9 +2729,10 @@ mod tests {
             assert_eq!(
                 Esurface::radius_guess_from_terms(
                     &ray.shift,
-                    ray.energies
-                        .iter()
-                        .map(|(_, v, b, _)| (v.norm_squared(), v.clone() * b)),
+                    ray.energies.iter().map(|energy| (
+                        energy.velocity.norm_squared(),
+                        energy.velocity.clone() * &energy.offset
+                    )),
                 ),
                 guess
             );
@@ -3629,11 +2796,11 @@ mod tests {
                 lmb,
             );
             assert_eq!(
-                jet_ray.energies.iter().map(|term| term.0).collect_vec(),
+                jet_ray.energies.iter().map(|term| term.edge).collect_vec(),
                 jet_surface.energies
             );
-            assert_eq!(jet_ray.energies[2].1.norm_squared(), zero);
-            assert_eq!(jet_ray.energies[2].2.norm_squared(), f(9));
+            assert_eq!(jet_ray.energies[2].velocity.norm_squared(), zero);
+            assert_eq!(jet_ray.energies[2].offset.norm_squared(), f(9));
             // A CT seed still ignores the center, whereas the explicit LU ray
             // seed consumes its actual affine offsets. Here the difference is2/3.
             let old_seed = jet_surface
@@ -3642,10 +2809,12 @@ mod tests {
             assert_eq!(old_seed, &e_cm / f(6));
             let ray_seed = Esurface::radius_guess_from_terms(
                 &jet_ray.shift,
-                jet_ray
-                    .energies
-                    .iter()
-                    .map(|(_, v, b, _)| (v.norm_squared(), v.clone() * b)),
+                jet_ray.energies.iter().map(|energy| {
+                    (
+                        energy.velocity.norm_squared(),
+                        energy.velocity.clone() * &energy.offset,
+                    )
+                }),
             );
             assert!((ray_seed - old_seed - f(2) / f(3)).abs() < one.epsilon() * f(1024));
             let expected = [
@@ -3939,9 +3108,12 @@ mod tests {
         let ray = surface.routed_ray(&momentum, &center, &externals, &masses, lmb);
         let guess = Esurface::radius_guess_from_terms(
             &ray.shift,
-            ray.energies
-                .iter()
-                .map(|(_, v, b, _)| (v.norm_squared(), v.clone() * b)),
+            ray.energies.iter().map(|energy| {
+                (
+                    energy.velocity.norm_squared(),
+                    energy.velocity.clone() * &energy.offset,
+                )
+            }),
         );
         let strict = safeguarded_newton_iteration_and_derivative(
             &zero,

@@ -34,11 +34,12 @@ use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::{
-            Esurface, EsurfaceCollection, EsurfaceRay, ExistingEsurfaces, GroupEsurfaceId,
-            RaisedEsurfaceId, get_representative,
+            Esurface, EsurfaceCollection, ExistingEsurfaces, GroupEsurfaceId, RaisedEsurfaceId,
+            get_representative,
         },
         expression::OrientationID,
         orientations::GraphOrientation,
+        radial::EnergySurfaceRay,
         surface::{HsurfaceID, HybridSurfaceID},
     },
     graph::{
@@ -1932,7 +1933,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                     };
                     // Amplitudes have no LU host constraint. The exact zero defect
                     // leaves the shared normal half-budget intact.
-                    EsurfaceRay::<T>::verify_normal_alignment(
+                    EnergySurfaceRay::<T>::verify_normal_alignment(
                     [original(targets[0])?, original(targets[1])?],
                     [materialized(targets[0])?, materialized(targets[1])?],
                     std::array::from_fn(|_| rug::Float::with_val(2048, 0)),

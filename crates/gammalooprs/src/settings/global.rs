@@ -68,8 +68,9 @@ pub struct GenerationSettings {
     /// Sum all generated residue branches explicitly, removing runtime orientation selectors.
     #[serde(skip_serializing_if = "is_false")]
     pub explicit_orientation_sum_only: bool,
-    /// Medium for amplitude generation; non-vacuum modes require local 3D UV subtraction
-    /// and disabled threshold subtraction.
+    /// Medium for amplitudes and restricted finite-temperature cross sections. Medium amplitudes
+    /// use local 3D UV subtraction when enabled; thermal cross sections disable UV subtraction.
+    /// Both disable threshold subtraction.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub medium: MediumSettings,
 }
@@ -82,10 +83,15 @@ impl GenerationSettings {
             ));
         }
 
-        if generation_type == GenerationType::CrossSection && self.medium.mode != MediumMode::Vacuum
+        if generation_type == GenerationType::CrossSection
+            && self.medium.mode != MediumMode::Vacuum
+            && (self.medium.mode != MediumMode::ThermodynamicEquilibrium
+                || self.medium.vacuum_subtraction
+                || self.uv.subtract_uv
+                || self.threshold_subtraction.enable_thresholds)
         {
             return Err(eyre!(
-                "Cross-section (`xs`) generation is not supported in thermal modes or with vacuum subtraction"
+                "Thermal `xs` supports finite-temperature simple cuts with UV and threshold subtraction disabled; cold modes and vacuum subtraction are not supported yet"
             ));
         }
 
@@ -130,32 +136,38 @@ mod generation_settings_tests {
     use super::{GenerationSettings, GenerationType, MediumMode, OrientationPattern};
 
     #[test]
-    fn cross_sections_require_vacuum_mode_without_vacuum_subtraction() {
-        let mut settings = GenerationSettings::default();
-        settings
+    fn cross_sections_validate_supported_thermal_settings() {
+        GenerationSettings::default()
             .validate_for_process(GenerationType::CrossSection)
             .unwrap();
 
-        settings
-            .validate_for_process(GenerationType::Amplitude)
-            .unwrap();
-
-        settings.threshold_subtraction.enable_thresholds = false;
         for mode in [
             MediumMode::ThermodynamicEquilibrium,
             MediumMode::ZeroTemperatureEquilibrium,
         ] {
             for vacuum_subtraction in [false, true] {
-                settings.medium.mode = mode;
-                settings.medium.vacuum_subtraction = vacuum_subtraction;
-                settings
-                    .validate_for_process(GenerationType::Amplitude)
-                    .unwrap();
-                let error = settings
-                    .validate_for_process(GenerationType::CrossSection)
-                    .unwrap_err();
-                assert!(error.to_string().contains("`xs`"));
-                assert!(error.to_string().contains("not supported"));
+                for subtract_uv in [false, true] {
+                    for enable_thresholds in [false, true] {
+                        let mut settings = GenerationSettings::default();
+                        settings.medium.mode = mode;
+                        settings.medium.vacuum_subtraction = vacuum_subtraction;
+                        settings.uv.subtract_uv = subtract_uv;
+                        settings.threshold_subtraction.enable_thresholds = enable_thresholds;
+                        let result = settings.validate_for_process(GenerationType::CrossSection);
+                        let supported = mode == MediumMode::ThermodynamicEquilibrium
+                            && !vacuum_subtraction
+                            && !subtract_uv
+                            && !enable_thresholds;
+                        assert_eq!(
+                            result.is_ok(),
+                            supported,
+                            "mode={mode:?}, vacuum_subtraction={vacuum_subtraction}, subtract_uv={subtract_uv}, enable_thresholds={enable_thresholds}"
+                        );
+                        if let Err(error) = result {
+                            assert!(error.to_string().contains("Thermal `xs`"));
+                        }
+                    }
+                }
             }
         }
     }

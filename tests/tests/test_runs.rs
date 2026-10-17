@@ -80,3 +80,6 @@ mod amplitude_phase_conventions;
 
 #[path = "test_runs/scalar_virtual_phase_conventions.rs"]
 mod scalar_virtual_phase_conventions;
+
+#[path = "test_runs/thermal_rates.rs"]
+mod thermal_rates;

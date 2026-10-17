@@ -4,20 +4,34 @@
 = Thermal and dense media
 
 Medium modes evaluate amplitudes in an equilibrium medium at finite temperature or density.
+An initial finite-temperature cross-section path covers the restricted probe cuts below.
 The medium is at rest in the frame of the supplied momenta.
 
 == Scope and limitations
 
-Medium modes generate fixed-order amplitudes only; cross sections are rejected. Connected vacuum
-graphs, which give the pressure, are the only amplitudes validated against literature values.
-Higher-point amplitudes are supported but remain experimental.
+Connected vacuum graphs, which give the pressure, are the only amplitudes validated against
+literature values. Higher-point amplitudes are supported but remain experimental.
+
+The currently enabled thermal `xs` path is restricted to one future-directed timelike probe and simple cuts
+through massless scalar particles, with no virtual propagators and no chemical-potential
+assignments on the cut particles. Choose a generation loop-momentum basis in which at most
+one cut-particle momentum contains both loop and external momentum; the signed radial solver
+supports at most one distinct cut energy that scales nonhomogeneously with the radial variable.
+A runtime chemical potential of zero does not remove an adjustable assignment. This path remains
+experimental. Spacelike probes, massive or spinning
+cut particles, raised cuts, cold modes, vacuum subtraction, UV subtraction, threshold subtraction,
+and surface-targeted sampling are unavailable for thermal `xs`.
+These are temporary validation limits. Thermal crossings and their occupation factors use the
+shared cross-section residue, normalization, selector, event, and precision machinery.
+The internal representation of signed cuts does not by itself establish support for the
+excluded processes.
 
 #boundary("Infrared safety and thresholds", [
-  GammaLoop has no thermal infrared subtraction or resummation, so only infrared-safe
-  fixed-order amplitudes can be evaluated. At finite temperature, soft bosonic modes, whose
+  GammaLoop has no thermal infrared subtraction or resummation, so fixed-order amplitudes
+  and rates must be infrared finite. At finite temperature, soft bosonic modes, whose
   occupation grows like `T/E`, eventually require resummation that GammaLoop does not perform.
-  Threshold subtraction is also unavailable, so choose kinematics without thresholds, including
-  the thermal (Landau-damping) cuts that a medium adds to the vacuum ones.
+  For amplitudes, threshold subtraction is also unavailable, so choose kinematics without
+  thresholds, including the thermal (Landau-damping) cuts that a medium adds to the vacuum ones.
 ])
 
 The following are also unsupported:
@@ -72,6 +86,30 @@ inverse_temperature = 10.0
 muB = [0.5, 0.0]
 ```
 
+For the restricted thermal `xs` path, disable threshold subtraction at both generation and
+runtime, and use ordinary loop-momentum sampling:
+
+// docs-example: syntax
+```toml
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+vacuum_subtraction = false
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+```
+
+The experimental scalar sunset #source-link("examples/cli/thermal_rates/scalar_sunset/run.toml", label: "run card")
+and #source-link("examples/cli/thermal_rates/scalar_sunset/benchmark.typ", label: "benchmark notes")
+provide a concrete example and an independent phase-space reference. The reference alone does
+not validate native generation or integration.
+
 == Chemical potentials
 
 Chemical potentials are model parameters. Each particle may name one (`chemical_potential` in
@@ -121,7 +159,7 @@ exact equality; nearly coincident poles remain a numerical issue.
 
 With
 #link("reference/cli/settings/cli/global/generation/medium/#setting-cli-global-generation-medium-vacuum-subtraction-622cb5e219356a31")[`vacuum_subtraction = true`],
-only the medium-dependent part is generated: each distribution weight is replaced by its
+only the medium-dependent amplitude is generated: each distribution weight is replaced by its
 difference from the vacuum limit, and UV counterterms covering all loops are omitted,
 including when bridges remain in the graph.
 This option requires a medium mode.

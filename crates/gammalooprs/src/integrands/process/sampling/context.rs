@@ -11,7 +11,7 @@
 //! retry or pairing its point with stale cut data.
 
 use crate::{
-    cff::esurface::EsurfaceRay,
+    cff::radial::EnergySurfaceRay,
     processes::{CutGroupId, CutId},
     utils::{
         ArbPrec, F, FloatLike,
@@ -60,7 +60,7 @@ pub(crate) struct PreparedLUHost<T: FloatLike> {
     pub(crate) plan: Arc<SamplingLUHostPlan>,
     pub(crate) source: SamplingProposalKey,
     pub(crate) prior: Vec<T>,
-    pub(crate) ray: EsurfaceRay<T>,
+    pub(crate) ray: EnergySurfaceRay<T>,
     pub(crate) solution: NewtonIterationResult<T>,
 }
 
@@ -221,7 +221,7 @@ impl<'a, T: FloatLike> SamplingMapContext<'a, T> {
         prepare: impl FnOnce(
             &mut RadialRootDiagnostics,
             &RadialRootIdentity,
-        ) -> Result<(EsurfaceRay<T>, NewtonIterationResult<T>)>,
+        ) -> Result<(EnergySurfaceRay<T>, NewtonIterationResult<T>)>,
     ) -> Result<&PreparedLUHost<T>> {
         if prior.len() != 3 * plan.required_prior_lmb.len() {
             return Err(eyre!(

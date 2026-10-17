@@ -29,7 +29,7 @@ use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         CffEnergyDegreeBoundReport, CutCFFIndex,
-        esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
+        esurface::{RaisedEsurfaceGroup, RaisedEsurfaceId},
         expression::{
             OrientationID, normalize_cut_edge_support_with_raised_edge_groups,
             normalize_three_d_expression_cut_support_with_raised_edge_groups,
@@ -41,7 +41,7 @@ use crate::{
     graph::{
         GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
         ThresholdPinchStatus,
-        cuts::{CutSet, LuCutSelection, ResidueSelector},
+        cuts::{CutSet, LuCutSelection, RaisedSurfaceGroup, ResidueSelector},
         edge::EdgeMass,
         parse::complete_group_parsing,
         threshold_counterterms::{ThresholdCountertermMultiplier, ThresholdCountertermVariant},
@@ -62,7 +62,9 @@ use crate::{
         RaisedCutSignatureInventory,
     },
     settings::{
-        GlobalSettings, RuntimeSettings, global::GenerationSettings, runtime::LockedRuntimeSettings,
+        GlobalSettings, RuntimeSettings,
+        global::{GenerationSettings, MediumMode},
+        runtime::LockedRuntimeSettings,
     },
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, GS, W_,
@@ -1523,6 +1525,61 @@ impl CrossSectionGraph {
         self.apply_spin_sum(model, settings, &runtime_default)?;
         debug_tags!(#generation; "generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
+        if settings.medium.mode != MediumMode::Vacuum {
+            let internal = self
+                .graph
+                .no_dummy()
+                .subtract(&self.graph.initial_state_cut);
+            let internal_edges = self
+                .graph
+                .iter_edges_of(&internal)
+                .filter(|(pair, _, _)| pair.is_paired())
+                .map(|(_, edge, _)| edge)
+                .sorted()
+                .collect_vec();
+            if internal_edges
+                .iter()
+                .filter(|&&edge| {
+                    let signature = &self.graph.loop_momentum_basis.edge_signatures[edge];
+                    signature.internal.iter().any(|sign| sign.is_sign())
+                        && signature.external.iter().any(|sign| sign.is_sign())
+                })
+                .take(2)
+                .count()
+                > 1
+            {
+                return Err(eyre!(
+                    "Thermal `xs` currently requires external routing through at most one cut edge in the generation loop-momentum basis"
+                ));
+            }
+            if self.graph.initial_state_cut.nedges(&self.graph) != 1
+                || self.cuts.is_empty()
+                || self.cuts.iter().any(|cut| {
+                    self.graph
+                        .iter_edges_of(&cut.cut)
+                        .map(|(_, edge, _)| edge)
+                        .sorted()
+                        .ne(internal_edges.iter().copied())
+                })
+                || internal_edges.iter().any(|edge| {
+                    let edge = &self.graph[*edge];
+                    edge.particle.chemical_potential_atom().is_some()
+                        || !edge
+                            .particle
+                            .particle()
+                            .is_some_and(|particle| particle.is_scalar())
+                        || (!matches!(edge.mass, EdgeMass::Zero)
+                            && !edge
+                                .mass
+                                .value::<f64>(model, &self.graph.param_builder)
+                                .is_some_and(|mass| IsZero::is_zero(&mass)))
+                })
+            {
+                return Err(eyre!(
+                    "Thermal `xs` currently requires one probe, massless scalar cut particles, zero chemical-potential assignments, and simple cuts without virtual propagators"
+                ));
+            }
+        }
         debug_tags!(#generation; "generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
         debug_tags!(#generation; "generating cff");
@@ -1700,15 +1757,34 @@ impl CrossSectionGraph {
 
         self.cut_esurface_id_map = cut_esurface_map;
 
-        let esurface_raised_data = self
+        let mut surface_groups = self
             .graph
-            .determine_raised_esurfaces_from_expression(&global_cff.expression);
-
-        let (cut_group_data, cut_group_stats) = CutGroupData::new_from_esurface(
-            &esurface_raised_data,
+            .determine_raised_surfaces_from_expression(&global_cff.expression);
+        // E groups retain the physical-cut partition even when their poles
+        // cancel. Additional thermal crossings require an actual H pole;
+        // residual H catalogue entries do not authorize vacuum LU cuts.
+        surface_groups.retain(|group| {
+            matches!(group.surface_ids[0], HybridSurfaceID::Esurface(_))
+                || (settings.medium.mode != MediumMode::Vacuum && group.max_occurrence() > 0)
+        });
+        let cut_groups = CutGroup::from_surface_groups(
+            &surface_groups,
             &self.cut_esurface_id_map,
-            &settings.evaluator,
+            &self.cut_esurface,
+            &global_cff.expression,
+            &raised_edge_groups,
         );
+        if settings.medium.mode != MediumMode::Vacuum
+            && cut_groups
+                .iter()
+                .any(|group| group.residue.max_occurrence() > 1)
+        {
+            return Err(eyre!("Raised thermal `xs` cuts are not supported yet"));
+        }
+        // E and H groups must both be present before allocating derivative
+        // shapes and evaluators. Runtime eligibility is checked separately.
+        let (cut_group_data, cut_group_stats) =
+            CutGroupData::from_groups(cut_groups, &settings.evaluator);
 
         self.derived_data.global_cff_expression = Some(global_cff);
         self.derived_data.cut_group_data = cut_group_data;
@@ -1885,7 +1961,7 @@ impl CrossSectionGraph {
             .cut_group_data
             .cut_groups
             .iter()
-            .map(|cut_group| cut_group.related_esurface_group.max_occurence)
+            .map(|cut_group| cut_group.residue.max_occurrence())
             .max()
             .unwrap();
 
@@ -4231,15 +4307,117 @@ pub struct CutGroupData {
     pub pass_two_evaluators: Vec<GenericEvaluator>,
 }
 
-/// Physical cuts that share one normalized E-surface residue, whether ordinary or raised.
+/// Physical cuts sharing a canonical LU residue and a physical energy direction.
 #[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CutGroup {
     pub cuts: Vec<CutId>,
-    pub related_esurface_group: RaisedEsurfaceGroup,
+    pub residue: RaisedSurfaceGroup,
+    /// Physical cut equation = this sign times its canonical CFF surface.
+    pub surface_sign: i8,
 }
 
 impl CutGroup {
+    fn from_surface_groups(
+        surface_groups: &[RaisedSurfaceGroup],
+        cut_esurface_map: &TiVec<CutId, EsurfaceID>,
+        cut_esurfaces: &TiVec<CutId, Esurface>,
+        expression: &crate::cff::expression::ThreeDExpression<OrientationID>,
+        raised_edge_groups: &[Vec<EdgeIndex>],
+    ) -> TiVec<CutGroupId, Self> {
+        let mut groups = TiVec::new();
+        for residue in surface_groups {
+            match residue.surface_ids[0] {
+                HybridSurfaceID::Esurface(_) => {
+                    let cuts = cut_esurface_map
+                        .iter_enumerated()
+                        .filter_map(|(cut_id, id)| {
+                            residue
+                                .surface_ids
+                                .contains(&HybridSurfaceID::Esurface(*id))
+                                .then_some(cut_id)
+                        })
+                        .collect_vec();
+                    if !cuts.is_empty() {
+                        groups.push(Self {
+                            cuts,
+                            residue: residue.clone(),
+                            surface_sign: 1,
+                        });
+                    }
+                }
+                HybridSurfaceID::Hsurface(_) => {
+                    // Equal signed equations may retain different physical edge
+                    // supports after opposite raised-edge energies cancel.
+                    let aliases = residue
+                        .surface_ids
+                        .iter()
+                        .filter_map(|id| {
+                            let HybridSurfaceID::Hsurface(id) = id else {
+                                return None;
+                            };
+                            let surface = &expression.surfaces.hsurface_cache[*id];
+                            let support = normalize_cut_edge_support_with_raised_edge_groups(
+                                &surface
+                                    .positive_energies
+                                    .iter()
+                                    .chain(&surface.negative_energies)
+                                    .copied()
+                                    .collect_vec(),
+                                raised_edge_groups,
+                            );
+                            Some((surface, support))
+                        })
+                        .collect_vec();
+                    // The external physical energy flow fixes the direction of
+                    // a canonical mixed-sign pole. Preserve it independently
+                    // from the algebraic aliases and their effective order.
+                    for sign in [1_i8, -1] {
+                        let cuts = aliases
+                            .iter()
+                            .flat_map(|(surface, support)| {
+                                let shift = surface
+                                    .external_shift
+                                    .iter()
+                                    .map(|(edge, coefficient)| {
+                                        (*edge, coefficient * i64::from(sign))
+                                    })
+                                    .sorted()
+                                    .collect_vec();
+                                cut_esurfaces
+                                    .iter_enumerated()
+                                    .filter_map(move |(cut_id, cut)| {
+                                        (normalize_cut_edge_support_with_raised_edge_groups(
+                                            &cut.energies,
+                                            raised_edge_groups,
+                                        ) == *support
+                                            && cut
+                                                .external_shift
+                                                .iter()
+                                                .copied()
+                                                .sorted()
+                                                .eq(shift.iter().copied()))
+                                        .then_some(cut_id)
+                                    })
+                            })
+                            .sorted_by_key(|id| id.0)
+                            .dedup()
+                            .collect_vec();
+                        if !cuts.is_empty() {
+                            groups.push(Self {
+                                cuts,
+                                residue: residue.clone(),
+                                surface_sign: sign,
+                            });
+                        }
+                    }
+                }
+                _ => unreachable!("LU groups contain only E and H surfaces"),
+            }
+        }
+        groups
+    }
+
     pub(crate) fn lu_prefactor(
         &self,
         graph: &Graph,
@@ -4289,7 +4467,10 @@ impl CutGroup {
         let tstar = Atom::var(GS.rescale_star);
         let tsrat_pow = tstar.pow(loop_3);
         let hfunction = Atom::var(GS.hfunction_lu_cut);
-        Ok(tsrat_pow * hfunction * energy_conservation_delta_factor)
+        Ok(tsrat_pow
+            * hfunction
+            * energy_conservation_delta_factor
+            * Atom::num(self.surface_sign as i64))
     }
 
     pub(crate) fn lu_cut_selection(
@@ -4310,7 +4491,7 @@ impl CutGroup {
             })
             .collect();
         LuCutSelection {
-            raised_group: self.related_esurface_group.clone(),
+            surface: self.residue.clone(),
             cut_edge_alternatives,
         }
     }
@@ -4331,45 +4512,17 @@ impl CutGroupData {
         }
     }
 
-    pub fn new_from_esurface(
-        raised_esurface_data: &RaisedEsurfaceData,
-        cut_esurface_map: &TiVec<CutId, EsurfaceID>,
+    pub fn from_groups(
+        groups: TiVec<CutGroupId, CutGroup>,
         evaluator_settings: &EvaluatorSettings,
     ) -> (Self, GraphGenerationStats) {
         let mut stats = GraphGenerationStats::default();
-        let mut groups = TiVec::new();
-
-        for (_raised_esurface_id, raised_esurface_group) in
-            raised_esurface_data.raised_groups.iter_enumerated()
-        {
-            let cuts = cut_esurface_map
-                .iter_enumerated()
-                .filter_map(|(cut_id, esurface_id)| {
-                    raised_esurface_group
-                        .esurface_ids
-                        .contains(esurface_id)
-                        .then_some(cut_id)
-                })
-                .collect::<Vec<_>>();
-
-            if cuts.is_empty() {
-                continue;
-            }
-
-            groups.push(CutGroup {
-                cuts,
-                related_esurface_group: raised_esurface_group.clone(),
-            });
-        }
 
         let global_max_occurence = groups
             .iter()
-            .map(|group| group.related_esurface_group.max_occurence)
+            .map(|group| group.residue.max_occurrence())
             .max()
-            .unwrap_or_else(|| {
-                println!("corrupted groups");
-                panic!();
-            });
+            .unwrap_or(0);
 
         let dual_shapes = (1..global_max_occurence)
             .map(simple_n_deriv_shape)
@@ -4616,12 +4769,12 @@ mod tests {
     use symbolica::{atom::AtomCore, function, symbol};
 
     use crate::{
-        cff::CutCFFIndex,
+        cff::{CutCFFIndex, esurface::RaisedEsurfaceData},
         dot,
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         model::InputParamCard,
-        processes::cross_section::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
+        processes::cross_section::{EsurfaceID, RaisedEsurfaceGroup},
         settings::global::{GenerationSettings, OrientationPattern},
         utils::{GS, load_generic_model},
     };
@@ -4646,7 +4799,7 @@ mod tests {
     }
 
     #[test]
-    fn cut_groups_include_all_physical_cuts_in_a_raised_group() {
+    fn cut_groups_include_all_physical_cuts_and_signed_derivative_orders() {
         test_initialise().unwrap();
         let raised_esurface_data = RaisedEsurfaceData {
             raised_groups: [
@@ -4665,11 +4818,41 @@ mod tests {
         };
         let cut_esurface_map = [EsurfaceID(0), EsurfaceID(0)].into_iter().collect();
 
-        let (cut_group_data, _) = super::CutGroupData::new_from_esurface(
-            &raised_esurface_data,
+        let mut expression = crate::cff::expression::ThreeDExpression::new_empty();
+        let mut surface_groups = raised_esurface_data
+            .raised_groups
+            .iter()
+            .map(super::RaisedSurfaceGroup::from)
+            .collect::<Vec<_>>();
+        let h =
+            expression
+                .surfaces
+                .hsurface_cache
+                .push_and_get_key(crate::cff::hsurface::Hsurface {
+                    positive_energies: vec![EdgeIndex(1)],
+                    negative_energies: vec![EdgeIndex(3)],
+                    external_shift: vec![(EdgeIndex(0), 1)],
+                    vertex_set: crate::cff::VertexSet::dummy(),
+                });
+        surface_groups.push(super::RaisedSurfaceGroup {
+            surface_ids: vec![super::HybridSurfaceID::Hsurface(h)],
+            max_occurrence: 2,
+        });
+        let cut = super::Esurface {
+            energies: vec![EdgeIndex(2), EdgeIndex(3)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: crate::cff::VertexSet::dummy(),
+        };
+        let cut_esurfaces = [cut.clone(), cut].into_iter().collect();
+        let groups = super::CutGroup::from_surface_groups(
+            &surface_groups,
             &cut_esurface_map,
-            &super::EvaluatorSettings::default(),
+            &cut_esurfaces,
+            &expression,
+            &[vec![EdgeIndex(1), EdgeIndex(2)]],
         );
+        let (cut_group_data, _) =
+            super::CutGroupData::from_groups(groups, &super::EvaluatorSettings::default());
 
         let mut cut_partitions: Vec<Vec<super::CutId>> = cut_group_data
             .cut_groups
@@ -4686,7 +4869,62 @@ mod tests {
                 .map(|cut| cut.0)
                 .cmp(right.iter().map(|cut| cut.0))
         });
-        assert_eq!(cut_partitions, vec![vec![super::CutId(0), super::CutId(1)]]);
+        assert_eq!(
+            cut_partitions,
+            vec![vec![super::CutId(0), super::CutId(1)]; 2]
+        );
+        assert_eq!(
+            cut_group_data.cut_groups[super::CutGroupId(1)].surface_sign,
+            -1
+        );
+        assert_eq!(cut_group_data.dual_shapes.len(), 1);
+        assert_eq!(cut_group_data.pass_two_evaluators.len(), 2);
+    }
+
+    #[test]
+    fn signed_cut_groups_include_support_from_every_equivalent_alias() {
+        let mut expression = crate::cff::expression::ThreeDExpression::new_empty();
+        let mut ids = Vec::new();
+        for (positive, negative) in [
+            (vec![1], vec![3]),
+            (vec![1, 4], vec![3, 5]),
+            (vec![1], vec![3]),
+        ] {
+            ids.push(super::HybridSurfaceID::Hsurface(
+                expression.surfaces.hsurface_cache.push_and_get_key(
+                    crate::cff::hsurface::Hsurface {
+                        positive_energies: positive.into_iter().map(EdgeIndex).collect(),
+                        negative_energies: negative.into_iter().map(EdgeIndex).collect(),
+                        external_shift: vec![(EdgeIndex(0), 1)],
+                        vertex_set: crate::cff::VertexSet::dummy(),
+                    },
+                ),
+            ));
+        }
+        let cut_esurfaces = [vec![1, 3], vec![1, 3, 4, 5]]
+            .into_iter()
+            .map(|energies| super::Esurface {
+                energies: energies.into_iter().map(EdgeIndex).collect(),
+                external_shift: vec![(EdgeIndex(0), -1)],
+                vertex_set: crate::cff::VertexSet::dummy(),
+            })
+            .collect();
+        let groups = super::CutGroup::from_surface_groups(
+            &[super::RaisedSurfaceGroup {
+                surface_ids: ids,
+                max_occurrence: 2,
+            }],
+            &Default::default(),
+            &cut_esurfaces,
+            &expression,
+            &[vec![EdgeIndex(4), EdgeIndex(5)]],
+        );
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            groups[super::CutGroupId(0)].cuts,
+            vec![super::CutId(0), super::CutId(1)]
+        );
+        assert_eq!(groups[super::CutGroupId(0)].surface_sign, -1);
     }
 
     #[test]
@@ -4723,10 +4961,11 @@ mod tests {
         assert_eq!(graph.cuts.len(), 1);
         let group = super::CutGroup {
             cuts: vec![super::CutId(0)],
-            related_esurface_group: RaisedEsurfaceGroup {
+            residue: crate::graph::cuts::RaisedSurfaceGroup::from(&RaisedEsurfaceGroup {
                 esurface_ids: vec![EsurfaceID(0)],
                 max_occurence: 1,
-            },
+            }),
+            surface_sign: 1,
         };
         let conversion = group
             .lu_prefactor(&graph.graph, &graph.cuts)

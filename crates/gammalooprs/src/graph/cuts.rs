@@ -7,6 +7,7 @@ use linnet::half_edge::{
 };
 
 use crate::cff::{CutCFFIndex, esurface::RaisedEsurfaceGroup};
+pub use three_dimensional_reps::expression::RaisedSurfaceGroup;
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct CutSet {
@@ -23,9 +24,9 @@ impl LogMessage for CutSet {
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct LuCutSelection {
-    pub raised_group: RaisedEsurfaceGroup,
-    /// Normalized physical edge support for each actual Cutkosky cut in this
-    /// raised group. Alternative order remains the physical-cut order so a
+    pub surface: RaisedSurfaceGroup,
+    /// Normalized physical edge support for each actual Cutkosky cut sharing
+    /// the selected surface. Alternative order remains the physical-cut order so a
     /// future LTD policy can attach representation-specific data without
     /// reconstructing alternatives from the lossy union subgraph.
     pub cut_edge_alternatives: Vec<Vec<EdgeIndex>>,
@@ -45,7 +46,7 @@ impl ResidueSelector {
             .into_iter()
             .flat_map(|index| {
                 if let Some(lu) = &self.lu {
-                    (1..=lu.raised_group.max_occurence)
+                    (1..=lu.surface.max_occurrence())
                         .map(|lu_cut_index| {
                             let mut new_index = index;
                             new_index.lu_cut_order = Some(lu_cut_index);

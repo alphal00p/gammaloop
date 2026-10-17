@@ -1,0 +1,120 @@
+# From the repository root: ./gammaloop -n <this-card> run generate rest inspect
+commands = []
+
+[cli_settings.state]
+folder = "/tmp/gammaloop-thermal-rates-sunset-state"
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+vacuum_subtraction = false
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+softct = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+compile = false
+summed = false
+summed_function_map = true
+iterative_orientation_optimization = false
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+integral_unit = "none"
+inverse_temperature = 1.0
+generate_events = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.h_function]
+function = "poly_exponential"
+sigma = 1.0
+
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[1.0, 0.0, 0.0, 0.0]]
+helicities = [0]
+
+[default_runtime_settings.integrator]
+integrated_phase = "real"
+n_start = 50000
+n_increase = 0
+n_max = 1000000
+seed = 1701026
+target_relative_accuracy = 0.005
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model ./examples/cli/thermal_rates/scalar_sunset/model.json",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "generate xs X > B1 B2 B3 FI^2==2 [{{2}}] -p equilibrium -i LO",
+  "generate existing -p equilibrium -i LO",
+  "set global kv global.generation.medium.mode=vacuum",
+  "generate xs X > B1 B2 B3 FI^2==2 [{{2}}] -p vacuum -i LO",
+  "generate existing -p vacuum -i LO",
+]
+
+[[command_blocks]]
+name = "rest"
+commands = [
+  "set process -p equilibrium -i LO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]]",
+  "set process -p vacuum -i LO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]]",
+]
+
+[[command_blocks]]
+name = "boosted"
+commands = [
+  "set process -p equilibrium -i LO kv kinematics.externals.data.momenta=[[1.4142135623730951,0.0,0.0,1.0]]",
+  "set process -p vacuum -i LO kv kinematics.externals.data.momenta=[[1.4142135623730951,0.0,0.0,1.0]]",
+]
+
+[[command_blocks]]
+name = "fast"
+commands = [
+  "set process -p equilibrium -i LO kv kinematics.externals.data.momenta=[[3.1622776601683795,0.0,0.0,3.0]]",
+  "set process -p vacuum -i LO kv kinematics.externals.data.momenta=[[3.1622776601683795,0.0,0.0,3.0]]",
+]
+
+[[command_blocks]]
+name = "inspect"
+commands = [
+  "inspect -p equilibrium -i LO -m -x 0.6 0 0 0 0.8 0 --json-output /tmp/thermal-rates-sunset-equilibrium-inspect.json",
+  "inspect -p vacuum -i LO -m -x 0.6 0 0 0 0.8 0 --json-output /tmp/thermal-rates-sunset-vacuum-inspect.json",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+  "set process -p equilibrium -i LO kv general.generate_events=false",
+  "set process -p vacuum -i LO kv general.generate_events=false",
+  "integrate -p equilibrium -i LO -p vacuum -i LO --n-cores 2 --restart --workspace-path /tmp/thermal-rates-sunset-integral",
+]

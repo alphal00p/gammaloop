@@ -1,7 +1,11 @@
 use crate::cff::VertexSet;
 use crate::graph::LoopMomentumBasis;
-use crate::momentum::sample::{ExternalFourMomenta, ExternalThreeMomenta};
-use crate::utils::{F, cut_energy, external_energy_atom_from_index, ose_atom_from_index};
+use crate::momentum::sample::{ExternalFourMomenta, ExternalThreeMomenta, LoopMomenta};
+use crate::utils::{
+    F, FloatLike, cut_energy, external_energy_atom_from_index,
+    newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
+    ose_atom_from_index,
+};
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
@@ -14,6 +18,7 @@ use typed_index_collections::TiVec;
 
 use super::esurface::Esurface;
 use super::esurface::ExternalShift;
+use super::radial::EnergySurfaceRay;
 pub use super::surface::HsurfaceID;
 
 pub type HsurfaceCollection = TiVec<HsurfaceID, Hsurface>;
@@ -39,6 +44,39 @@ impl PartialEq for Hsurface {
 impl Eq for Hsurface {}
 
 impl Hsurface {
+    /// Prepare the retained signed equation and enumerate its simple positive roots.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn positive_radius_roots<T: FloatLike>(
+        &self,
+        loop_momenta: &LoopMomenta<F<T>>,
+        external_momenta: &ExternalFourMomenta<F<T>>,
+        masses: &EdgeVec<F<T>>,
+        lmb: &LoopMomentumBasis,
+        e_cm: &F<T>,
+        diagnostics: &mut RadialRootDiagnostics,
+        identity: &RadialRootIdentity,
+    ) -> eyre::Result<(EnergySurfaceRay<T>, Vec<NewtonIterationResult<T>>)> {
+        let center = LoopMomenta::from_iter(
+            loop_momenta
+                .iter()
+                .map(|momentum| momentum.map_ref(&|value| value.zero())),
+        );
+        let ray = EnergySurfaceRay::routed(
+            self.positive_energies
+                .iter()
+                .map(|&edge| (edge, 1))
+                .chain(self.negative_energies.iter().map(|&edge| (edge, -1))),
+            &self.external_shift,
+            loop_momenta,
+            &center,
+            external_momenta,
+            masses,
+            lmb,
+        );
+        let roots = ray.positive_radius_roots(e_cm, diagnostics, identity)?;
+        Ok((ray, roots))
+    }
+
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         let (symbolic_positive_energies, symbolic_negative_energies) =
             [&self.positive_energies, &self.negative_energies]
@@ -196,6 +234,214 @@ mod tests {
     use crate::cff::{VertexSet, esurface::Esurface};
 
     use super::Hsurface;
+
+    type RadialTestEnergy = (i64, [f64; 3], [f64; 3], f64);
+
+    fn radial_roots(
+        energies: &[RadialTestEnergy],
+        incoming_energy: f64,
+    ) -> eyre::Result<Vec<crate::utils::newton_solver::NewtonIterationResult<f64>>> {
+        use crate::{
+            graph::LoopMomentumBasis,
+            momentum::{FourMomentum, ThreeMomentum, signature::LoopExtSignature},
+            utils::{
+                F,
+                newton_solver::{RadialRootDiagnostics, RadialRootIdentity},
+                test_utils::dummy_hedge_graph,
+            },
+        };
+        use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+
+        let count = energies.len();
+        let graph = dummy_hedge_graph(2 * count + 1);
+        let signatures = (0..2 * count + 1).map(|edge| {
+            let mut internal = vec![0_isize; count];
+            let mut external = vec![0_isize; count + 1];
+            if edge < count {
+                internal[edge] = 1;
+                external[edge] = 1;
+            } else {
+                external[edge - count] = 1;
+            }
+            LoopExtSignature::from((internal, external))
+        });
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: (0..count).map(EdgeIndex).collect(),
+            ext_edges: (count..2 * count + 1).map(EdgeIndex).collect(),
+            edge_signatures: graph.new_edgevec_from_iter(signatures).unwrap(),
+        };
+        let loop_momenta = energies
+            .iter()
+            .map(|(_, v, _, _)| ThreeMomentum::new(F(v[0]), F(v[1]), F(v[2])))
+            .collect();
+        let external_momenta = energies
+            .iter()
+            .map(|(_, _, b, _)| FourMomentum::from_args(F(0.0), F(b[0]), F(b[1]), F(b[2])))
+            .chain(std::iter::once(FourMomentum::from_args(
+                F(incoming_energy),
+                F(0.0),
+                F(0.0),
+                F(0.0),
+            )))
+            .collect();
+        let masses = graph
+            .new_edgevec_from_iter(
+                (0..2 * count + 1).map(|edge| F(energies.get(edge).map_or(0.0, |energy| energy.3))),
+            )
+            .unwrap();
+        let surface = Hsurface {
+            positive_energies: energies
+                .iter()
+                .enumerate()
+                .flat_map(|(edge, (sign, _, _, _))| {
+                    std::iter::repeat_n(EdgeIndex(edge), (*sign).max(0) as usize)
+                })
+                .collect(),
+            negative_energies: energies
+                .iter()
+                .enumerate()
+                .flat_map(|(edge, (sign, _, _, _))| {
+                    std::iter::repeat_n(EdgeIndex(edge), (-sign).max(0) as usize)
+                })
+                .collect(),
+            external_shift: vec![(EdgeIndex(2 * count), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        surface
+            .positive_radius_roots(
+                &loop_momenta,
+                &external_momenta,
+                &masses,
+                &lmb,
+                &F(2.0),
+                &mut RadialRootDiagnostics::default(),
+                &RadialRootIdentity::new("signed radial test".to_string()),
+            )
+            .map(|(_, roots)| roots)
+    }
+
+    #[test]
+    fn signed_radial_sunset_roots_at_rest_and_with_spatial_external_momentum() {
+        let origin = [0.0; 3];
+        for sign in [-1, 1] {
+            for pz in [0.0, 0.5] {
+                let energies = [
+                    (1, [1.0, 0.0, 0.0], origin, 0.0),
+                    (1, [0.0, 1.0, 0.0], origin, 0.0),
+                    (sign, [-1.0, -1.0, 0.0], [0.0, 0.0, pz], 0.0),
+                ];
+                let roots = radial_roots(&energies, 2.0).unwrap();
+                assert_eq!(roots.len(), 1, "sign={sign}, pz={pz}");
+                let expected = if pz == 0.0 {
+                    2.0 / (2.0 + sign as f64 * 2.0_f64.sqrt())
+                } else {
+                    (8.0 - sign as f64 * 34.0_f64.sqrt()) / 4.0
+                };
+                assert!((roots[0].solution.0 - expected).abs() < 1.0e-12);
+                assert!(roots[0].derivative_at_solution.0 > 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn signed_radial_enumerates_both_crossings_and_retains_signed_jacobians() {
+        let energies = [
+            (2, [1.0, 0.0, 0.0], [0.0; 3], 1.0),
+            (-1, [1.9, 0.0, 0.0], [0.0; 3], 0.0),
+        ];
+        let roots = radial_roots(&energies, 1.0).unwrap();
+        assert_eq!(roots.len(), 2);
+        let discriminant = 3.8_f64.powi(2) - 4.0 * 0.39 * 3.0;
+        for (index, sign) in [-1.0, 1.0].into_iter().enumerate() {
+            let expected = (3.8 + sign * discriminant.sqrt()) / 0.78;
+            assert!((roots[index].solution.0 - expected).abs() < 1.0e-11);
+            assert!(roots[index].derivative_at_solution.0 * sign > 0.0);
+        }
+        let negated =
+            energies.map(|(sign, velocity, offset, mass)| (-sign, velocity, offset, mass));
+        let reversed = radial_roots(&negated, -1.0).unwrap();
+        for (root, reverse) in roots.iter().zip(&reversed) {
+            assert!((root.solution.0 - reverse.solution.0).abs() < 1.0e-12);
+            assert!(
+                (root.derivative_at_solution.0 + reverse.derivative_at_solution.0).abs() < 1.0e-12
+            );
+        }
+    }
+
+    #[test]
+    fn signed_radial_proves_closed_channels_and_rejects_the_squared_opposite_sheet() {
+        let origin = [0.0; 3];
+        // A negative discriminant proves the complete absence of a real root.
+        assert!(
+            radial_roots(
+                &[
+                    (2, [1.0, 0.0, 0.0], origin, 1.0),
+                    (-1, [1.9, 0.0, 0.0], origin, 0.0),
+                ],
+                0.0
+            )
+            .unwrap()
+            .is_empty()
+        );
+        // sqrt(r²+1)+2 has a positive root after squaring, on the wrong sheet.
+        assert!(
+            radial_roots(&[(1, [1.0, 0.0, 0.0], origin, 1.0)], -2.0)
+                .unwrap()
+                .is_empty()
+        );
+        // An affine equation with only a negative root is also a closed channel.
+        assert!(
+            radial_roots(&[(-1, [1.0, 0.0, 0.0], origin, 0.0)], 1.0)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn signed_radial_distinguishes_excluded_endpoints_from_nonisolated_cuts() {
+        let origin = [0.0; 3];
+        assert!(
+            radial_roots(&[(1, [1.0, 0.0, 0.0], origin, 0.0)], 0.0)
+                .unwrap()
+                .is_empty()
+        );
+        // sqrt(r²+1)-1 only touches zero at the excluded endpoint.
+        assert!(
+            radial_roots(&[(1, [1.0, 0.0, 0.0], origin, 1.0)], 1.0)
+                .unwrap()
+                .is_empty()
+        );
+        let tangent =
+            radial_roots(&[(1, [1.0, 0.0, 0.0], [-2.0, 0.0, 0.0], 1.0)], 1.0).unwrap_err();
+        assert!(tangent.to_string().contains("tangent"));
+        let cusp = radial_roots(&[(1, [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], 0.0)], 0.0).unwrap_err();
+        assert!(cusp.to_string().contains("tangent"));
+        let identically_zero = radial_roots(
+            &[
+                (1, [1.0, 0.0, 0.0], origin, 0.0),
+                (-1, [1.0, 0.0, 0.0], origin, 0.0),
+            ],
+            0.0,
+        )
+        .unwrap_err();
+        assert!(identically_zero.to_string().contains("identically zero"));
+    }
+
+    #[test]
+    fn signed_radial_unsupported_and_nonfinite_rays_are_errors_not_closed_channels() {
+        let origin = [0.0; 3];
+        let unsupported = radial_roots(
+            &[
+                (1, [1.0, 0.0, 0.0], origin, 1.0),
+                (-1, [2.0, 0.0, 0.0], origin, 1.0),
+            ],
+            1.0,
+        )
+        .unwrap_err();
+        assert!(unsupported.to_string().contains("unsupported ray"));
+        assert!(radial_roots(&[(1, [f64::NAN, 0.0, 0.0], origin, 0.0)], 1.0).is_err());
+    }
 
     #[test]
     fn test_equality_under_energy_conservation() {

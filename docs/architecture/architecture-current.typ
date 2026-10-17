@@ -344,6 +344,41 @@ treating missing or literal-zero assignments as zero; independent external input
 allowed when consistent. Vacuum evaluation does not consume or validate these assignments.
 Vacuum builders register no thermal distribution functions.
 
+The currently enabled thermal cross-section scope remains finite-temperature, single-probe
+simple cuts through massless scalars without virtual propagators or chemical-potential
+assignments. The probe must be future-directed and timelike. The generation loop-momentum
+basis must route external momentum through at most one cut line that also carries loop momentum.
+Cold modes, vacuum subtraction, UV subtraction, raised thermal cuts, and surface-targeted sampling
+remain rejected by the temporary validation policy. These restrictions do not define separate
+thermal residue or event pipelines. Thermal threshold subtraction is unavailable; the runtime
+also requires `subtraction.disable_threshold_subtraction = true` so canonical physical-overlap
+preparation cannot reinterpret a mixed-sign cut as a positive E-surface cut.
+No broader infrared-finiteness or thermal-rate validation follows from the shared architecture.
+
+`LuCutSelection` pairs physical cut-edge alternatives with a `RaisedSurfaceGroup` containing
+`surface_ids: Vec<HybridSurfaceID>` and `max_occurrence`. E- and H-surface aliases use the same
+normalization and Laurent-coefficient selection. Selection restricts physical support before
+consuming the CFF denominator; matching numerator factors cancel first, thermal weights remain
+attached, and only the selected surface group's denominator-sign provenance is consumed.
+Threshold selectors retain positive E-surface groups. `CutGroup::surface_sign` relates the
+canonical pole to the physical cut equation.
+
+Both surface kinds construct an `EnergySurfaceRay` below the positive `Esurface` and signed
+`Hsurface` interfaces. This common owner retains ordered edge occurrences, signed coefficients,
+affine momenta, masses, and the external energy shift. Routing, native evaluation, directed
+enclosures, root refinement, and hyperdual derivatives use that same represented equation.
+Repeated energies are combined only in the root-isolation view; residue derivatives retain
+their original occurrences. `Esurface` keeps its positive-energy geometry and convex solve.
+Signed H-surface root isolation currently covers rays with at most one distinct nonhomogeneous
+energy, after combining identical affine energies. It enumerates every simple positive root
+within that chart and distinguishes proven absent roots from unsupported equations and unresolved
+tangencies; it does not claim general signed-root coverage.
+
+Cross-section graph terms retain the H-surface catalogue. Localized roots enter the same LU
+residue evaluation, normalization, event processing, and precision ladder. Each root emits its
+own event with an absolute simple-cut Jacobian. Absorbed cut particles are crossed into the
+incoming list before shared selectors run, while the original probe remains incoming.
+
 `integrands::process::fermi_surface::FermiSurfaceProduct` localizes zero-temperature
 distribution derivatives. Production amplitude evaluation separates these
 distributions from the completed UV-subtracted expression before compiling
@@ -1139,7 +1174,10 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 15` currently).
+- State format is versioned with `state_manifest.toml` (`version = 16` currently).
+- Version 16 stores shared E/H surface-alias groups and their residue orders, the physical
+  surface sign in each cut group, and the H-surface catalogue in cross-section graph terms.
+  Older states use a different positional binary layout and must be regenerated.
 - Version 15 stores one-entry coefficient catalogues for orientation-specific Fermi
   sectors, evaluated with local index zero. Older full-catalogue sectors use different
   index semantics and must be regenerated even though the encoded field layout is unchanged.

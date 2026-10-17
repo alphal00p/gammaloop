@@ -63,7 +63,12 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-14: version 15 rejects saved Fermi coefficient catalogues with
 # the previous global-index semantics; the one-entry catalogue mapping and
 # regeneration requirement are documented in architecture-current.typ.
-digest = "b07adbd4a1cf8299414e885a2de300264295388c"
+# Reviewed 2026-10-17: state version 16 persists shared E/H alias groups,
+# residue orders, physical cut signs, and cross-section H-surface catalogues.
+# architecture-current.typ records regeneration, shared radial-equation ownership,
+# and the restricted thermal-xs scope. The uncommitted layout changes share one
+# version bump from 15; this review does not claim numerical benchmark validation.
+digest = "79d11d13e39e738ab23ed12c25e73fbbf953c360"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"

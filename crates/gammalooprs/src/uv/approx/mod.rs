@@ -691,7 +691,7 @@ mod tests {
                         .clone()
                 })
                 .collect(),
-            raised_group: lu_cut,
+            surface: crate::graph::cuts::RaisedSurfaceGroup::from(&lu_cut),
         });
         let contracted = graph
             .get_edge_subgraph(EdgeIndex(1))
@@ -918,7 +918,7 @@ mod tests {
             .ok_or_else(|| eyre!("GL24 q3/q4 LU surface was not generated"))?;
         let mut cutset = CutSet::empty(graph.n_hedges());
         cutset.residue_selector.lu = Some(LuCutSelection {
-            raised_group: lu_surface,
+            surface: crate::graph::cuts::RaisedSurfaceGroup::from(&lu_surface),
             cut_edge_alternatives: vec![vec![EdgeIndex(3), EdgeIndex(4)]],
         });
         let expected_keys = cutset
@@ -1923,7 +1923,7 @@ mod tests {
             );
             let mut cutset = CutSet::empty(graph.n_hedges());
             cutset.residue_selector.lu = Some(LuCutSelection {
-                raised_group: lu_cut.clone(),
+                surface: crate::graph::cuts::RaisedSurfaceGroup::from(&lu_cut),
                 cut_edge_alternatives: lu_cut
                     .esurface_ids
                     .iter()

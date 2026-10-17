@@ -1807,7 +1807,7 @@ mod tests {
         dot,
         graph::{
             ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator,
-            cuts::{CutSet, LuCutSelection},
+            cuts::{CutSet, LuCutSelection, RaisedSurfaceGroup},
             parse::from_dot::IntoGraph,
         },
         initialisation::test_initialise,
@@ -2665,7 +2665,7 @@ mod tests {
             .expect("raised production CFF should contain a physical repeated LU surface");
         let mut cutset = CutSet::empty(graph.n_hedges());
         cutset.residue_selector.lu = Some(LuCutSelection {
-            raised_group: lu_cut.clone(),
+            surface: RaisedSurfaceGroup::from(&lu_cut),
             cut_edge_alternatives: lu_cut
                 .esurface_ids
                 .iter()
@@ -2757,7 +2757,7 @@ mod tests {
             .expect("raised production CFF should contain a physical repeated LU surface");
         let mut cutset = CutSet::empty(graph.n_hedges());
         cutset.residue_selector.lu = Some(LuCutSelection {
-            raised_group: lu_cut.clone(),
+            surface: RaisedSurfaceGroup::from(&lu_cut),
             cut_edge_alternatives: lu_cut
                 .esurface_ids
                 .iter()

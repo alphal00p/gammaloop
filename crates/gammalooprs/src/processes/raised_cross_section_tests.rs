@@ -504,7 +504,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     .cut_group_data
                     .cut_groups
                     .iter()
-                    .all(|group| group.related_esurface_group.max_occurence == 2)
+                    .all(|group| group.residue.max_occurrence() == 2)
             );
             let directives = target_directives_from_legacy(&baseline);
 
@@ -1578,7 +1578,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                     })
                     .unwrap();
                 assert!(term.cut_group_data.cut_groups.iter().any(|group| {
-                    group.cuts.contains(&host_id) && group.related_esurface_group.max_occurence == 2
+                    group.cuts.contains(&host_id) && group.residue.max_occurrence() == 2
                 }));
                 let associations = &term.cut_threshold_associations[host_id];
                 let left =
@@ -2272,7 +2272,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
         .spawn(|| -> eyre::Result<()> {
             use crate::{
                 DependentMomentaConstructor,
-                cff::esurface::{Esurface, EsurfaceRay},
+                cff::{esurface::Esurface, radial::EnergySurfaceRay},
                 graph::LmbIndex,
                 integrands::process::{
                     GaussianReferenceFunction, GraphTerm, ProcessIntegrandImpl, SamplingChannelId, SamplingExpressionEvaluator,
@@ -2643,9 +2643,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                 .iter()
                 .find(|group| group.cuts.contains(&host_id))
                 .unwrap();
-            let residues = production
-                .clone()
-                .select_esurface_residue(&group.related_esurface_group);
+            let residues = production.clone().select_surface_residues(&group.residue);
             for target in targets {
                 let id = production
                     .surfaces
@@ -2950,7 +2948,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                 // This uses original graph equations at exactly the retained
                 // source point, with a budget relative to the actual H/Z radius
                 // rather than to the hard energy scale or root magnitude.
-                EsurfaceRay::<ArbPrec>::verify_normal_alignment(
+                EnergySurfaceRay::<ArbPrec>::verify_normal_alignment(
                     [original(&original_targets[0], &independent_loops)?,
                      original(&original_targets[1], &independent_loops)?],
                     [original(&original_targets[0], &retained_loops)?,

@@ -1,0 +1,1076 @@
+{
+  "status": "All pointwise controls passed. Rest and p=1 pilots agree. The discrepant p=3 pilot is retained; an independent adaptive million-sample repeat agrees at 2.85 percent uncertainty.",
+  "binary": "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+  "binary_sha256": "4036e004f2ed2522b4d59a09bdeb999e1c9714e885e8db634ef68d3501598fca",
+  "source_files_sha256": {
+    "model.json": "466c843b26d71403f921289c117fc2849754920100454c60710a48e809c1fd77",
+    "run.toml": "d381fd653c0eab5bfffe5f0ba4d88896ecb33f416c4bb592563fe2fcb63cddd3",
+    "reference.py": "1d0969d926ff1ec366466d6e521284cdb898ff28f3e34de55b632c9f04c2df45"
+  },
+  "inspection_point": [
+    0.6,
+    0,
+    0,
+    0,
+    0.8,
+    0
+  ],
+  "point_checks": [
+    {
+      "block": "rest",
+      "mode": "equilibrium",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-native-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "rest",
+        "inspect"
+      ],
+      "log": "/tmp/thermal-rates-sunset-native.log",
+      "inspect": "/tmp/thermal-rates-sunset-native-rest-equilibrium.json",
+      "value": {
+        "re": 5.2497393862529534e-05,
+        "im": 0.0
+      },
+      "events": 4,
+      "event_weight_sum": 5.2497393862529534e-05,
+      "max_conservation_residual": 2.220446049250313e-16,
+      "is_nan": false,
+      "stability": [
+        {
+          "precision": "Double",
+          "estimated_relative_accuracy": 2.5815618945880733e-16,
+          "estimated_decimal_digits": 15.588117458005556,
+          "status": {
+            "Stable": 2
+          }
+        }
+      ],
+      "independent_phase_space_density": 5.249739386252953e-05,
+      "oracle_relative_difference": 1.290780947294037e-16,
+      "independent_signed_event_checks": [
+        {
+          "absorbed_pdgs": [],
+          "independent_radial_root": 0.41666666666666663,
+          "independent_phase_space_density": 2.6185891201811344e-07,
+          "native_event_weight": 2.618589120181144e-07,
+          "relative_difference": 3.639028583434932e-15
+        },
+        {
+          "absorbed_pdgs": [
+            9000004
+          ],
+          "independent_radial_root": 2.5,
+          "independent_phase_space_density": 5.99488851534086e-07,
+          "native_event_weight": 5.994888515340862e-07,
+          "relative_difference": 3.5323131743265596e-16
+        },
+        {
+          "absorbed_pdgs": [
+            9000003
+          ],
+          "independent_radial_root": 1.25,
+          "independent_phase_space_density": 2.9232910653604076e-05,
+          "native_event_weight": 2.923291065360407e-05,
+          "relative_difference": -2.318025617883168e-16
+        },
+        {
+          "absorbed_pdgs": [
+            9000002
+          ],
+          "independent_radial_root": 0.8333333333333333,
+          "independent_phase_space_density": 2.240313544537325e-05,
+          "native_event_weight": 2.2403135445373262e-05,
+          "relative_difference": 6.049388572914113e-16
+        }
+      ]
+    },
+    {
+      "block": "rest",
+      "mode": "vacuum",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-native-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "rest",
+        "inspect"
+      ],
+      "log": "/tmp/thermal-rates-sunset-native.log",
+      "inspect": "/tmp/thermal-rates-sunset-native-rest-vacuum.json",
+      "value": {
+        "re": 8.851236217417727e-09,
+        "im": 0.0
+      },
+      "events": 1,
+      "event_weight_sum": 8.851236217417727e-09,
+      "max_conservation_residual": 2.220446049250313e-16,
+      "is_nan": false,
+      "stability": [
+        {
+          "precision": "Double",
+          "estimated_relative_accuracy": 0.0,
+          "estimated_decimal_digits": null,
+          "status": {
+            "Stable": 2
+          }
+        }
+      ],
+      "independent_phase_space_density": 8.85123621741772e-09,
+      "oracle_relative_difference": 7.476294539967446e-16
+    },
+    {
+      "block": "boosted",
+      "mode": "equilibrium",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-native-boosted-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "boosted",
+        "inspect"
+      ],
+      "log": "/tmp/thermal-rates-sunset-native-boosted.log",
+      "inspect": "/tmp/thermal-rates-sunset-native-boosted-equilibrium.json",
+      "value": {
+        "re": 3.1103352938102657e-05,
+        "im": 0.0
+      },
+      "events": 4,
+      "event_weight_sum": 3.1103352938102657e-05,
+      "max_conservation_residual": 2.220446049250313e-16,
+      "is_nan": false,
+      "stability": [
+        {
+          "precision": "Double",
+          "estimated_relative_accuracy": 4.3572560112856826e-16,
+          "estimated_decimal_digits": 15.36078692227166,
+          "status": {
+            "Stable": 2
+          }
+        }
+      ],
+      "independent_signed_event_checks": [
+        {
+          "absorbed_pdgs": [],
+          "independent_radial_root": 0.27024368116021646,
+          "independent_phase_space_density": 1.0298202545713559e-11,
+          "native_event_weight": 1.0298202545713557e-11,
+          "relative_difference": -1.5688049703053192e-16
+        },
+        {
+          "absorbed_pdgs": [
+            9000004
+          ],
+          "independent_radial_root": 3.8545458757613122,
+          "independent_phase_space_density": 5.5481615965087124e-11,
+          "native_event_weight": 5.5481615965087945e-11,
+          "relative_difference": 1.4792616432331567e-14
+        },
+        {
+          "absorbed_pdgs": [
+            9000003
+          ],
+          "independent_radial_root": 1.356923557492892,
+          "independent_phase_space_density": 2.042589963567035e-05,
+          "native_event_weight": 2.0425899635670367e-05,
+          "relative_difference": 8.293714963478052e-16
+        },
+        {
+          "absorbed_pdgs": [
+            9000002
+          ],
+          "independent_radial_root": 0.7676679065041019,
+          "independent_phase_space_density": 1.0677387522613772e-05,
+          "native_event_weight": 1.0677387522613775e-05,
+          "relative_difference": 3.173184247402686e-16
+        }
+      ]
+    },
+    {
+      "block": "boosted",
+      "mode": "vacuum",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-native-boosted-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "boosted",
+        "inspect"
+      ],
+      "log": "/tmp/thermal-rates-sunset-native-boosted.log",
+      "inspect": "/tmp/thermal-rates-sunset-native-boosted-vacuum.json",
+      "value": {
+        "re": 2.5542658529641266e-13,
+        "im": 0.0
+      },
+      "events": 1,
+      "event_weight_sum": 2.5542658529641266e-13,
+      "max_conservation_residual": 0.0,
+      "is_nan": false,
+      "stability": [
+        {
+          "precision": "Double",
+          "estimated_relative_accuracy": 0.0,
+          "estimated_decimal_digits": null,
+          "status": {
+            "Stable": 2
+          }
+        }
+      ],
+      "independent_phase_space_density": 2.554265852964127e-13,
+      "oracle_relative_difference": -1.9765796060561363e-16
+    },
+    {
+      "block": "fast",
+      "mode": "equilibrium",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-native-fast-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "fast",
+        "inspect"
+      ],
+      "log": "/tmp/thermal-rates-sunset-native-fast.log",
+      "inspect": "/tmp/thermal-rates-sunset-native-fast-equilibrium.json",
+      "value": {
+        "re": 4.086258125489884e-06,
+        "im": 0.0
+      },
+      "events": 4,
+      "event_weight_sum": 4.086258125489884e-06,
+      "max_conservation_residual": 1.3322676295501878e-15,
+      "is_nan": false,
+      "stability": [
+        {
+          "precision": "Double",
+          "estimated_relative_accuracy": 1.243728988098742e-15,
+          "estimated_decimal_digits": 14.905274243275246,
+          "status": {
+            "Stable": 2
+          }
+        }
+      ],
+      "independent_signed_event_checks": [
+        {
+          "absorbed_pdgs": [],
+          "independent_radial_root": 0.11435634921994828,
+          "independent_phase_space_density": 1.4703704722303707e-40,
+          "native_event_weight": 1.470370472230858e-40,
+          "relative_difference": 3.3145298185591063e-13
+        },
+        {
+          "absorbed_pdgs": [
+            9000004
+          ],
+          "independent_radial_root": 9.108953492937825,
+          "independent_phase_space_density": 3.3562808874014113e-42,
+          "native_event_weight": 3.3562808874013126e-42,
+          "relative_difference": -2.942891307487845e-14
+        },
+        {
+          "absorbed_pdgs": [
+            9000003
+          ],
+          "independent_radial_root": 1.8735894906278503,
+          "independent_phase_space_density": 3.499493889903059e-06,
+          "native_event_weight": 3.499493889902994e-06,
+          "relative_difference": -1.8516397657362098e-14
+        },
+        {
+          "absorbed_pdgs": [
+            9000002
+          ],
+          "independent_radial_root": 0.5559737988910256,
+          "independent_phase_space_density": 5.867642355868969e-07,
+          "native_event_weight": 5.867642355868898e-07,
+          "relative_difference": -1.2089865917201414e-14
+        }
+      ]
+    },
+    {
+      "block": "fast",
+      "mode": "vacuum",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-native-fast-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "fast",
+        "inspect"
+      ],
+      "log": "/tmp/thermal-rates-sunset-native-fast.log",
+      "inspect": "/tmp/thermal-rates-sunset-native-fast-vacuum.json",
+      "value": {
+        "re": 8.458909777678587e-43,
+        "im": 0.0
+      },
+      "events": 1,
+      "event_weight_sum": 8.458909777678587e-43,
+      "max_conservation_residual": 0.0,
+      "is_nan": false,
+      "stability": [
+        {
+          "precision": "Double",
+          "estimated_relative_accuracy": 1.4689974516128596e-14,
+          "estimated_decimal_digits": 13.832978957614394,
+          "status": {
+            "Stable": 2
+          }
+        }
+      ],
+      "independent_phase_space_density": 8.458909777675746e-43,
+      "oracle_relative_difference": 3.3579775079828806e-13
+    },
+    {
+      "block": "cold",
+      "mode": "equilibrium",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-native-cold-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "rest",
+        "-c",
+        "set process -p equilibrium -i LO kv general.inverse_temperature=1000.0; run inspect"
+      ],
+      "log": "/tmp/thermal-rates-sunset-native-cold.log",
+      "inspect": "/tmp/thermal-rates-sunset-native-cold-equilibrium.json",
+      "value": {
+        "re": 8.851236217417727e-09,
+        "im": 0.0
+      },
+      "events": 4,
+      "event_weight_sum": 8.851236217417727e-09,
+      "max_conservation_residual": 2.220446049250313e-16,
+      "is_nan": false,
+      "stability": [
+        {
+          "precision": "Double",
+          "estimated_relative_accuracy": 0.0,
+          "estimated_decimal_digits": null,
+          "status": {
+            "Stable": 2
+          }
+        }
+      ]
+    },
+    {
+      "block": "cold",
+      "mode": "vacuum",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-native-cold-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "rest",
+        "-c",
+        "set process -p equilibrium -i LO kv general.inverse_temperature=1000.0; run inspect"
+      ],
+      "log": "/tmp/thermal-rates-sunset-native-cold.log",
+      "inspect": "/tmp/thermal-rates-sunset-native-cold-vacuum.json",
+      "value": {
+        "re": 8.851236217417727e-09,
+        "im": 0.0
+      },
+      "events": 1,
+      "event_weight_sum": 8.851236217417727e-09,
+      "max_conservation_residual": 2.220446049250313e-16,
+      "is_nan": false,
+      "stability": [
+        {
+          "precision": "Double",
+          "estimated_relative_accuracy": 0.0,
+          "estimated_decimal_digits": null,
+          "status": {
+            "Stable": 2
+          }
+        }
+      ]
+    }
+  ],
+  "pilot": {
+    "scope": "50,000 samples per slot at rest; feasibility pilot, not a precision target",
+    "result": "/tmp/thermal-rates-sunset-pilot/integration_result.json",
+    "log": "/tmp/thermal-rates-sunset-pilot.log",
+    "command": [
+      "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+      "-n",
+      "-s",
+      "/tmp/thermal-rates-sunset-pilot-state",
+      "examples/cli/thermal_rates/scalar_sunset/run.toml",
+      "run",
+      "generate",
+      "rest",
+      "-c",
+      "set process -p equilibrium -i LO kv general.generate_events=false integrator.n_start=50000 integrator.n_max=50000; set process -p vacuum -i LO kv general.generate_events=false integrator.n_start=50000 integrator.n_max=50000; integrate -p equilibrium -i LO -p vacuum -i LO --n-cores 2 --restart --workspace-path /tmp/thermal-rates-sunset-pilot --renderer tabled --no-stream-iterations"
+    ],
+    "comparisons": [
+      {
+        "slot": "equilibrium@LO",
+        "reference": 0.007266759995377879,
+        "value": 0.007186069818068161,
+        "error": 0.00016510665427801056,
+        "pull": -0.48871547705067364,
+        "sample_count": 50000,
+        "real_zero_count": 482,
+        "settings": "/tmp/thermal-rates-sunset-pilot/integrands/equilibrium@LO/settings.toml"
+      },
+      {
+        "slot": "vacuum@LO",
+        "reference": 6.299127818984276e-05,
+        "value": 6.228046044170507e-05,
+        "error": 1.4844358647523143e-06,
+        "pull": -0.47884705901813646,
+        "sample_count": 50000,
+        "real_zero_count": 7172,
+        "settings": "/tmp/thermal-rates-sunset-pilot/integrands/vacuum@LO/settings.toml"
+      }
+    ],
+    "global_statistics": {
+      "num_evals": 100000,
+      "f64_percentage": 99.343,
+      "f128_percentage": 0.657,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0
+    },
+    "recovered_intermediate_nonfinite_warnings": 657,
+    "final_nonfinite_markers": 0,
+    "settings": {
+      "equilibrium@LO": {
+        "path": "/tmp/thermal-rates-sunset-pilot/integrands/equilibrium@LO/settings.toml",
+        "sha256": "29d34fe81f44ffa3cfbf140263688c5850e180433d0ecb1963eb939c9fbfb18d"
+      },
+      "vacuum@LO": {
+        "path": "/tmp/thermal-rates-sunset-pilot/integrands/vacuum@LO/settings.toml",
+        "sha256": "29d34fe81f44ffa3cfbf140263688c5850e180433d0ecb1963eb939c9fbfb18d"
+      }
+    }
+  },
+  "binary_scope": "Native executable contains the thermal xs numerical implementation before the final structural preflight guards. Final-source focused tests are recorded separately.",
+  "boosted_integrations": [
+    {
+      "label": "p1",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-p1-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "boosted",
+        "-c",
+        "set process -p equilibrium -i LO kv general.generate_events=false integrator.n_start=50000 integrator.n_max=100000; set process -p vacuum -i LO kv general.generate_events=false integrator.n_start=50000 integrator.n_max=100000; integrate -p equilibrium -i LO -p vacuum -i LO --n-cores 2 --restart --workspace-path /tmp/thermal-rates-sunset-p1 --renderer tabled --no-stream-iterations --write-results-for-each-iteration"
+      ],
+      "log": "/tmp/thermal-rates-sunset-p1.log",
+      "workspace": "/tmp/thermal-rates-sunset-p1",
+      "status": "completed",
+      "exit_code": 0,
+      "result": "/tmp/thermal-rates-sunset-p1/integration_result.json",
+      "comparisons": [
+        {
+          "slot": "equilibrium@LO",
+          "reference": 0.004673737639868995,
+          "value": 0.004568121453541463,
+          "error": 0.00013076859665341644,
+          "pull": -0.8076571059904641,
+          "sample_count": 100000,
+          "real_zero_count": 517,
+          "chi_square": 0.9729951370255492,
+          "max_weight_impact": 0.019798493456590783
+        },
+        {
+          "slot": "vacuum@LO",
+          "reference": 4.454155996364608e-05,
+          "value": 4.506951508067339e-05,
+          "error": 1.8886587944813208e-06,
+          "pull": 0.2795397022320802,
+          "sample_count": 100000,
+          "real_zero_count": 15843,
+          "chi_square": 0.057003331880530084,
+          "max_weight_impact": 0.015617701055188261
+        }
+      ],
+      "global_statistics": {
+        "num_evals": 200000,
+        "f64_percentage": 98.8745,
+        "f128_percentage": 1.1255,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0
+      },
+      "recovered_intermediate_nonfinite_warnings": 2250,
+      "final_nonfinite_markers": 0,
+      "settings": {
+        "equilibrium@LO": {
+          "path": "/tmp/thermal-rates-sunset-p1/integrands/equilibrium@LO/settings.toml",
+          "sha256": "7cf71f3af1cd0407b85d99c7fbe18fa6b2854125fba5df2aae9099f396619153"
+        },
+        "vacuum@LO": {
+          "path": "/tmp/thermal-rates-sunset-p1/integrands/vacuum@LO/settings.toml",
+          "sha256": "7cf71f3af1cd0407b85d99c7fbe18fa6b2854125fba5df2aae9099f396619153"
+        }
+      }
+    },
+    {
+      "label": "p3",
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-p3-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "fast",
+        "-c",
+        "set process -p equilibrium -i LO kv general.generate_events=false integrator.n_start=50000 integrator.n_max=100000; set process -p vacuum -i LO kv general.generate_events=false integrator.n_start=50000 integrator.n_max=100000; integrate -p equilibrium -i LO -p vacuum -i LO --n-cores 2 --restart --workspace-path /tmp/thermal-rates-sunset-p3 --renderer tabled --no-stream-iterations --write-results-for-each-iteration"
+      ],
+      "log": "/tmp/thermal-rates-sunset-p3.log",
+      "workspace": "/tmp/thermal-rates-sunset-p3",
+      "status": "completed",
+      "exit_code": 0,
+      "result": "/tmp/thermal-rates-sunset-p3/integration_result.json",
+      "comparisons": [
+        {
+          "slot": "equilibrium@LO",
+          "reference": 0.001581268207984088,
+          "value": 0.001297007815929699,
+          "error": 5.061176698674551e-05,
+          "pull": -5.616488199845557,
+          "sample_count": 100000,
+          "real_zero_count": 1018,
+          "chi_square": 0.015565904213218573,
+          "max_weight_impact": 0.023418952852340774
+        },
+        {
+          "slot": "vacuum@LO",
+          "reference": 1.991959118051914e-05,
+          "value": 1.4444555122909272e-05,
+          "error": 1.728375582636957e-06,
+          "pull": -3.1677351338513398,
+          "sample_count": 100000,
+          "real_zero_count": 31432,
+          "chi_square": 0.8965336537716233,
+          "max_weight_impact": 0.05386100326741568
+        }
+      ],
+      "global_statistics": {
+        "num_evals": 200000,
+        "f64_percentage": 98.173,
+        "f128_percentage": 1.8270000000000002,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0
+      },
+      "recovered_intermediate_nonfinite_warnings": 3652,
+      "final_nonfinite_markers": 0,
+      "settings": {
+        "equilibrium@LO": {
+          "path": "/tmp/thermal-rates-sunset-p3/integrands/equilibrium@LO/settings.toml",
+          "sha256": "8d660d4c81cc9cfc39f77f36e004292093774fc2a9f61c0e4197b407e75d9cfc"
+        },
+        "vacuum@LO": {
+          "path": "/tmp/thermal-rates-sunset-p3/integrands/vacuum@LO/settings.toml",
+          "sha256": "8d660d4c81cc9cfc39f77f36e004292093774fc2a9f61c0e4197b407e75d9cfc"
+        }
+      }
+    }
+  ],
+  "detailed_artifact": "/tmp/thermal-rates-sunset-validation-detailed.json",
+  "physical_parameters": {
+    "probe_mass": 1,
+    "bath_masses": [
+      0,
+      0,
+      0
+    ],
+    "coupling": 1,
+    "temperature": 1,
+    "chemical_potentials": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "probe_spatial_magnitudes": [
+      0,
+      1,
+      3
+    ],
+    "cold_inverse_temperature": 1000,
+    "uv_subtraction": false,
+    "threshold_subtraction": false,
+    "vacuum_subtraction": false
+  },
+  "adaptive_repeat": {
+    "label": "p3_independent_seed",
+    "momentum": 3,
+    "seed": 1701027,
+    "status": "completed",
+    "exit_code": 0,
+    "binary_sha256": "4036e004f2ed2522b4d59a09bdeb999e1c9714e885e8db634ef68d3501598fca",
+    "command": [
+      "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+      "-n",
+      "-s",
+      "/tmp/thermal-rates-sunset-p3-seed1701027-state",
+      "examples/cli/thermal_rates/scalar_sunset/run.toml",
+      "run",
+      "generate",
+      "fast",
+      "-c",
+      "set process -p equilibrium -i LO kv general.generate_events=false integrator.n_start=100000 integrator.n_increase=0 integrator.n_max=1000000 integrator.seed=1701027 integrator.target_relative_accuracy=0.005; set process -p vacuum -i LO kv general.generate_events=false integrator.n_start=100000 integrator.n_increase=0 integrator.n_max=1000000 integrator.seed=1701027 integrator.target_relative_accuracy=0.005; integrate -p equilibrium -i LO -p vacuum -i LO --n-cores 2 --restart --workspace-path /tmp/thermal-rates-sunset-p3-seed1701027 --renderer tabled --no-stream-iterations --write-results-for-each-iteration"
+    ],
+    "workspace": "/tmp/thermal-rates-sunset-p3-seed1701027",
+    "result": "/tmp/thermal-rates-sunset-p3-seed1701027/integration_result.json",
+    "log": "/tmp/thermal-rates-sunset-p3-seed1701027.log",
+    "comparisons": [
+      {
+        "slot": "equilibrium@LO",
+        "reference": 0.001581268207984088,
+        "value": 0.0015899071647644254,
+        "error": 4.5259686653134425e-05,
+        "pull": 0.19087531132385807,
+        "sample_count": 1000000,
+        "real_zero_count": 3636,
+        "chi_square_per_dof": 1.2799983111393658,
+        "max_weight_impact": 0.0208203842655899
+      },
+      {
+        "slot": "vacuum@LO",
+        "reference": 1.991959118051914e-05,
+        "value": 1.9567441325189285e-05,
+        "error": 5.598739683369128e-07,
+        "pull": -0.628980583569379,
+        "sample_count": 1000000,
+        "real_zero_count": 236342,
+        "chi_square_per_dof": 1.1400169349213456,
+        "max_weight_impact": 0.016912226607591778
+      }
+    ],
+    "settings": {
+      "equilibrium@LO": {
+        "path": "/tmp/thermal-rates-sunset-p3-seed1701027/integrands/equilibrium@LO/settings.toml",
+        "sha256": "ddcb8fe3c46816b9a42b4584ed617579b1bb96f903aa7eb16412789f06d78659"
+      },
+      "vacuum@LO": {
+        "path": "/tmp/thermal-rates-sunset-p3-seed1701027/integrands/vacuum@LO/settings.toml",
+        "sha256": "ddcb8fe3c46816b9a42b4584ed617579b1bb96f903aa7eb16412789f06d78659"
+      }
+    },
+    "global_statistics": {
+      "num_evals": 2000000,
+      "f64_percentage": 98.51050000000001,
+      "f128_percentage": 1.4893999999999998,
+      "arb_percentage": 9.999999999999999e-05,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0
+    },
+    "recovered_intermediate_nonfinite_warnings": 29788,
+    "final_nonfinite_markers": 0,
+    "iteration_evolution": [
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0001.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 100000,
+            "value": 0.0013936559190744378,
+            "error": 9.836570700633905e-05,
+            "real_zero_fraction": 0.01527
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 100000,
+            "value": 1.683138789219573e-05,
+            "error": 4.120479385433134e-06,
+            "real_zero_fraction": 0.35224
+          }
+        ]
+      },
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0002.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 200000,
+            "value": 0.0014986085353979701,
+            "error": 6.8739757607618e-05,
+            "real_zero_fraction": 0.01005
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 200000,
+            "value": 1.6925075236281087e-05,
+            "error": 2.152071502419983e-06,
+            "real_zero_fraction": 0.29171
+          }
+        ]
+      },
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0003.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 300000,
+            "value": 0.0015115439233076159,
+            "error": 5.174275035503263e-05,
+            "real_zero_fraction": 0.007696666666666667
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 300000,
+            "value": 1.8394191087062627e-05,
+            "error": 1.6367667065053018e-06,
+            "real_zero_fraction": 0.26626333333333335
+          }
+        ]
+      },
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0004.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 400000,
+            "value": 0.0015320640307683925,
+            "error": 4.0359297288352496e-05,
+            "real_zero_fraction": 0.0063975
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 400000,
+            "value": 1.888051980108747e-05,
+            "error": 1.246373671750371e-06,
+            "real_zero_fraction": 0.2484125
+          }
+        ]
+      },
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0005.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 500000,
+            "value": 0.0015297564388718206,
+            "error": 3.343584499166884e-05,
+            "real_zero_fraction": 0.005524
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 500000,
+            "value": 1.8946784433545434e-05,
+            "error": 1.0036701468681115e-06,
+            "real_zero_fraction": 0.23997
+          }
+        ]
+      },
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0006.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 600000,
+            "value": 0.0015708276239633358,
+            "error": 4.578989460707549e-05,
+            "real_zero_fraction": 0.004938333333333334
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 600000,
+            "value": 1.9104048284848398e-05,
+            "error": 8.490699257955069e-07,
+            "real_zero_fraction": 0.239695
+          }
+        ]
+      },
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0007.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 700000,
+            "value": 0.0015550999965120468,
+            "error": 3.948845895331329e-05,
+            "real_zero_fraction": 0.0045
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 700000,
+            "value": 1.916105283323368e-05,
+            "error": 7.46166522949036e-07,
+            "real_zero_fraction": 0.24263142857142858
+          }
+        ]
+      },
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0008.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 800000,
+            "value": 0.001571191148662425,
+            "error": 3.801653080295622e-05,
+            "real_zero_fraction": 0.00416625
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 800000,
+            "value": 1.951889162645694e-05,
+            "error": 6.759326931056999e-07,
+            "real_zero_fraction": 0.24281375
+          }
+        ]
+      },
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0009.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 900000,
+            "value": 0.0015654566579435451,
+            "error": 3.4105478825205424e-05,
+            "real_zero_fraction": 0.0038911111111111112
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 900000,
+            "value": 1.9444962122481923e-05,
+            "error": 6.054502561643372e-07,
+            "real_zero_fraction": 0.23912333333333333
+          }
+        ]
+      },
+      {
+        "archive": "/tmp/thermal-rates-sunset-p3-seed1701027/results/integration_result_iter_0010.json",
+        "slots": [
+          {
+            "slot": "equilibrium@LO",
+            "samples": 1000000,
+            "value": 0.0015899071647644254,
+            "error": 4.5259686653134425e-05,
+            "real_zero_fraction": 0.003636
+          },
+          {
+            "slot": "vacuum@LO",
+            "samples": 1000000,
+            "value": 1.9567441325189285e-05,
+            "error": 5.598739683369128e-07,
+            "real_zero_fraction": 0.236342
+          }
+        ]
+      }
+    ]
+  },
+  "interpretation": "Boosted pointwise signed densities agree independently. The high-statistics p=3 repeat and its iteration evolution support a coverage/convergence explanation for the initial pilot; this does not establish general sampling efficiency or rigorous Monte Carlo error coverage.",
+  "final_source_tests": {
+    "runner": "just test-ci / cargo nextest ci-optim, ci_gammaloop",
+    "run_id": "6f6c60c1-6c35-4214-b5bd-ac55fa148f6d",
+    "tests": 14,
+    "binaries": 4,
+    "passed": 14,
+    "execution_seconds": 1.448,
+    "log": "/tmp/thermal-rates-tests.log",
+    "scope": "Includes saved thermal-state reload and existing raised-E state roundtrip/regression; focused selection, not full suite"
+  },
+  "final_cli_checks": {
+    "binary": "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+    "sha256": "9bfb0fe2a556ad14ca6ba58ec419727af34990d5ccc3bb32b8795e3a222a5916",
+    "build": {
+      "command": "just build-cli-no-pyo3 with shared CARGO_TARGET_DIR",
+      "log": "/tmp/thermal-rates-build-final.log",
+      "exit_code": 0
+    },
+    "smoke": {
+      "command": [
+        "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "-n",
+        "-s",
+        "/tmp/thermal-rates-sunset-final-state",
+        "examples/cli/thermal_rates/scalar_sunset/run.toml",
+        "run",
+        "generate",
+        "rest",
+        "inspect"
+      ],
+      "log": "/tmp/thermal-rates-sunset-final.log",
+      "exit_code": 0,
+      "inspect_results": {
+        "equilibrium": {
+          "path": "/tmp/thermal-rates-sunset-final-equilibrium-inspect.json",
+          "value": {
+            "re": 5.2497393862529534e-05,
+            "im": 0.0
+          },
+          "events": 4,
+          "is_nan": false
+        },
+        "vacuum": {
+          "path": "/tmp/thermal-rates-sunset-final-vacuum-inspect.json",
+          "value": {
+            "re": 8.851236217417727e-09,
+            "im": 0.0
+          },
+          "events": 1,
+          "is_nan": false
+        }
+      }
+    },
+    "guards": [
+      {
+        "case": "threshold",
+        "command": [
+          "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/tmp/thermal-rates-threshold-guard-state",
+          "examples/cli/thermal_rates/scalar_sunset/run.toml",
+          "run",
+          "generate",
+          "rest",
+          "-c",
+          "set process -p equilibrium -i LO kv subtraction.disable_threshold_subtraction=false; inspect -p equilibrium -i LO -m -x 0.6 0 0 0 0.8 0"
+        ],
+        "log": "/tmp/thermal-rates-threshold-guard.log",
+        "expected_exit_code": 1,
+        "observed_exit_code": 1,
+        "expected_message": "requires subtraction.disable_threshold_subtraction=true",
+        "final_nonfinite_placeholder_markers": 0
+      },
+      {
+        "case": "spacelike",
+        "command": [
+          "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/tmp/thermal-rates-spacelike-guard-state",
+          "examples/cli/thermal_rates/scalar_sunset/run.toml",
+          "run",
+          "generate",
+          "rest",
+          "-c",
+          "set process -p equilibrium -i LO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,2.0]]; inspect -p equilibrium -i LO -m -x 0.6 0 0 0 0.8 0"
+        ],
+        "log": "/tmp/thermal-rates-spacelike-guard.log",
+        "expected_exit_code": 1,
+        "observed_exit_code": 1,
+        "expected_message": "requires a future-directed timelike probe",
+        "final_nonfinite_placeholder_markers": 0
+      }
+    ]
+  },
+  "shared_lu_refactor_verification": {
+    "scope": "Shared E/H residue groups and EnergySurfaceRay refactor; existing public thermal xs scope retained. Historical numerical integrations above were not rerun.",
+    "state_manifest_version": 17,
+    "manifest_version_note": "This historical run used temporary version 17. Before committing, the unchanged layout was assigned version 16, consolidating the uncommitted changes into one bump from 15.",
+    "tests": {
+      "status": "passed",
+      "runner": "just test / cargo nextest",
+      "cargo_profile": "ci-optim",
+      "nextest_profile": "ci_gammaloop",
+      "run_id": "e8fd0805-f408-427a-bc7d-6c883d997ae4",
+      "tests": 195,
+      "passed": 195,
+      "binaries": 5,
+      "skipped": 2142,
+      "profile_excluded": 2,
+      "execution_seconds": 87.757,
+      "log": "/tmp/thermal-rates-shared-tests.log",
+      "scope": "Focused selection, not full suite; includes saved-state round trip and outgoing-B1 selection with retained and hidden events.",
+      "command": "CARGO_TARGET_DIR=/Users/kaapo/Work/gammaloop/gammaloop-base/target just test --exclude alphal00p-docs-builder --exclude alphal00p-docs-schema --exclude alphal00p-docs-catalogs --exclude alphal00p-docs-macros --exclude gammaloop-tracing-filter --exclude gammaloop-tracing-filter-macros --exclude gammaloop-workspace-hack --exclude spenso --exclude linnet --exclude symbolica-utils --exclude spenso-macros --exclude idenso --exclude spenso-hep-lib --exclude vakint --exclude alphal00p-docs-examples --exclude alphal00p-docs-python-exporter --exclude linnet-py --exclude kurvst --exclude linnest --exclude spynso3 --exclude clinnet --lib --test test_runs -E 'package(three-dimensional-reps) or test(cff::radial::tests) or test(cff::esurface::tests) or test(cff::hsurface::tests) or test(hsurface_lu_) or test(signed_surface_groups_) or test(cut_groups_include_) or test(signed_cut_groups_) or test(cross_sections_validate_supported_thermal_settings) or test(thermal_scalar_sunset) or test(exact_raised_lu_cut_matches_ordinary_cff_per_residue) or test(lu_residue_selection_rejects_missing) or test(generalized_raised_cross_section_covers_derivative_components_and_roundtrips) or test(canonical_lu_host_materializes_directly_without_new_root_history) or test(sampling_state_tests) or test(state_manifest_)' > /tmp/thermal-rates-shared-tests.log 2>&1"
+    },
+    "clippy": {
+      "status": "passed",
+      "command": "CARGO_TARGET_DIR=/Users/kaapo/Work/gammaloop/gammaloop-base/target just ci_cargo_profile=dev-optim clippy --exclude alphal00p-docs-builder --exclude alphal00p-docs-schema --exclude alphal00p-docs-catalogs --exclude alphal00p-docs-macros --exclude gammaloop-tracing-filter --exclude gammaloop-tracing-filter-macros --exclude gammaloop-workspace-hack --exclude spenso --exclude linnet --exclude symbolica-utils --exclude spenso-macros --exclude idenso --exclude spenso-hep-lib --exclude vakint --exclude alphal00p-docs-examples --exclude alphal00p-docs-python-exporter --exclude linnet-py --exclude kurvst --exclude linnest --exclude spynso3 --exclude clinnet > /tmp/thermal-rates-shared-clippy.log 2>&1",
+      "warnings": 0,
+      "elapsed_seconds": 30.07,
+      "log": "/tmp/thermal-rates-shared-clippy.log"
+    },
+    "formatting": {
+      "status": "passed",
+      "scope": "rustfmt check of changed Rust sources"
+    },
+    "cli": {
+      "status": "passed",
+      "build": {
+        "command": "CARGO_TARGET_DIR=/Users/kaapo/Work/gammaloop/gammaloop-base/target just build-cli-no-pyo3 > /tmp/thermal-rates-shared-build.log 2>&1",
+        "log": "/tmp/thermal-rates-shared-build.log",
+        "exit_code": 0,
+        "elapsed_seconds": 190
+      },
+      "smoke": {
+        "binary": "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+        "binary_sha256": "cba9ab0c65ae1e22da98b4c96f35fb2eeac6b76f4453d49a2e090cde1700fa97",
+        "command": [
+          "/Users/kaapo/Work/gammaloop/gammaloop-base/target/dev-optim/gammaloop",
+          "-n",
+          "-s",
+          "/tmp/gammaloop-thermal-rates-shared-state",
+          "/tmp/thermal-rates-shared-run.toml",
+          "run",
+          "generate",
+          "rest",
+          "inspect"
+        ],
+        "log": "/tmp/thermal-rates-shared-smoke.log",
+        "exit_code": 0,
+        "inspect_results": {
+          "equilibrium": {
+            "path": "/tmp/thermal-rates-shared-equilibrium-inspect.json",
+            "value": {
+              "re": 5.2497393862529534e-05,
+              "im": 0.0
+            },
+            "events": 4,
+            "event_weight_sum": 5.2497393862529534e-05,
+            "max_conservation_residual": 2.220446049250313e-16,
+            "matches_initial_point_value_exactly": true
+          },
+          "vacuum": {
+            "path": "/tmp/thermal-rates-shared-vacuum-inspect.json",
+            "value": {
+              "re": 8.851236217417727e-09,
+              "im": 0.0
+            },
+            "events": 1,
+            "event_weight_sum": 8.851236217417727e-09,
+            "max_conservation_residual": 2.220446049250313e-16,
+            "matches_initial_point_value_exactly": true
+          }
+        }
+      },
+      "card_sha256": "d03b1fc25ce700b061399a9e79710703704c8c3123bc33098b43f677505cb9f2",
+      "state_persisted": false,
+      "scope": "Fresh generation and rest-frame inspection only; -n did not save a state. The focused regression separately covers the version-17 saved-state round trip. No numerical integration reruns."
+    },
+    "commands_manifest": "/tmp/thermal-rates-shared-commands.json"
+  }
+}
