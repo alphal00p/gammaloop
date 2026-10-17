@@ -215,6 +215,11 @@ restore forward endpoints. The normalization remains local to the trace, so
 surrounding callbacks observe the evaluated result in the same pass. Mixed
 orientations and open chains remain opaque to that trace-transpose identity,
 and gamma5 retains its existing four-dimensional restrictions.
+An adjacent pair of ordinary gamma matrices with identical vector arguments
+may also have both endpoint orders reversed: its product is the transpose of
+the ordinary equal-argument product and has the same metric coefficient.
+This local contraction preserves the original spin representation, including
+formal spin dimensions, and never treats a mixed-orientation pair as equal.
 
 Fixed components of the physical Minkowski basis have a separate local rule.
 Their metric contractions use the physical signature while retaining the

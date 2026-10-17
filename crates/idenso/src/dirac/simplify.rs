@@ -345,8 +345,9 @@ impl<'a> DiracFactor<'a> {
     /// Ordinary gammas are recognized as `gamma(in,out,mu)` and keep `mu`
     /// by view. Reversed matrix endpoints remain opaque to ordinary Clifford
     /// and special-matrix rules, which cannot safely act on mixed
-    /// ordinary/transposed words. An explicit four-dimensional C sandwich may
-    /// flip their orientation using the charge-conjugation identities.
+    /// ordinary/transposed words. The adjacent-pair owner separately recognizes
+    /// two equally oriented reversed factors; an explicit four-dimensional C
+    /// sandwich may flip orientation using the charge-conjugation identities.
     /// Their dimension is inferred
     /// from `mu` when it is a Minkowski slot, or from the first visible
     /// Minkowski representation inside slash-like tensorial indices such as
@@ -1522,13 +1523,39 @@ impl<'settings> DiracSimplifier<'settings> {
 impl DiracSimplifier<'_> {
     /// Contract equal-index gamma pairs, adjacent or around physical gamma0.
     /// The temporal sandwich uses its summed Lorentz dimension, not four.
+    /// Adjacent pairs may both be transposed, without transposing other factors.
     fn contract_gamma_pair(word: DiracWord<'_>, factors: &[DiracFactor<'_>]) -> Option<Atom> {
         for (i, pair) in factors.windows(2).enumerate() {
             let [left, right] = pair else {
                 unreachable!("windows(2) always yields pairs")
             };
-            let Some((mu, nu)) = Self::mink_index_pair(ADJACENT_GAMMA_CONTRACTION, left, right)
-            else {
+            let indices =
+                Self::mink_index_pair(ADJACENT_GAMMA_CONTRACTION, left, right).or_else(|| {
+                    // (A A)^T = A^T A^T. Borrow only this pair's index metadata;
+                    // reversed factors stay opaque to every other Clifford rule.
+                    let reversed = [*left, *right].map(|factor| {
+                        let AtomView::Fun(gamma) = factor.as_view() else {
+                            return None;
+                        };
+                        if gamma.get_symbol() != AGS.gamma
+                            || gamma.get_nargs() != 3
+                            || !has_forward_chain_endpoints(gamma.get(1), gamma.get(0))
+                        {
+                            return None;
+                        }
+                        let mink_index = gamma.get(2);
+                        Some(DiracFactor::Gamma {
+                            factor: factor.as_view(),
+                            mink_index,
+                            dimension: mink_slot_dimension(mink_index),
+                        })
+                    });
+                    let [Some(left), Some(right)] = reversed else {
+                        return None;
+                    };
+                    Self::mink_index_pair(ADJACENT_GAMMA_CONTRACTION, &left, &right)
+                });
+            let Some((mu, nu)) = indices else {
                 continue;
             };
 
