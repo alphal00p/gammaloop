@@ -456,6 +456,46 @@ fn test_particle(pdg_code: i64, spin: i64, massless: bool, name: &str) -> Partic
 }
 
 #[test]
+fn fermion_polarization_sum_preserves_native_projector_interface() {
+    ensure_test_initialized();
+    let eid = EdgeIndex(7);
+    let [row, col] = [41, 37].map(|hedge| {
+        Bispinor {}
+            .new_rep(4)
+            .to_symbolic([function!(GS.hedgeaind, hedge, 1)])
+    });
+    for pdg in [11, -11] {
+        let particle = dummy_spinor_particle(pdg);
+        let [ket, bra] = if particle.is_antiparticle() {
+            [GS.v, GS.vbar]
+        } else {
+            [GS.u, GS.ubar]
+        };
+        let projector = feynkit_graph::NumeratorInterface::admit(
+            function!(ket, eid.0, &row) * function!(bra, eid.0, &col),
+            None,
+        )
+        .unwrap();
+        for average in [false, true] {
+            let replacement = particle
+                .polarization_sum(
+                    model(),
+                    eid,
+                    average,
+                    VectorPolarizationSumGauge::LightLikeAxial,
+                )
+                .unwrap()
+                .unwrap();
+            let replaced = projector
+                .with_checked_expression(projector.expression().replace_multiple(&[replacement]))
+                .unwrap();
+            assert_eq!(replaced.structure(), projector.structure());
+            assert_ne!(replaced.expression(), projector.expression());
+        }
+    }
+}
+
+#[test]
 fn fermion_polarization_sum_symbolic_mass_term_sign_matches_completeness_relation() {
     ensure_test_initialized();
     let eid = EdgeIndex(7);

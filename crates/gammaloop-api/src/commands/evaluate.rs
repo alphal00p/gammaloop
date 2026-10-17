@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use clap::Args;
 use gammalooprs::{
@@ -177,7 +177,10 @@ impl Evaluate {
             );
             fs::write(
                 p,
-                toml::to_string_pretty(&full_evaluation.to_canonical_string())?,
+                toml::to_string_pretty(&BTreeMap::from([(
+                    "expression",
+                    full_evaluation.to_canonical_string(),
+                )]))?,
             )?;
         } else if self.numerical {
             let numerical_evaluation_result =
@@ -338,6 +341,16 @@ mod tests {
                 number_of_terms_in_epsilon_expansion: Some(2),
             }
             .run(&mut state, &cli_settings, &runtime)?;
+            let saved: std::collections::BTreeMap<String, String> = toml::from_str(
+                &std::fs::read_to_string(temp.path().join(format!("{name}.toml")))?,
+            )?;
+            assert_eq!(
+                saved,
+                std::collections::BTreeMap::from([(
+                    "expression".to_owned(),
+                    output.to_canonical_string(),
+                )]),
+            );
             let output =
                 NumeratorInterface::admit(output, None)?.contract(ContractSettings::default())?;
             assert!(output.is_scalar());

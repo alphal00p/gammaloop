@@ -329,8 +329,9 @@ pub struct TensorReducer {
 impl TensorReducer {
     /// Construct a reducer in `dimension` with no integrated vectors selected.
     ///
-    /// `dimension` must exactly match the first argument of every input
-    /// `spenso::mink(dimension,index)` slot.  Thus generated four-dimensional
+    /// `dimension` must exactly match the source dimension of every input
+    /// `spenso::mink(dimension,index)` slot, including reversibly encoded
+    /// compound dimensions. Thus generated four-dimensional
     /// FeynKit rules use `4`, while a symbolic R-operation numerator whose
     /// slots carry `D` uses `D`. Mixed high-rank projectors should retain a
     /// symbolic dimension until after reduction: a fixed positive integer
@@ -671,7 +672,14 @@ impl TensorReducer {
         let mut by_index: BTreeMap<Atom, IndexOccupants> = BTreeMap::new();
         for vector in indexed_vectors {
             let integrated = self.is_integrated(&vector);
-            let occupants = by_index.entry(vector.index.clone()).or_default();
+            let occupants =
+                by_index
+                    .entry(vector.index.clone())
+                    .or_insert_with(|| IndexOccupants {
+                        slot: vector.slot.clone(),
+                        integrated: Vec::new(),
+                        outside: Vec::new(),
+                    });
             if integrated {
                 occupants.integrated.push(vector.compact);
             } else {
@@ -709,7 +717,7 @@ impl TensorReducer {
                 ([vector], []) => {
                     integrated.push(vector.clone());
                     outside.push(Outside::Index {
-                        slot: minkowski_slot(&self.dimension, &index),
+                        slot: occupants.slot.clone(),
                         index,
                     });
                 }
@@ -766,10 +774,14 @@ impl TensorReducer {
             return Ok(None);
         }
         let representation_arguments = representation.iter().collect::<Vec<_>>();
-        if representation_arguments[0] != self.dimension.as_view() {
+        let dimension = representation_arguments[0]
+            .get_symbol()
+            .and_then(idenso::CookSettings::dimension_payload)
+            .unwrap_or_else(|| representation_arguments[0].to_owned());
+        if dimension != self.dimension {
             return Err(TensorReductionError::DimensionMismatch {
                 expected: self.dimension.clone(),
-                found: representation_arguments[0].to_owned(),
+                found: dimension,
             });
         }
 
@@ -788,6 +800,7 @@ impl TensorReducer {
             head: function.get_symbol(),
             compact,
             index: representation_arguments[1].to_owned(),
+            slot: representation.as_view().to_owned(),
         }))
     }
 
@@ -1317,10 +1330,11 @@ struct IndexedVector {
     head: Symbol,
     compact: Atom,
     index: Atom,
+    slot: Atom,
 }
 
-#[derive(Default)]
 struct IndexOccupants {
+    slot: Atom,
     integrated: Vec<Atom>,
     outside: Vec<Atom>,
 }
@@ -1363,8 +1377,16 @@ fn count_minkowski_index(
         && function.get_symbol().get_stripped_name() == "mink"
     {
         let arguments = function.iter().collect::<Vec<_>>();
-        if arguments.as_slice() == [dimension.as_view(), index.as_view()] {
-            return Ok(multiplicity);
+        if let [slot_dimension, slot_index] = arguments.as_slice()
+            && *slot_index == index.as_view()
+        {
+            let source_dimension = slot_dimension
+                .get_symbol()
+                .and_then(idenso::CookSettings::dimension_payload)
+                .unwrap_or_else(|| slot_dimension.to_owned());
+            if source_dimension == *dimension {
+                return Ok(multiplicity);
+            }
         }
     }
     if let AtomView::Pow(power) = expression {
@@ -1459,6 +1481,7 @@ fn outside_pair(left: &Outside, right: &Outside) -> Atom {
     }
 }
 
+#[cfg(test)]
 fn minkowski_slot(dimension: &Atom, index: &Atom) -> Atom {
     FunctionBuilder::new(Minkowski::selfless_symbol())
         .add_arg(dimension)
@@ -1838,6 +1861,64 @@ mod tests {
             .add_arg(minkowski_slot(dimension, left))
             .add_arg(minkowski_slot(dimension, right))
             .finish()
+    }
+
+    #[test]
+    fn encoded_dimensions_keep_native_slots_and_scalar_projector_coefficients() {
+        let (k, q, _, _) = vectors();
+        let epsilon = Atom::var(symbol!("feynkit_tensor_test::encoded_epsilon"));
+        let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let mu = Atom::num(0);
+        let nu = Atom::num(1);
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let expected = cooking
+            .try_cook(
+                (metric(&dimension, &mu, &nu)
+                    * dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension))
+                    / &dimension)
+                    .as_view(),
+            )
+            .unwrap();
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        for second in [
+            indexed(k, 1, &dimension, &nu),
+            indexed(k, 1, &dimension, &nu) + indexed(q, 1, &dimension, &nu),
+        ] {
+            let source = SymbolicTensor::infer(
+                cooking
+                    .try_cook((indexed(k, 1, &dimension, &mu) * second).as_view())
+                    .unwrap(),
+            )
+            .unwrap();
+            let result = reducer.reduce(&source).unwrap().into_expression().unwrap();
+            assert_eq!(
+                result.structure().logical_slots(),
+                source.structure().logical_slots()
+            );
+            assert_eq!(result.rank(), 2);
+            assert!((result.expression() - &expected).together().is_zero());
+            let zero = source.with_checked_expression(Atom::Zero).unwrap();
+            let reduced_zero = reducer.reduce(&zero).unwrap().into_expression().unwrap();
+            assert!(reduced_zero.is_zero());
+            assert_eq!(reduced_zero.structure(), source.structure());
+            assert!(matches!(
+                TensorReducer::new(Atom::num(6) - Atom::num(2) * &epsilon)
+                    .with_integrated_head(k)
+                    .reduce(&source),
+                Err(TensorReductionError::DimensionMismatch { .. })
+            ));
+        }
+        let opaque = spenso::tensor_symbol!("feynkit_tensor_test::encoded_opaque");
+        let opaque = FunctionBuilder::new(opaque)
+            .add_arg(minkowski_slot(&dimension, &mu))
+            .finish();
+        let opaque = cooking.try_cook(opaque.as_view()).unwrap();
+        assert_eq!(
+            count_minkowski_index(opaque.as_view(), &dimension, &mu, 1).unwrap(),
+            1
+        );
     }
 
     #[test]

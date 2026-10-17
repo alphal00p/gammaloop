@@ -993,3 +993,47 @@ can compute the same metadata twice. These are candidates for measurement,
 not an attribution of GL1's historical slowdown. The fresh frozen workspace
 and normal Nix CLI must qualify this implementation before new timing or
 merge-readiness claims are made.
+
+Frozen native candidate `53312d8b` builds all 102 workspace test binaries and
+passes 1,519 of 1,535 selected native/interface tests. The sixteen failures
+identify boundaries still requiring qualification: a malformed toy singlet
+fixture adds a colored summand; graph artifact validation needs an exact scalar
+coefficient certificate; several tests still expect raw Python expressions;
+and the new backend controls expose encoded dimensions and invalid TOML output.
+The current repairs keep complete tensor admission, exact numerical oracles,
+and interface assertions. A broader run of these same binaries is diagnostic;
+source-dependent documentation tests read the live compile-time workspace and
+must be rerun there after its review digests settle. Archive remapping alone
+does not isolate those tests.
+
+The final ownership audit found two remaining uses of fresh interface inference
+after transformations of a retained tensor. The evaluator's scalar color
+invariant rewrite now uses `with_checked_expression`. Final specialization
+uses `map_representation_dimensions` for both `D` and the evanescent dimension,
+then checks the remaining scalar rewrite. Nonzero reversed-axis and ranked-zero
+controls cover the distinction. The native reducer likewise compares decoded
+dimension metadata while retaining the original encoded slots; it does not
+decode and re-admit the complete tensor. The runtime fermion spin-sum recipe
+now allocates its dummy through `AbstractIndex`, avoiding a legacy function-valued
+index inside an otherwise native projector. These repairs and the pending
+formal-color comparison repair still require runtime qualification.
+
+The formal-color probe establishes that `Nc` survives typed composition,
+algebra and canonical preparation. The exact canceled quotient contains an
+encoded scalar dimension for `Nc^2 - 1`; the scalar-name validator rejected
+that symbol, causing the existing numerical fallback to return its value at
+`Nc = 3`. The repair decodes dimension payloads only in this scalar quotient,
+then applies the unchanged strict scalar check and the requested symbolic or
+concrete-color option. Encoded index coefficients remain rejected. It neither
+decodes the retained tensor bodies nor changes fallback sampling policy.
+
+The first complete native run finishes with 5,344 passes and 292 failures out
+of 5,636 selected tests. Most failures stop at the same encoded-dimension or
+legacy spin-sum index boundaries; their original numerical checks were not
+reached. The remaining classes include the focused source/API cases above,
+four generation snapshot tests (including the formal-color regression), six
+source-dependent documentation failures, and one global tensor JSON round trip.
+The latter wrote display-formatted payloads beside canonical interface metadata;
+the serializer now uses canonical source strings and retains exact parse-back
+checks. The next full run must keep its actual compile-time source tree frozen
+through execution. These diagnostic failures are recorded, not counted as passes.

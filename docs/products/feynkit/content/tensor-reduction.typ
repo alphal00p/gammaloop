@@ -129,13 +129,16 @@ and evaluation remain available directly. The tensor overrides of `replace`,
 incompatible changes. Other inherited methods keep Symbolica's return types.
 Use `to_expression()` to deliberately discard the tensor interface, for example before a
 rank-changing rewrite. It returns an ordinary `Expression` without tensor metadata.
+The expression can still contain interned index or dimension symbols;
+`to_expression()` does not decode those source labels.
 Use `tensor.with_lorentz_dimension(D)` before contracting indices to promote four-dimensional
 Lorentz slots, including compact representations. Spinor/color dimensions, scalar coefficients,
 and Lorentz slots already in other dimensions remain unchanged.
 
 `reducer.reduce(expression)` transforms a numerator without a graph.
 `diagram.reduce_tensor_numerator(reducer)` multiplies the stored numerator by its external-state
-projector before reducing. It returns a Symbolica expression, including residual metrics.
+projector before reducing. Both return a `TensorExpression`, retaining ordered
+ports and residual metrics, including the interface of a zero result.
 `diagram.reduce_tensor_graphs(reducer)` requires a fully contracted result and returns one
 scalar graph per compact term. It consumes and resets the projector, preserves the scalar
 numerator prefactor and topology ID, and assigns deterministic `name.tensor[index]` names.

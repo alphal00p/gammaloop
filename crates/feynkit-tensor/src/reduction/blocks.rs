@@ -6,7 +6,7 @@ use super::*;
 use idenso::shorthands::UndoShorthands;
 use spenso::{
     network::parsing::ParseState,
-    structure::{abstract_index::AbstractIndex, partial::PartialStructure, slot::ParseableAind},
+    structure::{abstract_index::AbstractIndex, partial::PartialStructure},
 };
 
 impl TensorReducer {
@@ -122,12 +122,13 @@ impl TensorReducer {
                     maximum: OrthogonalWeingarten::MAX_RANK,
                 });
             }
-            let slots = slots.iter().map(|slot| slot.to_atom()).collect::<Vec<_>>();
             let indices = (0..rank).map(|_| state.fresh_index()).collect::<Vec<_>>();
-            let fresh = indices
+            let fresh = slots
                 .iter()
-                .map(|index| minkowski_slot(&self.dimension, &index.to_atom()))
+                .zip(&indices)
+                .map(|(slot, index)| slot.rep().slot::<AbstractIndex, _>(*index).to_atom())
                 .collect::<Vec<_>>();
+            let slots = slots.iter().map(|slot| slot.to_atom()).collect::<Vec<_>>();
             // Inner contractions own distinct dummies even when retained inside
             // a factored sum; they must not reconnect to the outside projector.
             let replacements = inside

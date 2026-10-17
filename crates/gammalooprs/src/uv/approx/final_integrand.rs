@@ -544,11 +544,12 @@ impl<'a> FinalIntegrandBuilder<'a> {
     {
         let normalize_scalar = Self::scalar_normalizer(graph, reduced);
         move |tensor| {
-            // Dimension specialization can change port representations. Preserve
-            // the carrier while explicitly validating that interface change.
+            // Map representation metadata and logical ports together, including
+            // encoded dimensions and ports carried only by a zero. The remaining
+            // scalar rewrite must preserve that established logical interface.
             let tensor = tensor
-                .with_transformed_expression(normalize_scalar(tensor.expression()))?
-                .0;
+                .map_representation_dimensions(|_, dimension| dimension.replace(GS.dim).with(4))?;
+            let tensor = tensor.with_checked_expression(normalize_scalar(tensor.expression()))?;
             debug_tags!(#generation, #profile, #uv, #numerator, #dump;
                 stage = "final_integrand_before_color",
                 graph = %graph.name,
@@ -571,6 +572,9 @@ impl<'a> FinalIntegrandBuilder<'a> {
             // Exact production branches have already mapped every owned
             // numerator fragment. The former coarse export sign replacement
             // has no role here and must not remap these factors a second time.
+            let reduced = reduced.map_representation_dimensions(|_, dimension| {
+                dimension.replace(GS.dim_epsilon).with(0)
+            })?;
             Ok(reduced.with_checked_expression(
                 reduced
                     .expression()
@@ -652,6 +656,98 @@ mod tests {
         assert_eq!(retained.structure(), tensor.structure());
         assert_eq!(retained.expression(), &native);
         assert_eq!(cooking.uncook(retained.expression().as_view()), raw);
+        Ok(())
+    }
+
+    #[test]
+    fn final_normalization_preserves_logical_axes_and_specializes_encoded_zero_dimensions()
+    -> Result<()> {
+        use spenso::structure::{partial::PartialStructureExt, slot::IsAbstractSlot};
+
+        test_initialise()?;
+        let graph: Graph = finalized_runtime_dot!(digraph final_dimension_ports {
+            graph [projector=1]
+            edge [num=1 mass=1];
+            node [num=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+        })?;
+        let reduced = graph.full_filter();
+        let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let tensor_head = spenso::tensor_symbol!("final_dimension_test::matrix");
+        let spectator = parse!("(final_dimension_test::a+final_dimension_test::b)^3");
+        for (dimension, physical_dimension) in [
+            (Atom::var(GS.dim), 4),
+            (Atom::var(GS.dim) + 2, 6),
+            (
+                Atom::var(GS.dim) - Atom::num(2) * Atom::var(GS.dim_epsilon),
+                4,
+            ),
+        ] {
+            let raw = (&Atom::var(GS.dim) + Atom::var(GS.dim_epsilon))
+                * &spectator
+                * function!(
+                    tensor_head,
+                    Minkowski {}.to_symbolic([dimension.clone(), Atom::num(7)]),
+                    Minkowski {}.to_symbolic([dimension.clone(), Atom::num(11)])
+                );
+            let admitted = SymbolicTensor::infer(cooking.try_cook(raw.as_view())?)?;
+            let physical_slots = admitted.structure().logical_slots();
+            if dimension != Atom::var(GS.dim) {
+                let encoded = physical_slots[0].dim().to_symbolic().get_symbol().unwrap();
+                assert_eq!(
+                    CookSettings::dimension_payload(encoded),
+                    Some(dimension.clone())
+                );
+            }
+            let source = SymbolicTensor::from_declared_parts(
+                admitted.expression().clone(),
+                PartialStructure::from_logical_slots(physical_slots.into_iter().rev()),
+            )?;
+            let expected = SymbolicTensor::infer(
+                Atom::num(4)
+                    * &spectator
+                    * function!(
+                        tensor_head,
+                        Minkowski {}.to_symbolic([Atom::num(physical_dimension), Atom::num(7)]),
+                        Minkowski {}.to_symbolic([Atom::num(physical_dimension), Atom::num(11)])
+                    ),
+            )?;
+            let expected_slots = expected
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>();
+            assert_ne!(
+                source.structure().logical_slots()[0].aind,
+                admitted.structure().logical_slots()[0].aind,
+                "the source's declared axes deliberately reverse its payload order"
+            );
+            let before = source.clone();
+            for input in [&source, &source.with_checked_expression(Atom::Zero)?] {
+                let output = normalize(input)?;
+                assert_eq!(output.rank(), 2);
+                assert_eq!(
+                    output.structure().logical_slots(),
+                    expected_slots,
+                    "dimension={dimension}, zero={}",
+                    input.is_zero()
+                );
+                assert_eq!(output.is_zero(), input.is_zero());
+                if !input.is_zero() {
+                    assert_eq!(output.expression(), expected.expression());
+                    assert!(output.expression().contains(&spectator));
+                }
+            }
+            assert_eq!(
+                source, before,
+                "finalization must leave the Taylor source unchanged"
+            );
+        }
         Ok(())
     }
 

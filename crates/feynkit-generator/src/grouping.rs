@@ -1704,7 +1704,14 @@ fn compare(
     if options.check_canonical_numerator
         && let Some(ratio) = compare_atoms(&candidate.exact, &master.exact, mode, scalar_names)?
     {
-        return Ok(Some(ratio));
+        // A contracted representation dimension can survive as a scalar
+        // coefficient. Its decoded Nc becomes visible only at this quotient
+        // boundary, so apply the requested concrete-color choice here too.
+        return Ok(Some(if options.fully_numerical_substitution {
+            ratio.replace(CS.nc).with(3)
+        } else {
+            ratio
+        }));
     }
     let mut first: Option<Atom> = None;
     for (candidate, master) in candidate.samples.iter().zip(&master.samples) {
@@ -1771,6 +1778,18 @@ fn compare_atoms(
         return Ok(None);
     }
     let ratio = (candidate.expression() / master.expression()).collect_factors();
+    // Closed color contractions can emit an encoded representation dimension
+    // as a scalar weight. Decode only that metadata in the cancelled quotient;
+    // keep both tensor bodies and encoded index identities untouched.
+    let ratio = ratio
+        .replace_map(|view, _, out| {
+            if let AtomView::Var(variable) = view
+                && let Some(dimension) = CookSettings::dimension_payload(variable.get_symbol())
+            {
+                **out = dimension;
+            }
+        })
+        .collect_factors();
     // Cancel only existing common factors. Polynomial conversion would expand
     // graph numerators, including copies used solely for this comparison.
     // Dummy indices can be alpha-equivalent across separately prepared graphs;
@@ -3374,6 +3393,87 @@ mod tests {
             .unwrap()
             .is_none(),
             "a quotient retaining tensor heads must not be accepted as a scalar ratio"
+        );
+    }
+
+    #[test]
+    fn canonical_scalar_ratios_decode_dimensions_without_decoding_indices() {
+        let model = Arc::new(model());
+        let nc = Atom::var(CS.nc);
+        let dimension = nc.clone().pow(2) - Atom::one();
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let representation = cooking
+            .try_cook(ColorAdjoint {}.to_symbolic([dimension.clone()]).as_view())
+            .unwrap();
+        let encoded_dimension = representation
+            .as_fun_view()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap()
+            .to_owned();
+        assert_ne!(encoded_dimension, dimension);
+
+        for concrete in [false, true] {
+            let grouped = group_diagrams(
+                vec![
+                    diagram(
+                        &model,
+                        "master",
+                        &format!("{}*x", nc.to_canonical_string()),
+                        25,
+                        25,
+                    ),
+                    diagram(
+                        &model,
+                        "member",
+                        &format!("{}*x", encoded_dimension.to_canonical_string()),
+                        25,
+                        25,
+                    ),
+                ],
+                &model,
+                &NumeratorGrouping::UpToScalar(GraphGroupingOptions {
+                    fully_numerical_substitution: concrete,
+                    number_of_numerical_samples: 0,
+                    ..exact_options()
+                }),
+                false,
+                &GenerationOptions::default(),
+            )
+            .unwrap();
+            assert_eq!(grouped.groups.len(), 1);
+            assert_eq!(
+                grouped.groups[0].members[1].ratio,
+                if concrete {
+                    Atom::num(8) / Atom::num(3)
+                } else {
+                    (&dimension / &nc).collect_factors()
+                },
+            );
+        }
+
+        let index = cooking
+            .cook_function(
+                function!(feynkit_graph::symbols::hedge_index(), 17, 2)
+                    .as_fun_view()
+                    .unwrap(),
+            )
+            .unwrap();
+        assert!(index.get_symbol().is_some());
+        let common = symbol!("FeynKit::dimension_ratio_tensor").call(1);
+        assert!(
+            compare_atoms(
+                &(&index * &common),
+                &common,
+                ComparisonMode::UpToScalar,
+                &scalar_names(&model),
+            )
+            .unwrap()
+            .is_none(),
+            "an encoded index must not be accepted as a scalar dimension coefficient",
         );
     }
 

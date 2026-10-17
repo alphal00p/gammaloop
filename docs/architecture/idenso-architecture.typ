@@ -296,6 +296,14 @@ inference; `FourDTerm::from_tensor` checks each completed numerator against the
 original carrier to restore its logical interface. That residual conversion is
 an API limitation, not a claim that all tensor work now avoids parsing.
 
+`CookSettings::dimension_payload` exposes the existing portable dimension
+decoder to consumers of retained tensors. It returns `None` for ordinary
+symbols and index encodings. A reducer can compare the decoded scalar dimension
+while retaining the original native slots; a scalar-ratio validator can expose
+`Nc^2 - 1` after all tensor factors cancel. Neither use requires decoding the
+complete tensor. Mapping represented dimensions and interpreting an encoded
+dimension that has become a scalar coefficient are distinct boundaries.
+
 == Rewrite families and execution flow
 
 `contract(ContractSettings)` and `simplify_algebra(AlgebraSettings)` lower into one

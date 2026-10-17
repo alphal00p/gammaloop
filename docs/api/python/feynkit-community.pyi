@@ -3506,9 +3506,9 @@ class FeynmanDiagram:
             Zero omits the denominator; negative powers put it in the numerator.
             Entries outside the selected internal edges are ignored.
         """
-    def numerator_prefactor_expression(self) -> Expression:
+    def numerator_prefactor_expression(self) -> TensorExpression:
         r"""
-        Return the request-wide numerator multiplier as a Symbolica expression.
+        Return the request-wide numerator multiplier with its tensor interface.
 
         Examples
         --------
@@ -3518,9 +3518,9 @@ class FeynmanDiagram:
         >>> weighted_numerator = prefactor * diagram.numerator_expression()
         >>> weighted_numerator
         """
-    def projector_expression(self) -> Expression:
+    def projector_expression(self) -> TensorExpression:
         r"""
-        Return the external-state projector as a Symbolica expression.
+        Return the external-state projector with its tensor interface.
 
         Examples
         --------
@@ -3530,7 +3530,7 @@ class FeynmanDiagram:
         >>> projected_numerator = projector * diagram.numerator_expression()
         >>> projected_numerator
         """
-    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, expression: symbolica.Expression | symbolica.community.tensor.TensorExpression | None = None, projector: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, expression: symbolica.Expression | symbolica.community.tensor.TensorExpression | None = None, projector: symbolica.Expression | symbolica.community.tensor.TensorExpression | None = None) -> TensorExpression:
         r"""
         Reduce the numerator and projector using the diagram's internal edge momenta.
 
@@ -3554,10 +3554,10 @@ class FeynmanDiagram:
         expression : Expression or TensorExpression, optional
             Complete prepared input to reduce instead of the numerator and projector.
             Cannot be combined with an explicit projector.
-        projector : Expression or None, optional
+        projector : Expression or TensorExpression or None, optional
             Explicit external tensor projector, required for partial regions unless expression is supplied.
         """
-    def reduce_tensor_numerator(self, reducer: TensorReducer) -> Expression:
+    def reduce_tensor_numerator(self, reducer: TensorReducer) -> TensorExpression:
         r"""
         Reduce the finalized numerator and projector with a tensor reducer.
 
@@ -10856,9 +10856,9 @@ class TensorReducer:
         limit : int
             Maximum compact contraction classes to materialize.
         """
-    def reduce(self, expression: Expression) -> Expression:
+    def reduce(self, expression: symbolica.Expression | symbolica.community.tensor.TensorExpression) -> TensorExpression:
         r"""
-        Reduce a Spenso tensor expression to one Symbolica expression.
+        Reduce a numerator to a TensorExpression with its ordered interface.
 
         Rank-one tensors must carry a final ``spenso::mink(D,index)`` argument.
         Fully contracted projectors are returned as scalar ``spenso::dot``
@@ -10868,7 +10868,8 @@ class TensorReducer:
         spectator are reduced directly, including nonnegative integer powers.
         Dots between integrated vectors or with declared external basis vectors
         remain scalar invariants. Negative or noninteger powers of spectator
-        contractions are rejected. Odd-rank vacuum tensors vanish.
+        contractions are rejected. Odd-rank vacuum tensors vanish while retaining
+        their output interface.
 
         Examples
         --------
@@ -10896,7 +10897,7 @@ class TensorReducer:
 
         Parameters
         ----------
-        expression : Expression
+        expression : Expression or TensorExpression
             Tensor numerator or projected tensor numerator to reduce.
         """
     def __repr__(self) -> builtins.str:

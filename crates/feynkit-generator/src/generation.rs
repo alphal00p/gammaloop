@@ -5005,7 +5005,7 @@ mod tests {
                 ],
                 "vertex_rules":[{
                     "name":"V","particles":["f~","f","a"],
-                    "color_structures":["1","T(3,2,1)"],
+                    "color_structures":["1","1"],
                     "lorentz_structures":["FFV"],
                     "couplings":[["GC_LOW"],["GC_HIGH"]]
                 }]
@@ -6912,7 +6912,20 @@ mod tests {
 
     #[test]
     fn interaction_numerator_keeps_named_couplings_and_lowers_tensors() {
-        let model = fermion_model();
+        let mut definition = serde_json::to_value(fermion_model()).unwrap();
+        for particle in definition["particles"].as_array_mut().unwrap() {
+            particle["color"] = serde_json::json!(match particle["name"].as_str() {
+                Some("f") => 3,
+                Some("f~") => -3,
+                Some("a") => 8,
+                _ => 1,
+            });
+        }
+        // Both couplings multiply the same open color interface. A scalar
+        // color term cannot be added to a fundamental-adjoint tensor term.
+        definition["vertex_rules"][0]["color_structures"] =
+            serde_json::json!(["T(3,2,1)", "T(3,2,1)"]);
+        let model = Model::from_json(&definition.to_string()).unwrap();
         let generator = Generator::new(model.clone());
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
@@ -6932,6 +6945,33 @@ mod tests {
         assert!(numerator.contains("spenso::t"));
         assert!(!numerator.contains("Gamma("));
         assert!(!numerator.contains("UFO::T("));
+    }
+
+    #[test]
+    fn interaction_numerator_rejects_incompatible_color_summands() {
+        let mut definition = serde_json::to_value(fermion_model()).unwrap();
+        definition["vertex_rules"][0]["color_structures"] = serde_json::json!(["1", "T(3,2,1)"]);
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let generator = Generator::new(model.clone());
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs[..3],
+        };
+        let error = generator
+            .interaction_numerator(model.vertex_rule_id("V").unwrap(), &instantiation)
+            .unwrap_err();
+
+        assert!(matches!(
+            &error,
+            GenerationError::Diagram(DiagramError::Tensor(_))
+        ));
+        assert!(
+            error
+                .to_string()
+                .contains("tensor summands do not have compatible tensor interfaces")
+        );
+        assert!(generator.numerators.interactions.read().unwrap().is_empty());
     }
 
     #[test]

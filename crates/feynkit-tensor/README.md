@@ -78,18 +78,19 @@ requests become a clear error instead of an accidental memory blow-up.
 
 ```rust,no_run
 use feynkit_tensor::TensorReducer;
+use idenso::tensor::SymbolicTensor;
 use symbolica::parse;
 
 let dimension = parse!("D");
-let numerator = parse!("K(1,spenso::mink(D,mu))*K(1,spenso::mink(D,nu))*P(spenso::mink(D,mu))*P(spenso::mink(D,nu))");
+let numerator = SymbolicTensor::infer(parse!("K(1,spenso::mink(D,mu))*K(1,spenso::mink(D,nu))*P(spenso::mink(D,mu))*P(spenso::mink(D,nu))"))?;
 let reducer = TensorReducer::new(dimension).with_integrated_head_name("K");
-let scalar = reducer.reduce(numerator.as_view())?.into_expression();
+let scalar = reducer.reduce(&numerator)?.into_expression()?;
 println!("{scalar}");
 # Ok::<(), feynkit_tensor::TensorReductionError>(())
 ```
 
-The Python binding mirrors this API and returns one concrete Symbolica
-`Expression`:
+The Python binding mirrors this API and returns a `TensorExpression`, retaining
+the logical interface even when the result is zero:
 
 ```python
 from symbolica import E

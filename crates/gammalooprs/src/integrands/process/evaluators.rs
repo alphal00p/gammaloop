@@ -1021,8 +1021,7 @@ impl EvaluatorStack {
         let input = if settings.do_algebra {
             a.clone()
         } else {
-            a.with_transformed_expression(a.expression().to_cof_dimension_invariants())?
-                .0
+            a.with_checked_expression(a.expression().to_cof_dimension_invariants())?
         };
         let network_input = if settings.do_algebra {
             let simplified = input.simplify_algebra(&idenso::tensor::AlgebraSettings {
@@ -6699,6 +6698,76 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn evaluator_scalar_invariant_rewrite_keeps_declared_axes_and_ranked_zero() {
+        use idenso::{color::CS, representations::ColorFundamental};
+        use spenso::structure::representation::Minkowski;
+
+        test_initialise().unwrap();
+        let rep = Minkowski {}.new_rep(4).to_lib();
+        let slots =
+            [48013, 48017].map(|index| rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index)));
+        let invariant = function!(CS.idx, 2, ColorFundamental {}.new_rep(3).to_symbolic([]));
+        let expression = invariant
+            * GS.emr_vec(EdgeIndex(7), slots[0].to_atom())
+            * GS.emr_vec(EdgeIndex(8), slots[1].to_atom());
+        assert_ne!(expression.to_cof_dimension_invariants(), expression);
+        let structure = PartialStructure::from_logical_slots(
+            [slots[1], slots[0]].map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
+        );
+        let source = SymbolicTensor::from_declared_parts(expression, structure).unwrap();
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        let expected_slots = [slots[1].to_atom(), slots[0].to_atom()];
+        let settings = EvaluatorSettings {
+            do_algebra: false,
+            ..Default::default()
+        };
+
+        for (input, is_zero) in [(&source, false), (&zero, true)] {
+            EvaluatorStack::preprocess_tensor(input, 0, &settings, None, |net, _, _, layout| {
+                let library = TENSORLIB.read().unwrap();
+                let ExecutionResult::Val(tensor) = net.result_tensor(library.deref())? else {
+                    panic!("an open matrix, including zero, must retain both axes");
+                };
+                assert_eq!(layout.order(), 2);
+                assert_eq!(
+                    layout
+                        .canonical_to_logical(&tensor.external_structure())
+                        .into_iter()
+                        .map(|slot| slot.to_atom())
+                        .collect::<Vec<_>>(),
+                    expected_slots,
+                );
+                let components = tensor
+                    .iter_expanded()
+                    .map(|(indices, body)| (layout.canonical_to_logical(&indices), body.to_owned()))
+                    .collect::<HashMap<_, _>>();
+                if is_zero {
+                    assert!(components.values().all(Atom::is_zero));
+                } else {
+                    // The logical axes are (nu, mu), so these two distinct
+                    // components must not be transposed by scalar rewriting.
+                    let nu_one_mu_two = GS.emr_vec(EdgeIndex(7), GS.cind(2))
+                        * GS.emr_vec(EdgeIndex(8), GS.cind(1))
+                        / Atom::num(2);
+                    let nu_two_mu_one = GS.emr_vec(EdgeIndex(7), GS.cind(1))
+                        * GS.emr_vec(EdgeIndex(8), GS.cind(2))
+                        / Atom::num(2);
+                    assert_ne!(nu_one_mu_two, nu_two_mu_one);
+                    assert_eq!(components[&vec![1, 2]], nu_one_mu_two);
+                    assert_eq!(components[&vec![2, 1]], nu_two_mu_one);
+                    assert!(
+                        components
+                            .values()
+                            .all(|body| !body.contains_symbol(CS.idx))
+                    );
+                }
+                Ok(Atom::Zero.into())
+            })
+            .unwrap();
+        }
+    }
+
     #[test]
     fn evaluator_preprocess_scalarizes_abstract_minkowski_contractions_without_algebra() {
         test_initialise().unwrap();

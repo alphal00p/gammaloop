@@ -1924,13 +1924,26 @@ impl FeynmanDiagram {
                 &reconstructed
             }
         };
-        if !fragment_numerator.same_value(&self.numerator)
-            && fragment_numerator.coefficients_equal(
-                &self.numerator,
-                spenso::shadowing::TensorCollectFilter::<0>::Tensors,
-            )? != symbolica::id::ConditionResult::True
-        {
-            return Err(DiagramError::NumeratorFragmentMismatch);
+        if !fragment_numerator.same_value(&self.numerator) {
+            // Artifact validation must also accept exact polynomial identities
+            // in scalar coefficients. The conservative grouping proof leaves
+            // those inconclusive; collect tensor factors first, then use the
+            // existing exact-only scalar owner without expanding the numerator.
+            let difference = fragment_numerator.try_sub(&self.numerator)?;
+            let coefficients = difference
+                .coefficient_list(spenso::shadowing::TensorCollectFilter::<0>::Tensors)?;
+            let zero_settings = symbolica::atom::ZeroTestSettings::default()
+                .finite_field_samples(0)
+                .numerical_samples(0)
+                .exact_fallback(true);
+            if !coefficients.into_iter().all(|(tensor, coefficient)| {
+                tensor.is_zero()
+                    || coefficient.is_scalar()
+                        && coefficient.expression().check_zero_with(&zero_settings)
+                            == symbolica::id::ConditionResult::True
+            }) {
+                return Err(DiagramError::NumeratorFragmentMismatch);
+            }
         }
         if self.routing_validation.get().is_none() {
             self.loop_momentum_basis.validate(self)?;
@@ -3845,8 +3858,14 @@ mod tests {
                 |_, vertex| {
                     let mut vertex = vertex.clone();
                     vertex.numerator = NumeratorInterface::admit(
-                        symbolica::function!(momentum_symbol(), internal_edges[0].0, 0)
-                            + symbolica::symbol!("feynkit_graph::uv_test_mass"),
+                        symbolica::function!(
+                            momentum_symbol(),
+                            internal_edges[0].0,
+                            symbolica::function!(
+                                spenso::structure::abstract_index::AIND_SYMBOLS.cind,
+                                0
+                            )
+                        ) + symbolica::symbol!("feynkit_graph::uv_test_mass"),
                         None,
                     )
                     .unwrap();
@@ -3856,8 +3875,14 @@ mod tests {
                     let mut edge = edge.clone();
                     if internal_edges.contains(&id) {
                         edge.numerator = NumeratorInterface::admit(
-                            symbolica::function!(momentum_symbol(), id.0, 0)
-                                + symbolica::symbol!("feynkit_graph::uv_test_mass"),
+                            symbolica::function!(
+                                momentum_symbol(),
+                                id.0,
+                                symbolica::function!(
+                                    spenso::structure::abstract_index::AIND_SYMBOLS.cind,
+                                    0
+                                )
+                            ) + symbolica::symbol!("feynkit_graph::uv_test_mass"),
                             None,
                         )
                         .unwrap();
@@ -4064,6 +4089,11 @@ mod tests {
             .with_algebra_result(factored.expand())
             .unwrap();
         diagram.validate().unwrap();
+        assert_eq!(
+            diagram.vertices().next().unwrap().1.numerator.expression(),
+            &factored,
+            "exact coefficient validation must preserve the factored source fragment"
+        );
         diagram.validation.take();
         diagram.numerator = diagram
             .numerator

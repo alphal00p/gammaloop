@@ -378,9 +378,13 @@ assert type(feynkit_expression + spenso_expression) is core.Expression
 assert type(expanded_coupling) is core.Expression
 assert expanded_coupling == model.coupling("SCALAR_COUPLING").expression
 assert named_coupling == core.S("UFO::SCALAR_COUPLING")
-assert type(tensor_reduced) is core.Expression
+assert type(tensor_reduced) is spenso.TensorExpression
+assert tensor_reduced.rank == 0
+assert tensor_reduced.axes == ()
 assert tensor_reduced == tensor_expected
-assert type(diagram_tensor_reduced) is core.Expression
+assert type(diagram_tensor_reduced) is spenso.TensorExpression
+assert diagram_tensor_reduced.rank == 0
+assert diagram_tensor_reduced.axes == ()
 assert diagram_tensor_reduced == tensor_expected
 assert len(scalar_graphs) == 1
 assert scalar_graphs[0].numerator_expression().to_expression() == tensor_expected
@@ -433,7 +437,11 @@ assert indexed / denominator == indexed * inverse_denominator
 assert isinstance(indexed, spenso.TensorExpression)
 assert isinstance(indexed, core.Expression)
 assert indexed.rank == 4
-assert indexed.to_expression() == core.Expression.parse(indexed_diagram.numerator)
+indexed_source = spenso.TensorExpression(
+    core.Expression.parse(indexed_diagram.numerator), intern="indices"
+)
+assert indexed.to_expression() == indexed_source.to_expression()
+assert indexed.axes == indexed_source.axes
 assert "gammalooprs::Q(" in indexed_diagram.numerator
 assert "FeynKit::" not in indexed_diagram.numerator
 assert "Momentum" not in str(indexed)
@@ -477,7 +485,9 @@ assert scalar_graphs[0].projector_expression() == 1
 assert scalar_graphs[0].numerator_prefactor_expression() == numerator_prefactor
 assert scalar_graphs[0].overall_factor_expression() == feynkit_expression
 scalar_graphs[0].validate()
-assert type(free_tensor_reduced) is core.Expression
+assert type(free_tensor_reduced) is spenso.TensorExpression
+assert free_tensor_reduced.rank == 2
+assert free_tensor_reduced.axes == free_tensor_diagram.numerator_expression().axes
 "#,
             )
             .unwrap();

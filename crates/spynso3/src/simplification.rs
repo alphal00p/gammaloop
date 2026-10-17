@@ -237,8 +237,12 @@ assert hasattr(sp.Tensor, 'contract_ports')
                 .expect_err("malformed dot notation should not have a Dirac adjoint");
             assert!(error.is_instance_of::<DiracAdjointError>(py));
             assert!(error.is_instance_of::<PyValueError>(py));
-            assert!(error.to_string().contains("cannot parse tensor network"));
-            assert!(error.to_string().contains("Invalid dot function"));
+            // Source admission now diagnoses this before network materialization.
+            assert!(
+                error
+                    .to_string()
+                    .contains("dot requires exactly two operands")
+            );
             Ok(())
         })
         .unwrap();
