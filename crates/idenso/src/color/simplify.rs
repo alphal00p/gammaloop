@@ -1857,9 +1857,8 @@ impl ColorAlgebraSimplifier {
             );
         }
 
-        let args = StructureView::parse(base)?.args;
-        let dimension = color_structure_dimension(&args)?;
-        Some(adjoint_casimir_for_dimension(dimension.clone()) * dimension)
+        let structure = StructureView::parse(base)?;
+        structure.contract_loop(&structure)
     }
 
     /// Rename the indices of the slots of `term` selected by `rename` to fresh
@@ -2449,6 +2448,15 @@ impl ColorAlgebraSimplifier {
 
     fn simplify_two_f_loop_product(&self, product: &ProductView) -> Option<Atom> {
         for (left_index, left_factor) in product.factors.iter().enumerate() {
+            if let AtomView::Pow(square) = left_factor.atom
+                && positive_integer(square.get_exp()) == Some(2)
+                && let Some(structure) = StructureView::parse(square.get_base())
+                && let Some(replacement) = structure.contract_loop(&structure)
+            {
+                // A closed pair can normalize to a square, with its phase in
+                // another factor. Preserve that factor and the same slot guards.
+                return Some(product.replacing_one(left_index, replacement));
+            }
             let Some(left_structure) = &left_factor.structure else {
                 continue;
             };
@@ -4565,7 +4573,25 @@ mod reconstruction_tests {
         .simplify_algebra(&settings)
         .unwrap();
         assert!(closed.is_scalar());
-        assert_eq!(closed.expression(), &(Atom::num(8) * casimir));
+        assert_eq!(closed.expression(), &(Atom::num(8) * &casimir));
+        for (left_weight, right_weight) in
+            [(Atom::i(), Atom::num(-2)), (Atom::num(-2), Atom::num(3))]
+        {
+            let closed = SymbolicTensor::infer(chain!(
+                &a,
+                &b,
+                &left_weight * color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &b),
+                &right_weight * color_f!(Atom::var(T.chain_in), Atom::var(T.chain_out), &a),
+            ))
+            .unwrap()
+            .simplify_algebra(&settings)
+            .unwrap();
+            assert!(closed.is_scalar());
+            assert_eq!(
+                closed.expression(),
+                &(Atom::num(8) * left_weight * right_weight * &casimir)
+            );
+        }
     }
 
     #[test]
@@ -4632,7 +4658,48 @@ mod reconstruction_tests {
         };
         assert_eq!(
             left.contract_loop(&right),
-            Some(adjoint_casimir_for_dimension(Atom::num(8)) * color_metric(fixed, c))
+            Some(
+                adjoint_casimir_for_dimension(Atom::num(8))
+                    * color_metric(fixed.clone(), c.clone())
+            )
+        );
+
+        let simplifier = ColorAlgebraSimplifier::new(Default::default(), ParseState::default());
+        let casimir = adjoint_casimir_for_dimension(Atom::num(8));
+        let ordinary_square = color_f!(&a, &u, &b).pow(2);
+        assert_eq!(
+            simplifier.simplify_power(ordinary_square.as_view()),
+            Some(Atom::num(8) * &casimir)
+        );
+        let fixed_square = color_f!(&a, &u, &fixed).pow(2);
+        let fixed_expected = &casimir * color_metric(fixed.clone(), fixed.clone());
+        assert_eq!(
+            simplifier.simplify_power(fixed_square.as_view()),
+            Some(fixed_expected.clone())
+        );
+        let spectator = (Atom::var(symbol!("structure_fixed_component::x"))
+            + Atom::var(symbol!("structure_fixed_component::y")))
+        .pow(7);
+        assert_eq!(
+            simplifier.simplify_two_f_loop_product(&ProductView::parse(
+                (Atom::i() * &spectator * fixed_square).as_view()
+            )),
+            Some(Atom::i() * spectator * fixed_expected)
+        );
+        let other_fixed = ColorAdjoint {}.to_symbolic([Atom::num(8), AIND_SYMBOLS.cind.call(1)]);
+        let insufficient = color_f!(&a, &fixed, &other_fixed).pow(2);
+        assert!(simplifier.simplify_power(insufficient.as_view()).is_none());
+        assert!(
+            simplifier
+                .simplify_two_f_loop_product(&ProductView::parse(insufficient.as_view()))
+                .is_none()
+        );
+        assert!(
+            simplifier
+                .simplify_two_f_loop_product(&ProductView::parse(
+                    color_f!(&a, &u, &b).pow(3).as_view()
+                ))
+                .is_none()
         );
     }
 

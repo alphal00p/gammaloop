@@ -139,6 +139,12 @@ components; the latter are not evidence for a color-index sum. Its new tests and
 repaired-build performance still need qualification. The matched inputs, local
 proof and independent review are retained under `ghost-performance-audit`.
 
+The first full Idenso run of that follow-up passes 1,047 of 1,048 tests; its new
+scalar-closure control exposes a normalized `f^2` form. The correction routes
+both the separate and squared structure constants through the same guarded
+contraction. The exact `8*C_A` assertion is retained and extended with weighted
+closures and fixed-index controls. Qualification of this correction is pending.
+
 == Measured GL1 preparation cost and proof reuse
 
 The existing instrumentation at `8f24069f` attributes about 0.915 seconds of
