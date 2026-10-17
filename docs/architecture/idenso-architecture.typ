@@ -369,6 +369,14 @@ the matrix phases; explicit structure-constant products independently check the
 sign. This closes internal color labels before scalar coefficients reach an
 analytic backend.
 
+A retained adjoint chain can also connect to a separate fundamental trace or
+color line. The product owner exposes that one chain through Spenso's reserved
+dummy allocator only when an existing cross-factor identity can consume the
+connection. A notation-only opening is discarded, preventing an open/recollect
+cycle. This lets the same structure-constant identities act on explicit products
+and compact chains without distributing spectator factors or losing the logical
+ports of a zero result.
+
 Settings objects are part of the semantics. Gamma ordering and trace evaluation, color Fierz and
 invariant substitutions, contraction budgets, and cooking source/tag filters can all
 change the result form. Reproducible callers record the exact settings; the
