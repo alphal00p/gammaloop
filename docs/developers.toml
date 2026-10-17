@@ -819,6 +819,16 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 digest = "ffa0ab2761d1963df2b783ddd8aa97a1a2e1dcb7"
 
 [[section.note.scope]]
+path = "crates/idenso/src/tensor/inference.rs"
+symbol = "idenso::tensor::SymbolicTensor::map_representation_dimensions"
+anchor = "    pub fn map_representation_dimensions("
+end_anchor = "    /// Scope explicit indices"
+# Reviewed 2026-10-17: unchanged payload and complete logical layout reuse the
+# existing finisher. Mapper execution, unchecked-input validation, ranked-zero
+# dimension changes and independent callback-result checks remain enforced.
+digest = "2fab115ac04bd931c076c9125b65d98748ca81bd"
+
+[[section.note.scope]]
 path = "crates/idenso/src/tensor/contract.rs"
 symbol = "idenso::tensor::ContractSettings"
 anchor = "pub struct ContractSettings<'a> {"

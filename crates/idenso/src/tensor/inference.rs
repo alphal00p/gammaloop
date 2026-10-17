@@ -856,7 +856,13 @@ impl SymbolicTensor<PartialStructure> {
         if let Some(error) = failure {
             return Err(error);
         }
-        let mut value = Self::checked_parts(expression, structure)?;
+        let mut value = if expression == self.expression && structure == self.structure {
+            // Finishing an unchanged carrier retains its established proofs while
+            // still validating unchecked inputs and normalizing unfinished parts.
+            self.clone().finish_parts()?
+        } else {
+            Self::checked_parts(expression, structure)?
+        };
         if let Some(expected) = physical {
             // Named signatures can encode canonical storage order while exposing
             // a different logical order. Validate independently mapped physical
@@ -4424,6 +4430,107 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn identity_dimension_mapping_retains_reduction_state_and_zero_layout() {
+        crate::test_support::test_initialize();
+        let representation = ExtendibleReps::MINKOWSKI.new_rep(4);
+        let ports = [73343, 73341]
+            .map(|index| representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let expression =
+            FunctionBuilder::new(spenso::tensor_symbol!("dimension_noop_retained_matrix"))
+                .add_args(ports.into_iter().rev().map(composition::port_atom))
+                .finish();
+        let value = SymbolicTensor::from_declared_parts(
+            expression,
+            PartialStructure::from_logical_slots(ports),
+        )
+        .unwrap();
+        let d = Atom::var(symbolica::symbol!("dimension_noop_parameter"));
+        let dimension = d.pow(2) - 1;
+        let value = value
+            .map_representation_dimensions(|_, _| dimension.clone())
+            .unwrap();
+        let zero = value.with_checked_expression(Atom::Zero).unwrap();
+        for source in [value, zero] {
+            let source = source.contract(Default::default()).unwrap();
+            assert!(source.contraction_complete());
+            let mut calls = Vec::new();
+            let mapped = source
+                .map_representation_dimensions(|representation, dimension| {
+                    calls.push((representation, dimension.to_owned()));
+                    dimension.to_owned()
+                })
+                .unwrap();
+            assert_eq!(calls, vec![(representation.rep, dimension.clone())]);
+            assert_eq!(mapped, source);
+            assert!(mapped.same_reduction_state(&source));
+            assert_eq!(
+                mapped.structure.logical_slots(),
+                source.structure.logical_slots()
+            );
+            assert!(
+                mapped
+                    .contract(Default::default())
+                    .unwrap()
+                    .same_reduction_state(&source)
+            );
+
+            // In particular, a zero's unchanged Atom cannot hide a dimension change.
+            let specialized = source
+                .map_representation_dimensions(|_, _| Atom::num(6))
+                .unwrap();
+            assert_eq!(specialized.is_zero(), source.is_zero());
+            assert_eq!(
+                specialized.structure.logical_slots(),
+                ports.map(|slot| ExtendibleReps::MINKOWSKI.new_rep(6).slot(slot.aind))
+            );
+            assert!(!specialized.same_reduction_state(&source));
+        }
+    }
+
+    #[test]
+    fn identity_dimension_mapping_still_finishes_unchecked_parts() {
+        crate::test_support::test_initialize();
+        let representation = ExtendibleReps::MINKOWSKI.new_rep(4);
+        let slot = representation
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(73345))
+            .to_atom();
+        let malformed = FunctionBuilder::new(spenso::tensor_symbol!(
+            "dimension_noop_invalid_multiplicity"
+        ))
+        .add_args([&slot, &slot, &slot])
+        .finish();
+        let scalar = PartialStructure::from_logical_slots([]);
+        let expected = SymbolicTensor::checked_parts(malformed.clone(), scalar.clone())
+            .unwrap_err()
+            .to_string();
+        let unchecked = SymbolicTensor::from_normalized_parts(malformed, scalar.clone());
+        let mut calls = 0;
+        let actual = unchecked
+            .map_representation_dimensions(|_, dimension| {
+                calls += 1;
+                dimension.to_owned()
+            })
+            .unwrap_err();
+        assert_eq!(actual.to_string(), expected);
+        assert_eq!(calls, 1);
+
+        // Interface admission can precede product finishing. Preserve that boundary.
+        let x = Atom::var(symbolica::symbol!("dimension_noop_unfinished_x"));
+        let y = Atom::var(symbolica::symbol!("dimension_noop_unfinished_y"));
+        let expression = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(&x)
+            .add_arg(&y)
+            .finish();
+        let admitted = SymbolicTensor::from_declared_parts(expression, scalar).unwrap();
+        assert_eq!(admitted.proofs.validated.get(), Some(&true));
+        let finished = admitted
+            .map_representation_dimensions(|_, dimension| dimension.to_owned())
+            .unwrap();
+        assert_eq!(finished.expression, x * y);
+        assert!(finished.is_scalar());
+    }
+
+    #[test]
     fn mapped_color_dimensions_keep_encoded_ports_and_ranked_zero() {
         crate::test_support::test_initialize();
         let adjoint = ColorAdjoint {}.new_rep(8);
@@ -4672,6 +4779,23 @@ pub(crate) mod tests {
                     expression,
                     PartialStructure::from_logical_slots([port]),
                 );
+                calls.lock().unwrap().clear();
+                let unchanged = value
+                    .expression
+                    .with_lorentz_dimension(Atom::num(4).as_view());
+                let unchanged_calls = std::mem::take(&mut *calls.lock().unwrap());
+                let mut mapped_pairs = Vec::new();
+                let actual = value
+                    .map_representation_dimensions(|representation, dimension| {
+                        mapped_pairs.push((representation, dimension.to_owned()));
+                        dimension.to_owned()
+                    })
+                    .unwrap();
+                assert_eq!(actual.expression, unchanged);
+                assert_eq!(actual.structure, value.structure);
+                assert_eq!(*calls.lock().unwrap(), unchanged_calls);
+                assert_eq!(mapped_pairs, vec![(representation.rep, Atom::num(4))]);
+
                 calls.lock().unwrap().clear();
                 let expected = value
                     .expression
