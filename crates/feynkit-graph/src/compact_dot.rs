@@ -350,13 +350,13 @@ impl FeynmanDiagram {
             };
             builder.overall_factor = translate(&builder.overall_factor)?;
             builder.numerator_prefactor =
-                NumeratorInterface::translate(&builder.numerator_prefactor, &translate)?;
-            builder.projector = NumeratorInterface::translate(&builder.projector, &translate)?;
+                NumeratorInterface::translate(&builder.numerator_prefactor, translate)?;
+            builder.projector = NumeratorInterface::translate(&builder.projector, translate)?;
             for vertex in &mut builder.vertices {
-                vertex.numerator = NumeratorInterface::translate(&vertex.numerator, &translate)?;
+                vertex.numerator = NumeratorInterface::translate(&vertex.numerator, translate)?;
             }
             for (_, edge) in &mut builder.edges {
-                edge.numerator = NumeratorInterface::translate(&edge.numerator, &translate)?;
+                edge.numerator = NumeratorInterface::translate(&edge.numerator, translate)?;
             }
         }
         let (mut diagram, source_map) = builder.finalize()?;

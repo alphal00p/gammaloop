@@ -6861,9 +6861,10 @@ mod tests {
             [Flow::Source, Flow::Sink],
         ));
 
-        assert_eq!(actual, &exact);
-        assert_ne!(actual, &blanket_reversal);
-        assert_ne!(actual, &particle_fallback);
+        let actual = NumeratorInterface::export(actual).0;
+        assert_eq!(actual, exact);
+        assert_ne!(actual, blanket_reversal);
+        assert_ne!(actual, particle_fallback);
     }
 
     #[test]

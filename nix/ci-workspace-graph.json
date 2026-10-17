@@ -76,6 +76,7 @@
     "feynkit-graph": [
       "feynkit-kinematics",
       "feynkit-model",
+      "idenso",
       "linnest",
       "linnet",
       "spenso",
@@ -97,10 +98,12 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "idenso",
       "linnest",
       "linnet",
       "linnet-py",
       "linnet-render-py",
+      "spenso",
       "spenso-macros",
       "spynso3",
       "typst-renderer"
@@ -223,6 +226,7 @@
     ],
     "vakint": [
       "feynkit-tensor",
+      "idenso",
       "spenso",
       "spenso-macros"
     ]
@@ -345,6 +349,7 @@
     "feynkit-graph": {
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "idenso": [],
       "linnest": [
         "svg"
       ],
@@ -378,12 +383,16 @@
       "feynkit-model": [],
       "feynkit-tensor": [],
       "feynkit-ufo": [],
+      "idenso": [],
       "linnest": [
         "svg"
       ],
       "linnet": [],
       "linnet-py": [],
       "linnet-render-py": [],
+      "spenso": [
+        "shadowing"
+      ],
       "spenso-macros": [],
       "spynso3": [],
       "typst-renderer": []
@@ -584,6 +593,7 @@
     },
     "vakint": {
       "feynkit-tensor": [],
+      "idenso": [],
       "spenso": [],
       "spenso-macros": []
     }
@@ -743,6 +753,7 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
+      "idenso",
       "linnet",
       "spenso",
       "spenso-macros",
@@ -766,6 +777,7 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
+      "idenso",
       "kurvst",
       "linnest",
       "linnet",
@@ -1055,6 +1067,7 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
+      "idenso",
       "linnet",
       "spenso",
       "spenso-macros",
@@ -1078,6 +1091,7 @@
       "feynkit-kinematics",
       "feynkit-model",
       "gammaloop-workspace-hack",
+      "idenso",
       "kurvst",
       "linnest",
       "linnet",
@@ -1426,6 +1440,7 @@
     "feynkit-graph": [
       "feynkit-kinematics",
       "feynkit-model",
+      "idenso",
       "linnest",
       "linnet",
       "spenso",
@@ -1447,10 +1462,12 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "idenso",
       "linnest",
       "linnet",
       "linnet-py",
       "linnet-render-py",
+      "spenso",
       "spenso-macros",
       "spynso3",
       "typst-renderer"
@@ -1575,6 +1592,7 @@
     ],
     "vakint": [
       "feynkit-tensor",
+      "idenso",
       "spenso",
       "spenso-macros"
     ]
@@ -1700,6 +1718,7 @@
     "feynkit-graph": {
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "idenso": [],
       "linnest": [
         "svg"
       ],
@@ -1733,12 +1752,16 @@
       "feynkit-model": [],
       "feynkit-tensor": [],
       "feynkit-ufo": [],
+      "idenso": [],
       "linnest": [
         "svg"
       ],
       "linnet": [],
       "linnet-py": [],
       "linnet-render-py": [],
+      "spenso": [
+        "shadowing"
+      ],
       "spenso-macros": [],
       "spynso3": [],
       "typst-renderer": []
@@ -1947,6 +1970,7 @@
     },
     "vakint": {
       "feynkit-tensor": [],
+      "idenso": [],
       "spenso": [],
       "spenso-macros": []
     }

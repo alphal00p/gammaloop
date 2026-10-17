@@ -29,7 +29,7 @@ use spenso::{
         abstract_index::AbstractIndex,
         dimension::Dimension,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{LibrarySlot, Minkowski, RepName},
+        representation::{LibrarySlot, Minkowski},
         slot::{DualSlotTo, IsAbstractSlot, ParseableAind},
     },
 };
@@ -76,6 +76,12 @@ pub enum AmplitudeError {
 
 impl From<TensorInferenceError> for AmplitudeError {
     fn from(error: TensorInferenceError) -> Self {
+        Self::Tensor(error.to_string())
+    }
+}
+
+impl From<idenso::tensor::composition::TensorCompositionError> for AmplitudeError {
+    fn from(error: idenso::tensor::composition::TensorCompositionError) -> Self {
         Self::Tensor(error.to_string())
     }
 }
@@ -374,7 +380,7 @@ impl Amplitude {
                         "physical external ports need explicit leg identities".into(),
                     ));
                 };
-                Ok(slot.rep().slot(index))
+                Ok(slot.rep().slot::<AbstractIndex, _>(index))
             })
             .collect::<Result<Vec<_>, _>>()?;
         let cooking = CookSettings::indices()

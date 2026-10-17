@@ -6,6 +6,7 @@ use super::{
     Outside, TensorMonomial, TensorReducer, TensorReductionError, TensorReductionTerm, dot,
     indexed_vector, outside_pair,
 };
+use idenso::tensor::SymbolicTensor;
 use std::collections::HashMap;
 use symbolica::{
     atom::{Atom, AtomCore},

@@ -26,7 +26,7 @@ use spenso::{
     },
     structure::{
         abstract_index::AbstractIndex,
-        partial::PartialStructure,
+        partial::{PartialIndex, PartialStructure, PartialStructureExt},
         representation::{Minkowski, RepName},
         slot::{DummyAind, ParseableAind, SlotMatcher},
     },
@@ -254,6 +254,40 @@ pub(crate) struct Integrated<'a> {
 }
 
 impl Integrated<'_> {
+    /// Keep numeric public ports distinct from Vakint's numeric dummy ABI.
+    /// The returned map restores the original logical positions after the
+    /// backend result has been checked against the protected carrier.
+    pub(crate) fn protect_numeric_ports(
+        source: &SymbolicTensor<PartialStructure>,
+    ) -> Result<(
+        SymbolicTensor<PartialStructure>,
+        std::collections::HashMap<usize, AbstractIndex>,
+    )> {
+        let originals = source
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .enumerate()
+            .filter_map(|(position, slot)| match slot.aind {
+                PartialIndex::Explicit(index)
+                    if matches!(index.to_atom().as_view(), AtomView::Num(_)) =>
+                {
+                    Some((position, index))
+                }
+                _ => None,
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        if originals.is_empty() {
+            return Ok((source.clone(), originals));
+        }
+        let reserved = SymbolicTensor::reserved_dummies([source]);
+        let protected = originals
+            .keys()
+            .map(|&position| (position, reserved.fresh_index()))
+            .collect();
+        Ok((source.reindex_interface_ports(&protected)?, originals))
+    }
+
     pub(crate) fn new<'a>(
         vakint: &'a Vakint,
         vakint_settings: &'a vakint::VakintSettings,
@@ -358,6 +392,8 @@ impl Integrated<'_> {
         current: &S,
         given: &S,
     ) -> Result<SymbolicTensor<PartialStructure>> {
+        let (protected_integrand, source_ports) = Self::protect_numeric_ports(integrand)?;
+        let integrand = &protected_integrand;
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
         let settings = ctx.settings;
@@ -888,7 +924,11 @@ impl Integrated<'_> {
             output_bytes = result.expression().as_view().get_byte_size(),
             "Completed integrated coefficient cleanup"
         );
-        Ok(result)
+        if source_ports.is_empty() {
+            Ok(result)
+        } else {
+            Ok(result.reindex_interface_ports(&source_ports)?)
+        }
     }
 
     fn simplify_projected_numerator(
@@ -1044,7 +1084,10 @@ impl Integrated<'_> {
         })
     }
 
-    fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
+    /// Restore the raw Vakint tensor ABI. Public numeric source ports must be
+    /// transported to distinct native labels before entering the backend;
+    /// unlabelled numeric indices here belong to its topology-local dummies.
+    pub(crate) fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
         // Projector indices may close two opaque tensor leaves. Restore their
         // complete Minkowski representation before exposing the tensor bodies.
         let mink = Minkowski {}.new_rep(GS.dim);
@@ -3023,6 +3066,146 @@ mod tests {
                 .expand()
                 .is_zero()
         );
+    }
+
+    #[test]
+    fn restored_numeric_source_ports_remain_distinct_from_backend_dummies() -> Result<()> {
+        test_initialise()?;
+        let source = crate::numerator::AppliedFeynmanRule::new(parse!(
+            "spenso::g(spenso::mink(gammalooprs::dim,0),spenso::mink(gammalooprs::dim,1))"
+        ))?
+        .expr;
+        let (protected, originals) = Integrated::protect_numeric_ports(&source)?;
+        let labels = protected
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .map(|slot| {
+                let PartialIndex::Explicit(index) = slot.aind else {
+                    unreachable!()
+                };
+                index.to_atom()
+            })
+            .collect::<Vec<_>>();
+        let dummy = vakint::symbols::S.dot_dummy_ind(0);
+        let backend = function!(vakint::symbols::S.g, &labels[0], &dummy)
+            * function!(vakint::symbols::S.g, &dummy, &labels[1]);
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        for backend in [backend, Atom::Zero] {
+            let is_zero = backend.is_zero();
+            let restored = Integrated::restore_numerator(backend, 19);
+            let result = protected
+                .with_checked_expression(cooking.try_cook(restored.as_view())?)?
+                .contract(ContractSettings::default())?
+                .reindex_interface_ports(&originals)?;
+            assert_eq!(
+                result.structure().logical_slots(),
+                source.structure().logical_slots()
+            );
+            assert_eq!(result.rank(), 2);
+            assert_eq!(result.is_zero(), is_zero);
+            if !is_zero {
+                assert_eq!(result.expression(), source.expression());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn integrated_backend_preserves_numeric_open_ports_in_both_projection_modes() -> Result<()> {
+        use crate::{
+            finalized_runtime_dot,
+            graph::Graph,
+            numerator::AppliedFeynmanRule,
+            uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode},
+        };
+        use linnet::half_edge::subgraph::InternalSubGraph;
+
+        test_initialise()?;
+        let graph: Graph = finalized_runtime_dot!(digraph numeric_open_vacuum {
+            graph [projector=1]
+            edge [particle=scalar_1 num=1 mass=2]
+            node [num=1]
+            a -> a [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
+        }, "scalars")?;
+        let full = graph.full_filter();
+        let current = OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                InternalSubGraph::cleaned_filter_optimist(full.clone(), graph.as_ref()),
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::MUV,
+                0,
+            )?
+            .expect("the tadpole has its full compatible loop basis"),
+            topo_order: 23,
+        };
+        let given = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        let denominator =
+            AppliedFeynmanRule::new(graph.denominator(&full, &graph.model, |_| -3))?.expr;
+        let numerator = AppliedFeynmanRule::new(parse!(
+            "gammalooprs::Q(0,spenso::mink(gammalooprs::dim,0))*gammalooprs::Q(0,spenso::mink(gammalooprs::dim,1))"
+        ))?.expr;
+        let source = numerator.multiply(&denominator)?;
+        let metric = AppliedFeynmanRule::new(parse!(
+            "spenso::g(spenso::mink(gammalooprs::dim,0),spenso::mink(gammalooprs::dim,1))"
+        ))?
+        .expr;
+        let scalar_source = source
+            .multiply(&metric)?
+            .contract(ContractSettings::default())?;
+        assert!(scalar_source.is_scalar());
+        let settings = UVgenerationSettings {
+            add_marker: false,
+            ..Default::default()
+        };
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let sector = FourDSector::new(
+            source.clone(),
+            vec![(full.clone(), full, graph.loop_momentum_basis.clone())],
+            Vec::new(),
+        );
+        for project_onto_tensor_integrals in [false, true] {
+            let backend_settings = vakint::VakintSettings {
+                project_onto_tensor_integrals,
+                number_of_terms_in_epsilon_expansion: 3,
+                ..settings.vakint.true_settings()
+            };
+            let integrated = Integrated::new(crate::utils::vakint()?, &backend_settings);
+            let result = integrated.integrate(&source, &sector, &ctx, &current, &given)?;
+            assert_eq!(result.rank(), 2);
+            assert_eq!(
+                result.structure().logical_slots(),
+                source.structure().logical_slots()
+            );
+            assert!(!result.is_zero());
+            let scalar = integrated.integrate(&scalar_source, &sector, &ctx, &current, &given)?;
+            assert!(scalar.is_scalar());
+            assert!(!scalar.is_zero());
+            let closed = result
+                .multiply(&metric)?
+                .contract(ContractSettings::default())?;
+            assert!(closed.is_scalar());
+            // Tensor metadata stays in symbolic D. Only this completed scalar
+            // contraction uses D=4-2*epsilon, including every evanescent term.
+            let residual =
+                Integrated::dimensionally_regularized(closed.expression()) - scalar.expression();
+            assert!(
+                series(&residual, 2)?.to_atom().expand().is_zero(),
+                "project={project_onto_tensor_integrals}: {residual}"
+            );
+            let zero = source.with_checked_expression(Atom::Zero)?;
+            let zero = integrated.integrate(&zero, &sector, &ctx, &current, &given)?;
+            assert!(zero.is_zero());
+            assert_eq!(
+                zero.structure().logical_slots(),
+                source.structure().logical_slots()
+            );
+        }
+        Ok(())
     }
 
     #[test]

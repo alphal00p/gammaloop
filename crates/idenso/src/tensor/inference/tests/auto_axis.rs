@@ -523,11 +523,82 @@ fn one_anonymous_axis_stays_unambiguous_across_explicit_port_movement() {
     }
     let ambiguous =
         SymbolicTensor::infer(function!(head, rep.to_symbolic([]), rep.to_symbolic([]))).unwrap();
-    assert!(
-        ambiguous
-            .with_rewritten_expression(Atom::num(2) * ambiguous.expression())
-            .is_err()
+    type Tensor = ParamTensor<ShadowedStructure<AbstractIndex>>;
+    type Lib = TensorLibrary<ParamTensor<ExplicitKey<AbstractIndex>>, AbstractIndex>;
+    type Net = Network<NetworkStore<Tensor, Atom>, ExplicitKey<AbstractIndex>, Symbol>;
+    let selectors = [
+        spenso::vector_symbol!("mixed_anonymous_scaling::basis_zero"),
+        spenso::vector_symbol!("mixed_anonymous_scaling::basis_one"),
+    ];
+    let mut library = Lib::new();
+    library
+        .insert_explicit_sparse(
+            ExplicitKey::from_iter([rep, rep], head, None),
+            [(vec![0, 1], Atom::num(3)), (vec![1, 0], Atom::num(5))],
+            Atom::Zero,
+        )
+        .unwrap();
+    for (head, position) in selectors.into_iter().zip([0, 1]) {
+        library
+            .insert_explicit_sparse(
+                ExplicitKey::from_iter([rep], head, None),
+                [(vec![position], Atom::one())],
+                Atom::Zero,
+            )
+            .unwrap();
+    }
+    let indices = [74833, 74835].map(AbstractIndex::Normal);
+    let bindings = HashMap::from([(0, indices[0]), (1, indices[1])]);
+    let component = |expression: Atom, coordinates: [usize; 2]| {
+        let projection = expression
+            * function!(
+                selectors[coordinates[0]],
+                rep.slot::<AbstractIndex, _>(indices[0]).to_atom()
+            )
+            * function!(
+                selectors[coordinates[1]],
+                rep.slot::<AbstractIndex, _>(indices[1]).to_atom()
+            );
+        let mut network = Net::try_from_view::<ShadowedStructure<AbstractIndex>, _>(
+            projection.as_view(),
+            &library,
+            &ParseSettings::default(),
+        )
+        .unwrap();
+        network
+            .execute::<Sequential, SmallestDegree, _, _, _>(&library, &ErroringLibrary::new())
+            .unwrap();
+        match network.result_scalar().unwrap() {
+            ExecutionResult::Val(value) => value.into_owned(),
+            ExecutionResult::Zero => Atom::Zero,
+            ExecutionResult::One => Atom::one(),
+        }
+    };
+    let original = ambiguous.materialize_interface_ports(&bindings).unwrap();
+    assert_eq!(component(original.clone(), [0, 1]), Atom::num(3));
+    assert_eq!(component(original, [1, 0]), Atom::num(5));
+    let changed_head = function!(
+        spenso::tensor_symbol!("mixed_anonymous_scaling::different_matrix"),
+        rep.to_symbolic([]),
+        rep.to_symbolic([])
     );
+    for finish in [
+        SymbolicTensor::with_rewritten_expression,
+        SymbolicTensor::with_algebra_result,
+        SymbolicTensor::with_checked_expression,
+    ] {
+        // A scalar weight leaves this exact ordered tensor witness unchanged.
+        // Distinct off-diagonal values detect an accidental transpose.
+        let doubled = finish(&ambiguous, Atom::num(2) * ambiguous.expression()).unwrap();
+        assert_eq!(
+            doubled.structure.logical_slots(),
+            ambiguous.structure.logical_slots()
+        );
+        let expression = doubled.materialize_interface_ports(&bindings).unwrap();
+        assert_eq!(component(expression.clone(), [0, 1]), Atom::num(6));
+        assert_eq!(component(expression, [1, 0]), Atom::num(10));
+        assert!(finish(&ambiguous, Atom::num(2) * &changed_head).is_err());
+    }
 }
 
 #[test]

@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use feynkit_graph::FeynmanDiagram;
 use idenso::tensor::{ContractSettings, SymbolicTensor};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
-use spenso::network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG};
+use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
 use spenso::{
     shadowing::TensorCollectFilter,
     structure::{
@@ -468,14 +468,6 @@ impl TensorReducer {
         // The shared collector distributes only selected Lorentz structures.
         // Scalar and foreign-representation coefficients retain their original
         // factorization, and a capped selection cannot publish partial rows.
-        source.ensure_validated().map_err(|error| {
-            // Preserve the reducer's established multiplicity/power diagnostics.
-            // This parser only refines a failed admission; it never accepts an
-            // expression rejected by the shared interface owner.
-            self.parse_monomial(source.expression().as_view())
-                .err()
-                .unwrap_or_else(|| TensorReductionError::TensorAlgebra(error.to_string()))
-        })?;
         let normalized = source
             .contract(ContractSettings {
                 rank_one: false,
@@ -484,7 +476,14 @@ impl TensorReducer {
                 expand: false,
                 ..Default::default()
             })
-            .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
+            .map_err(|error| {
+                // Contract validates the input through the shared cached owner.
+                // Refine failures with the reducer's established multiplicity
+                // and power diagnostics without accepting rejected tensors.
+                self.parse_monomial(source.expression().as_view())
+                    .err()
+                    .unwrap_or_else(|| TensorReductionError::TensorAlgebra(error.to_string()))
+            })?;
         let normalized = normalized
             .to_dots()
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;

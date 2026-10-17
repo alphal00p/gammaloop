@@ -25,10 +25,11 @@ use feynkit_graph::{
 };
 use idenso::{color::ColorSimplifySettings, tensor::SymbolicTensor};
 use spenso::{
-    shadowing::{TensorCollectFilter, symbolica_utils::LogPrint},
+    shadowing::{IntoAtom, TensorCollectFilter, symbolica_utils::LogPrint},
     structure::{
         partial::{PartialStructure, PartialStructureExt},
         representation::{Minkowski, Representation},
+        slot::{IsAbstractSlot, Slot},
     },
 };
 

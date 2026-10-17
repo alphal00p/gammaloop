@@ -1,5 +1,6 @@
 //! Independent diagrams obtained by opening a selected region's boundary.
 
+use idenso::tensor::SymbolicTensor;
 use std::collections::{BTreeMap, BTreeSet};
 
 use linnet::half_edge::{
@@ -11,7 +12,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 
 use crate::{
     DiagramEndpoint, DiagramError, DiagramHalfEdge, ExternalLeg, ExternalState, FeynmanDiagram,
-    VertexId, symbols,
+    NumeratorInterface, VertexId, symbols,
 };
 
 impl FeynmanDiagram {

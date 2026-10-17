@@ -496,7 +496,7 @@ impl FeynmanDiagramBuilder {
         };
         let translate_tensor = |tensor: &SymbolicTensor<PartialStructure>| {
             if generated {
-                NumeratorInterface::translate(tensor, &translate)
+                NumeratorInterface::translate(tensor, translate)
             } else {
                 Ok(tensor.clone())
             }

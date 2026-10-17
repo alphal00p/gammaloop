@@ -1,6 +1,6 @@
 use std::ffi::CString;
 
-use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram};
+use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram, NumeratorInterface};
 use feynkit_model::Model;
 use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
 #[cfg(feature = "linnet-python")]
@@ -182,6 +182,9 @@ fn tensor_diagram(
     numerator_prefactor: Atom,
     projector: Atom,
 ) -> FeynmanDiagram {
+    let numerator = NumeratorInterface::admit(numerator, None).unwrap();
+    let numerator_prefactor = NumeratorInterface::admit(numerator_prefactor, None).unwrap();
+    let projector = NumeratorInterface::admit(projector, None).unwrap();
     let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
     let particle = model.particle_id("scalar_0").unwrap();
     let mut left = DiagramVertex::interaction("left", rule);
