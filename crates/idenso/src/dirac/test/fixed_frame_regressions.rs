@@ -76,6 +76,187 @@ fn mixed_temporal_traces_reduce_without_fixing_formal_dimensions() {
 }
 
 #[test]
+fn contracted_temporal_sandwich_preserves_formal_dimension_and_scalar_factors() {
+    use spenso::shadowing::IntoAtom;
+    use symbolica::{function, symbol};
+
+    let r = test_initialize();
+    let d = Atom::var(symbol!("contracted_temporal::d"));
+    let epsilon = symbol!("contracted_temporal::epsilon");
+    let start = slot!(r.bis4, a).into_atom();
+    let end = slot!(r.bis4, b).into_atom();
+    let x = Atom::var(symbol!("contracted_temporal::x"));
+    let y = Atom::var(symbol!("contracted_temporal::y"));
+    let retained_power = (&x + &y).pow(7);
+    let spectator =
+        function!(symbol!("contracted_temporal::opaque"), &x + &y) * &retained_power / (&x - &y);
+    for dimension in [d.clone(), Atom::num(4)] {
+        let mu =
+            Minkowski {}.to_symbolic([&dimension, &Atom::var(symbol!("contracted_temporal::mu"))]);
+        for settings in [
+            GammaSimplifySettings::canonical(),
+            GammaSimplifySettings::repeated_pairs(),
+        ] {
+            let sandwich = chain!(&start, &end, gamma!(&mu), gamma0!(), gamma!(&mu));
+            let reduced = simplify(&(&spectator * &sandwich), settings);
+            let expected =
+                &spectator * (Atom::num(2) - &dimension) * chain!(&start, &end, gamma0!());
+            assert_eq!(reduced, expected);
+            assert!(reduced.contains(retained_power.as_view()));
+            assert_eq!(simplify(&reduced, settings), reduced);
+            let closed_pair = chain!(&start, &end, gamma0!(), gamma!(&mu), gamma0!(), gamma!(&mu));
+            assert_eq!(
+                simplify(&closed_pair, settings),
+                (Atom::num(2) - &dimension) * g!(&start, &end)
+            );
+            let trace = trace!(
+                r.bis4.to_symbolic([]),
+                gamma0!(),
+                gamma!(&mu),
+                gamma0!(),
+                gamma!(&mu)
+            );
+            assert_eq!(
+                simplify(&trace, settings),
+                Atom::num(4) * (Atom::num(2) - &dimension)
+            );
+            let evanescent = (&dimension - Atom::num(4)) / Atom::var(epsilon) * &closed_pair;
+            let finite = simplify(&evanescent, settings)
+                .replace(d.to_pattern())
+                .with(Atom::num(4) - Atom::num(2) * Atom::var(epsilon))
+                .series(epsilon, 0, 0)
+                .unwrap()
+                .to_atom();
+            assert_eq!(
+                finite,
+                if dimension == d {
+                    Atom::num(4) * g!(&start, &end)
+                } else {
+                    Atom::Zero
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn contracted_temporal_sandwich_keeps_fixed_components_and_other_spaces_distinct() {
+    use spenso::{
+        network::library::symbolic::ETS, shadowing::IntoAtom,
+        structure::abstract_index::AIND_SYMBOLS,
+    };
+    use symbolica::{function, symbol};
+
+    let r = test_initialize();
+    let d = Atom::var(symbol!("contracted_temporal_controls::d"));
+    let start = slot!(r.bis4, a).into_atom();
+    let end = slot!(r.bis4, b).into_atom();
+    for dimension in [d.clone(), Atom::num(4)] {
+        let rep = Minkowski {}.to_symbolic([&dimension]);
+        let mu = Minkowski {}.to_symbolic([
+            &dimension,
+            &Atom::var(symbol!("contracted_temporal_controls::mu")),
+        ]);
+        let nu = Minkowski {}.to_symbolic([
+            &dimension,
+            &Atom::var(symbol!("contracted_temporal_controls::nu")),
+        ]);
+        for settings in [
+            GammaSimplifySettings::canonical(),
+            GammaSimplifySettings::repeated_pairs(),
+        ] {
+            for i in 0..4 {
+                let fixed = function!(ETS.delta, function!(AIND_SYMBOLS.cind, i), &rep);
+                let word = chain!(&start, &end, gamma!(&fixed), gamma0!(), gamma!(&fixed));
+                assert_eq!(simplify(&word, settings), chain!(&start, &end, gamma0!()));
+                // A raw concrete structural port is not a native gamma input;
+                // the admitted component spelling above is its basis vector.
+                let fixed_slot =
+                    Minkowski {}.to_symbolic([&dimension, &function!(AIND_SYMBOLS.cind, i)]);
+                let raw_gamma = function!(AGS.gamma, &start, &end, fixed_slot);
+                assert!(SymbolicTensor::infer(raw_gamma).is_err());
+            }
+            let distinct = chain!(&start, &end, gamma!(&mu), gamma0!(), gamma!(&nu));
+            assert_eq!(simplify(&distinct, settings), distinct);
+            let generic_spin = chain!(
+                slot!(r.bis_d, a),
+                slot!(r.bis_d, b),
+                gamma!(&mu),
+                gamma0!(),
+                gamma!(&mu)
+            );
+            assert_eq!(simplify(&generic_spin, settings), generic_spin);
+            let compact = function!(
+                spenso::network::tags::SPENSO_TAG
+                    .rank_one_tensor_symbol("contracted_temporal_controls::p"),
+                &rep
+            );
+            let compact_word = chain!(&start, &end, gamma!(&compact), gamma0!(), gamma!(&compact));
+            assert_eq!(simplify(&compact_word, settings), compact_word);
+            let contracted_trace = trace!(
+                r.bis4.to_symbolic([]),
+                gamma0!(),
+                gamma!(&mu),
+                gamma0!(),
+                gamma!(&mu)
+            );
+            assert_eq!(
+                simplify(
+                    &contracted_trace,
+                    GammaSimplifySettings {
+                        evaluate_traces: false,
+                        ..settings
+                    }
+                ),
+                contracted_trace
+            );
+        }
+    }
+    let left = Minkowski {}.to_symbolic([
+        &d,
+        &Atom::var(symbol!("contracted_temporal_controls::same_label")),
+    ]);
+    let right = Minkowski {}.to_symbolic([
+        &Atom::num(4),
+        &Atom::var(symbol!("contracted_temporal_controls::same_label")),
+    ]);
+    let cross_space = chain!(&start, &end, gamma!(left), gamma0!(), gamma!(right));
+    assert_eq!(
+        simplify(&cross_space, GammaSimplifySettings::canonical()),
+        cross_space
+    );
+}
+
+#[test]
+fn captured_temporal_sandwich_from_vacuum_projection_reduces_exactly() {
+    use symbolica::{function, symbol};
+    test_initialize();
+    let d = Atom::var(symbol!("gammalooprs::dim"));
+    let start = function!(
+        symbol!("spenso::bis"),
+        4,
+        function!(symbol!("gammalooprs::hedge"), 1, 1)
+    );
+    let end = function!(
+        symbol!("spenso::bis"),
+        4,
+        function!(symbol!("gammalooprs::hedge"), 0, 1)
+    );
+    let mu = function!(
+        symbol!("spenso::mink"),
+        &d,
+        function!(symbol!("gammalooprs::dummy"), 1000013)
+    );
+    // Exact ordered word retained after native two-loop vacuum tensor projection.
+    let captured = chain!(&start, &end, gamma0!(), gamma!(&mu), gamma0!(), gamma!(&mu));
+    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+    let cooked = cooking.try_cook(captured.as_view()).unwrap();
+    assert_eq!(cooking.uncook(cooked.as_view()), captured);
+    let reduced = cooking.uncook(simplify(&cooked, GammaSimplifySettings::canonical()).as_view());
+    assert_eq!(reduced, (Atom::num(2) - d) * g!(&start, &end));
+}
+
+#[test]
 fn fixed_temporal_slash_uses_gamma_zero_without_fixing_lorentz_dimension() {
     use spenso::{
         network::library::symbolic::ETS, shadowing::IntoAtom,

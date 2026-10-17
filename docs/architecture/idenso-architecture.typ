@@ -200,9 +200,14 @@ products. A weighted sum of ordinary slashed vectors enters the same trace
 recurrence as one vector argument; it does not generate a Cartesian product of
 matrix words. Explicit-index matrix sums remain outside that rule. Weighted
 compact metrics and dots share complete-interface admission before bilinear
-normalization. Mixed physical `gamma0` traces require explicit four-dimensional
-spin and Lorentz representations; formal dimensions and disabled trace
-evaluation retain their words.
+normalization. Uncontracted mixed physical `gamma0` traces require explicit
+four-dimensional spin and Lorentz representations; formal dimensions and
+disabled trace evaluation retain their words. A repeated abstract Lorentz
+index around `gamma0` has the separate dimension-generic Clifford contraction
+`gamma_mu gamma0 gamma^mu = (2-d) gamma0` in physical four-component spinor
+space. Open words and enabled traces share this pair-contraction owner. Fixed
+components, compact slashes, distinct or incompatible ports, and formal spin
+dimensions do not enter that summed-index rule.
 
 Uniformly reversed closed gamma and gamma5 words use the trace transpose
 identity before entering those same kernels: reverse the factor order and

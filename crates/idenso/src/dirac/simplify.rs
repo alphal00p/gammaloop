@@ -1464,7 +1464,7 @@ impl<'settings> DiracSimplifier<'settings> {
             return Some(ETS.metric_literal(*start, *end));
         }
 
-        Self::contract_adjacent_gamma_pair(DiracWord::Chain(*start, *end), &factors)
+        Self::contract_gamma_pair(DiracWord::Chain(*start, *end), &factors)
             .or_else(|| {
                 factor_kinds
                     .has_non_pure_gamma()
@@ -1520,12 +1520,9 @@ impl<'settings> DiracSimplifier<'settings> {
 }
 
 impl DiracSimplifier<'_> {
-    /// Contracts adjacent equal-index gammas:
-    /// `...[gamma(mu), gamma(mu)]... -> g(mu, mu) * ...[...]...`.
-    fn contract_adjacent_gamma_pair(
-        word: DiracWord<'_>,
-        factors: &[DiracFactor<'_>],
-    ) -> Option<Atom> {
+    /// Contract equal-index gamma pairs, adjacent or around physical gamma0.
+    /// The temporal sandwich uses its summed Lorentz dimension, not four.
+    fn contract_gamma_pair(word: DiracWord<'_>, factors: &[DiracFactor<'_>]) -> Option<Atom> {
         for (i, pair) in factors.windows(2).enumerate() {
             let [left, right] = pair else {
                 unreachable!("windows(2) always yields pairs")
@@ -1546,6 +1543,39 @@ impl DiracSimplifier<'_> {
             return Some(ETS.metric_literal(mu, nu) * word.build(rest));
         }
 
+        if word.is_four_dimensional() {
+            let mut slots = SlotMatcher::default();
+            for (i, triple) in factors.windows(3).enumerate() {
+                if !matches!(triple[1], DiracFactor::Gamma0(_)) {
+                    continue;
+                }
+                let Some((mu, nu)) =
+                    Self::mink_index_pair(ADJACENT_GAMMA_CONTRACTION, &triple[0], &triple[2])
+                else {
+                    continue;
+                };
+                if mu != nu || !is_minkowski_slot(mu) {
+                    continue;
+                }
+                let SlotMatch::Explicit(slot) = slots.classify(mu) else {
+                    continue;
+                };
+                if slot.is_concrete_index() {
+                    continue;
+                }
+                // gamma_mu gamma0 gamma^mu = (2-d) gamma0. A fixed
+                // component or a supplied vector does not define this sum.
+                return Some(
+                    (Atom::num(2) - ETS.metric_literal(mu, mu))
+                        * word.build(Self::chain_factors(
+                            factors,
+                            i,
+                            i + 2,
+                            [triple[1].as_view()],
+                        )),
+                );
+            }
+        }
         None
     }
 
@@ -2353,6 +2383,13 @@ impl DiracSimplifier<'_> {
             return Some(rewritten);
         }
 
+        if factor_kinds.has_gamma0
+            && has_four_dimensional_trace_rep(rep)
+            && let Some(reduced) = Self::contract_gamma_pair(DiracWord::Trace(rep), &factors)
+        {
+            return Some(reduced);
+        }
+
         if factor_kinds.has_gamma0 && has_four_dimensional_trace_rep(rep) {
             // A temporal matrix is the slash of the physical time basis vector.
             // Feed that vector directly to the trace recurrence: rewriting the
@@ -2394,7 +2431,7 @@ impl DiracSimplifier<'_> {
         // Prefer a one-word Chisholm reduction before a branching contraction.
         let rotated = Self::rotate_trace_to_repeated_pair(&factors);
         let word = DiracWord::Trace(rep);
-        if let Some(reduced) = Self::contract_adjacent_gamma_pair(word, &rotated)
+        if let Some(reduced) = Self::contract_gamma_pair(word, &rotated)
             .or_else(|| Self::four_dim_chisholm_contraction(word, &rotated))
             .or_else(|| Self::bubble_repeated_gamma_towards_contraction(word, &rotated))
         {
@@ -2581,7 +2618,7 @@ impl DiracSimplifier<'_> {
 
         let rotated = Self::rotate_trace_to_repeated_pair(factors);
         let word = DiracWord::Trace(rep);
-        if let Some(reduced) = Self::contract_adjacent_gamma_pair(word, &rotated)
+        if let Some(reduced) = Self::contract_gamma_pair(word, &rotated)
             .or_else(|| Self::four_dim_chisholm_contraction(word, &rotated))
             .or_else(|| Self::bubble_repeated_gamma_towards_contraction(word, &rotated))
         {
