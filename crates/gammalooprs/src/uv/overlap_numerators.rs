@@ -379,6 +379,29 @@ impl NumeratorJetCache {
                     break;
                 }
             }
+            if !value.is_zero() {
+                // Finite execution has fixed every tensor coordinate. Select
+                // those scalar coordinate atoms, not the surrounding graph,
+                // to prove identities between their retained polynomial powers.
+                let cooking = idenso::CookSettings::indices()
+                    .with_mode(idenso::CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                // This is an additional exact zero certificate, not a rewrite
+                // of nonzero content keys. Refused or inconclusive collection
+                // retains the original finite value and its existing budgets.
+                if let Ok(cooked) = cooking.try_cook(value.as_view())
+                    && let Ok(scalar) = idenso::tensor::SymbolicTensor::infer_indexed(cooked)
+                    && scalar.is_scalar()
+                    && matches!(
+                        scalar.coefficients_are_zero(
+                            spenso::shadowing::TensorCollectFilter::<0>::TaggedTensors,
+                        ),
+                        Ok(symbolica::id::ConditionResult::True)
+                    )
+                {
+                    value = Atom::Zero;
+                }
+            }
             if value.is_zero() {
                 continue;
             }
@@ -471,6 +494,42 @@ mod tests {
         assert!(constant.key.is_one());
         assert_eq!(constant.scalar_prefactor, Atom::num(4));
         assert!(cache.canonicalize(&Atom::Zero).unwrap().is_zero);
+    }
+
+    #[test]
+    fn finite_fixed_coordinates_certify_polynomial_zero_without_opening_spectators() {
+        test_initialise().unwrap();
+        let a = GS.emr_mom(EdgeIndex(2), GS.cind(0));
+        let b = GS.emr_mom(EdgeIndex(2), GS.cind(3));
+        let difference =
+            Atom::num(2) * a.pow(2) + Atom::num(2) * b.pow(2) - (&a + &b).pow(2) - (&a - &b).pow(2);
+        let original = difference.clone();
+        let x = Atom::var(symbol!("finite_coordinate_proof::x"; Scalar));
+        let y = Atom::var(symbol!("finite_coordinate_proof::y"; Scalar));
+        let u = Atom::var(symbol!("finite_coordinate_proof::u"; Scalar));
+        let v = Atom::var(symbol!("finite_coordinate_proof::v"; Scalar));
+        let spectator = function!(symbol!("finite_coordinate_proof::opaque"; Scalar), x + y).pow(7)
+            / (u + v).pow(3);
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &difference))
+                .unwrap()
+                .is_zero
+        );
+        assert!(!cache.canonicalize(&(&difference + 1)).unwrap().is_zero);
+        let perturbed = &spectator * (&difference + 1);
+        assert!(!cache.canonicalize(&perturbed).unwrap().is_zero);
+        assert!(
+            cache
+                .canonicalize(&(&perturbed - &spectator))
+                .unwrap()
+                .is_zero,
+        );
+        let retained = cache.canonicalize(&spectator).unwrap();
+        assert!(retained.key.contains(&spectator));
+        assert_eq!(difference, original);
     }
 
     #[test]
