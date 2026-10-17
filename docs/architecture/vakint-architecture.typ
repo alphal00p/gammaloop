@@ -223,9 +223,12 @@ sum branches reuse the same written index. External-vector syntax is retained
 inside `pure_scalar` metadata, so it does not add an extra tensor port and can
 be restored after projection.
 
-The raw Vakint adapter admits each converted selected numerator once as a
-`SymbolicTensor<PartialStructure>` and calls `TensorReducer::reduce` with that
-retained value. `TensorReductionTerm` keeps its tensor body in the same carrier;
+The raw Vakint adapter uses `TensorReducer::admit` to admit each converted
+selected numerator once as a `SymbolicTensor<PartialStructure>`, then calls
+`TensorReducer::reduce` with that retained value. Rejected source expressions
+keep the reducer's precise index/power error when its existing parser can
+refine the native admission error; validation is never bypassed.
+`TensorReductionTerm` keeps its tensor body in the same carrier;
 its separate Atom coefficient is the exact scalar orbit or projector weight.
 Foreign-representation spectators remain tensors during selected Lorentz
 reduction and composition. `TensorReduction` also retains the source interface

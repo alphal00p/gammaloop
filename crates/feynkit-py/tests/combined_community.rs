@@ -381,11 +381,11 @@ assert named_coupling == core.S("UFO::SCALAR_COUPLING")
 assert type(tensor_reduced) is spenso.TensorExpression
 assert tensor_reduced.rank == 0
 assert tensor_reduced.axes == ()
-assert tensor_reduced == tensor_expected
+assert tensor_reduced.to_expression() == tensor_expected
 assert type(diagram_tensor_reduced) is spenso.TensorExpression
 assert diagram_tensor_reduced.rank == 0
 assert diagram_tensor_reduced.axes == ()
-assert diagram_tensor_reduced == tensor_expected
+assert diagram_tensor_reduced.to_expression() == tensor_expected
 assert len(scalar_graphs) == 1
 assert scalar_graphs[0].numerator_expression().to_expression() == tensor_expected
 assert isinstance(scalar_graphs[0].numerator_expression(), spenso.TensorExpression)
@@ -481,8 +481,8 @@ for output in (html, indexed.to_svg()):
     assert "SinkIndex" not in output
     assert "EdgeDummy" not in output
     assert "VertexDummy" not in output
-assert scalar_graphs[0].projector_expression() == 1
-assert scalar_graphs[0].numerator_prefactor_expression() == numerator_prefactor
+assert scalar_graphs[0].projector_expression().to_expression() == 1
+assert scalar_graphs[0].numerator_prefactor_expression().to_expression() == numerator_prefactor
 assert scalar_graphs[0].overall_factor_expression() == feynkit_expression
 scalar_graphs[0].validate()
 assert type(free_tensor_reduced) is spenso.TensorExpression

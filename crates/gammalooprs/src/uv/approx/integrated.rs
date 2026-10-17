@@ -3171,7 +3171,10 @@ mod tests {
         for project_onto_tensor_integrals in [false, true] {
             let backend_settings = vakint::VakintSettings {
                 project_onto_tensor_integrals,
-                number_of_terms_in_epsilon_expansion: 3,
+                // This logarithmically divergent integral starts at epsilon^-1.
+                // Four coefficients supply the epsilon^2 order checked below,
+                // including the evanescent term from the closing D-dimensional metric.
+                number_of_terms_in_epsilon_expansion: 4,
                 ..settings.vakint.true_settings()
             };
             let integrated = Integrated::new(crate::utils::vakint()?, &backend_settings);
