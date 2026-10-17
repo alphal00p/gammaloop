@@ -394,6 +394,9 @@ components do not authorize a sum. Fixed uncontracted spectators are preserved
 by the local identity. Public symbolic tensor admission currently rejects the
 raw fixed-color chain and structure-constant forms used in these controls, so
 their fixed-index guard is tested directly at the identity owner.
+Identical materialized factors can normalize to a square. The ordinary and
+squared forms share this contraction owner, retaining scalar weights and the
+same summed-index guards without distributing sums.
 
 Settings objects are part of the semantics. Gamma ordering and trace evaluation, color Fierz and
 invariant substitutions, contraction budgets, and cooking source/tag filters can all
