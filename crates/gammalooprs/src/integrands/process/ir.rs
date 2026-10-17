@@ -1021,23 +1021,13 @@ impl AmplitudeIntegrand {
                 let edges_in_limit = ir_limit.get_all_edges()?;
                 let lmb = self.data.graph_terms[graph_id]
                     .lmb_with_loop_edges(edges_in_limit.as_slice())?;
-                let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings)?;
-                let non_limit_loops = lmb
-                    .loop_edges
-                    .iter_enumerated()
-                    .filter_map(|(loop_id, edge_id)| {
-                        if !edges_in_limit.contains(edge_id) {
-                            Some(loop_id)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect_vec();
-
-                let non_limit_momenta = non_limit_loops
-                    .iter()
-                    .map(|loop_id| (*loop_id, sample_random_unit_vector(rng)))
-                    .collect_vec();
+                let momenta = ir_limit.get_momenta(
+                    rng,
+                    &self.settings,
+                    approach_settings,
+                    &lmb.loop_edges,
+                    &[],
+                )?;
 
                 let externals = self.data.graph_terms[graph_id]
                     .graph
@@ -1046,7 +1036,6 @@ impl AmplitudeIntegrand {
                 let dependent_momenta_constructor =
                     DependentMomentaConstructor::Amplitude(&externals);
 
-                let loop_number = lmb.loop_edges.len();
                 let orientations = requested_orientations(self, graph_id, approach_settings)?;
                 let mut reports = Vec::with_capacity(orientations.len());
 
@@ -1055,35 +1044,8 @@ impl AmplitudeIntegrand {
                     let mut ray_points = Vec::with_capacity(momenta.len());
 
                     for (loop_mom_id, lambda_point) in momenta.iter().cloned().enumerate() {
-                        let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
-                            .map(|_| {
-                                ThreeMomentum::new(
-                                    F::from_f64(0.0),
-                                    F::from_f64(0.0),
-                                    F::from_f64(0.0),
-                                )
-                            })
-                            .collect();
-
-                        for (loop_id, momentum) in non_limit_momenta.iter() {
-                            loop_moms[*loop_id] = *momentum;
-                        }
-
-                        for tagged_momenta in &lambda_point.momenta {
-                            let edge_id = tagged_momenta.tag;
-                            let loop_id = lmb
-                                .loop_edges
-                                .iter()
-                                .position(|loop_edge| loop_edge == &edge_id)
-                                .unwrap_or_else(|| {
-                                    unreachable!("corrupted lmb and ir limit: {}", ir_limit);
-                                });
-
-                            loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum;
-                        }
-
                         let sample_in_cmb = MomentumSample::new(
-                            loop_moms,
+                            lambda_point.loop_momenta,
                             loop_mom_id,
                             &self.settings.kinematics.externals,
                             0,
@@ -1345,27 +1307,16 @@ impl CrossSectionIntegrand {
             .collect_vec();
 
         let lmb = self.data.graph_terms[graph_id].lmb_with_loop_edges(edges_in_limit.as_slice())?;
-        let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings)?;
-        let non_limit_loops = lmb
-            .loop_edges
-            .iter_enumerated()
-            .filter_map(|(loop_id, edge_id)| {
-                if !edges_in_limit.contains(edge_id) {
-                    Some(loop_id)
-                } else {
-                    None
-                }
-            })
-            .collect_vec();
-
-        let non_limit_momenta = non_limit_loops
-            .iter()
-            .map(|loop_id| (*loop_id, sample_random_unit_vector(rng)))
-            .collect_vec();
+        let momenta = ir_limit.get_momenta(
+            rng,
+            &self.settings,
+            approach_settings,
+            &lmb.loop_edges,
+            &edges_to_flip,
+        )?;
 
         let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection;
 
-        let loop_number = lmb.loop_edges.len();
         let orientations = requested_orientations(self, graph_id, approach_settings)?;
         let mut reports = Vec::with_capacity(orientations.len());
 
@@ -1374,35 +1325,8 @@ impl CrossSectionIntegrand {
             let mut ray_points = Vec::with_capacity(momenta.len());
 
             for (loop_mom_id, lambda_point) in momenta.iter().cloned().enumerate() {
-                let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
-                    .map(|_| {
-                        ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0))
-                    })
-                    .collect();
-
-                for (loop_id, momentum) in non_limit_momenta.iter() {
-                    loop_moms[*loop_id] = *momentum;
-                }
-
-                for tagged_momenta in &lambda_point.momenta {
-                    let edge_id = tagged_momenta.tag;
-                    let loop_id = lmb
-                        .loop_edges
-                        .iter()
-                        .position(|loop_edge| loop_edge == &edge_id)
-                        .unwrap_or_else(|| {
-                            unreachable!("corrupted lmb and ir limit: {}", ir_limit);
-                        });
-
-                    loop_moms[LoopIndex(loop_id)] = if edges_to_flip.contains(&edge_id) {
-                        -tagged_momenta.momentum
-                    } else {
-                        tagged_momenta.momentum
-                    };
-                }
-
                 let sample_in_cmb = MomentumSample::new(
-                    loop_moms,
+                    lambda_point.loop_momenta,
                     loop_mom_id,
                     &self.settings.kinematics.externals,
                     0,
@@ -2175,21 +2099,38 @@ impl IrLimit {
         rng: &mut MonteCarloRng,
         settings: &RuntimeSettings,
         approach_settings: &IRProfileSetting,
-    ) -> Result<Vec<LambdaPoint<f64>>> {
+        loop_edges: &TiVec<LoopIndex, EdgeIndex>,
+        edges_to_flip: &[EdgeIndex],
+    ) -> Result<Vec<LambdaLoopMomentaPoint<f64>>> {
         let momentum_builders = self.get_momentum_builders(rng);
-
+        let edges_in_limit = self.get_all_edges()?;
+        let scale = F::from_f64(settings.kinematics.e_cm);
         let lambda_values = constant_dropped_fit_points(
             &F::from_f64(10.0_f64.powf(approach_settings.lambda_exp_start)),
             &F::from_f64(10.0_f64.powf(approach_settings.lambda_exp_end)),
             approach_settings.steps,
         )?;
+        // Match the limited vectors' physical scale. Unit spectator momenta
+        // instead change the relative ray when the energy unit is changed and
+        // can force LU roots deep into the localization profile's tail.
+        // Draw spectators after all limited-vector builders, as before.
+        let hard_momenta: LoopMomenta<F<f64>> = loop_edges
+            .iter()
+            .map(|edge| {
+                if edges_in_limit.contains(edge) {
+                    ThreeMomentum::new(scale.zero(), scale.zero(), scale.zero())
+                } else {
+                    sample_random_unit_vector(rng) * scale
+                }
+            })
+            .collect();
 
         Ok(lambda_values
             .into_iter()
-            .map(|lambda| LambdaPoint {
-                momenta: momentum_builders
-                    .iter()
-                    .map(|builder| match builder {
+            .map(|lambda| {
+                let mut loop_momenta = hard_momenta.clone();
+                for builder in &momentum_builders {
+                    let (edge_id, momentum) = match builder {
                         MomentumBuilder::Colinear {
                             edge_id,
                             x,
@@ -2199,28 +2140,31 @@ impl IrLimit {
                         } => {
                             let momentum = if *is_soft {
                                 (colinear_direction * x + perpendicular_direction * lambda)
-                                    * F::from_f64(settings.kinematics.e_cm)
+                                    * scale
                                     * lambda
                             } else {
-                                (colinear_direction * x + perpendicular_direction * lambda)
-                                    * F::from_f64(settings.kinematics.e_cm)
+                                (colinear_direction * x + perpendicular_direction * lambda) * scale
                             };
-                            TaggedMomenta {
-                                momentum,
-                                tag: *edge_id,
-                            }
+                            (*edge_id, momentum)
                         }
                         MomentumBuilder::Soft { edge_id, direction } => {
-                            let momentum =
-                                direction * lambda * F::from_f64(settings.kinematics.e_cm);
-                            TaggedMomenta {
-                                momentum,
-                                tag: *edge_id,
-                            }
+                            (*edge_id, direction * lambda * scale)
                         }
-                    })
-                    .collect(),
-                lambda,
+                    };
+                    let loop_id = loop_edges
+                        .iter()
+                        .position(|edge| *edge == edge_id)
+                        .unwrap_or_else(|| unreachable!("corrupted lmb and ir limit: {}", self));
+                    loop_momenta[LoopIndex(loop_id)] = if edges_to_flip.contains(&edge_id) {
+                        -momentum
+                    } else {
+                        momentum
+                    };
+                }
+                LambdaLoopMomentaPoint {
+                    lambda,
+                    loop_momenta,
+                }
             })
             .collect())
     }
@@ -2351,18 +2295,6 @@ fn sample_random_unit_vector<T: FloatLike>(rng: &mut MonteCarloRng) -> ThreeMome
     let unnormalized_momentum = ThreeMomentum::new(k_x, k_y, k_z);
     let norm = unnormalized_momentum.norm();
     unnormalized_momentum * norm.inv()
-}
-
-#[derive(Clone)]
-struct TaggedMomenta<T> {
-    momentum: ThreeMomentum<T>,
-    tag: EdgeIndex,
-}
-
-#[derive(Clone)]
-struct LambdaPoint<T: FloatLike> {
-    lambda: F<T>,
-    momenta: Vec<TaggedMomenta<F<T>>>,
 }
 
 #[derive(Clone)]
@@ -2977,6 +2909,127 @@ mod tests {
                 orientation: None,
                 parameterization_branch: None,
             },
+        }
+    }
+
+    #[test]
+    fn ir_rays_scale_spectators_and_limits_without_changing_rng_or_cut_flips() {
+        use crate::utils::Length;
+
+        let loop_edges = ti_vec![EdgeIndex(5), EdgeIndex(7), EdgeIndex(3), EdgeIndex(2)];
+        let cases = [
+            IrLimit::new_pure_soft(vec![EdgeIndex(7)]),
+            IrLimit {
+                colinear: vec![vec![
+                    HardOrSoft::Hard(EdgeIndex(7)),
+                    HardOrSoft::Soft(EdgeIndex(2)),
+                ]],
+                soft: vec![EdgeIndex(5)],
+            },
+        ];
+        for limit in cases {
+            let edges_in_limit = limit.get_all_edges().unwrap();
+            for seed in [1337, 4242] {
+                let mut approach = test_ir_profile_settings(12);
+                approach.lambda_exp_start = -5.0;
+                approach.lambda_exp_end = -7.0;
+                approach.seed = seed;
+                let mut settings = RuntimeSettings::default();
+                settings.kinematics.e_cm = 400.0;
+                let mut rng = MonteCarloRng::new(seed, 0);
+                let low = limit
+                    .get_momenta(&mut rng, &settings, &approach, &loop_edges, &[])
+                    .unwrap();
+                let continuation: [u64; 4] = std::array::from_fn(|_| rng.random());
+
+                // The old callers sampled only the untouched loops after the
+                // existing limited-vector builder. Preserve that exact draw
+                // schedule; neither the scale nor cut restoration draws RNG.
+                let mut reference_rng = MonteCarloRng::new(seed, 0);
+                let _ = limit.get_momentum_builders(&mut reference_rng);
+                let mut old_spectators = BTreeMap::new();
+                for (loop_id, edge) in loop_edges.iter_enumerated() {
+                    if !edges_in_limit.contains(edge) {
+                        old_spectators.insert(
+                            loop_id,
+                            sample_random_unit_vector::<f64>(&mut reference_rng),
+                        );
+                    }
+                }
+                assert_eq!(
+                    continuation,
+                    std::array::from_fn(|_| reference_rng.random::<u64>())
+                );
+
+                settings.kinematics.e_cm = 800.0;
+                let mut high_rng = MonteCarloRng::new(seed, 0);
+                let high = limit
+                    .get_momenta(&mut high_rng, &settings, &approach, &loop_edges, &[])
+                    .unwrap();
+                assert_eq!(
+                    continuation,
+                    std::array::from_fn(|_| high_rng.random::<u64>())
+                );
+                settings.kinematics.e_cm = 400.0;
+                let mut flipped_rng = MonteCarloRng::new(seed, 0);
+                let flipped = limit
+                    .get_momenta(
+                        &mut flipped_rng,
+                        &settings,
+                        &approach,
+                        &loop_edges,
+                        &edges_in_limit,
+                    )
+                    .unwrap();
+                assert_eq!(
+                    continuation,
+                    std::array::from_fn(|_| flipped_rng.random::<u64>())
+                );
+
+                let grid = constant_dropped_fit_points(&F(1e-5), &F(1e-7), 12).unwrap();
+                assert_eq!(low.len(), grid.len());
+                assert_eq!(high.len(), low.len());
+                assert_eq!(flipped.len(), low.len());
+                for (((low, high), flipped), lambda) in
+                    low.iter().zip(&high).zip(&flipped).zip(grid)
+                {
+                    assert_eq!(low.lambda, lambda);
+                    assert_eq!(high.lambda, lambda);
+                    assert_eq!(flipped.lambda, lambda);
+                    assert_eq!(low.loop_momenta.len(), loop_edges.len());
+                    for (loop_id, edge) in loop_edges.iter_enumerated() {
+                        // Doubling an exactly representable energy scale must
+                        // double every Cartesian component, including untouched
+                        // loops and soft-collinear momenta, with the same seed.
+                        assert_eq!(
+                            high.loop_momenta[loop_id],
+                            low.loop_momenta[loop_id] * F(2.0)
+                        );
+                        let restored = if edges_in_limit.contains(edge) {
+                            -flipped.loop_momenta[loop_id]
+                        } else {
+                            flipped.loop_momenta[loop_id]
+                        };
+                        assert_eq!(restored, low.loop_momenta[loop_id]);
+                        if let Some(direction) = old_spectators.get(&loop_id) {
+                            assert_eq!(low.loop_momenta[loop_id], *direction * F(400.0));
+                            assert!(
+                                (low.loop_momenta[loop_id].norm().0 - 400.0).abs()
+                                    < 64.0 * f64::EPSILON * 400.0
+                            );
+                        }
+                    }
+                    if limit.colinear.is_empty() {
+                        let soft_index = loop_edges
+                            .iter()
+                            .position(|edge| *edge == EdgeIndex(7))
+                            .unwrap();
+                        let norm = low.loop_momenta[LoopIndex(soft_index)].norm().0;
+                        let expected = 400.0 * lambda.0;
+                        assert!((norm - expected).abs() < 64.0 * f64::EPSILON * expected);
+                    }
+                }
+            }
         }
     }
 
