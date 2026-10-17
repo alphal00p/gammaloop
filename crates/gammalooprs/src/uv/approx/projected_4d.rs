@@ -1301,6 +1301,282 @@ mod tests {
     }
 
     #[test]
+    fn boosted_doubled_bubble_projection_matches_independent_soft_residues() -> Result<()> {
+        test_initialise()?;
+        let model = crate::utils::load_generic_model("sm");
+        let mut graph: Graph = finalized_runtime_dot!(digraph doubled_on_shell_bubble {
+            graph [projector=1]
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0 sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            b -> outgoing [id=3 source="{ufo_order:2}"]
+        }, &model)?;
+        let owners = graph
+            .full_filter()
+            .subtract(&graph.external_filter::<SuBitGraph>());
+        let subgraph = InternalSubGraph::cleaned_filter_optimist(owners.clone(), graph.as_ref());
+        let lmb = graph.try_compatible_sub_lmb(
+            &subgraph,
+            graph.dummy_stripped_external_flows_of(&subgraph),
+            &graph.loop_momentum_basis,
+        )?;
+        let external = *lmb.ext_edges.iter().next().unwrap();
+        let mass = Atom::num(12);
+        let constant_parameter = symbol!("os_double_bubble_test::constant");
+        let linear_parameter = symbol!("os_double_bubble_test::linear");
+        let constant = Atom::var(constant_parameter);
+        let linear = Atom::var(linear_parameter);
+        let spectator_head = symbol!("os_double_bubble_test::spectator"; Scalar);
+        let spectator = function!(
+            spectator_head,
+            (Atom::var(symbol!("os_double_bubble_test::u"))
+                + Atom::var(symbol!("os_double_bubble_test::v")))
+            .pow(11)
+        );
+        let loop_momentum = function!(GS.emr_mom, 1);
+        let loop_energy = GS.emr_mom(EdgeIndex(1), GS.cind(0));
+        let fermion_invariant = mass.pow(2)
+            + (1..=3)
+                .map(|index| GS.emr_mom(EdgeIndex(1), GS.cind(index)).pow(2))
+                .sum::<Atom>();
+        let fermion_energy = Atom::var(symbol!("os_double_bubble_test::E"));
+        let gluon_energy = Atom::var(symbol!("os_double_bubble_test::W"));
+        let energy_variable = symbol!("os_double_bubble_test::z");
+        let energy = Atom::var(energy_variable);
+        let radius_variable = symbol!("os_double_bubble_test::rho");
+        let radius = Atom::var(radius_variable);
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let production = Default::default();
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, false),
+        );
+        let mut context = Local4dProjectionContext::default();
+        for (velocity_components, positive_spatial_point) in [
+            (["5/4", "3/4", "0", "0"], [9, 0, 0]),
+            (["5/4", "1/4", "1/2", "1/2"], [3, 6, 6]),
+        ] {
+            let velocity = UVgenerationSettings {
+                on_shell_subtraction_velocity: velocity_components.map(str::to_owned),
+                ..Default::default()
+            }
+            .on_shell_velocity()?;
+            for sign in [-1, 1] {
+                let point_energy = Atom::num(sign * 15);
+                let spatial_point = positive_spatial_point.map(|component| sign * component);
+                let point = GS.on_shell_momentum(external, &Atom::num(sign * 12), &velocity);
+                let gluon_momentum = &point - &loop_momentum;
+                let quadratic = |momentum: &Atom, mass_squared: Atom| {
+                    (0..=3).fold(-mass_squared, |sum, index| {
+                        sum + Atom::num(if index == 0 { 1 } else { -1 })
+                            * GS.indexed_momentum(momentum, &[GS.cind(index)]).pow(2)
+                    })
+                };
+                let fermion_denominator = GS.den(
+                    1,
+                    &loop_momentum,
+                    mass.pow(2),
+                    quadratic(&loop_momentum, mass.pow(2)),
+                );
+                let gluon_denominator = GS.den(
+                    2,
+                    &gluon_momentum,
+                    0,
+                    quadratic(&gluon_momentum, Atom::Zero),
+                );
+                let gluon_invariant = (1..=3)
+                    .map(|index| {
+                        (GS.emr_mom(EdgeIndex(1), GS.cind(index))
+                            - Atom::num(spatial_point[index - 1]))
+                        .pow(2)
+                    })
+                    .sum::<Atom>();
+                let numerator = (&constant + &linear * (&loop_energy - &point_energy)) * &spectator;
+                let source = crate::graph::parse::NumeratorInterface::admit(
+                    &numerator / fermion_denominator.pow(2) / gluon_denominator,
+                    None,
+                )?
+                .try_into_indexed()?;
+                assert!(source.is_scalar());
+                let sector = FourDSector::new(
+                    source,
+                    vec![(owners.clone(), owners.clone(), lmb.clone())],
+                    Vec::new(),
+                );
+                // The existing canonical owner certifies signed routing, complete
+                // pole polynomials, powers and source incidence before CFF dispatch.
+                let canonical = sector.canonical_projection(&graph)?;
+                assert_eq!(canonical.terms.len(), 1);
+                let term = &canonical.terms[0];
+                assert_eq!(
+                    crate::graph::parse::NumeratorInterface::export(&term.source_numerator).0,
+                    numerator
+                );
+                assert!(!term.on_shell_points.is_empty());
+                assert_eq!(term.powers.values().sum::<usize>(), 3);
+                assert_eq!(term.powers.values().copied().max(), Some(2));
+                assert_eq!(term.source_witness.len(), 3);
+                for (edge, multiplicity, mass_squared) in [
+                    (EdgeIndex(1), 2, mass.pow(2)),
+                    (EdgeIndex(2), 1, Atom::Zero),
+                ] {
+                    let occurrences = term
+                        .source_witness
+                        .iter()
+                        .filter(|denominator| denominator.source_edge == edge)
+                        .collect::<Vec<_>>();
+                    assert_eq!(occurrences.len(), multiplicity);
+                    assert!(
+                        occurrences
+                            .iter()
+                            .all(|denominator| denominator.mass_squared == mass_squared)
+                    );
+                }
+                let projected = localizer.project_factorized_taylor_sector(
+                    &mut graph,
+                    &canonical,
+                    &mut context,
+                )?;
+                assert!(
+                    projected.numerators().iter().any(|entry| {
+                        entry
+                            .rhs
+                            .expression()
+                            .pattern_match(&spectator.to_pattern(), None, None)
+                            .next()
+                            .is_some()
+                    }),
+                    "the opaque powered spectator stays in a shared numerator body"
+                );
+                let resolved = projected.resolved()?;
+                let actual = resolved
+                    .iter()
+                    .map(|(_, coefficient)| coefficient.clone())
+                    .sum::<Atom>()
+                    .replace(crate::utils::ose_atom_from_index(EdgeIndex(1)))
+                    .with(fermion_invariant.sqrt())
+                    .replace_map(|view, _, output| {
+                        let symbolica::atom::AtomView::Pow(power) = view else {
+                            return;
+                        };
+                        if !power.get_base().contains_symbol(GS.emr_mom) {
+                            return;
+                        }
+                        // Expand only a scalar energy polynomial for equality;
+                        // neither numerator nor spectator enters this comparison.
+                        let base = power.get_base().to_owned();
+                        let positive_energy = if (&base - &fermion_invariant).expand().is_zero() {
+                            &fermion_energy
+                        } else if (&base - &gluon_invariant).expand().is_zero() {
+                            &gluon_energy
+                        } else {
+                            return;
+                        };
+                        let twice_exponent = power.get_exp().to_owned() * Atom::num(2);
+                        if let Ok(exponent) = i64::try_from(twice_exponent.as_view()) {
+                            **output = positive_energy.pow(exponent);
+                        }
+                    });
+                assert!(!actual.contains_symbol(GS.os_mom));
+                assert!(!actual.contains_symbol(GS.emr_mom));
+                assert!(!actual.contains_symbol(GS.ose));
+                assert!(actual.contains_symbol(spectator_head));
+
+                // Independent clockwise Feynman residues: one double pole at E
+                // and one simple pole at q0+W. Keep both until after their sum.
+                let energy_numerator = &constant + &linear * (&energy - &point_energy);
+                let double_pole = (&energy_numerator
+                    / ((&energy + &fermion_energy).pow(2)
+                        * ((&energy - &point_energy).pow(2) - gluon_energy.pow(2))))
+                .derivative(energy_variable)
+                .replace(energy_variable)
+                .with(fermion_energy.clone());
+                let gluon_pole = energy_numerator
+                    .replace(energy_variable)
+                    .with(&point_energy + &gluon_energy)
+                    / (Atom::num(2)
+                        * &gluon_energy
+                        * ((&point_energy + &gluon_energy).pow(2) - fermion_energy.pow(2)).pow(2));
+                let contour_factor = Atom::i() / (Atom::num(8) * Atom::var(GS.pi).pow(3));
+                let expected = -&contour_factor * (double_pole + gluon_pole);
+                let actual = actual / &spectator;
+                for value in [&actual, &expected] {
+                    assert!(
+                        value
+                            .derivative(constant_parameter)
+                            .derivative(constant_parameter)
+                            .is_zero()
+                    );
+                    assert!(
+                        value
+                            .derivative(linear_parameter)
+                            .derivative(linear_parameter)
+                            .is_zero()
+                    );
+                    assert!(
+                        value
+                            .derivative(constant_parameter)
+                            .derivative(linear_parameter)
+                            .is_zero()
+                    );
+                    assert!(
+                        value
+                            .replace(constant_parameter)
+                            .with(0)
+                            .replace(linear_parameter)
+                            .with(0)
+                            .is_zero()
+                    );
+                }
+                for (parameter, radial_power, leading_sign) in
+                    [(constant_parameter, 3, -1), (linear_parameter, 2, sign)]
+                {
+                    let actual_coefficient = actual.derivative(parameter);
+                    let expected_coefficient = expected.derivative(parameter);
+                    assert!(
+                        (&actual_coefficient - &expected_coefficient)
+                            .together()
+                            .is_zero(),
+                        "velocity={velocity_components:?}, sign={sign}, parameter={parameter}: exact scalar CFF coefficient"
+                    );
+                    for ray in [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]] {
+                        let scalar_product: i32 =
+                            spatial_point.iter().zip(ray).map(|(p, n)| p * n).sum();
+                        let energy_squared = Atom::num(225)
+                            + Atom::num(2 * scalar_product) * &radius
+                            + radius.pow(2);
+                        // Positive source energies stay exact until after the
+                        // complete residue sum. These unit rays have W=rho.
+                        let weighted = (&actual_coefficient / &contour_factor
+                            * radius.pow(radial_power))
+                        .replace(fermion_energy.clone())
+                        .with(energy_squared.sqrt())
+                        .replace(gluon_energy.clone())
+                        .with(radius.clone());
+                        let series = weighted.series(radius_variable, Atom::Zero, 0)?;
+                        assert_eq!(series.get_trailing_exponent(), Rational::from(0));
+                        assert_eq!(
+                            series.coefficient(Rational::from(0)),
+                            Some(
+                                Atom::num(leading_sign)
+                                    / Atom::num(8 * (15 + scalar_product).pow(2))
+                            ),
+                            "velocity={velocity_components:?}, sign={sign}, ray={ray:?}, parameter={parameter}: independent nonzero radial coefficient"
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn projected_rows_retain_one_ordinary_numerator_and_scalar_arguments() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = finalized_runtime_dot!(digraph projected_parametric_numerator { graph [projector=1]

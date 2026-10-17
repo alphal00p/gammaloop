@@ -509,8 +509,9 @@ external velocities with rest and matching subtraction points. These are
 four-dimensional Laurent certificates. They do not by themselves assert
 absolute integrability at intersecting soft strata or establish the result
 after CFF energy integration. The boosted one-loop reconstruction and route
-checks certify that component's representation boundary; boosted two-loop
-CFF soft behavior requires its own limit check.
+checks certify that component's representation boundary. The additional
+two-loop CFF checks below test the separate energy-integrated limit on explicit
+nonpinching rays.
 
 The complete forest tests require the following exact coefficients at $m=12$ with
 $p=(12,0,0,0)$, $(15,9,0,0)$ and $(15,3,6,6)$, retaining symbolic $K$
@@ -531,6 +532,65 @@ Direct finite-component certificates preserve the same assertions without
 expanding the graph-level diagnostic numerator. The fixed-frame public
 generation test requires agreement across all three routes and preservation
 of the stability constraint after state loading.
+
+The historical repaired-production run
+`837a9f7d-2b4c-4ef2-847a-d80f830f573f` passed these three additional tests.
+This record predates the retained-tensor port and does not qualify its newly
+ported test bodies. The exact scalar residue check takes
+0.136 seconds, the full-forest radial matrix 67.055 seconds and the two-point
+three-route comparison 33.233 seconds. All remain within the ordinary
+240-second per-test limit. These additions change tests, not the production
+operator.
+
+On retained-tensor source `6f558ab5979b6e7d591d343559b9d9cf1604458e`, all three
+cases passed in run `1e969f55-be49-41ce-a2f4-d4476513a33a` (199.116 seconds total),
+with the same exact residue coefficients, nonzero ray controls and ordinary
+240-second per-case bounds. Only authored scalar admission and retained
+source/definition access were adapted; the production operators and all
+reference mathematics remain unchanged. This current run supplements the
+historical timings above without certifying intersecting soft strata or a
+full integrated two-loop mass coefficient.
+
+The scalar contour oracle retains a doubled massive propagator and a massless
+gluon propagator, with numerator $a_0+a_1(z-q^0)$ times an opaque powered
+spectator. It certifies the source numerator, denominator routing, masses,
+powers and incidence before CFF generation, then compares the result exactly
+with the sum of the independently differentiated fermion double-pole residue
+and the gluon residue. With the common $i/(2pi)^3$ factor removed, unit spatial
+ray $bold(n)$ and $q^0=sigma E_0$, the leading coefficients are
+
+$ lim_(rho arrow.r 0) rho^3 R[1]
+  =-1/(8(E_0+bold(q) dot.op bold(n))^2), quad
+  lim_(rho arrow.r 0) rho^2 R[z-q^0]
+  =sigma/(8(E_0+bold(q) dot.op bold(n))^2). $
+
+Both energy signs, both boosted velocities and four signed unit rays give
+32 exact leading-coefficient checks. Scalar contour algebra does not unfold
+the spectator or a graph numerator.
+
+The full rainbow uses the projected route with the actual finite child
+coefficient and the parent acting on that completed child. The overall
+analytic addback has a regular spatial localization kernel and cannot change
+the negative powers under test. Keep the child spatial momentum at $(0,9,0)$
+and take $bold(r)=bold(p)+rho bold(n)$ for the two unit rays along the first
+and second axes. Five radii, $rho=2^(-3),dots,2^(-7)$, at rest and at both
+boosts give 50 open-matrix evaluations across the five point/prescription pairs
+in the table above. In that historical run, on the last two halvings the $rho^2$-weighted tensor
+norm had ratios 0.9956–1.0049 for matching points and 1.9987–2.0246 for boosted
+external points with rest subtraction. Thus the sampled matching limits are
+consistent with $rho^(-2)$, while the mismatched controls retain $rho^(-3)$.
+The assertions retain nonzero controls and exclude an extra integer pole.
+
+The separate complete-forest comparison uses a fixed nonaxial subtraction
+point and both matching and unrelated on-shell external momenta. All three
+routes agree component by component, including the finite child correction.
+This checks that fixing a component point does not replace the surrounding
+graph's live momentum. The radial checks concern the open spinor matrix;
+they do not establish an external-spinor-projected identity, general soft
+integrability at intersecting strata or the full two-loop integrated mass
+coefficient. Logs, source guards and the exact residue derivation are retained
+under `target/os-feynkit/physics-validation/boosted-cff/` and
+`target/os-feynkit/physics-validation/boosted-rainbow-cff-leading-coefficient.typ`.
 
 The original OS run recorded 7.1, 17.5 and 59.9 seconds for the rest, axial and
 non-axial cases in `tests/artifacts/on_shell_boosted_validation.json`. These
