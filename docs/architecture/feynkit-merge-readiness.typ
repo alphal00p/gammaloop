@@ -85,7 +85,91 @@ results from diagnostic timing probes. Private generated states remain local.
 
 == Pipeline comparison and demonstrated costs
 
-Both routes use the same graph, runtime inputs, selected evaluator settings,
+The source comparison uses three immutable checkpoints: main `ff533fcd`, the
+previously qualified FeynKit implementation `6002674d`, and the first retained-
+tensor candidate `48b8acfa`. This distinguishes the earlier FeynKit integration
+from the newer tensor-ownership migration. The full path/symbol evidence is in
+`target/symbolic-tensor-flow/main-candidate-rust-flow.json`.
+
++ #strong[Generation and model.] Main's `ProcessDefinition` directly owns its
+  PDG, filtering and grouping options; `diagram_generator` constructs a
+  `SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>`. Its model uses
+  `ArcParticle`, `ArcPropagator` and `ArcVertexRule`. The reconciled branch uses
+  `GenerationProcess` and `GenerationOptions`; `feynkit_generator::Process`
+  returns `GenerationResult` containing `Vec<FeynmanDiagram>` and a
+  `GenerationReport`. The canonical model supplies `ParticleId`, `PropagatorId`
+  and `VertexRuleId`. These are earlier architectural changes; tensor retention
+  does not change the generator or enumerate diagrams again.
++ #strong[Runtime graph, routing and cuts.] Both routes use GammaLoop's
+  `Graph`, containing `HedgeGraph<Edge, Vertex, HedgeData>`, a
+  `LoopMomentumBasis` and cut/surface data. The loop basis still carries
+  `loop_edges`, `ext_edges` and `EdgeVec<LoopExtSignature>`. The branch imports
+  `FinalizedCut` and `FinalizedTopologyThresholdCandidate` records from the
+  canonical diagram and delegates routing to `feynkit_graph::routing::MomentumRouting`.
+  The external momentum rows and source frames must survive this conversion.
+  The tensor migration changes fragment admission at this boundary; the LMB
+  and cuts implementations remain unchanged from `6002674d`.
++ #strong[Numerators.] Main stores `Autogen<Atom>` on edges and vertices and an
+  `Atom` in `SymbolicExpression<State>` inside `Numerator<State>`. The earlier
+  FeynKit branch also stores Atoms, constructing temporary Idenso tensors for
+  algebra and exporting their expressions afterward. The migration retains
+  `SymbolicTensor<PartialStructure>` in those same owners. The Atom remains its
+  payload; logical ports, zero rank and reduction facts now travel with it.
+  `UltravioletGraph::numerator` becomes fallible because typed composition must
+  validate the fragments it combines.
++ #strong[CFF and UV.] `AmplitudeGraph::preprocess` still orders CFF generation,
+  UV construction, sampling channels and optional thresholds. `GraphThreeDSource`
+  supplies `GeneratedThreeDExpression<Esurface, Hsurface>`;
+  `OrientationExpression` carries exact `LinearEnergyExpr` maps and `CFFVariant`
+  data. `OperationNode`, `ComputeStore` and `ComputeNode` schedule the hedge-poset
+  forests. Main already has `Arc`-shared numerator definitions and separate
+  scalar roots in `Integrands`; this sharing is not a new tensor-migration
+  optimization. The migration makes `FnMapEntry<E = Atom>` generic and uses
+  `NumeratorDefinition = FnMapEntry<SymbolicTensor<PartialStructure>>` for
+  tensor bodies. Direct-3D mapping, `FourDSector`, `FourDTerm` and
+  `CanonicalUvTerm` retain those bodies. The forest combinatorics, cut keys and
+  residue maps stay with their existing owners. Vakint and scalar Laurent
+  series remain explicit backend boundaries.
++ #strong[Finite components.] Main preprocesses an `AtomCore` input, builds a
+  `ParsingNet`, and executes finite components. The earlier branch inserts
+  temporary Idenso admission/algebra before that parse. The migration passes
+  the retained tensor to `into_network`, which returns
+  `Canonicalized<ParsingNet>`. Here `ParsingNet` is a Spenso `Network` with
+  `NetworkStore<ParamTensor<ShadowedStructure<Aind>>, Atom>`, `ExplicitKey<Aind>`,
+  `Symbol` and GammaLoop's `Aind`. Its `CanonicalLayout` maps component storage
+  back to the declared logical axes. This lowering occurs during generation,
+  before sample evaluation.
++ #strong[Scalar evaluators.] `EvaluatorStack` still contains single-parametric,
+  iterative, summed-function-map and summed `GenericEvaluator` variants.
+  `GenericEvaluator` consumes scalar `FnMapEntry<Atom>` definitions and
+  Symbolica `ExpressionEvaluator` programs; `ParamBuilder<T: FloatLike>` supplies
+  numeric values. The precision lanes and eager, SymJIT and external backends
+  remain the same. Component factor collection and the guarded common-pair
+  elimination policy are earlier performance repairs. Equivalent expression
+  organization can still change compiler work and executed instruction counts.
++ #strong[Sampling and events.] `ProcessIntegrand` evaluates
+  `MomentumSample<T>` / `BareMomentumSample<T>` with their momenta, Jacobian,
+  orientation and parameterization branch. `SamplingMapContext` and proposal/
+  host plans retain their existing responsibilities. The sampling subtree is
+  unchanged from `6002674d`; the migration adds no per-sample tensor inference
+  and does not change the Monte Carlo estimator or event accumulation.
++ #strong[Persistence.] Main's full-state format is version 15; the earlier
+  reconciled branch uses 18; retained tensor fields require 19. The new payload
+  stores expressions and logical interfaces, remaps symbols and validates them
+  on load, and excludes planner/proof caches. Standalone amplitude version 12
+  and cross-section version 15 remain unchanged because they store already
+  lowered scalar evaluators. Canonical diagram/model recipes remain source
+  artifacts; runtime tensor interfaces are retained at their admission boundary.
+
+The model/generator split and stable IDs are architecture choices. Correct
+routing, source provenance, tensor interfaces and scalar admission are necessary
+invariants. Repeated expression transport, repeated validation of an already
+certified value, and overlapping cached graphs are implementation costs to
+measure and reduce. Tensor retention changes ownership; it does not require a
+new CFF scheduler, sampler or numerical evaluator.
+
+For the measured GL1 evaluator comparison, both routes use the same frozen graph,
+runtime inputs, selected evaluator settings,
 orientation selectors and reference points. Their numerator representations
 first differ at tensor preprocessing. FeynKit uses the checked Idenso tensor
 carrier and shared identity planner before explicit Spenso component execution;
@@ -728,6 +812,14 @@ Concrete Rust API difficulties found during implementation:
 - A no-op reduction can establish new completion facts. Mathematical equality
   alone must not discard its returned carrier when reusing an `Arc`;
   `same_reduction_state` distinguishes that case without traversing cached graphs.
+- Symbolic dimensions do not provide a total canonical storage order. A scalar
+  substitution can change the syntax-derived order of explicit ports from
+  `[D:1, 4:1]` to `[4:1, D:1]` without changing either port. Checked replacement
+  now compares complete explicit port identities with their multiplicities and
+  keeps the original logical layout. Anonymous ports retain their positional
+  checks. The separate repair is `7f673da6`
+  (`feynkit-explicit-port-interface-order`); all 1,028 selected Idenso tests pass,
+  including asymmetric finite-component and invalid-interface controls.
 - A mixed-space `from_signature` example currently constructs canonical
   argument order with different logical metadata, then fails its own admission
   check. The standalone reproducer is
@@ -781,3 +873,22 @@ shared graph-selection fold.
 Validation and performance measurements for this migration are pending. Existing
 physics references, tolerances and performance thresholds remain unchanged.
 Artifacts and logs are retained under `target/symbolic-tensor-flow`.
+
+The first immutable candidate `48b8acfa` passed a fresh 533-case core sweep and
+workspace Clippy. The broader 151-case physics/state/backend run then reported
+129 passes, 21 failures and one timeout. This prevents treating the earlier core
+pass as complete qualification. The failures exposed explicit-port order matching,
+finite dots retained inside scalar function arguments, a legacy color collector
+which still exported native indices, and a diagnostic parser's dummy-name
+collision. The scalar-argument and diagnostic-collision repairs passed focused
+production cases; the native port-order repair passed the full Idenso package.
+Further application validation is pending.
+
+The ghost d76 timing remains under investigation. A rebuilt binary exceeded
+240 seconds with tracing disabled yet passed in about 35 seconds with narrow
+tracing. Neither observation establishes an unconditional algorithmic timing.
+Scalar-only diagnostic events now isolate stages without expression printers;
+the original reference and 240-second timeout remain unchanged. The incomplete
+48b8 CLI build was stopped as superseded, with completed shared Nix outputs
+retained. No performance result from the previous qualified implementation is
+being relabeled as a measurement of this migration.

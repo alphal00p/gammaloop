@@ -153,6 +153,12 @@ impl Rooted for IntegratedCts {
 fn simplify(
     integrand: &SymbolicTensor<PartialStructure>,
 ) -> Result<SymbolicTensor<PartialStructure>> {
+    let started = std::time::Instant::now();
+    debug_tags!(#uv, #integrated, #diagnostic_stage;
+        stage = 1u8, finished = false,
+        input_bytes = integrand.expression().as_view().get_byte_size(),
+        "Start retained analytic tensor simplification"
+    );
     if integrand.expression().contains_symbol(AGS.sigma) {
         return Err(eyre!(
             "Sigma tensors are not supported by d-dimensional analytic UV numerator algebra"
@@ -206,6 +212,12 @@ fn simplify(
             "an unresolved Lorentz trace remains after d-dimensional UV numerator algebra"
         ));
     }
+    debug_tags!(#uv, #integrated, #diagnostic_stage;
+        stage = 1u8, finished = true,
+        elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+        output_bytes = dotted.expression().as_view().get_byte_size(),
+        "Completed retained analytic tensor simplification"
+    );
     Ok(dotted)
 }
 
@@ -750,7 +762,20 @@ impl Integrated<'_> {
                         "Completed projected numerator algebra before Laurent expansion"
                     );
                 }
+                let started = std::time::Instant::now();
+                debug_tags!(#uv, #integrated, #diagnostic_stage;
+                    stage = 2u8, finished = false,
+                    term_count = integrand_vakint.0.len(),
+                    "Start scalar vacuum integral evaluation"
+                );
                 integrand_vakint.evaluate_integral(self.vakint, self.vakint_settings)?;
+                debug_tags!(#uv, #integrated, #diagnostic_stage;
+                    stage = 2u8, finished = true,
+                    elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                    output_bytes = integrand_vakint.0.iter()
+                        .map(|term| term.numerator.as_view().get_byte_size()).sum::<usize>(),
+                    "Completed scalar vacuum integral evaluation"
+                );
                 for (term_index, t) in integrand_vakint.0.iter().enumerate() {
                     debug_tags!(#uv,#integrated,#vakint,#trace,#evaluate;
                         term_index = %term_index,
@@ -781,6 +806,12 @@ impl Integrated<'_> {
             "Raw post vakint "
         );
 
+        let started = std::time::Instant::now();
+        debug_tags!(#uv, #integrated, #diagnostic_stage;
+            stage = 3u8, finished = false,
+            input_bytes = res.as_view().get_byte_size(),
+            "Start integrated coefficient cleanup"
+        );
         let res = Self::restore_numerator(res, current.topo_order());
 
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
@@ -822,7 +853,14 @@ impl Integrated<'_> {
         // Normalize the fully integrated UV subgraph before Laurent projection
         // and reinsertion: identical scalar masters can arrive as 2*(A+B) or
         // 2*A+2*B. No cograph numerator is present at this analytic boundary.
-        Ok(cooking.uncook(collected.expression().as_view()).expand())
+        let result = cooking.uncook(collected.expression().as_view()).expand();
+        debug_tags!(#uv, #integrated, #diagnostic_stage;
+            stage = 3u8, finished = true,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            output_bytes = result.as_view().get_byte_size(),
+            "Completed integrated coefficient cleanup"
+        );
+        Ok(result)
     }
 
     fn simplify_projected_numerator(
@@ -830,6 +868,13 @@ impl Integrated<'_> {
         numerator: &Atom,
         topology_order: usize,
     ) -> Result<Atom> {
+        let started = std::time::Instant::now();
+        debug_tags!(#uv, #integrated, #diagnostic_stage;
+            stage = 4u8, finished = false,
+            topology_order,
+            input_bytes = numerator.as_view().get_byte_size(),
+            "Start projected numerator cleanup"
+        );
         // Tensor projection can identify Lorentz slots belonging to different
         // gamma matrices. Complete their d-dimensional algebra before Vakint
         // expands scalar coefficients in epsilon; otherwise an evanescent
@@ -862,7 +907,14 @@ impl Integrated<'_> {
             .simple_execute::<()>()?;
         let numerator =
             numerator.with_checked_expression(cooking.try_cook(materialized.as_view())?)?;
-        Self::to_vakint_numerator(&numerator)
+        let result = Self::to_vakint_numerator(&numerator)?;
+        debug_tags!(#uv, #integrated, #diagnostic_stage;
+            stage = 4u8, finished = true,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            output_bytes = result.as_view().get_byte_size(),
+            "Completed projected numerator cleanup"
+        );
+        Ok(result)
     }
 
     fn ensure_resolved_lorentz_contractions(numerator: &Atom) -> Result<()> {
@@ -870,10 +922,23 @@ impl Integrated<'_> {
         if !numerator.contains_symbol(minkowski) {
             return Ok(());
         }
+        let started = std::time::Instant::now();
+        debug_tags!(#uv, #integrated, #diagnostic_stage;
+            stage = 5u8, finished = false,
+            input_bytes = numerator.as_view().get_byte_size(),
+            "Start structural residual-contraction check"
+        );
         // Expose compact inter-chain contractions, retaining every analytic
         // branch and scalar coefficient. The shared occurrence observer checks
         // branch-local pairs without distributing products of sums.
-        let explicit = numerator
+        // This diagnostic uses the legacy Aind materializer, whose fresh-name
+        // reservations must see the source spelling of existing dummy indices.
+        // A cooked dummy otherwise appears distinct from a newly allocated raw
+        // dummy until the validation input is cooked again. Keep this decoded
+        // temporary local; the retained numerator remains native and unchanged.
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let source = cooking.uncook(numerator.as_view());
+        let explicit = source
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
                     schoonschip: SchoonschipExpansionMode::full(),
@@ -908,9 +973,13 @@ impl Integrated<'_> {
                 "an unresolved compact Lorentz inner product remains after d-dimensional UV numerator algebra"
             ));
         }
-        let explicit = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .try_cook(explicit.as_view())?;
+        let explicit = cooking.try_cook(explicit.as_view())?;
+        debug_tags!(#uv, #integrated, #vakint, #trace;
+            stage = "residual_lorentz_contraction_materialization",
+            file.source = %source.to_plain_string(),
+            file.explicit = %explicit.to_plain_string(),
+            "Check residual contractions in a source-aware dummy scope"
+        );
         if InterfaceInference::has_explicit_index_pairs(
             explicit.as_view(),
             Minkowski {}.into(),
@@ -927,6 +996,12 @@ impl Integrated<'_> {
                 "an unresolved internal Lorentz tensor contraction remains after d-dimensional UV numerator algebra; a d-dimensional tensor-operator reduction is required before analytic integration"
             ));
         }
+        debug_tags!(#uv, #integrated, #diagnostic_stage;
+            stage = 5u8, finished = true,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            output_bytes = explicit.as_view().get_byte_size(),
+            "Completed structural residual-contraction check"
+        );
         Ok(())
     }
 
@@ -2976,6 +3051,58 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn residual_lorentz_check_reserves_decoded_color_dummy_indices() -> Result<()> {
+        test_initialise()?;
+        let adjoint = idenso::representations::ColorAdjoint {}.new_rep(8);
+        let [a, b, c, x, y] = [0, 1, 2, 1_000_000, 1_000_001]
+            .map(|index| adjoint.to_symbolic([Aind::Dummy(index).to_atom()]));
+        let word = spenso::chain!(
+            &a,
+            &b,
+            function!(
+                idenso::color::CS.f,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                &x
+            ),
+            function!(
+                idenso::color::CS.f,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                &y
+            )
+        );
+        let momentum = GS.emr_mom(
+            EdgeIndex(0),
+            Minkowski {}
+                .new_rep(GS.dim)
+                .to_symbolic([Aind::Hedge(9, 1).to_atom()]),
+        );
+        let source = word * idenso::color_f!(&x, &y, &c) * momentum;
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let native = SymbolicTensor::infer(cooking.try_cook(source.as_view())?)?;
+        Integrated::ensure_resolved_lorentz_contractions(&source)?;
+        Integrated::ensure_resolved_lorentz_contractions(native.expression())?;
+        assert_eq!(cooking.uncook(native.expression().as_view()), source);
+
+        // An actual third occurrence still fails after the parser has reserved
+        // both encoded source dummies. The fix only prevents invented collisions.
+        let extra = idenso::color_f!(
+            &x,
+            adjoint.to_symbolic([Aind::Hedge(10, 1).to_atom()]),
+            adjoint.to_symbolic([Aind::Hedge(11, 1).to_atom()])
+        );
+        let malformed = native.expression() * cooking.try_cook(extra.as_view())?;
+        assert!(
+            Integrated::ensure_resolved_lorentz_contractions(&malformed)
+                .unwrap_err()
+                .to_string()
+                .contains("more than two compatible tensor ports")
+        );
+        Ok(())
     }
 
     #[test]
