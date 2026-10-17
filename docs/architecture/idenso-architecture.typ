@@ -184,8 +184,10 @@ materializer certifies one compatible compact axis and a scalar coefficient.
 It retains the summed operand and its scalar spectators without distributing them.
 This admission pass leaves explicit metrics, dots, indexed contractions and
 scalar payloads unchanged. Callback-sensitive ancestors and metadata remain
-on the existing checked path; the deterministic fixed-component delta is a
-local exception, not an intrinsic-interface certificate. Full admission
+on the existing checked path. The native fixed-component delta shares the
+intrinsic-normalizer classification used by metric, dot and dual notation:
+its normalizer only compares literal components. Descendants are still checked
+for callbacks; this classification is not an interface certificate. Full admission
 validates the normalized expression before publishing it.
 
 Closed gamma traces emit factored local identities into the tensor expression.
@@ -423,6 +425,12 @@ their separate multiplicity checks.
 Algebra prerequisites use these same observations to discharge free-port
 regions before contraction setup or budget accounting. Unselected scalar
 spectators and unrelated tensor factors remain opaque to the collector.
+
+Positive powers of a dot with a native fixed-component selector use the same
+intrinsic normalization proof when their scope is copied. An enclosing scalar
+spectator therefore does not turn that supported coefficient collection into
+a refusal. Callback-sensitive descendants retain the existing refusal path;
+this changes neither scalar zero-proof policy nor copy-local index ownership.
 
 The same domain retains its depth-one graph and exact opaque-leaf interfaces.
 When a trusted intrinsic rewrite changes topology, unchanged leaves reuse their

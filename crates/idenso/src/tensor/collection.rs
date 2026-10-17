@@ -2260,6 +2260,101 @@ mod tests {
     }
 
     #[test]
+    fn coefficient_list_preserves_fixed_selector_powers_and_scalar_spectators() {
+        crate::test_support::test_initialize();
+        let x = Atom::var(symbolica::symbol!("fixed_coefficient_x"; Scalar));
+        let y = Atom::var(symbolica::symbol!("fixed_coefficient_y"; Scalar));
+        let spectator = (&x + &y).pow(9)
+            * tensor(
+                symbolica::symbol!("fixed_coefficient_opaque"; Scalar),
+                &[(&x - &y).pow(11)],
+            )
+            / (&x + Atom::num(3));
+        for dimension in [
+            Atom::num(4),
+            Atom::var(symbolica::symbol!("fixed_coefficient_d")),
+        ] {
+            let rep = spenso::mink!(
+                spenso::structure::dimension::Dimension::try_from(dimension.as_view()).unwrap()
+            );
+            let p = tensor(
+                spenso::vector_symbol!("fixed_coefficient_p"),
+                std::slice::from_ref(&rep),
+            );
+            let q = tensor(
+                spenso::vector_symbol!("fixed_coefficient_q"),
+                std::slice::from_ref(&rep),
+            );
+            let ordinary = spenso::dot!(&p, &q);
+            for component in 0..4 {
+                let basis = tensor(
+                    ETS.delta,
+                    &[
+                        tensor(
+                            spenso::structure::abstract_index::AIND_SYMBOLS.cind,
+                            &[Atom::num(component)],
+                        ),
+                        rep.clone(),
+                    ],
+                );
+                let fixed = spenso::dot!(&q, &basis);
+                for coefficient in [Atom::one(), Atom::num(2), x.clone(), spectator.clone()] {
+                    for (body, expected) in [
+                        (fixed.pow(2), vec![(fixed.pow(2), coefficient.clone())]),
+                        (fixed.pow(3), vec![(fixed.pow(3), coefficient.clone())]),
+                        (
+                            ordinary.pow(2),
+                            vec![(ordinary.pow(2), coefficient.clone())],
+                        ),
+                        (
+                            (&ordinary - &fixed).pow(2),
+                            vec![
+                                (ordinary.pow(2), coefficient.clone()),
+                                (&ordinary * &fixed, -Atom::num(2) * &coefficient),
+                                (fixed.pow(2), coefficient.clone()),
+                            ],
+                        ),
+                    ] {
+                        let source = SymbolicTensor::infer(&coefficient * body).unwrap();
+                        let before = source.clone();
+                        let rows = source
+                            .coefficient_list(TensorCollectFilter::<0>::Tensors)
+                            .unwrap();
+                        assert_eq!(rows.len(), expected.len());
+                        assert!(
+                            rows.iter()
+                                .all(|(key, weight)| key.is_scalar() && weight.is_scalar())
+                        );
+                        let actual = rows
+                            .into_iter()
+                            .map(|(key, weight)| (key.expression, weight.expression))
+                            .collect::<std::collections::BTreeMap<_, _>>();
+                        assert_eq!(actual, expected.into_iter().collect());
+                        assert_eq!(source, before);
+                    }
+                }
+                let open = tensor(
+                    spenso::tensor_symbol!("fixed_coefficient_open"),
+                    &[spenso::mink!(
+                        spenso::structure::dimension::Dimension::try_from(dimension.as_view())
+                            .unwrap(),
+                        97601
+                    )],
+                );
+                let selected = &open * fixed.pow(2);
+                let source = SymbolicTensor::infer(&selected * &spectator).unwrap();
+                let rows = source
+                    .coefficient_list(TensorCollectFilter::<0>::Tensors)
+                    .unwrap();
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0].0.expression, selected);
+                assert_eq!(rows[0].0.structure, source.structure);
+                assert_eq!(rows[0].1.expression, spectator);
+            }
+        }
+    }
+
+    #[test]
     fn coefficient_list_refuses_inverse_callback_scope_without_replay() {
         use std::sync::atomic::{AtomicUsize, Ordering};
         crate::test_support::test_initialize();

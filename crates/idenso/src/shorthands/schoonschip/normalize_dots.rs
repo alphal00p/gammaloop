@@ -318,15 +318,10 @@ impl DotNormalizer {
             function.as_view().visitor(&mut |value| {
                 if let AtomView::Fun(function) = value {
                     let symbol = function.get_symbol();
-                    intrinsic &= if symbol == ETS.delta {
-                        // This builtin only compares literal fixed components.
-                        // This local exception grants no interface certificate.
-                        symbol.get_evaluation_info().is_none()
-                    } else {
+                    intrinsic &=
                         crate::tensor::inference::InterfaceInference::intrinsic_normalization_head(
                             symbol,
-                        )
-                    };
+                        );
                 }
                 intrinsic
             });
