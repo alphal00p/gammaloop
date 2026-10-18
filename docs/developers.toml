@@ -394,7 +394,10 @@ end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
 # Reviewed 2026-10-17: Native AbstractIndex materialization removes the decode/recook detour while retaining checked projected interfaces and strict residual/multiplicity guards.
 # Reviewed 2026-10-17: Completed pole and signed finite projections retain their source interface; native projected cleanup and backend restoration preserve ports and ranked zeros.
 # Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
-digest = "953e336e1823f0eec037de9b5c54262ad3526815"
+# Reviewed 2026-10-18: The UV note records validated physical fixed-selector
+# admissibility after original unfiltered scope validation. Formal D/epsilon,
+# tensor factorization, genuine summed contractions and selector bounds remain guarded.
+digest = "aa86a2bcf483dc539fbddb34f6983a095d192fde"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
@@ -806,7 +809,10 @@ anchor = "pub struct CookSettings {"
 # original admitted names; it does not introduce a second normalization or persistence
 # boundary.
 # Reviewed 2026-10-17: The existing portable dimension decoder is public for scalar dimension comparisons without decoding native slots or complete tensors; its behavior is unchanged.
-digest = "2a68fe5999a94a287accc9516cbcf3c4db22e134"
+# Reviewed 2026-10-18: Strict indexed admission follows reversible public-index
+# Open/scope payloads without rebuilding expressions; opaque labels and closed
+# compact contractions retain the boundaries documented in the Idenso note.
+digest = "e38e0e3114eac5c8448ab37e7261d071f8dbbbee"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/mod.rs"
@@ -875,7 +881,11 @@ anchor = "pub struct AlgebraSettings {"
 # coefficient certificate; finite trace, power-domain and zero-budget regressions
 # preserve the documented factorization and planner policies.
 # Reviewed 2026-10-17: The Idenso note records that expand_dots retains the typed carrier and checked open interface; algebra and contraction continue to share the existing scheduler.
-digest = "af6a18a2e8511e7a79542b3df561e9678e870909"
+# Reviewed 2026-10-18: One Cow planner retains validation, wildcard-alias and
+# completion rules while moving owned input at the existing ownership boundary.
+# Idenso and readiness notes distinguish removed payload copies from remaining
+# metadata and adapter copies; no runtime improvement is claimed without measurement.
+digest = "4969892c1c56ffb37acd8c45bc58165f39b1c12c"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
@@ -1702,7 +1712,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # No-impact attestation 2026-10-18: the captured d11 gamma0 chain is declared
 # in Idenso's compile-time test assets. The documented package-specific test
 # producer boundary is preserved; the fixture bytes and assertions are unchanged.
-digest = "f104db3a4efd798363d8c21cae15ff78dc3d4764"
+# Reviewed 2026-10-18: Captured fixed-basis Atom fixtures are explicit gammalooprs
+# compile-time test inputs. Filtered source hashes verify both files; production
+# and runtime source ownership and cache policy are unchanged.
+digest = "ba5a5dd8c15ca14862b1717a1f767e6845eada19"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

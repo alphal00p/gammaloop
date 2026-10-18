@@ -28,7 +28,7 @@ use spenso::{
         IndexedStructure,
         abstract_index::AbstractIndex,
         representation::{Minkowski, RepName},
-        slot::{DummyAind, ParseableAind, SlotMatcher},
+        slot::{DummyAind, ParseableAind, SlotMatch, SlotMatcher},
     },
 };
 use symbolica::{
@@ -1040,13 +1040,38 @@ impl Integrated<'_> {
             file.explicit = %explicit.to_plain_string(),
             "Check residual contractions in the native index scope"
         );
+        let momenta = [
+            GS.emr_mom,
+            GS.loop_mom,
+            vakint::symbols::S.p,
+            vakint::symbols::S.k,
+        ];
+        let mut selectors = SlotMatcher::default();
         if InterfaceInference::has_explicit_index_pairs(
             explicit.as_view(),
             Minkowski {}.into(),
             |value| {
-                matches!(value, AtomView::Fun(leaf) if [
-                GS.emr_mom, GS.loop_mom, vakint::symbols::S.p, vakint::symbols::S.k,
-            ].contains(&leaf.get_symbol()))
+                let AtomView::Fun(leaf) = value else {
+                    return false;
+                };
+                if momenta.contains(&leaf.get_symbol()) {
+                    return true;
+                }
+                if leaf.get_symbol() != ETS.delta || leaf.get_nargs() != 2 {
+                    return false;
+                }
+                let SlotMatch::Explicit(slot) = selectors.classify(leaf.get(1)) else {
+                    return false;
+                };
+                let representation = slot.representation();
+                // A validated fixed physical basis projection is not a free
+                // D-dimensional tensor contraction. Keep D and scalar epsilon
+                // dependence untouched; unchecked delta shapes remain visible.
+                representation.head() == minkowski
+                    && representation.is_self_dual()
+                    && selectors
+                        .fixed_basis_component(leaf.get(0), representation)
+                        .is_some_and(|component| component < 4)
             },
         )
         .map_err(|error| eyre!("invalid residual d-dimensional tensor structure: {error}"))?
@@ -2160,6 +2185,7 @@ impl VakintMomentumSolution {
 
 #[cfg(test)]
 mod tests {
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
     use symbolica::symbol;
 
     use crate::{initialisation::test_initialise, utils::symbolica_ext::Q_I};
@@ -4482,5 +4508,302 @@ mod tests {
                 * (&first / radial.pow(base_power + 2) + &second / radial.pow(base_power + 3));
             assert_eq!(actual.collect_factors(), expected.collect_factors());
         }
+    }
+
+    #[test]
+    fn analytic_fixed_basis_projection_preserves_captured_word_and_factored_term() -> Result<()> {
+        test_initialise()?;
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        for fixture in [
+            include_str!("../../../tests/resources/uv_fixed_basis/d02_guard_fixed_word.sym"),
+            include_str!("../../../tests/resources/uv_fixed_basis/d02_guard_factored_term.sym"),
+        ] {
+            let source = Atom::parse(fixture, "gammalooprs", Default::default())
+                .map_err(|error| eyre!(error))?;
+            let native = SymbolicTensor::infer_indexed(cooking.try_cook(source.as_view())?)?;
+            let original = native.clone();
+            Integrated::ensure_resolved_lorentz_contractions(native.expression())?;
+            assert_eq!(native, original);
+            assert_eq!(cooking.uncook(native.expression().as_view()), source);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn analytic_fixed_basis_bounds_preserve_formal_dimension_and_laurent_depth() -> Result<()> {
+        test_initialise()?;
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let bis = Bispinor {}.new_rep(4);
+        let a = bis.to_symbolic([Aind::Hedge(881, 1).to_atom()]);
+        let b = bis.to_symbolic([Aind::Hedge(882, 1).to_atom()]);
+        let power = (Atom::var(symbol!("analytic_fixed_basis::x"))
+            + Atom::var(symbol!("analytic_fixed_basis::y")))
+        .pow(9);
+        let inverse = (Atom::var(symbol!("analytic_fixed_basis::u"))
+            + Atom::var(symbol!("analytic_fixed_basis::v")))
+        .pow(-3);
+        let spectator = function!(symbol!("analytic_fixed_basis::opaque"), &power) * &inverse;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        for dimension in [Atom::var(GS.dim), Atom::num(4)] {
+            let rep = Minkowski {}.to_symbolic([&dimension]);
+            for i in 0..4 {
+                for j in 0..4 {
+                    let fixed = |component| {
+                        function!(ETS.delta, function!(AIND_SYMBOLS.cind, component), &rep)
+                    };
+                    let word = spenso::chain!(
+                        &a,
+                        &b,
+                        function!(
+                            AGS.gamma,
+                            SPENSO_TAG.chain_in,
+                            SPENSO_TAG.chain_out,
+                            fixed(i)
+                        ),
+                        function!(
+                            AGS.gamma,
+                            SPENSO_TAG.chain_in,
+                            SPENSO_TAG.chain_out,
+                            fixed(j)
+                        )
+                    );
+                    for pole in [1, 2] {
+                        let coefficient = (Atom::var(GS.dim) - Atom::num(4)) * Atom::var(GS.dim)
+                            / epsilon.pow(pole);
+                        let source = &spectator * &coefficient * &word;
+                        let native =
+                            SymbolicTensor::infer_indexed(cooking.try_cook(source.as_view())?)?;
+                        let original = native.clone();
+                        Integrated::ensure_resolved_lorentz_contractions(native.expression())?;
+                        assert_eq!(native, original);
+                        assert!(
+                            cooking
+                                .uncook(native.expression().as_view())
+                                .contains(power.as_view())
+                        );
+                        assert!(
+                            cooking
+                                .uncook(native.expression().as_view())
+                                .contains(inverse.as_view())
+                        );
+                        // Scalar D remains independent through admission. Only
+                        // this reference explicitly performs dimensional substitution.
+                        let scalar = coefficient
+                            .replace(GS.dim)
+                            .with(Atom::num(4) - Atom::num(2) * &epsilon)
+                            .series(GS.dim_epsilon, 0, 0)?
+                            .to_atom();
+                        assert_eq!(
+                            scalar,
+                            if pole == 1 {
+                                Atom::num(-8)
+                            } else {
+                                Atom::num(-8) / &epsilon + Atom::num(4)
+                            }
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn analytic_fixed_basis_projection_keeps_unknown_selectors_and_real_sums_visible() -> Result<()>
+    {
+        test_initialise()?;
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let bis = Bispinor {}.new_rep(4);
+        let [a, b, c, d, e, f] =
+            [891, 892, 893, 894, 895, 896].map(|i| bis.to_symbolic([Aind::Hedge(i, 1).to_atom()]));
+        for dimension in [Atom::var(GS.dim), Atom::num(4)] {
+            let rep = Minkowski {}.to_symbolic([&dimension]);
+            for coordinate in [
+                function!(AIND_SYMBOLS.cind, -1),
+                function!(AIND_SYMBOLS.cind, 4),
+                function!(AIND_SYMBOLS.cind, symbol!("analytic_fixed_basis::unknown")),
+                function!(AIND_SYMBOLS.cind, 1, 2),
+            ] {
+                let source = function!(AGS.gamma, &a, &b, function!(ETS.delta, &coordinate, &rep));
+                let source = cooking.try_cook(source.as_view())?;
+                assert!(Integrated::ensure_resolved_lorentz_contractions(&source).is_err());
+            }
+            let mu = Minkowski {}
+                .to_symbolic([&dimension, &Atom::var(symbol!("analytic_fixed_basis::mu"))]);
+            let left = function!(AGS.gamma, &a, &b, &mu);
+            let right = function!(AGS.gamma, &c, &d, &mu);
+            let malformed = &left
+                * function!(ETS.delta, function!(AIND_SYMBOLS.cind, 1), &mu)
+                * function!(ETS.delta, function!(AIND_SYMBOLS.cind, 2), &mu);
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(
+                    &cooking.try_cook(malformed.as_view())?
+                )
+                .is_err()
+            );
+
+            let fixed = function!(
+                AGS.gamma,
+                &a,
+                &b,
+                function!(ETS.delta, function!(AIND_SYMBOLS.cind, 1), &rep)
+            );
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(
+                    &cooking.try_cook((&left * &right).as_view())?
+                )
+                .is_err()
+            );
+            // A valid fixed selector in another additive branch cannot hide
+            // an actual free D-dimensional contraction.
+            let separate_fixed = function!(
+                AGS.gamma,
+                &e,
+                &f,
+                function!(ETS.delta, function!(AIND_SYMBOLS.cind, 2), &rep)
+            );
+            let independent_sum = &separate_fixed * &left * &right;
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(
+                    &cooking.try_cook(independent_sum.as_view())?
+                )
+                .is_err()
+            );
+            let nu = Minkowski {}
+                .to_symbolic([&dimension, &Atom::var(symbol!("analytic_fixed_basis::nu"))]);
+            let metric_pair = &separate_fixed
+                * &left
+                * function!(ETS.metric, &mu, &nu)
+                * function!(AGS.gamma, &c, &d, &nu);
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(
+                    &cooking.try_cook(metric_pair.as_view())?
+                )
+                .is_err()
+            );
+            let ordinary_vector =
+                SPENSO_TAG.rank_one_tensor_symbol("analytic_fixed_basis::unclassified_vector");
+            let unclassified = function!(
+                AGS.gamma,
+                &a,
+                &b,
+                function!(ordinary_vector, function!(AIND_SYMBOLS.cind, 1), &rep)
+            );
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(
+                    &cooking.try_cook(unclassified.as_view())?
+                )
+                .is_err()
+            );
+            let source = &left * &right + &fixed * function!(ETS.metric, &c, &d);
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(
+                    &cooking.try_cook(source.as_view())?
+                )
+                .is_err()
+            );
+            let compact = function!(
+                ETS.metric,
+                function!(AGS.gamma, &a, &b, &rep),
+                function!(AGS.gamma, &c, &d, &rep)
+            );
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(
+                    &cooking.try_cook(compact.as_view())?
+                )
+                .is_err()
+            );
+            let dot = function!(
+                SPENSO_TAG.dot,
+                function!(AGS.gamma, &a, &b, &rep),
+                function!(AGS.gamma, &c, &d, &rep)
+            );
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(&cooking.try_cook(dot.as_view())?)
+                    .is_err()
+            );
+        }
+        // Generic fixed-basis bounds and the physical analytic subspace are
+        // distinct: (2,2) is out of bounds; (6,4) is bounded but nonphysical.
+        for (dimension, component) in [(2, 2), (6, 4)] {
+            let rep = Minkowski {}.to_symbolic([Atom::num(dimension)]);
+            let source = function!(
+                AGS.gamma,
+                &a,
+                &b,
+                function!(ETS.delta, function!(AIND_SYMBOLS.cind, component), &rep)
+            );
+            assert!(
+                Integrated::ensure_resolved_lorentz_contractions(
+                    &cooking.try_cook(source.as_view())?
+                )
+                .is_err()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn analytic_fixed_gamma_one_two_has_independent_nonzero_weyl_components() -> Result<()> {
+        use crate::{
+            numerator::symbolica_ext::NumeratorAtomExt,
+            utils::{FUN_LIB, TENSORLIB},
+        };
+        use idenso::shorthands::UndoShorthands;
+        use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
+        test_initialise()?;
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let bis = Bispinor {}.new_rep(4);
+        let a = bis.to_symbolic([Aind::Hedge(901, 1).to_atom()]);
+        let b = bis.to_symbolic([Aind::Hedge(902, 1).to_atom()]);
+        let rep = Minkowski {}.new_rep(4).to_symbolic([]);
+        let fixed = |i| function!(ETS.delta, function!(AIND_SYMBOLS.cind, i), &rep);
+        let word = spenso::chain!(
+            &a,
+            &b,
+            function!(
+                AGS.gamma,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                fixed(1)
+            ),
+            function!(
+                AGS.gamma,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                fixed(2)
+            )
+        );
+        // Weyl gamma1*gamma2 = -i diag(sigma3,sigma3). Both spatial
+        // covector signs cancel; this is a nonzero matrix, not a vanishing word.
+        for row in 0..4 {
+            for column in 0..4 {
+                let component = &word
+                    * function!(ETS.delta, function!(AIND_SYMBOLS.cind, row), &a)
+                    * function!(ETS.delta, function!(AIND_SYMBOLS.cind, column), &b);
+                let explicit = component.undo_dots::<Aind>()?;
+                let mut network = explicit.parse_into_net()?;
+                network.execute::<Sequential, SmallestDegree, _, _, _>(
+                    &*TENSORLIB.read().unwrap(),
+                    &*FUN_LIB,
+                )?;
+                let actual = match network.result_scalar()? {
+                    ExecutionResult::One => Atom::one(),
+                    ExecutionResult::Zero => Atom::Zero,
+                    ExecutionResult::Val(value) => value.into_owned(),
+                };
+                let expected = if row != column {
+                    Atom::Zero
+                } else if row % 2 == 0 {
+                    -Atom::i()
+                } else {
+                    Atom::i()
+                };
+                assert_eq!(actual, expected, "row={row}, column={column}");
+            }
+        }
+        // Run the independent nonzero reference even on the expected-RED base.
+        Integrated::ensure_resolved_lorentz_contractions(&cooking.try_cook(word.as_view())?)?;
+        Ok(())
     }
 }

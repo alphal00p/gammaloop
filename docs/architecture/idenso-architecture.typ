@@ -282,6 +282,20 @@ with each fixed physical spatial slash. These identities preserve ordered
 spinor multiplication and do not set the Lorentz dimension to four. Formal
 spin dimensions and unsupported component representations retain their word.
 
+Analytic UV admissibility is separate from general index-pair observation.
+A gamma matrix projected onto a validated fixed physical basis vector does not
+require an unresolved D-dimensional tensor reduction. The analytic boundary
+excludes only recognized physical Minkowski selector leaves (coordinates zero
+through three), using borrowed component and representation bounds; it leaves
+scalar D and epsilon dependence untouched. Its per-leaf predicate distinguishes
+valid selectors from unchecked uses of the same delta head. The query first
+validates the original unfiltered index multiplicities; excluding a leaf cannot
+hide a malformed source. Filtered discovery uses a separate fresh cache. General pair
+observation still counts these connections when no exclusion is requested, and
+unknown/out-of-range selectors and genuine summed Lorentz contractions remain
+visible. The borrowed bounds query neither invokes normalization callbacks nor
+materializes indices; the compact-vector recognizer keeps its existing grammar.
+
 `map_representation_dimensions` maps representation dimensions in both the
 payload and the logical interface, including ports carried only by a ranked
 zero. Its callback receives the representation kind and the decoded dimension;

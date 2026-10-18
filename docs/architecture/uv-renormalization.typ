@@ -98,6 +98,15 @@ dummy names and native generated dummy names remain reserved. A genuine third
 compatible occurrence is still an error; changing parser index types does not
 relax multiplicity or unresolved-dimensional-algebra checks.
 
+Validated fixed physical Minkowski basis projections are admissible at this
+boundary. A connection to `delta(cind(i),mink(d))` for coordinates zero through
+three does not require an unrestricted D-dimensional tensor reduction. Borrowed
+slot and component bounds recognize these selector leaves without rewriting
+the tensor factors or their scalar D and epsilon dependence. The query validates
+the original unfiltered multiplicities and scopes before excluding known momenta
+and these validated selectors from pair discovery. Unknown or out-of-range
+selectors and genuine summed Lorentz contractions remain visible and rejected.
+
 The required backend depth includes epsilon poles in numerator coefficients and loop-normalization factors. Positive epsilon orders needed by enclosing UV operations are retained using the forest's loop-order bound. A backend that cannot supply the required depth must report an error instead of silently returning a shallower expansion. The Laurent-series boundary also verifies integer powers and epsilon-independent coefficients. Supported scalar mathematical functions are expanded there; unresolved opaque epsilon dependence produces an error.
 
 When integrated counterterms are enabled, the shared UV entry inspects the
