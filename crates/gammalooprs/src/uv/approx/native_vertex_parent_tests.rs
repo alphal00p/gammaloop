@@ -354,6 +354,421 @@ impl QcdMassReference {
         Ok(completed_tensor.with_checked_expression(cooking.try_cook(constrained.as_view())?)?)
     }
 
+    /// Physical rational-finalizer boundary only; no energy residues or evaluator.
+    pub(in crate::uv) fn certify_d09_rational_finalizer_mass_projection(
+        &self,
+        diagram: &feynkit_graph::FeynmanDiagram,
+        ctx: &UVCtx<'_>,
+        given: &OwnedForestNode,
+        prefix: &Full4dCts,
+        actual: &(OwnedForestNode, Local4dCts, IntegratedCts),
+    ) -> Result<()> {
+        use crate::uv::approx::final_integrand::FinalIntegrandBuilder;
+
+        let (parent, local, integrated) = actual;
+        let graph = ctx.graph;
+        eyre::ensure!(diagram.name() == "D09" && graph.name == "D09");
+        eyre::ensure!(parent.renormalization_scheme() == ApproximationType::OS);
+        eyre::ensure!(
+            ctx.settings.on_shell_velocity()? == [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero]
+        );
+        eyre::ensure!(local.recursive_completion().is_empty());
+        let reduced = graph
+            .full_filter()
+            .subtract(parent.subgraph())
+            .subtract(&graph.initial_state_cut);
+        let normalize = FinalIntegrandBuilder::final_normalizer(graph, &reduced);
+        let normalize_scalar = FinalIntegrandBuilder::scalar_normalizer(graph, &reduced);
+        let scalar_tail = |atom: &Atom| {
+            normalize_scalar(atom)
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum)
+                .replace(GS.dim_epsilon)
+                .with(0)
+        };
+        let boundary = graph
+            .dummy_less_full_crown(parent.subgraph())
+            .included_iter()
+            .collect::<Vec<_>>();
+        eyre::ensure!(boundary.len() == 2);
+        let incoming = boundary
+            .iter()
+            .find(|hedge| graph.flow(**hedge) == Flow::Sink)
+            .ok_or_else(|| eyre!("D09 incoming parent port missing"))?;
+        let owner = graph[incoming];
+        let mass = graph[owner].particle.mass_atom(&graph.model);
+        let (projector, reference_p) = self.mass_projector(diagram, &Atom::var(GS.dim))?;
+        let basis = diagram.loop_momentum_basis();
+        let routed_p = basis.route_expression(&reference_p);
+        eyre::ensure!(
+            (basis.route_expression(&function!(GS.emr_mom, owner.0)) - &routed_p)
+                .expand()
+                .is_zero()
+        );
+        let mut signs = BTreeMap::new();
+        for hedge in &boundary {
+            let edge = graph[hedge];
+            let routed = basis.route_expression(&function!(GS.emr_mom, edge.0));
+            let sign = if (&routed - &routed_p).expand().is_zero() {
+                1
+            } else if (&routed + &routed_p).expand().is_zero() {
+                -1
+            } else {
+                return Err(eyre!(
+                    "D09 boundary is not the certified signed external momentum"
+                ));
+            };
+            signs.insert(edge, sign);
+        }
+        let velocity = ctx.settings.on_shell_velocity()?;
+        let at_point = |tensor: &SymbolicTensor<IndexedStructure>, lmb: &LoopMomentumBasis| {
+            let routed = GS
+                .erase_uv_momentum_provenance(tensor.expression())
+                .replace_multiple(graph.uv_wrapped_replacement(parent.subgraph(), lmb, &[W_.x___]));
+            let mapped = routed.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                    && momentum.get_nargs() > 0
+                    && let Ok(edge) = usize::try_from(momentum.get(0))
+                    && let Some(sign) = signs.get(&EdgeIndex(edge))
+                {
+                    let point = GS.on_shell_momentum(owner, &(Atom::num(*sign) * &mass), &velocity);
+                    let indices = momentum
+                        .iter()
+                        .skip(1)
+                        .map(|index| index.to_owned())
+                        .collect::<Vec<_>>();
+                    **output = GS.indexed_momentum(&point, &indices);
+                }
+            });
+            tensor.with_checked_expression(
+                GS.resolve_os_momenta(&mapped)
+                    .replace(mass.to_pattern())
+                    .with(1),
+            )
+        };
+        let projector = projector
+            .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))?;
+        let projector =
+            projector.with_checked_expression(projector.expression().replace(CS.nc).with(3))?;
+        let projector = at_point(
+            &normalize(&projector.try_into_indexed()?)?,
+            &graph.loop_momentum_basis,
+        )?;
+        let phi = |tensor: &SymbolicTensor<IndexedStructure>,
+                   lmb: &LoopMomentumBasis|
+         -> Result<SymbolicTensor<IndexedStructure>> {
+            let projected = projector.clone().multiply(at_point(tensor, lmb)?)?;
+            eyre::ensure!(
+                projected.structure().canonical().is_scalar(),
+                "D09 finalized mass probe leaves ports: projector={:?}; operand={:?}; product={:?}",
+                projector.structure().logical_slots(),
+                tensor.structure().logical_slots(),
+                projected.structure().logical_slots(),
+            );
+            Ok(projected)
+        };
+        // Use the existing physical-shell owner to consume loop bookkeeping.
+        // Final tensor bodies and scalar denominators retain their separate owners.
+        let emit = |sector: &FourDSector| -> Result<SymbolicTensor<IndexedStructure>> {
+            let emit_term = |term: FourDTerm| -> Result<SymbolicTensor<IndexedStructure>> {
+                let numerator = normalize(&term.numerator)?;
+                let denominators =
+                    Atom::mul_many(term.denominators.into_iter().map(|denominator| {
+                        GS.den(
+                            usize::from(denominator.source_edge),
+                            denominator.momentum,
+                            denominator.mass_squared,
+                            denominator.full_expr,
+                        )
+                    }));
+                Ok(numerator
+                    .with_checked_expression(numerator.expression() / scalar_tail(&denominators))?)
+            };
+            let mut terms = sector.physical_terms()?.into_iter();
+            let first = terms
+                .next()
+                .ok_or_else(|| eyre!("D09 physical operand has no rational terms"))?;
+            let first = emit_term(first)?;
+            terms.try_fold(first, |sum, term| -> Result<_> {
+                Ok(sum.try_add(&emit_term(term)?)?)
+            })
+        };
+        // The same finalizer and point map must preserve an independently
+        // known mass insertion. Use vertex color slots, dual to the removed
+        // external propagators, exactly as in the native amputation controls.
+        let spin = boundary
+            .iter()
+            .map(|hedge| {
+                graph.underlying[*hedge]
+                    .edge_spin_slots()
+                    .next()
+                    .map(|slot| slot.to_atom())
+                    .ok_or_else(|| eyre!("D09 boundary spin slot missing"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let color = boundary
+            .iter()
+            .map(|hedge| {
+                graph.underlying[*hedge]
+                    .num_indices
+                    .color_indices
+                    .vertex_indices
+                    .external_structure_iter()
+                    .next()
+                    .map(|slot| slot.to_atom())
+                    .ok_or_else(|| eyre!("D09 boundary vertex color slot missing"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mass_control = AppliedFeynmanRule::new(
+            &mass
+                * function!(ETS.metric, &spin[0], &spin[1])
+                * function!(ETS.metric, &color[0], &color[1]),
+        )?
+        .expr;
+        eyre::ensure!(
+            mass_control.structure().canonical().external_structure()
+                == local.atom().structure().canonical().external_structure(),
+            "the authored mass probe must use the actual parent's indexed interface"
+        );
+        let projected_mass_control = phi(&normalize(&mass_control)?, &graph.loop_momentum_basis)?;
+        let calibration = crate::uv::overlap_numerators::NumeratorJetCache::default()
+            .canonicalize(&on_shell_tests::scalar_component(
+                projected_mass_control.expression(),
+            )?)?;
+        eyre::ensure!(
+            !calibration.is_zero
+                && calibration.key.is_one()
+                && calibration.scalar_prefactor.is_one(),
+            "D09 finalized mass projector must give exactly one on the native mass identity"
+        );
+        // A single explicit coordinate witness proves that these reconstructed
+        // scalar kernels are not identically zero. No D-dimensional integral
+        // or actual Projected4dSector transport is inferred from this check.
+        let kernel_at_origin = |kernel: &Atom, loops: usize| -> Result<()> {
+            eyre::ensure!(!kernel.is_zero());
+            let origin = kernel
+                .replace(function!(GS.localizing_integrand, W_.a_))
+                .with(W_.a_)
+                .replace(function!(GS.emr_mom, W_.a_, W_.b_))
+                .with(0)
+                .replace(GS.renormalization_localization_scale)
+                .with(1);
+            let inverse_origin =
+                Atom::var(symbolica::atom::Symbol::PI).pow(i64::try_from(2 * loops)?);
+            eyre::ensure!(
+                (&origin * &inverse_origin)
+                    .collect_compact_factors()
+                    .is_one()
+            );
+            Ok(())
+        };
+        let co_graph = grow_factor(ctx, parent, given)?;
+        let mut domains = std::collections::HashSet::new();
+        let mut matched = BTreeSet::new();
+        let mut frozen_domains = 0;
+        for input in prefix.sectors() {
+            eyre::ensure!(
+                !input.atom.is_zero(),
+                "D09 cannot match a pruned input by position"
+            );
+            let single = Full4dCts(FourDSectors::new(vec![input.clone()], Vec::new())?);
+            let coordinate_lmb = compatible_lmb(ctx, parent, given, &single)?;
+            let retained = input
+                .active_components
+                .iter()
+                .flat_map(|(_, _, lmb)| lmb.loop_edges.iter())
+                .chain(
+                    input
+                        .frozen_lmbs
+                        .iter()
+                        .flat_map(|lmb| lmb.loop_edges.iter()),
+                )
+                .copied()
+                .collect::<BTreeSet<_>>();
+            let mut quotient = coordinate_lmb.clone();
+            if !given.subgraph().is_empty() {
+                for index in (0..quotient.loop_edges.len()).rev() {
+                    let index = LoopIndex(index);
+                    if retained.contains(&quotient.loop_edges[index]) {
+                        quotient.put_loop_to_ext(index);
+                    }
+                }
+                graph.canonicalize_lmb_external_order(&mut quotient);
+            }
+            eyre::ensure!(
+                quotient.loop_edges.len()
+                    == graph.n_loops(parent.subgraph()) - graph.n_loops(given.subgraph())
+            );
+            let mut components = input.active_components.clone();
+            components.push((
+                parent.reduced_subgraph(given),
+                parent.subgraph().clone(),
+                quotient,
+            ));
+            let key = (components, input.frozen_lmbs.clone());
+            eyre::ensure!(
+                domains.insert(key.clone()),
+                "D09 input domains must be distinct"
+            );
+            let outputs = local
+                .active_sectors()
+                .iter()
+                .enumerate()
+                .filter(|(_, output)| {
+                    output.active_components == key.0 && output.frozen_lmbs == key.1
+                })
+                .collect::<Vec<_>>();
+            eyre::ensure!(
+                outputs.len() == 1,
+                "D09 source lacks one exact full-domain output"
+            );
+            let (index, output) = outputs[0];
+            eyre::ensure!(matched.insert(index), "D09 output domain was reused");
+            let source = FourDSector {
+                atom: finalize(input.atom.clone().multiply(co_graph.clone())?)?,
+                ..input.clone()
+            };
+            let source = emit(&source)?;
+            let local = emit(output)?;
+            let frozen = scalar_tail(&Atom::mul_many(
+                input
+                    .frozen_lmbs
+                    .iter()
+                    .map(|lmb| GS.localizing_integrand(lmb)),
+            ));
+            let frozen_tensor = SymbolicTensor::infer_indexed(frozen.clone())?;
+            eyre::ensure!(at_point(&frozen_tensor, &coordinate_lmb)?.expression() == &frozen);
+            kernel_at_origin(
+                &frozen,
+                input
+                    .frozen_lmbs
+                    .iter()
+                    .map(|lmb| lmb.loop_edges.len())
+                    .sum(),
+            )?;
+            if !input.frozen_lmbs.is_empty() {
+                frozen_domains += 1;
+                eyre::ensure!(input.active_components.is_empty());
+                eyre::ensure!(input.frozen_lmbs.as_slice() == std::slice::from_ref(given.lmb()));
+                eyre::ensure!(
+                    !normalize(&input.atom)?.is_zero() && !source.is_zero(),
+                    "actual finite-child carrier must survive finalization"
+                );
+            }
+            let source = phi(&source, &coordinate_lmb)?;
+            let local = phi(&local, &coordinate_lmb)?;
+            let difference = source.try_add(&local)?;
+            on_shell_tests::assert_rational_zero(
+                "D09 separately finalized source and signed parent local output",
+                graph,
+                parent,
+                &(difference.expression() * &frozen),
+                on_shell_tests::SpinReduction::FiniteComponents,
+            )?;
+            // An omitted/misnormalized mass subtraction cannot hide behind
+            // the matched zero: the independently finalized wrong local
+            // operand must leave the unit times the same nonzero kernel.
+            let perturbed = FourDSector {
+                atom: output.atom.try_add(&mass_control)?,
+                ..output.clone()
+            };
+            let perturbed = phi(&emit(&perturbed)?, &coordinate_lmb)?;
+            let wrong = source.try_add(&perturbed)?;
+            let wrong = wrong.with_checked_expression(wrong.expression() * &frozen)?;
+            let expected = projected_mass_control
+                .with_checked_expression(projected_mass_control.expression() * &frozen)?;
+            let controlled_residual = wrong.try_sub(&expected)?;
+            on_shell_tests::assert_rational_zero(
+                "D09 finalized mass perturbation leaves the certified nonzero frozen kernel",
+                graph,
+                parent,
+                controlled_residual.expression(),
+                on_shell_tests::SpinReduction::FiniteComponents,
+            )?;
+        }
+        eyre::ensure!(matched.len() == local.active_sectors().len());
+        eyre::ensure!(domains.len() == if given.subgraph().is_empty() { 1 } else { 2 });
+        eyre::ensure!(frozen_domains == usize::from(!given.subgraph().is_empty()));
+        let physical_finite = integrated.physical_finite_counterterm()?;
+        let finite = normalize(&physical_finite)?;
+        if given.subgraph().is_empty() {
+            eyre::ensure!(
+                !finite.is_zero(),
+                "actual nonzero finite field correction must survive finalization"
+            );
+        }
+        let parent_kernel = scalar_tail(&GS.localizing_integrand(parent.lmb()));
+        kernel_at_origin(&parent_kernel, parent.lmb().loop_edges.len())?;
+        let kernel_tensor = SymbolicTensor::infer_indexed(parent_kernel.clone())?;
+        eyre::ensure!(
+            at_point(&kernel_tensor, &graph.loop_momentum_basis)?.expression() == &parent_kernel
+        );
+        // Exercise the actual recursive finite-carrier owner relative to the
+        // actual Integrated result, including consumed loop bookkeeping.
+        // A zero result has no surviving recursive payload; it cannot be zipped.
+        let completion = Full4dCts::recursion_input(
+            local,
+            integrated,
+            ApproximationType::OS,
+            false,
+            parent.lmb(),
+        )?;
+        let completions = &completion.0.recursive_completion;
+        if physical_finite.is_zero() {
+            eyre::ensure!(completions.is_empty());
+        } else {
+            eyre::ensure!(completions.len() == 1);
+            let completion = &completions[0];
+            eyre::ensure!(completion.active_components.is_empty());
+            eyre::ensure!(completion.frozen_lmbs.as_slice() == std::slice::from_ref(parent.lmb()));
+            let transported = emit(completion)?;
+            Self::certify_parent_tensor_zero(
+                "D09 signed recursive finite carrier matches the actual physical Integrated output",
+                &transported.try_sub(&finite)?,
+            )?;
+            let kernel = scalar_tail(&Atom::mul_many(
+                completion
+                    .frozen_lmbs
+                    .iter()
+                    .map(|lmb| GS.localizing_integrand(lmb)),
+            ));
+            eyre::ensure!(kernel == parent_kernel);
+        }
+        let finite_projection = phi(&finite, &graph.loop_momentum_basis)?;
+        on_shell_tests::assert_rational_zero(
+            "D09 actual finalized finite parent correction",
+            graph,
+            parent,
+            &(finite_projection.expression() * &parent_kernel),
+            on_shell_tests::SpinReduction::FiniteComponents,
+        )?;
+        let perturbed_finite = normalize(&physical_finite.try_add(&mass_control)?)?;
+        let wrong = phi(&perturbed_finite, &graph.loop_momentum_basis)?;
+        let wrong = wrong.with_checked_expression(wrong.expression() * &parent_kernel)?;
+        let expected = projected_mass_control
+            .with_checked_expression(projected_mass_control.expression() * &parent_kernel)?;
+        on_shell_tests::assert_rational_zero(
+            "D09 finalized finite mass perturbation leaves the certified nonzero parent kernel",
+            graph,
+            parent,
+            wrong.try_sub(&expected)?.expression(),
+            on_shell_tests::SpinReduction::FiniteComponents,
+        )?;
+        debug_tags!(#uv, #integrated, #summary;
+            stage = "native_d09_rational_finalizer_mass_projection",
+            source = %diagram.name(), given = %given.subgraph().string_label(),
+            domains = domains.len(), frozen_domains,
+            per_full_domain_source_local_zero = true, actual_finalized_finite_mass_zero = true,
+            mass_projector_unit_calibration = true, mass_perturbation_nonzero_control = true,
+            signed_parent_carrier_transport = true, reconstructed_kernels_nonzero = true,
+            child_epsilon_depth_checked_separately = true,
+            emitted_cff_condition_proved = false, dimensional_R2_condition_proved = false,
+            "Actual D09 operands pass the matched physical rational-finalizer boundary"
+        );
+        Ok(())
+    }
+
     pub(in crate::uv) fn certify_parent_mass_projection_input(
         &self,
         diagram: &feynkit_graph::FeynmanDiagram,
