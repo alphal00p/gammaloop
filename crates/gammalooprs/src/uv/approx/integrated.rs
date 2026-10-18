@@ -3453,8 +3453,10 @@ mod tests {
             approx::local_4d::{Full4dCts, on_shell_tests::fixture, uv_limit},
         };
 
-        use crate::graph::parse::NumeratorInterface;
         test_initialise()?;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
         let (graph, current, root) = fixture(false)?;
         for velocity in [
             ["1", "0", "0", "0"],
@@ -3486,8 +3488,9 @@ mod tests {
                 .numerator(current.subgraph(), root.subgraph())?
                 .to_d_dim(GS.dim)?
                 .color_simplify()?
-                .get_single_atom()
-                .expect("the primitive quark source has a single numerator");
+                .state
+                .expr;
+            let numerator = cooking.uncook(numerator.expression().as_view());
             let massless = numerator.replace(mass.to_pattern()).with(Atom::Zero);
             let external_slash = massless
                 .replace(function!(GS.emr_mom, 2, W_.x___))
@@ -3534,7 +3537,8 @@ mod tests {
                         };
                         let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
                             .run(&local, &ctx, &current, &root, &current, &root)?;
-                        let pole = NumeratorInterface::export(&integrated.physical_pole()?).0;
+                        let pole = integrated.physical_pole()?;
+                        let pole = cooking.uncook(pole.expression().as_view());
                         assert!(
                             !pole.contains_symbol(GS.m_uv_vacuum)
                                 && !pole.contains_symbol(GS.m_uv_expansion),
@@ -3543,7 +3547,7 @@ mod tests {
                         let pole = pole.replace(GS.dim).with(4);
                         let expected_pole = &normalization * &field_matrix * epsilon.pow(-1);
                         let mut comparisons =
-                            vec![("signed field pole".to_owned(), pole - expected_pole, 0)];
+                            vec![("signed field pole".to_owned(), &pole - expected_pole, 0)];
                         for vacuum_mass in [1, 2] {
                             // For real positive scales, L = log(mu²)-log(M²) is also
                             // -log(M²/mu²). Use the ratio form without assuming a generic
@@ -3552,14 +3556,13 @@ mod tests {
                                 symbolica::atom::Symbol::LOG,
                                 Atom::num(vacuum_mass).pow(2) / Atom::var(GS.mu_r_sq)
                             );
-                            let finite = NumeratorInterface::export(
-                                &integrated.physical_finite_counterterm()?,
-                            )
-                            .0
-                            .replace(GS.m_uv_vacuum)
-                            .with(Atom::num(vacuum_mass))
-                            .replace(GS.dim)
-                            .with(4);
+                            let finite = integrated.physical_finite_counterterm()?;
+                            let finite = cooking
+                                .uncook(finite.expression().as_view())
+                                .replace(GS.m_uv_vacuum)
+                                .with(Atom::num(vacuum_mass))
+                                .replace(GS.dim)
+                                .with(4);
                             let expected_finite = &normalization
                                 * &field_matrix
                                 * (Atom::one() - &logarithm
@@ -3573,6 +3576,27 @@ mod tests {
                                             + (Atom::one() - &logarithm) * pi.pow(2)
                                                 / Atom::num(12)
                                             + &zeta_three / Atom::num(3)));
+                            // Spin coefficients four, but the same D-dimensional
+                            // angular/radial measure: -V4 = I2 * C(p-slash-m).
+                            // The independent vacuum test below derives this from
+                            // I2 and I3; this Gamma series is not read from the CT.
+                            let vacuum_master = epsilon.pow(-1)
+                                + &logarithm
+                                + &epsilon
+                                    * (logarithm.pow(2) / Atom::num(2) + pi.pow(2) / Atom::num(12))
+                                + epsilon.pow(2)
+                                    * (logarithm.pow(3) / Atom::num(6)
+                                        + &logarithm * pi.pow(2) / Atom::num(12)
+                                        - &zeta_three / Atom::num(3));
+                            let signed_four_vacuum =
+                                &normalization * &field_matrix * &vacuum_master;
+                            // Actual -VD = pole - finite; hence VD - V4 below.
+                            comparisons.push((
+                                format!("dimensional vacuum bridge at M={vacuum_mass}"),
+                                &finite - &pole + signed_four_vacuum
+                                    - &normalization * &field_matrix * &epsilon * vacuum_master,
+                                enclosing_poles,
+                            ));
                             comparisons.push((
                                 format!("finite scheme correction at M={vacuum_mass}"),
                                 finite - expected_finite,
@@ -3605,7 +3629,7 @@ mod tests {
             uv::{
                 UVgenerationSettings,
                 approx::local_4d::{
-                    FourDTerm, Full4dCts,
+                    Full4dCts,
                     on_shell_tests::{
                         SpinReduction, assert_rational_zero, fixture, gamma_velocity_at_port,
                     },
@@ -3620,7 +3644,9 @@ mod tests {
 
         test_initialise()?;
         let (graph, current, root) = fixture(false)?;
-        use crate::graph::parse::NumeratorInterface;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
         let numerator_source = graph
             .numerator(current.subgraph(), root.subgraph())?
             .to_d_dim(GS.dim)?
@@ -3631,7 +3657,7 @@ mod tests {
             numerator_source.expression()
                 * graph.denominator(current.subgraph(), &graph.model, |_| -1),
         )?;
-        let numerator = NumeratorInterface::export(&numerator_source).0;
+        let numerator = cooking.uncook(numerator_source.expression().as_view());
         let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
         let epsilon = Atom::var(GS.dim_epsilon);
         let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
@@ -3682,6 +3708,11 @@ mod tests {
         let at_zero = evaluate_vector(&numerator, 2, &Atom::Zero);
         let mass_matrix = &at_zero / &dimension;
         let expected_mass = &mass_matrix * (Atom::num(3) - Atom::num(2) * &epsilon) * &j0;
+        // Freeze only scalar spin coefficients after native contraction and
+        // dimensional regularization. The same D-dimensional j0/j1 moments
+        // below continue the four-dimensional numerator; do not freeze them.
+        let four_numerator = numerator.replace(GS.dim_epsilon).with(0);
+        let four_at_zero = at_zero.replace(GS.dim_epsilon).with(0);
         let loop_vector = function!(GS.emr_mom, 2);
 
         // A nonzero trace of one exact physical specialization proves that the
@@ -3698,7 +3729,7 @@ mod tests {
                 .to_atom()
         });
         let trace_projection = function!(ETS.metric, &ports[0], &ports[1])
-            * NumeratorInterface::export(&graph.global_prefactor.num).0;
+            * cooking.uncook(graph.global_prefactor.num.expression().as_view());
         let strong_coupling = Atom::from(crate::model::UFOSymbol::from("G"));
         let vertex_coupling = Atom::from(crate::model::UFOSymbol::from("GC_11"));
         let coupling_at_unit_g = graph
@@ -3756,6 +3787,7 @@ mod tests {
                 &velocity,
             )?;
             let mut on_shell_moment = Atom::Zero;
+            let mut four_on_shell_moment = Atom::Zero;
             for (sigma, branch) in [1, -1].into_iter().zip(branches) {
                 // Certify the factorized source and full denominator data
                 // before replacing the two physical propagators by moments.
@@ -3771,7 +3803,12 @@ mod tests {
                 let _certificate = sector.canonical_projection(&graph)?;
                 let point =
                     GS.on_shell_momentum(EdgeIndex(0), &(Atom::num(sigma) * &mass), &velocity);
-                for term in FourDTerm::from_view(branch.expression().as_view())? {
+                assert!(
+                    !branch
+                        .expression()
+                        .contains_symbol(GS.integrated_loop_scale)
+                );
+                for term in sector.physical_terms()? {
                     assert_eq!(term.denominators.len(), 2);
                     assert_eq!(
                         term.denominators
@@ -3802,16 +3839,39 @@ mod tests {
                             SpinReduction::SymbolicFirst,
                         )?;
                     }
-                    let numerator = regulate(&NumeratorInterface::export(&term.numerator).0)?;
+                    let numerator =
+                        regulate(&cooking.uncook(term.numerator.expression().as_view()))?;
                     let zero = evaluate_vector(&numerator, 2, &Atom::Zero);
                     let endpoint = evaluate_vector(&numerator, 2, &point);
                     on_shell_moment += &zero * &j0 + (endpoint - zero) * &j1;
+                    // The companion uses this same certified production branch
+                    // and both complete source denominators, not a second O oracle.
+                    let four = numerator.replace(GS.dim_epsilon).with(0);
+                    let four_zero = evaluate_vector(&four, 2, &Atom::Zero);
+                    let four_endpoint = evaluate_vector(&four, 2, &point);
+                    four_on_shell_moment += &four_zero * &j0 + (four_endpoint - four_zero) * &j1;
                 }
             }
             assert_integrated_zero(
                 "integrated production O is the boost-independent mass counterterm",
                 &(&on_shell_moment - &expected_mass),
             )?;
+
+            let os_difference =
+                series(&((&on_shell_moment - &four_on_shell_moment) / &epsilon), 0)?.to_atom();
+            assert_integrated_zero(
+                "the standalone dimensional O difference is minus the mass matrix",
+                &(&os_difference + &mass_matrix),
+            )?;
+            let os_difference_trace = specialize_witness(&(&trace_projection * &os_difference));
+            let os_difference_trace =
+                witness_tensors.canonicalize(&os_difference_trace.undo_dots::<Aind>()?)?;
+            assert_eq!(os_difference_trace.key, Atom::one());
+            assert_eq!(
+                os_difference_trace.scalar_prefactor,
+                -&mass_trace.scalar_prefactor
+            );
+            assert!(!os_difference_trace.scalar_prefactor.is_zero());
 
             let ctx = UVCtx::new(&graph, &graph.model, &settings);
             let local = uv_limit(
@@ -3823,10 +3883,13 @@ mod tests {
                 &root,
             )?;
             let vakint_settings = settings.vakint.true_settings();
-            let signed_field_pole = Integrated::new(crate::utils::vakint()?, &vakint_settings)
-                .run(&local, &ctx, &current, &root, &current, &root)?
-                .physical_pole()?;
-            let signed_field_pole = NumeratorInterface::export(&signed_field_pole).0;
+            let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
+                .run(&local, &ctx, &current, &root, &current, &root)?;
+            let signed_field_pole = integrated.physical_pole()?;
+            let signed_field_pole = cooking.uncook(signed_field_pole.expression().as_view());
+            let actual_finite_addback = integrated.physical_finite_counterterm()?;
+            let actual_finite_addback =
+                cooking.uncook(actual_finite_addback.expression().as_view());
             for external_velocity in [
                 ["1", "0", "0", "0"],
                 ["5/4", "3/4", "0", "0"],
@@ -3846,7 +3909,7 @@ mod tests {
                 let pole =
                     evaluate_vector(&evaluate_vector(&signed_field_pole, 0, &point), 1, &point);
                 let renormalized =
-                    &normalization * &physical_master * (bare_moment - &on_shell_moment)
+                    &normalization * &physical_master * (&bare_moment - &on_shell_moment)
                         + regulate(&pole)?;
                 let right_projected = (&renormalized
                     + gamma_velocity_at_port(&graph, &renormalized, 0, &external_velocity))
@@ -3875,6 +3938,96 @@ mod tests {
                     finite_trace.scalar_prefactor, expected_finite_trace,
                     "a nonzero finite trace proves the complete MS-bar-field matrix survives"
                 );
+
+                let four_bare_moment = &four_at_zero * &j0
+                    + (evaluate_vector(&four_numerator, 2, &point) - &four_at_zero) * &j1;
+                let external_slash = (evaluate_vector(&numerator, 2, &point) - &at_zero)
+                    / (Atom::num(2) - &dimension);
+                let field_matrix = simplify(&(&external_slash - &mass_matrix))?;
+                let bare_difference =
+                    series(&((&bare_moment - &four_bare_moment) / &epsilon), 0)?.to_atom();
+                assert_integrated_zero(
+                    "the dimensional bare difference is C(p-slash-2m)",
+                    &(bare_difference - &external_slash + Atom::num(2) * &mass_matrix),
+                )?;
+                let physical_log = -function!(
+                    symbolica::atom::Symbol::LOG,
+                    mass.pow(2) / Atom::var(GS.mu_r_sq)
+                );
+                // Only the finite open matrix is compared here. These common
+                // masters need the pole and constant, not a D=4 angular average.
+                let bare_master = epsilon.pow(-1) + &physical_log;
+                let formal_finite = truncate(
+                    &series(
+                        &(renormalized
+                            .replace(physical_master.to_pattern())
+                            .with(bare_master.clone())
+                            / &normalization),
+                        0,
+                    )?,
+                    true,
+                );
+                assert_integrated_zero(
+                    "the formal finite open matrix has MS-bar field normalization",
+                    &(&formal_finite + (&physical_log + Atom::num(2)) * &field_matrix),
+                )?;
+                for vacuum_mass in [1, 2] {
+                    let vacuum_log = -function!(
+                        symbolica::atom::Symbol::LOG,
+                        Atom::num(vacuum_mass).pow(2) / Atom::var(GS.mu_r_sq)
+                    );
+                    // The existing fixed_boosted_os_matches_compact_operator_and_local_shell_projection
+                    // certifies the actual physical V4 source. Together with that
+                    // prerequisite, the radial test transfers -V4 = I2*C(p/-m).
+                    // Its contribution here is local; the addback is the actual
+                    // same-production Integrated value, with its one loop scale consumed.
+                    let local_four = &bare_master * (&four_bare_moment - &four_on_shell_moment)
+                        + (epsilon.pow(-1) + &vacuum_log) * &field_matrix;
+                    let addback = actual_finite_addback
+                        .replace(GS.m_uv_vacuum)
+                        .with(Atom::num(vacuum_mass));
+                    let addback = evaluate_vector(&evaluate_vector(&addback, 0, &point), 1, &point);
+                    let emitted_finite = truncate(
+                        &series(&(&local_four + regulate(&addback)? / &normalization), 0)?,
+                        true,
+                    );
+                    assert_integrated_zero(
+                        "emitted spin-four local terms plus actual dimensional addback",
+                        &(&emitted_finite - &formal_finite),
+                    )?;
+                    let four_addback = -&vacuum_log * &field_matrix;
+                    let missing_rational =
+                        truncate(&series(&(local_four + four_addback), 0)?, true);
+                    assert_integrated_zero(
+                        "prematurely spin-four addback misses exactly the field matrix",
+                        &(&emitted_finite - missing_rational - &field_matrix),
+                    )?;
+                    // It is not enough to project this negative onto an on-shell
+                    // spinor, where it vanishes. Keep its nonzero open-matrix trace.
+                    let field_trace = specialize_witness(&(&trace_projection * &field_matrix));
+                    let field_trace =
+                        witness_tensors.canonicalize(&field_trace.undo_dots::<Aind>()?)?;
+                    assert_eq!(field_trace.key, Atom::one());
+                    assert_eq!(field_trace.scalar_prefactor, -&mass_trace.scalar_prefactor);
+                    assert!(!field_trace.scalar_prefactor.is_zero());
+                }
+                // A finite bridge is not an all-epsilon child identity. At
+                // mu=M=m, the exact local difference starts at 3*epsilon*C(p/-m).
+                // This scalar +1/epsilon residue is a mechanism control only.
+                let local_difference = (&bare_moment - &on_shell_moment - &four_bare_moment
+                    + &four_on_shell_moment)
+                    / &epsilon
+                    - &field_matrix;
+                assert_integrated_zero(
+                    "the local dimensional difference has zero finite coefficient",
+                    &series(&local_difference, 0)?.to_atom(),
+                )?;
+                let enclosing_pole_finite =
+                    truncate(&series(&(local_difference / &epsilon), 0)?, true);
+                assert_integrated_zero(
+                    "a positive-epsilon difference survives a scalar enclosing pole",
+                    &(enclosing_pole_finite - Atom::num(3) * &field_matrix),
+                )?;
             }
         }
         Ok(())
@@ -3977,13 +4130,51 @@ mod tests {
             // The signed local counterterm -V has radial coefficient
             // (d-2)[I2-2/d (I2+M^2 I3)]. Evaluate the two denominator
             // topologies independently instead of assuming the IBP identity.
-            let tensor_reduced = evaluate(
-                (&dimension - Atom::num(2)) * (Atom::one() - Atom::num(2) / &dimension),
+            // Evaluate each scalar topology once and reuse it for both spin
+            // dimensions. Angular dimension D remains unchanged in either lift.
+            let i2 = evaluate(Atom::one(), 2)?;
+            let i3 = evaluate(Atom::one(), 3)?;
+            let tensor_reduced = series(
+                &((&dimension - Atom::num(2)) * (Atom::one() - Atom::num(2) / &dimension) * &i2
+                    - Atom::num(2) * (&dimension - Atom::num(2)) * &mass_squared / &dimension
+                        * &i3),
                 2,
-            )? + evaluate(
-                -Atom::num(2) * (&dimension - Atom::num(2)) * &mass_squared / &dimension,
-                3,
-            )?;
+            )?
+            .to_atom();
+            // The quark-loop chart gives -V4 = 4/D * <k^2/Dvac^3>.
+            // Its radial numerator is I2+M^2 I3; this also tests the tensor
+            // integration identity without substituting a counterterm result.
+            let signed_four_vacuum = series(
+                &(Atom::num(4) / &dimension * (&i2 + &mass_squared * &i3)),
+                2,
+            )?
+            .to_atom();
+            assert!(
+                series(&(&signed_four_vacuum - &i2), 2)?
+                    .to_atom()
+                    .expand()
+                    .is_zero()
+            );
+            assert!(
+                series(&(&signed_four_vacuum - &tensor_reduced - &epsilon * &i2), 2)?
+                    .to_atom()
+                    .expand()
+                    .is_zero()
+            );
+            // Deliberately alter only the lifted-four angular average. The
+            // formal-D tensor_reduced reference must remain unchanged.
+            let wrong_angular_four = &i2 + &mass_squared * &i3;
+            let wrong_bridge = truncate(
+                &series(
+                    &((wrong_angular_four - &tensor_reduced) / &normalization),
+                    0,
+                )?,
+                true,
+            );
+            assert!(
+                (wrong_bridge - Atom::num((1, 2))).expand().is_zero(),
+                "freezing the D angular average early must lose half the rational bridge"
+            );
             let scalar_reference = evaluate(Atom::one() - &epsilon, 2)?;
             assert!(
                 series(&(&tensor_reduced - &scalar_reference), 2)?
