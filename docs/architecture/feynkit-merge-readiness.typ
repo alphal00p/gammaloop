@@ -20,11 +20,41 @@ from GammaLoop runtime storage.
 Admission rejects unresolved public ports rather than assigning dummy labels.
 Closed scalar dots can still contain compact vector notation. The checked
 conversion keeps the expression, layout, operation flags and reduction proofs;
-it does not round-trip the numerator through raw source notation. Indexed
-operations use the existing Idenso algebra internally with a metadata-only
-projection. Borrowed calls copy rank-sized metadata and proof handles, so this
-change is an ownership invariant, not an assumed speedup. Its actual cost must
-be checked on the original workloads.
+it does not round-trip the numerator through raw source notation. Strict
+admission follows reversible public index payloads as well as native enum
+variants, so cooking an Open label into a Symbol cannot bypass the boundary.
+Closed contractions and opaque explicit labels remain accepted.
+
+The first indexed candidate, `e4f9189f`, passed the normal Nix CLI build, strict
+workspace Clippy, documentation checks, 1,061 Idenso tests and 18 Spenso metadata
+tests. Its full frozen sweep ran all 5,677 cases: 5,675 passed and two failed,
+with 128 unchanged skips and no timeouts. Every prior test identity was retained.
+One failure exposed the cooked-Open admission gap; the other was an authored UV
+series fixture with an anonymous free vector. The corrections inspect only public
+index payloads and give that positive fixture one explicit index while retaining
+its dimension, coefficient, factorization and Laurent assertions. A negative
+control retains rejection of the original anonymous input. These corrections
+require fresh qualification; the first sweep is not relabelled as a pass.
+
+The initial description of borrowed adapters as metadata-only was incorrect.
+Symbolica's owned Atom stores packed expression bytes in a vector; cloning it
+copies those bytes. The initial indexed adapter made that copy before the shared
+reduction planner made its own working/result copy. The repair uses one shared
+`Cow` planner: already owned input moves into the plan, while borrowed input is
+copied only at the ownership boundary. Validation, wildcard aliases, completion
+rules and the planning timer retain their existing order. Checked-result
+publication borrows the old expression and original proof cells, then consumes
+the supplied result. Dummy reservation borrows both payload and observations and
+retains logical index traversal order. Controls check allocation retention,
+source proof updates, cached observations and named-index callback order.
+
+This removes specific avoidable copies; it does not make every tensor operation
+free. Slot metadata is still converted, completion-policy metadata may be copied,
+and collection, composition, dimension/index transforms, notation and adjunction
+still use owned partial projections. Their expression-copy and output-allocation
+costs must be measured on the original workloads. No indexed performance run has
+yet been used to qualify this repair; earlier measurements below remain attached
+to their earlier sources.
 
 The API adaptation is explicit: indexed source constructors are named
 `infer_indexed` and `from_indexed_parts`, and an admitted partial tensor uses
