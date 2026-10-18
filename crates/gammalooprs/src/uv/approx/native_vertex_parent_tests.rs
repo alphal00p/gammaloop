@@ -755,6 +755,237 @@ impl QcdMassReference {
             wrong.try_sub(&expected)?.expression(),
             on_shell_tests::SpinReduction::FiniteComponents,
         )?;
+        // First emitted prefix: construct the actual parent CFF and certify
+        // its retained boundaries. No source/local mass cancellation is asserted.
+        {
+            use crate::{
+                graph::feynman_graph::FeynmanGraph,
+                settings::global::OrientationPattern,
+                uv::{
+                    Integrands,
+                    approx::{
+                        CutStructure, OrientationProjection,
+                        local_3d::Localizer,
+                        projected_4d::{Local4dProjectionContext, Projected4dApproximation},
+                    },
+                    settings::FinalIntegrandDimension,
+                },
+            };
+            use symbolica::id::Replacement;
+
+            let retained_local = local.clone();
+            let retained_finite = physical_finite.clone();
+            let mut projection_graph = graph.clone();
+            let mut settings = ctx.settings.clone();
+            settings.local_uv_cts_from_expanded_4d_integrands = true;
+            settings.final_integrand = FinalIntegrandDimension::ThreeD;
+            eyre::ensure!(settings.generate_integrated && !settings.add_marker);
+            let pattern = OrientationPattern::default();
+            let numerator = projection_graph
+                .numerator(&graph.full_filter(), &graph.empty_subgraph())?
+                .state
+                .expr;
+            let options = projection_graph.denominator_only_cff_3d_expression_options();
+            let surfaces = projection_graph.get_esurface_canonization(&graph.loop_momentum_basis);
+            let contracted_edges =
+                graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
+            let production = projection_graph.generate_3d_expression_for_integrand(
+                &contracted_edges,
+                &surfaces,
+                &options,
+                Some(numerator.expression()),
+            )?;
+            let orientation =
+                OrientationProjection::exact_expression(&production, &options, &pattern, true);
+            eyre::ensure!(!orientation.orientation_ids()?.is_empty());
+            let cuts = CutStructure::empty(&projection_graph);
+            let localizer = Localizer::new(&cuts.cuts[0], orientation);
+            let allowed_keys = cuts.cuts[0].residue_selector.generate_allowed_keys();
+            eyre::ensure!(!allowed_keys.is_empty());
+
+            let family = symbol!("gammalooprs::uv::numerator_family");
+            let calls = |integrands: &Integrands| {
+                let mut calls = BTreeSet::new();
+                for (_, root) in integrands.iter() {
+                    root.visitor(&mut |view| {
+                        if let AtomView::Fun(call) = view
+                            && call.get_symbol() == family
+                        {
+                            calls.insert(view.to_owned());
+                        }
+                        true
+                    });
+                }
+                calls
+            };
+            let check_store = |integrands: &Integrands| -> Result<()> {
+                // Reuse the store's flatness, binding and collision admission.
+                let checked = integrands
+                    .clone()
+                    .with_numerators(integrands.numerators().iter().cloned())?;
+                eyre::ensure!(&checked == integrands);
+                for call in calls(integrands) {
+                    let AtomView::Fun(call) = call.as_view() else {
+                        unreachable!()
+                    };
+                    let matches = integrands
+                        .numerators()
+                        .iter()
+                        .filter(|entry| {
+                            call.get_nargs() == entry.tags.len() + entry.args.len()
+                                && entry
+                                    .tags
+                                    .iter()
+                                    .enumerate()
+                                    .all(|(index, tag)| call.get(index) == tag.as_view())
+                        })
+                        .count();
+                    eyre::ensure!(
+                        matches == 1,
+                        "D09 CFF call lacks one complete retained binding"
+                    );
+                }
+                for (_, root) in integrands.iter() {
+                    eyre::ensure!(
+                        ![AGS.gamma, AGS.gamma0, GS.u, GS.ubar]
+                            .into_iter()
+                            .any(|head| root.contains_symbol(head)),
+                        "D09 CFF dispatch root contains an explicit spin tensor"
+                    );
+                }
+                Ok(())
+            };
+
+            // The producer emits one sector per already grouped full domain,
+            // in this stable order. Never zip the ungrouped Taylor sectors.
+            let groups = local.projection_sectors()?;
+            eyre::ensure!(!groups.is_empty());
+            let mut full_domains = std::collections::HashSet::new();
+            for group in &groups {
+                eyre::ensure!(
+                    full_domains
+                        .insert((group.active_components.clone(), group.frozen_lmbs.clone())),
+                    "D09 projection retained duplicate full domains"
+                );
+            }
+            let mut projection_context = Local4dProjectionContext::default();
+            eyre::ensure!(projection_context.source_preparation_builds == 0);
+            eyre::ensure!(projection_context.denominator_reconstruction_certificates == 0);
+            projection_context.certify_denominator_reconstruction = true;
+            let projected =
+                Projected4dApproximation::new(localizer, &mut projection_graph, &settings)
+                    .project_local_4d(local, &mut projection_context)?;
+            eyre::ensure!(projected.sectors().len() == groups.len());
+            let certificates = projection_context.denominator_reconstruction_certificates;
+            eyre::ensure!(certificates > 0);
+            eyre::ensure!(certificates == projection_context.source_preparation_builds);
+            eyre::ensure!(projection_context.projected_component_requests >= certificates);
+            let mut projected_families = 0;
+            for (index, group) in groups.iter().enumerate() {
+                let sector = &projected.sectors()[index];
+                let expected_kernel = group.frozen_lmbs.iter().fold(Atom::one(), |product, lmb| {
+                    product * GS.localizing_integrand(lmb)
+                });
+                eyre::ensure!(sector.frozen_factor == expected_kernel);
+                // The preceding rational gate supplies the nonzero origin
+                // witness for these exact same frozen LMB kernels.
+                eyre::ensure!(!sector.frozen_factor.is_zero());
+                kernel_at_origin(
+                    &scalar_tail(&sector.frozen_factor),
+                    group
+                        .frozen_lmbs
+                        .iter()
+                        .map(|lmb| lmb.loop_edges.len())
+                        .sum(),
+                )?;
+                check_store(&sector.coefficient)?;
+                projected_families += sector.coefficient.numerators().len();
+            }
+            eyre::ensure!(projected_families > 0);
+
+            // Certify the actual finite localizer's ordered carrier transport
+            // relative to this very Integrated output, before finalization/Phi.
+            eyre::ensure!(
+                !physical_finite
+                    .expression()
+                    .contains_symbol(GS.integrated_loop_scale)
+                    && !physical_finite
+                        .expression()
+                        .contains_symbol(GS.localizing_integrand)
+            );
+            let localized = localizer.localize(&physical_finite, &mut projection_graph, parent)?;
+            let mut finite_calls = 0;
+            if !physical_finite.is_zero() {
+                let kernel = GS.localizing_integrand(parent.lmb());
+                eyre::ensure!(!kernel.is_zero());
+                eyre::ensure!(localized.frozen_integrands.iter().count() == allowed_keys.len());
+                for (key, actual_kernel) in localized.frozen_integrands.iter() {
+                    eyre::ensure!(allowed_keys.contains(key) && actual_kernel == &kernel);
+                    kernel_at_origin(&scalar_tail(actual_kernel), parent.lmb().loop_edges.len())?;
+                }
+                for (host, source_map, integrands) in localized.active.iter_orientations() {
+                    check_store(integrands)?;
+                    eyre::ensure!(integrands.numerators().len() == 1);
+                    let entry = &integrands.numerators()[0];
+                    let expected = orientation.map_numerator(
+                        &projection_graph,
+                        host,
+                        source_map,
+                        physical_finite.expression(),
+                    )?;
+                    let expected = physical_finite.with_checked_expression(expected)?;
+                    for call in calls(integrands) {
+                        let AtomView::Fun(call) = call.as_view() else {
+                            unreachable!()
+                        };
+                        let replacements = entry.args.iter().enumerate().map(|(index, formal)| {
+                            Replacement::new(
+                                Atom::from(formal.clone()).to_pattern(),
+                                call.get(entry.tags.len() + index).to_owned(),
+                            )
+                        });
+                        // Specialize one retained typed body as a proof view;
+                        // never substitute the body into its dispatch roots.
+                        let transported = entry.rhs.with_checked_expression(
+                            entry.rhs.expression().replace_multiple(replacements),
+                        )?;
+                        Self::certify_parent_tensor_zero(
+                            "D09 actual CFF finite carrier and ordered branch arguments",
+                            &transported.try_sub(&expected)?,
+                        )?;
+                        finite_calls += 1;
+                    }
+                }
+                eyre::ensure!(finite_calls > 0);
+            }
+            // This is the actual final builder with both retained operands.
+            // into_integrands keeps every numerator body separate from roots.
+            let finalized = FinalIntegrandBuilder::new(localizer, &settings)
+                .build_projected(&mut projection_graph, parent, &projected, integrated)?
+                .into_integrands();
+            check_store(&finalized)?;
+            eyre::ensure!(finalized.scalar_definitions().is_empty());
+            eyre::ensure!(!finalized.numerators().is_empty());
+            eyre::ensure!(finalized.iter().any(|(_, root)| !root.is_zero()));
+            eyre::ensure!(finalized.iter().count() == allowed_keys.len());
+            eyre::ensure!(finalized.iter().all(|(key, _)| allowed_keys.contains(key)));
+            eyre::ensure!(local == &retained_local);
+            eyre::ensure!(integrated.physical_finite_counterterm()? == retained_finite);
+            debug_tags!(#uv, #local, #four_d, #cff, #integrated, #summary;
+                stage = "native_d09_parent_cff_reconstruction",
+                source = %graph.name, given = %given.subgraph().string_label(),
+                full_domains = groups.len(), certificates,
+                file.grouped_domains = ?groups.iter().map(|group| (&group.active_components, &group.frozen_lmbs)).collect::<Vec<_>>(),
+                component_requests = projection_context.projected_component_requests,
+                projected_families, finite_calls,
+                final_families = finalized.numerators().len(),
+                final_root_bytes = finalized.iter().map(|(_, atom)| atom.as_view().get_byte_size()).sum::<usize>(),
+                final_body_bytes = finalized.numerators().iter().map(|entry| entry.rhs.expression().as_view().get_byte_size()).sum::<usize>(),
+                actual_parent_cff_constructed = true, finite_carrier_transport_checked = true,
+                emitted_mass_cancellation_proved = false, dimensional_R2_condition_proved = false,
+                "Actual D09 parent CFF retains its certified factorized operands"
+            );
+        }
         debug_tags!(#uv, #integrated, #summary;
             stage = "native_d09_rational_finalizer_mass_projection",
             source = %diagram.name(), given = %given.subgraph().string_label(),
