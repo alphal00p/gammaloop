@@ -765,11 +765,11 @@ Export back to a native FeynKit diagram uses a lossless typed `From` conversion,
 not source serialization and re-admission. The selected-coefficient diagnostic
 collector remains a general-interface boundary because individual factors can
 have unresolved ports even when their complete product is scalar.
-GammaLoop archives store explicit slots, requiring full-state manifest version
-21; regenerate earlier full states. Standalone evaluator formats remain
-unchanged. The on-shell branch used 21 for a different layout: a future combined
-OS state format must use a distinct version, at least 22. That state-layout
-integration is not part of this candidate.
+The Indexed-slot migration introduced upstream full-state manifest version 21.
+This combined OS layout uses version 22; regenerate earlier full states. The
+layout and current regeneration rule are specified by
+#link("architecture-current.typ#persistence-compatibility-contract")[GammaLoop's persistence contract].
+Standalone evaluator formats remain unchanged.
 
 The new controls cover unresolved-port rejection, closed compact scalars,
 ranked-zero and nonsymmetric component layouts, callback validation, proof reuse,

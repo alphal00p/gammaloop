@@ -666,8 +666,10 @@ The optional `bincode` implementations for partial and indexed symbolic tensors
 reconstruct and validate their payloads, logical slots and operation flags using
 the caller's state map. Indexed archives encode explicit slots and reject
 unresolved or mismatched interfaces on load; planner and proof caches are not
-serialized. GammaLoop's full-state format changes to version 21 for this slot
-layout, while its already lowered standalone evaluator formats are unchanged.
+serialized. This slot layout was introduced in GammaLoop full-state version 21.
+Other runtime fields can require later state versions;
+#link("architecture-current.typ#persistence-compatibility-contract")[GammaLoop's persistence contract]
+specifies the complete layout. Already lowered standalone evaluator formats are unchanged.
 These wire implementations, rewrite settings, symbol
 registries, networks and cooked expressions do not together define an Idenso
 checkpoint format. Reversible cooking stores the
