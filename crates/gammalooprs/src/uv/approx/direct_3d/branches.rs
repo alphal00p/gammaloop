@@ -1654,8 +1654,7 @@ mod tests {
         });
         let dimension = Atom::var(symbol!("shared_series_factor_test::mu"));
         let compact = LibraryRep::from(Minkowski {}).to_symbolic([&dimension]);
-        let index = LibraryRep::from(Minkowski {})
-            .to_symbolic([dimension, Atom::num(87601)]);
+        let index = LibraryRep::from(Minkowski {}).to_symbolic([dimension, Atom::num(87601)]);
         let g = (GS.emr_vec(EdgeIndex(0), &index) + GS.emr_vec(EdgeIndex(1), &index))
             * (Atom::var(symbol!("shared_series_factor_test::u"))
                 + Atom::var(symbol!("shared_series_factor_test::v")));

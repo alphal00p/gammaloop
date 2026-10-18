@@ -94,15 +94,34 @@ its payload, operation flags and proof handles without allocating indices or
 re-sorting canonical slots. Closed scalar shorthand remains valid. New source
 values use `infer_indexed`; declared indexed interfaces, including ranked zeros,
 use `from_indexed_parts`. Both constructors retain the shared validation rules.
+Strict admission also follows reversible cooked index payloads through the
+existing cooking owner: an encoded Open or scoped Open cannot become an explicit
+port merely by being stored as a Symbol. Only public index metadata is inspected;
+opaque named labels and closed compact contractions retain their meaning.
 Use receiver syntax for shared methods such as `tensor.multiply(...)`.
 Unqualified associated-call syntax can be ambiguous between the indexed and
 partial specializations; static operations require the explicit structure type.
 
-Indexed algebra methods use the existing Idenso engine through an internal
-metadata projection. They do not export, decode or re-infer an established
-payload. Borrowed calls copy rank-sized slot metadata and immutable proof handles;
-the conversion is not a promised performance optimization. A result with an
-unresolved public interface is rejected instead of silently materialized.
+Indexed algebra methods reuse the existing Idenso engine. Consuming conversion
+moves the payload, layout and proofs. A borrowed conversion to an owned partial
+carrier copies the Atom's packed bytes as well as rank-sized metadata; Symbolica
+Atoms are not shared handles. Checked-result publication instead borrows the
+original Atom and proof cells through a private `BorrowedTensorParts` view, so
+new validation facts update the source and the supplied result moves into its
+carrier. Dummy reservation likewise borrows the payload and preserves logical
+index order, including the order observable by named-index callbacks.
+
+The reduction planner accepts borrowed or owned input through one `Cow` core.
+Validation and wildcard-label handling precede ownership acquisition. An indexed
+adapter's owned projection moves into that core; a borrowed partial input is
+copied only when a completed result or mutable plan needs ownership. This removes
+the extra planner-entry payload copy without changing public method signatures
+or identity rules. Completion-policy metadata is retained separately. Collection,
+composition, dimension/index transforms, notation changes and adjunction still
+use an owned projection and therefore copy their inputs. No conversion exports,
+decodes or re-infers an admitted payload. Actual workload costs require separate
+measurement; explicit indexing is an interface invariant, not a speed guarantee.
+A result with unresolved public ports is rejected instead of materialized.
 Native FeynKit export uses the standard indexed-to-partial `From` conversion to
 transfer the same tensor and proofs into its more general interface. Coefficient
 listing remains a partial-engine API because selected subexpressions can have
