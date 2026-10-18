@@ -2109,7 +2109,7 @@ fn native_d09_bare_and_completed_child_preserve_overall_mass_condition() -> Resu
         uv::{
             ApproximationType, Spinney,
             approx::{
-                ForestNodeLike, Rooted,
+                ForestNodeLike, Rooted, UVCtx,
                 local_4d::{Full4dCts, Local4dCts},
             },
             hedge_poset::OwnedForestNode,
@@ -2152,7 +2152,15 @@ fn native_d09_bare_and_completed_child_preserve_overall_mass_condition() -> Resu
             file.velocity = ?settings.on_shell_velocity()?,
             "Same native graph and retained component sectors enter the overall operator"
         );
-        let integrated = reference.certify_actual_overall_mass_input(&record, given, prefix)?;
+        let actual = reference.certify_actual_overall_mass_input(&record, given, prefix)?;
+        reference.certify_d09_rational_finalizer_mass_projection(
+            &record.diagram,
+            &UVCtx::new(graph, &graph.model, settings),
+            given,
+            prefix,
+            &actual,
+        )?;
+        let (_, _, integrated) = actual;
         if given.subgraph().is_empty() {
             ensure!(
                 !integrated.physical_finite_counterterm()?.is_zero(),
@@ -2163,6 +2171,7 @@ fn native_d09_bare_and_completed_child_preserve_overall_mass_condition() -> Resu
         crate::debug_tags!(#uv, #integrated, #summary;
             stage = "native_d09_overall_input_complete", label, completed,
             local_parent_certificate = true, actual_integrated_finite_projection_zero = true,
+            rational_finalizer_mass_condition = true, emitted_cff_condition_proved = false,
             public_complete_forest_evaluated = false,
             "D09 actual parent operator and its finite scheme insertion obey the matched mass projection"
         );
@@ -2182,13 +2191,17 @@ fn native_d09_bare_and_completed_child_preserve_overall_mass_condition() -> Resu
 
 impl QcdMassReference {
     /// Apply both actual parent mass certificates to one original retained input.
-    /// The returned value remains available for nonzero finite-field controls.
+    /// Retain the same parent and both actual outputs for physical-boundary proofs.
     fn certify_actual_overall_mass_input(
         &self,
         record: &CertifiedMassPrefix,
         given: &crate::uv::hedge_poset::OwnedForestNode,
         prefix: &crate::uv::approx::local_4d::Full4dCts,
-    ) -> Result<super::IntegratedCts> {
+    ) -> Result<(
+        crate::uv::hedge_poset::OwnedForestNode,
+        crate::uv::approx::local_4d::Local4dCts,
+        super::IntegratedCts,
+    )> {
         use crate::uv::{
             ApproximationType, UltravioletGraph,
             approx::{
@@ -2263,7 +2276,7 @@ impl QcdMassReference {
             &parent,
             &integrated,
         )?;
-        Ok(integrated)
+        Ok((parent, local, integrated))
     }
 
     fn certify_parent_integrated_finite_mass_projection(
