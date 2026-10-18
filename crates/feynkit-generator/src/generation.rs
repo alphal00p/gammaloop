@@ -603,19 +603,20 @@ impl NumeratorInstantiation<'_> {
                             * momentum)
                     })
                 }
-                "Epsilon" => {
-                    if arguments.is_empty() {
-                        Err(self.invalid_tensor(term, "expected at least one Lorentz index"))
-                    } else {
-                        Ok(arguments
-                            .into_iter()
-                            .fold(
-                                FunctionBuilder::new(*EPSILON_SYMBOL),
-                                |builder, argument| builder.add_arg(self.minkowski(argument)),
-                            )
-                            .finish())
-                    }
-                }
+                // UFO's real Levi-Civita tensor has ε^{0123} = −1 (ALOHA,
+                // matching FeynRules), so Tr[γ5 γ^μ γ^ν γ^ρ γ^σ] = 4i ε^{μνρσ}
+                // for the same γ5 = diag(−1,−1,1,1). Idenso's epsilon is
+                // normalized by Tr[…] = 4 ε^{μνρσ}, i.e. ε^{0123} = −i.
+                "Epsilon" => self.exact_arguments(term, &arguments, 4).map(|args| {
+                    let epsilon = args
+                        .iter()
+                        .fold(
+                            FunctionBuilder::new(*EPSILON_SYMBOL),
+                            |builder, argument| builder.add_arg(self.minkowski(argument.clone())),
+                        )
+                        .finish();
+                    -Atom::i() * epsilon
+                }),
                 "C" => self.exact_arguments(term, &arguments, 2).map(|args| {
                     FunctionBuilder::new(AGS.charge_conjugation)
                         .add_arg(self.bispinor(args[0].clone()))
@@ -7053,6 +7054,59 @@ mod tests {
             (scalar - test_atom("-1i*(3+xi)")).together().cancel(),
             Atom::Zero
         );
+    }
+
+    #[test]
+    fn lowers_ufo_epsilon_with_the_ufo_normalization() {
+        use idenso::{
+            CookMode, CookSettings,
+            tensor::{AlgebraSettings, SymbolicTensor},
+        };
+
+        let legs: [NumeratorHalfEdge; 4] = std::array::from_fn(|i| NumeratorHalfEdge {
+            edge: 10 * (i + 1),
+            flow: Flow::Sink,
+            hedge: 20 * (i + 1),
+            spin: 3,
+            color: 1,
+        });
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs,
+        };
+        let lower = |structure: &str| {
+            instantiation
+                .instantiate(&test_atom(structure), NumeratorSector::Spin)
+                .unwrap()
+        };
+        assert_eq!(
+            lower("Epsilon(1,2,3,4)"),
+            test_atom(
+                "-1i*spenso::epsilon(spenso::mink(4,gammalooprs::hedge(20,1)),spenso::mink(4,gammalooprs::hedge(40,1)),spenso::mink(4,gammalooprs::hedge(60,1)),spenso::mink(4,gammalooprs::hedge(80,1)))"
+            )
+        );
+        // ALOHA's explicit matrices satisfy
+        // Tr[γ5 γ^μ γ^ν γ^ρ γ^σ] = 4i ε^{μνρσ} with its ε^{0123} = −1; the
+        // lowered structures must agree after Idenso's trace simplification.
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplify = |structure: &str| {
+            let tensor = SymbolicTensor::infer(cooking.cook(lower(structure).as_view())).unwrap();
+            let simplified = tensor
+                .simplify_algebra(&AlgebraSettings::hep())
+                .unwrap()
+                .into_expression();
+            cooking.uncook(simplified.as_view())
+        };
+        let trace =
+            simplify("Gamma5(-1,-2)*Gamma(1,-2,-3)*Gamma(2,-3,-4)*Gamma(3,-4,-5)*Gamma(4,-5,-1)");
+        assert!(!trace.is_zero());
+        assert_eq!(trace, simplify("4*1i*Epsilon(1,2,3,4)"));
+        for malformed in ["Epsilon()", "Epsilon(1,2,3)", "Epsilon(1,2,3,4,-1)"] {
+            assert!(matches!(
+                instantiation.instantiate(&test_atom(malformed), NumeratorSector::Spin),
+                Err(GenerationError::InvalidNumeratorTensor { .. })
+            ));
+        }
     }
 
     #[test]
