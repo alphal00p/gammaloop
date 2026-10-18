@@ -643,6 +643,99 @@ mod typed_dot_tests {
     }
 
     #[test]
+    fn chain_unfolding_materializes_each_projector_factor() {
+        use spenso::shadowing::{FactorProjector, ProjectorExpander};
+
+        crate::test_support::test_initialize();
+        let a = chain_factor!(projector_unfold_A, in, out);
+        let b = chain_factor!(projector_unfold_B, in, out);
+        let c = chain_factor!(projector_unfold_C, in, out);
+        for projector in [
+            FactorProjector::Symmetric,
+            FactorProjector::Antisymmetric,
+            FactorProjector::Cyclic,
+        ] {
+            let group = projector.apply([a.clone(), b.clone(), c.clone()]);
+            for expression in [
+                chain!(mink!(4, 97101), mink!(4, 97102), &group),
+                trace!(mink!(4), &group),
+            ] {
+                let source = SymbolicTensor::infer(expression.clone()).unwrap();
+                let opened = source.undo_trace().unwrap().undo_chain().unwrap();
+                assert_eq!(opened.structure(), source.structure());
+                assert!(!opened.expression().contains_symbol(projector.symbol()));
+                assert!(!opened.expression().contains_symbol(SPENSO_TAG.chain));
+                SymbolicTensor::validate_atom(opened.expression()).unwrap();
+                let expected = SymbolicTensor::infer(expression.expand_projectors())
+                    .unwrap()
+                    .contract(Default::default())
+                    .unwrap();
+                let joined = opened.contract(Default::default()).unwrap();
+                assert_eq!(joined.expression(), expected.expression());
+            }
+        }
+    }
+
+    #[test]
+    fn chain_unfolding_rejects_unexpandable_projectors() {
+        use spenso::shadowing::FactorProjector;
+
+        crate::test_support::test_initialize();
+        // The existing normalized projector operation bounds its factorial
+        // denominator to i64. Do not silently wire an unsupported group as one
+        // matrix if that operation cannot expand it.
+        let factor = chain_factor!(projector_unfold_large_A, in, out);
+        let group = FactorProjector::Symmetric.apply(vec![factor; 21]);
+        let expression = chain!(mink!(4, 97111), mink!(4, 97112), group);
+        assert!(expression.undo_chain::<AbstractIndex>().is_err());
+    }
+
+    #[test]
+    fn projector_chain_unfolding_preserves_powers_spectators_and_fresh_copies() {
+        use spenso::shadowing::{FactorProjector, ProjectorExpander};
+
+        crate::test_support::test_initialize();
+        let trace = trace!(
+            mink!(4),
+            FactorProjector::Symmetric.apply([
+                chain_factor!(projector_power_A, in, out),
+                chain_factor!(projector_power_B, in, out),
+                chain_factor!(projector_power_C, in, out),
+            ])
+        );
+        let coefficient = (Atom::var(symbol!("projector_spectator")) + Atom::one()).pow(40);
+        let source = SymbolicTensor::infer(&coefficient * trace.pow(2)).unwrap();
+        let opened = source.undo_trace().unwrap().undo_chain().unwrap();
+        assert!(
+            matches!(opened.expression().as_view(), AtomView::Mul(product)
+            if product.iter().any(|factor| factor == coefficient.as_view()))
+        );
+        let expected = SymbolicTensor::infer(trace.expand_projectors().pow(2))
+            .unwrap()
+            .contract(Default::default())
+            .unwrap();
+        assert_eq!(
+            opened.contract(Default::default()).unwrap().expression(),
+            &(&coefficient * expected.expression())
+        );
+
+        let single = SymbolicTensor::infer(trace).unwrap();
+        let first = single.undo_trace().unwrap().undo_chain().unwrap();
+        let second = single.undo_trace().unwrap().undo_chain().unwrap();
+        assert_ne!(first.expression(), second.expression());
+        let product = first.expression() * second.expression();
+        SymbolicTensor::validate_atom(&product).unwrap();
+        assert_eq!(
+            SymbolicTensor::infer(product)
+                .unwrap()
+                .contract(Default::default())
+                .unwrap()
+                .expression(),
+            expected.expression()
+        );
+    }
+
+    #[test]
     fn chain_unfolding_keeps_factor_ports_and_spectator_factorization() {
         crate::test_support::test_initialize();
         let left = mink!(4, 97071);
