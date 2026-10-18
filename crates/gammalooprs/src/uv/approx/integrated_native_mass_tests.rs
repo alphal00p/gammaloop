@@ -2190,6 +2190,358 @@ fn native_d09_bare_and_completed_child_preserve_overall_mass_condition() -> Resu
 }
 
 impl QcdMassReference {
+    /// Extract the complete generic-external-momentum coefficient of one actual
+    /// signed overall pole, retaining native spin/color ports and source weight.
+    fn certify_native_overall_kinetic_pole(
+        &self,
+        record: &CertifiedMassPrefix,
+        parent: &crate::uv::hedge_poset::OwnedForestNode,
+        actual: &super::IntegratedCts,
+        projection: &MassProjection,
+        common: &mut Option<(SymbolicTensor<IndexedStructure>, [Atom; 2], usize)>,
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
+        use crate::{
+            numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
+            utils::GS,
+            uv::{UltravioletGraph, approx::ForestNodeLike},
+        };
+        use idenso::tensor::{SymbolicNetExt, SymbolicNetParse};
+        use linnet::half_edge::{involution::Flow, subgraph::SubSetLike};
+        use spenso::{
+            network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+            structure::{
+                abstract_index::AbstractIndex,
+                representation::LibraryRep,
+                slot::{IsAbstractSlot, ParseableAind, Slot},
+            },
+        };
+        use std::collections::HashMap;
+        use symbolica::atom::FunctionBuilder;
+
+        let diagram = &record.diagram;
+        let graph = &record.graph;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let pole = actual.physical_pole()?;
+        ensure!(
+            pole.rank() == 4,
+            "a native quark pole retains two spin and two color ports"
+        );
+        for forbidden in [
+            GS.den,
+            GS.loop_mom,
+            GS.localizing_integrand,
+            GS.integrated_loop_scale,
+            vakint::symbols::S.k,
+            vakint::symbols::S.p,
+        ] {
+            ensure!(
+                !pole.expression().contains_symbol(forbidden),
+                "an internal denominator/momentum/localization owner survived actual overall integration"
+            );
+        }
+        let (projector, reference_p) = self.mass_projector(diagram, &Atom::var(GS.dim))?;
+        let projector = projector
+            .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))?;
+        let projector = projector
+            .with_checked_expression(projector.expression().replace(CS.nc).with(3))?
+            .try_into_indexed()?;
+        let AtomView::Fun(reference_p_call) = reference_p.as_view() else {
+            return Err(eyre!(
+                "native incoming momentum must retain its source edge"
+            ));
+        };
+        ensure!(reference_p_call.get_symbol() == GS.emr_mom && reference_p_call.get_nargs() == 1);
+        let incoming_edge =
+            usize::try_from(reference_p_call.get(0)).map_err(|error| eyre!(error))?;
+        let routed_p = diagram.loop_momentum_basis().route_expression(&reference_p);
+        let crown = graph.dummy_less_full_crown(parent.subgraph());
+        let boundary = crown.included_iter().collect::<Vec<_>>();
+        ensure!(boundary.len() == 2);
+        let mut signs = BTreeMap::new();
+        for hedge in boundary {
+            let edge = graph[&hedge];
+            let routed = diagram
+                .loop_momentum_basis()
+                .route_expression(&function!(GS.emr_mom, edge.0));
+            let sign = if (&routed - &routed_p).expand().is_zero() {
+                1
+            } else if (&routed + &routed_p).expand().is_zero() {
+                -1
+            } else {
+                return Err(eyre!(
+                    "kinetic pole boundary is not the native signed external momentum"
+                ));
+            };
+            if graph.flow(hedge) == Flow::Sink {
+                ensure!(sign == 1);
+            }
+            ensure!(signs.insert(edge.0, sign).is_none());
+        }
+        for tensor in [&pole, &projector] {
+            let mut unexpected = Vec::new();
+            tensor.expression().visitor(&mut |view| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                    && (momentum.get_nargs() == 0
+                        || usize::try_from(momentum.get(0))
+                            .ok()
+                            .is_none_or(|edge| !signs.contains_key(&edge)))
+                {
+                    unexpected.push(view.to_owned());
+                }
+                true
+            });
+            ensure!(
+                unexpected.is_empty(),
+                "internal/unowned external momenta survived integration: {unexpected:?}"
+            );
+        }
+        // The closing mass projector owns both physical endpoint labels. Its
+        // p-linear numerator is pslash/(4 Nc); transpose those two native
+        // endpoints to obtain the independently ordered OPEN kinetic matrix.
+        let native_projector = cooking.uncook(diagram.projector().expression().as_view());
+        let mut endpoints = BTreeMap::new();
+        native_projector.visitor(&mut |view| {
+            if let AtomView::Fun(wave) = view
+                && [symbols::u(), symbols::ubar()].contains(&wave.get_symbol())
+                && wave.get_nargs() == 2
+                && let AtomView::Fun(spin) = wave.get(1)
+                && spin.get_symbol() == symbol!("spenso::bis")
+                && spin.get_nargs() == 2
+            {
+                endpoints.insert(wave.get_symbol(), Atom::from(spin.to_owned()));
+            }
+            true
+        });
+        ensure!(endpoints.len() == 2);
+        let endpoint_atoms = [
+            endpoints[&symbols::u()].clone(),
+            endpoints[&symbols::ubar()].clone(),
+        ];
+        let cooked_endpoints = endpoint_atoms
+            .iter()
+            .map(|slot| -> Result<Atom> {
+                // Index encoding is owned by a complete representation slot.
+                let cooked = cooking.try_cook(slot.as_view())?;
+                let typed = Slot::<LibraryRep, AbstractIndex>::try_from(cooked.as_view())?;
+                Ok(typed.aind().to_atom())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        ensure!(cooked_endpoints[0] != cooked_endpoints[1]);
+        let zero_projector = projector.with_checked_expression(
+            projector.expression().replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                {
+                    **output = Atom::Zero;
+                }
+            }),
+        )?;
+        let closing_kinetic = projector.try_sub(&zero_projector)?;
+        let closing_kinetic = closing_kinetic
+            .with_checked_expression(Atom::num(12) * closing_kinetic.expression())?;
+        let slots = closing_kinetic.structure().logical_slots();
+        let endpoint_indices = cooked_endpoints
+            .iter()
+            .map(|index| {
+                slots
+                    .iter()
+                    .find(|slot| slot.aind().to_atom() == *index)
+                    .map(|slot| slot.aind())
+                    .ok_or_else(|| eyre!("native endpoint is absent from the kinetic template"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut transpose = HashMap::new();
+        let mut inverse = HashMap::new();
+        for (position, slot) in slots.iter().enumerate() {
+            let role = cooked_endpoints
+                .iter()
+                .position(|index| slot.aind().to_atom() == *index)
+                .ok_or_else(|| eyre!("kinetic template has an unowned port"))?;
+            transpose.insert(position, endpoint_indices[1 - role]);
+            inverse.insert(position, slot.aind());
+        }
+        ensure!(transpose.len() == 4);
+        let kinetic_template = closing_kinetic.reindex_interface_ports(&transpose)?;
+        ensure!(
+            kinetic_template
+                .reindex_interface_ports(&inverse)?
+                .same_value(&closing_kinetic)
+        );
+        let template_zero = closing_kinetic.with_checked_expression(Atom::Zero)?;
+        let transposed_zero = template_zero.reindex_interface_ports(&transpose)?;
+        ensure!(
+            transposed_zero.rank() == 4
+                && transposed_zero
+                    .reindex_interface_ports(&inverse)?
+                    .same_value(&template_zero)
+        );
+        ensure!(
+            kinetic_template
+                .structure()
+                .canonical()
+                .external_structure()
+                == pole.structure().canonical().external_structure()
+        );
+        let first_input = common.is_none();
+        if first_input {
+            *common = Some((
+                kinetic_template.clone(),
+                endpoint_atoms.clone(),
+                incoming_edge,
+            ));
+        }
+        let (common_template, common_endpoint_atoms, common_edge) = common.as_ref().unwrap();
+        let common_endpoints = common_endpoint_atoms
+            .iter()
+            .map(|slot| -> Result<Atom> {
+                // Index encoding is owned by a complete representation slot.
+                let cooked = cooking.try_cook(slot.as_view())?;
+                let typed = Slot::<LibraryRep, AbstractIndex>::try_from(cooked.as_view())?;
+                Ok(typed.aind().to_atom())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let common_slots = common_template.structure().logical_slots();
+        let route = |expression: &Atom| -> Atom {
+            expression.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                {
+                    let edge =
+                        usize::try_from(momentum.get(0)).expect("all source Q owners were checked");
+                    let mut target = FunctionBuilder::new(GS.emr_mom).add_arg(*common_edge);
+                    for index in momentum.iter().skip(1) {
+                        target = target.add_arg(index);
+                    }
+                    **output = Atom::num(signs[&edge]) * target.finish();
+                }
+            })
+        };
+        let align = |tensor: &SymbolicTensor<IndexedStructure>| -> Result<SymbolicTensor<IndexedStructure>> {
+            let logical = tensor.structure().logical_slots();
+            ensure!(logical.len() == common_slots.len());
+            let mut map = HashMap::new();
+            let mut inverse = HashMap::new();
+            for (position, slot) in logical.iter().enumerate() {
+                let role = cooked_endpoints.iter().position(|index| slot.aind().to_atom() == *index)
+                    .ok_or_else(|| eyre!("overall pole has an unnamed external port"))?;
+                let targets = common_slots.iter().filter(|target| target.rep() == slot.rep() && target.aind().to_atom() == common_endpoints[role]).collect::<Vec<_>>();
+                ensure!(targets.len() == 1, "native spin/color role has no unique common-frame port");
+                map.insert(position, targets[0].aind());
+                inverse.insert(position, slot.aind());
+            }
+            let aligned = tensor.reindex_interface_ports(&map)?;
+            ensure!(aligned.reindex_interface_ports(&inverse)?.same_value(tensor));
+            let aligned_zero = tensor.with_checked_expression(Atom::Zero)?.reindex_interface_ports(&map)?;
+            ensure!(aligned_zero.rank() == tensor.rank());
+            ensure!(aligned_zero.reindex_interface_ports(&inverse)?.same_value(&tensor.with_checked_expression(Atom::Zero)?));
+            let logical = aligned.structure().logical_slots();
+            let axes = common_slots.iter().map(|slot| logical.iter().position(|candidate| candidate == slot)
+                .ok_or_else(|| eyre!("common kinetic frame lost a logical slot"))).collect::<Result<Vec<_>>>()?;
+            ensure!(axes.iter().copied().collect::<BTreeSet<_>>() == (0..axes.len()).collect());
+            let partial: SymbolicTensor<PartialStructure> = aligned.into();
+            let ordered = partial.permuted(&axes)?;
+            let mut unpermute = vec![0; axes.len()];
+            for (target, source) in axes.iter().copied().enumerate() { unpermute[source] = target; }
+            ensure!(ordered.permuted(&unpermute)?.same_value(&partial));
+            let ordered = ordered.try_into_indexed()?;
+            ensure!(ordered.structure().logical_slots() == common_slots);
+            Ok(ordered)
+        };
+        let routed_template =
+            kinetic_template.with_checked_expression(route(kinetic_template.expression()))?;
+        let aligned_template = align(&routed_template)?;
+        Self::certify_finite_tagged_rows_zero(
+            "native kinetic templates have the same generic-p open frame",
+            super::simplify(&aligned_template.try_sub(common_template)?)?,
+        )?;
+
+        // Expose only compact vector arguments, retaining chain/trace factors.
+        // A scalar tau inside an opaque gamma(tau*p) is not a coefficient.
+        let expanded = cooking
+            .uncook(pole.expression().as_view())
+            .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                shorthand_parsing: ShorthandParsing::Expand {
+                    schoonschip: SchoonschipExpansionMode {
+                        inner_products: false,
+                        expand_inside_chains: true,
+                        expand_schoonship: true,
+                    },
+                    trace: false,
+                    chain: false,
+                },
+                ..Default::default()
+            })?
+            .simple_execute::<()>()?;
+        let expanded = pole.with_checked_expression(cooking.try_cook(expanded.as_view())?)?;
+        let tau = Atom::var(symbol!("native_msbar_field_reference::external_scale"));
+        ensure!(!expanded.expression().contains(tau.as_view()));
+        let scaled = expanded.with_checked_expression(expanded.expression().replace_map(
+            |view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                {
+                    **output = &tau * view.to_owned();
+                }
+            },
+        ))?;
+        let affine = |expression: &Atom| -> Result<(Atom, Atom)> {
+            let rows = expression
+                .coefficient_list_exact(std::slice::from_ref(&tau))
+                .ok_or_else(|| eyre!("bounded complete external polynomial extraction refused"))?;
+            let mut constant = Atom::Zero;
+            let mut linear = Atom::Zero;
+            for (monomial, coefficient) in rows {
+                ensure!(
+                    !coefficient.contains(tau.as_view()),
+                    "external scale remains hidden in a coefficient"
+                );
+                if monomial == Atom::one() {
+                    constant += coefficient;
+                } else if monomial == tau {
+                    linear += coefficient;
+                } else {
+                    return Err(eyre!(
+                        "actual overall field pole is not affine in its generic external momentum: {monomial}"
+                    ));
+                }
+            }
+            Ok((constant, linear))
+        };
+        let (constant, linear) = affine(scaled.expression())?;
+        if first_input {
+            let quadratic = scaled.expression() + tau.pow(2) * kinetic_template.expression();
+            let error = affine(&quadratic).expect_err(
+                "the complete affine gate must reject a nonzero quadratic kinetic perturbation",
+            );
+            ensure!(error.to_string().contains("is not affine"));
+        }
+        let reconstructed = scaled.with_checked_expression(&constant + &tau * &linear)?;
+        Self::certify_finite_tagged_rows_zero(
+            "complete external-affine overall pole reconstruction",
+            super::simplify(&scaled.try_sub(&reconstructed)?)?,
+        )?;
+        let linear = pole.with_checked_expression(linear)?;
+        let linear = linear.with_checked_expression(route(linear.expression()))?;
+        let linear = align(&linear)?;
+        let weight = &projection.kernel_weight * &projection.numerator_prefactor;
+        ensure!(!weight.contains_symbol(GS.emr_mom) && !weight.contains(tau.as_view()));
+        let weighted = linear.with_checked_expression(
+            self.model.expand_couplings(&(weight * linear.expression())),
+        )?;
+        crate::debug_tags!(#uv, #integrated, #summary;
+            stage = "native_overall_kinetic_pole_input", source = %diagram.name(),
+            generic_external_affine = true, exact_open_frame = true,
+            file.external_signs = ?signs, file.scalar_source_weight = %(&projection.kernel_weight * &projection.numerator_prefactor).to_canonical_string(),
+            file.constant_pole = %cooking.uncook(constant.as_view()).to_canonical_string(),
+            file.weighted_linear_pole = %cooking.uncook(weighted.expression().as_view()).to_canonical_string(),
+            "Actual integrated pole retains generic live momentum and ordered native spin/color output"
+        );
+        Ok(weighted)
+    }
+
     /// Apply both actual parent mass certificates to one original retained input.
     /// Retain the same parent and both actual outputs for physical-boundary proofs.
     fn certify_actual_overall_mass_input(
@@ -2855,7 +3207,9 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
     let prefixes = reference.certified_mass_prefixes()?;
     reference.certify_overall_mass_input_inventory(&sources, &prefixes)?;
     let mut completed = BTreeSet::new();
-    for (diagram, _) in sources
+    let mut kinetic_frame = None;
+    let mut kinetic_sum: Option<SymbolicTensor<IndexedStructure>> = None;
+    for (diagram, projection) in sources
         .iter()
         .filter(|(d, _)| d.loop_momentum_basis().loop_edges.len() == 2)
     {
@@ -2895,7 +3249,18 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
                 given_scheme = %given.renormalization_scheme(),
                 "Starting one retained native bare/proper overall mass input"
             );
-            let _ = reference.certify_actual_overall_mass_input(record, given, prefix)?;
+            let actual = reference.certify_actual_overall_mass_input(record, given, prefix)?;
+            let kinetic = reference.certify_native_overall_kinetic_pole(
+                record,
+                &actual.0,
+                &actual.2,
+                projection,
+                &mut kinetic_frame,
+            )?;
+            kinetic_sum = Some(match kinetic_sum {
+                Some(sum) => sum.try_add(&kinetic)?,
+                None => kinetic,
+            });
             let unique = completed.insert(key.clone());
             ensure!(unique);
             crate::debug_tags!(#uv, #integrated, #summary;
@@ -2926,6 +3291,105 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
     ensure!(
         completed.contains(&("D03".to_owned(), Vec::new()))
             && completed.contains(&("D03".to_owned(), vec![5]))
+    );
+
+    // Independent MS field reference, with a=alpha_s/(4*pi), psi_B=sqrt(Zpsi)psi_R,
+    // and renormalized Feynman gauge xi_R=1, xi_B=Z3*xi_R. Falcioni--Gardi--Milloy,
+    // arXiv:1909.00697 A.18: CF[(CA+CF/2)/eps^2+(-17CA/4+3CF/4+TF*nf)/eps].
+    // SU(3), nf=6 gives 44/(9 eps^2)-35/(3 eps). This target is not a definition
+    // by subtraction of the produced bare/proper coefficients above.
+    let (kinetic_template, _, common_edge) = kinetic_frame
+        .ok_or_else(|| eyre!("the complete native inventory has no open kinetic frame"))?;
+    let kinetic_sum = kinetic_sum.ok_or_else(|| eyre!("the actual pole sum is empty"))?;
+    let epsilon = Atom::var(crate::utils::GS.dim_epsilon);
+    let pi = Atom::var(symbolica::atom::Symbol::PI);
+    let coupling = Atom::var(symbol!("UFO::G"));
+    let a = coupling.pow(2) / (Atom::num(16) * pi.pow(2));
+    let w2 = Atom::num((44, 9)) * epsilon.pow(-2) - Atom::num((35, 3)) / &epsilon;
+    let normalization = Atom::i() * a.pow(2);
+    let expected_kinetic = kinetic_template
+        .with_checked_expression(&normalization * &w2 * kinetic_template.expression())?;
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "complete generic-p native two-loop MS field pole",
+        super::simplify(&kinetic_sum.try_sub(&expected_kinetic)?)?,
+    )?;
+    // Fixed bare xi_B=1 instead shifts the double pole by CF*z3=4/3.
+    // A simple-pole shift is a second independent normalization control.
+    for wrong in [
+        &w2 + Atom::num((4, 3)) * epsilon.pow(-2),
+        &w2 + epsilon.pow(-1),
+    ] {
+        let wrong = kinetic_template
+            .with_checked_expression(&normalization * wrong * kinetic_template.expression())?;
+        let error = QcdMassReference::certify_finite_tagged_rows_zero(
+            "wrong independent field-pole convention",
+            super::simplify(&kinetic_sum.try_sub(&wrong)?)?,
+        )
+        .expect_err("independently nonzero field-pole shifts must be rejected");
+        ensure!(
+            error
+                .to_string()
+                .contains("native finite-tensor coefficient is not zero")
+        );
+    }
+    // A matched-point trace cannot certify the open matrix: this generic
+    // (p.v)vslash-pslash perturbation vanishes at the rest point, yet is nonzero
+    // before that substitution. It must be rejected by the same native owner.
+    let gs = &crate::utils::GS;
+    let temporal =
+        kinetic_template.with_checked_expression(kinetic_template.expression().replace_map(
+            |view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == gs.emr_mom
+                    && usize::try_from(momentum.get(0)).ok() == Some(common_edge)
+                    && momentum.get_nargs() == 2
+                {
+                    **output = gs.emr_mom(
+                        linnet::half_edge::involution::EdgeIndex(common_edge),
+                        gs.cind(0),
+                    ) * gs.energy_delta(&momentum.get(1).to_owned());
+                }
+            },
+        ))?;
+    let matched_only = temporal.try_sub(&kinetic_template)?;
+    let error = QcdMassReference::certify_finite_tagged_rows_zero(
+        "generic-p matched-only field perturbation",
+        super::simplify(&matched_only)?,
+    )
+    .expect_err("the generic-p field certificate must see the matched-only perturbation");
+    ensure!(
+        error
+            .to_string()
+            .contains("native finite-tensor coefficient is not zero")
+    );
+    let at_rest = matched_only.with_checked_expression(matched_only.expression().replace_map(
+        |view, _, output| {
+            if let AtomView::Fun(momentum) = view
+                && momentum.get_symbol() == gs.emr_mom
+                && usize::try_from(momentum.get(0)).ok() == Some(common_edge)
+                && momentum.get_nargs() == 2
+            {
+                **output = if momentum.get(1) == gs.cind(0).as_view() {
+                    Atom::one()
+                } else {
+                    gs.energy_delta(&momentum.get(1).to_owned())
+                };
+            }
+        },
+    ))?;
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "the same nonzero generic field perturbation vanishes at matched rest",
+        super::simplify(&at_rest)?,
+    )?;
+    crate::debug_tags!(#uv, #integrated, #summary;
+        stage = "native_two_loop_msbar_field_pole", overall_inputs = completed.len(),
+        file.actual_generic_p = %kinetic_sum.expression().to_canonical_string(),
+        file.independent_w2 = %w2.to_canonical_string(),
+        exact_generic_open_matrix = true, mass_trace_used_as_field_oracle = false,
+        auxiliary_scales_substituted = false, renormalized_feynman_gauge = true,
+        fixed_bare_gauge_control_rejected = true, quadratic_control_rejected = true,
+        matched_point_only_control_rejected = true,
+        "Actual weighted native poles match the independent two-loop MS field reference"
     );
 
     // The actual operator/source identities above transfer -O to the same
