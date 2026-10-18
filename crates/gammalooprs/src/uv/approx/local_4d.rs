@@ -11783,3 +11783,7 @@ pub(crate) mod on_shell_tests;
 #[cfg(test)]
 #[path = "on_shell_forest_tests.rs"]
 pub(crate) mod on_shell_forest_tests;
+
+#[cfg(test)]
+#[path = "native_vertex_parent_tests.rs"]
+mod native_vertex_parent_tests;
