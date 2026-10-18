@@ -24,8 +24,8 @@ Current validation records must identify the tested revision, test selection
 and run; exact reconstruction, local limits and integrated renormalization
 remain separate claims.
 
-The owning Indexed FeynKit rebase qualification at the end of this note records
-the current replay. Earlier records retain their stated source and scope.
+The owning Indexed FeynKit rebase qualification and physics continuation at
+the end of this note record the current replay and its qualified scope. Earlier records retain their stated source and scope.
 
 At retained-tensor source `bb4ee859bb121796015db6ba3e4a9faa40089cff`, the
 finite-density case passed in run `a9ef128e-92bc-4870-b449-b0eb9aac73a0`
@@ -2374,8 +2374,9 @@ and to that slow selection, while keeping the tests nonignored. Main runs the
 full core selection and four long integration partitions. This scheduling does
 not alter the paired performance gate: relevant, non-draft, same-repository
 `final-review` PRs and relevant merge-group commits run the existing comparison;
-main pushes skip that comparison, and manual dispatch remains available. The
-trigger and workload policy is maintained in
+the separate `Performance main` workflow measures every main push against the
+previous main SHA, independently of those gates. Manual dispatch remains
+available. The trigger and workload policy is maintained in
 #link("ci.typ")[CI maintenance and measurements].
 
 The physical end-to-end acceptance covers $gamma^* arrow.r t overline(t)$
@@ -2708,3 +2709,149 @@ separate full-main case is retained but was not rerun for this rebase. Public
 complete-forest admission, complete two-loop emitted/R2 matching, the two-loop
 field pole, and the larger scaling and performance matrices remain outstanding.
 
+
+
+=== Physics continuation on the owning stack
+
+The native D11 and D02 Wood regressions retain six histories each: the empty
+history, either overlapping child, the parent, and either child followed by its
+parent. They exclude the incompatible simultaneous children. The four local
+and completed-finite-prefix cases pass in 58.985 seconds. Their 108 actual
+source preparations and 336 denominator occurrences receive exact certificates;
+the completed children retain nonzero pole, finite and positive-epsilon parts.
+Parent operations consume each complete child in the same fresh context, with
+its original frozen frame and coefficient owner. Public mixed-prescription
+admission remains unchanged. These exact construction tests do not replace UV,
+soft, emitted or integrated renormalization checks.
+
+The D09 rational-finalizer proof passes for the bare source and completed OS
+child. It matches full active/frozen domains before comparing the source and
+signed local result, normalizes each term separately, and verifies the actual
+integrated finite carrier through recursion before the mass projection.
+Independent unit-mass and nonzero kernel controls reject wrong local and finite
+mass insertions. Complete native representation slots own cooked index
+admission. The ordinary thirteen-source regression independently checks both
+native open and closing interfaces, logical ordering, inverse transport and
+ranked zeros, rejecting contextless index conversion through the same guard.
+It takes 0.367 seconds without a backend call.
+
+Fresh source `442c9b49` also passes the actual D09 parent-CFF construction
+prefix in 44.325 seconds. Bare and completed-child projection use fresh contexts
+with four and twenty-eight full denominator certificates, respectively. Each
+count equals the actual source-preparation count. The existing canonical
+numerator and immutable selected-assignment certificates run before CFF
+aggregation. The grouped full domains retain their exact frozen kernels.
+The actual finite localizer's ordered call arguments reconstruct its typed
+carrier against that branch's authoritative energy map before finalization.
+The final builder consumes the actual local and integrated operands while
+retaining numerator bodies separately from dispatch roots. These are exact
+construction and transport claims. Emitted source/local mass cancellation and
+complete dimensional/R2 matching are still separate gates.
+
+The inclusive physical acceptance was rerun after the rebase. Its guarded
+retained `8fb7c81b` executable has exactly the current production and runtime
+inputs; only private cfg(test) code/declarations and documentation changed.
+No new NLO executable is claimed.
+The new run passes LO and all nine route/auxiliary-scale measurements in
+2458.497 seconds under the unchanged 7200-second full-main cap. An independent
+420-digit review binds all ten raw results and recomputes the analytic
+reference and all twenty-one comparisons. The largest reference, scale and
+route differences are 1.400, 1.272 and 1.453 standard deviations. The largest
+reported uncertainty is 0.708% of the NLO reference, below the unchanged 5%
+bound. Seeds, sample counts and tolerances are unchanged. This is integrated
+physical acceptance with its prescribed statistical comparison; it establishes
+neither an exact algebraic identity nor an isolated performance ranking.
+
+=== Generic-momentum two-loop field reference
+
+The independent MS field convention uses $a=alpha_s/(4 pi)$,
+$psi_B=sqrt(Z_psi)psi$, and the renormalized Feynman gauge parameter
+$xi_R=1$, with $xi_B=Z_3 xi_R$. Appendix A.18 of
+#link("https://arxiv.org/pdf/1909.00697")[Falcioni--Gardi--Milloy] gives
+$w_2=C_F((C_A+C_F/2)/epsilon^2
++(-17 C_A/4+3 C_F/4+T_F n_f)/epsilon)$.
+For SU(3) and six active flavors this is
+$w_2=44/(9 epsilon^2)-35/(3 epsilon)$.
+The gauge convention is independently fixed by
+#link("https://arxiv.org/pdf/1709.08541")[Chetyrkin et al., section 2].
+Holding the bare gauge at one instead would shift the double pole by
+$4/(3 epsilon^2)$; the reference does not admit that alternative.
+
+The inverse-propagator Lagrangian gives
+$i a^2(w_2 slash(p)-(w_2+K_2)m)$ with $K_2=z_2+w_1 z_1$.
+The separately local OS mass branch owns $-i a^2 K_2 m$.
+Here the signed vacuum term is $-(U_1-U_1O)$. Its integrated pole must be
+$i a^2 w_2(slash(p)-m)$, independently of the produced mass projection. The finite addback remains
+$+"Fin" integral (U_1-U_1O)$ in the convention defined above; its sign is not
+the sign of this pole term.
+The native one-loop source fixes the phase and loop measure with
+$w_1=-C_F/epsilon$. Equation 5.11 of
+#link("https://arxiv.org/pdf/2203.11038v1")[Capatti--Hirschi--Ruijl]
+provides the same local-mass/vacuum-field separation.
+
+The actual-native check reuses each of the twenty-six existing
+integrations, preserves the full generic external momentum, and proves an
+exact affine decomposition before any on-shell specialization. Complete native
+spin/color slots, inverse interface maps and ranked zeros align the actual
+open matrices. Scalar color invariants are evaluated by the existing Idenso
+owner in the declared SU(3) convention. The captured pre-normalization scalar
+regression proves its cancellation for an arbitrary auxiliary logarithm.
+The original expected coefficients and all sensitivity controls are unchanged.
+The full-main test at source `6a895deb` passes in 430.658 seconds. It checks
+the complete generic-p kinetic matrix first, then the independent constant
+$-i a^2 w_2 m I$ and their full sum. Physical mass remains symbolic and no
+auxiliary-scale substitutions enter these comparisons. It retains the
+independent OS mass reference through its finite coefficient. The wrong bare
+gauge convention, simple-pole shift, constant mass shift, matched-point-only
+matrix and quadratic dependence remain rejected; the first four produce actual
+nonzero finite-scalar witnesses rather than scope or budget refusals.
+An independent reader verifies all twenty-six input extractions, their native
+interfaces, 497 full polynomial denominator classes and 104 literal projector
+attachments, then checks the final field and mass references and control
+records. This qualifies the formal-dimensional integrated pole matrix in the
+specified SU(3), six-flavor, fixed-rest-subtraction convention. Finite off-shell,
+emitted dimensional/R2 and public mixed-prescription claims remain separate.
+
+=== Actual D09 source branches and complete finite products
+
+The D09 source-construction extension at `a8ec1ab7` passes in a 46.296-second
+ordinary run. It builds the bare source through the actual direct root and
+final builder. The completed-child source retains its active local sectors
+and actual finite completion separately, with exact recomposition, consumed
+one-loop measure and frozen-frame checks. The finite completion passes through
+the real localizer and the same-key outside-numerator multiplication.
+No analytic backend call is repeated.
+
+Only a cloned projection graph has its external projector replaced by one,
+leaving the original graph and actual operator results unchanged. The parent
+is built in this same open external-matrix view from the already certified
+projected coefficients and actual Integrated object. Before materialization,
+every nonzero-coefficient finite-source monomial must contain its actual
+retained child family and cograph family, with no family hidden in a scalar
+coefficient. Exact residue keys and complete ordered arguments bind both typed
+bodies. Their native tensor product must reconstruct the complete open
+external matrix of that product, with its original spin/color interface,
+under that exact source map.
+The run certifies eight complete products under eight distinct full residue
+keys, although only six literal call-pair monomials are distinct. Identical
+calls therefore do not determine their complete source map. The earlier
+first-monomial prefix remains a separate historical qualification.
+
+These are construction and transport certificates, not an emitted mass
+condition. A subsequent mass projector must act once on each complete product;
+projecting its child and cograph independently would change the operation.
+Full cancellation still requires parent key/domain association and exact
+component-aware transport of compact energies, including the implicit momentum
+dependence of physical on-shell-energy functions. No map is inferred from a
+low-rank numerator image. The source construction retains compact energy and
+surface functions and separate numerator stores. It does not clear denominators
+across a complete sum or resolve the graph numerator catalog.
+
+The complete generic-field test module is byte-identical to its qualified
+`6a895deb` source; these later additions affect only the private D09 consumer.
+All production owners and the NLO inputs remain unchanged. Ordinary cases
+retain the 240-second failure bound, larger cases retain their full-main
+selection, and implementation CI remains disabled. Shared-host correctness
+measurements do not establish a route-performance ranking. Public complete-
+forest admission, complete two-loop emitted/dimensional/R2 matching and the
+larger scaling and performance matrices remain separate gates.
