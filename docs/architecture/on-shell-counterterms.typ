@@ -2612,3 +2612,31 @@ overlap, and all tolerances are unchanged. All ten result files and the exact
 source/binary mapping are retained. The run took 2438.704 seconds under the
 7200-second cap on a shared host; it establishes no route-performance ranking
 or all-angle symbolic soft proof.
+
+=== Primitive emitted-dimensional bridge: next exact gate
+
+The primitive regression combines the exact local spin-four source certificate
+with the same production dimensional scheme addback. Its continuation retains
+$d$-dimensional denominators and angular measure while setting only the already
+contracted spin coefficients to four. After stripping $a C_F$, the finite
+differences obey
+
+$ Delta B=slash(p)-2m, quad Delta O=-m, quad Delta V=slash(p)-m, $
+$ Delta B-Delta O-Delta V=0. $
+
+The actual addback is $+"Fin"[V_d]$. A spin-four addback loses the nonzero open
+field matrix $slash(p)-m$; adding it again as an independent primitive R2 term
+would double count it. The separate mass difference $-m$ is nonzero. The
+regression retains rest, axial and nonaxial subtraction and external velocities,
+two auxiliary masses, a one-sided wrong-angular-average control, and the
+positive-epsilon difference multiplied by a scalar pole. That last control is
+mechanism-only, not a nested-graph certificate.
+
+This extension was qualified on historical source `0b4c6a9c`; its current
+Indexed port has not yet been executed. Exact numerator and complete denominator
+certificates precede CFF aggregation in the existing primitive projection
+consumer. Scalar dispatch roots and retained tensor bodies keep their separate
+normalization owners. The actual D09 finite-child dimensional contribution has
+its own certificate; neither result establishes the complete two-loop emitted
+condition, general off-shell/R2 matching, or public mixed-prescription support.
+
