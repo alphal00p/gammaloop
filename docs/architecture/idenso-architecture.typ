@@ -911,8 +911,11 @@ serialized. These are trusted GammaLoop state files: decode trusts the stored
 metadata without observing the payload again, consistently with Symbolica's Atom
 decoder, which is not safe for untrusted bytes. A fixed eight-byte magic
 (`d9 49 44 45 4e 53 4f 00`) precedes version `1`. Legacy or unknown formats are
-rejected before their bytes can become an Atom allocation length. GammaLoop's
-already lowered standalone evaluator formats are unchanged.
+rejected before their bytes can become an Atom allocation length. Explicit indexed
+slots were introduced in GammaLoop full-state version 21. Other runtime fields
+can require later state versions;
+#link("architecture-current.typ#persistence-compatibility-contract")[GammaLoop's persistence contract]
+specifies the complete layout. Already lowered standalone evaluator formats are unchanged.
 These wire implementations, rewrite settings, symbol
 registries, networks and cooked expressions do not together define an Idenso
 checkpoint format. Reversible cooking stores the
