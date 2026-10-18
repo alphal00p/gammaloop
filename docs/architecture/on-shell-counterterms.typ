@@ -962,6 +962,20 @@ three-route consumer passes in run `1aa340cb-2a30-4350-8c59-ed183990c98e`
 `target/os-feynkit/retained-tensor-os-rebase/oracle-prerequisite/` and
 `target/os-feynkit/retained-tensor-os-rebase/19-native3/`.
 
+The later vertex-prefix checkpoint `01dd0484` retains each certified native
+diagram, graph, child, local and integrated payload and generation setting for
+its next proof. The new ordinary density control uses those same four actual
+attachments (two in D02 and two in D11), with their exact quotient poles,
+source/cograph factors and single remaining outer measure. It closes the
+formal-dimensional mass trace before comparison with the independent SU(3)
+one-loop density. The one-loop integral through epsilon one then fixes the
+finite term after multiplication by the vertex pole. The three source and
+isolated-child controls plus this proper-density control pass together in
+`baf4c286` (2.101 seconds), with all source and binary guards unchanged. This
+is an exact density transfer, not a new two-loop numerical integration or a
+completed parent-operator proof. Evidence is retained under
+`target/os-feynkit/retained-tensor-os-rebase/23-24-vertex-prefix/`.
+
 These source and isolated-child certificates neither admit a mixed-prescription
 parent nor prove the full integrated two-loop OS condition. The mandatory
 nonignored numerical bare reference and its pinned backend/Nix qualification
