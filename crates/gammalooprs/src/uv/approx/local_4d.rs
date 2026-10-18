@@ -19,7 +19,7 @@ use linnet::half_edge::{
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
 };
 use serde::{Deserialize, Serialize};
-use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::IndexedStructure;
 use symbolica::{
     atom::{AtomCore, AtomView},
     prelude::*,
@@ -79,7 +79,7 @@ pub(crate) struct Local4dBranchProvenance {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FourDSector {
-    pub(crate) atom: SymbolicTensor<PartialStructure>,
+    pub(crate) atom: SymbolicTensor<IndexedStructure>,
     /// A nonzero S branch occurred in this contribution's ancestry. Retained
     /// soft coordinates require canonical routing and restrict supported parent
     /// schemes, even after later cancellations. Parent operators act once on `atom`;
@@ -104,7 +104,7 @@ pub(crate) struct FourDSector {
 struct FourDSectors {
     active: Vec<FourDSector>,
     recursive_completion: Vec<FourDSector>,
-    atom: SymbolicTensor<PartialStructure>,
+    atom: SymbolicTensor<IndexedStructure>,
     has_soft_ancestry: bool,
     inherited_loop_edges: Vec<EdgeIndex>,
     provenance_components: Vec<Local4dComponentProvenance>,
@@ -118,7 +118,7 @@ pub(crate) struct Full4dCts(FourDSectors);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct FourDTerm {
-    pub(crate) numerator: SymbolicTensor<PartialStructure>,
+    pub(crate) numerator: SymbolicTensor<IndexedStructure>,
     pub(crate) denominators: Vec<FourDDenominator>,
 }
 
@@ -148,11 +148,11 @@ pub(crate) struct CanonicalUvDenominatorClass {
 
 #[derive(Clone, Debug)]
 pub(crate) struct CanonicalUvTerm {
-    pub(crate) numerator: SymbolicTensor<PartialStructure>,
+    pub(crate) numerator: SymbolicTensor<IndexedStructure>,
     /// Factorized raw numerator witness, used only for the exact projection
     /// certificate and physical-parent diagnostics. Its provenance does not
     /// participate in canonical algebra or occurrence allocation.
-    pub(crate) source_numerator: SymbolicTensor<PartialStructure>,
+    pub(crate) source_numerator: SymbolicTensor<IndexedStructure>,
     pub(crate) powers: BTreeMap<UvDenominatorClassId, usize>,
     /// Physical incidence is independent of algebraic class identity. Equal
     /// buckets retain one witness, never concatenate their denominator lists.
@@ -242,14 +242,13 @@ impl CanonicalUvDenominatorClass {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let polynomial = SymbolicTensor::infer(cooking.try_cook(polynomial.as_view())?)?.contract(
-            ContractSettings {
+        let polynomial = SymbolicTensor::infer_indexed(cooking.try_cook(polynomial.as_view())?)?
+            .contract(ContractSettings {
                 rank_one: false,
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
-            },
-        )?;
+            })?;
         let polynomial = cooking.uncook(polynomial.expression().as_view());
         let polynomial = polynomial.expand();
         let mut residual = false;
@@ -274,14 +273,13 @@ impl CanonicalUvDenominatorClass {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let collapsed = SymbolicTensor::infer(cooking.try_cook(collapsed.as_view())?)?.contract(
-            ContractSettings {
+        let collapsed = SymbolicTensor::infer_indexed(cooking.try_cook(collapsed.as_view())?)?
+            .contract(ContractSettings {
                 rank_one: false,
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
-            },
-        )?;
+            })?;
         let collapsed = cooking.uncook(collapsed.expression().as_view());
         let collapsed = collapsed.expand();
         if residual || collapsed != self.full_expr {
@@ -343,7 +341,7 @@ impl FourDSector {
     }
 
     pub(crate) fn new(
-        atom: SymbolicTensor<PartialStructure>,
+        atom: SymbolicTensor<IndexedStructure>,
         active_components: Vec<(SuBitGraph, SuBitGraph, LoopMomentumBasis)>,
         frozen_lmbs: Vec<LoopMomentumBasis>,
     ) -> Self {
@@ -579,9 +577,9 @@ impl CanonicalUvSector {
     /// typed denominators unwrap only in this proof copy, never in the source.
     pub(crate) fn neutral_numerator(
         &self,
-        atom: &SymbolicTensor<PartialStructure>,
+        atom: &SymbolicTensor<IndexedStructure>,
         graph: &Graph,
-    ) -> Result<SymbolicTensor<PartialStructure>> {
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
         let mut error = None;
         let result = atom.expression().replace_map(|view, _, output| {
             let AtomView::Fun(momentum) = view else {
@@ -721,10 +719,10 @@ impl CanonicalUvSector {
 
     fn normalize_numerator(
         &self,
-        atom: &SymbolicTensor<PartialStructure>,
+        atom: &SymbolicTensor<IndexedStructure>,
         term: &CanonicalUvTerm,
         graph: &Graph,
-    ) -> Result<SymbolicTensor<PartialStructure>> {
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
         let normalize = |view: AtomView<'_>| -> Result<Option<Atom>> {
             let AtomView::Fun(function) = view else {
                 return Ok(None);
@@ -930,10 +928,8 @@ impl FourDSectors {
                 .next()
                 .map(|sector| sector.atom.clone())
                 .unwrap_or_else(|| {
-                    SymbolicTensor::from_normalized_parts(
-                        Atom::Zero,
-                        PartialStructure::from_logical_slots([]),
-                    )
+                    SymbolicTensor::infer_indexed(Atom::Zero)
+                        .expect("literal zero has a scalar indexed interface")
                 }),
         };
         Ok(Self::with_atom(active, recursive_completion, atom))
@@ -942,7 +938,7 @@ impl FourDSectors {
     fn with_atom(
         mut active: Vec<FourDSector>,
         mut recursive_completion: Vec<FourDSector>,
-        atom: SymbolicTensor<PartialStructure>,
+        atom: SymbolicTensor<IndexedStructure>,
     ) -> Self {
         // Preserve contribution history before pruning zero projection payloads.
         let sectors = active.iter().chain(&recursive_completion);
@@ -972,7 +968,7 @@ impl FourDSectors {
         }
     }
 
-    fn active_atom(atom: SymbolicTensor<PartialStructure>) -> Self {
+    fn active_atom(atom: SymbolicTensor<IndexedStructure>) -> Self {
         Self::with_atom(
             vec![FourDSector::new(atom.clone(), Vec::new(), Vec::new())],
             Vec::new(),
@@ -987,17 +983,15 @@ impl FourDSectors {
 
 impl Full4dCts {
     #[cfg(test)]
-    pub(crate) fn atom(&self) -> &SymbolicTensor<PartialStructure> {
+    pub(crate) fn atom(&self) -> &SymbolicTensor<IndexedStructure> {
         &self.0.atom
     }
 
     #[cfg(test)]
     fn root() -> Self {
         Self(FourDSectors::active_atom(
-            SymbolicTensor::from_normalized_parts(
-                Atom::one(),
-                PartialStructure::from_logical_slots([]),
-            ),
+            SymbolicTensor::infer_indexed(Atom::one())
+                .expect("literal one has a scalar indexed interface"),
         ))
     }
 
@@ -1156,7 +1150,7 @@ impl Full4dCts {
 }
 
 impl Local4dCts {
-    pub(crate) fn atom(&self) -> &SymbolicTensor<PartialStructure> {
+    pub(crate) fn atom(&self) -> &SymbolicTensor<IndexedStructure> {
         &self.0.atom
     }
 
@@ -1169,10 +1163,7 @@ impl Local4dCts {
     }
 
     pub(crate) fn from_full_product(factors: impl IntoIterator<Item = Full4dCts>) -> Result<Self> {
-        let mut atom = SymbolicTensor::from_normalized_parts(
-            Atom::one(),
-            PartialStructure::from_logical_slots([]),
-        );
+        let mut atom = SymbolicTensor::infer_indexed(Atom::one())?;
         let mut products = vec![(
             FourDSector::new(atom.clone(), Vec::new(), Vec::new()),
             false,
@@ -1295,7 +1286,7 @@ impl FourDTerm {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         Ok(Self {
-            numerator: SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)
+            numerator: SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view())?)
                 .wrap_err_with(|| {
                     format!("invalid rational-shell numerator fragment `{numerator}`")
                 })?,
@@ -1348,7 +1339,7 @@ impl FourDTerm {
             .collect())
     }
 
-    fn from_tensor(tensor: &SymbolicTensor<PartialStructure>) -> Result<Vec<Self>> {
+    fn from_tensor(tensor: &SymbolicTensor<IndexedStructure>) -> Result<Vec<Self>> {
         if !tensor.expression().contains_symbol(GS.den) {
             return Ok(vec![Self {
                 numerator: tensor.clone(),
@@ -1463,10 +1454,7 @@ impl FourDTerm {
                 let multiplicity = usize::try_from(exponent.unsigned_abs())
                     .map_err(|_| eyre!("4D denominator multiplicity does not fit in memory"))?;
                 Ok(Self {
-                    numerator: SymbolicTensor::from_normalized_parts(
-                        Atom::one(),
-                        PartialStructure::from_logical_slots([]),
-                    ),
+                    numerator: SymbolicTensor::infer_indexed(Atom::one())?,
                     denominators: std::iter::repeat_n(denominator, multiplicity).collect(),
                 })
             }
@@ -1517,14 +1505,13 @@ impl FourDDenominator {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let normalized = SymbolicTensor::infer(cooking.try_cook(normalized.as_view())?)?.contract(
-            ContractSettings {
+        let normalized = SymbolicTensor::infer_indexed(cooking.try_cook(normalized.as_view())?)?
+            .contract(ContractSettings {
                 rank_one: false,
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
-            },
-        )?;
+            })?;
         let normalized = cooking.uncook(normalized.expression().as_view());
         Ok(normalized.expand())
     }
@@ -1562,10 +1549,8 @@ impl FourDDenominator {
 impl Rooted for Local4dCts {
     fn root() -> Self {
         Self(FourDSectors::active_atom(
-            SymbolicTensor::from_normalized_parts(
-                Atom::one(),
-                PartialStructure::from_logical_slots([]),
-            ),
+            SymbolicTensor::infer_indexed(Atom::one())
+                .expect("literal one has a scalar indexed interface"),
         ))
     }
 }
@@ -1930,7 +1915,7 @@ fn grow<S: super::ForestNodeLike>(
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,
-) -> Result<SymbolicTensor<PartialStructure>> {
+) -> Result<SymbolicTensor<IndexedStructure>> {
     let factor = grow_factor(ctx, current, given)?;
     let integrand = finalize(integrand.0.atom.multiply(&factor)?)?;
 
@@ -1943,7 +1928,7 @@ fn grow_factor<S: super::ForestNodeLike>(
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,
-) -> Result<SymbolicTensor<PartialStructure>> {
+) -> Result<SymbolicTensor<IndexedStructure>> {
     let reduced = current.reduced_subgraph(given);
     let graph = ctx.graph;
 
@@ -1964,13 +1949,13 @@ fn grow_factor<S: super::ForestNodeLike>(
         given = %given.log_display(),
     )]
 fn t<S: super::ForestNodeLike>(
-    integrand: &SymbolicTensor<PartialStructure>,
+    integrand: &SymbolicTensor<IndexedStructure>,
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,
     retained_loop_edges: &[EdgeIndex],
     required_prefix_loop_count: usize,
-) -> Result<(SymbolicTensor<PartialStructure>, LoopMomentumBasis, usize)> {
+) -> Result<(SymbolicTensor<IndexedStructure>, LoopMomentumBasis, usize)> {
     let graph = ctx.graph;
     let n_loops = graph.n_loops(current.subgraph());
 
@@ -2291,12 +2276,12 @@ fn internal_expansion_carriers(
 }
 
 fn t_raw<S: ForestNodeLike>(
-    integrand: &SymbolicTensor<PartialStructure>,
+    integrand: &SymbolicTensor<IndexedStructure>,
     ctx: &UVCtx<'_>,
     current: &S,
     _given: &S,
     lmb: &LoopMomentumBasis,
-) -> Result<SymbolicTensor<PartialStructure>> {
+) -> Result<SymbolicTensor<IndexedStructure>> {
     let graph = ctx.graph;
     let active_loop_edges = lmb
         .loop_edges
@@ -2356,12 +2341,12 @@ fn t_raw<S: ForestNodeLike>(
 }
 
 fn tilde_t_raw<S: ForestNodeLike>(
-    integrand: &SymbolicTensor<PartialStructure>,
+    integrand: &SymbolicTensor<IndexedStructure>,
     ctx: &UVCtx<'_>,
     current: &S,
     _given: &S,
     lmb: &LoopMomentumBasis,
-) -> Result<SymbolicTensor<PartialStructure>> {
+) -> Result<SymbolicTensor<IndexedStructure>> {
     // The soft Taylor operator acts on the component's external momenta only;
     // physical masses and the MUV scales remain untouched.
     // Canonical component bases are padded with unrelated graph externals.
@@ -2379,9 +2364,9 @@ fn tilde_t_raw<S: ForestNodeLike>(
 }
 
 fn tilde_taylor(
-    rescaled: SymbolicTensor<PartialStructure>,
+    rescaled: SymbolicTensor<IndexedStructure>,
     dod: i32,
-) -> Result<SymbolicTensor<PartialStructure>> {
+) -> Result<SymbolicTensor<IndexedStructure>> {
     // For a logarithmic component, \widetilde T_{d-1}=\widetilde T_{-1}=0.
     if dod == 0 {
         return Ok(rescaled.with_algebra_result(Atom::Zero)?);
@@ -2405,23 +2390,23 @@ fn tilde_taylor(
 
 #[cfg(test)]
 fn hat_t_raw<S: ForestNodeLike>(
-    integrand: &SymbolicTensor<PartialStructure>,
+    integrand: &SymbolicTensor<IndexedStructure>,
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,
     lmb: &LoopMomentumBasis,
-) -> Result<SymbolicTensor<PartialStructure>> {
+) -> Result<SymbolicTensor<IndexedStructure>> {
     Ok(hat_t_raw_with_provenance(integrand, ctx, current, given, lmb)?.0)
 }
 
 fn hat_t_raw_with_provenance<S: ForestNodeLike>(
-    completed: &SymbolicTensor<PartialStructure>,
+    completed: &SymbolicTensor<IndexedStructure>,
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,
     lmb: &LoopMomentumBasis,
 ) -> Result<(
-    SymbolicTensor<PartialStructure>,
+    SymbolicTensor<IndexedStructure>,
     Vec<Local4dBranchProvenance>,
 )> {
     // Apply U once to the completed atom. Soft ancestry is explicit metadata,
@@ -2500,7 +2485,7 @@ fn hat_t_raw_with_provenance<S: ForestNodeLike>(
     ))
 }
 
-fn finalize(raw: SymbolicTensor<PartialStructure>) -> Result<SymbolicTensor<PartialStructure>> {
+fn finalize(raw: SymbolicTensor<IndexedStructure>) -> Result<SymbolicTensor<IndexedStructure>> {
     debug_tags!(#uv, #local, #trace;
         stage = "local_4d_finalize_input",
         file.raw = %raw.expression().to_plain_string(),
@@ -5617,7 +5602,7 @@ mod tests {
             crate::utils::vakint()?,
             &vakint_settings,
         );
-        let integrate_branch = |raw: SymbolicTensor<PartialStructure>| -> Result<IntegratedCts> {
+        let integrate_branch = |raw: SymbolicTensor<IndexedStructure>| -> Result<IntegratedCts> {
             let mut sector = local.active_sectors()[0].clone();
             sector.atom = -finalize(raw).unwrap();
             integrator.run(
@@ -6204,16 +6189,17 @@ mod tests {
         // intact, including the diagnostic copy.
         let normalized = normalized.expand_num().collect_compact_factors();
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let reduced = SymbolicTensor::infer(cooking.try_cook(normalized.as_view()).unwrap())
-            .unwrap()
-            .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                gamma: Some(GammaSimplifySettings::canonical()),
-                color: Some(ColorSimplifySettings::default()),
-                ..Default::default()
-            })
-            .unwrap()
-            .to_dots()
-            .unwrap();
+        let reduced =
+            SymbolicTensor::infer_indexed(cooking.try_cook(normalized.as_view()).unwrap())
+                .unwrap()
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::canonical()),
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .to_dots()
+                .unwrap();
         // Coefficient-zero testing deliberately does not reduce identities.
         // Compare only after the shared owner has closed metrics and equivalent
         // Dirac/color words, including contractions exposed inside tensor sums.
@@ -6392,7 +6378,7 @@ mod tests {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
+        let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(atom.as_view()).unwrap())
             .unwrap()
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
@@ -6442,7 +6428,7 @@ mod tests {
         // materialization indices. Close them before combining coefficient
         // products; only the original graph boundary ports may be shared.
         let coefficient = if dependent_word {
-            SymbolicTensor::infer(coefficient)
+            SymbolicTensor::infer_indexed(coefficient)
                 .unwrap()
                 .contract(Default::default())
                 .unwrap()
@@ -8536,7 +8522,6 @@ mod tests {
     fn rational_shell_retains_source_ports_and_positive_denominator_factors() -> Result<()> {
         use spenso::structure::{
             abstract_index::AbstractIndex,
-            partial::PartialIndex,
             representation::{Euclidean, Minkowski, RepName},
             slot::IsAbstractSlot,
         };
@@ -8555,12 +8540,21 @@ mod tests {
         let head = spenso::tensor_symbol!("uv_typed_shell::matrix");
         let mink = Minkowski {}.new_rep(4).to_lib();
         let euc = Euclidean {}.new_rep(2).to_lib();
-        for ports in [
-            vec![mink.to_symbolic([]), euc.to_symbolic([])],
-            vec![mink.to_symbolic([]), mink.to_symbolic([])],
-        ] {
+        for representations in [[mink, euc], [mink, mink]] {
+            let anonymous = FunctionBuilder::new(head)
+                .add_args(representations.map(|rep| rep.to_symbolic([])))
+                .finish()
+                * &spectator;
+            assert!(SymbolicTensor::infer_indexed(&anonymous * &shell).is_err());
+            let ports = representations
+                .into_iter()
+                .zip([76123, 76129])
+                .map(|(rep, index)| {
+                    rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                        .to_atom()
+                });
             let numerator = FunctionBuilder::new(head).add_args(ports).finish() * &spectator;
-            let source = SymbolicTensor::infer(&numerator * &shell)?;
+            let source = SymbolicTensor::infer_indexed(&numerator * &shell)?;
             assert_eq!(source.rank(), 2);
             let terms = FourDTerm::from_tensor(&source)?;
             assert_eq!(terms.len(), 2);
@@ -8588,11 +8582,8 @@ mod tests {
         let index = AbstractIndex::Normal(76127);
         let ports = [mink, euc].map(|rep| rep.slot::<AbstractIndex, _>(index).to_atom());
         let numerator = FunctionBuilder::new(head).add_args(ports).finish() * spectator;
-        let declared = PartialStructure::from_logical_slots(
-            [euc, mink].map(|rep| rep.slot(PartialIndex::Explicit(index))),
-        );
-        let source =
-            SymbolicTensor::from_declared_parts(&numerator / denominator.pow(2), declared)?;
+        let declared = IndexedStructure::from_iter([euc, mink].map(|rep| rep.slot(index)));
+        let source = SymbolicTensor::from_indexed_parts(&numerator / denominator.pow(2), declared)?;
         let terms = FourDTerm::from_tensor(&source)?;
         assert_eq!(terms.len(), 1);
         assert_eq!(terms[0].numerator.expression(), &numerator);
@@ -9218,7 +9209,7 @@ mod tests {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let simplified_pair = SymbolicTensor::infer(cooking.try_cook(pair.as_view())?)?
+        let simplified_pair = SymbolicTensor::infer_indexed(cooking.try_cook(pair.as_view())?)?
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),
                 epsilon: true,
@@ -9571,7 +9562,7 @@ mod tests {
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let rescaled = SymbolicTensor::infer(cooking.try_cook(rescaled.as_view())?)?
+            let rescaled = SymbolicTensor::infer_indexed(cooking.try_cook(rescaled.as_view())?)?
                 .contract(ContractSettings {
                     collect_chains: false,
                     collect_traces: false,
@@ -9784,7 +9775,7 @@ mod tests {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let expanded = SymbolicTensor::infer(cooking.try_cook(expanded.as_view())?)?
+        let expanded = SymbolicTensor::infer_indexed(cooking.try_cook(expanded.as_view())?)?
             .contract(ContractSettings {
                 collect_chains: false,
                 collect_traces: false,
@@ -10010,7 +10001,7 @@ mod tests {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let scalar_series_oracle =
-            SymbolicTensor::infer(cooking.try_cook(scalar_series_oracle.as_view())?)?
+            SymbolicTensor::infer_indexed(cooking.try_cook(scalar_series_oracle.as_view())?)?
                 .contract(ContractSettings {
                     collect_chains: false,
                     collect_traces: false,
@@ -10104,13 +10095,14 @@ mod tests {
             "production T must retain seven natural topologies with fixed e1 rank four and only derivative-local rank increases",
         );
 
-        let normalized_numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?
-            .contract(ContractSettings {
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?
-            .to_dots()?;
+        let normalized_numerator =
+            SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view())?)?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .to_dots()?;
         let normalized_numerator = cooking.uncook(normalized_numerator.expression().as_view());
         let expansion_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
         for (position, owner) in owners.into_iter().enumerate() {
@@ -10260,7 +10252,7 @@ mod tests {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let independent = SymbolicTensor::infer(cooking.try_cook(independent.as_view())?)?
+        let independent = SymbolicTensor::infer_indexed(cooking.try_cook(independent.as_view())?)?
             .contract(ContractSettings {
                 collect_chains: false,
                 collect_traces: false,
@@ -10746,23 +10738,24 @@ mod tests {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let simplify_color = |expression: &Atom| -> Result<Atom> {
-            let simplified = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
-                .simplify_algebra(&idenso::tensor::AlgebraSettings {
-                    color: Some(ColorSimplifySettings::default()),
-                    ..Default::default()
-                })?
-                .contract(idenso::tensor::ContractSettings {
-                    collect_chains: false,
-                    collect_traces: false,
-                    ..Default::default()
-                })?;
+            let simplified =
+                SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view())?)?
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                        color: Some(ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })?
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?;
             Ok(cooking.uncook(simplified.expression().as_view()))
         };
         let late = simplify_color(&raw_full)?;
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let late = SymbolicTensor::infer(cooking.try_cook(late.as_view())?)?.contract(
+        let late = SymbolicTensor::infer_indexed(cooking.try_cook(late.as_view())?)?.contract(
             ContractSettings {
                 rank_one: false,
                 collect_chains: false,

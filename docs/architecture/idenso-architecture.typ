@@ -75,14 +75,39 @@ error translation, and presentation metadata. `PartialStructure` does not preten
 the canonical-storage `TensorStructure` contract.
 
 FeynKit retains this carrier through instantiated graph fragments, diagram
-numerators, projectors, amplitudes and tensor-reduction results. GammaLoop retains
-it through runtime graph fragments, numerator states, UV sectors and shared
-numerator definitions. Model recipes and genuinely scalar coefficients remain
+numerators, projectors, amplitudes and tensor-reduction results. GammaLoop uses
+`SymbolicTensor<IndexedStructure>` for runtime graph fragments, numerator states,
+UV sectors and shared numerator definitions. `IndexedStructure` is
+`Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>>`: it retains logical
+axis order while requiring explicit public indices. Bare `OrderedStructure`
+alone would discard the outer layout needed by ranked zeros and component axes.
+Model recipes and genuinely scalar coefficients remain
 Atoms. Borrowing `expression()` for
 a scalar algorithm leaves the source interface available; rebuilding an unrelated
 tensor from the returned Atom would lose that interface and its reduction facts.
 Mathematical equality alone cannot decide whether an old shared carrier may be
 reused: `same_reduction_state` also compares its validation and completion state.
+
+`try_into_indexed` checks an unvalidated carrier before converting its interface,
+rejects unresolved public ports (including scoped open indices), and transfers
+its payload, operation flags and proof handles without allocating indices or
+re-sorting canonical slots. Closed scalar shorthand remains valid. New source
+values use `infer_indexed`; declared indexed interfaces, including ranked zeros,
+use `from_indexed_parts`. Both constructors retain the shared validation rules.
+Use receiver syntax for shared methods such as `tensor.multiply(...)`.
+Unqualified associated-call syntax can be ambiguous between the indexed and
+partial specializations; static operations require the explicit structure type.
+
+Indexed algebra methods use the existing Idenso engine through an internal
+metadata projection. They do not export, decode or re-infer an established
+payload. Borrowed calls copy rank-sized slot metadata and immutable proof handles;
+the conversion is not a promised performance optimization. A result with an
+unresolved public interface is rejected instead of silently materialized.
+Native FeynKit export uses the standard indexed-to-partial `From` conversion to
+transfer the same tensor and proofs into its more general interface. Coefficient
+listing remains a partial-engine API because selected subexpressions can have
+unresolved ports even when the complete input is scalar; independent diagnostic
+oracles may use it without changing GammaLoop's runtime storage contract.
 
 External declared interfaces enter through `from_declared_parts`, which checks
 the payload against the logical slots once. Bincode stores the payload, logical
@@ -301,6 +326,10 @@ for component coordinates and shadow axes; matching only the port multiset does
 not preserve logical axis order. A ranked zero becomes an empty sparse tensor
 with its original ports. Concrete components and contraction execution remain
 Spenso responsibilities.
+
+The indexed `into_network` entry point consumes the same retained carrier and
+uses this handoff with an already explicit public interface. Its logical layout,
+ranked-zero handling and index-decoding checks are unchanged.
 
 The Atom-like API has deliberate checked boundaries and some ergonomic gaps.
 Symbolica seals `AtomCore`, preventing a downstream implementation on this
@@ -564,9 +593,13 @@ initialization; its `python_stubgen` feature adds metadata for the unified Spens
 `reference-cases` exposes the otherwise test-only curated identity cases.
 
 Binary encoding is always derived for Idenso's zero-sized representation marker types.
-The optional `bincode` implementation for `SymbolicTensor<PartialStructure>`
-reconstructs and validates its payload, logical slots and operation flags using
-the caller's state map. That wire implementation, rewrite settings, symbol
+The optional `bincode` implementations for partial and indexed symbolic tensors
+reconstruct and validate their payloads, logical slots and operation flags using
+the caller's state map. Indexed archives encode explicit slots and reject
+unresolved or mismatched interfaces on load; planner and proof caches are not
+serialized. GammaLoop's full-state format changes to version 21 for this slot
+layout, while its already lowered standalone evaluator formats are unchanged.
+These wire implementations, rewrite settings, symbol
 registries, networks and cooked expressions do not together define an Idenso
 checkpoint format. Reversible cooking stores the
 source atom in Symbolica symbol user data and derives a stable-looking hash name, but recovery

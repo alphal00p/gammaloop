@@ -4,7 +4,7 @@ use color_eyre::Result;
 use eyre::eyre;
 use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::IndexedStructure;
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
@@ -296,7 +296,7 @@ impl<'a> Direct3dApproximation<'a> {
     /// its branch and therefore governs every later factor in that branch.
     fn localize_integrated<S: ForestNodeLike>(
         &mut self,
-        expr: &SymbolicTensor<PartialStructure>,
+        expr: &SymbolicTensor<IndexedStructure>,
         integrated_node: &S,
     ) -> Result<(DirectResidueBranches, Integrands)> {
         let FrozenActiveCt {
@@ -452,7 +452,7 @@ impl<'a> Direct3dApproximation<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn run_integrated<S: ForestNodeLike, I: ForestNodeLike, M: ForestNodeLike>(
         &mut self,
-        finite_counterterms: &[(&SymbolicTensor<PartialStructure>, &I)],
+        finite_counterterms: &[(&SymbolicTensor<IndexedStructure>, &I)],
         integrated_node: &I,
         current: &S,
         given: &S,
@@ -463,7 +463,7 @@ impl<'a> Direct3dApproximation<'a> {
         // Equal masses in disjoint integrated prefixes must remain distinct
         // until an enclosing operation contains their respective components.
         let finite_counterterm = finite_counterterms.iter().try_fold(
-            SymbolicTensor::infer(Atom::one())?,
+            SymbolicTensor::infer_indexed(Atom::one())?,
             |product, (coefficient, component)| -> Result<_> {
                 let mass_scope =
                     function!(*LOCAL_3D_MASS_SCOPE, usize::from(component.lmb_id()) as i64);

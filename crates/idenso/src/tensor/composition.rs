@@ -1210,7 +1210,7 @@ pub(crate) fn rewrite_interface_ports(
         state.indices = Some(
             indices
                 .cloned()
-                .unwrap_or_else(|| SymbolicTensor::reserved_dummies([value])),
+                .unwrap_or_else(|| SymbolicTensor::<PartialStructure>::reserved_dummies([value])),
         );
     }
     // Identity rewrites still walk every summand, but need no regrouping proof.
@@ -3138,7 +3138,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let result = factors[1..].iter().fold(factors[0].clone(), |left, right| {
-            SymbolicTensor::multiply(&left, right).unwrap()
+            left.multiply(right).unwrap()
         });
         let expected = factors
             .iter()
@@ -3179,7 +3179,7 @@ mod tests {
                 &right_ports,
                 &right_ports,
             );
-            let result = SymbolicTensor::multiply(&left, &right).unwrap();
+            let result = left.multiply(&right).unwrap();
             let expected = if last == 0 {
                 Vec::new()
             } else {
@@ -3192,7 +3192,7 @@ mod tests {
                 .unwrap();
             assert_eq!(network.graph.dangling_indices().len(), expected.len());
             let zero = SymbolicTensor::new(Atom::Zero, left.structure.clone());
-            let zero_result = SymbolicTensor::multiply(&zero, &right).unwrap();
+            let zero_result = zero.multiply(&right).unwrap();
             assert!(zero_result.expression.as_view().is_zero());
             assert_eq!(zero_result.structure.logical_slots(), expected);
         }
@@ -3218,7 +3218,7 @@ mod tests {
                 &right_ports,
                 &right_ports,
             );
-            let result = SymbolicTensor::multiply(&left, &right).unwrap();
+            let result = left.multiply(&right).unwrap();
             assert!(result.is_scalar());
             assert!(
                 result
@@ -3250,7 +3250,7 @@ mod tests {
             &right_ports,
             &right_ports,
         );
-        let result = SymbolicTensor::multiply(&left, &right).unwrap();
+        let result = left.multiply(&right).unwrap();
         assert!(result.is_scalar());
         assert!(
             result
@@ -3446,7 +3446,7 @@ mod tests {
         ];
         let left = tensor("unique_open_left", &reps);
         let right = tensor("unique_open_right", &[reps[2], reps[0], reps[1]]);
-        let result = SymbolicTensor::multiply(&left, &right).unwrap();
+        let result = left.multiply(&right).unwrap();
         assert!(result.is_scalar());
         assert!(
             result
@@ -3477,7 +3477,7 @@ mod tests {
             &ports,
         );
         assert!(
-            matches!(SymbolicTensor::multiply(&left, &right), Err(TensorCompositionError::Ambiguous(pairs)) if pairs.len() == 4)
+            matches!(left.multiply(&right), Err(TensorCompositionError::Ambiguous(pairs)) if pairs.len() == 4)
         );
     }
 
@@ -3486,7 +3486,7 @@ mod tests {
         let reps = [rep(), rep(), Minkowski {}.new_rep(4).cast()];
         let left = tensor("open_spectator_matrix_left", &reps);
         let right = tensor("open_spectator_matrix_right", &reps);
-        let result = SymbolicTensor::multiply(&left, &right).unwrap();
+        let result = left.multiply(&right).unwrap();
         assert_eq!(result.rank(), 4);
         assert!(
             matches!(result.expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.chain)
@@ -3585,7 +3585,7 @@ mod tests {
     fn rank_one_product_uses_dot() {
         let left = vector("rank_one_product_left", rep().slot(PartialIndex::open(0)));
         let right = vector("rank_one_product_right", rep().slot(PartialIndex::open(0)));
-        let result = SymbolicTensor::multiply(&left, &right).unwrap();
+        let result = left.multiply(&right).unwrap();
 
         assert!(result.is_scalar());
         assert!(
@@ -3632,7 +3632,7 @@ mod tests {
         let dual = base.dual();
         let left = vector("dual_dot_left", base.slot(PartialIndex::open(0)));
         let right = vector("dual_dot_right", dual.slot(PartialIndex::open(0)));
-        let result = SymbolicTensor::multiply(&left, &right).unwrap();
+        let result = left.multiply(&right).unwrap();
 
         assert!(
             matches!(result.expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.dot)
@@ -3655,8 +3655,8 @@ mod tests {
         let first = tensor("first", &[rep(), rep()]);
         let second = tensor("second", &[rep(), rep()]);
         let third = tensor("third", &[rep(), rep()]);
-        let chain = SymbolicTensor::multiply(&first, &second).unwrap();
-        let chain = SymbolicTensor::multiply(&chain, &third).unwrap();
+        let chain = first.multiply(&second).unwrap();
+        let chain = chain.multiply(&third).unwrap();
 
         let AtomView::Fun(fun) = chain.expression.as_view() else {
             panic!("expected a chain")
@@ -3671,7 +3671,7 @@ mod tests {
         let first = tensor("wrapped_chain_first", &[rep(), rep()]);
         let second = tensor("wrapped_chain_second", &[rep(), rep()]);
         let third = tensor("wrapped_chain_third", &[rep(), rep()]);
-        let chain = SymbolicTensor::multiply(&first, &second).unwrap();
+        let chain = first.multiply(&second).unwrap();
         let scalar = Atom::var(symbolica::symbol!("wrapped_chain_scalar"));
         let broadcast = FunctionBuilder::new(spenso::broadcast_symbol!("wrapped_chain_broadcast"))
             .add_arg(&chain.expression)
@@ -3690,10 +3690,10 @@ mod tests {
                 })
             );
 
-            let product = SymbolicTensor::multiply(&wrapped, &third);
+            let product = wrapped.multiply(&third);
             let traced = SymbolicTensor::trace_unique(&wrapped);
             if can_extend {
-                let expected = SymbolicTensor::multiply(&chain, &third).unwrap();
+                let expected = chain.multiply(&third).unwrap();
                 assert_eq!(
                     product.unwrap().expression,
                     scalar.clone() * expected.expression
@@ -3769,7 +3769,7 @@ mod tests {
             &right_ports,
         );
 
-        let result = SymbolicTensor::multiply(&left, &right).unwrap();
+        let result = left.multiply(&right).unwrap();
 
         assert_eq!(result.rank(), 2);
         assert!(
@@ -3873,7 +3873,7 @@ mod tests {
     fn multiple_compatible_spectators_are_ambiguous() {
         let left = tensor("ambiguous_spectator_left", &[rep(), rep(), rep()]);
         let right = tensor("ambiguous_spectator_right", &[rep()]);
-        let error = SymbolicTensor::multiply(&left, &right).unwrap_err();
+        let error = left.multiply(&right).unwrap_err();
 
         assert!(
             matches!(error, TensorCompositionError::Ambiguous(candidates) if candidates.len() == 3)
@@ -4860,7 +4860,7 @@ mod tests {
     fn trace_closes_chain_in_canonical_form() {
         let first = tensor("first", &[rep(), rep()]);
         let second = tensor("second", &[rep(), rep()]);
-        let chain = SymbolicTensor::multiply(&first, &second).unwrap();
+        let chain = first.multiply(&second).unwrap();
         let traced = SymbolicTensor::trace_unique(&chain).unwrap();
 
         assert!(traced.is_scalar());

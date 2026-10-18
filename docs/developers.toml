@@ -50,7 +50,8 @@ anchor = "load_state_manifest(&save_path)?"
 # the documented save/load behavior; exact physical and reference acceptance pass.
 # Reviewed 2026-10-17: The architecture records state version 19 for retained tensor payloads, checked symbol-remapped loading, and unchanged standalone scalar evaluator versions.
 # Reviewed 2026-10-17: Full state version 20 retains global numerator/projector interfaces in addition to version19 runtime tensors; standalone evaluator formats remain unchanged.
-digest = "cc4e9e814602593d69aa5e36d2cb8cc0dbf1f532"
+# Reviewed 2026-10-18: Full state 21 stores explicit indexed tensor slots and rejects unresolved runtime ports; architecture-current records regeneration of earlier full states and unchanged standalone formats.
+digest = "5113940a12e8bac5ec042c59db01bd0ecfb05ef0"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -363,7 +364,8 @@ anchor = "impl UVOrchestrator {"
 # Reviewed 2026-10-15: The UV orchestrator retains canonical model access and complete
 # generation settings for medium-dependent forest selection.
 # Reviewed 2026-10-16: Only comparison fixtures changed: shared normalization contracts dummy charts; exact equivalence and retained scalar factors remain asserted. UV ownership is unchanged.
-digest = "e3d71a9ec1fe5eac2f07d19909ceb55cab05b074"
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+digest = "19e0c07de61017d01b36bfda24f60e48d4b17bfc"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"
@@ -391,7 +393,8 @@ end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
 # Reviewed 2026-10-17: The UV note records retained tensor bodies through symbolic preparation and explicit Vakint/Laurent interchange boundaries; additional normalization is checked as scalar.
 # Reviewed 2026-10-17: Native AbstractIndex materialization removes the decode/recook detour while retaining checked projected interfaces and strict residual/multiplicity guards.
 # Reviewed 2026-10-17: Completed pole and signed finite projections retain their source interface; native projected cleanup and backend restoration preserve ports and ranked zeros.
-digest = "29051ba367ad602449730b06c8adb14b552b6b19"
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+digest = "953e336e1823f0eec037de9b5c54262ad3526815"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
@@ -441,7 +444,8 @@ end_anchor = "    fn series_preserving_factors(\n        &self,\n        variabl
 # Reviewed 2026-10-16: Numeric-content normalization delegates to the shared Spenso collector; retained functions, powers, guards and numerator-family boundaries are unchanged.
 # Reviewed 2026-10-16: Scalar scopes bypass repeated tensor scans; empty positive-power catalogs bypass numeric-content work. Original guards, power ownership, strict-size bounds and all 18 replay expressions are unchanged.
 # Guard-scan review: without guards, numerator families or tensor-bearing inverses, the occurrence-local predicate is identically false. Skipping its traversal preserves every factor and all 18 replay expressions.
-digest = "d767adc42e482d3a9c75893042c5194ffcdf5311"
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+digest = "786808befbd6d68f493db1aeb4ee7e1e8f92b710"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/overlap_numerators.rs"
@@ -464,7 +468,8 @@ end_anchor = "\n#[cfg(test)]"
 # opaque spectators, strict size descent and all algebra budgets are unchanged.
 # Native-component zero/nonzero controls and the complete three-loop identity
 # certify this selection repair without changing production normalization.
-digest = "2dcea1ae7c8673f7c2ba8ff8f5f4a200838eb434"
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+digest = "5422656f0c564e911f364e3c37da799493d519fc"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs"
@@ -477,7 +482,8 @@ anchor = "impl Localizer<'_> {"
 # Reviewed 2026-10-17: Localized integrated coefficients retain typed shared bodies. Scalar carrier dispatch and the documented separation from the cograph remain unchanged.
 # Reviewed 2026-10-17: Integrated pole/finite tensors reach localization directly; typed composition owns the complete CFF capacity input and finite-body mapping.
 # Reviewed 2026-10-17: The localizer consumes retained pole/finite tensor projections; scalar dispatch does not erase the coefficient body interface.
-digest = "b71a0049900250e5c9a23ccc8112af32961c269d"
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+digest = "4bf2b6847adf455c97cad008ed8076214f184431"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -669,7 +675,8 @@ anchor = "pub trait TensorStructure {"
 # Reviewed 2026-10-15: Checked slot access and representation metadata enforce the
 # existing logical-interface contract. Symbolic unresolved slots and finite component
 # execution remain distinct.
-digest = "c324b7b72073391cbd6d4d5f97dd7db31b4ff320"
+# Reviewed 2026-10-18: The Spenso note documents IndexedStructure, strict partial-interface conversion and exact layout-preserving metadata transport; the partial positional interface and canonical-storage trait remain distinct.
+digest = "811c525ab9896dcd834ad30f27e14b84e65ec08a"
 
 [[section.note.scope]]
 path = "crates/spenso/src/tensors/data.rs"
@@ -816,7 +823,8 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # storage and checked interfaces.
 # Reviewed 2026-10-16: Symbolic TensorFromExpression retains the canonical source layout; reviewed against the Idenso symbolic-target and Spenso realization descriptions.
 # Reviewed 2026-10-17: The Idenso note records retained reduction state, declared-interface persistence, consuming component handoff and its logical layout.
-digest = "ffa0ab2761d1963df2b783ddd8aa97a1a2e1dcb7"
+# Reviewed 2026-10-18: The Idenso note documents indexed admission and checked methods, proof-preserving native interoperability, component lowering and explicit-slot archives; both interfaces share one algebra engine.
+digest = "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/inference.rs"
@@ -1521,7 +1529,8 @@ anchor = "fn preprocess_numerator_families<A: AtomCore>("
 # Reviewed 2026-10-17: The readiness note distinguishes previous qualified timings from the pending typed migration, including logical component layouts, retained zero-family interfaces, and separately timed raw-root admission.
 # Reviewed 2026-10-17: Scalar-argument finite dots lower after family shadows, before component parsing, with admission and scalar-component timers recorded separately.
 # Reviewed 2026-10-17: The scalar invariant rewrite with algebra disabled preserves the declared tensor interface via the checked finisher; reversed-axis nonzero and ranked-zero controls are retained.
-digest = "f4dccef6c82c2a3ac6dc2aaebe4bbcced04ed471"
+# Reviewed 2026-10-18: The readiness record separates the indexed continuation from prior qualification and records strict runtime interfaces, preserved component layouts, API limitations and pending performance measurements.
+digest = "3b507cbf49922826dc7426ae7fcfa75e95c43aed"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"

@@ -1185,7 +1185,9 @@ impl<'settings> DiracSimplifier<'settings> {
         // Compare vector bodies at one fresh external port so repeated routed
         // momenta can use the recurrence's slash-square and p/q/p identities.
         // The shared interface rewriter retains metadata and internal scopes.
-        let common_index = SymbolicTensor::reserved_dummies([selected, coefficient]).fresh_index();
+        let common_index =
+            SymbolicTensor::<PartialStructure>::reserved_dummies([selected, coefficient])
+                .fresh_index();
         let mut arguments = Vec::with_capacity(word.indices.len());
         for &argument in &word.indices {
             let key = if let Some(&(_, position, port)) = bindings

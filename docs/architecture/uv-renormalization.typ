@@ -19,14 +19,20 @@ records rather than in the current architecture.
 == Symbolic values and backend boundaries
 <symbolic-values-and-backend-boundaries>
 Runtime edge and vertex numerators enter UV construction as
-`SymbolicTensor<PartialStructure>`. `FourDSector::atom`, aggregate local-4D
+`SymbolicTensor<IndexedStructure>`. `FourDSector::atom`, aggregate local-4D
 values, `FourDTerm::numerator` and canonical projection numerators retain the
 same carrier. Denominator classes, source incidence and momentum provenance
 remain separate ownership data. Typed addition and multiplication preserve
 logical ports and the rank of zero results.
 
+`IndexedStructure` retains canonical storage and the declared logical axis order
+with an explicit abstract index on every free port. Admission rejects unresolved
+ports, including scoped unresolved indices, instead of allocating labels.
+Closed compact dots and chains remain valid; indexed external interfaces do not
+require expanding internal tensor notation or fixing the Lorentz dimension.
+
 Direct-3D `Integrands` keeps an Atom coefficient program beside shared
-`FnMapEntry<SymbolicTensor<PartialStructure>>` definitions. The program's
+`FnMapEntry<SymbolicTensor<IndexedStructure>>` definitions. The program's
 numerator-family calls stand for those tensors; treating their opaque syntax
 as evidence of a scalar interface would erase that distinction. Root
 prefactors, markers and scalar energy substitutions remain separate from body
@@ -58,10 +64,10 @@ would require an upstream Symbolica change.
 
 The rewriting APIs distinguish scalar algebra (`with_algebra_result`), checked
 interface-preserving substitutions (`with_checked_expression`) and a genuinely
-changed interface (`with_transformed_expression`). Matching ranks alone cannot
-certify the identity of repeated anonymous ports. Custom tensor-valued heads
-must declare their tensor semantics in addition to Symbolica linearity. Shared
-definitions reuse their Arc only when both value and `same_reduction_state`
+changed interface (`with_transformed_expression`). Indexed results must retain
+explicit ports; matching ranks alone cannot certify their identities. Custom
+tensor-valued heads must declare their tensor semantics in addition to Symbolica
+linearity. Shared definitions reuse their Arc only when both value and `same_reduction_state`
 agree: a no-op contraction can establish a new completion certificate without
 changing the expression. Typed stage handoffs keep those facts instead of
 exporting and admitting the expression again. Timing evidence belongs in the

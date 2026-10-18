@@ -483,7 +483,7 @@ mod tests {
                 let cooking = CookSettings::indices()
                     .with_mode(CookMode::ReversibleEncoding)
                     .with_representation_payloads(true, true);
-                let contracted = SymbolicTensor::infer(
+                let contracted = SymbolicTensor::infer_indexed(
                     cooking.try_cook(expression.expression().as_view()).unwrap(),
                 )
                 .unwrap()

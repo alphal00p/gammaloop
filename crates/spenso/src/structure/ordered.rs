@@ -68,6 +68,67 @@ impl<R: PartialEq + RepName, Aind: PartialEq> PartialEq for OrderedStructure<R, 
 }
 impl<R: Eq + RepName, Aind: Eq> Eq for OrderedStructure<R, Aind> {}
 
+impl super::IndexedStructure {
+    /// Return the explicitly indexed slots in their declared logical order.
+    pub fn logical_slots(&self) -> Vec<Slot<LibraryRep, AbstractIndex>> {
+        self.layout()
+            .canonical_to_logical(&self.canonical().external_structure())
+    }
+
+    /// Project index metadata to the partial interface without changing storage order.
+    /// This neither allocates indices nor rewrites any symbolic payload.
+    pub fn into_partial(self) -> super::partial::PartialStructure {
+        self.map_canonical(|structure| OrderedStructure {
+            structure: structure
+                .structure
+                .into_iter()
+                .map(|slot| {
+                    slot.rep()
+                        .slot(super::partial::PartialIndex::Explicit(slot.aind))
+                })
+                .collect(),
+            dual_start: structure.dual_start,
+            base_start: structure.base_start,
+        })
+    }
+}
+
+impl TryFrom<super::partial::PartialStructure> for super::IndexedStructure {
+    type Error = StructureError;
+
+    fn try_from(value: super::partial::PartialStructure) -> Result<Self, Self::Error> {
+        use super::partial::PartialIndex;
+
+        let mut slots = Vec::with_capacity(value.canonical().order());
+        for (axis, slot) in value.canonical().external_structure_iter().enumerate() {
+            let PartialIndex::Explicit(index) = slot.aind else {
+                return Err(StructureError::ExpectedExplicitSlot { axis });
+            };
+            let unscoped = index;
+            #[cfg(feature = "shadowing")]
+            let unscoped = {
+                let mut index = unscoped;
+                while let AbstractIndex::Scoped(scope) = index {
+                    index = scope.index();
+                }
+                index
+            };
+            if matches!(unscoped, AbstractIndex::Open { .. }) {
+                return Err(StructureError::ExpectedExplicitSlot { axis });
+            }
+            slots.push(slot.rep().slot(index));
+        }
+        // Removing the Explicit enum wrapper does not change the established
+        // canonical order. Keep both ordering stages verbatim, including ties
+        // involving symbolic dimensions; do not sort an admitted layout again.
+        Ok(value.map_canonical(|structure| OrderedStructure {
+            structure: slots,
+            dual_start: structure.dual_start,
+            base_start: structure.base_start,
+        }))
+    }
+}
+
 impl<R: RepName, Aind> super::ApplyPendingIndexPermutation for OrderedStructure<R, Aind> {
     type Output = Self;
 

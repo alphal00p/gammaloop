@@ -1802,7 +1802,7 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
                 }
             });
             assert!(
-                idenso::tensor::SymbolicTensor::infer(coefficient)?.is_scalar(),
+                idenso::tensor::SymbolicTensor::infer_indexed(coefficient)?.is_scalar(),
                 "the CFF weight must not contain an inline finite tensor"
             );
         }

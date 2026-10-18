@@ -48,9 +48,9 @@ use spenso::contraction::Contract;
 
 use spenso::network::library::symbolic::{ETS, ExplicitKey};
 
+use spenso::structure::IndexedStructure;
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 use spenso::structure::dimension::Dimension;
-use spenso::structure::partial::PartialStructure;
 
 use spenso::structure::{CanonicalLayout, HasStructure, ScalarTensor, SmartShadowStructure};
 
@@ -352,8 +352,8 @@ struct _GlobalPrefactorAny {
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, PartialEq)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct GlobalPrefactor {
-    pub projector: SymbolicTensor<PartialStructure>,
-    pub num: SymbolicTensor<PartialStructure>,
+    pub projector: SymbolicTensor<IndexedStructure>,
+    pub num: SymbolicTensor<IndexedStructure>,
 }
 
 impl JsonSchema for GlobalPrefactor {
@@ -492,8 +492,8 @@ impl GlobalPrefactor {
 impl Default for GlobalPrefactor {
     fn default() -> Self {
         GlobalPrefactor {
-            projector: SymbolicTensor::infer(Atom::one()).expect("one is a scalar tensor"),
-            num: SymbolicTensor::infer(Atom::one()).expect("one is a scalar tensor"),
+            projector: SymbolicTensor::infer_indexed(Atom::one()).expect("one is a scalar tensor"),
+            num: SymbolicTensor::infer_indexed(Atom::one()).expect("one is a scalar tensor"),
         }
     }
 }
@@ -542,13 +542,15 @@ impl<'de> Deserialize<'de> for GlobalPrefactor {
         let helper = GlobalPrefactorHelper::deserialize(deserializer)?;
         let admit = |source: &str,
                      interface: Option<String>|
-         -> std::result::Result<SymbolicTensor<PartialStructure>, D::Error> {
+         -> std::result::Result<SymbolicTensor<IndexedStructure>, D::Error> {
             let expression = try_parse!(source).map_err(serde::de::Error::custom)?;
             let interface = interface
                 .map(|source| feynkit_graph::NumeratorInterface::parse(&source))
                 .transpose()
                 .map_err(serde::de::Error::custom)?;
             feynkit_graph::NumeratorInterface::admit(expression, interface)
+                .map_err(serde::de::Error::custom)?
+                .try_into_indexed()
                 .map_err(serde::de::Error::custom)
         };
         Ok(GlobalPrefactor {
@@ -574,7 +576,7 @@ impl Default for Numerator<UnInit> {
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct SymbolicExpression<State> {
-    pub expr: SymbolicTensor<PartialStructure>,
+    pub expr: SymbolicTensor<IndexedStructure>,
     pub state: State,
 }
 
@@ -634,7 +636,7 @@ impl<E: ExpressionState> SymbolicExpression<E> {
     }
 
     /// Keep the interface and established facts of an admitted numerator.
-    pub(crate) fn from_tensor(expression: SymbolicTensor<PartialStructure>) -> Self {
+    pub(crate) fn from_tensor(expression: SymbolicTensor<IndexedStructure>) -> Self {
         Self {
             expr: expression,
             state: E::default(),
@@ -657,9 +659,9 @@ pub trait ExpressionState:
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        Ok(SymbolicExpression::from_tensor(SymbolicTensor::infer(
-            cooking.try_cook(expression.as_view())?,
-        )?))
+        Ok(SymbolicExpression::from_tensor(
+            SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view())?)?,
+        ))
     }
 
     fn new_color(expression: Atom) -> Result<SymbolicExpression<Self>> {
@@ -961,6 +963,20 @@ mod typed_expression_tests {
             .gamma_simplify()
             .unwrap();
         assert!(simplified.state.expr.same_value(&expected));
+    }
+
+    #[test]
+    fn numerator_admission_requires_indexed_external_ports_but_keeps_closed_compact_dots() {
+        let head = spenso::vector_symbol!("gammalooprs::indexed_admission_vector");
+        let compact = function!(head, spenso::mink!(4));
+        assert!(AppliedFeynmanRule::new(compact.clone()).is_err());
+        let closed = AppliedFeynmanRule::new(spenso::dot!(&compact, &compact)).unwrap();
+        assert!(closed.expr.is_scalar());
+        let explicit = AppliedFeynmanRule::new(function!(head, spenso::mink!(4, 87))).unwrap();
+        assert_eq!(explicit.expr.rank(), 1);
+        let zero = explicit.expr.with_checked_expression(Atom::Zero).unwrap();
+        assert!(zero.is_zero());
+        assert_eq!(zero.structure(), explicit.expr.structure());
     }
 
     #[test]

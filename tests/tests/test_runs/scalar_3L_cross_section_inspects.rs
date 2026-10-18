@@ -497,7 +497,7 @@ helicities = [0]
                     )
                 })?;
             let edge = &mut supergraph.graph.underlying[edge_id];
-            let factor = SymbolicTensor::infer(cooking.try_cook(factor.as_view())?)?;
+            let factor = SymbolicTensor::infer_indexed(cooking.try_cook(factor.as_view())?)?;
             let edge_numerator = edge.num.value.multiply(&factor)?;
             let edge_dod = edge_numerator
                 .expression()

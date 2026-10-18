@@ -796,7 +796,7 @@ pub type SerializedFnMapEntry<T> = (T, T, Vec<T>, Vec<T>, InliningPolicy, bool);
 
 /// Retained numerator functions keep their tensor interface until component lowering.
 pub type NumeratorDefinition =
-    FnMapEntry<idenso::tensor::SymbolicTensor<spenso::structure::partial::PartialStructure>>;
+    FnMapEntry<idenso::tensor::SymbolicTensor<spenso::structure::IndexedStructure>>;
 
 impl<E> FnMapEntry<E> {
     pub fn with_rhs<T>(&self, rhs: T) -> FnMapEntry<T> {
@@ -829,7 +829,8 @@ impl TryFrom<FnMapEntry> for NumeratorDefinition {
         let cooking = idenso::CookSettings::indices()
             .with_mode(idenso::CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let tensor = idenso::tensor::SymbolicTensor::infer(cooking.try_cook(entry.rhs.as_view())?)?;
+        let tensor =
+            idenso::tensor::SymbolicTensor::infer_indexed(cooking.try_cook(entry.rhs.as_view())?)?;
         Ok(entry.with_rhs(tensor))
     }
 }

@@ -323,7 +323,7 @@ impl NumeratorJetCache {
                                 idenso::CookSettings::indices()
                                     .with_mode(idenso::CookMode::ReversibleEncoding)
                                     .try_cook(key.as_view()).map_err(|error| error.to_string())
-                                    .and_then(|cooked| idenso::tensor::SymbolicTensor::infer(cooked)
+                                    .and_then(|cooked| idenso::tensor::SymbolicTensor::infer_indexed(cooked)
                                         .map(|tensor| tensor.is_scalar()).map_err(|error| error.to_string()))
                             }).collect::<Vec<_>>(),
                             "Selected complete scalar factor owners"

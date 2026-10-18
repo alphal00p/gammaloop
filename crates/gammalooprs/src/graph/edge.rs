@@ -14,9 +14,7 @@ use linnet::{
 };
 use spenso::{
     algebra::complex::Complex,
-    structure::{
-        IndexLess, ScalarStructure, partial::PartialStructure, representation::LibraryRep,
-    },
+    structure::{IndexLess, IndexedStructure, ScalarStructure, representation::LibraryRep},
 };
 use symbolica::{domains::float::Complex as SymComplex, prelude::*};
 
@@ -223,7 +221,7 @@ pub struct Edge {
     // pub propagator: ArcPropagator,
     pub particle: PossibleParticle,
     pub mass: EdgeMass,
-    pub num: Autogen<SymbolicTensor<PartialStructure>>,
+    pub num: Autogen<SymbolicTensor<IndexedStructure>>,
     // pub spin_num: Atom,
     pub dod: Autogen<i32>,
     pub is_dummy: bool, // #[bincode(with_serde)]

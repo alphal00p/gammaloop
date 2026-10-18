@@ -11,7 +11,7 @@ use color_eyre::Result;
 use eyre::{ensure, eyre};
 use idenso::tensor::SymbolicTensor;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::IndexedStructure;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol, SymbolAttribute, SymbolBuilder},
     domains::{atom::AtomField, rational::Rational},
@@ -184,10 +184,10 @@ impl DirectResidueBranches {
         &self,
         orientation: OrientationProjection<'_>,
         graph: &Graph,
-        numerator: &SymbolicTensor<PartialStructure>,
+        numerator: &SymbolicTensor<IndexedStructure>,
         scope: usize,
     ) -> Result<(
-        SymbolicTensor<PartialStructure>,
+        SymbolicTensor<IndexedStructure>,
         Vec<Atom>,
         Vec<(DirectResidueKey, Vec<Atom>)>,
     )> {
@@ -447,7 +447,7 @@ impl DirectResidueBranches {
     /// Transform each shared definition once, preserving its formal binding.
     pub(crate) fn map_numerators(
         &self,
-        mut map: impl FnMut(&NumeratorDefinition) -> Result<SymbolicTensor<PartialStructure>>,
+        mut map: impl FnMut(&NumeratorDefinition) -> Result<SymbolicTensor<IndexedStructure>>,
     ) -> Result<Self> {
         let mut definitions: BTreeMap<Atom, Arc<NumeratorDefinition>> = BTreeMap::new();
         let mut transformed = BTreeMap::new();
@@ -510,7 +510,7 @@ impl DirectResidueBranches {
         &self,
         orientation: OrientationProjection<'_>,
         graph: &Graph,
-        factor: &SymbolicTensor<PartialStructure>,
+        factor: &SymbolicTensor<IndexedStructure>,
         scope: (usize, Atom),
     ) -> Result<Self> {
         if factor.is_scalar() && matches!(factor.expression().as_view(), AtomView::Num(_)) {
@@ -680,7 +680,7 @@ impl DirectResidueBranches {
                                     };
                                     // Admit an actual scalar arithmetic definition here;
                                     // the opaque numerator call is never inferred as scalar.
-                                    let rhs = match SymbolicTensor::infer(rhs) {
+                                    let rhs = match SymbolicTensor::infer_indexed(rhs) {
                                         Ok(rhs) => rhs,
                                         Err(err) => {
                                             error = Some(err.into());
@@ -2352,11 +2352,20 @@ mod tests {
                 .into_iter()
                 .collect(),
         )?;
-        let index =
-            LibraryRep::from(Minkowski {}).to_symbolic([Atom::var(symbol!("direct_3d_test::mu"))]);
-        let external = GS.emr_mom(EdgeIndex(0), &index);
+        let dimension = Atom::var(symbol!("direct_3d_test::mu"));
+        let compact = LibraryRep::from(Minkowski {}).to_symbolic([&dimension]);
+        let anonymous = GS.emr_mom(EdgeIndex(0), &compact)
+            * (GS.emr_mom(EdgeIndex(1), &compact) + function!(GS.loop_mom, 0, &compact))
+            * function!(GS.loop_mom, 0, GS.cind(1));
+        assert!(AppliedFeynmanRule::new(anonymous).is_err());
+        // The two free axes are independent; use explicit identities while
+        // retaining the same dimension, affine vector sum and component oracle.
+        let external_index =
+            LibraryRep::from(Minkowski {}).to_symbolic([dimension.clone(), Atom::num(811)]);
+        let loop_index = LibraryRep::from(Minkowski {}).to_symbolic([dimension, Atom::num(812)]);
+        let external = GS.emr_mom(EdgeIndex(0), &external_index);
         let numerator = &external
-            * (GS.emr_mom(EdgeIndex(1), &index) + function!(GS.loop_mom, 0, &index))
+            * (GS.emr_mom(EdgeIndex(1), &loop_index) + function!(GS.loop_mom, 0, &loop_index))
             * function!(GS.loop_mom, 0, GS.cind(1));
         let (template, parameters, rows) = branches.prepare_numerator(
             orientation,
@@ -2365,6 +2374,11 @@ mod tests {
             23,
         )?;
         assert_eq!(parameters.len(), 1);
+        assert_eq!(template.rank(), 2);
+        assert_eq!(
+            template.structure(),
+            AppliedFeynmanRule::new(numerator.clone())?.expr.structure(),
+        );
         let specialized =
             template
                 .expression()

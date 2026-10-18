@@ -450,7 +450,7 @@ impl<'a> ComparableExpr<'a> {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let normalized = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?
+        let normalized = SymbolicTensor::infer_indexed(cooking.try_cook(input.as_view())?)?
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(Default::default()),
                 ..Default::default()

@@ -17,7 +17,7 @@ use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::settings::RuntimeSettings;
 use idenso::tensor::SymbolicTensor;
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::IndexedStructure;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::{info, warn};
 
@@ -104,7 +104,7 @@ impl Evaluate {
             true_settings.number_of_terms_in_epsilon_expansion = n_terms as i64;
         }
 
-        let mut full_evaluation: Option<SymbolicTensor<PartialStructure>> = None;
+        let mut full_evaluation: Option<SymbolicTensor<IndexedStructure>> = None;
 
         for graph_term in amplitude.graphs.iter() {
             let g = &graph_term.graph;
@@ -112,7 +112,8 @@ impl Evaluate {
                 true_settings.number_of_terms_in_epsilon_expansion =
                     g.n_loops(&g.no_dummy()) as i64 + 1;
             }
-            let mut complete_evaluation_for_this_graph = SymbolicTensor::infer(Atom::one())?;
+            let mut complete_evaluation_for_this_graph =
+                SymbolicTensor::infer_indexed(Atom::one())?;
             if g.n_externals() != 0 {
                 return Err(color_eyre::eyre::eyre!(
                     "Graph named: {} has external legs. Analytical evaluation in gammaloop only supports vacuum graphs.",
@@ -150,7 +151,7 @@ impl Evaluate {
                 complete_evaluation_for_this_graph =
                     complete_evaluation_for_this_graph.multiply(&component)?;
             }
-            let overall_factor = SymbolicTensor::infer(g.overall_factor.clone())?;
+            let overall_factor = SymbolicTensor::infer_indexed(g.overall_factor.clone())?;
             let complete = complete_evaluation_for_this_graph
                 .multiply(&g.global_prefactor.projector)?
                 .multiply(&overall_factor)?;
@@ -235,7 +236,6 @@ mod tests {
         };
         use idenso::tensor::ContractSettings;
         use spenso::structure::{
-            partial::PartialStructureExt,
             representation::{Minkowski, RepName},
             slot::IsAbstractSlot,
         };

@@ -363,7 +363,8 @@ mod test {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let source = SymbolicTensor::infer(cooking.try_cook(expr.as_view()).unwrap()).unwrap();
+        let source =
+            SymbolicTensor::infer_indexed(cooking.try_cook(expr.as_view()).unwrap()).unwrap();
         let _ = source
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::default()),

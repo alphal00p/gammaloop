@@ -30,7 +30,7 @@ use idenso::{
 };
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::shadowing::TensorCollectFilter;
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::IndexedStructure;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate},
     function,
@@ -540,7 +540,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
     fn final_normalizer(
         graph: &Graph,
         reduced: &SuBitGraph,
-    ) -> impl Fn(&SymbolicTensor<PartialStructure>) -> Result<SymbolicTensor<PartialStructure>>
+    ) -> impl Fn(&SymbolicTensor<IndexedStructure>) -> Result<SymbolicTensor<IndexedStructure>>
     {
         let normalize_scalar = Self::scalar_normalizer(graph, reduced);
         move |tensor| {
@@ -626,7 +626,7 @@ mod tests {
             .with_representation_payloads(true, true);
         let native = cooking.try_cook(raw.as_view())?;
         assert_ne!(native, raw);
-        let tensor = SymbolicTensor::infer(native.clone())?;
+        let tensor = SymbolicTensor::infer_indexed(native.clone())?;
         assert_eq!(tensor.rank(), 4);
         let tag = Atom::var(symbol!("final_color_collection_scope"));
         let lhs = symbol!("gammalooprs::uv::numerator_family").call_args([tag.clone()]);
@@ -662,7 +662,7 @@ mod tests {
     #[test]
     fn final_normalization_preserves_logical_axes_and_specializes_encoded_zero_dimensions()
     -> Result<()> {
-        use spenso::structure::{partial::PartialStructureExt, slot::IsAbstractSlot};
+        use spenso::structure::slot::IsAbstractSlot;
 
         test_initialise()?;
         let graph: Graph = finalized_runtime_dot!(digraph final_dimension_ports {
@@ -694,7 +694,7 @@ mod tests {
                     Minkowski {}.to_symbolic([dimension.clone(), Atom::num(7)]),
                     Minkowski {}.to_symbolic([dimension.clone(), Atom::num(11)])
                 );
-            let admitted = SymbolicTensor::infer(cooking.try_cook(raw.as_view())?)?;
+            let admitted = SymbolicTensor::infer_indexed(cooking.try_cook(raw.as_view())?)?;
             let physical_slots = admitted.structure().logical_slots();
             if dimension != Atom::var(GS.dim) {
                 let encoded = physical_slots[0].dim().to_symbolic().get_symbol().unwrap();
@@ -703,11 +703,11 @@ mod tests {
                     Some(dimension.clone())
                 );
             }
-            let source = SymbolicTensor::from_declared_parts(
+            let source = SymbolicTensor::from_indexed_parts(
                 admitted.expression().clone(),
-                PartialStructure::from_logical_slots(physical_slots.into_iter().rev()),
+                IndexedStructure::from_iter(physical_slots.into_iter().rev()),
             )?;
-            let expected = SymbolicTensor::infer(
+            let expected = SymbolicTensor::infer_indexed(
                 Atom::num(4)
                     * &spectator
                     * function!(
@@ -1271,7 +1271,7 @@ mod tests {
 
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let normalize = |atom: &Atom| -> Result<Atom> {
-            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+            let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(atom.as_view())?)?
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(color_settings),
                     ..Default::default()

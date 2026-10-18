@@ -279,7 +279,8 @@ fn one_orientation_cff_hard_charts_match_direct_external_jets() -> Result<()> {
     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
     let active_with_numerator = &active_started * &homogeneous_numerator;
     let expanded =
-        SymbolicTensor::infer(cooking.try_cook(active_with_numerator.as_view())?)?.expand_dots()?;
+        SymbolicTensor::infer_indexed(cooking.try_cook(active_with_numerator.as_view())?)?
+            .expand_dots()?;
     let active_with_numerator = cooking.uncook(expanded.expression().as_view());
     let started = &active_with_numerator * &tree_denominator;
 
@@ -1018,8 +1019,8 @@ fn soft_laurent_projection_expands_materialized_internal_energy() -> Result<()> 
         };
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let difference = actual - expected;
-        let expanded =
-            SymbolicTensor::infer(cooking.try_cook(difference.as_view())?)?.expand_dots()?;
+        let expanded = SymbolicTensor::infer_indexed(cooking.try_cook(difference.as_view())?)?
+            .expand_dots()?;
         let difference = cooking.uncook(expanded.expression().as_view()).expand();
         assert!(
             difference.is_zero(),

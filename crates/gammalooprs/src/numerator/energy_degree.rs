@@ -2027,8 +2027,9 @@ impl Graph {
             .expect("validated graph numerator must have a compatible tensor interface")
             .state
             .expr;
-        let overall_factor = idenso::tensor::SymbolicTensor::infer(self.overall_factor.clone())
-            .expect("the declared overall factor must have a valid scalar interface");
+        let overall_factor =
+            idenso::tensor::SymbolicTensor::infer_indexed(self.overall_factor.clone())
+                .expect("the declared overall factor must have a valid scalar interface");
         let numerator = numerator
             .multiply(&self.global_prefactor.num)
             .and_then(|value| value.multiply(&self.global_prefactor.projector))

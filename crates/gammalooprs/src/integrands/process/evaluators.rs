@@ -38,10 +38,9 @@ use spenso::{
         symbolica_utils::{LogPrint, SpensoPrintSettings},
     },
     structure::{
-        CanonicalLayout, Canonicalized, TensorStructure,
-        abstract_index::{AIND_SYMBOLS, AbstractIndex},
+        CanonicalLayout, Canonicalized, IndexedStructure, TensorStructure,
+        abstract_index::AIND_SYMBOLS,
         concrete_index::{DualConciousExpandedIndex, DualConciousIndex},
-        partial::{PartialIndex, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, RepName},
         slot::{IsAbstractSlot, Slot},
     },
@@ -882,7 +881,7 @@ impl EvaluatorStack {
     ) -> Result<AliasedAtom> {
         let admission_started = std::time::Instant::now();
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let tensor = SymbolicTensor::infer(cooking.try_cook(a.as_atom_view())?)?;
+        let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(a.as_atom_view())?)?;
         crate::debug_tags!(#generation, #profile, #numerator, #compile, #summary;
             stage = "evaluator_stack_raw_root_admission",
             atom_index,
@@ -997,7 +996,7 @@ impl EvaluatorStack {
     }
 
     fn preprocess_tensor(
-        a: &SymbolicTensor<PartialStructure>,
+        a: &SymbolicTensor<IndexedStructure>,
         atom_index: usize,
         settings: &EvaluatorSettings,
         tensor_map: Option<&ParsingTensorMap<'_>>,
@@ -1224,20 +1223,15 @@ impl EvaluatorStack {
                         .iter()
                         .any(|entry| entry.rhs.contains(&formal))
                 });
-                // A zero body still carries its declared ports. Keep their
-                // logical order, and leave anonymous ports to ordinary lowering.
+                // Strict admission gives every retained external axis an index,
+                // including a zero body. Keep the declared logical order here.
                 let slots = definition
                     .rhs
                     .structure()
                     .logical_slots()
                     .into_iter()
-                    .map(|slot| {
-                        let PartialIndex::Explicit(index) = slot.aind else {
-                            return None;
-                        };
-                        Some(slot.rep().slot::<AbstractIndex, _>(index).to_atom())
-                    })
-                    .collect::<Option<Vec<_>>>()?;
+                    .map(|slot| slot.to_atom())
+                    .collect::<Vec<_>>();
                 let mut parameterized_slot = slots.iter().any(|slot| {
                     definition
                         .args
@@ -1427,7 +1421,7 @@ impl EvaluatorStack {
                 if rhs.validate_chain_like_nesting().is_err() {
                     return None;
                 }
-                let rhs = match SymbolicTensor::infer(rhs) {
+                let rhs = match SymbolicTensor::infer_indexed(rhs) {
                     Ok(tensor) => tensor,
                     Err(error) => {
                         combination_error = Some(error);
@@ -6701,7 +6695,7 @@ mod tests {
     #[test]
     fn evaluator_scalar_invariant_rewrite_keeps_declared_axes_and_ranked_zero() {
         use idenso::{color::CS, representations::ColorFundamental};
-        use spenso::structure::representation::Minkowski;
+        use spenso::structure::{abstract_index::AbstractIndex, representation::Minkowski};
 
         test_initialise().unwrap();
         let rep = Minkowski {}.new_rep(4).to_lib();
@@ -6712,10 +6706,8 @@ mod tests {
             * GS.emr_vec(EdgeIndex(7), slots[0].to_atom())
             * GS.emr_vec(EdgeIndex(8), slots[1].to_atom());
         assert_ne!(expression.to_cof_dimension_invariants(), expression);
-        let structure = PartialStructure::from_logical_slots(
-            [slots[1], slots[0]].map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
-        );
-        let source = SymbolicTensor::from_declared_parts(expression, structure).unwrap();
+        let structure = IndexedStructure::from_iter([slots[1], slots[0]]);
+        let source = SymbolicTensor::from_indexed_parts(expression, structure).unwrap();
         let zero = source.with_checked_expression(Atom::Zero).unwrap();
         let expected_slots = [slots[1].to_atom(), slots[0].to_atom()];
         let settings = EvaluatorSettings {

@@ -447,7 +447,7 @@ fn single_bridge_color_sums_and_scalar_spectators_remain_factored() {
         let source = SymbolicTensor::infer(outside * &sum).unwrap();
         let kernel = crate::color::simplify::ColorAlgebraSimplifier::new(
             ColorSimplifySettings::default(),
-            SymbolicTensor::reserved_dummies([&source]),
+            SymbolicTensor::<PartialStructure>::reserved_dummies([&source]),
         );
         assert_eq!(
             kernel.step(source.expression.as_view(), true),
@@ -601,8 +601,11 @@ fn a_single_port_adjoint_chain_leaves_a_color_sum_factored() {
     let chain = spenso::chain!(&a, &x; [matrix(&b), matrix(&y)]);
     let source = SymbolicTensor::infer(&chain * &sum).unwrap();
     let step = |settings: ColorSimplifySettings| {
-        ColorAlgebraSimplifier::new(settings, SymbolicTensor::reserved_dummies([&source]))
-            .step(source.expression.as_view(), true)
+        ColorAlgebraSimplifier::new(
+            settings,
+            SymbolicTensor::<PartialStructure>::reserved_dummies([&source]),
+        )
+        .step(source.expression.as_view(), true)
     };
     assert_eq!(step(ColorSimplifySettings::default()), source.expression);
     // Incremental rounds spread the chain over the summands, whose

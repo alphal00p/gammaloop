@@ -193,9 +193,10 @@ impl PhysicalOverlapInput {
                     let cooking = idenso::CookSettings::indices()
                         .with_mode(idenso::CookMode::ReversibleEncoding)
                         .with_representation_payloads(true, true);
-                    let collected =
-                        idenso::tensor::SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
-                            .collect(color)?;
+                    let collected = idenso::tensor::SymbolicTensor::infer_indexed(
+                        cooking.try_cook(atom.as_view())?,
+                    )?
+                    .collect(color)?;
                     Ok(cooking.uncook(collected.expression().as_view()))
                 })?
                 .into_integrands();

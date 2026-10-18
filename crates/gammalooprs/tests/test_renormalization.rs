@@ -1173,59 +1173,58 @@ mod slow {
         let adjoint_dimension = parse!("rqft_dA");
         let fundamental = function!(CS.fundamental_rep, &fundamental_dimension);
         let adjoint = function!(CS.adjoint_rep, &adjoint_dimension);
-        let parametrize_tensor = |tensor: &mut idenso::tensor::SymbolicTensor<
-            spenso::structure::partial::PartialStructure,
-        >| {
-            let original = tensor.clone();
-            let mapped = tensor
-                .map_representation_dimensions(|representation, dimension| {
-                    if representation.base()
-                        == (idenso::representations::ColorFundamental {}).into()
-                    {
-                        fundamental_dimension.clone()
-                    } else if representation.base()
-                        == (idenso::representations::ColorAdjoint {}).into()
-                    {
-                        adjoint_dimension.clone()
-                    } else {
-                        dimension.to_owned()
-                    }
-                })
-                .unwrap();
-            let expression = mapped
-                .expression()
-                .replace(CS.nc * CS.nc - 1)
-                .with(adjoint_dimension.clone())
-                .replace(CS.nc)
-                .with(fundamental_dimension.clone());
-            let mapped = mapped.with_checked_expression(expression).unwrap();
-            let restored = mapped
-                .map_representation_dimensions(|_, dimension| {
-                    dimension
-                        .replace(fundamental_dimension.as_view().to_pattern())
-                        .with(Atom::num(3))
-                        .replace(adjoint_dimension.as_view().to_pattern())
-                        .with(Atom::num(8))
-                })
-                .unwrap();
-            let restored = restored
-                .with_checked_expression(
-                    restored
-                        .expression()
-                        .replace(fundamental_dimension.as_view().to_pattern())
-                        .with(Atom::num(3))
-                        .replace(adjoint_dimension.as_view().to_pattern())
-                        .with(Atom::num(8)),
-                )
-                .unwrap();
-            assert_eq!(
-                restored.expression(),
-                original.expression(),
-                "parametric color changes a primitive at N_c = 3"
-            );
-            assert_eq!(restored.structure(), original.structure());
-            *tensor = mapped;
-        };
+        let parametrize_tensor =
+            |tensor: &mut idenso::tensor::SymbolicTensor<spenso::structure::IndexedStructure>| {
+                let original = tensor.clone();
+                let mapped = tensor
+                    .map_representation_dimensions(|representation, dimension| {
+                        if representation.base()
+                            == (idenso::representations::ColorFundamental {}).into()
+                        {
+                            fundamental_dimension.clone()
+                        } else if representation.base()
+                            == (idenso::representations::ColorAdjoint {}).into()
+                        {
+                            adjoint_dimension.clone()
+                        } else {
+                            dimension.to_owned()
+                        }
+                    })
+                    .unwrap();
+                let expression = mapped
+                    .expression()
+                    .replace(CS.nc * CS.nc - 1)
+                    .with(adjoint_dimension.clone())
+                    .replace(CS.nc)
+                    .with(fundamental_dimension.clone());
+                let mapped = mapped.with_checked_expression(expression).unwrap();
+                let restored = mapped
+                    .map_representation_dimensions(|_, dimension| {
+                        dimension
+                            .replace(fundamental_dimension.as_view().to_pattern())
+                            .with(Atom::num(3))
+                            .replace(adjoint_dimension.as_view().to_pattern())
+                            .with(Atom::num(8))
+                    })
+                    .unwrap();
+                let restored = restored
+                    .with_checked_expression(
+                        restored
+                            .expression()
+                            .replace(fundamental_dimension.as_view().to_pattern())
+                            .with(Atom::num(3))
+                            .replace(adjoint_dimension.as_view().to_pattern())
+                            .with(Atom::num(8)),
+                    )
+                    .unwrap();
+                assert_eq!(
+                    restored.expression(),
+                    original.expression(),
+                    "parametric color changes a primitive at N_c = 3"
+                );
+                assert_eq!(restored.structure(), original.structure());
+                *tensor = mapped;
+            };
 
         for index in [21, 24] {
             let graph = &mut amp.graphs[index];

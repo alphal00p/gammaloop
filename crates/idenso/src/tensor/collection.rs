@@ -90,7 +90,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
     ) -> Self {
         Self {
             observations: Arc::clone(source.reduction_observations()),
-            state: SymbolicTensor::reserved_dummies(std::iter::once(source)),
+            state: SymbolicTensor::<PartialStructure>::reserved_dummies(std::iter::once(source)),
             select,
             mode,
             values: Vec::new(),

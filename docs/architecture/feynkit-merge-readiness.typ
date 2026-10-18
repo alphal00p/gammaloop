@@ -1,5 +1,54 @@
 = FeynKit merge readiness and performance
 
+== Fully indexed GammaLoop continuation
+
+The user requested explicit-index storage after the qualified checkpoint below.
+That checkpoint, `87b1d81f`, now has all 105 selected CI outputs verified and its
+canonical cache upload completed successfully. Its test and timing evidence
+remains tied to that source. The new indexed continuation is under validation;
+it does not inherit a fresh runtime or performance pass from the earlier build.
+
+GammaLoop's runtime edge and vertex fragments, global prefactors, numerator
+states, UV bodies, integrated projections and shared numerator definitions now
+use `SymbolicTensor<IndexedStructure>`. Here `IndexedStructure` means
+`Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>>`. The outer layout
+preserves logical port order and the axes of zero; it must not be replaced by
+bare canonical storage. The portable FeynKit source codec retains its broader
+partial-interface support, and arbitrary symbolic utilities remain separate
+from GammaLoop runtime storage.
+
+Admission rejects unresolved public ports rather than assigning dummy labels.
+Closed scalar dots can still contain compact vector notation. The checked
+conversion keeps the expression, layout, operation flags and reduction proofs;
+it does not round-trip the numerator through raw source notation. Indexed
+operations use the existing Idenso algebra internally with a metadata-only
+projection. Borrowed calls copy rank-sized metadata and proof handles, so this
+change is an ownership invariant, not an assumed speedup. Its actual cost must
+be checked on the original workloads.
+
+The API adaptation is explicit: indexed source constructors are named
+`infer_indexed` and `from_indexed_parts`, and an admitted partial tensor uses
+`try_into_indexed`. Ordinary typed operations keep their existing method names.
+Distinct constructor names avoid ambiguity with the existing partial APIs.
+For methods shared by both specializations, Rust's unqualified
+`SymbolicTensor::method(...)` syntax can still be ambiguous even when the
+arguments carry a known type. Call the typed receiver or explicitly name its
+structure parameter; the algebra and assertions are unchanged.
+Export back to a native FeynKit diagram uses a lossless typed `From` conversion,
+not source serialization and re-admission. The selected-coefficient diagnostic
+collector remains a general-interface boundary because individual factors can
+have unresolved ports even when their complete product is scalar.
+Native archives store explicit slots, requiring full-state manifest version 21;
+regenerate earlier full states. Standalone evaluator formats remain unchanged.
+
+The new controls cover unresolved-port rejection, closed compact scalars,
+ranked-zero and nonsymmetric component layouts, callback validation, proof reuse,
+and archive symbol remapping. Existing numerical references, tolerances, sample
+budgets and performance limits remain enforced. Compilation and runtime results
+for this continuation are recorded separately from the earlier qualification.
+
+== Qualification before indexed storage
+
 Production revision `fd9ed336` passes the normal Nix CLI build and all numerical
 checks in the thirteen original CLI cases. Twelve cases pass their performance
 gates; GL16 SingleParametric runtime remains inconclusive under the unchanged

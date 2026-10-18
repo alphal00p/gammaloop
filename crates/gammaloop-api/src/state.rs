@@ -1659,7 +1659,9 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 19 retains tensor interfaces in runtime graph fragments and numerator
 // definitions. Older positional archives must be regenerated.
 // Version 20 also retains the graph's global numerator and projector interfaces.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 20;
+// Version 21 stores fully indexed tensor interfaces without PartialIndex wire tags.
+// Older positional archives must be regenerated; unresolved ports are not assigned indices.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 21;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -5088,16 +5090,22 @@ commands = ["quit -n"]
 
     #[test]
     fn state_save_rejects_legacy_target_before_writing() {
-        let temp = tempdir().unwrap();
-        let symbolica_state = temp.path().join("symbolica_state.bin");
-        fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 1\n").unwrap();
-        fs::write(&symbolica_state, b"legacy sentinel").unwrap();
-        let mut state = State::new_test();
+        for version in [1, 20] {
+            let temp = tempdir().unwrap();
+            let symbolica_state = temp.path().join("symbolica_state.bin");
+            fs::write(
+                temp.path().join(STATE_MANIFEST_FILE),
+                format!("version = {version}\n"),
+            )
+            .unwrap();
+            fs::write(&symbolica_state, b"legacy sentinel").unwrap();
+            let mut state = State::new_test();
 
-        let err = state.save(temp.path(), true, false).unwrap_err();
-        assert!(err.to_string().contains("cannot be migrated"));
-        assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
-        assert!(!temp.path().join("model.json").exists());
+            let err = state.save(temp.path(), true, false).unwrap_err();
+            assert!(err.to_string().contains("cannot be migrated"));
+            assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
+            assert!(!temp.path().join("model.json").exists());
+        }
     }
 
     #[test]

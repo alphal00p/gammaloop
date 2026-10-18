@@ -341,9 +341,15 @@ Model recipes and DOT/JSON expression strings remain source boundaries. Live
 retain `SymbolicTensor<PartialStructure>`, as do the generator's localized
 factor caches and prepared grouping values. Grouping samples which still carry
 color ports retain tensors; only completed scalar components and ratios are
-Atoms. Runtime `Graph` transfers these carriers directly into its edge/vertex
+Atoms. Runtime `Graph` checks that every public port is explicitly indexed and
+transfers these carriers into `SymbolicTensor<IndexedStructure>` edge/vertex
 `Autogen` fields and `GlobalPrefactor`, preserving reversible index encoding,
-logical interfaces and reduction state. `UltravioletGraph::numerator` returns
+logical interfaces and reduction state. `IndexedStructure` retains the
+`Canonicalized` layout around `OrderedStructure<LibraryRep, AbstractIndex>`;
+unresolved public ports are rejected rather than assigned dummy labels. Closed
+scalar shorthand remains valid. Native export back to FeynKit transfers the same
+tensor into its more general interface without an Atom round-trip.
+`UltravioletGraph::numerator` returns
 `Result<Numerator<AppliedFeynmanRule>>`; its `SymbolicExpression<Local>` stores
 that same carrier. Reduced-graph composition, color algebra and later UV operations use
 it directly. `get_single_atom` is an explicit decoded expression view for
@@ -704,7 +710,7 @@ The surrounding CFF denominator sum uses `Esurface(a1, ..., an) = a1 + ... + an`
 
 `Integrands` stores `BTreeMap<CutCFFIndex, Atom>` dispatch roots and flat shared
 `Arc<NumeratorDefinition>` bodies. `NumeratorDefinition` is
-`FnMapEntry<SymbolicTensor<PartialStructure>>`; scalar function definitions use
+`FnMapEntry<SymbolicTensor<IndexedStructure>>`; scalar function definitions use
 `FnMapEntry<Atom>`. A root calls `numerator_family(scope, coefficients...)`.
 The call is part of the coefficient program: its hidden tensor body is not
 inferred to be scalar. Tensor normalization acts on the retained bodies;
@@ -1394,21 +1400,25 @@ human-editable for settings/run cards, mixed with binary artifacts for
 performance-heavy data.
 
 Runtime graph fragments and retained numerator definitions encode both their
-symbolic expression and logical tensor interface, including ranked zeros and
-open-port order. Loading remaps symbols and validates the declared interface;
+symbolic expression and logical indexed interface, including ranked zeros and
+axis order. Loading remaps symbols and validates the declared interface;
 reduction certificates, observed graphs and other transient caches are not
 serialized. This changes the positional runtime payload from the former Atom
 fields. Earlier full GammaLoop states must be regenerated; canonical FeynKit model and
 source-recipe artifacts retain their raw-expression contract. Diagram
 DOT/JSON stores expression strings with optional logical-port metadata when
-the expression cannot recover it. Full state version 20 also encodes global
-numerator/projector interfaces. Standalone evaluator archives contain lowered scalar programs and
+the expression cannot recover it. Full state version 21 encodes explicit slots
+for runtime numerators, including global numerator/projector interfaces, and
+rejects unresolved ports. Standalone evaluator archives contain lowered scalar programs and
 neither runtime graphs nor retained tensor definitions, so this change leaves
 their amplitude version 12 and cross-section version 15 unchanged.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 20` currently).
+- State format is versioned with `state_manifest.toml` (`version = 21` currently).
+- Version 21 stores explicit indexed slots rather than partial-index wire tags.
+  Earlier full states must be regenerated; source recipes are not relabeled
+  binary archives. The logical layout and ranked-zero axes remain retained.
 - Version 20 also retains the tensor interfaces of global numerator prefactors
   and projectors. Their positional runtime payload cannot be read as the former
   Atom fields; earlier full states must be regenerated.

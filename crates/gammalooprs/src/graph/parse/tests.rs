@@ -102,6 +102,79 @@ fn numerator_interface_source_roundtrip_keeps_two_identical_open_axes() {
 }
 
 #[test]
+fn runtime_graph_rejects_anonymous_ports_without_assigning_indices() {
+    use super::NumeratorInterface;
+    use spenso::structure::{abstract_index::AbstractIndex, slot::IsAbstractSlot};
+
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let rep = Minkowski {}.new_rep(4).to_lib();
+    let anonymous = AbstractIndex::Open {
+        owner: 801,
+        axis: 0,
+    };
+    for port in [
+        rep.to_symbolic([]),
+        rep.slot::<AbstractIndex, _>(anonymous).to_atom(),
+        rep.slot::<AbstractIndex, _>(anonymous.scoped(symbol!("runtime_open_scope")))
+            .to_atom(),
+    ] {
+        let interface = NumeratorInterface(vec![port]);
+        let metadata = serde_json::to_string(&interface.to_json()).unwrap();
+        // A portable ranked zero is valid source data. GammaLoop requires an
+        // explicit graph interface even when its expression vanishes.
+        assert_eq!(
+            NumeratorInterface::admit(Atom::Zero, Some(interface))
+                .unwrap()
+                .rank(),
+            1
+        );
+        for source in [
+            triangle_fixture(3, None).replace(
+                "graph [projector=\"1\"]",
+                &format!(
+                    "graph [projector=\"1\" num=\"0\" numerator_prefactor_interface={metadata}]"
+                ),
+            ),
+            triangle_fixture(3, None).replace(
+                "node [num=\"1\"]",
+                &format!("node [num=\"0\" num_interface={metadata}]"),
+            ),
+            triangle_fixture(3, None).replace(
+                "edge [pdg=1000 num=\"1\" dir=none]",
+                &format!("edge [pdg=1000 num=\"0\" num_interface={metadata} dir=none]"),
+            ),
+        ] {
+            let result: color_eyre::Result<Graph> = source.into_finalized_runtime_graph(&model);
+            let error = result
+                .err()
+                .expect("anonymous runtime ports must be rejected");
+            assert!(
+                format!("{error:#}").contains("requires an explicit index"),
+                "{error:?}"
+            );
+        }
+    }
+    // Compact internal contractions are scalar; fully indexed interfaces do
+    // not require expanding tensor shorthand or changing the source expression.
+    let vector = GS.emr_vec(EdgeIndex(3), rep.to_symbolic([]));
+    let scalar = SPENSO_TAG.dot.call_args([vector.clone(), vector]);
+    let source = triangle_fixture(3, None).replace(
+        "graph [projector=\"1\"]",
+        &format!(
+            "graph [projector=\"1\" num={}]",
+            serde_json::to_string(&scalar.to_canonical_string()).unwrap()
+        ),
+    );
+    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
+    assert!(graph.global_prefactor.num.is_scalar());
+    assert_eq!(
+        NumeratorInterface::export(&graph.global_prefactor.num).0,
+        scalar
+    );
+}
+
+#[test]
 fn runtime_and_canonical_dot_preserve_ranked_zero_fragments() {
     use super::NumeratorInterface;
     test_initialise().unwrap();
@@ -115,7 +188,10 @@ fn runtime_and_canonical_dot_preserve_ranked_zero_fragments() {
         Minkowski {}.new_rep(4).to_symbolic([Atom::num(37)]),
         Minkowski {}.new_rep(4).to_symbolic([Atom::num(41)])
     );
-    let metric = NumeratorInterface::admit(metric, None).unwrap();
+    let metric = NumeratorInterface::admit(metric, None)
+        .unwrap()
+        .try_into_indexed()
+        .unwrap();
     let zero = metric.with_algebra_result(Atom::Zero).unwrap();
     for (mut graph, edge) in [
         (parse_triangle_fixture(3, None), EdgeIndex(3)),
@@ -155,17 +231,14 @@ fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order()
     use crate::numerator::GlobalPrefactor;
     use crate::uv::UltravioletGraph;
     use idenso::tensor::SymbolicTensor;
-    use spenso::structure::{
-        abstract_index::AbstractIndex,
-        partial::{PartialIndex, PartialStructure, PartialStructureExt},
-    };
+    use spenso::structure::{IndexedStructure, abstract_index::AbstractIndex};
     test_initialise().unwrap();
     let representation = Minkowski {}.new_rep(4).to_lib();
-    let interface =
-        PartialStructure::from_logical_slots([41, 37].map(|index| {
-            representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)))
-        }));
-    let zero = SymbolicTensor::from_declared_parts(Atom::Zero, interface.clone()).unwrap();
+    let interface: IndexedStructure = [41, 37]
+        .map(|index| representation.slot(AbstractIndex::Normal(index)))
+        .into_iter()
+        .collect();
+    let zero = SymbolicTensor::from_indexed_parts(Atom::Zero, interface.clone()).unwrap();
     let metric = NumeratorInterface::admit(
         symbolica::function!(
             spenso::network::library::symbolic::ETS.metric,
@@ -176,8 +249,7 @@ fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order()
     )
     .unwrap();
     let metric =
-        SymbolicTensor::from_declared_parts(metric.expression().clone(), interface.clone())
-            .unwrap();
+        SymbolicTensor::from_indexed_parts(metric.expression().clone(), interface.clone()).unwrap();
     let model = crate::utils::load_generic_model("scalars");
     let canonical = Graph::import_dot(
         include_str!("../../../../../tests/resources/graphs/ir_safe_thresholds/no_directive_cross_section.dot"),
@@ -645,7 +717,10 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
         let (runtime_data, runtime_pair) = &runtime.underlying[&edge];
         assert_eq!(*runtime_pair, pair);
         assert_eq!(runtime.underlying.orientation(edge), data.orientation);
-        assert_eq!(runtime_data.num.value, data.data.numerator);
+        assert_eq!(
+            runtime_data.num.value,
+            data.data.numerator.clone().try_into_indexed().unwrap()
+        );
         assert_eq!(runtime_data.is_dummy, data.data.is_dummy);
     }
     for index in 0..source.n_hedges() {
@@ -655,8 +730,18 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
         assert_eq!(runtime.underlying[&hedge], source[&hedge]);
     }
     assert_eq!(runtime.overall_factor, *diagram.overall_factor());
-    assert_eq!(runtime.global_prefactor.num, *diagram.numerator_prefactor());
-    assert_eq!(runtime.global_prefactor.projector, *diagram.projector());
+    assert_eq!(
+        runtime.global_prefactor.num,
+        diagram
+            .numerator_prefactor()
+            .clone()
+            .try_into_indexed()
+            .unwrap()
+    );
+    assert_eq!(
+        runtime.global_prefactor.projector,
+        diagram.projector().clone().try_into_indexed().unwrap()
+    );
     let transported: feynkit_graph::routing::MomentumBasis = (&runtime.loop_momentum_basis).into();
     assert_eq!(
         transported,
@@ -1079,6 +1164,8 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
                 reindex(&super::NumeratorInterface::export(&vertex.num.value).0),
                 None,
             )
+            .unwrap()
+            .try_into_indexed()
             .unwrap();
             vertex
         },
@@ -1089,6 +1176,8 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
                     reindex(&super::NumeratorInterface::export(&edge.num.value).0),
                     None,
                 )
+                .unwrap()
+                .try_into_indexed()
                 .unwrap();
                 edge
             })
@@ -1124,7 +1213,10 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
         .global_prefactor
         .num
         .multiply(
-            &super::NumeratorInterface::admit(function!(ETS.metric, first, second), None).unwrap(),
+            &super::NumeratorInterface::admit(function!(ETS.metric, first, second), None)
+                .unwrap()
+                .try_into_indexed()
+                .unwrap(),
         )
         .unwrap();
     let error = Graph::import_dot(
@@ -1140,17 +1232,26 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
         "{error:?}"
     );
 
-    literal.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
+    literal.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None)
+        .unwrap()
+        .try_into_indexed()
+        .unwrap();
     literal.underlying = literal.underlying.map_data_ref(
         |_, _, vertex| {
             let mut vertex = vertex.clone();
-            vertex.num.value = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
+            vertex.num.value = super::NumeratorInterface::admit(Atom::one(), None)
+                .unwrap()
+                .try_into_indexed()
+                .unwrap();
             vertex
         },
         |_, _, _, edge| {
             edge.map(|edge| {
                 let mut edge = edge.clone();
-                edge.num.value = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
+                edge.num.value = super::NumeratorInterface::admit(Atom::one(), None)
+                    .unwrap()
+                    .try_into_indexed()
+                    .unwrap();
                 edge
             })
         },
@@ -1259,7 +1360,11 @@ fn compact_qcd_import_instantiates_rules_and_retains_explicit_fragments() {
     );
     assert_eq!(
         imported.global_prefactor.projector,
-        reference.external_state_projector().unwrap()
+        reference
+            .external_state_projector()
+            .unwrap()
+            .try_into_indexed()
+            .unwrap()
     );
     assert!(!imported.global_prefactor.projector.expression().is_one());
     let supplied = source.replace(
@@ -1477,7 +1582,10 @@ fn full_numerator_requires_one_q3_structure_argument() {
     let abstract_slot = Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)]);
     graph.overall_factor = Atom::one();
     graph.global_prefactor.num =
-        super::NumeratorInterface::admit(GS.emr_vec(EdgeIndex(3), abstract_slot), None).unwrap();
+        super::NumeratorInterface::admit(GS.emr_vec(EdgeIndex(3), abstract_slot), None)
+            .unwrap()
+            .try_into_indexed()
+            .unwrap();
     let error = graph.validate_full_numerator_tensor_network().unwrap_err();
     assert!(
         error
@@ -1499,7 +1607,10 @@ fn full_numerator_requires_one_q3_structure_argument() {
         "a numeric Minkowski index must remain an abstract Q3 label, not normalize to a Q component",
     );
 
-    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
+    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None)
+        .unwrap()
+        .try_into_indexed()
+        .unwrap();
 
     for malformed_component in [
         AIND_SYMBOLS.cind.call_args([Atom::num(-1)]),
@@ -1542,14 +1653,20 @@ fn full_numerator_requires_one_q3_structure_argument() {
     );
 
     graph.global_prefactor.num =
-        super::NumeratorInterface::admit(GS.emr_mom(out_of_range_edge, GS.cind(1)), None).unwrap();
+        super::NumeratorInterface::admit(GS.emr_mom(out_of_range_edge, GS.cind(1)), None)
+            .unwrap()
+            .try_into_indexed()
+            .unwrap();
     graph.overall_factor = malformed_q3.clone();
     let error = graph.validate_spatial_momentum_convention().unwrap_err();
     assert!(
         error.to_string().contains("Spatial momentum Q3"),
         "Q3 source validation must precede Q bounds in a retained tensor: {error:?}",
     );
-    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
+    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None)
+        .unwrap()
+        .try_into_indexed()
+        .unwrap();
 
     let nested_q = wrapper.call_args([scalar.pow(malformed_q)]);
     graph.overall_factor = nested_q.clone();
@@ -1591,7 +1708,10 @@ fn full_numerator_requires_one_q3_structure_argument() {
     graph.overall_factor = &malformed_q3 - &malformed_q3;
     graph.validate_spatial_momentum_convention().unwrap();
     graph.overall_factor = malformed_q3;
-    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::Zero, None).unwrap();
+    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::Zero, None)
+        .unwrap()
+        .try_into_indexed()
+        .unwrap();
     graph.validate_spatial_momentum_convention().unwrap();
 }
 
@@ -1733,7 +1853,10 @@ fn open_fundamental_color_requires_an_explicit_projector() {
     .unwrap();
 
     graph.validate_full_numerator_tensor_network().unwrap();
-    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None).unwrap();
+    graph.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None)
+        .unwrap()
+        .try_into_indexed()
+        .unwrap();
     let error = graph.validate_full_numerator_tensor_network().unwrap_err();
     assert!(
         error

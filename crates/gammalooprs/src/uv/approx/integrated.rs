@@ -25,8 +25,8 @@ use spenso::{
         tags::SPENSO_TAG,
     },
     structure::{
+        IndexedStructure,
         abstract_index::AbstractIndex,
-        partial::{PartialIndex, PartialStructure, PartialStructureExt},
         representation::{Minkowski, RepName},
         slot::{DummyAind, ParseableAind, SlotMatcher},
     },
@@ -65,14 +65,14 @@ use crate::{
 /// retained projections keep the completed tensor's logical interface, including zero.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct IntegratedCts {
-    pole: SymbolicTensor<PartialStructure>,
-    finite_counterterm: SymbolicTensor<PartialStructure>,
+    pole: SymbolicTensor<IndexedStructure>,
+    finite_counterterm: SymbolicTensor<IndexedStructure>,
     scale_power: i64,
 }
 
 impl IntegratedCts {
     fn from_series(
-        source: &SymbolicTensor<PartialStructure>,
+        source: &SymbolicTensor<IndexedStructure>,
         expansion: &Series<AtomField>,
         scale_power: i64,
     ) -> Result<Self> {
@@ -108,7 +108,7 @@ impl IntegratedCts {
         Self::from_series(&combined, &expansion, scale_power)
     }
 
-    fn projected(&self, finite: bool) -> Result<SymbolicTensor<PartialStructure>> {
+    fn projected(&self, finite: bool) -> Result<SymbolicTensor<IndexedStructure>> {
         // The enclosing forest Taylor operation rescales the vacuum mass in
         // this coefficient along with its active momenta. The bookkeeping
         // factor restores only consumed loop measures; physical projections
@@ -123,15 +123,15 @@ impl IntegratedCts {
         )?)
     }
 
-    pub(crate) fn pole(&self) -> Result<SymbolicTensor<PartialStructure>> {
+    pub(crate) fn pole(&self) -> Result<SymbolicTensor<IndexedStructure>> {
         self.projected(false)
     }
 
-    pub(crate) fn finite_counterterm(&self) -> Result<SymbolicTensor<PartialStructure>> {
+    pub(crate) fn finite_counterterm(&self) -> Result<SymbolicTensor<IndexedStructure>> {
         self.projected(true)
     }
 
-    pub(crate) fn physical_pole(&self) -> Result<SymbolicTensor<PartialStructure>> {
+    pub(crate) fn physical_pole(&self) -> Result<SymbolicTensor<IndexedStructure>> {
         Ok(self.pole.with_checked_expression(
             self.pole
                 .expression()
@@ -140,7 +140,7 @@ impl IntegratedCts {
         )?)
     }
 
-    pub(crate) fn physical_finite_counterterm(&self) -> Result<SymbolicTensor<PartialStructure>> {
+    pub(crate) fn physical_finite_counterterm(&self) -> Result<SymbolicTensor<IndexedStructure>> {
         Ok(self.finite_counterterm.with_checked_expression(
             self.finite_counterterm
                 .expression()
@@ -168,7 +168,8 @@ fn truncate(series: &Series<AtomField>, finite: bool) -> Atom {
 
 impl Rooted for IntegratedCts {
     fn root() -> Self {
-        let zero = SymbolicTensor::infer(Atom::Zero).expect("zero has a scalar tensor interface");
+        let zero =
+            SymbolicTensor::infer_indexed(Atom::Zero).expect("zero has a scalar tensor interface");
         Self {
             pole: zero.clone(),
             finite_counterterm: zero,
@@ -178,8 +179,8 @@ impl Rooted for IntegratedCts {
 }
 
 fn simplify(
-    integrand: &SymbolicTensor<PartialStructure>,
-) -> Result<SymbolicTensor<PartialStructure>> {
+    integrand: &SymbolicTensor<IndexedStructure>,
+) -> Result<SymbolicTensor<IndexedStructure>> {
     let started = std::time::Instant::now();
     debug_tags!(#uv, #integrated, #diagnostic_stage;
         stage = 1u8, finished = false,
@@ -258,9 +259,9 @@ impl Integrated<'_> {
     /// The returned map restores the original logical positions after the
     /// backend result has been checked against the protected carrier.
     pub(crate) fn protect_numeric_ports(
-        source: &SymbolicTensor<PartialStructure>,
+        source: &SymbolicTensor<IndexedStructure>,
     ) -> Result<(
-        SymbolicTensor<PartialStructure>,
+        SymbolicTensor<IndexedStructure>,
         std::collections::HashMap<usize, AbstractIndex>,
     )> {
         let originals = source
@@ -268,19 +269,15 @@ impl Integrated<'_> {
             .logical_slots()
             .into_iter()
             .enumerate()
-            .filter_map(|(position, slot)| match slot.aind {
-                PartialIndex::Explicit(index)
-                    if matches!(index.to_atom().as_view(), AtomView::Num(_)) =>
-                {
-                    Some((position, index))
-                }
-                _ => None,
+            .filter_map(|(position, slot)| {
+                matches!(slot.aind.to_atom().as_view(), AtomView::Num(_))
+                    .then_some((position, slot.aind))
             })
             .collect::<std::collections::HashMap<_, _>>();
         if originals.is_empty() {
             return Ok((source.clone(), originals));
         }
-        let reserved = SymbolicTensor::reserved_dummies([source]);
+        let reserved = SymbolicTensor::<IndexedStructure>::reserved_dummies([source]);
         let protected = originals
             .keys()
             .map(|&position| (position, reserved.fresh_index()))
@@ -386,12 +383,12 @@ impl Integrated<'_> {
     )]
     fn integrate<S: ForestNodeLike>(
         &self,
-        integrand: &SymbolicTensor<PartialStructure>,
+        integrand: &SymbolicTensor<IndexedStructure>,
         sector: &FourDSector,
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
-    ) -> Result<SymbolicTensor<PartialStructure>> {
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
         let (protected_integrand, source_ports) = Self::protect_numeric_ports(integrand)?;
         let integrand = &protected_integrand;
         let graph = ctx.graph;
@@ -953,7 +950,7 @@ impl Integrated<'_> {
         // cannot account for ports carried by those native tensor leaves.
         let numerator = Self::restore_numerator(numerator.clone(), topology_order);
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
+        let numerator = SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view())?)?;
         let numerator = simplify(&numerator)?;
         Self::ensure_resolved_lorentz_contractions(numerator.expression())?;
         let numerator = numerator
@@ -1227,7 +1224,7 @@ impl Integrated<'_> {
         res
     }
 
-    fn to_vakint_numerator(numerator: &SymbolicTensor<PartialStructure>) -> Result<Atom> {
+    fn to_vakint_numerator(numerator: &SymbolicTensor<IndexedStructure>) -> Result<Atom> {
         // A concrete component is a fixed-vector projection, not an Einstein
         // index. Keep repeated temporal/spatial components distinct from dummy
         // multiplicity before Vakint supplies its formal-dimensional slots.
@@ -1326,7 +1323,7 @@ pub(crate) fn to_vakint_integrand<
     S: SubGraphLike + SubSetLike<Base = SuBitGraph>,
     SS: SubGraphLike,
 >(
-    integrand: &SymbolicTensor<PartialStructure>,
+    integrand: &SymbolicTensor<IndexedStructure>,
     graph: &HedgeGraph<E, V, H>,
     reduced: &S,
     dependent_subgraph: &SS,
@@ -1335,7 +1332,7 @@ pub(crate) fn to_vakint_integrand<
     substitute_masses_to_m_uv: bool,
 ) -> Result<VakintExpression> {
     let additional_normalization =
-        SymbolicTensor::infer(parse!(&settings.additional_normalization))?;
+        SymbolicTensor::infer_indexed(parse!(&settings.additional_normalization))?;
     if !additional_normalization.is_scalar() {
         return Err(eyre!(
             "additional_normalization must have a scalar tensor interface"
@@ -1866,7 +1863,7 @@ pub(crate) fn to_vakint_integrand<
         let momentum_solution =
             VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
                 .wrap_err("could not solve momentum system for Vakint integrand")?;
-        let numerator = SymbolicTensor::infer(cooking.try_cook(t.numerator.as_view())?)?;
+        let numerator = SymbolicTensor::infer_indexed(cooking.try_cook(t.numerator.as_view())?)?;
         let mut numerator = momentum_solution.rewrite_numerator(&numerator)?;
         t.integral = momentum_solution.rewrite_integral(&t.integral, &add_additional_args);
         momentum_solution.ensure_free_variables_eliminated(
@@ -1909,7 +1906,7 @@ pub(crate) fn to_vakint_integrand<
         // );
 
         let normalization =
-            additional_normalization.pow(&SymbolicTensor::infer(Atom::num(nloops))?)?;
+            additional_normalization.pow(&SymbolicTensor::infer_indexed(Atom::num(nloops))?)?;
         numerator = numerator.multiply(&normalization)?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_loop_normalization",
@@ -2089,8 +2086,8 @@ impl VakintMomentumSolution {
 
     fn rewrite_numerator(
         &self,
-        numerator: &SymbolicTensor<PartialStructure>,
-    ) -> Result<SymbolicTensor<PartialStructure>> {
+        numerator: &SymbolicTensor<IndexedStructure>,
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
         // Production numerators have already passed metric-only preparation.
         // Affine momentum replacement preserves port labels and introduces no
         // metric edges. Keep vectors explicit while normalizing the new products.
@@ -2598,11 +2595,13 @@ mod tests {
                     let difference = Integrated::restore_numerator(difference, 0);
                     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
                     assert!(
-                        SymbolicTensor::infer(cooking.try_cook(simplify(&difference)?.as_view())?)?
-                            .coefficients_are_zero(
-                                spenso::shadowing::TensorCollectFilter::<0>::Tensors
-                            )?
-                            .is_true(),
+                        SymbolicTensor::infer_indexed(
+                            cooking.try_cook(simplify(&difference)?.as_view())?
+                        )?
+                        .coefficients_are_zero(
+                            spenso::shadowing::TensorCollectFilter::<0>::Tensors
+                        )?
+                        .is_true(),
                         "backend={tensor_reduction_method:?}, compact={compact_fixed_vectors}, projected={project_onto_tensor_integrals}, dots={use_dot_product_notation}"
                     );
                     let mut scalar = vakint::VakintTerm {
@@ -2639,7 +2638,7 @@ mod tests {
                     ) - expected_integral.replace(spectator.to_pattern()).with(1);
                     let difference = simplify(&difference)?;
                     assert!(
-                        SymbolicTensor::infer(cooking.try_cook(difference.as_view())?)?
+                        SymbolicTensor::infer_indexed(cooking.try_cook(difference.as_view())?)?
                             .coefficients_are_zero(
                                 spenso::shadowing::TensorCollectFilter::<0>::Tensors
                             )?
@@ -2735,13 +2734,13 @@ mod tests {
             };
             let difference = casimir.pow(2) - &dimension_ratio * &casimir * index;
             assert!(
-                SymbolicTensor::infer(&spectator * difference)?
+                SymbolicTensor::infer_indexed(&spectator * difference)?
                     .simplify_algebra(&settings)?
                     .into_expression()
                     .is_zero()
             );
             assert_eq!(
-                SymbolicTensor::infer(&spectator * casimir)?
+                SymbolicTensor::infer_indexed(&spectator * casimir)?
                     .simplify_algebra(&settings)?
                     .into_expression(),
                 &spectator * dimension_ratio / Atom::num(2),
@@ -3080,12 +3079,7 @@ mod tests {
             .structure()
             .logical_slots()
             .into_iter()
-            .map(|slot| {
-                let PartialIndex::Explicit(index) = slot.aind else {
-                    unreachable!()
-                };
-                index.to_atom()
-            })
+            .map(|slot| slot.aind.to_atom())
             .collect::<Vec<_>>();
         let dummy = vakint::symbols::S.dot_dummy_ind(0);
         let backend = function!(vakint::symbols::S.g, &labels[0], &dummy)
@@ -3370,7 +3364,7 @@ mod tests {
                 let dot = function!(vakint::symbols::S.dot, left.call(1), right.call(2));
                 let source = &spectator * dot.pow(2);
                 let restored = Integrated::restore_numerator(source.clone(), 0);
-                let admitted = SymbolicTensor::infer(restored.clone()).unwrap();
+                let admitted = SymbolicTensor::infer_indexed(restored.clone()).unwrap();
                 assert_eq!(admitted.expression(), &restored);
                 assert_eq!(to_vakint_numerator(&restored).unwrap(), source);
                 assert_eq!(
@@ -3418,7 +3412,7 @@ mod tests {
             );
             let source = word * idenso::color_f!(&x, &y, &c) * momentum;
             let encoded = cooking.try_cook(source.as_view())?;
-            let native = SymbolicTensor::infer(encoded.clone())?;
+            let native = SymbolicTensor::infer_indexed(encoded.clone())?;
             Integrated::ensure_resolved_lorentz_contractions(&encoded)?;
             Integrated::ensure_resolved_lorentz_contractions(native.expression())?;
             assert_eq!(cooking.uncook(native.expression().as_view()), source);
@@ -3677,7 +3671,7 @@ mod tests {
             2,
         )
         .unwrap();
-        let source = SymbolicTensor::infer(expansion.to_atom()).unwrap();
+        let source = SymbolicTensor::infer_indexed(expansion.to_atom()).unwrap();
         let integrated = IntegratedCts::from_series(&source, &expansion, 4).unwrap();
         let scale = Atom::var(GS.integrated_loop_scale).pow(4);
 
@@ -3706,7 +3700,7 @@ mod tests {
     fn finite_projection_retains_child_epsilon_terms_until_parent_poles_multiply() {
         test_initialise().unwrap();
         let epsilon = Atom::var(GS.dim_epsilon);
-        let child_source = SymbolicTensor::infer(
+        let child_source = SymbolicTensor::infer_indexed(
             Atom::num(2) + Atom::num(3) * &epsilon + Atom::num(5) * epsilon.pow(2),
         )
         .unwrap();
@@ -3717,7 +3711,8 @@ mod tests {
         )
         .unwrap();
         let parent_poles =
-            SymbolicTensor::infer(epsilon.pow(-2) + Atom::num(7) * epsilon.pow(-1)).unwrap();
+            SymbolicTensor::infer_indexed(epsilon.pow(-2) + Atom::num(7) * epsilon.pow(-1))
+                .unwrap();
         let nested_source = child
             .physical_finite_counterterm()
             .unwrap()
@@ -3752,7 +3747,8 @@ mod tests {
 
         let epsilon = Atom::var(GS.dim_epsilon);
         let factors = [2, 3, 5].map(|finite| {
-            let source = SymbolicTensor::infer(epsilon.pow(-1) + Atom::num(finite)).unwrap();
+            let source =
+                SymbolicTensor::infer_indexed(epsilon.pow(-1) + Atom::num(finite)).unwrap();
             IntegratedCts::from_series(&source, &series(source.expression(), 1).unwrap(), 0)
                 .unwrap()
         });
@@ -3854,15 +3850,16 @@ mod tests {
         for power in [1, 2, -1] {
             let numerator = &spectator * (&q * &p + Atom::one()).pow(power);
             let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-            let prepared = SymbolicTensor::infer(cooking.try_cook(numerator.as_view()).unwrap())
-                .unwrap()
-                .contract(ContractSettings {
-                    rank_one: false,
-                    collect_chains: false,
-                    collect_traces: false,
-                    ..Default::default()
-                })
-                .unwrap();
+            let prepared =
+                SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view()).unwrap())
+                    .unwrap()
+                    .contract(ContractSettings {
+                        rank_one: false,
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
+                    .unwrap();
             let rewritten = solution.rewrite_numerator(&prepared).unwrap();
             assert_eq!(
                 cooking.uncook(rewritten.expression().as_view()),

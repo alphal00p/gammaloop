@@ -3,7 +3,6 @@ use std::sync::atomic::AtomicUsize;
 use color_eyre::Result;
 use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetOps};
-use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use symbolica::atom::Atom;
 use symbolica_utils::AtomPrintExt;
 use tracing::debug;
@@ -50,10 +49,7 @@ impl Numerator<UnInit> {
             &graph.underlying,
             &selected,
             &graph.underlying.empty_subgraph(),
-            SymbolicTensor::from_normalized_parts(
-                Atom::one(),
-                PartialStructure::from_logical_slots([]),
-            ),
+            SymbolicTensor::infer_indexed(Atom::one())?,
             |_, vertex| vertex.get_num(),
             |edge| edge.num.value.clone(),
             |edge| edge.is_dummy,
@@ -78,10 +74,7 @@ impl Numerator<UnInit> {
             &graph.underlying,
             subgraph,
             ignore,
-            SymbolicTensor::from_normalized_parts(
-                Atom::one(),
-                PartialStructure::from_logical_slots([]),
-            ),
+            SymbolicTensor::infer_indexed(Atom::one())?,
             |_, vertex| vertex.get_num(),
             |edge| edge.num.value.clone(),
             |edge| edge.is_dummy,

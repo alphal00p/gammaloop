@@ -5,7 +5,7 @@ use linnet::{
 };
 
 use idenso::tensor::SymbolicTensor;
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::IndexedStructure;
 use symbolica::atom::Atom;
 
 use crate::{
@@ -31,14 +31,14 @@ pub struct Vertex {
     // #[bincode(with_serde)]
     pub name: Autogen<String>,
     pub vertex_rule: Option<VertexRuleId>,
-    pub num: Autogen<SymbolicTensor<PartialStructure>>,
+    pub num: Autogen<SymbolicTensor<IndexedStructure>>,
     // pub num_spin: ParamTensor<OrderedStructure<Euclidean, Aind>>,
     // pub num_color: ParamTensor<OrderedStructure<Euclidean, Aind>>,
     pub dod: Autogen<i32>,
 }
 
 impl Vertex {
-    pub(crate) fn get_num(&self) -> SymbolicTensor<PartialStructure> {
+    pub(crate) fn get_num(&self) -> SymbolicTensor<IndexedStructure> {
         self.num.value.clone()
     }
 

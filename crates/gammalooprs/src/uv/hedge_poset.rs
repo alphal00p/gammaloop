@@ -1585,7 +1585,7 @@ impl Forests {
                 vec![node]
             };
             let physical = components.into_iter().try_fold(
-                SymbolicTensor::infer(Atom::one())?,
+                SymbolicTensor::infer_indexed(Atom::one())?,
                 |product, component| -> Result<_> {
                     let component_key = &self.graph[component];
                     let integrated = self
@@ -1614,7 +1614,7 @@ impl Forests {
                 key=%key,
                expr = % physical.expression().log_print(None),"Term before simplification"
             );
-            let overall = SymbolicTensor::infer(graph.overall_factor.clone())?;
+            let overall = SymbolicTensor::infer_indexed(graph.overall_factor.clone())?;
             let prefactor = graph
                 .global_prefactor
                 .projector
@@ -2785,7 +2785,7 @@ mod tests {
         assert!(schemes.contains(&ApproximationType::PolePart));
 
         let expected = components.iter().try_fold(
-            SymbolicTensor::infer(Atom::one())?,
+            SymbolicTensor::infer_indexed(Atom::one())?,
             |product, &component| -> Result<_> {
                 let component_key = &forests.graph[component];
                 let integrated = forests
@@ -3725,13 +3725,15 @@ mod tests {
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
-                .contract(ContractSettings {
-                    rank_one: false,
-                    collect_chains: false,
-                    collect_traces: false,
-                    ..Default::default()
-                })?;
+            let expression = SymbolicTensor::infer_indexed(
+                cooking.try_cook(expression.as_view())?,
+            )?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
             Ok(cooking
                 .uncook(expression.expression().as_view())
                 .collect_factors())
@@ -3978,15 +3980,14 @@ mod tests {
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let mixed_remainder = SymbolicTensor::infer(
-                cooking.try_cook(mixed_remainder.as_view())?,
-            )?
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?;
+            let mixed_remainder =
+                SymbolicTensor::infer_indexed(cooking.try_cook(mixed_remainder.as_view())?)?
+                    .contract(ContractSettings {
+                        rank_one: false,
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?;
             let mixed_remainder = cooking
                 .uncook(mixed_remainder.expression().as_view())
                 .collect_factors();
@@ -4086,25 +4087,28 @@ mod tests {
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
-                .contract(ContractSettings {
-                    rank_one: false,
-                    collect_chains: false,
-                    collect_traces: false,
-                    ..Default::default()
-                })?
-                // Typed composition can spell a completed scalar contraction
-                // as g(p,q). Use the same dot notation before selecting the
-                // tensor basis; no indexed contraction or finite-D value is added.
-                .to_dots()?;
+            let expression =
+                SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view())?)?
+                    .contract(ContractSettings {
+                        rank_one: false,
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
+                    // Typed composition can spell a completed scalar contraction
+                    // as g(p,q). Use the same dot notation before selecting the
+                    // tensor basis; no indexed contraction or finite-D value is added.
+                    .to_dots()?;
             Ok(cooking.uncook(expression.expression().as_view()))
         });
         let (actual, expected) = (actual?, expected?);
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let actual = SymbolicTensor::infer(cooking.try_cook(actual.as_view())?)?;
-        let expected = SymbolicTensor::infer(cooking.try_cook(expected.as_view())?)?;
+        let actual = SymbolicTensor::infer_indexed(cooking.try_cook(actual.as_view())?)?;
+        let expected = SymbolicTensor::infer_indexed(cooking.try_cook(expected.as_view())?)?;
+        // This independent diagnostic selects tensor factors whose individual
+        // interfaces may be unresolved; it does not store a runtime numerator.
         let difference = SymbolicTensor::infer(actual.expression() - expected.expression())?;
         // The fixture's numerator consists of its selected Q tensor factors.
         // Compare their complete scalar denominator weights in the same formal

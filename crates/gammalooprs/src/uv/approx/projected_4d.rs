@@ -8,7 +8,7 @@ use std::{
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::subgraph::SubSetLike;
-use spenso::structure::partial::PartialStructureExt;
+use spenso::structure::slot::IsAbstractSlot;
 use symbolica::{
     atom::{Atom, AtomCore, Indeterminate},
     id::Replacement,
@@ -407,7 +407,7 @@ impl Localizer<'_> {
                     .structure()
                     .logical_slots()
                     .into_iter()
-                    .map(idenso::tensor::composition::port_atom)
+                    .map(|slot| slot.to_atom())
                     .collect::<Vec<_>>();
                 let key = (
                     powers.clone(),

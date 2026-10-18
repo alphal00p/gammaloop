@@ -22,7 +22,7 @@ use rayon::{
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::algebra::complex::Complex;
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::IndexedStructure;
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
@@ -1229,7 +1229,7 @@ impl AmplitudeGraph {
         &self,
         component: &S,
         config: AnalyticalEvaluationConfig<'_>,
-    ) -> Result<SymbolicTensor<PartialStructure>> {
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
         if self.graph.param_builder.medium_mode != MediumMode::Vacuum {
             return Err(eyre!(
                 "Analytical evaluation with Vakint does not support thermal modes (graph '{}', mode {:?}); use inspect or integrate for medium-dependent results",

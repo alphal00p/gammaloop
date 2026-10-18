@@ -629,7 +629,7 @@ mod shared_expression_tests {
         let edge = EdgeIndex(7);
         let mass_squared = symbolica::symbol!("shared_propagator_test::m").pow(2);
         let momentum_square =
-            SymbolicTensor::infer(spenso_lor_atom(edge.0 as i32, edge.0, GS.dim).pow(2))
+            SymbolicTensor::infer_indexed(spenso_lor_atom(edge.0 as i32, edge.0, GS.dim).pow(2))
                 .unwrap()
                 .contract(ContractSettings {
                     collect_chains: false,
