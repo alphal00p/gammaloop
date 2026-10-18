@@ -2626,10 +2626,13 @@ impl<'a> GraphThreeDSource<'a> {
                 "denominator certificate changed parsed mass metadata"
             );
             let momentum = CanonicalUvDenominatorClass::momentum(&edge.signature, lmb);
-            let quadratic = Minkowski {}
-                .new_rep(GS.dim)
-                .inner_product(&momentum, &momentum)
-                - &denominator.mass_squared;
+            let represented =
+                GS.indexed_momentum(&momentum, &[Minkowski {}.new_rep(GS.dim).to_symbolic([])]);
+            let quadratic = function!(
+                spenso::network::tags::SPENSO_TAG.dot,
+                &represented,
+                &represented
+            ) - &denominator.mass_squared;
             let reconstructed = FourDDenominator {
                 source_edge: denominator.source_edge,
                 momentum,
@@ -7521,10 +7524,13 @@ mod tests {
             .into_iter()
             .flat_map(|(source_edge, sign, power)| {
                 let momentum = Atom::num(sign) * &carrier;
-                let full_expr = Minkowski {}
-                    .new_rep(GS.dim)
-                    .inner_product(&momentum, &momentum)
-                    - &full_mass;
+                let represented =
+                    GS.indexed_momentum(&momentum, &[Minkowski {}.new_rep(GS.dim).to_symbolic([])]);
+                let full_expr = function!(
+                    spenso::network::tags::SPENSO_TAG.dot,
+                    &represented,
+                    &represented
+                ) - &full_mass;
                 std::iter::repeat_n(
                     FourDDenominator {
                         source_edge,
@@ -7636,10 +7642,13 @@ mod tests {
                 .particle
                 .mass_atom(&graph.model)
                 .pow(2);
-            let full_expr = Minkowski {}
-                .new_rep(GS.dim)
-                .inner_product(&momentum, &momentum)
-                - &mass_squared;
+            let represented =
+                GS.indexed_momentum(&momentum, &[Minkowski {}.new_rep(GS.dim).to_symbolic([])]);
+            let full_expr = function!(
+                spenso::network::tags::SPENSO_TAG.dot,
+                &represented,
+                &represented
+            ) - &mass_squared;
             FourDDenominator {
                 source_edge,
                 momentum,
