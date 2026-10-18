@@ -133,6 +133,15 @@ error and assigns the `public_typst_behavior` binary to the existing
 `memory-intensive` group, capped at two concurrent tests. Test selection,
 assertions, expected output, timeout and retry policies remain unchanged.
 
+The first local canonical follow-up at `0ce5d11e` passes Clippy, formatting and
+the CI graph check, then reveals a separate doctest markup failure. Rustdoc
+interprets an indented Python option list in `simplify_algebra` as Rust source.
+The repair dedents that list into Markdown prose, preserving every option,
+caveat and example rather than disabling the extracted check. The stopped run
+records 65 passing doctests and 19 existing ignored cases before the single
+failure; later packages are not certified by that attempt. The existing Python
+exporter refreshes both generated stub copies from the corrected shared docs.
+
 Repair qualification uses the full canonical `just ci-checks` owner after CI
 regeneration and formatting. This exercises Nix's actual per-package runtime
 features and rendering policy; another workspace-default Cargo sweep cannot
