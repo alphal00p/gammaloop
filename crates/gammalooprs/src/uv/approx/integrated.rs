@@ -1043,12 +1043,11 @@ impl Integrated<'_> {
         if InterfaceInference::has_explicit_index_pairs(
             explicit.as_view(),
             Minkowski {}.into(),
-            &[
-                GS.emr_mom,
-                GS.loop_mom,
-                vakint::symbols::S.p,
-                vakint::symbols::S.k,
-            ],
+            |value| {
+                matches!(value, AtomView::Fun(leaf) if [
+                GS.emr_mom, GS.loop_mom, vakint::symbols::S.p, vakint::symbols::S.k,
+            ].contains(&leaf.get_symbol()))
+            },
         )
         .map_err(|error| eyre!("invalid residual d-dimensional tensor structure: {error}"))?
         {

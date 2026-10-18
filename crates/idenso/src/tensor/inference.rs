@@ -2938,7 +2938,7 @@ impl InterfaceInference {
                 validate: true,
                 ..ObservationScope::default()
             },
-            &[],
+            &mut |_| false,
         )
         .map(|_| ())
         .map_err(|error| error.to_string())
