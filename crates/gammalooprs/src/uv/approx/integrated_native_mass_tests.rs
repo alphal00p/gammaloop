@@ -56,6 +56,75 @@ struct MassProjection {
 }
 
 impl QcdMassReference {
+    /// Certify only the finite scalar rows of a completed, preprocessed tensor.
+    /// Callers retain their distinct Dirac/color preprocessing contracts.
+    fn certify_finite_tagged_rows_zero(
+        label: &str,
+        tensor: SymbolicTensor<IndexedStructure>,
+    ) -> Result<()> {
+        use crate::{numerator::symbolica_ext::ScalarRationalSize, utils::GS};
+
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        // Move the completed carrier into the coefficient engine; its individual
+        // words may have partial interfaces even when the input is fully indexed.
+        let tensor: SymbolicTensor<PartialStructure> = tensor.into();
+        // Keep each complete tensor word as an opaque key. Only its finite
+        // scalar coefficient is put over a common denominator; in particular,
+        // rational epsilon weights from the independent moments must cancel.
+        for (word, coefficient) in
+            tensor.coefficient_list(spenso::shadowing::TensorCollectFilter::<0>::TaggedTensors)?
+        {
+            if word.expression().is_zero() || coefficient.expression().is_zero() {
+                continue;
+            }
+            ensure!(coefficient.is_scalar());
+            let scalar = coefficient.expression().collect_compact_factors();
+            if scalar.is_zero() {
+                continue;
+            }
+            // Only finite scalar moment/epsilon weights may need rational
+            // cancellation. Physical pole owners remain separate, and the
+            // shared preflight bounds work before polynomial conversion.
+            let in_scope = !scalar.contains_symbol(GS.den)
+                && ScalarRationalSize::estimate(scalar.as_view()).is_some();
+            let is_zero = in_scope && scalar.together().is_zero();
+            if !is_zero {
+                crate::debug_tags!(#uv, #integrated, #inspect;
+                    stage = "native_proper_prefix_scalar_certificate_rejected", label, in_scope,
+                    physical_poles = scalar.contains_symbol(GS.den),
+                    scalar_bytes = scalar.as_view().get_byte_size(),
+                    file.scalar = %cooking.uncook(scalar.as_view()).to_canonical_string(),
+                    file.word = %cooking.uncook(word.expression().as_view()).to_canonical_string(),
+                    "Retained factorized scalar row and native word at the rejected proof boundary"
+                );
+            }
+            ensure!(
+                in_scope,
+                "{label}: finite scalar scope refused; physical_poles={}, bytes={}, symbols={:?}",
+                scalar.contains_symbol(GS.den),
+                scalar.as_view().get_byte_size(),
+                scalar
+                    .get_all_symbols(true)
+                    .into_iter()
+                    .map(|symbol| symbol.to_string())
+                    .collect::<BTreeSet<_>>()
+            );
+            ensure!(
+                is_zero,
+                "{label}: native finite-tensor coefficient is not zero; bytes={}, symbols={:?}",
+                scalar.as_view().get_byte_size(),
+                scalar
+                    .get_all_symbols(true)
+                    .into_iter()
+                    .map(|symbol| symbol.to_string())
+                    .collect::<BTreeSet<_>>()
+            );
+        }
+        Ok(())
+    }
+
     pub(in crate::uv) fn new() -> Result<Self> {
         let mut restriction: serde_json::Value = serde_json::from_str(include_str!(
             "../../../../../assets/models/json/sm/restrict_light_quarks_massless.json"
@@ -1818,3 +1887,8 @@ fn native_qg_vertex_proper_prefixes_match_one_loop_mass_density() -> Result<()> 
     ensure!(counts.values().copied().collect::<Vec<_>>() == [2, 2]);
     Ok(())
 }
+
+#[path = "native_gluon_prefix_tests.rs"]
+mod native_gluon_prefix_tests;
+#[path = "native_self_energy_prefix_tests.rs"]
+mod native_self_energy_prefix_tests;
