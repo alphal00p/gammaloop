@@ -104,6 +104,10 @@ pub(crate) struct Local4dProjectionContext {
     pub(crate) canonical_preparation_builds: usize,
     pub(crate) source_preparation_builds: usize,
     pub(crate) projected_component_requests: usize,
+    #[cfg(test)]
+    pub(crate) certify_denominator_reconstruction: bool,
+    #[cfg(test)]
+    pub(crate) denominator_reconstruction_certificates: usize,
 }
 
 impl Default for Local4dProjectionContext {
@@ -116,6 +120,10 @@ impl Default for Local4dProjectionContext {
             canonical_preparation_builds: 0,
             source_preparation_builds: 0,
             projected_component_requests: 0,
+            #[cfg(test)]
+            certify_denominator_reconstruction: false,
+            #[cfg(test)]
+            denominator_reconstruction_certificates: 0,
         }
     }
 }

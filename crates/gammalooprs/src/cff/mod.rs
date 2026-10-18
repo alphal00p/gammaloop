@@ -1187,6 +1187,16 @@ impl Graph {
                     _ => unreachable!("preparation key and value kinds agree"),
                 });
             let cache_hit = cached.is_some();
+            #[cfg(test)]
+            if let Some(context) = context.as_deref_mut()
+                && context.certify_denominator_reconstruction
+            {
+                eyre::ensure!(
+                    context.denominator_reconstruction_certificates
+                        == context.source_preparation_builds,
+                    "an opted-in context contains an uncertified source preparation"
+                );
+            }
             let mut source_build_time = Duration::ZERO;
             let mut analysis_preparation_time = Duration::ZERO;
             let preparation = if let Some(preparation) = cached {
@@ -1213,6 +1223,13 @@ impl Graph {
                     )?
                 }
                 .with_fixed_external_momenta(&key.fixed_external_momenta)?;
+                #[cfg(test)]
+                if let Some(context) = context.as_deref_mut()
+                    && context.certify_denominator_reconstruction
+                {
+                    source.certify_denominator_reconstruction(classes)?;
+                    context.denominator_reconstruction_certificates += 1;
+                }
                 source_build_time = reconstruction_started.elapsed();
                 let preparation_started = Instant::now();
                 let preparation = Arc::new(self.prepare_3d_expression_for_4d_term(
