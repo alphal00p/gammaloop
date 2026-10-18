@@ -35,6 +35,8 @@ pub enum CookingError {
     DimensionCallback,
     #[error("unsupported dimension payload for reversible cooking")]
     UnsupportedDimensionPayload,
+    #[error("cyclic reversible index payload")]
+    CyclicIndexPayload,
 }
 
 impl CookingError {
@@ -489,6 +491,64 @@ impl CookSettings {
                 }
             }
         })
+    }
+
+    /// Inspect one public index through reversible payloads without rebuilding it.
+    /// Ordinary function-valued labels remain opaque explicit identities. Only
+    /// native Open/scope heads and this owner's symbol payloads are followed;
+    /// in particular, ordinary labels never construct a failed index parse.
+    pub(crate) fn index_has_open_port(
+        mut index: spenso::structure::abstract_index::AbstractIndex,
+    ) -> Result<bool, CookingError> {
+        use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+
+        while let AbstractIndex::Scoped(scope) = index {
+            index = scope.index();
+        }
+        let AbstractIndex::Symbol(symbol) = index else {
+            return Ok(matches!(index, AbstractIndex::Open { .. }));
+        };
+        let mut symbol: Symbol = symbol.into();
+        let settings = Self::indices().with_mode(CookMode::ReversibleEncoding);
+        // Ordinary cooked labels need no allocation. A visited list is needed
+        // only when a stored payload refers to another encoded symbol.
+        let mut visited = Vec::new();
+        loop {
+            if !settings.should_uncook_symbol(symbol) {
+                return Ok(false);
+            }
+            let UserData::Atom(payload) = symbol.get_data() else {
+                return Ok(false);
+            };
+            let mut view = payload.as_view();
+            loop {
+                match view {
+                    AtomView::Fun(function) if function.get_symbol() == AIND_SYMBOLS.openind => {
+                        return Ok(true);
+                    }
+                    AtomView::Fun(function)
+                        if function.get_symbol() == AbstractIndex::scope_symbol()
+                            && function.get_nargs() == 2 =>
+                    {
+                        let mut arguments = function.iter();
+                        if !matches!(arguments.next(), Some(AtomView::Var(_))) {
+                            return Ok(false);
+                        }
+                        view = arguments.next().unwrap();
+                    }
+                    AtomView::Var(variable) => {
+                        let next = variable.get_symbol();
+                        if next == symbol || visited.contains(&next) {
+                            return Err(CookingError::CyclicIndexPayload);
+                        }
+                        visited.push(symbol);
+                        symbol = next;
+                        break;
+                    }
+                    _ => return Ok(false),
+                }
+            }
+        }
     }
 
     /// Cook only the abstract-index payloads of recognized representation slots.

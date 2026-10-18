@@ -67,6 +67,15 @@ impl PartialTensor {
         } = self;
         let structure = IndexedStructure::try_from(structure)
             .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
+        for (axis, slot) in structure.canonical().external_structure_iter().enumerate() {
+            if crate::CookSettings::index_has_open_port(slot.aind)
+                .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
+            {
+                return Err(TensorInferenceError::Invalid(
+                    spenso::structure::StructureError::ExpectedExplicitSlot { axis }.to_string(),
+                ));
+            }
+        }
         Ok(IndexedTensor {
             structure,
             expression,
@@ -516,6 +525,83 @@ mod tests {
     }
 
     #[test]
+    fn indexed_admission_rejects_cooked_open_ports_without_rewriting_explicit_labels() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let cooking = crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
+        let rep = Minkowski {}.new_rep(4).to_lib();
+        let scope = symbol!("indexed_cooked_open_scope");
+        let open = AbstractIndex::Open {
+            owner: 173,
+            axis: 1,
+        };
+        for source in [open, open.scoped(scope)] {
+            let encoded = cooking
+                .try_cook_indices(rep.slot::<AbstractIndex, _>(source).to_atom().as_view())
+                .unwrap();
+            let slot = LibrarySlot::<AbstractIndex>::try_from(encoded.as_view()).unwrap();
+            assert!(matches!(slot.aind, AbstractIndex::Symbol(_)));
+            let nested = function!(
+                AbstractIndex::scope_symbol(),
+                Atom::var(scope),
+                slot.aind.to_atom()
+            );
+            let nested = cooking
+                .cook_function(nested.as_fun_view().unwrap())
+                .unwrap();
+            let nested = AbstractIndex::try_from(nested.as_view()).unwrap();
+            for index in [slot.aind, slot.aind.scoped(scope), nested] {
+                let slot = rep.slot(index);
+                let interface: IndexedStructure = [slot].into_iter().collect();
+                assert!(IndexedTensor::from_indexed_parts(Atom::Zero, interface.clone()).is_err());
+                let nonzero = PartialTensor::infer(function!(
+                    spenso::tensor_symbol!("indexed_encoded_open_vector"),
+                    slot.to_atom()
+                ))
+                .unwrap();
+                assert!(nonzero.try_into_indexed().is_err());
+            }
+        }
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let arbitrary = symbol!(
+            "indexed_opaque_label",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let named = spenso::index_symbol!("indexed_named_label");
+        for label in [
+            function!(arbitrary, 17),
+            function!(named, 7, 9),
+            function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0),
+            function!(arbitrary, open.to_atom()),
+        ] {
+            let raw = function!(rep.rep.symbol(), 4, label);
+            let encoded = cooking.try_cook_indices(raw.as_view()).unwrap();
+            let slot = LibrarySlot::<AbstractIndex>::try_from(encoded.as_view()).unwrap();
+            let source = PartialTensor::from_declared_parts(
+                Atom::Zero,
+                PartialStructure::from_logical_slots([rep.slot(PartialIndex::Explicit(slot.aind))]),
+            )
+            .unwrap()
+            .simplify_algebra(&AlgebraSettings::default())
+            .unwrap();
+            calls.store(0, Ordering::Relaxed);
+            let indexed = source.clone().try_into_indexed().unwrap();
+            let restored: PartialTensor = indexed.into();
+            assert_eq!(restored.expression(), source.expression());
+            assert_eq!(restored.structure(), source.structure());
+            assert!(source.same_reduction_state(&restored));
+            assert_eq!(calls.load(Ordering::Relaxed), 0);
+        }
+    }
+
+    #[test]
     fn indexed_conversion_does_not_replay_callbacks_and_checks_changed_results() {
         use std::sync::{
             Arc,
@@ -721,12 +807,22 @@ mod tests {
         assert_eq!(restored, source);
         assert_eq!(restored.structure.logical_slots(), slots);
         assert!(restored.proofs.shallow_graph.get().is_none());
+        let cooked_open = crate::CookSettings::indices()
+            .with_mode(crate::CookMode::ReversibleEncoding)
+            .try_cook_indices(
+                rep.slot::<AbstractIndex, _>(AbstractIndex::Open { owner: 47, axis: 1 })
+                    .to_atom()
+                    .as_view(),
+            )
+            .unwrap();
+        let cooked_open = LibrarySlot::<AbstractIndex>::try_from(cooked_open.as_view()).unwrap();
         for (expression, slots) in [
             (Atom::one(), slots.to_vec()),
             (
                 Atom::Zero,
                 vec![rep.slot(AbstractIndex::Open { owner: 43, axis: 0 })],
             ),
+            (Atom::Zero, vec![cooked_open]),
         ] {
             let bytes = bincode::encode_to_vec(
                 (expression, slots, false, true),
