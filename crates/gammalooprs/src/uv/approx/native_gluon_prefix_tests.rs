@@ -30,6 +30,9 @@ struct CertifiedGluonPrefix {
     pub(super) color: Vec<Atom>,
     pub(super) crown_edges: Vec<linnet::half_edge::involution::EdgeIndex>,
     pub(super) q: Atom,
+    pub(super) local: Local4dCts,
+    pub(super) integrated: super::super::IntegratedCts,
+    pub(super) denominators: Vec<crate::graph::FourDDenominator>,
     pub(super) actual_child: SymbolicTensor<IndexedStructure>,
     pub(super) actual_numerator: Atom,
 }
@@ -103,7 +106,10 @@ impl QcdMassReference {
                     topo_order: 1,
                 };
                 let edges = graph.paired_edges(child.subgraph());
-                ensure!(edges.len() == 2 && child.lmb().loop_edges.len() == 1);
+                ensure!(
+                    (edges.len() == 2 || (edges.len() == 1 && flavour == 21))
+                        && child.lmb().loop_edges.len() == 1
+                );
                 let mass = graph[edges[0]].particle.mass_atom(model);
                 ensure!(
                     edges
@@ -186,10 +192,22 @@ impl QcdMassReference {
                     .sectors()
                     .filter(|sector| !sector.frozen_lmbs().is_empty())
                     .collect::<Vec<_>>();
-                ensure!(frozen.len() == 1 && frozen[0].active_components.is_empty());
-                ensure!(frozen[0].frozen_lmbs() == std::slice::from_ref(child.lmb()));
-                let finite = &frozen[0].atom;
                 let physical_finite = integrated.physical_finite_counterterm()?;
+                if edges.len() == 1 {
+                    // The actual massless seagull is integrated before its zero
+                    // completion is pruned. Retain its nonzero local source.
+                    ensure!(flavour == 21 && mass.is_zero());
+                    ensure!(integrated.physical_pole()?.is_zero());
+                    ensure!(physical_finite.is_zero());
+                    ensure!(frozen.is_empty());
+                } else {
+                    ensure!(frozen.len() == 1 && frozen[0].active_components.is_empty());
+                    ensure!(frozen[0].frozen_lmbs() == std::slice::from_ref(child.lmb()));
+                }
+                let finite = frozen.iter().try_fold(
+                    physical_finite.with_checked_expression(Atom::Zero)?,
+                    |sum, sector| sum.try_add(&sector.atom),
+                )?;
                 let reduced = super::super::simplify(&finite.try_sub(
                     &physical_finite.with_checked_expression(
                         physical_finite.expression() * Atom::var(GS.integrated_loop_scale).pow(4),
@@ -351,6 +369,12 @@ impl QcdMassReference {
                         == outside.iter().copied().collect()
                 );
 
+                let denominators = terms
+                    .into_iter()
+                    .next()
+                    .expect("the single complete cograph term was certified")
+                    .denominators;
+
                 let (projector, projected_external) = self.mass_projector(&diagram, &d)?;
                 ensure!(
                     projected_external == p,
@@ -410,6 +434,9 @@ impl QcdMassReference {
                     color,
                     crown_edges,
                     q,
+                    local,
+                    integrated,
+                    denominators,
                     actual_child,
                     actual_numerator,
                 });
@@ -427,7 +454,7 @@ fn native_fermion_gluon_prefixes_have_the_ms_field_pole_and_cograph_density() ->
 }
 
 impl QcdMassReference {
-    fn certify_fermion_gluon_prefixes(&self) -> Result<()> {
+    pub(super) fn certify_fermion_gluon_prefixes(&self) -> Result<CertifiedMassPrefixes> {
         let mut one_loop_sources = self.sources(1)?;
         self.project(&one_loop_sources.remove(0))?
             .certify_one_loop()?;
@@ -439,6 +466,7 @@ impl QcdMassReference {
         let a = g.pow(2) / (Atom::num(16) * pi.pow(2));
         let mut seen = BTreeSet::new();
         let mut light_density = None;
+        let mut transferred = CertifiedMassPrefixes::new();
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
@@ -515,6 +543,16 @@ impl QcdMassReference {
                     + Atom::num(4)
                     + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(4)));
             let integral = super::super::series(&(Atom::num((2, 3)) / &epsilon * f), 0)?.to_atom();
+            let key = (
+                record.diagram.name().to_owned(),
+                graph
+                    .paired_edges(child.subgraph())
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect(),
+            );
+            let unique_source = transferred.insert(key, integral.clone()).is_none();
+            ensure!(unique_source);
             crate::debug_tags!(#uv, #integrated, #summary;
                 stage = "native_fermion_gluon_prefix_certificate", source = %record.diagram.name(), flavour,
                 file.child_edges = ?graph.paired_edges(child.subgraph()), file.crown_edges = ?record.crown_edges,
@@ -527,7 +565,386 @@ impl QcdMassReference {
             );
         }
         ensure!(seen == (1..=6).collect::<BTreeSet<_>>());
-        Ok(())
+        Ok(transferred)
+    }
+}
+
+#[test]
+fn native_pure_gauge_gluon_prefixes_have_the_grouped_ms_pole_and_mass_density() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    QcdMassReference::new()?.certify_pure_gauge_gluon_prefixes()?;
+    Ok(())
+}
+
+impl QcdMassReference {
+    pub(super) fn certify_pure_gauge_gluon_prefixes(&self) -> Result<CertifiedMassPrefixes> {
+        use spenso::{
+            network::tags::SPENSO_TAG,
+            structure::{abstract_index::AbstractIndex, representation::LibraryRep, slot::Slot},
+        };
+        use std::collections::HashMap;
+        use symbolica::atom::FunctionBuilder;
+
+        let mut one_loop_sources = self.sources(1)?;
+        self.project(&one_loop_sources.remove(0))?
+            .certify_one_loop()?;
+        longitudinal_gluon_mass_trace_has_only_an_odd_vacuum_remainder()?;
+        let records = self.certified_gluon_prefixes(&BTreeSet::from([21, 9000005]))?;
+        ensure!(records.len() == 3);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let d = Atom::var(GS.dim);
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let coupling = Atom::var(symbol!("UFO::G"));
+        let a = coupling.pow(2) / (Atom::num(16) * pi.pow(2));
+        let q_head = symbol!(
+            "native_gauge_prefix::q",
+            tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
+        );
+        let q = Atom::var(q_head);
+        let q2 = Atom::var(symbol!("native_gauge_prefix::q_squared"));
+        let kin = Kinematics::in_dimension(&d)?.with_mass_squared(&q, q2.clone())?;
+        let indices = [
+            symbol!("native_gauge_prefix::mu"),
+            symbol!("native_gauge_prefix::nu"),
+            symbol!("native_gauge_prefix::a"),
+            symbol!("native_gauge_prefix::b"),
+        ];
+        let original_ports = records[0]
+            .spin
+            .iter()
+            .chain(&records[0].color)
+            .collect::<Vec<_>>();
+        let common_ports = original_ports
+            .iter()
+            .zip(indices)
+            .map(|(port, index)| {
+                let cooked = cooking.try_cook(port.as_view())?;
+                let slot = Slot::<LibraryRep, AbstractIndex>::try_from(cooked.as_view())?;
+                Ok(slot
+                    .rep()
+                    .slot::<AbstractIndex, _>(AbstractIndex::from(index))
+                    .to_atom())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let common_ports = common_ports
+            .iter()
+            .map(|port| cooking.uncook(port.as_view()))
+            .collect::<Vec<_>>();
+        for (i, port) in common_ports.iter().enumerate() {
+            let AtomView::Fun(port) = port.as_view() else {
+                return Err(eyre!("explicit native crown slot required"));
+            };
+            ensure!(port.get_nargs() == 2);
+            if i < 2 {
+                ensure!(port.get_symbol() == symbol!("spenso::mink") && port.get(0) == d.as_view());
+            } else {
+                ensure!(
+                    port.get_symbol() == CS.adjoint_rep && port.get(0) == Atom::num(8).as_view()
+                );
+            }
+        }
+        let metric = spenso::g!(&common_ports[0], &common_ports[1]);
+        let color = spenso::g!(&common_ports[2], &common_ports[3]);
+        let qq = function!(q_head, &common_ports[0]) * function!(q_head, &common_ports[1]);
+        // Only the standalone rank probe needs an explicit free axis. Use
+        // the actual named crown port; compact q remains inside closed dots.
+        let q_probe = SymbolicTensor::infer_indexed(
+            cooking.try_cook(function!(q_head, &common_ports[0]).as_view())?,
+        )?;
+        let q_port = cooking.try_cook(common_ports[0].as_view())?;
+        let q_port = Slot::<LibraryRep, AbstractIndex>::try_from(q_port.as_view())?;
+        ensure!(q_probe.rank() == 1);
+        ensure!(q_probe.structure().logical_slots() == vec![q_port]);
+        let q_vector = Minkowski {}.new_rep(GS.dim).vector(q.as_view(), []);
+        let q_squared = function!(SPENSO_TAG.dot, &q_vector, &q_vector);
+        let mut aligned_poles = Vec::new();
+        let mut sum_a = Atom::Zero;
+        let mut sum_b = Atom::Zero;
+        let mut density_sum = Atom::Zero;
+        let mut transferred = BTreeMap::new();
+        let mut inventory = BTreeSet::new();
+        for record in records {
+            let graph = &record.graph;
+            let child = &record.child;
+            let edges = graph.paired_edges(child.subgraph());
+            let (kind, name, weight) = match (record.species, edges.len()) {
+                (9000005, 2) => ("ghost", "D00", Atom::num(-1)),
+                (21, 2) => ("gluon", "D01", Atom::num((1, 2))),
+                (21, 1) => ("tadpole", "D03", Atom::num((1, 2))),
+                _ => return Err(eyre!("unexpected native pure-gauge child")),
+            };
+            ensure!(record.diagram.name() == name && record.weight == weight);
+            ensure!(inventory.insert(kind) && record.mass.is_zero());
+            ensure!(
+                !record.local.atom().is_zero(),
+                "D03 and both bubble sources remain local"
+            );
+            ensure!(record.denominators.len() == 3);
+            if kind == "tadpole" {
+                ensure!(record.integrated.physical_pole()?.is_zero());
+                ensure!(record.integrated.physical_finite_counterterm()?.is_zero());
+                ensure!(record.actual_numerator.is_zero());
+            }
+
+            // Certify the signed native crown momentum before using one neutral
+            // coordinate. This is a chart for comparison, never new EMR ownership.
+            let chart =
+                graph.uv_wrapped_replacement(&graph.full_filter(), child.lmb(), &[] as &[Atom]);
+            let q_native = record.q.replace_multiple(&chart);
+            let names = child
+                .lmb()
+                .loop_edges
+                .iter()
+                .chain(child.lmb().ext_edges.iter())
+                .map(|edge| function!(GS.emr_mom, edge.0))
+                .collect::<BTreeSet<_>>();
+            let linear = Kinematics::in_dimension(&d)?.with_momenta(names)?;
+            let terms = linear.linear_terms(&q_native)?;
+            let [(carrier, sign)] = terms.as_slice() else {
+                return Err(eyre!("one crown momentum required"));
+            };
+            ensure!(*sign == Atom::one() || *sign == Atom::num(-1));
+            for edge in &record.crown_edges {
+                let routed = function!(GS.emr_mom, edge.0).replace_multiple(&chart);
+                ensure!(
+                    (&routed - &q_native).expand().is_zero()
+                        || (&routed + &q_native).expand().is_zero()
+                );
+            }
+            let actual_source = cooking.uncook(record.actual_child.expression().as_view());
+            let routed = GS
+                .erase_uv_momentum_provenance(&actual_source)
+                .replace_multiple(graph.uv_wrapped_replacement(
+                    &graph.full_filter(),
+                    child.lmb(),
+                    &[W_.x___],
+                ));
+            let neutral = routed.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                {
+                    assert_eq!(
+                        function!(GS.emr_mom, momentum.get(0)),
+                        *carrier,
+                        "completed child must not retain a consumed hard momentum"
+                    );
+                    let indices = momentum
+                        .iter()
+                        .skip(1)
+                        .map(|arg| arg.to_owned())
+                        .collect::<Vec<_>>();
+                    **output = sign * FunctionBuilder::new(q_head).add_args(indices).finish();
+                }
+            });
+            ensure!(!neutral.contains_symbol(GS.emr_mom));
+            let reversed_momentum = neutral.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == q_head
+                {
+                    let indices = momentum
+                        .iter()
+                        .map(|arg| arg.to_owned())
+                        .collect::<Vec<_>>();
+                    **output = sign * GS.indexed_momentum(carrier, &indices);
+                }
+            });
+            ensure!(
+                reversed_momentum == routed,
+                "signed crown-coordinate map reconstructs the actual integrated source"
+            );
+            ensure!(indices.iter().all(|name| !neutral.contains_symbol(*name)));
+            let source_interface = graph
+                .numerator(child.subgraph(), &graph.empty_subgraph())?
+                .to_d_dim(GS.dim)?
+                .state
+                .expr;
+            ensure!(
+                record
+                    .actual_child
+                    .structure()
+                    .canonical()
+                    .external_structure()
+                    == source_interface
+                        .structure()
+                        .canonical()
+                        .external_structure(),
+                "the actual integrated child retains its named source interface, including D03 zero"
+            );
+            let value = cooking.try_cook(neutral.as_view())?;
+            // Coordinate comparison changes only momentum leaves. The actual
+            // carrier retains its public interface and proof state, even at zero.
+            let tensor = record.actual_child.with_checked_expression(value)?;
+            ensure!(
+                tensor.structure().logical_slots()
+                    == record.actual_child.structure().logical_slots()
+            );
+            let ports = record.spin.iter().chain(&record.color).collect::<Vec<_>>();
+            let logical = tensor.structure().logical_slots();
+            let mut map = HashMap::new();
+            let mut inverse = HashMap::new();
+            for (source, target) in ports.iter().zip(&common_ports) {
+                let source = cooking.try_cook(source.as_view())?;
+                let target = cooking.try_cook(target.as_view())?;
+                let target = Slot::<LibraryRep, AbstractIndex>::try_from(target.as_view())?;
+                let position = logical
+                    .iter()
+                    .position(|slot| slot.to_atom() == source)
+                    .ok_or_else(|| eyre!("native crown port missing from the integrated child"))?;
+                ensure!(logical[position].rep() == target.rep());
+                let old = logical[position].aind();
+                ensure!(map.insert(position, target.aind()).is_none());
+                inverse.insert(position, old);
+            }
+            ensure!(map.len() == 4 && tensor.rank() == 4);
+            let aligned = tensor.reindex_interface_ports(&map)?;
+            ensure!(
+                aligned
+                    .reindex_interface_ports(&inverse)?
+                    .same_value(&tensor),
+                "public crown reindexing must reconstruct the exact source"
+            );
+            let aligned = aligned
+                .with_checked_expression(aligned.expression().to_cof_dimension_invariants())?;
+            let aligned_source = cooking.uncook(aligned.expression().as_view());
+
+            // Two scalar contractions determine A and B. No tensor division or
+            // denominator clearing of a graph numerator enters this projection.
+            let scalar_trace = |projector: &Atom| -> Result<Atom> {
+                let projector =
+                    SymbolicTensor::infer_indexed(cooking.try_cook(projector.as_view())?)?;
+                let closed = aligned.clone().multiply(projector)?;
+                ensure!(closed.structure().canonical().is_scalar());
+                let contracted = closed
+                    .simplify_algebra(&AlgebraSettings {
+                        color: Some(
+                            ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                        ),
+                        ..Default::default()
+                    })?
+                    .contract(ContractSettings::default())?;
+                ensure!(contracted.contraction_complete());
+                let scalar = cooking
+                    .uncook(contracted.to_dots()?.expression().as_view())
+                    .to_cof_dimension_invariants();
+                let scalar = kin.apply(&scalar);
+                ensure!(!scalar.contains_symbol(q_head));
+                Ok(scalar.collect_compact_factors().together())
+            };
+            let trace = scalar_trace(&(&metric * &color))? / (Atom::num(8) * &q2);
+            let longitudinal = scalar_trace(&(&qq * &color))? / (Atom::num(8) * q2.pow(2));
+            let coefficient_a = ((&trace - &longitudinal) / (&d - Atom::one())).together();
+            let coefficient_b = ((&d * &longitudinal - &trace) / (&d - Atom::one())).together();
+            ensure!(!coefficient_a.contains(q2.as_view()) && !coefficient_b.contains(q2.as_view()));
+            let reconstructed =
+                (&coefficient_a * &q_squared * &metric + &coefficient_b * &qq) * &color;
+            // The independently reconstructed zero still has the certified
+            // four-port boundary; do not infer a scalar interface for D03.
+            let expected =
+                aligned.with_checked_expression(cooking.try_cook(reconstructed.as_view())?)?;
+            let reduced = super::super::simplify(&aligned.try_sub(&expected)?)?;
+            Self::certify_finite_tagged_rows_zero(
+                "actual individual gauge pole reconstructs from A and B",
+                reduced
+                    .with_checked_expression(reduced.expression().to_cof_dimension_invariants())?,
+            )?;
+            let pk = Atom::var(symbol!("native_gluon_prefix::pk"));
+            let kk = Atom::var(symbol!("native_gluon_prefix::kk"));
+            let dk = &kk - Atom::one();
+            let dg = &kk - Atom::num(2) * &pk + Atom::one();
+            let n = (Atom::num(2) - &d) * &pk + &d;
+            let field_a = &coefficient_a / (Atom::i() * &a);
+            let field_b = &coefficient_b / (Atom::i() * &a);
+            // Independent bare-rule/Feynman-parameter pole residues, including
+            // native loop signs and AutG once (see bare-rule-derivation.typ).
+            let (expected_a, expected_b) = match kind {
+                "ghost" => (Atom::num((-1, 4)) / &epsilon, Atom::num((-1, 2)) / &epsilon),
+                "gluon" => (
+                    Atom::num((-19, 4)) / &epsilon,
+                    Atom::num((11, 2)) / &epsilon,
+                ),
+                "tadpole" => (Atom::Zero, Atom::Zero),
+                _ => unreachable!(),
+            };
+            ensure!((&field_a - &expected_a).together().is_zero());
+            ensure!((&field_b - &expected_b).together().is_zero());
+            let expected_density = super::super::Integrated::dimensionally_regularized(
+                &(Atom::num((4, 3)) * (&field_a * &dg * &n + &field_b * (&pk - Atom::one()) * &dk)),
+            );
+            ensure!(
+                super::super::series(&(&record.actual_numerator - expected_density), 1)?
+                    .to_atom()
+                    .together()
+                    .is_zero(),
+                "actual gauge cograph does not match independent A/B mass density"
+            );
+            let f = Atom::num((4, 3))
+                * (Atom::num(3) / &epsilon
+                    + Atom::num(4)
+                    + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(4)));
+            let integral = super::super::series(
+                &super::super::Integrated::dimensionally_regularized(&(&field_a * f)),
+                0,
+            )?
+            .to_atom();
+            let key = (
+                record.diagram.name().to_owned(),
+                edges.iter().map(|edge| edge.0).collect(),
+            );
+            let previous = transferred.insert(key, integral.clone());
+            ensure!(previous.is_none());
+            aligned_poles.push(aligned);
+            sum_a += &coefficient_a;
+            sum_b += &coefficient_b;
+            density_sum += &record.actual_numerator;
+            crate::debug_tags!(#uv, #integrated, #summary;
+                stage = "native_pure_gauge_gluon_prefix", source = %record.diagram.name(), kind,
+                file.weight = %record.weight.to_canonical_string(), file.child_edges = ?edges,
+                file.native_pole = %actual_source.to_canonical_string(), file.aligned_pole = %aligned_source.to_canonical_string(),
+                file.coefficient_a = %coefficient_a.to_canonical_string(), file.coefficient_b = %coefficient_b.to_canonical_string(),
+                file.density = %record.actual_numerator.to_canonical_string(), file.transferred_integral = %integral.to_canonical_string(),
+                file.local = %cooking.uncook(record.local.atom().expression().as_view()).to_canonical_string(),
+                individual_transversality_required = false,
+                "Actual weighted gauge child; tensor reconstruction and cograph density precede grouped transversality"
+            );
+        }
+        ensure!(inventory == BTreeSet::from(["ghost", "gluon", "tadpole"]));
+        let expected_a = -Atom::i() * &a * Atom::num(5) / &epsilon;
+        ensure!((&sum_a - &expected_a).together().is_zero());
+        ensure!((&sum_b + &expected_a).together().is_zero());
+        ensure!(aligned_poles.len() == 3);
+        let sum = aligned_poles.iter().try_fold(
+            aligned_poles[0].with_checked_expression(Atom::Zero)?,
+            |sum, value| sum.try_add(value),
+        )?;
+        let expected = sum.with_checked_expression(
+            cooking.try_cook((&expected_a * (&q_squared * &metric - &qq) * &color).as_view())?,
+        )?;
+        let reduced = super::super::simplify(&sum.try_sub(&expected)?)?;
+        Self::certify_finite_tagged_rows_zero(
+            "grouped native pure-gauge field pole is transverse",
+            reduced.with_checked_expression(reduced.expression().to_cof_dimension_invariants())?,
+        )?;
+        let f = Atom::num((4, 3))
+            * (Atom::num(3) / &epsilon
+                + Atom::num(4)
+                + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(4)));
+        let expected_integral = super::super::series(&(-Atom::num(5) / &epsilon * f), 0)?.to_atom();
+        ensure!(
+            (transferred.values().sum::<Atom>() - &expected_integral)
+                .together()
+                .is_zero()
+        );
+        crate::debug_tags!(#uv, #integrated, #summary;
+            stage = "native_pure_gauge_gluon_prefix_group", sources = 3,
+            file.actual_density_sum = %density_sum.to_canonical_string(),
+            file.transferred_integral = %expected_integral.to_canonical_string(),
+            epsilon_input_depth = 1, parent_overall_operator_computed = false,
+            "D00+D01+D03 retain original weights; grouped pole and analytic Ward transfer give -5F/epsilon at SU3"
+        );
+        Ok(transferred)
     }
 }
 
