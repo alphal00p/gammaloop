@@ -18,15 +18,35 @@ type Cache = AHashMap<ObservationScope, AHashMap<Vec<u8>, ExplicitIndexOccurrenc
 impl InterfaceInference {
     /// Detect explicit index pairs in any additive branch without distributing it.
     ///
-    /// Exclusions suppress ports of the named tensor leaves, without changing
-    /// their payloads or recursing into scalar metadata. Closed powers and
-    /// inverses keep their internal dummy scope; malformed multiplicities and
-    /// placeholder scopes remain errors.
+    /// The predicate suppresses ports of matching tensor leaves, without changing
+    /// their payloads or recursing into scalar metadata. It must inspect borrowed
+    /// syntax only and return the same decision for an unchanged leaf. Composite
+    /// tensor scopes cannot be excluded. Original multiplicities and placeholder
+    /// scopes are validated before exclusions; excluded leaves cannot make an
+    /// invalid input valid. Closed powers and inverses keep their internal scope.
     pub fn has_explicit_index_pairs(
         value: AtomView<'_>,
         representation: LibraryRep,
-        excluded_tensor_heads: &[Symbol],
+        mut exclude_tensor_leaf: impl FnMut(AtomView<'_>) -> bool,
     ) -> InferenceResult<bool> {
+        // Exclusions are a pair-discovery policy, not permission to hide an
+        // invalid original scope. Reuse the same syntax-only observer first
+        // without exclusions. Pair-query mode deliberately permits unlike
+        // additive interfaces while retaining multiplicity/scope validation.
+        Self::observe_indices(
+            value,
+            &mut SlotMatcher::default(),
+            &mut AHashMap::new(),
+            ObservationScope {
+                validate: true,
+                count_indices: true,
+                pair_representation: Some(representation),
+                ..ObservationScope::default()
+            },
+            &mut |_| false,
+        )?
+        .validate()?;
+        // A fresh cache is required: exclusions change the counted ports.
         let occurrences = Self::observe_indices(
             value,
             &mut SlotMatcher::default(),
@@ -37,7 +57,7 @@ impl InterfaceInference {
                 pair_representation: Some(representation),
                 ..ObservationScope::default()
             },
-            excluded_tensor_heads,
+            &mut exclude_tensor_leaf,
         )?;
         occurrences.validate()?;
         Ok(occurrences.selected_pair)
@@ -56,7 +76,7 @@ impl InterfaceInference {
                 count_indices: true,
                 ..ObservationScope::default()
             },
-            &[],
+            &mut |_| false,
         )
         .expect("index-only observation cannot reject a placeholder scope")
     }
@@ -76,7 +96,7 @@ impl InterfaceInference {
                 count_indices: true,
                 ..ObservationScope::default()
             },
-            &[],
+            &mut |_| false,
         )
     }
 
@@ -112,7 +132,7 @@ impl InterfaceInference {
         slots: &mut SlotMatcher,
         cache: &mut Cache,
         scope: ObservationScope,
-        excluded_tensor_heads: &[Symbol],
+        exclude_tensor_leaf: &mut impl FnMut(AtomView<'_>) -> bool,
     ) -> InferenceResult<ExplicitIndexOccurrences> {
         let reusable = matches!(value, AtomView::Fun(_))
             && !value.needs_normalization()
@@ -125,7 +145,7 @@ impl InterfaceInference {
             return Ok(summary.clone());
         }
         let result =
-            Self::observe_indices_uncached(value, slots, cache, scope, excluded_tensor_heads)?;
+            Self::observe_indices_uncached(value, slots, cache, scope, exclude_tensor_leaf)?;
         if reusable
             && cache.values().map(|values| values.len()).sum::<usize>() < Self::CACHE_ENTRIES
         {
@@ -144,7 +164,7 @@ impl InterfaceInference {
         slots: &mut SlotMatcher,
         cache: &mut Cache,
         mut scope: ObservationScope,
-        excluded_tensor_heads: &[Symbol],
+        exclude_tensor_leaf: &mut impl FnMut(AtomView<'_>) -> bool,
     ) -> InferenceResult<ExplicitIndexOccurrences> {
         #[cfg(test)]
         if scope.count_indices && matches!(value, AtomView::Fun(_)) {
@@ -175,7 +195,7 @@ impl InterfaceInference {
             AtomView::Add(sum) => {
                 for term in sum.iter() {
                     let mut branch =
-                        Self::observe_indices(term, slots, cache, scope, excluded_tensor_heads)?;
+                        Self::observe_indices(term, slots, cache, scope, exclude_tensor_leaf)?;
                     // Each alternative owns its internal contractions. Only
                     // surviving ports can meet factors outside this sum. Keep
                     // malformed local counts visible to the existing validator.
@@ -204,7 +224,7 @@ impl InterfaceInference {
                         slots,
                         cache,
                         scope,
-                        excluded_tensor_heads,
+                        exclude_tensor_leaf,
                     )?);
                 }
             }
@@ -216,7 +236,7 @@ impl InterfaceInference {
                 // leaves or allocates dummy indices.
                 for (position, term) in [base, exponent].into_iter().enumerate() {
                     let mut branch =
-                        Self::observe_indices(term, slots, cache, scope, excluded_tensor_heads)?;
+                        Self::observe_indices(term, slots, cache, scope, exclude_tensor_leaf)?;
                     if position == 0
                         && !branch.counts.is_empty()
                         && branch.counts.values().all(|count| *count <= 2)
@@ -266,8 +286,7 @@ impl InterfaceInference {
                 let tensor_leaf = symbol.has_tag(&SPENSO_TAG.tensor);
                 let count_arguments = scope.count_indices
                     && (tensor_leaf || composition::is_composite_head(symbol, &SPENSO_TAG))
-                    && !(composition::is_tensor_leaf_head(symbol)
-                        && excluded_tensor_heads.contains(&symbol));
+                    && !(composition::is_tensor_leaf_head(symbol) && exclude_tensor_leaf(value));
                 let mut inputs = 0;
                 let mut outputs = 0;
                 for (position, argument) in function.iter().enumerate() {
@@ -306,7 +325,7 @@ impl InterfaceInference {
                             slots,
                             cache,
                             child,
-                            excluded_tensor_heads,
+                            exclude_tensor_leaf,
                         )?);
                     }
                 }
@@ -393,7 +412,7 @@ mod tests {
                 InterfaceInference::has_explicit_index_pairs(
                     expression.as_view(),
                     Minkowski {}.into(),
-                    &[],
+                    |_| false,
                 )
                 .unwrap()
             );
@@ -408,7 +427,7 @@ mod tests {
             InterfaceInference::has_explicit_index_pairs(
                 invalid_branch.as_view(),
                 Minkowski {}.into(),
-                &[],
+                |_| false,
             )
             .is_err()
         );
@@ -479,7 +498,7 @@ mod tests {
                 &mut slots,
                 &mut cache,
                 in_factor,
-                &[]
+                &mut |_| false
             )
             .is_ok()
         );
@@ -492,7 +511,7 @@ mod tests {
                     inside_factor: false,
                     ..in_factor
                 },
-                &[],
+                &mut |_| false,
             )
             .is_err()
         );
@@ -586,7 +605,7 @@ mod tests {
                 InterfaceInference::has_explicit_index_pairs(
                     expression.as_view(),
                     Minkowski {}.into(),
-                    &[]
+                    |_| false
                 )
                 .unwrap()
             );
@@ -598,7 +617,7 @@ mod tests {
             InterfaceInference::has_explicit_index_pairs(
                 invalid.as_view(),
                 Minkowski {}.into(),
-                &[]
+                |_| false
             )
             .is_err()
         );
@@ -648,7 +667,7 @@ mod tests {
                 InterfaceInference::has_explicit_index_pairs(
                     expression.as_view(),
                     Minkowski {}.into(),
-                    &[]
+                    |_| false
                 )
                 .unwrap()
             );
@@ -679,7 +698,11 @@ mod tests {
         let x = Atom::var(symbolica::symbol!("incidence_x"));
         let y = Atom::var(symbolica::symbol!("incidence_y"));
         let pairs = |value: &Atom| {
-            InterfaceInference::has_explicit_index_pairs(value.as_view(), Minkowski {}.into(), &[])
+            InterfaceInference::has_explicit_index_pairs(
+                value.as_view(),
+                Minkowski {}.into(),
+                |_| false,
+            )
         };
         assert!(!pairs(&(&a + &b)).unwrap());
         assert!(pairs(&((&a + &b) * &c)).unwrap());
@@ -697,21 +720,40 @@ mod tests {
             !InterfaceInference::has_explicit_index_pairs(
                 (&a * &p).as_view(),
                 Minkowski {}.into(),
-                &[momentum],
+                |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == momentum),
             )
             .unwrap()
         );
-        // Equalized momentum leaves must not cancel two distinct branches.
+        // Exclusions cannot hide a malformed original three-port scope.
         let q = FunctionBuilder::new(momentum)
             .add_arg(1)
             .add_arg(&mu)
             .finish();
-        let weighted = (&p - &q) * &a * &b;
+        let malformed = (&p - &q) * &a * &b;
+        assert!(
+            InterfaceInference::has_explicit_index_pairs(
+                malformed.as_view(),
+                Minkowski {}.into(),
+                |value| matches!(value,AtomView::Fun(function) if function.get_symbol()==momentum),
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("more than two compatible tensor ports")
+        );
+        // Equalized momentum leaves must not cancel two distinct branches.
+        // Their independent nu port keeps this witness well formed before
+        // excluding momenta; A(mu)*B(mu) is the pair being detected.
+        let free_p = FunctionBuilder::new(momentum).add_arg(&nu).finish();
+        let free_q = FunctionBuilder::new(momentum)
+            .add_arg(1)
+            .add_arg(&nu)
+            .finish();
+        let weighted = (&free_p - &free_q) * &a * &b;
         assert!(
             InterfaceInference::has_explicit_index_pairs(
                 weighted.as_view(),
                 Minkowski {}.into(),
-                &[momentum],
+                |value| matches!(value,AtomView::Fun(function) if function.get_symbol()==momentum),
             )
             .unwrap()
         );
@@ -725,7 +767,7 @@ mod tests {
             !InterfaceInference::has_explicit_index_pairs(
                 nested_filtered.as_view(),
                 Minkowski {}.into(),
-                &[momentum],
+                |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == momentum),
             )
             .unwrap()
         );
@@ -737,7 +779,7 @@ mod tests {
             InterfaceInference::has_explicit_index_pairs(
                 spenso::bracket!(&a * &b).as_view(),
                 Minkowski {}.into(),
-                &[SPENSO_TAG.bracket],
+                |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.bracket),
             )
             .unwrap()
         );
@@ -756,7 +798,11 @@ mod tests {
         let b = leaf("incidence_power_B");
         let c = leaf("incidence_power_C");
         let pairs = |value: &Atom| {
-            InterfaceInference::has_explicit_index_pairs(value.as_view(), Minkowski {}.into(), &[])
+            InterfaceInference::has_explicit_index_pairs(
+                value.as_view(),
+                Minkowski {}.into(),
+                |_| false,
+            )
         };
         assert!(pairs(&a.pow(2)).unwrap());
         assert!(pairs(&a.pow(3)).is_err());
@@ -774,10 +820,99 @@ mod tests {
                 !InterfaceInference::has_explicit_index_pairs(
                     value.as_view(),
                     Minkowski {}.into(),
-                    &[momentum],
+                    |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == momentum),
                 )
                 .unwrap()
             );
         }
+    }
+
+    #[test]
+    fn pair_exclusion_predicate_distinguishes_leaves_of_the_same_head() {
+        let mu = spenso::mink!(4, 99581);
+        let a = FunctionBuilder::new(spenso::tensor_symbol!("pair_leaf_filter::A"))
+            .add_arg(&mu)
+            .finish();
+        let head = spenso::tensor_symbol!("pair_leaf_filter::v");
+        let selected = FunctionBuilder::new(head).add_arg(0).add_arg(&mu).finish();
+        let retained = FunctionBuilder::new(head).add_arg(1).add_arg(&mu).finish();
+        let exclude = |value: AtomView<'_>| {
+            matches!(value,AtomView::Fun(function)
+            if function.get_symbol()==head && function.get(0).is_zero())
+        };
+        for (input, expected) in [
+            (&a * &selected, false),
+            (&a * &retained, true),
+            (&a * (&selected + &retained), true),
+            (spenso::bracket!(&a * &selected).pow(3), false),
+            (spenso::bracket!(&a * &retained).pow(-2), true),
+        ] {
+            let original = input.clone();
+            assert_eq!(
+                InterfaceInference::has_explicit_index_pairs(
+                    input.as_view(),
+                    Minkowski {}.into(),
+                    exclude
+                )
+                .unwrap(),
+                expected
+            );
+            assert_eq!(input, original);
+        }
+    }
+
+    #[test]
+    fn pair_exclusion_predicate_does_not_replay_leaf_normalizers() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        let mu = spenso::mink!(4, 99591);
+        let head = spenso::tensor_symbol!(
+            "pair_leaf_filter::callback",
+            norm = |_, _| {
+                CALLS.fetch_add(1, Ordering::SeqCst);
+            }
+        );
+        let left = FunctionBuilder::new(head).add_arg(0).add_arg(&mu).finish();
+        let right = FunctionBuilder::new(head).add_arg(1).add_arg(&mu).finish();
+        let input = &left * &right;
+        let original = input.clone();
+        let calls = CALLS.load(Ordering::SeqCst);
+        assert!(!InterfaceInference::has_explicit_index_pairs(input.as_view(),Minkowski {}.into(),
+            |value| matches!(value,AtomView::Fun(function) if function.get_symbol()==head && function.get(0).is_zero())
+        ).unwrap());
+        assert_eq!(CALLS.load(Ordering::SeqCst), calls);
+        assert_eq!(input, original);
+    }
+    #[test]
+    fn pair_exclusions_cannot_hide_original_three_port_multiplicity() {
+        let mu = spenso::mink!(4, 99597);
+        let a = FunctionBuilder::new(spenso::tensor_symbol!("pair_scope_validation::A"))
+            .add_arg(&mu)
+            .finish();
+        let head = spenso::tensor_symbol!("pair_scope_validation::excluded");
+        let first = FunctionBuilder::new(head).add_arg(1).add_arg(&mu).finish();
+        let second = FunctionBuilder::new(head).add_arg(2).add_arg(&mu).finish();
+        let source = &a * &first * &second;
+        let original = source.clone();
+        let error = InterfaceInference::has_explicit_index_pairs(
+            source.as_view(),
+            Minkowski {}.into(),
+            |value| matches!(value,AtomView::Fun(function) if function.get_symbol()==head),
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("more than two compatible tensor ports")
+        );
+        assert_eq!(source, original);
+        assert!(
+            !InterfaceInference::has_explicit_index_pairs(
+                (&a * &first).as_view(),
+                Minkowski {}.into(),
+                |value| matches!(value,AtomView::Fun(function) if function.get_symbol()==head)
+            )
+            .unwrap()
+        );
     }
 }
