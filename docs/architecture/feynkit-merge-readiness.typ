@@ -187,6 +187,12 @@ and exact package/docs comparisons remain unchanged. Broader checks of the
 known-failing source were cancelled through their owned Nix clients; all frozen
 source guards passed. Their partial builds do not establish CI success.
 
+Frozen `cb77b664` then passes both isolated Linnet exporter tests and the exact
+three-copy stub check, the GammaLoop stub check and all three exporter tests,
+all 74 documentation scope checks, and formatting. All 3,502 tracked source
+entries remain unchanged across that preflight. Full canonical Nix runtime and
+rendering qualification remains separate from these focused checks.
+
 Repair qualification uses the full canonical `just ci-checks` owner after CI
 regeneration and formatting. This exercises Nix's actual per-package runtime
 features and rendering policy; another workspace-default Cargo sweep cannot
