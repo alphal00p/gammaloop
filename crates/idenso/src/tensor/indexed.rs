@@ -274,9 +274,12 @@ impl IndexedTensor {
             .try_into_indexed()
     }
 
-    pub fn multiply(&self, right: &Self) -> std::result::Result<Self, TensorCompositionError> {
-        self.partial_engine()
-            .multiply(&right.partial_engine())?
+    /// Consume both operands through the shared composition engine and strict
+    /// indexed result validation. Clone an operand explicitly when retaining it.
+    pub fn multiply(self, right: Self) -> std::result::Result<Self, TensorCompositionError> {
+        let left = self.into_partial_engine();
+        let right = right.into_partial_engine();
+        left.multiply(&right)?
             .try_into_indexed()
             .map_err(composition_error)
     }

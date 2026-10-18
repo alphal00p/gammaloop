@@ -274,7 +274,7 @@ fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order()
         assert!(restored_global.projector.same_value(&metric));
         let product = restored_global
             .num
-            .multiply(&restored_global.projector)
+            .multiply(restored_global.projector)
             .unwrap();
         assert!(product.is_zero() && product.is_scalar());
 
@@ -302,7 +302,7 @@ fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order()
             .unwrap()
             .state
             .expr
-            .multiply(&restored.global_numerator().unwrap())
+            .multiply(restored.global_numerator().unwrap())
             .unwrap();
         assert!(full.is_zero() && full.is_scalar());
         restored.validate_full_numerator_tensor_network().unwrap();
@@ -1213,7 +1213,7 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
         .global_prefactor
         .num
         .multiply(
-            &super::NumeratorInterface::admit(function!(ETS.metric, first, second), None)
+            super::NumeratorInterface::admit(function!(ETS.metric, first, second), None)
                 .unwrap()
                 .try_into_indexed()
                 .unwrap(),

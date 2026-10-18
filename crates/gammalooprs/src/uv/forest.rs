@@ -374,12 +374,13 @@ impl Forest {
             let prefactor = graph
                 .global_prefactor
                 .projector
-                .multiply(&graph.global_prefactor.num)?
-                .multiply(&overall)?;
+                .clone()
+                .multiply(graph.global_prefactor.num.clone())?
+                .multiply(overall)?;
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let physical = physical.multiply(&prefactor)?;
+            let physical = physical.multiply(prefactor)?;
             debug_tags!(#generation, #uv, #inspect, #dump;
                 log.expression = physical.expression(),
                 dod = n.data.spinney.dod,

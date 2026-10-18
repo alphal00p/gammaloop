@@ -119,9 +119,16 @@ Validation and wildcard-label handling precede ownership acquisition. An indexed
 adapter's owned projection moves into that core; a borrowed partial input is
 copied only when a completed result or mutable plan needs ownership. This removes
 the extra planner-entry payload copy without changing public method signatures
-or identity rules. Completion-policy metadata is retained separately. Collection,
-composition, dimension/index transforms, notation changes and adjunction still
-use an owned projection and therefore copy their inputs. No conversion exports,
+or identity rules. Completion-policy metadata is retained separately.
+Indexed `multiply(self, right: Self)` consumes both operands and moves them into
+the existing partial multiplication owner. This avoids copying an already owned
+graph-fold accumulator and preserves the same product planning and strict result
+validation. Callers clone only inputs whose owning graph, shared definition or
+Cartesian product needs them again. The partial-interface multiplication method
+retains its borrowed API. New products receive new result facts; input reduction
+proofs are not certificates for their product. Collection, dimension/index
+transforms, notation changes and adjunction still use an owned projection and
+therefore copy their inputs. No conversion exports,
 decodes or re-infers an admitted payload. Actual workload costs require separate
 measurement; explicit indexing is an interface invariant, not a speed guarantee.
 A result with unresolved public ports is rejected instead of materialized.

@@ -202,8 +202,9 @@ impl Graph {
         Ok(self
             .global_prefactor
             .num
-            .multiply(&self.global_prefactor.projector)?
-            .multiply(&factor)?)
+            .clone()
+            .multiply(self.global_prefactor.projector.clone())?
+            .multiply(factor)?)
     }
 
     pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
@@ -214,8 +215,7 @@ impl Graph {
             .state
             .expr
             .multiply(
-                &self
-                    .global_numerator()
+                self.global_numerator()
                     .expect("validated global numerator must be a tensor"),
             )
             .expect("the complete production numerator must have compatible ports");

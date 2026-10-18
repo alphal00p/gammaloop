@@ -96,8 +96,8 @@ impl IntegratedCts {
         let mut scale_power = first.scale_power;
 
         for factor in factors {
-            pole = pole.multiply(&factor.pole)?;
-            finite_counterterm = finite_counterterm.multiply(&factor.finite_counterterm)?;
+            pole = pole.multiply(factor.pole.clone())?;
+            finite_counterterm = finite_counterterm.multiply(factor.finite_counterterm.clone())?;
             scale_power += factor.scale_power;
         }
 
@@ -1931,7 +1931,7 @@ pub(crate) fn to_vakint_integrand<
 
         let normalization =
             additional_normalization.pow(&SymbolicTensor::infer_indexed(Atom::num(nloops))?)?;
-        numerator = numerator.multiply(&normalization)?;
+        numerator = numerator.multiply(normalization)?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_loop_normalization",
             term_index = %term_index,
@@ -2252,7 +2252,7 @@ mod tests {
                 &series(right_source.expression(), 2)?,
                 4,
             )?;
-            let tensor_product = left.multiply(&right)?;
+            let tensor_product = left.clone().multiply(right)?;
             assert_eq!(tensor_product.rank(), expected_rank);
             let product = IntegratedCts::factorized_product([&left_ct, &right_ct], 2)?;
             let pole = product.physical_pole()?;
@@ -3168,13 +3168,14 @@ mod tests {
         let numerator = AppliedFeynmanRule::new(parse!(
             "gammalooprs::Q(0,spenso::mink(gammalooprs::dim,0))*gammalooprs::Q(0,spenso::mink(gammalooprs::dim,1))"
         ))?.expr;
-        let source = numerator.multiply(&denominator)?;
+        let source = numerator.multiply(denominator)?;
         let metric = AppliedFeynmanRule::new(parse!(
             "spenso::g(spenso::mink(gammalooprs::dim,0),spenso::mink(gammalooprs::dim,1))"
         ))?
         .expr;
         let scalar_source = source
-            .multiply(&metric)?
+            .clone()
+            .multiply(metric.clone())?
             .contract(ContractSettings::default())?;
         assert!(scalar_source.is_scalar());
         let settings = UVgenerationSettings {
@@ -3208,7 +3209,7 @@ mod tests {
             assert!(scalar.is_scalar());
             assert!(!scalar.is_zero());
             let closed = result
-                .multiply(&metric)?
+                .multiply(metric.clone())?
                 .contract(ContractSettings::default())?;
             assert!(closed.is_scalar());
             // Tensor metadata stays in symbolic D. Only this completed scalar
@@ -3741,7 +3742,7 @@ mod tests {
         let nested_source = child
             .physical_finite_counterterm()
             .unwrap()
-            .multiply(&parent_poles)
+            .multiply(parent_poles)
             .unwrap();
         let nested = IntegratedCts::from_series(
             &nested_source,

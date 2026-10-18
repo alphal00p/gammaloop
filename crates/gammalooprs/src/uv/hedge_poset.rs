@@ -1601,7 +1601,7 @@ impl Forests {
                             return Err(eyre!("No terminal counterterm projection for {scheme}"));
                         }
                     };
-                    Ok(product.multiply(&projection)?)
+                    Ok(product.multiply(projection)?)
                 },
             )?;
             let marked = marker.prefix(
@@ -1618,13 +1618,14 @@ impl Forests {
             let prefactor = graph
                 .global_prefactor
                 .projector
-                .multiply(&graph.global_prefactor.num)?
-                .multiply(&overall)?;
+                .clone()
+                .multiply(graph.global_prefactor.num.clone())?
+                .multiply(overall)?;
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
             let reduced = physical
-                .multiply(&prefactor)?
+                .multiply(prefactor)?
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default()),
                     ..Default::default()
@@ -2797,7 +2798,7 @@ mod tests {
                     ApproximationType::PolePart => integrated.physical_pole()?,
                     scheme => panic!("unexpected component scheme {scheme}"),
                 };
-                Ok(product.multiply(&projection)?)
+                Ok(product.multiply(projection)?)
             },
         )?;
         let terminal_key = &forests.graph[terminal];

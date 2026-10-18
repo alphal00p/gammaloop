@@ -1165,7 +1165,7 @@ mod tests {
                         .numerator(&reduced, child.subgraph())?
                         .state
                         .expr
-                        .multiply(&route_graph.global_numerator()?)?;
+                        .multiply(route_graph.global_numerator()?)?;
                     let resnum = feynkit_graph::NumeratorInterface::export(&resnum).0;
                     let analysis_branches = sector
                         .active

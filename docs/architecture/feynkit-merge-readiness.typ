@@ -2,11 +2,95 @@
 
 == Fully indexed GammaLoop continuation
 
-The user requested explicit-index storage after the qualified checkpoint below.
-That checkpoint, `87b1d81f`, now has all 105 selected CI outputs verified and its
-canonical cache upload completed successfully. Its test and timing evidence
-remains tied to that source. The new indexed continuation is under validation;
-it does not inherit a fresh runtime or performance pass from the earlier build.
+The explicit-index continuation follows checkpoint `87b1d81f`, whose 105
+selected CI outputs were verified and uploaded through the canonical workflow.
+That checkpoint's test and timing evidence remains tied to its own source.
+
+=== Indexed checkpoint 8272f78a
+
+Frozen combined source `8272f78a` passes all 5,690 Rust tests, with 128 unchanged
+skips, no failures and no timeouts. Every prior test identity and all new controls
+are retained; exact source guards and fresh JUnit identities are verified.
+Strict workspace Clippy, formatting, documentation checks and the normal Nix CLI
+build also pass.
+
+All 105 selected CI artifacts were prepared, uploaded through the canonical
+cache workflow and verified against this frozen source. These are static-check
+outputs, runtime launchers and compiled producers; uploading them does not
+certify remote runtime execution. CI is enabled, and the required remote NixCI
+runtime results for final publication remain pending.
+
+The original thirteen-case comparison at `8272f78a` matches every numerical
+reference. Nine cases pass their performance gates and four are inconclusive;
+none is a confirmed regression. The evidence audit verifies every source, tool,
+policy, numerical result and artifact seal, with zero errors. These are the
+original predeclared attempts, retaining the original five-pair budgets,
+thresholds, absolute floors and noise policy. No retry replaces an outcome.
+
+#table(
+  columns: (2fr, 1fr, 1fr, 1fr, 0.9fr),
+  [Metric], [Main median], [Indexed median], [Paired change], [Gate],
+  [GL1 generation], [4.02666 s], [4.54712 s], [+13.15%], [Inconclusive],
+  [GL1 SingleParametric build], [140.685 ms], [57.118 ms], [−59.91%], [Pass],
+  [GL1 SingleParametric runtime], [160.120 µs], [136.146 µs], [−16.12%], [Pass],
+  [GL1 generation peak RSS], [84.849 MB], [94.155 MB], [+11.76%], [Pass],
+  [Thermal generation], [7.0873 s], [6.3598 s], [−9.36%], [Pass],
+  [Thermal SingleParametric build], [431.41 ms], [163.28 ms], [−62.18%], [Pass],
+  [Thermal SingleParametric runtime], [833.28 µs], [740.79 µs], [−11.22%], [Inconclusive],
+  [Thermal generation peak RSS], [111.04 MB], [146.12 MB], [+22.67%], [Pass],
+)
+
+Changes are medians of paired changes, not ratios of the reported medians; MB
+denotes decimal megabytes. The four inconclusive cases are GL04 orientation
+Summed runtime, GL16 evaluator aliases, GL1 generation and thermal
+SingleParametric runtime. GL04's median change is +1.51 percent with 4.98 percent
+robust paired noise. GL1 generation is slower in all five pairs, with a median
+528.55 ms increase and 2.31 percent paired noise; its upper screening value is
+20.09 percent against the unchanged 20 percent limit. Thermal runtime improves
+in all five pairs, but three times its 5.15 percent noise exceeds the 15 percent
+allowance. GL16's noisy build, generation and runtime metrics remain explicitly
+inconclusive. These screens are not confidence intervals or passing results.
+
+The separate topology comparison preserves all 66 canonical entries in every
+pair. Complete fresh-process medians are 0.934873 s on main and 1.290712 s at
+`8272f78a`; the median paired change is +36.45 percent, with all five pairs
+slower. This supplemental check includes model import, generation, runtime graph
+conversion and state saving, and excludes integrand construction. Its inventory
+certificate is not full numerator equivalence or a fourteenth timing gate.
+
+A bounded follow-up compares the existing fd9 retained-partial binary with the
+indexed binary, using the original card and a derivative changing only terminal
+`quit` to `quit --no-save-state`. Both saved pairs preserve all 66 entries.
+Indexed overhead persists without saving: +234.12 and +236.27 ms. The saved
+pairs add +100.07 and +248.01 ms. Two pairs do not resolve a precise persistence
+cost, but saving cannot be the sole cause. Startup, model loading, native
+generation, runtime conversion and process assembly are still combined.
+The fd9 binary has equivalent production Rust to `87b1d81f`; it is not claimed
+to be byte-identical. No follow-up replaces the original qualification results.
+
+The aggregate and raw evidence are retained under
+`target/fully-indexed/performance-final-8272f78a/aggregate-1`; the controlled
+follow-up is `target/fully-indexed/topology-cost-diagnostic-1`. Earlier fd9 and
+e6 timings retain their own source identities.
+
+=== Owned product continuation
+
+The graph numerator fold already supplies owned tensor operands. The initial
+indexed `multiply` API borrowed them, cloned both packed Atom payloads into
+partial carriers, then discarded the original operands. Every fold step copied
+the growing accumulator unnecessarily. The consuming indexed multiplication
+method now moves both operands through the existing partial engine and retains
+its unchanged product planning and strict output validation. Shared graph
+fragments are still cloned when the graph retains ownership; reused Cartesian
+sector operands likewise require explicit clones. No input contraction or
+reduction proof is assigned to a new product, and validation is not skipped.
+The partial-interface multiplication API keeps its existing borrowed contract.
+
+This continuation requires its own build, runtime and performance qualification.
+The measured share of the topology overhead removed by ownership transfer is
+not yet established; the `8272f78a` results above do not qualify a changed source.
+
+=== Implementation and checkpoint history
 
 GammaLoop's runtime edge and vertex fragments, global prefactors, numerator
 states, UV bodies, integrated projections and shared numerator definitions now
@@ -33,8 +117,9 @@ One failure exposed the cooked-Open admission gap; the other was an authored UV
 series fixture with an anonymous free vector. The corrections inspect only public
 index payloads and give that positive fixture one explicit index while retaining
 its dimension, coefficient, factorization and Laurent assertions. A negative
-control retains rejection of the original anonymous input. These corrections
-require fresh qualification; the first sweep is not relabelled as a pass.
+control retains rejection of the original anonymous input. Later repaired
+checkpoints qualify these corrections separately; the first sweep is not
+relabelled as a pass.
 
 The initial description of borrowed adapters as metadata-only was incorrect.
 Symbolica's owned Atom stores packed expression bytes in a vector; cloning it
@@ -50,20 +135,20 @@ source proof updates, cached observations and named-index callback order.
 
 This removes specific avoidable copies; it does not make every tensor operation
 free. Slot metadata is still converted, completion-policy metadata may be copied,
-and collection, composition, dimension/index transforms, notation and adjunction
-still use owned partial projections. Their expression-copy and output-allocation
-costs must be measured on the original workloads. No indexed performance run has
-yet been used to qualify this repair; earlier measurements below remain attached
-to their earlier sources.
+and collection, dimension/index transforms, notation and adjunction still use
+owned partial projections. Their expression-copy and output-allocation
+costs must be measured on the original workloads. Qualification of the indexed
+candidate is recorded above; earlier measurements below remain attached to their
+earlier sources.
 
 The repaired checkpoint `ae223076` passes strict workspace Clippy and all 1,065
 Idenso tests, retaining all 1,061 earlier identities and adding four controls.
 All 48 selected GammaLoop/state tests pass, including both failures from the
 first full sweep. The source and fresh JUnit identities were verified for both
 runs; skips and assertions were preserved. The subsequent combined candidate
-also imports the on-shell agent's validated fixed-basis bounds, checked pair
-exclusions and physical-selector admissibility. Their local replay commits are
-`6166b8e5`, `3325bb9c` and `5ab0928e`; fresh combined qualification is pending.
+`8272f78a` also imports the on-shell agent's validated fixed-basis bounds, checked
+pair exclusions and physical-selector admissibility. Their local replay commits
+are `6166b8e5`, `3325bb9c` and `5ab0928e`; combined qualification is recorded above.
 
 These shared fixes retain borrowed representation views and explicit runtime
 interfaces. Pair queries now validate the original unfiltered scopes before
@@ -112,12 +197,12 @@ subject to the build-feature limits recorded below.
 The complete 5,661-test workspace sweep, earlier quiet ghost comparisons and
 successful 105-output local CI preparation belong to the earlier `e6a3bb46`
 checkpoint.
-Their source identities remain separate from the newer qualification. At this
-documentation checkpoint, CI is enabled, but preparation of all 105 outputs for
-the final exact source, cache upload and push/publication remain pending. The early `9c76b732` preparation was
-intentionally stopped as superseded; it is neither active nor a completed pass.
-The remaining inconclusive gate is not waived, and this is not a merge-ready
-checkpoint.
+Their source identities remain separate from the newer qualification. At the
+`575606be` documentation checkpoint, final-source CI preparation, upload and
+publication were still pending. Subsequent preparation and upload are recorded
+above against their actual sources. The early `9c76b732` preparation was stopped
+as superseded; it is neither active nor a completed pass. The inconclusive fd9
+gate remains recorded and was not waived by a successful build.
 
 This record follows the reconciliation of local FeynKit, remote FeynKit and
 main, then the repairs required before merge. Exact assertions, numerical
@@ -127,7 +212,7 @@ six-photon binary64 update checked independently with arbitrary precision.
 A successful build or focused rerun is distinct from a complete runtime or
 performance qualification.
 
-== Latest shared fixes, 18 October 2026
+== Shared fixes before indexed storage, 18 October 2026
 
 The on-shell agent's two additional named shared fixes are imported separately:
 `aa118f7852cef1ffc67743cc18f91d023c00764a` maps to
@@ -150,11 +235,11 @@ correction above preserves the exact assertion; `ea221df3` adds the 819-byte
 captured temporal chain to Idenso's existing compile-time test assets. Receipts are under
 `target/symbolic-tensor-flow/shared-selector-temporal-validation-2`, with import
 mappings in `onshell-api-coordination.json`. The reviewed fixture-source digest
-and documentation registry pass at `575606be`. At this documentation checkpoint,
-final exact-source CI preparation remains pending; the newer CLI performance
-results follow separately from the historical e6 full-workspace sweep.
+and documentation registry passed at `575606be`, when final-source CI
+preparation was still pending. The fd9 CLI performance results below remain
+separate from the historical e6 full-workspace sweep and the indexed candidate.
 
-== Current fd9 CLI qualification
+== fd9 CLI qualification before indexed storage
 
 The aggregate at
 `target/symbolic-tensor-flow/performance-final-fd9ed336-aggregate-1/report.json`
@@ -195,7 +280,7 @@ construction. This is a supplemental inventory comparison, not a fourteenth
 performance gate or a full numerator-equivalence certificate. Its receipt is
 `target/symbolic-tensor-flow/performance-final-fd9ed336-topology-1/topology-report/report.json`.
 
-== Current CPE policy controls
+== fd9 CPE policy controls
 
 The SingleParametric compiler keeps the scoped `cpe_iterations = 0` policy for
 conditional residue dispatch when the user has not specified a value. CPE means
@@ -348,7 +433,7 @@ normal-Nix diagnostic at `c0e78d26` measured thermal runtime at 969/974 microsec
 with default CPE and 732/735 with zero, passing the original corpus comparisons.
 Later scoped production passed its paired runtime gate. These are historical
 `c0e78d26` measurements, not a default-versus-zero comparison at e6. The fd9
-zero/one and fixed-point controls in the current CPE section above provide the
+zero/one and fixed-point controls in the fd9 CPE section above provide the
 later measured tradeoff supporting the retained policy.
 
 The separate five-pair topology comparison preserves all 66 inventory entries
@@ -359,8 +444,8 @@ construction, DOT export and inventory verification. This supplemental check is
 not one of the thirteen metric gates or a full numerator-equivalence certificate.
 Its receipt is
 `target/symbolic-tensor-flow/performance-final-e6a3bb46-topology-1/topology-report/report.json`.
-These topology results qualify e6 only; current fd9 qualification and the
-remaining final-source CI/upload/publication steps are recorded above.
+These topology results qualify e6 only. The later fd9 results and the current
+indexed candidate's qualification and publication status are recorded above.
 
 The earlier full run of `880ad11dcce02724c178eac628e0f28dad6e17fa` finished in
 3,175.357 seconds with 5,639 passes, five failures, five slow cases and zero
@@ -1516,17 +1601,20 @@ interface, reject collisions and preserve callback validation. These are not
 safe uses of an Atom replacement followed by fresh inference. Python transfers
 reuse `TensorExpression::from_structured` to keep the same carrier.
 
-Current production `fd9ed336` has twelve passing CLI cases and one inconclusive
-GL16 SingleParametric case, with all numerical checks and evidence verified.
+Before indexed storage, production `fd9ed336` had twelve passing CLI cases and
+one inconclusive GL16 SingleParametric case, with all numerical checks and
+evidence verified.
 Its normal Nix CLI build and five-pair topology comparison are complete.
 The `663ee049` test child passes 1,054 native and 664 consumer tests; its separate
 quiet follow-up passes eight exact ghost checks with the feature limits above.
 The complete 5,661-test sweep, earlier quiet ghost comparisons and completed
-105-output preparation remain explicitly tied to e6. The CPE controls above support keeping
-the scoped policy and do not replace the remaining inconclusive gate. At this
-documentation checkpoint, final exact-source preparation of all 105 CI outputs,
-cache upload and push/publication remain pending; the early 9c76 preparation was
-stopped as superseded. Artifacts and logs are retained under `target/symbolic-tensor-flow`.
+105-output preparation remain explicitly tied to e6. The CPE controls above
+support keeping the scoped policy and do not replace the recorded inconclusive
+gate. Final-source CI preparation, upload and publication were still pending at
+that historical checkpoint; current indexed qualification is recorded at the
+start of this note. The early 9c76 preparation was stopped as superseded.
+Historical artifacts remain under `target/symbolic-tensor-flow`; indexed
+continuation receipts are under `target/fully-indexed`.
 
 The first immutable candidate `48b8acfa` passed a fresh 533-case core sweep and
 workspace Clippy. The broader 151-case physics/state/backend run then reported

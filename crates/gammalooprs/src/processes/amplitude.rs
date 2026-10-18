@@ -1321,7 +1321,10 @@ impl AmplitudeGraph {
             .graph
             .numerator(component, &self.graph.empty_subgraph())?;
         if config.include_global_numerator {
-            num.state.expr = num.state.expr.multiply(&self.graph.global_prefactor.num)?;
+            num.state.expr = num
+                .state
+                .expr
+                .multiply(self.graph.global_prefactor.num.clone())?;
         }
 
         let numerator = num.to_d_dim(GS.dim)?;

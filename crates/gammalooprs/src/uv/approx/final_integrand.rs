@@ -139,7 +139,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             }),
             ..Default::default()
         })?;
-        let resnum = resnum.multiply(&global_num)?;
+        let resnum = resnum.multiply(global_num)?;
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
             graph = %graph.name,
@@ -229,7 +229,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             }),
             ..Default::default()
         })?;
-        let resnum = resnum.multiply(&global_num)?;
+        let resnum = resnum.multiply(global_num)?;
         let localizer = self.localizer.with_independent_source_sum();
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
@@ -337,7 +337,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 // Plan one product while retaining its two ordinary factors.
                 // The chosen occurrence-local route is replayed separately on
                 // the body and the small scalar carrier, never on expanded rows.
-                let source_numerator = entry.rhs.multiply(&resnum)?;
+                let source_numerator = entry.rhs.clone().multiply(resnum.clone())?;
                 let (mut factors, localized) = localizer
                     .projected_cff_from_soft_momentum_proposals(
                         graph,

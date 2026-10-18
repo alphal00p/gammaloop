@@ -1171,7 +1171,7 @@ impl Local4dCts {
         let mut has_soft_ancestry = false;
         let mut inherited_loop_edges = Vec::new();
         for factor in factors {
-            atom = atom.multiply(&factor.0.atom)?;
+            atom = atom.multiply(factor.0.atom)?;
             has_soft_ancestry |= factor.0.has_soft_ancestry;
             for edge in &factor.0.inherited_loop_edges {
                 if !inherited_loop_edges.contains(edge) {
@@ -1203,7 +1203,7 @@ impl Local4dCts {
                             let mut frozen_lmbs = left.frozen_lmbs.clone();
                             frozen_lmbs.extend(right.frozen_lmbs);
                             let mut product = FourDSector::new(
-                                left.atom.multiply(&right.atom)?,
+                                left.atom.clone().multiply(right.atom)?,
                                 active_components,
                                 frozen_lmbs,
                             );
@@ -1295,7 +1295,7 @@ impl FourDTerm {
     }
 
     fn product(mut left: Self, right: Self) -> Result<Self> {
-        left.numerator = left.numerator.multiply(&right.numerator)?;
+        left.numerator = left.numerator.multiply(right.numerator)?;
         left.denominators.extend(right.denominators);
         Ok(left)
     }
@@ -1917,7 +1917,7 @@ fn grow<S: super::ForestNodeLike>(
     given: &S,
 ) -> Result<SymbolicTensor<IndexedStructure>> {
     let factor = grow_factor(ctx, current, given)?;
-    let integrand = finalize(integrand.0.atom.multiply(&factor)?)?;
+    let integrand = finalize(integrand.0.atom.clone().multiply(factor)?)?;
 
     debug_tags!(#uv, #integrated, #algebra, #start; log.integrand = integrand.expression(), reduced = %current.reduced_subgraph(given).string_label());
 
@@ -2616,7 +2616,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     ));
                 }
                 let co_graph = grow_factor(ctx, current, given)?;
-                let grown = finalize(sector.atom.multiply(&co_graph)?)?;
+                let grown = finalize(sector.atom.clone().multiply(co_graph)?)?;
                 let soft_route = scheme == ApproximationType::IR || sector.has_soft_ancestry;
                 let mut retained_loop_edges = sector
                     .active_components
@@ -3706,7 +3706,7 @@ mod tests {
         );
         let co_graph = grow_factor(&ctx, &parent, &child).unwrap();
         let parent_image = t_raw(
-            &refinement.multiply(&co_graph).unwrap(),
+            &refinement.multiply(co_graph).unwrap(),
             &ctx,
             &parent,
             &child,
@@ -5350,7 +5350,7 @@ mod tests {
                     let direct_nested_delta = normalize(
                         (-finalize(
                             t_raw(
-                                &delta_child.multiply(&co_graph).unwrap(),
+                                &delta_child.multiply(co_graph).unwrap(),
                                 &ctx,
                                 &parent,
                                 &child_h,
@@ -7582,7 +7582,7 @@ mod tests {
                 );
                 assert_eq!(
                     nested_grown,
-                    finalize(child_local.atom().multiply(&co_graph).unwrap()).unwrap(),
+                    finalize(child_local.atom().clone().multiply(co_graph).unwrap()).unwrap(),
                     "Appendix B.10-B.12 F_gamma must be the signed child forest atom times its co-graph",
                 );
                 let expected_co_graph_physical = (&co_graph_numerator[0] + &co_graph_numerator[1])
@@ -7606,9 +7606,9 @@ mod tests {
                 let verified_child_h = finalize(child_h.clone()).unwrap();
                 let verified_child_outer_u = finalize(child_u.clone()).unwrap();
                 let expected_b_16_physical =
-                    finalize(verified_child_h.multiply(&AppliedFeynmanRule::new(expected_co_graph_physical.clone()).unwrap().expr).unwrap()).unwrap();
+                    finalize(verified_child_h.multiply(AppliedFeynmanRule::new(expected_co_graph_physical.clone()).unwrap().expr).unwrap()).unwrap();
                 let expected_b_16_uv =
-                    finalize(verified_child_outer_u.multiply(&AppliedFeynmanRule::new(expected_co_graph_uv_quadratic.clone()).unwrap().expr).unwrap()).unwrap();
+                    finalize(verified_child_outer_u.multiply(AppliedFeynmanRule::new(expected_co_graph_uv_quadratic.clone()).unwrap().expr).unwrap()).unwrap();
                 let expected_b_16 = expected_b_16_physical.expression() + expected_b_16_uv.expression();
 
                 // B.15 identifies T(T(gamma_1)*(Gamma\\gamma_1)) as the first
@@ -7940,7 +7940,7 @@ mod tests {
         let completed_child = AppliedFeynmanRule::new(local_muv.clone())
             .unwrap()
             .expr
-            .multiply(&inner_projection)
+            .multiply(inner_projection)
             .unwrap();
 
         // Equation (4.4) requires an outer Taylor operation to grade a free

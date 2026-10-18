@@ -41,7 +41,7 @@ impl Graph {
             let num = numerator
                 .state
                 .expr
-                .multiply(&prefactor)?
+                .multiply(prefactor)?
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: settings
                         .do_color_algebra

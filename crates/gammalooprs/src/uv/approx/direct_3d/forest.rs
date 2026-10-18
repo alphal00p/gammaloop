@@ -492,7 +492,7 @@ impl<'a> Direct3dApproximation<'a> {
                     }
                 }
                 let coefficient = coefficient.with_checked_expression(expression)?;
-                Ok(product.multiply(&coefficient)?)
+                Ok(product.multiply(coefficient)?)
             },
         )?;
         let (active, frozen_integrands) =

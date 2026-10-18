@@ -2031,9 +2031,9 @@ impl Graph {
             idenso::tensor::SymbolicTensor::infer_indexed(self.overall_factor.clone())
                 .expect("the declared overall factor must have a valid scalar interface");
         let numerator = numerator
-            .multiply(&self.global_prefactor.num)
-            .and_then(|value| value.multiply(&self.global_prefactor.projector))
-            .and_then(|value| value.multiply(&overall_factor))
+            .multiply(self.global_prefactor.num.clone())
+            .and_then(|value| value.multiply(self.global_prefactor.projector.clone()))
+            .and_then(|value| value.multiply(overall_factor))
             .expect("the complete numerator must have compatible tensor ports");
         super::AppliedFeynmanRule::from_tensor(numerator)
             .get_single_atom()
