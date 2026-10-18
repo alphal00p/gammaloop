@@ -14,7 +14,7 @@ not treat the presence of a primitive as an end-to-end validation.
 
 #table(
   columns: (1fr, 1fr, 2fr),
-  [Capability], [Owner], [Coverage and remaining work],
+  table.header([Capability], [Owner], [Coverage and remaining work]),
   [Models and diagrams], [`feynkit-model`, `feynkit-ufo`, `feynkit-generator`],
   [Existing validated models, UFO import and generation. A generated QED
    electron-positron to muon-pair benchmark and a different-flavor QCD quark

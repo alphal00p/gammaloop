@@ -1063,7 +1063,7 @@
 
   #table(
     columns: (auto, auto, 1fr),
-    [Option], [Default], [Meaning],
+    table.header([Option], [Default], [Meaning]),
     [`impred-spacing`], [`2.4`], [Characteristic force and movement length.],
     [`impred-repulsion`], [`2.5`], [Point repulsion multiplier.],
     [`impred-attraction`], [`2.5`], [Route-segment attraction multiplier.],

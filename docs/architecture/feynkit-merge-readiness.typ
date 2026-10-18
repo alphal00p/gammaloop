@@ -257,6 +257,13 @@ all six authored HTML/PDF products and their developer notes before running the
 unchanged whole-site checker. This check still omits native Rustdoc sidecars;
 notebook-wheel and full Nix publication qualification remain separate.
 
+The all-product authored build at `c16e6689` passes rendering and generated-link
+validation. Its HTML audit clears the preceding errors and identifies 24 more
+headerless tables in the Idenso architecture note, unified reduction note,
+FeynCalc coverage guide and Linnet layout manual. Their existing first rows
+receive the same semantic-header correction. Cell content, order, measured
+values and configuration defaults remain intact; the checker is unchanged.
+
 These repairs change no source-level numerical algorithm, indexed API or
 state format 21. They establish no performance improvement or executable
 equality, and do not resolve any historical inconclusive gate. The successful

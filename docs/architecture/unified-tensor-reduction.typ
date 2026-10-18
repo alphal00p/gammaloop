@@ -124,7 +124,7 @@ than assuming that every historical method name meant the same work. Here
 
 #table(
   columns: (1.3fr, 2.3fr, 1.7fr),
-  [Caller], [Enabled work], [Required output],
+  table.header([Caller], [Enabled work], [Required output]),
   [FeynKit amplitude conjugation],
   [Gamma settings retain `gamma0=true` and trace evaluation disabled; epsilon follows Reduced output; ambient contraction],
   [Resolved Atom with declared physical-leg port order],
@@ -199,7 +199,7 @@ output operation.
 
 #table(
   columns: (1fr, 1.6fr, 1fr, 1fr, 1fr),
-  [Input], [Build], [Reduction], [Expansion], [Total],
+  table.header([Input], [Build], [Reduction], [Expansion], [Total]),
   [Quark], [Archived `344a7942`], [31.201], [0.593], [31.794],
   [Quark], [Baseline `87425e2b`], [10.904], [0.043], [10.947],
   [Quark], [Final `afa62f3b`], [0.1069], [0.0468], [0.1537],
@@ -363,7 +363,7 @@ in historical fixtures rejected by the current strict admission boundary.
 
 #table(
   columns: (2.5fr, 1fr),
-  [Complete typed gamma case], [Median ms],
+  table.header([Complete typed gamma case], [Median ms]),
   [Free ordinary trace, length 8], [6.868],
   [Free ordinary trace, length 12], [295.899],
   [Axial trace, length 6], [1.413],
@@ -400,7 +400,7 @@ and output. Full HEP component tests remain a separate correctness gate.
 
 #table(
   columns: (1.3fr, 1fr, 1fr, 1fr),
-  [Free word], [Idenso warm ms], [FORM trace4 process ms], [FORM tracen process ms],
+  table.header([Free word], [Idenso warm ms], [FORM trace4 process ms], [FORM tracen process ms]),
   [Length 4], [0.370], [8.951], [9.339],
   [Length 8], [6.983], [10.097], [9.077],
   [Length 12], [300.534], [15.671], [22.639],
@@ -444,7 +444,7 @@ are retained separately. These boundaries are explicit and are not interchangeab
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr),
-  [Case], [Fresh complete ms], [Prepared CPU ms], [FORM body CPU ms],
+  table.header([Case], [Fresh complete ms], [Prepared CPU ms], [FORM body CPU ms]),
   [free4-trace4], [0.498], [0.249], [0.002],
   [free4-tracen], [0.520], [0.260], [0.001],
   [free12-trace4], [80.112], [97.009], [3.480],
@@ -543,7 +543,7 @@ for the requested output.
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr, 1fr),
-  [Case], [Fresh complete ms], [Contraction CPU ms], [Materialization CPU ms], [Definitions],
+  table.header([Case], [Fresh complete ms], [Contraction CPU ms], [Materialization CPU ms], [Definitions]),
   [historical-original], [92.980], [33.899], [52.068], [163],
   [historical-early], [104.189], [34.723], [53.843], [163],
   [gluon-4-trace4], [271.339], [178.803], [82.429], [488],
@@ -600,7 +600,7 @@ RSS in a caller-selected output directory.
 
 #table(
   columns: (1.8fr, 1fr, 1fr, 1fr, 1fr),
-  [Case], [Baseline fresh ms], [Final fresh ms], [Final prepared CPU ms], [FORM body CPU ms],
+  table.header([Case], [Baseline fresh ms], [Final fresh ms], [Final prepared CPU ms], [FORM body CPU ms]),
   [mixed-colour-trace4], [4.772], [6.225], [5.528], [0.00952],
   [colour-fierz], [3.656], [5.575], [4.324], [0.00354],
   [fermion-3-trace4], [3.246], [3.253], [1.401], [0.32500],
@@ -633,7 +633,7 @@ warmups, diagnostic work and serialization; that duration is not an algebra time
 
 #table(
   columns: (1.8fr, 1fr, 1fr, 1fr, 1fr),
-  [Alias route], [Baseline fresh ms], [Final fresh ms], [Final contraction CPU ms], [Final materialization CPU ms],
+  table.header([Alias route], [Baseline fresh ms], [Final fresh ms], [Final contraction CPU ms], [Final materialization CPU ms]),
   [historical-original], [94.398], [93.374], [37.083], [46.388],
   [historical-early], [92.379], [90.060], [36.133], [42.078],
   [gluon-4-trace4], [243.618], [241.503], [160.569], [67.134],
@@ -657,7 +657,7 @@ cost before the completion-record correction below.
 
 #table(
   columns: (1.8fr, 1fr, 1fr, 1fr, 1fr),
-  [Case], [Old gamma rerun ms], [Final algebra rerun ms], [Final contract rerun ms], [Final combined rerun ms],
+  table.header([Case], [Old gamma rerun ms], [Final algebra rerun ms], [Final contract rerun ms], [Final combined rerun ms]),
   [free4-trace4], [0.023791], [0.002721], [0.001971], [0.043090],
   [free12-trace4], [10.741150], [0.008810], [0.009760], [325.133288],
   [free12-tracen], [6.079513], [0.008200], [0.009100], [68.035945],
@@ -694,7 +694,7 @@ refusals are preserved; they are not completed operation samples.
 
 #table(
   columns: (1.9fr, 1fr, 1fr, 1fr),
-  [Native case], [Baseline median ms], [Final median ms], [Separate diagnostic ms],
+  table.header([Native case], [Baseline median ms], [Final median ms], [Separate diagnostic ms]),
   [metric_loop_32], [1.373], [1.314], [1.372],
   [ordinary_even4_10], [9.778], [16.220], [16.278],
   [free_12], [303.158], [626.753], [631.222],
@@ -710,7 +710,7 @@ end-to-end time.
 
 #table(
   columns: (1.5fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr),
-  [Case], [Admission ms], [Scan ms], [Planning ms], [Gamma ms], [Contraction ms], [Materialization ms],
+  table.header([Case], [Admission ms], [Scan ms], [Planning ms], [Gamma ms], [Contraction ms], [Materialization ms]),
   [metric_loop_32], [0.429], [0.152], [0.759], [0.000], [0.748], [0.001],
   [ordinary_even4_10], [0.323], [2.960], [13.633], [1.262], [8.097], [1.939],
   [free_12], [0.458], [20.113], [382.217], [11.857], [330.074], [243.433],
@@ -737,7 +737,7 @@ chain/trace dispatch has separate rules.
 
 #table(
   columns: (1.6fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr),
-  [Case/operation], [Structure queries], [Cache hits], [Cache misses], [Uncached queries], [Recursive visits], [Uncached ms],
+  table.header([Case/operation], [Structure queries], [Cache hits], [Cache misses], [Uncached queries], [Recursive visits], [Uncached ms]),
   [metric_loop_32], [32], [0], [32], [32], [32], [0.029],
   [late_metric_D_10_ordinary], [3998], [3563], [435], [435], [2791], [3.302],
   [free_12], [0], [0], [0], [0], [1579], [0.000],
@@ -763,7 +763,7 @@ colour/Fierz FORM and HEP certificate above.
 
 #table(
   columns: (1.9fr, 1fr, 1fr, 1fr, 1fr),
-  [Existing colour reference case], [Diagnostic median ms], [Colour kernel ms], [Contraction ms], [Materialization ms],
+  table.header([Existing colour reference case], [Diagnostic median ms], [Colour kernel ms], [Contraction ms], [Materialization ms]),
   [`color_form_one_generator_trace`], [0.257], [0.145], [0.003], [0.002],
   [`color_form_two_generator_trace`], [0.752], [0.589], [0.024], [0.003],
   [`color_form_fierz_generator_contraction`], [3.615], [3.343], [0.731], [0.005],
@@ -994,7 +994,7 @@ are discarded.
 
 #table(
   columns: (1.8fr, 1fr, 1fr, 1fr),
-  [Case], [Original baseline ms], [Initial unified ms], [Corrected ms],
+  table.header([Case], [Original baseline ms], [Initial unified ms], [Corrected ms]),
   [free12-trace4], [73.862], [382.413], [66.666],
   [free12-tracen], [61.598], [119.149], [60.166],
   [free14-trace4], [331.406], [6827.879], [300.576],
@@ -1024,7 +1024,7 @@ the primary wall-clock median.
 
 #table(
   columns: (1.6fr, 1fr, 1fr, 1fr, 1fr),
-  [Case], [Before reduction ms], [Corrected reduction ms], [Before materialization ms], [Corrected materialization ms],
+  table.header([Case], [Before reduction ms], [Corrected reduction ms], [Before materialization ms], [Corrected materialization ms]),
   [free12-trace4], [361.072], [42.757], [18.960], [18.541],
   [free14-trace4], [5886.094], [182.757], [99.593], [95.912],
   [fermion-4-tracen], [556.892], [38.558], [20.079], [19.939],
@@ -1046,7 +1046,7 @@ All three samples are retained, including the first.
 
 #table(
   columns: (1.8fr, 1fr, 1fr),
-  [Case], [Initial combined rerun ms], [Corrected combined rerun ms],
+  table.header([Case], [Initial combined rerun ms], [Corrected combined rerun ms]),
   [free12-trace4], [327.494057], [0.012529],
   [free12-tracen], [69.024713], [0.012100],
   [free14-trace4], [6324.468926], [0.010800],
@@ -1109,7 +1109,7 @@ a second trace recurrence, or another contraction implementation.
 
 #table(
   columns: (2fr, 1fr, 1.3fr),
-  [Measurement], [Reduction seconds], [Completed rerun seconds],
+  table.header([Measurement], [Reduction seconds], [Completed rerun seconds]),
   [Historical Python extension], [23.710816], [Not captured in this sample],
   [Candidate Python, sample 1], [0.848985], [0.025762],
   [Candidate Python, sample 2], [0.740976], [0.003168],
@@ -1271,7 +1271,7 @@ Only `collect_coefficients` differs between the two modes.
 
 #table(
   columns: (1.3fr, 1fr, 1fr, 1fr),
-  [Native output], [Reduction median (s)], [Rerun median (µs)], [Atom bytes],
+  table.header([Native output], [Reduction median (s)], [Rerun median (µs)], [Atom bytes]),
   [Collected], [1.062576], [49.311], [1,049,059],
   [Nested], [0.809103], [1,584.035], [23,377,307],
 )
@@ -1292,7 +1292,7 @@ are 1.037457 s and 0.760196 s. Per-phase medians are:
 
 #table(
   columns: (2fr, 1fr, 1fr),
-  [Phase], [Collected (ms)], [Nested (ms)],
+  table.header([Phase], [Collected (ms)], [Nested (ms)]),
   [Interface discovery, outermost], [3.000], [2.892],
   [Candidate observations], [83.209], [84.270],
   [Shallow graph construction], [52.276], [51.890],
@@ -1331,7 +1331,7 @@ independent oracle, and reduction are excluded.
 
 #table(
   columns: (2fr, 1fr, 1fr),
-  [Downstream phase], [Collected (ms)], [Nested (ms)],
+  table.header([Downstream phase], [Collected (ms)], [Nested (ms)]),
   [Parse, specialize and admit], [173.544], [9,395.301],
   [Construct evaluator], [0.715], [52.255],
   [Construct component points], [13.006], [13.392],
@@ -1366,7 +1366,7 @@ the saved numerator fixture, without regenerating its graph.
 
 #table(
   columns: (1.3fr, 1fr, 1fr, 1fr),
-  [Installed Python output], [Reduction median (s)], [Rerun median (ms)], [Atom bytes],
+  table.header([Installed Python output], [Reduction median (s)], [Rerun median (ms)], [Atom bytes]),
   [Collected], [1.035185], [0.241491], [1,098,752],
   [Nested], [0.779839], [19.237235], [24,213,378],
 )

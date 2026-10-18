@@ -766,7 +766,7 @@ process startup. These measurements are pinned among cooperating jobs, not on an
 exclusive host.
 
 #table(columns: 4,
-  [Case], [M0 CPU ms], [M1 CPU ms], [FORM CPU ms],
+  table.header([Case], [M0 CPU ms], [M1 CPU ms], [FORM CPU ms]),
   [Historical ladder, early order], [451.95], [150.05], [265.00],
   [Historical ladder, original order], [1112.81], [753.63], [848.00],
   [Physical four-loop gluon, 4D], [763.43], [327.09], [759.00],
