@@ -1718,6 +1718,10 @@ impl Display for Forests {
 }
 
 #[cfg(test)]
+#[path = "native_mass_inventory_tests.rs"]
+mod native_mass_inventory_tests;
+
+#[cfg(test)]
 mod tests {
     use crate::initialisation;
     use crate::utils;
