@@ -1459,8 +1459,8 @@ grouped graphs or supply the observed weight as an expected-value multiplier.
 === Historical validation on the repaired review
 
 The following qualification belongs only to the frozen `faad517b` source and
-its original shared repairs. It does not certify the retained-tensor port's
-current source, state21 or deferred runtime inventories.
+its original shared repairs. It does not certify the later state-21 retained-tensor
+port, the state-22 Indexed OS port, or their deferred runtime inventories.
 
 The separately named shared repair `feynkit-nested-vector-admission`
 (`e2d55fbfaef7db3d6f699c10a360bb280a4bfb96`) precedes all thirteen replayed
@@ -2471,3 +2471,48 @@ remained unchanged. A focused `uv, integrated, summary` logfile retained all
 nine backend reports and their input and library hashes before successful
 callback cleanup. The production OS forest condition remains a separate,
 unexecuted condition on this retained-tensor checkpoint.
+
+== Indexed OS continuation
+<indexed-os-continuation>
+
+The 26 retained OS functionality changes were copied individually above the
+qualified shared Indexed checkpoint `ccbba18a`. Each Rust prefix compiled before
+the next change; documentation-only prefixes retained exact code bridges. The
+preserved replay tip is `2524f931`. Native GammaLoop carriers use explicit
+Indexed ports, while generic FeynKit diagrams and independent coefficient-row
+work retain their existing Partial owners. Owned checked conversions preserve
+payloads, logical order and ranked zeros; they do not assign missing indices.
+Combined full-state version 22 first enters with the boosted-frame payloads and
+rejects both earlier version-21 layouts. The upstream rational-shell fixture,
+shared algebra contracts and public prescription guards are unchanged.
+
+The additive proper-self-energy successor `89e6043c` preserves every existing
+native-reference statement and adds only private proof consumers. Its fresh
+producer passed 135 distinct baseline tests before all four new proper-prefix
+tests. This includes ordered one-loop local and analytic references, exact
+completed 4D/CFF reconstruction, direct-route and finite-history comparisons,
+boosted rainbow controls, native parent inputs at rest and a nonaxial point,
+ranked-zero and logical-port checks, both nonempty fixed-frame persistence
+paths, and strict state-version rejection. All 3533 tracked source files and
+all five producer binaries remained unchanged across the runs. Every selected
+case retained the ordinary 240-second cap; the longest observed case was the
+finite-disjoint route comparison at 199.330 seconds. These are correctness
+measurements on a shared host, not route-performance rankings.
+
+The physical GL1 self-energy master complete-cut soft test retained both seed
+profiles and the existing native summary. The reported measure-weighted scalings are
+1.999999999457756 and 1.9999999996998061, each with fit coefficient $R^2 = 1$;
+the real-cut negative controls remain near zero. The three routes agree at the
+two prescribed points. These are the native test's finite-ray fit and assertion
+results, not an independent refit or an all-angle soft proof.
+
+The four additional tests certify the longitudinal odd remainder, the D03
+local cancellation before its scaleless integral, the D09 mass/field proper
+insertion, and the six fermion-bubble field-pole densities. They retain formal
+internal dimension, exact source polynomials, consumed-loop ownership and the
+required finite-child epsilon depth. Their success does not establish the
+pure-gauge/P2 sum, actual integrated overall parent condition, or emitted
+four-dimensional/R2 bridge. The nine-kernel numerical result above remains
+historical on its stated source: no new scalar-input bridge or backend run is
+claimed here. The held main-only geometry and performance inventories also
+remain unexecuted on this Indexed checkpoint.

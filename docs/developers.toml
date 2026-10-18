@@ -53,8 +53,8 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-18: Full state 21 stores explicit indexed tensor slots and rejects unresolved runtime ports; architecture-current records regeneration of earlier full states and unchanged standalone formats.
 # Historical OS state21 added fixed-frame metadata to the old partial
 # interfaces; it is incompatible with the upstream Indexed state21 layout.
-# Static Indexed OS replay review: combined state22 and named interfaces
-# preserve existing rejection/ownership policies; runtime qualification pending.
+# Reviewed 2026-10-18 at 89e6043c: combined state22 and named interfaces
+# passed the strict version, no-write and nonempty fixed-frame codec controls.
 digest = "065e190b31d0b7b5198a4b554a374733eac00685"
 
 [[section.note.scope]]
@@ -384,14 +384,14 @@ anchor = "impl UVOrchestrator {"
 # recorded separately in the in-progress OS note.
 # Reviewed 2026-10-18: retained-tensor migration preserves the component-local
 # prescription guards, source-rule Ward certificate and direct history bounds.
-# Static Indexed OS replay review: native carrier publication and existing OS
-# source/rule/history guards are combined; fresh compilation/runtime is pending.
+# Reviewed 2026-10-18 at 89e6043c: native carrier publication and existing OS
+# source/rule/history guards passed the scoped 135-case replay frontier.
 # Reviewed 2026-10-18: fixed-frame metadata is retained only for a generated
 # massive-boundary OS component; existing prescription/history guards remain.
 # Fixture review 2026-10-18: restrict light quarks through the canonical model
 # owner before checking a massless parent with a still-massive top bubble.
-# Static Indexed OS replay review: native carriers and fixed-frame ownership
-# are preserved together; runtime qualification remains pending.
+# Reviewed 2026-10-18 at 89e6043c: native carriers and fixed-frame ownership
+# passed the local, analytic, route and persistence controls in the OS note.
 digest = "a489fcb4c020675241dd4b41e16e5c1ad71f9efb"
 
 [[section.note.scope]]
