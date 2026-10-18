@@ -1,4 +1,4 @@
-//! Native QCD mass-projection certificates. This test performs no numerical integration.
+//! Exact native QCD mass projections and independent integrated reference checks.
 use crate::{
     model::{InputParamCard, ModelGammaLoopExt},
     numerator::symbolica_ext::NumeratorAtomExt,

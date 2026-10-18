@@ -461,6 +461,208 @@ twenty-seven-comparison record below used three ungrouped masters. These are
 the maintained test's coverage requirements; their retained-tensor
 qualification is recorded separately.
 
+== Independent full-dimensional two-loop mass reference
+
+The independent reference below uses the original native export at `289611be`.
+Its numerical results are historical; current retained-tensor source and runtime
+qualification are recorded separately in this note. It does not certify the production two-loop OS
+forest or the emitted four-dimensional local-plus-scheme result. Those remain
+separate comparisons with the proper and overall counterterms defined below.
+
+The input has one massive top flavor, five explicitly massless light flavors,
+zero widths and zero chemical potentials. Ungrouped, one-particle-irreducible
+$t arrow.r t$ generation at QCD order four gives twelve sources: ghost and
+gluon bubbles (D00–D01), a three-gluon diagram (D02), a four-gluon tadpole
+(D03), five light-quark bubbles (D04–D08), the rainbow (D09), the massive-quark
+bubble (D10), and crossed exchange (D11). The five
+light sources are retained individually. Their complete scalar, denominator,
+phase and weight inputs agree exactly, allowing one integral to be reused
+five times. D11 has the exact color factor $C_F(C_F-C_A/2)$.
+D03 has a nonzero numerator and a separate scaleless-integral certificate:
+its isolated massless loop is absent from the other propagators and numerator,
+and the native parametric scaling satisfies the exact Euler identity.
+It must still be retained when constructing local UV and soft forests.
+
+=== Normalization and independent insertions
+
+Write $a=alpha_s/(4pi)$, $d=4-2epsilon$, $m_0=Z_m m$ and
+$psi_0=sqrt(Z_psi)psi$, with the full-theory MS-bar coupling and
+$n_f=n_l+n_h$. Use the same loop measure as above and the mass projection
+
+$ Phi[X]=frac("tr"_("spin,color")[(slash(p)+m)X],4m^2 N_c),
+  quad p^2=m^2. $
+
+The spin trace has $"tr"(1)=4$ while Lorentz contractions retain formal $d$.
+The generated ordered amplitude contains a named external-fermion Wick sign;
+remove only that factor to obtain the amputated kernel $Gamma_2=-i Sigma$.
+Retain closed-loop signs, symmetry factors, numerator prefactors and the exact
+model couplings, including $"GC"_(11)=i g_s$. In an $ell$-loop PySecDec input the
+resulting scalar prefactor is $i^(ell+1)$ times the kernel weight and mass
+projection, divided by $g_s^(2ell)$. The backend retains its own propagator
+sign and Gamma normalization; the MS-bar factor $exp(ell gamma_("E")epsilon)$
+is inserted once at $mu=m=1$. Native numerator/denominator reconstruction and
+color decomposition are exact; finite tensor contraction does not expand a
+whole forest numerator.
+
+Let $F=C_F f$ be the one-loop mass projection divided by $a$, and let
+$H=C_F g$ be $m$ times its derivative with respect to the internal physical
+mass, holding the external momentum and projector fixed. Give that internal mass a separate symbol
+$m_("int")$, keep external $p$ and the projector mass $m$ fixed, and evaluate
+the derivative at $m_("int")=m$. The fixed external relation $p^2=m^2$ may
+already be imposed; it must not vary with $m_("int")$. At $mu=m$ the independent
+anchors are
+
+$ f=3/epsilon+4+epsilon(8+pi^2/4)+O(epsilon^2), quad
+  g=6/epsilon+2+epsilon(8+pi^2/2)+O(epsilon^2). $
+
+Exactly, $g=2(1-epsilon)f$. Differentiating the already on-shell-composed answer
+would instead give the wrong coefficient. Direct PySecDec anchors and the
+native one-loop export agree through $epsilon^1$, including the coupling and
+phase normalization. Both positive-epsilon terms are needed when multiplied
+by an enclosing simple pole.
+
+Define $Z_m=1+a z_1+a^2 z_2$, $Z_psi=1+a w_1+a^2 w_2$,
+$z_1=-F$, $w_1=-C_F/epsilon$ in Feynman gauge, and
+$beta_0=11C_A/3-4T_F(n_l+n_h)/3$. If $B=Phi[Sigma_("bare",2)]/a^2$,
+then the bare-parameter relation is
+
+$ z_2=-B-z_1 H+beta_0 F/epsilon. $
+
+The reference is independently obtained from the two-loop OS constant in
+#link("https://arxiv.org/pdf/hep-ph/0005131")[Melnikov and van Ritbergen,
+hep-ph/0005131, equations 39–41], with the coupling converted to $a$ above.
+The finite mass relation in
+#link("https://arxiv.org/pdf/hep-ph/9912391")[Melnikov and van Ritbergen,
+hep-ph/9912391, equations 10–11] supplies a separate cross-check.
+At $mu=m$, writing
+$B=C_F(C_F B_F+C_A B_A+T_F n_l B_l+T_F n_h B_h)$ gives:
+
+#table(columns: (0.7fr, 0.7fr, 0.7fr, 3fr), inset: 5pt,
+  table.header([Channel], [$epsilon^(-2)$], [$epsilon^(-1)$], [Finite coefficient]),
+  [$B_F$], [$27/2$], [$75/4$],
+    [$441/8+29pi^2/4+12zeta(3)-8pi^2 log(2)$],
+  [$B_A$], [$11/2$], [$91/4$],
+    [$605/8-5pi^2/12-6zeta(3)+4pi^2 log(2)$],
+  [$B_l$], [$-2$], [$-7$], [$-45/2-5pi^2/3$],
+  [$B_h$], [$-2$], [$-7$], [$-69/2+7pi^2/3$],
+)
+
+=== Historical numerical result and proof scope
+
+Seven independent nonzero two-loop scalar kernels suffice after the exact
+light-flavor, D11 color and D03 zero certificates. PySecDec 1.6.6 uses the
+on-shell relation before sector decomposition, seed 1337, requested relative
+accuracy $10^(-7)$, `minn=10000` and `maxeval=1000000`. Generation uses two
+processes with two FORM threads each; C++ compilation and numerical evaluation
+each use two workers. No numerical budget, seed or comparison tolerance was
+tuned after seeing a result. All Laurent
+coefficients through the finite term satisfy the fixed comparison bound
+$10^(-6)(1+abs("reference"))$.
+
+#table(columns: (0.65fr, 1.65fr, 1.4fr), inset: 5pt,
+  table.header([Channel], [Numerical finite coefficient], [Independent target]),
+  [$B_F$], [$86.37560907 plus.minus 0.00000185$], [$86.37560703$],
+  [$B_A$], [$91.66467772 plus.minus 0.00000198$], [$91.66467727$],
+  [$B_l$], [$-38.94934099 plus.minus 0.00000061$], [$-38.94934067$],
+  [$B_h$], [$-11.47092302 plus.minus 0.00000014$], [$-11.47092306$],
+)
+
+The displayed errors are linear sums of absolute backend error estimates for
+the independent scalar kernels; they are not Gaussian confidence intervals.
+No imaginary coefficient survives. At $N_c=3$, $n_l=5$, $n_h=1$, the bare
+reference is
+$B=38/epsilon^2+289/(3epsilon)+382.7369262019$.
+The numerical result is
+$37.99999999/epsilon^2+96.33333716/epsilon+382.73693057$.
+Adding the independently known one-loop mass and coupling insertions reconstructs
+$z_2=22/epsilon^2-17/(3epsilon)-90.1810702379$;
+the corresponding numerical finite value is $-90.18107461$ with summed backend
+error $0.00001248$. This reconstruction is the same bare comparison expressed
+as a renormalization constant, not a second independent two-loop integration.
+
+The exact native source certificates and numerical results are retained under
+`target/os-feynkit/physics-validation/scalar-power-refresh/export/` and
+`target/os-feynkit/physics-validation/pysecdec/` in the retained
+`feynkit-algebra-regressions` task workspace.
+`full-two-loop-reference-check.json` records the twelve-source incidence,
+input identities, coefficient-by-coefficient comparisons and the explicit
+false flag for a production-forest integrated-condition claim. Numerical
+agreement does not establish an algebraic identity or promote a later OS
+implementation whose own checks are incomplete.
+
+=== Production forest target and the four-dimensional boundary
+
+An actual forest comparison must keep the proper insertions separate from the
+overall OS counterterm. The Lagrangian mass vertex contains $Z_psi Z_m-1$,
+so its two-loop on-shell mass coefficient is $K_2=z_2+w_1z_1$.
+The complete proper one-loop insertions have the independent target
+
+$ P_2=z_1 H-beta_0 F/epsilon+w_1 F, quad B+P_2+K_2=0. $
+
+Thus extract the parameter constant as $z_2=K_2-w_1z_1$.
+At $mu=m$, the mixed term is
+$w_1z_1=C_F^2(3/epsilon^2+4/epsilon+8+pi^2/4)$.
+Omitting it fails already in the double pole. Compare the actual proper
+prefixes with $P_2$ before applying the overall OS operator; do not define an
+expected counterterm as minus the production bare-plus-forest output.
+The QCD logarithmic vertex children remain MUV. OS-over-MUV admission requires
+the concrete canonical-vertex, completed-child and analytic-policy certificates;
+the full bare reference does not authorize relaxing the general mixed guard.
+
+The classified twelve-source inventory confirms two overlapping logarithmic
+vertex children in each of D02 and D11, giving six forest operations per source.
+The other ten sources have four operations each. The two overlapping children
+never occur together in a proper forest. D02 and D11 are the only rejected
+prescription combinations in that inventory; the scaleless bare D03 source
+remains present before all forest operations.
+
+The actual four isolated MUV children independently pass their open-tree
+Laurent comparison through $epsilon^1$. With the native tree phase $i g_s$ and
+$S_M=exp(gamma_("E")epsilon)Gamma(1+epsilon)(mu^2/M^2)^epsilon$, the unsigned
+Taylor-integral coefficients relative to the tree are
+
+$ V_A=(C_F-C_A/2) S_M (1-epsilon)^2/epsilon, quad
+  V_N=C_A S_M (3-2epsilon)/(2epsilon). $
+
+The first is the two-quark/one-gluon triangle in D11; the second is the
+one-quark/two-gluon triangle in D02. These follow from the dimensional vacuum
+tensor integral of the actual hard-loop numerator. Angular averaging is not a
+pointwise substitution in the unintegrated cograph. At $mu=M$, their series are
+
+$ V_A=(C_F-C_A/2)[1/epsilon-2+epsilon(1+pi^2/12)]+O(epsilon^2), quad
+  V_N=C_A[3/(2epsilon)-1+epsilon pi^2/8]+O(epsilon^2). $
+
+The tests compare the signed integral of the actual stored $-U_0$ with
+$-g_s^2/(16pi^2)$ times the native tree and these coefficients at $N_c=3$.
+The source vertices, their rule IDs and field order, the crown attachment, and
+the exact child-times-cograph numerator are certified before integration.
+The vacuum integration retains three Laurent terms; both the pole and finite
+addback owners enter the comparison. Both historical test cases pass in run
+`e0c37b1d-69dd-42c4-ad32-12ff251ecff4` (2.330 seconds), covering two distinct
+attachments of each triangle. Their records are retained under
+`target/os-feynkit/physics-validation/native-vertex-and-scoped-oracle/isolated-children/`
+in `on-shell-counterterms`. This certifies the standalone children; the complete
+child under its OS parent, including the consumed measure and frozen kernel,
+requires separate qualification on the retained-tensor source.
+
+The pre-finalizer sectors retain full-dimensional numerator algebra and the
+nonnegative-epsilon analytic child coefficients. Frozen localization kernels
+have unit normalization and must not be integrated again as dimensional loops.
+The final four-dimensional emitted integrand is a different boundary. Already
+at one loop, setting only the spin-numerator coefficients to four dimensions,
+with the same formal-$d$ denominators, loop measure and angular reduction, gives
+$f_4=3/epsilon+5+epsilon(9+pi^2/4)+O(epsilon^2)$, whereas the full-dimensional
+$f_D$ has finite coefficient 4. Their exact difference is
+$ f_D-f_4=-frac(exp(gamma_("E")epsilon)Gamma(1+epsilon)
+  (mu^2/m^2)^epsilon,1-epsilon). $
+The finite difference $-1$ is an expected evanescent control, not a defect to
+remove. At two loops the complete local subtraction and analytic finite
+correction must reproduce the corresponding dimensional renormalized quantity,
+including evanescent coefficients multiplied by enclosing poles. The matched emitted mass condition and the stronger off-shell dimensional/R2
+comparison require separate checks on the complete result. The bare four-color
+success alone establishes neither of them nor the integrated condition of the
+production OS forest.
+
 == Fixed boosts and the rainbow soft condition
 
 The one-loop integrated condition is independent of the chosen fixed velocity.
@@ -865,7 +1067,34 @@ not transfer a historical uniform-matrix pass to this source.
   $p=Q_2$, $k=Q_3$, $l=Q_4$ are homogeneous. The proper component's OS point
   belongs to edge 2; its spectator cograph on edges 2, 8, 9 stays live.])
 
-The larger example tests the complete four-family proper two-loop component
+#figure(
+  grid(columns: (1fr, 1fr), gutter: 8pt,
+    [#show-fixture("../assets/typst/portal-graphs/graphs/os-mass-two-loop-D00.dot")
+      #align(center)[D00: ghost bubble]],
+    [#show-fixture("../assets/typst/portal-graphs/graphs/os-mass-two-loop-D01.dot")
+      #align(center)[D01: gluon bubble]],
+    [#show-fixture("../assets/typst/portal-graphs/graphs/os-mass-two-loop-D02.dot")
+      #align(center)[D02: three-gluon vertex]],
+    [#show-fixture("../assets/typst/portal-graphs/graphs/os-mass-two-loop-D03.dot")
+      #align(center)[D03: four-gluon tadpole]],
+    [#show-fixture("../assets/typst/portal-graphs/graphs/os-mass-two-loop-D04.dot")
+      #align(center)[D04: light bubble (five flavors)]],
+    [#show-fixture("../assets/typst/portal-graphs/graphs/os-mass-two-loop-D09.dot")
+      #align(center)[D09: rainbow]],
+    [#show-fixture("../assets/typst/portal-graphs/graphs/os-mass-two-loop-D10.dot")
+      #align(center)[D10: heavy bubble]],
+    [#show-fixture("../assets/typst/portal-graphs/graphs/os-mass-two-loop-D11.dot")
+      #align(center)[D11: crossed exchange]],
+  ),
+  caption: [Actual native two-loop QCD self-energy incidence. D04 represents
+  the five separately retained massless flavors D04–D08. The other seven
+  diagrams are distinct sources. Edge IDs, endpoints, particle assignments,
+  directions and local source slots agree with the original ungrouped exports.
+  These small DOT files are presentation views; numerical algebra uses the
+  complete native graphs. In particular, D03 is retained despite its scaleless
+  bare integral.],
+)
+The three-loop fixture tests the complete four-family proper two-loop component
 at fixed formal $p$: independent bounded $U_1$, $O$, $U_1 O$ certificates,
 the owned mass points on edges 2 and 3, and the four hard subspaces of $k,l$.
 Exact cograph attachment carries those identities into the three-loop graph
@@ -2177,7 +2406,13 @@ verified its exact profile selection, and passed all three native source and
 isolated-child controls (`0e6c0aa0`). Canonical CI regeneration and graph checks
 preserved the generated configuration. The resolved runtime derivation is
 identical to the previously qualified two-anchor runtime, so its seven cached
-checks remain evidence about that immutable backend and input, not a fresh
-nine-kernel result. The current numerical execution remains pending. A focused
-`uv, integrated, summary` logfile retains all nine backend reports and their
-input and library hashes before successful callback cleanup.
+checks remain evidence about that immutable backend and input. The subsequent
+fresh run on `da40a0b4` (`4ac0dfbd`) completed all nine kernels and all 47
+coefficient comparisons in 515.412 seconds. Its native scalar input hash is
+`e7ce7a27c02d203386e2a69a809fc033b88c384239fa609b5ed010e55ffab5bd`.
+The largest component difference was 0.095561 of the unchanged absolute
+tolerance. All 3522 tracked source guards and native/runtime artifact guards
+remained unchanged. A focused `uv, integrated, summary` logfile retained all
+nine backend reports and their input and library hashes before successful
+callback cleanup. The production OS forest condition remains a separate,
+unexecuted condition on this retained-tensor checkpoint.
