@@ -2461,6 +2461,7 @@ impl QcdMassReference {
             },
         };
         use linnet::half_edge::subgraph::SubSetOps;
+        use spenso::structure::partial::PartialStructureExt;
         ensure!(sources.len() == 13 && prefixes.len() == 14);
         let one_loop = sources
             .iter()
@@ -2562,6 +2563,67 @@ impl QcdMassReference {
                         }
                     })?
                     .try_into_indexed()?;
+                // These independently composed native sources can expose the
+                // same named ports in different logical encounter order. Align
+                // only the private reference view through the native axis owner.
+                ensure!(
+                    runtime_numerator
+                        .structure()
+                        .canonical()
+                        .external_structure()
+                        == reference_numerator
+                            .structure()
+                            .canonical()
+                            .external_structure()
+                );
+                let runtime_slots = runtime_numerator.structure().logical_slots();
+                let reference_slots = reference_numerator.structure().logical_slots();
+                let axes = runtime_slots
+                    .iter()
+                    .map(|slot| {
+                        reference_slots
+                            .iter()
+                            .position(|candidate| candidate == slot)
+                            .ok_or_else(|| {
+                                eyre!("native reference is missing a runtime source port")
+                            })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                ensure!(
+                    axes.iter().copied().collect::<BTreeSet<_>>()
+                        == (0..runtime_slots.len()).collect::<BTreeSet<_>>()
+                );
+                let reference_work: SymbolicTensor<PartialStructure> = reference_numerator.into();
+                let aligned = reference_work.permuted(&axes)?;
+                ensure!(aligned.expression() == reference_work.expression());
+                let mut inverse = vec![0; axes.len()];
+                for (target, source) in axes.iter().copied().enumerate() {
+                    inverse[source] = target;
+                }
+                ensure!(aligned.permuted(&inverse)?.same_value(&reference_work));
+                // The same transport must retain order even when the payload
+                // cannot witness any ports.
+                let zero_reference = reference_work.with_checked_expression(Atom::Zero)?;
+                let zero_aligned = zero_reference.permuted(&axes)?;
+                ensure!(zero_aligned.is_zero() && zero_aligned.rank() == reference_work.rank());
+                ensure!(
+                    zero_aligned.structure().logical_slots() == aligned.structure().logical_slots()
+                );
+                ensure!(zero_aligned.permuted(&inverse)?.same_value(&zero_reference));
+                let zero_aligned = zero_aligned.try_into_indexed()?;
+                ensure!(zero_aligned.structure().logical_slots() == runtime_slots);
+                let reference_numerator = aligned.try_into_indexed()?;
+                ensure!(reference_numerator.structure().logical_slots() == runtime_slots);
+                ensure!(
+                    reference_numerator
+                        .structure()
+                        .canonical()
+                        .external_structure()
+                        == runtime_numerator
+                            .structure()
+                            .canonical()
+                            .external_structure()
+                );
                 if !runtime_numerator.same_value(&reference_numerator) {
                     let cooking = CookSettings::indices()
                         .with_mode(CookMode::ReversibleEncoding)
