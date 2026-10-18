@@ -339,6 +339,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
         feature = "linnet",
         feature = "spenso",
         feature = "feynkit",
+        feature = "gammaloop",
         feature = "vakint"
     ))]
     let stub_info = scope_symbolica_floats(stub_info);
@@ -349,6 +350,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
     feature = "linnet",
     feature = "spenso",
     feature = "feynkit",
+    feature = "gammaloop",
     feature = "vakint"
 ))]
 fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_gen::StubInfo {
@@ -357,7 +359,7 @@ fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_g
 
     // Numerica leaves these two classes unscoped in its stub inventory.
     // They belong to Symbolica, even when another product gathers first.
-    // GammaLoop's standalone f64 API does not enable these Python classes.
+    // Their metadata may be enabled alongside GammaLoop's standalone f64 API.
     let float_types = [
         TypeId::of::<PythonFloat>(),
         TypeId::of::<PythonComplexFloat>(),
@@ -626,7 +628,7 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_stub_keeps_aliases_before_import_like_docstrings() {
-        let (module_name, mut stub_info) = super::gather("linnet-py").unwrap();
+        let (module_name, mut stub_info) = super::gather("linnet-graph").unwrap();
         let module = stub_info.modules.get_mut(module_name).unwrap();
         module
             .class
@@ -635,7 +637,7 @@ def validate(runtime_module, stub_source):
             .unwrap()
             .doc = "Construct a graph\nfrom its nodes and edges.\nimport drawing data as needed.";
 
-        let canonical = super::render("linnet-py", module).unwrap();
+        let canonical = super::render("linnet-graph", module).unwrap();
         let graph = canonical.find("class Graph:").unwrap();
         assert!(canonical.find("\n__all__ = [\n").unwrap() < graph);
         assert!(canonical.find("\n_NativeValue: typing.TypeAlias").unwrap() < graph);
@@ -652,6 +654,27 @@ def validate(runtime_module, stub_source):
             .modules
             .get(module_name)
             .expect("GammaLoop extension module");
+        let symbolica_module = stub_info
+            .modules
+            .get("symbolica")
+            .expect("Symbolica owns its numeric type definitions");
+        for (type_id, name) in [
+            (
+                std::any::TypeId::of::<symbolica::domains::float::PythonFloat>(),
+                "Float",
+            ),
+            (
+                std::any::TypeId::of::<symbolica::domains::float::PythonComplexFloat>(),
+                "ComplexFloat",
+            ),
+        ] {
+            assert!(!module.class.contains_key(&type_id));
+            assert_eq!(
+                symbolica_module.class.get(&type_id).map(|class| class.name),
+                Some(name),
+                "numeric definitions must remain available from their owning module"
+            );
+        }
         super::validate_runtime_stub_surface(module_name, module)
             .expect("StubInfo and runtime registration match");
 

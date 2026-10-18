@@ -81,8 +81,8 @@ the first complete check of new intrinsic products. A faster compositional
 certificate would need to establish normalization, scoped multiplicities and
 logical layout; copying operand proofs or bypassing observation would weaken
 correctness. The current evidence supports no further small production fix.
-Performance qualification remains incomplete until the three inconclusive gates
-are resolved; these results do not authorize merging.
+Performance qualification remains incomplete while required gates are
+inconclusive; these results do not authorize merging.
 
 The audit is retained at
 `target/fully-indexed/owned-products/performance-final-2f556851/aggregate-1/report.json`,
@@ -90,6 +90,19 @@ with its final source guard and ownership-control audit. The bounded control is
 `target/fully-indexed/owned-products/topology-cost-diagnostic-1/analysis.json`.
 The `8959f063` publication changed documentation only above the frozen measured
 source; its Rust, tests and performance inputs were unchanged.
+
+The separately pinned official run
+#link("https://github.com/alphal00p/gammaloop/actions/runs/39142163304")[39142163304]
+compares published `8959f063` with main `ff533fcd`. It completes all thirteen
+cases with twelve passes and one inconclusive result, no numerical or input
+identity mismatches, and exits two at measurement. GL1 generation is slower in
+all five pairs: +19.52 percent, +771.87 ms, with 2.15 percent paired noise.
+Its uncertainty screen crosses the unchanged 20 percent allowance. The other
+cases pass on this attempt, including thermal and GL16. This run remains a
+separate complete result; passing metrics are not pooled across runs and its
+inconclusive generation gate is not reported as success or a confirmed
+threshold violation. The following CI metadata and asset repairs do not
+establish a generation speedup.
 
 
 Receipts are retained under `target/fully-indexed/owned-products`: the full
@@ -141,6 +154,28 @@ caveat and example rather than disabling the extracted check. The stopped run
 records 65 passing doctests and 19 existing ignored cases before the single
 failure; later packages are not certified by that attempt. The existing Python
 exporter refreshes both generated stub copies from the corrected shared docs.
+
+The frozen `d65689f3` follow-up passes all 65 intended doctests, retaining the
+19 existing ignored cases. Seven Nextest groups complete successfully. The
+documentation unit group reports 214 passes and eleven failures because its
+filtered runtime source omits the STIX math font and companion license which
+the site builder already requires. Both files exist in the repository and the
+full-site source closure. The repair adds their exact paths to the unit-test
+runtime closure. Integration has no completed result from this stopped attempt.
+
+The independent full-site check at that same source passes all 88 documentation
+examples, then stops at the isolated GammaLoop Python exporter. Its StubInfo
+inventory incorrectly assigns Symbolica's `Float` and `ComplexFloat` to the
+GammaLoop module, whose runtime registration does not export them. The existing
+Symbolica scoping step already handles these inventory entries for the other
+products. The exporter explicitly enables Symbolica's stub metadata and applies
+that same scoping step to GammaLoop. The existing test additionally verifies
+that both concrete types remain owned by Symbolica. A Linnet exporter fixture
+also uses the current `linnet-graph` component key instead of the obsolete
+`linnet-py` spelling; its alias-order assertions remain unchanged.
+Rendering and publication checks are not certified by the stopped
+attempt. These failures concern runtime assets and generated API metadata;
+their repairs preserve the numerical tests and performance policy.
 
 Repair qualification uses the full canonical `just ci-checks` owner after CI
 regeneration and formatting. This exercises Nix's actual per-package runtime

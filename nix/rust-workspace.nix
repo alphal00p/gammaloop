@@ -587,6 +587,8 @@
       "crates/spenso-macros/CHANGELOG.typ"
       "crates/spenso/CHANGELOG.typ"
       "crates/spynso3/CHANGELOG.typ"
+      "crates/spynso3/typst/STIX-Two-OFL.txt"
+      "crates/spynso3/typst/STIXTwoMath-Regular.woff2"
       "docs"
       "examples/cli/aa_aa/2L/graphs"
       "examples/cli/gg_hhh/3L/3L_graph.dot"

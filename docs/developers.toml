@@ -1728,7 +1728,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-18: Captured fixed-basis Atom fixtures are explicit gammalooprs
 # compile-time test inputs. Filtered source hashes verify both files; production
 # and runtime source ownership and cache policy are unchanged.
-digest = "ba5a5dd8c15ca14862b1717a1f767e6845eada19"
+# No-impact attestation 2026-10-18: documentation unit tests retain their existing
+# STIX font and license in the filtered runtime closure. Producer partitioning,
+# rendering behavior and assertions remain unchanged.
+digest = "c7078ea21e69aef27edf1ed24a9a7478300b1ff8"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
