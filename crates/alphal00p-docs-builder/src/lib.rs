@@ -6833,7 +6833,7 @@ fn render_api_overloads(
         if let Some(docs) = &overload.docs {
             body.push_str(&render_doc_text_omitting_parameters(
                 docs,
-                6,
+                (overload_heading + 1).clamp(5, 6),
                 overload
                     .members
                     .iter()
@@ -11857,6 +11857,56 @@ mod tests {
             python_item_disambiguated_segment(&function, &function.name),
             "edge-function"
         );
+    }
+
+    #[test]
+    fn python_overload_doc_sections_follow_their_parent_heading() {
+        use alphal00p_docs_schema::DocText;
+
+        let mut overload = DocMember::new("choose", DocMemberKind::Overload);
+        overload.signature = Some("def choose(value: int) -> int:".to_owned());
+        overload.docs = Some(DocText::new(
+            DocFormat::PythonDocstring,
+            "Choose one value.\n\nParameters\n----------\nvalue : int\n    Input value.\n\nReturns\n-------\nint\n    Selected value.\n\nNotes\n-----\nKeep `value` unchanged.\n\nExamples\n--------\n```python\n# This stays source.\nvalue = 1 < 2\n```",
+        ));
+        let mut parameter = DocMember::new("value", DocMemberKind::Parameter);
+        parameter.signature = Some("int".to_owned());
+        parameter.docs = Some(DocText::new(DocFormat::PythonDocstring, "Input value."));
+        overload.members.push(parameter);
+        let headings = Regex::new(r"<h([1-6])>").unwrap();
+
+        // Free functions and nested methods have different overload parents.
+        for (parent_level, expected_levels, section_level) in
+            [(2, [3, 4, 5, 5, 5, 5], 5), (3, [4, 5, 6, 6, 6, 6], 6)]
+        {
+            let mut rendered = String::new();
+            render_api_overloads(
+                std::slice::from_ref(&overload),
+                "choose",
+                parent_level,
+                &BTreeMap::new(),
+                &mut rendered,
+            );
+            let actual_levels = headings
+                .captures_iter(&rendered)
+                .map(|capture| capture[1].parse::<usize>().unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(actual_levels, expected_levels);
+            for title in ["Returns", "Notes", "Examples", "Parameters"] {
+                assert!(
+                    rendered.contains(&format!("<h{section_level}>{title}</h{section_level}>"))
+                );
+            }
+            assert_eq!(rendered.matches(">Parameters</h").count(), 1);
+            assert!(rendered.contains("choose(value: int)"));
+            assert!(rendered.contains("<p>Choose one value.</p>"));
+            assert!(rendered.contains("Selected value."));
+            assert!(rendered.contains("Input value."));
+            assert!(rendered.contains("Keep <code>value</code> unchanged."));
+            assert!(rendered.contains(
+                "<pre><code data-lang=\"python\"># This stays source.\nvalue = 1 &lt; 2</code></pre>"
+            ));
+        }
     }
 
     #[test]

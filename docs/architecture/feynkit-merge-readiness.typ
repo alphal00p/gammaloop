@@ -30,7 +30,7 @@ evidence.
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr, 0.9fr),
-  [Metric], [Main median], [Owned-product median], [Paired change], [Gate],
+  table.header([Metric], [Main median], [Owned-product median], [Paired change], [Gate]),
   [GL1 generation], [4.1146 s], [4.6244 s], [+12.28%], [Pass],
   [GL1 SingleParametric build], [142.2316 ms], [59.6660 ms], [-57.40%], [Pass],
   [GL1 SingleParametric runtime], [161.6771 µs], [146.1588 µs], [-13.69%], [Inconclusive],
@@ -239,6 +239,24 @@ benchmark drivers remain linked. No raw record is fabricated and link
 validation stays enabled. This failed focused attempt does not qualify the
 complete site; its source and lock guards pass unchanged.
 
+At `04b5b02a`, the combined Idenso build and its generated-link validation pass.
+The external HTML audit then finds 39 historical-table headers and three API
+settings-table headers emitted as ordinary cells, plus eleven heading jumps in
+Python overload documentation. The table rows now use the existing semantic
+header construct without changing their cells; the eight tables in this
+readiness note receive the same correction. The overload renderer derives a
+documentation section's heading from its actual parent instead of hard-coding
+level six. A regression covers free functions and nested methods, retaining
+section titles, parameter handling, prose and fenced examples. Markdown
+parsing and the HTML checker remain unchanged.
+
+The focused product preview also lacks top-level portal assets expected by the
+whole-site audit. The canonical Nix owner builds all products, including that
+portal, through the same asset writer. The next local check therefore renders
+all six authored HTML/PDF products and their developer notes before running the
+unchanged whole-site checker. This check still omits native Rustdoc sidecars;
+notebook-wheel and full Nix publication qualification remain separate.
+
 These repairs change no source-level numerical algorithm, indexed API or
 state format 21. They establish no performance improvement or executable
 equality, and do not resolve any historical inconclusive gate. The successful
@@ -301,7 +319,7 @@ thresholds, absolute floors and noise policy. No retry replaces an outcome.
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr, 0.9fr),
-  [Metric], [Main median], [Indexed median], [Paired change], [Gate],
+  table.header([Metric], [Main median], [Indexed median], [Paired change], [Gate]),
   [GL1 generation], [4.02666 s], [4.54712 s], [+13.15%], [Inconclusive],
   [GL1 SingleParametric build], [140.685 ms], [57.118 ms], [−59.91%], [Pass],
   [GL1 SingleParametric runtime], [160.120 µs], [136.146 µs], [−16.12%], [Pass],
@@ -541,7 +559,7 @@ substituted or pooled into these results.
 
 #table(
   columns: (2fr, 1fr, 1fr, 1.2fr, 0.7fr),
-  [Metric], [Main median], [fd9 median], [Median paired change], [Gate],
+  table.header([Metric], [Main median], [fd9 median], [Median paired change], [Gate]),
   [GL1 generation], [4.08535 s], [4.53491 s], [+10.7000%], [Pass],
   [GL1 SingleParametric runtime], [158.9323 µs], [137.6361 µs], [−14.3240%], [Pass],
   [GL1 generation peak RSS], [83.6362 MB], [99.2707 MB], [+16.9070%], [Pass],
@@ -657,7 +675,7 @@ measurable generation and memory costs:
 
 #table(
   columns: (2fr, 1fr, 1fr, 1.2fr, 0.7fr),
-  [Metric], [Main median], [e6 median], [Median paired change], [Gate],
+  table.header([Metric], [Main median], [e6 median], [Median paired change], [Gate]),
   [GL1 generation], [3.95567 s], [4.46103 s], [+12.1132%], [Pass],
   [GL1 SingleParametric runtime], [157.9431 µs], [135.0273 µs], [−14.1263%], [Pass],
   [GL1 generation peak RSS], [82.14528 MB], [100.78208 MB], [+20.5537%], [Pass],
@@ -890,7 +908,7 @@ CPU access or a substitute for the thirteen-case sealed CLI corpus.
 
 #table(
   columns: (1fr, 1fr, 1fr, 1.3fr),
-  [Case], [16787f71 median wall], [e6a3bb46 median wall], [Median paired change],
+  table.header([Case], [16787f71 median wall], [e6a3bb46 median wall], [Median paired change]),
   [d53], [19.80694 s], [20.55913 s], [+3.7994%],
   [d76], [32.59799 s], [18.91189 s], [−41.9735%],
 )
@@ -964,7 +982,7 @@ are unchanged. No build or test process from this task overlapped measurement.
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr),
-  [Metric], [Main median], [6002674d median], [Paired change],
+  table.header([Metric], [Main median], [6002674d median], [Paired change]),
   [GL1 generation], [3.9653 s], [4.5784 s], [+15.4%],
   [GL1 SingleParametric runtime], [157.75 µs], [135.28 µs], [−13.0%],
   [Thermal GL1 generation], [6.8730 s], [6.8564 s], [−0.55%],
@@ -1008,7 +1026,7 @@ Eleven cases passed their performance gates. Its confirmed regressions were:
 
 #table(
   columns: (2fr, 1fr, 1fr, 1fr),
-  [Metric], [Main median], [Reconciled median], [Paired change],
+  table.header([Metric], [Main median], [Reconciled median], [Paired change]),
   [GL1 SingleParametric runtime], [156.7 µs], [186.7 µs], [+19.1%],
   [Thermal GL1 SingleParametric runtime], [819.7 µs], [1023.5 µs], [+24.6%],
   [Thermal GL1 generation peak RSS], [119.6 MB], [194.9 MB], [+62.9%],
@@ -1695,7 +1713,7 @@ Against main `ff533fcd`, the concrete storage changes are:
 #table(
   columns: (1.1fr, 1fr, 1.4fr),
   inset: 6pt,
-  [Stage], [Main], [Current indexed GammaLoop branch],
+  table.header([Stage], [Main], [Current indexed GammaLoop branch]),
   [Runtime edge/vertex numerator], [`Autogen<Atom>`],
     [`Autogen<SymbolicTensor<IndexedStructure>>`],
   [Numerator processing state], [`SymbolicExpression<State>.expr: Atom`],

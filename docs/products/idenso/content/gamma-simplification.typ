@@ -113,7 +113,7 @@ these are workload-specific measurements.
 
 #table(
   columns: 5,
-  [Numerator], [Dimension], [Idenso, ms], [FORM, ms], [Ratio],
+  table.header([Numerator], [Dimension], [Idenso, ms], [FORM, ms], [Ratio]),
   [Three-loop fermion], [4D], [0.612], [0.356], [1.72×],
   [Three-loop fermion], [D], [2.879], [2.231], [1.29×],
   [Four-loop fermion], [4D], [6.523], [6.583], [0.99×],
@@ -227,7 +227,7 @@ a shared AMD EPYC 9754 host, the example measured the following medians in milli
 
 #table(
   columns: 5,
-  [Case], [Old Idenso], [New Idenso], [FORM `trace4`], [FORM `tracen`],
+  table.header([Case], [Old Idenso], [New Idenso], [FORM `trace4`], [FORM `tracen`]),
   [10 free indices], [168.05], [1.12], [10.81], [10.63],
   [12 free indices], [Not measured], [8.00], [16.54], [22.57],
   [14 free indices], [Not measured], [63.61], [54.42], [190.45],
@@ -258,7 +258,7 @@ divided by the trace count, compares with five warm in-process Idenso wall-time 
 
 #table(
   columns: 4,
-  [Free indices], [Idenso (ms)], [FORM (ms)], [Idenso / FORM],
+  table.header([Free indices], [Idenso (ms)], [FORM (ms)], [Idenso / FORM]),
   [8], [0.150], [0.055], [2.75×],
   [10], [1.100], [0.386], [2.85×],
   [12], [8.094], [2.887], [2.80×],
@@ -363,7 +363,7 @@ repeated-index guard and dot/bracket normalization.
 
 #table(
   columns: 4,
-  [Input], [Tuple rules], [Metric first], [Speedup],
+  table.header([Input], [Tuple rules], [Metric first], [Speedup]),
   [One metric and tensor], [26.75], [2.31], [11.6×],
   [Metric and chain body], [37.08], [4.15], [8.9×],
   [Metric and cyclic trace], [39.73], [4.69], [8.5×],
@@ -384,7 +384,7 @@ parsing, tracing, sorting and cleanup. Rust input construction is outside timing
 
 #table(
   columns: 4,
-  [Axial length], [Before metric first], [After metric first], [FORM `trace4` wall],
+  table.header([Axial length], [Before metric first], [After metric first], [FORM `trace4` wall]),
   [6], [5.79], [4.78], [0.00634],
   [8], [45.42], [36.15], [0.02023],
   [10], [332.40], [254.64], [0.09993],
@@ -419,7 +419,7 @@ monomial counts before collection. Warm Idenso calls reuse the collected recipes
 
 #table(
   columns: 3,
-  [Trace], [Generated in either engine], [Collected recipes / FORM output],
+  table.header([Trace], [Generated in either engine], [Collected recipes / FORM output]),
   [Axial 6 / 8 / 10 / 12], [6 / 33 / 180 / 1053], [6 / 33 / 180 / 1029],
   [Ordinary 8 / 10 / 12], [117 / 801 / 5139], [105 / 693 / 4383],
 )
@@ -491,7 +491,7 @@ processes. All runs use the shared host; Idenso input creation is outside timing
 
 #table(
   columns: 4,
-  [Input], [Before (ms)], [After (ms)], [FORM wall (ms)],
+  table.header([Input], [Before (ms)], [After (ms)], [FORM wall (ms)]),
   [Repeated-index trace, 12], [19.52], [6.62], [0.06043],
   [External metrics, 12], [508.55], [6.74], [0.06144],
   [Axial crossing, 12], [105.96], [32.22], [0.02116],
@@ -550,7 +550,7 @@ microseconds.
 
 #table(
   columns: 4,
-  [Input], [Before], [After], [Speedup],
+  table.header([Input], [Before], [After], [Speedup]),
   [Tagged vector and tensor], [44.33], [19.51], [2.27×],
   [Tagged vector and trace], [62.62], [29.76], [2.10×],
   [Tagged compact metric], [49.34], [24.46], [2.02×],
@@ -569,7 +569,7 @@ parsing, input normalization, `trace4`, sorting and cleanup.
 
 #table(
   columns: 4,
-  [Input], [Before], [After], [FORM wall],
+  table.header([Input], [Before], [After], [FORM wall]),
   [Axial distinct indices, 6], [4.854], [0.637], [—],
   [Axial distinct indices, 8], [36.759], [4.895], [—],
   [Axial distinct indices, 10], [256.810], [35.781], [—],
@@ -654,7 +654,7 @@ are in microseconds.
 
 #table(
   columns: 5,
-  [Input], [Parse before], [Parse after], [Parse + normalize before], [Parse + normalize after],
+  table.header([Input], [Parse before], [Parse after], [Parse + normalize before], [Parse + normalize after]),
   [Metric self-trace], [3.105], [3.822], [12.391], [3.860],
   [Metric and tensor], [4.880], [5.471], [16.160], [6.051],
   [Metric and compact vector], [3.713], [4.737], [12.107], [4.971],
@@ -679,7 +679,7 @@ All entries are milliseconds.
 
 #table(
   columns: 4,
-  [Input], [Before], [After], [FORM wall],
+  table.header([Input], [Before], [After], [FORM wall]),
   [Axial distinct indices, 6], [0.647], [0.204], [—],
   [Axial distinct indices, 8], [4.952], [1.141], [—],
   [Axial distinct indices, 10], [36.379], [7.161], [—],
@@ -738,7 +738,7 @@ interleaved.
 
 #table(
   columns: 3,
-  [Input], [Registry 3.0.0], [Pinned main],
+  table.header([Input], [Registry 3.0.0], [Pinned main]),
   [Axial distinct indices, 8], [1.145], [1.091],
   [Axial distinct indices, 10], [7.172], [6.870],
   [Axial distinct indices, 12], [48.962], [46.879],
@@ -814,7 +814,7 @@ Our builds were quiet, but unrelated shared-host load was uncontrolled.
 
 #table(
   columns: 4,
-  [Input], [Before], [After], [FORM wall],
+  table.header([Input], [Before], [After], [FORM wall]),
   [Axial distinct indices, 8], [1.112], [0.119], [0.021],
   [Axial distinct indices, 10], [6.794], [0.467], [0.102],
   [Axial distinct indices, 12], [46.343], [2.512], [0.646],
@@ -834,7 +834,7 @@ microseconds from the same confirmation run.
 
 #table(
   columns: 3,
-  [Contraction], [Before (µs)], [After (µs)],
+  table.header([Contraction], [Before (µs)], [After (µs)]),
   [Vector into tensor], [5.115], [3.356],
   [Metric into epsilon], [7.758], [4.935],
   [Metric into chain], [9.294], [6.129],
@@ -972,7 +972,7 @@ not be treated as established improvements.
 
 #table(
   columns: 3,
-  [Free gammas], [Idenso factored], [FORM expanded],
+  table.header([Free gammas], [Idenso factored], [FORM expanded]),
   [8], [0.145], [0.036],
   [10], [0.483], [0.337],
   [12], [1.997], [3.900],
@@ -985,7 +985,7 @@ expansion and destruction of both outputs:
 
 #table(
   columns: 5,
-  [Generic-D input], [Trace, ms], [Expansion, ms], [Full lifecycle, ms], [FORM, ms],
+  table.header([Generic-D input], [Trace, ms], [Expansion, ms], [Full lifecycle, ms], [FORM, ms]),
   [8 gammas, branching pair], [0.058], [0.050], [0.109], [0.0134],
   [Pair with four interior gammas], [0.441], [1.295], [1.731], [0.173],
   [Pair with five interior gammas], [2.230], [19.728], [21.894], [2.550],
@@ -1029,7 +1029,7 @@ remaining gammas are compact slashes.
 
 #table(
   columns: 4,
-  [Generic-D input], [Before, ms], [Current, ms], [FORM, ms],
+  table.header([Generic-D input], [Before, ms], [Current, ms], [FORM, ms]),
   [8 gammas, branching two-gamma interior], [1.142], [0.053], [0.0134],
   [Pair with three interior gammas], [2.085], [0.096], [0.018],
   [Pair with four interior gammas], [18.148], [0.412], [0.173],
@@ -1052,7 +1052,7 @@ At the shared-scan checkpoint, unchanged generic-D reruns measure:
 
 #table(
   columns: 3,
-  [Free gammas], [Idenso, ms], [FORM, ms],
+  table.header([Free gammas], [Idenso, ms], [FORM, ms]),
   [8], [0.052], [0.031],
   [10], [0.483], [0.277],
   [12], [5.340], [3.400],
@@ -1097,7 +1097,7 @@ times include normalization:
 
 #table(
   columns: 4,
-  [Input], [Before, µs], [Cached metadata, µs], [FORM, µs],
+  table.header([Input], [Before, µs], [Cached metadata, µs], [FORM, µs]),
   [Metric over 8 tensor terms], [11.98], [10.51], [4.0],
   [Metric over 128 tensor terms], [176.65], [141.68], [66.7],
   [Vector over 8 tensor terms], [13.74], [12.06], [4.5],
@@ -1174,7 +1174,7 @@ expanded lifecycle are separate measurements.
 
 #table(
   columns: 4,
-  [Input], [Idenso, factored], [Idenso, fully expanded], [FORM, fully expanded],
+  table.header([Input], [Idenso, factored], [Idenso, fully expanded], [FORM, fully expanded]),
   [Branching 8], [0.0506], [0.1165], [0.0132],
   [Order-sensitive 12], [0.9564], [5.9803], [0.7333],
   [Free 14], [17.4870], [798.5513], [54.0000],
@@ -1251,7 +1251,7 @@ output destruction, from three alternating processes with five samples each.
 
 #table(
   columns: 5,
-  [Input], [Before], [After], [Rerun before], [Rerun after],
+  table.header([Input], [Before], [After], [Rerun before], [Rerun after]),
   [S × free trace 8], [0.3758], [0.2837], [0.1452], [0.0520],
   [S × free trace 10], [2.4488], [1.6274], [1.2786], [0.4716],
   [S × free trace 12], [23.3361], [14.6916], [14.4584], [5.2234],
@@ -1289,7 +1289,7 @@ production source gives the following default-call times in milliseconds:
 
 #table(
   columns: 3,
-  [Input], [Before], [After],
+  table.header([Input], [Before], [After]),
   [S × free trace 8], [0.2844], [0.2064],
   [S × free trace 10], [1.6479], [0.9773],
   [S × free trace 12], [14.3991], [7.2032],
@@ -1328,7 +1328,7 @@ are milliseconds:
 
 #table(
   columns: 3,
-  [Input], [Before], [Retained],
+  table.header([Input], [Before], [Retained]),
   [S × order-sensitive trace 12, D], [159.596], [2.878],
   [S × alternating slashes 12, D], [1.636], [0.0569],
   [S × paired slashes 12, D], [0.1717], [0.0163],
@@ -1343,7 +1343,7 @@ lifecycle simplifies the product, expands only the trace body and restores S:
 
 #table(
   columns: 4,
-  [Trace body], [Before, ms], [Retained, ms], [FORM CPU, ms],
+  table.header([Trace body], [Before, ms], [Retained, ms], [FORM CPU, ms]),
   [Order-sensitive 12, D], [165.193], [8.104], [0.7433],
   [Free 12, D], [55.822], [53.940], [3.9333],
 )
@@ -1403,7 +1403,7 @@ in milliseconds, against the same build before either change:
 
 #table(
   columns: 3,
-  [Input], [Before], [Combined],
+  table.header([Input], [Before], [Combined]),
   [S × order-sensitive trace 12, D], [2.907], [0.964],
   [S × free trace 10, D], [0.970], [0.569],
   [S × free trace 12, D], [7.438], [2.373],
@@ -1462,7 +1462,7 @@ measured these complete calls with $S=(x+y)^8$ kept factored, in milliseconds:
 
 #table(
   columns: 4,
-  [Trace body], [Simplify then expand body], [Prototype], [FORM CPU],
+  table.header([Trace body], [Simplify then expand body], [Prototype], [FORM CPU]),
   [Order-sensitive 12, D], [6.248], [0.851], [0.7533],
   [Free 10, D], [3.475], [1.345], [0.3433],
   [Free 12, D], [47.868], [17.153], [3.9667],
@@ -1506,7 +1506,7 @@ copied-library comparison isolates this change; values below are microseconds:
 
 #table(
   columns: 4,
-  [Expanded trace body], [Before], [Exact-four path], [FORM CPU],
+  table.header([Expanded trace body], [Before], [Exact-four path], [FORM CPU]),
   [Order-sensitive 12, 4D], [432.27], [163.82], [53.33],
   [Five interior gammas, 4D], [4,086.94], [1,177.43], [—],
   [Repeated compact 8, 4D], [17.42], [13.83], [1.40],
@@ -1605,7 +1605,7 @@ eleven samples per process give the following smallest-degree timings:
 
 #table(
   columns: 3,
-  [Input], [Before], [After],
+  table.header([Input], [Before], [After]),
   [One closed vertex], [0.906 ms], [0.713 ms],
   [Two closed vertices], [4.197 ms], [3.149 ms],
   [Three closed vertices], [23.696 ms], [13.619 ms],
@@ -1650,7 +1650,7 @@ five-process-pair protocol, with smallest-degree ordering:
 
 #table(
   columns: 3,
-  [Input], [Before entry shortcut], [After entry shortcut],
+  table.header([Input], [Before entry shortcut], [After entry shortcut]),
   [One closed vertex], [0.698 ms], [0.440 ms],
   [Two closed vertices], [2.986 ms], [2.793 ms],
   [Three closed vertices], [13.432 ms], [10.403 ms],
@@ -1684,7 +1684,7 @@ matched five-process-pair checkpoint starts after the entry shortcut:
 
 #table(
   columns: 3,
-  [Input and order], [Before], [After],
+  table.header([Input and order], [Before], [After]),
   [Three vertices, smallest degree], [10.212 ms], [10.022 ms],
   [Three vertices, minimum product terms], [10.033 ms], [9.485 ms],
   [16 compact dots], [18.60 µs], [16.35 µs],
@@ -1752,7 +1752,7 @@ complete expanded-trace calls in milliseconds:
 
 #table(
   columns: 4,
-  [Trace body], [Before], [Unchanged-sum reuse], [Speedup],
+  table.header([Trace body], [Before], [Unchanged-sum reuse], [Speedup]),
   [Free 6, D], [0.827], [0.842], [0.98×],
   [Free 10, D], [117.687], [98.915], [1.19×],
   [Free 12, D], [4,203.895], [1,438.199], [2.92×],
@@ -1781,7 +1781,7 @@ complete reruns after the sum improvement, in milliseconds:
 
 #table(
   columns: 4,
-  [Expanded body], [Revalidate unchanged result], [Reuse metadata], [Speedup],
+  table.header([Expanded body], [Revalidate unchanged result], [Reuse metadata], [Speedup]),
   [Free 6, D], [0.786], [0.00738], [106×],
   [Free 10, D], [95.504], [0.676], [141×],
   [Free 12, D], [1,374.800], [9.222], [149×],
@@ -1832,7 +1832,7 @@ all entries below are complete Python first-call wall times in milliseconds:
 
 #table(
   columns: 4,
-  [Expanded body], [Before], [After], [Speedup],
+  table.header([Expanded body], [Before], [After], [Speedup]),
   [Free 2, D], [0.0272], [0.0262], [1.04×],
   [Free 4, D], [0.1069], [0.1023], [1.04×],
   [Free 6, D], [0.662], [0.437], [1.51×],
@@ -1884,7 +1884,7 @@ milliseconds; the ratios describe these stated timing boundaries.
 
 #table(
   columns: 4,
-  [Native workload], [Our wall], [FORM CPU], [Observed ratio],
+  table.header([Native workload], [Our wall], [FORM CPU], [Observed ratio]),
   [Axial 12, 4D (older checkpoint)], [0.621], [0.627], [0.99×],
   [Contracted 12, 4D, expanded], [0.164], [0.0533], [3.07×],
   [Contracted 12, D, expanded], [0.828], [0.753], [1.10×],
@@ -1910,7 +1910,7 @@ Fresh installed-Python measurements have a substantially larger gap:
 
 #table(
   columns: 4,
-  [Expanded body], [Complete Python wall], [FORM body CPU], [Observed ratio],
+  table.header([Expanded body], [Complete Python wall], [FORM body CPU], [Observed ratio]),
   [Free 2, D], [0.0262], [0.000640], [41×],
   [Free 4, D], [0.1023], [0.001350], [76×],
   [Free 6, D], [0.4369], [0.005400], [81×],
@@ -1948,7 +1948,7 @@ of the 46.474 s run.
 
 #table(
   columns: 3,
-  [Ladder operation], [Wall time, s], [Share],
+  table.header([Ladder operation], [Wall time, s], [Share]),
   [Construct TensorExpression from expanded input], [32.083], [75.14%],
   [Schoonschip, including result reconstruction], [9.846], [23.06%],
   [Multiply and initially expand], [0.700], [1.64%],
@@ -2005,7 +2005,7 @@ interfaces agree exactly with the preceding build.
 
 #table(
   columns: 4,
-  [Input terms], [Before, ms], [After, ms], [Ratio],
+  table.header([Input terms], [Before, ms], [After, ms], [Ratio]),
   [6], [0.128], [0.095], [1.35×],
   [36], [1.230], [0.771], [1.60×],
   [204], [8.213], [5.140], [1.60×],
@@ -2061,7 +2061,7 @@ Atoms/interfaces and the final 9,652-term result agree exactly.
 
 #table(
   columns: 4,
-  [Constructor input terms], [Before, ms], [After, ms], [Ratio],
+  table.header([Constructor input terms], [Before, ms], [After, ms], [Ratio]),
   [6,503], [251.410], [173.175], [1.45×],
   [50,684], [2,344.216], [1,589.343], [1.47×],
   [92,341], [4,651.301], [3,209.359], [1.45×],
@@ -2076,7 +2076,7 @@ claimed. Five-sample complete trace transformations give:
 
 #table(
   columns: 4,
-  [Expanded trace], [Python before, ms], [Python after, ms], [FORM body CPU, ms],
+  table.header([Expanded trace], [Python before, ms], [Python after, ms], [FORM body CPU, ms]),
   [Free 2, D], [0.02384], [0.02019], [0.00064],
   [Free 4, D], [0.09027], [0.07876], [0.00130],
   [Free 6, D], [0.39843], [0.34175], [0.00540],
