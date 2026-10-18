@@ -937,8 +937,8 @@ impl Graph {
             .numerator(&self.full_filter(), &self.empty_subgraph())?
             .state
             .expr
-            .multiply(&self.global_prefactor.num)?
-            .multiply(&self.global_prefactor.projector)?;
+            .multiply(self.global_prefactor.num.clone())?
+            .multiply(self.global_prefactor.projector.clone())?;
         if full_num.is_zero() {
             return Ok(());
         }
@@ -1073,7 +1073,7 @@ impl Graph {
             .state
             .expr;
         let prefactor = self.global_numerator()?;
-        let full_num = numerator.multiply(&prefactor)?;
+        let full_num = numerator.multiply(prefactor)?;
         let color_simplified = full_num
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),

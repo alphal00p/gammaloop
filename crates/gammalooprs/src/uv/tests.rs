@@ -887,7 +887,7 @@ fn build_tta_uv_graph() -> Graph {
     )
     .unwrap()
     .expr;
-    graph.global_prefactor.num = graph.global_prefactor.num.multiply(&color).unwrap();
+    graph.global_prefactor.num = graph.global_prefactor.num.multiply(color).unwrap();
     graph.validate_full_numerator_tensor_network().unwrap();
     graph
 }

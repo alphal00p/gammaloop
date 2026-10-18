@@ -65,7 +65,7 @@ impl Localizer<'_> {
             .subtract(&graph.initial_state_cut);
         let outside_numerator = graph.numerator(&reduced, to_contract)?.state.expr;
         let global = graph.global_numerator()?;
-        let analysis_numerator = expr.multiply(&outside_numerator)?.multiply(&global)?;
+        let analysis_numerator = expr.clone().multiply(outside_numerator)?.multiply(global)?;
 
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
         // Integration replaces the contracted spinney by an independent

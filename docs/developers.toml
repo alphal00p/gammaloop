@@ -486,7 +486,10 @@ anchor = "impl Localizer<'_> {"
 # Reviewed 2026-10-17: Integrated pole/finite tensors reach localization directly; typed composition owns the complete CFF capacity input and finite-body mapping.
 # Reviewed 2026-10-17: The localizer consumes retained pole/finite tensor projections; scalar dispatch does not erase the coefficient body interface.
 # Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
-digest = "4bf2b6847adf455c97cad008ed8076214f184431"
+# Reviewed 2026-10-18: consuming indexed multiplication moves the disposable
+# outside/global products; the retained integrated coefficient is cloned explicitly.
+# Coefficient interfaces, localization, routing and numerical assertions are unchanged.
+digest = "c4660d75be3e086dfc9d4e65b0c060fabb9def95"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -831,6 +834,16 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # Reviewed 2026-10-17: The Idenso note records retained reduction state, declared-interface persistence, consuming component handoff and its logical layout.
 # Reviewed 2026-10-18: The Idenso note documents indexed admission and checked methods, proof-preserving native interoperability, component lowering and explicit-slot archives; both interfaces share one algebra engine.
 digest = "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/indexed.rs"
+symbol = "idenso::tensor::SymbolicTensor<IndexedStructure>::multiply"
+anchor = "    pub fn multiply("
+end_anchor = "    pub fn reindex_interface_ports("
+# Reviewed 2026-10-18: both owned operands move into the existing partial engine;
+# product planning and strict indexed result validation are unchanged. The Idenso
+# and readiness notes record explicit clones for retained values and measurement limits.
+digest = "a4c365bd57958f94f9070df4562bc957bc1d425c"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/inference.rs"

@@ -1007,7 +1007,7 @@ mod tests {
         )
         .unwrap()
         .expr;
-        graph.global_prefactor.num = graph.global_prefactor.num.multiply(&color).unwrap();
+        graph.global_prefactor.num = graph.global_prefactor.num.multiply(color).unwrap();
         graph.validate_full_numerator_tensor_network().unwrap();
         test_default_momenta_graph(&graph, &sm, &F(600.0)).unwrap();
     }
@@ -1034,7 +1034,7 @@ mod tests {
             )
             .unwrap()
             .expr;
-            graph.global_prefactor.num = graph.global_prefactor.num.multiply(&color).unwrap();
+            graph.global_prefactor.num = graph.global_prefactor.num.multiply(color).unwrap();
         }
         graph.validate_full_numerator_tensor_network().unwrap();
         test_default_momenta_graph(&graph, &sm, &F(700.0)).unwrap();

@@ -53,7 +53,7 @@ impl Numerator<UnInit> {
             |_, vertex| vertex.get_num(),
             |edge| edge.num.value.clone(),
             |edge| edge.is_dummy,
-            |left, right| left.multiply(&right),
+            |left, right| left.multiply(right),
         )?;
 
         debug!( numerator = %num.expression().to_bare_ordered_string(),"Numerator constructed",);
@@ -78,7 +78,7 @@ impl Numerator<UnInit> {
             |_, vertex| vertex.get_num(),
             |edge| edge.num.value.clone(),
             |edge| edge.is_dummy,
-            |left, right| left.multiply(&right),
+            |left, right| left.multiply(right),
         )?;
 
         debug!( numerator = %num.expression().to_bare_ordered_string(),"Numerator constructed",);

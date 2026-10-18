@@ -407,7 +407,7 @@ mod test {
             let numerator = numerator
                 .state
                 .expr
-                .multiply(&prefactor)
+                .multiply(prefactor)
                 .unwrap()
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(idenso::color::ColorSimplifySettings::default()),

@@ -149,12 +149,12 @@ impl Evaluate {
                     },
                 )?;
                 complete_evaluation_for_this_graph =
-                    complete_evaluation_for_this_graph.multiply(&component)?;
+                    complete_evaluation_for_this_graph.multiply(component)?;
             }
             let overall_factor = SymbolicTensor::infer_indexed(g.overall_factor.clone())?;
             let complete = complete_evaluation_for_this_graph
-                .multiply(&g.global_prefactor.projector)?
-                .multiply(&overall_factor)?;
+                .multiply(g.global_prefactor.projector.clone())?
+                .multiply(overall_factor)?;
             full_evaluation = Some(match full_evaluation {
                 Some(sum) => sum.try_add(&complete)?,
                 None => complete,
@@ -317,7 +317,7 @@ mod tests {
             assert_eq!(slot.rep(), Minkowski {}.new_rep(GS.dim).to_lib());
         }
         assert!(!component.is_zero());
-        let closed = component.multiply(&graph.graph.global_prefactor.projector)?;
+        let closed = component.multiply(graph.graph.global_prefactor.projector.clone())?;
         assert!(
             closed.is_scalar(),
             "the declared projector must close both ports"
