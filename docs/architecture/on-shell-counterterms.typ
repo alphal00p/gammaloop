@@ -2613,7 +2613,7 @@ source/binary mapping are retained. The run took 2438.704 seconds under the
 7200-second cap on a shared host; it establishes no route-performance ranking
 or all-angle symbolic soft proof.
 
-=== Primitive emitted-dimensional bridge: next exact gate
+=== Primitive emitted-dimensional bridge qualification
 
 The primitive regression combines the exact local spin-four source certificate
 with the same production dimensional scheme addback. Its continuation retains
@@ -2632,10 +2632,15 @@ two auxiliary masses, a one-sided wrong-angular-average control, and the
 positive-epsilon difference multiplied by a scalar pole. That last control is
 mechanism-only, not a nested-graph certificate.
 
-This extension was qualified on historical source `0b4c6a9c`; its current
-Indexed port has not yet been executed. Exact numerator and complete denominator
-certificates precede CFF aggregation in the existing primitive projection
-consumer. Scalar dispatch roots and retained tensor bodies keep their separate
+This extension was qualified on historical source `0b4c6a9c`. The Indexed
+source `ea715048` now passes the three extended integrated references and four
+primitive supports: the compact local operator, independent Dirac CFF residues,
+fixed-point denominator contractions, and live-crown/prescription reconstruction.
+All seven retain the ordinary 240-second cap, their exact formulas and negative
+controls. The same production integral supplies both pole and finite parts;
+no extra backend call or counterterm is introduced. Exact numerator and complete
+denominator certificates precede CFF aggregation in the existing primitive
+projection consumer. Scalar dispatch roots and retained tensor bodies keep their separate
 normalization owners. The actual D09 finite-child dimensional contribution has
 its own certificate; neither result establishes the complete two-loop emitted
 condition, general off-shell/R2 matching, or public mixed-prescription support.
