@@ -45,6 +45,15 @@ type CertifiedMassPole = (usize, Atom, Atom, Atom);
 // same native input consumed by the complete inventory and overall operators.
 type CertifiedMassPrefixes = BTreeMap<(String, Vec<usize>), CertifiedMassPrefix>;
 
+// One actual source supplies the common, fully named open field interface.
+struct NativeFieldFrame {
+    kinetic: SymbolicTensor<IndexedStructure>,
+    identity: SymbolicTensor<IndexedStructure>,
+    mass: Atom,
+    endpoint_slots: [Atom; 2],
+    incoming_edge: usize,
+}
+
 struct CertifiedMassPrefix {
     coefficient: Atom,
     diagram: FeynmanDiagram,
@@ -895,8 +904,135 @@ impl QcdMassReference {
 
 #[test]
 fn native_qcd_mass_projections_certify_all_one_and_two_loop_sources() -> Result<()> {
+    use spenso::structure::{
+        abstract_index::AbstractIndex,
+        representation::LibraryRep,
+        slot::{IsAbstractSlot, ParseableAind, Slot},
+    };
+    use std::collections::HashMap;
+
     crate::initialisation::test_initialise()?;
-    QcdMassReference::new()?.certified_projections()?;
+    let reference = QcdMassReference::new()?;
+    let sources = reference.certified_projections()?;
+    ensure!(sources.len() == 13);
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    for (diagram, _) in &sources {
+        let source = diagram.numerator().clone().try_into_indexed()?;
+        let (projector, _) = reference.mass_projector(diagram, &Atom::var(crate::utils::GS.dim))?;
+        let projector = projector.map_representation_dimensions(|_, d| d.replace(CS.nc).with(3))?;
+        let projector = projector
+            .with_checked_expression(projector.expression().replace(CS.nc).with(3))?
+            .try_into_indexed()?;
+        ensure!(source.rank() == 4 && projector.rank() == 4);
+        let mut endpoints = BTreeMap::new();
+        cooking
+            .uncook(diagram.projector().expression().as_view())
+            .visitor(&mut |view| {
+                if let AtomView::Fun(wave) = view
+                    && [symbols::u(), symbols::ubar()].contains(&wave.get_symbol())
+                    && wave.get_nargs() == 2
+                {
+                    endpoints.insert(wave.get_symbol(), wave.get(1).to_owned());
+                }
+                true
+            });
+        ensure!(endpoints.len() == 2);
+        let raw_slots = [&endpoints[&symbols::u()], &endpoints[&symbols::ubar()]];
+        let typed = raw_slots
+            .iter()
+            .map(|slot| -> Result<_> {
+                let cooked = cooking.try_cook(slot.as_view())?;
+                Ok(Slot::<LibraryRep, AbstractIndex>::try_from(
+                    cooked.as_view(),
+                )?)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let source_slots = source.structure().logical_slots();
+        let projector_slots = projector.structure().logical_slots();
+        let admit = |indices: &[Atom]| -> Result<()> {
+            ensure!(indices.len() == 2 && indices[0] != indices[1]);
+            for (slot, index) in typed.iter().zip(indices) {
+                for frame in [&source_slots, &projector_slots] {
+                    ensure!(
+                        frame
+                            .iter()
+                            .filter(|candidate| candidate.rep() == slot.rep()
+                                && candidate.aind().to_atom() == *index)
+                            .count()
+                            == 1,
+                        "native source endpoint slot admission requires the complete cooked representation slot"
+                    );
+                }
+            }
+            Ok(())
+        };
+        let indices = typed
+            .iter()
+            .map(|slot| slot.aind().to_atom())
+            .collect::<Vec<_>>();
+        admit(&indices)?;
+        let contextless = raw_slots
+            .iter()
+            .map(|slot| -> Result<Atom> {
+                let AtomView::Fun(slot) = slot.as_view() else {
+                    return Err(eyre!("native external spin slot is not explicit"));
+                };
+                Ok(cooking.try_cook(slot.get(1))?)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let error = admit(&contextless)
+            .expect_err("contextless hedge-index cooking must not establish a native source port");
+        ensure!(
+            error
+                .to_string()
+                .contains("native source endpoint slot admission")
+        );
+        for (label, tensor, opposite) in [
+            ("closing projector", &projector, &source),
+            ("native open source", &source, &projector),
+        ] {
+            let logical = tensor.structure().logical_slots();
+            let mut swapped = logical.clone();
+            let mut map = HashMap::new();
+            let mut inverse = HashMap::new();
+            for (position, slot) in logical.iter().enumerate() {
+                let role = indices
+                    .iter()
+                    .position(|index| slot.aind().to_atom() == *index)
+                    .ok_or_else(|| {
+                        eyre!("{label}: external source port has no admitted endpoint")
+                    })?;
+                map.insert(position, typed[1 - role].aind());
+                inverse.insert(position, slot.aind());
+                swapped[position] = slot.reindex(typed[1 - role].aind());
+            }
+            let transported = tensor.reindex_interface_ports(&map)?;
+            ensure!(transported.structure().logical_slots() == swapped);
+            ensure!(
+                transported.structure().canonical().external_structure()
+                    == opposite.structure().canonical().external_structure()
+            );
+            ensure!(
+                transported
+                    .reindex_interface_ports(&inverse)?
+                    .same_value(tensor)
+            );
+            let zero = tensor.with_checked_expression(Atom::Zero)?;
+            let moved_zero = zero.reindex_interface_ports(&map)?;
+            ensure!(
+                moved_zero.rank() == 4
+                    && moved_zero.structure().logical_slots()
+                        == transported.structure().logical_slots()
+            );
+            ensure!(
+                moved_zero
+                    .reindex_interface_ports(&inverse)?
+                    .same_value(&zero)
+            );
+        }
+    }
     Ok(())
 }
 
@@ -2198,13 +2334,7 @@ impl QcdMassReference {
         parent: &crate::uv::hedge_poset::OwnedForestNode,
         actual: &super::IntegratedCts,
         projection: &MassProjection,
-        common: &mut Option<(
-            SymbolicTensor<IndexedStructure>,
-            SymbolicTensor<IndexedStructure>,
-            Atom,
-            [Atom; 2],
-            usize,
-        )>,
+        common: &mut Option<NativeFieldFrame>,
     ) -> Result<(
         SymbolicTensor<IndexedStructure>,
         SymbolicTensor<IndexedStructure>,
@@ -2446,18 +2576,23 @@ impl QcdMassReference {
         )?;
         let first_input = common.is_none();
         if first_input {
-            *common = Some((
-                kinetic_template.clone(),
-                transposed_identity.clone(),
-                physical_mass.clone(),
-                endpoint_atoms.clone(),
+            *common = Some(NativeFieldFrame {
+                kinetic: kinetic_template.clone(),
+                identity: transposed_identity.clone(),
+                mass: physical_mass.clone(),
+                endpoint_slots: endpoint_atoms.clone(),
                 incoming_edge,
-            ));
+            });
         }
-        let (common_template, common_identity, common_mass, common_endpoint_atoms, common_edge) =
-            common.as_ref().unwrap();
+        let NativeFieldFrame {
+            kinetic: common_template,
+            identity: common_identity,
+            mass: common_mass,
+            endpoint_slots: common_endpoint_atoms,
+            incoming_edge: common_edge,
+        } = common.as_ref().unwrap();
         ensure!(
-            &physical_mass == common_mass,
+            physical_mass == common_mass,
             "native inputs must retain the same symbolic physical top mass"
         );
         let common_endpoints = common_endpoint_atoms
@@ -3385,7 +3520,13 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
     // arXiv:1909.00697 A.18: CF[(CA+CF/2)/eps^2+(-17CA/4+3CF/4+TF*nf)/eps].
     // SU(3), nf=6 gives 44/(9 eps^2)-35/(3 eps). This target is not a definition
     // by subtraction of the produced bare/proper coefficients above.
-    let (kinetic_template, mass_identity, physical_mass, _, common_edge) = kinetic_frame
+    let NativeFieldFrame {
+        kinetic: kinetic_template,
+        identity: mass_identity,
+        mass: physical_mass,
+        incoming_edge: common_edge,
+        ..
+    } = kinetic_frame
         .ok_or_else(|| eyre!("the complete native inventory has no open kinetic frame"))?;
     let kinetic_sum = kinetic_sum.ok_or_else(|| eyre!("the actual pole sum is empty"))?;
     let epsilon = Atom::var(crate::utils::GS.dim_epsilon);
@@ -3467,7 +3608,7 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
                     **output = gs.emr_mom(
                         linnet::half_edge::involution::EdgeIndex(common_edge),
                         gs.cind(0),
-                    ) * gs.energy_delta(&momentum.get(1).to_owned());
+                    ) * gs.energy_delta(momentum.get(1).to_owned());
                 }
             },
         ))?;
@@ -3492,7 +3633,7 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
                 **output = if momentum.get(1) == gs.cind(0).as_view() {
                     Atom::one()
                 } else {
-                    gs.energy_delta(&momentum.get(1).to_owned())
+                    gs.energy_delta(momentum.get(1).to_owned())
                 };
             }
         },
