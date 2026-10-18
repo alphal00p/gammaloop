@@ -1034,6 +1034,21 @@ impl QcdMassReference {
                     unexpected_external.is_empty(),
                     "the external projection view cannot remove a hard-loop-dependent factor: {unexpected_external:?}"
                 );
+                // Reuse the already certified parent coefficients in the SAME
+                // open external graph view as the source. This is an actual
+                // final-builder call with the original Integrated result.
+                let open_parent = FinalIntegrandBuilder::new(localizer, &settings)
+                    .build_projected(&mut source_graph, parent, &projected, integrated)?
+                    .into_integrands();
+                check_store(&open_parent)?;
+                eyre::ensure!(open_parent.scalar_definitions().is_empty());
+                eyre::ensure!(!open_parent.numerators().is_empty());
+                eyre::ensure!(open_parent.iter().count() == allowed_keys.len());
+                eyre::ensure!(
+                    open_parent
+                        .iter()
+                        .all(|(key, _)| allowed_keys.contains(key))
+                );
                 let source_result = if given.subgraph().is_empty() {
                     let direct = Direct3dCts::root(&source_graph, localizer)?;
                     FinalIntegrandBuilder::new(localizer, &settings)
@@ -1225,6 +1240,10 @@ impl QcdMassReference {
                                     .all(|(_, coefficient)| coefficient.is_zero())
                             );
                             for (monomial, coefficient) in rows {
+                                eyre::ensure!(
+                                    !coefficient.contains_symbol(family),
+                                    "D09 complete-call extraction left an unbound family in its coefficient"
+                                );
                                 if coefficient.is_zero() {
                                     continue;
                                 }
@@ -1256,7 +1275,10 @@ impl QcdMassReference {
                                         && outside_call.len() == 1
                                         && child_call[0] != outside_call[0]
                                 );
-                                if witnessed == 0 {
+                                // Every actual nonzero-coefficient monomial,
+                                // under every actual key/cut, gets the typed
+                                // transport proof before materialization.
+                                {
                                     let bind = |call: &Atom, entry: &crate::integrands::process::param_builder::NumeratorDefinition| -> Result<_> {
                                         let AtomView::Fun(function) = call.as_view() else { unreachable!() };
                                         let replacements = entry.args.iter().enumerate().map(|(index, formal)| Replacement::new(
@@ -1327,7 +1349,7 @@ impl QcdMassReference {
                             }
                         }
                     }
-                    eyre::ensure!(source_keys == finite_entries.len() && witnessed == 1);
+                    eyre::ensure!(source_keys == finite_entries.len() && witnessed > 0);
                     let normalize_source =
                         FinalIntegrandBuilder::final_normalizer(&source_graph, &reduced_source);
                     let normalize_source_scalar =
@@ -1364,6 +1386,7 @@ impl QcdMassReference {
                 debug_tags!(#uv, #local, #four_d, #cff, #summary;
                     stage = "native_d09_actual_source_cff", given = %given.subgraph().string_label(),
                     families = source_result.numerators().len(),
+                    open_parent_families = open_parent.numerators().len(),
                     root_bytes = source_result.iter().map(|(_, root)| root.as_view().get_byte_size()).sum::<usize>(),
                     body_bytes = source_result.numerators().iter().map(|entry| entry.rhs.expression().as_view().get_byte_size()).sum::<usize>(),
                     actual_source_constructed = true, projection_only_open_external_matrix = true,
