@@ -56,6 +56,25 @@ costs must be measured on the original workloads. No indexed performance run has
 yet been used to qualify this repair; earlier measurements below remain attached
 to their earlier sources.
 
+The repaired checkpoint `ae223076` passes strict workspace Clippy and all 1,065
+Idenso tests, retaining all 1,061 earlier identities and adding four controls.
+All 48 selected GammaLoop/state tests pass, including both failures from the
+first full sweep. The source and fresh JUnit identities were verified for both
+runs; skips and assertions were preserved. The subsequent combined candidate
+also imports the on-shell agent's validated fixed-basis bounds, checked pair
+exclusions and physical-selector admissibility. Their local replay commits are
+`6166b8e5`, `3325bb9c` and `5ab0928e`; fresh combined qualification is pending.
+
+These shared fixes retain borrowed representation views and explicit runtime
+interfaces. Pair queries now validate the original unfiltered scopes before
+searching the filtered expression with a separate cache. This additional
+observation is a correctness cost: exclusions must not hide malformed index
+multiplicity. Physical fixed selectors in range remain admissible without
+specializing the formal dimension or epsilon series; unknown selectors and
+genuine unresolved sums remain checked. The imports preserve all numerical
+tolerances and budgets, and include their exact fixed-word fixtures in the Nix
+test source. The final timing comparison must include this validation cost.
+
 The API adaptation is explicit: indexed source constructors are named
 `infer_indexed` and `from_indexed_parts`, and an admitted partial tensor uses
 `try_into_indexed`. Ordinary typed operations keep their existing method names.
