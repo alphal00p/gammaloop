@@ -117,6 +117,7 @@
         clinnet-cli
         gammaloop-python-module
         nextestUfoPython
+        osMassReferenceLauncher
         symbolicaRenderData
         nixCiConfiguration
         guppyWorkspaceGraphJson
@@ -270,6 +271,9 @@
             nixCiArtifactBarrier "gammaloop-api-package-artifacts" gammaloopApiPackageArtifacts;
           inherit workspaceBuildArtifacts;
           "nix-ci-passed" = nixCiPassed;
+        }
+        // lib.optionalAttrs (system == "x86_64-linux") {
+          "gammaloop-os-mass-reference-runtime" = osMassReferenceLauncher;
         }
         // cranePackageDependencyOutputs
         // cranePackageOutputs

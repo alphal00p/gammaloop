@@ -1791,6 +1791,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-19: the UFO adapter retains requested-source metadata under the
 # loader public import scope; its renamed embedded Python helper stays owned by
 # feynkit-ufo in both explicit source lists. Producer and runtime boundaries stay fixed.
+# Reviewed 2026-10-18: The native mass reference embeds its pinned Python consumer
+# in the core test source. Its locked external runtime is supplied by a separate
+# mandatory full-main consumer; ordinary source and runtime owners are unchanged.
 digest = "9ed8dd0ee840c3876b4c7a341bbd6a433d55ad0d"
 
 [[section.note.scope]]

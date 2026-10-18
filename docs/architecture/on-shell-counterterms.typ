@@ -2144,3 +2144,40 @@ inclusive real/virtual cancellation and auxiliary-scale independence only
 at the summed and integrated boundary. It cannot certify nested forests or
 independently separate field and coupling schemes; their local and analytic
 certificates above remain necessary.
+
+== Mandatory bare-mass numerical reference
+
+The native QCD source certificates feed a separate numerical reference through
+an already closed finite scalar codec. The nonignored
+`native_two_loop_qcd_bare_mass_matches_primary_reference` test is selected only
+by `ci_os_mass_reference`, a dedicated x86_64-linux full-main check with the
+existing 7200-second limit. Ordinary and general full-suite profiles exclude
+that one external-runtime consumer; their existing selections and time limits
+otherwise remain unchanged.
+
+The pinned Python 3.13 runtime retains PySecDec 1.6.6, NumPy 2.5.4, SymPy 1.14.0,
+mpmath 1.3.0 and nest-asyncio 1.6.0 with wheel hashes. Two generation, FORM,
+compilation and QMC workers, seed 1337, the original evaluation bounds and
+coefficient tolerance remain fixed. The two one-loop anchors and seven distinct
+two-loop kernels consume all thirteen certified native sources, retaining the
+scaleless D03 certificate and exact flavor/color reuse. The reconstructed mass
+renormalization constant uses independent analytic insertions; this bare-reference
+check does not evaluate the production OS forest's integrated condition.
+
+The embedded Python source belongs to the core compile-time test input; the
+external runtime is supplied only to the dedicated main consumer. Missing
+runtime or an empty test selection is an error. Failed callbacks retain their
+private inputs and backend log, while successful callbacks clean generated
+workspaces. Launcher identity and all source, policy and output hashes must be
+recorded for a fresh numerical qualification on the migrated stack. Adding this
+wiring alone makes no new numerical pass claim.
+
+The retained-tensor preparation at `0ffc3845` compiled the native consumer,
+verified its exact profile selection, and passed all three native source and
+isolated-child controls (`0e6c0aa0`). Canonical CI regeneration and graph checks
+preserved the generated configuration. The resolved runtime derivation is
+identical to the previously qualified two-anchor runtime, so its seven cached
+checks remain evidence about that immutable backend and input, not a fresh
+nine-kernel result. The current numerical execution remains pending. A focused
+`uv, integrated, summary` logfile retains all nine backend reports and their
+input and library hashes before successful callback cleanup.

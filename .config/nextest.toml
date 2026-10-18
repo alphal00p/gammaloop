@@ -7,8 +7,9 @@ nextest-version = "0.9.137"
 # Keep all 44 exact exclusions below visible; a new `failing` module is not
 # automatically excluded. There are 17 integration, 25 gammalooprs and two
 # Idenso color-matrix investigations; their existing assertions are unchanged.
-# Ignored tests retain Rust's explicit opt-in semantics. PySecDec integrations
-# require a separate external-tool environment and remain manual validations.
+# Ignored tests retain Rust's explicit opt-in semantics. Vakint PySecDec cases
+# remain manual. The separately owned OS mass reference has one pinned main-only
+# runtime/profile; it is excluded from the general package selections.
 
 [profile.default]
 # Strict fast lane. Seven cases exceeded 240s in the matched CI-optim runs;
@@ -17,6 +18,7 @@ nextest-version = "0.9.137"
 # The fixed-statistics self-energy acceptance and inclusive OS auxiliary-scale
 # scan also run in the main-only lane.
 default-filter = '''
+not test(=uv::approx::integrated::native_mass_tests::native_two_loop_qcd_bare_mass_matches_primary_reference) and
 not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) and not (
     test(=cff::esurface::tests::failing::test_from_cut_left_box) or
     test(=cff::esurface::tests::failing::test_from_cut_left_dt) or
@@ -266,6 +268,7 @@ path = "junit.xml"
 [profile.ci_full]
 inherits = "default"
 default-filter = '''
+not test(=uv::approx::integrated::native_mass_tests::native_two_loop_qcd_bare_mass_matches_primary_reference) and
 not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) and not (
     test(=cff::esurface::tests::failing::test_from_cut_left_box) or
     test(=cff::esurface::tests::failing::test_from_cut_left_dt) or
@@ -392,6 +395,21 @@ test(=gamma_star_ttx::gamma_star_ttx_os_nlo_matches_the_analytic_inclusive_cross
 '''
 
 [profile.ci_slow.junit]
+path = "junit.xml"
+store-success-output = true
+
+# This one mandatory main check supplies a pinned external runtime. Inherit
+# the existing full-main timeout, while all ordinary cases retain 240 seconds.
+[profile.ci_os_mass_reference]
+inherits = "ci_full"
+default-filter = "package(gammalooprs) and test(=uv::approx::integrated::native_mass_tests::native_two_loop_qcd_bare_mass_matches_primary_reference)"
+test-threads = 1
+
+[[profile.ci_os_mass_reference.overrides]]
+filter = "all()"
+threads-required = "num-test-threads"
+
+[profile.ci_os_mass_reference.junit]
 path = "junit.xml"
 store-success-output = true
 
