@@ -477,7 +477,10 @@ end_anchor = "\n#[cfg(test)]"
 # Native-component zero/nonzero controls and the complete three-loop identity
 # certify this selection repair without changing production normalization.
 # Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
-digest = "5422656f0c564e911f364e3c37da799493d519fc"
+# Reviewed 2026-10-18: finite scalar entries use the existing bounded preflight
+# before native zero certification; only explicit True removes an entry.
+# Nonzero/unproved content and complete graph numerator factors are retained.
+digest = "f29939cd134b3940b022d7ca72ad7c92c912e3c2"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs"
