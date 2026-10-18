@@ -478,13 +478,22 @@ impl SlotContraction {
         // g(a,d)*g(c,b))*epsilon(a,e,f,h). Pass only that partner through the
         // sum; unrelated products retain their factorization. A normalized
         // metric with a compact vector becomes a rank-one source instead.
+        // When distribution is permitted, the partner can itself be a sum
+        // exposing the slot in every term, as in
+        // (p(a)+q(a))*(r(a)+epsilon(a,b,c,d)), whose antisymmetric tensor the
+        // component planner declines. Each source term then substitutes into
+        // its own copy of that sum.
         for (source, factor) in factors.clone().enumerate() {
             if !matches!(factor, AtomView::Add(_)) {
                 continue;
             }
             for (partner, tensor) in factors.clone().enumerate() {
-                if let AtomView::Fun(function) = tensor
-                    && function.get_symbol() != self.metric
+                let admitted = match tensor {
+                    AtomView::Fun(function) => function.get_symbol() != self.metric,
+                    AtomView::Add(_) => self.expand && partner != source,
+                    _ => false,
+                };
+                if admitted
                     && let Some(replacement) =
                         self.contract_linear_source(factor, tensor, chain_like, rank_one, slots)
                 {
@@ -1105,6 +1114,78 @@ mod tests {
                 expression
             );
         }
+    }
+
+    #[test]
+    fn linear_source_sums_pass_through_partner_sums_when_distribution_is_permitted() {
+        initialize_vectors();
+        for (input, expected, rank_one) in [
+            (
+                "(x*slot_contraction_p(mink(4,a))+y*slot_contraction_q(mink(4,a)))*(z*T(mink(4,a))+epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d)))",
+                "x*(z*T(slot_contraction_p(mink(4)))+epsilon(slot_contraction_p(mink(4)),mink(4,b),mink(4,c),mink(4,d)))+y*(z*T(slot_contraction_q(mink(4)))+epsilon(slot_contraction_q(mink(4)),mink(4,b),mink(4,c),mink(4,d)))",
+                true,
+            ),
+            (
+                "(g(mink(4,a),mink(4,e))+g(mink(4,a),mink(4,f)))*(T(mink(4,a))+epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d)))",
+                "T(mink(4,e))+T(mink(4,f))+epsilon(mink(4,e),mink(4,b),mink(4,c),mink(4,d))+epsilon(mink(4,f),mink(4,b),mink(4,c),mink(4,d))",
+                false,
+            ),
+        ] {
+            let expression = parse(input);
+            let result = SlotContraction::new().run(expression.as_view(), false, rank_one);
+            assert_eq!(result, parse(expected), "{input}");
+            assert_eq!(
+                SlotContraction::new().run(result.as_view(), false, rank_one),
+                result
+            );
+            assert_eq!(
+                SlotContraction::new()
+                    .expanding(false)
+                    .run(expression.as_view(), false, rank_one),
+                expression,
+                "{input}"
+            );
+        }
+        // Every source term needs a substitutable port, and the partner sum
+        // must expose the slot exactly once in every term.
+        for input in [
+            "(T(mink(4,a))+slot_contraction_p(mink(4,a)))*(U(mink(4,a))+epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d)))",
+            "(slot_contraction_p(mink(4,a))+slot_contraction_q(mink(4,a)))*(U(mink(4,a))+V(mink(4,b)))",
+            "(slot_contraction_p(mink(4,a))+slot_contraction_q(mink(4,a)))*(U(mink(4,a))*V(mink(4,a))+W(mink(4,a)))",
+        ] {
+            let expression = parse(input);
+            assert_eq!(
+                SlotContraction::new().run(expression.as_view(), false, true),
+                expression,
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn declined_epsilon_components_contract_vector_sums_through_partner_sums() {
+        use crate::tensor::SymbolicTensor;
+        use spenso::{network::parsing::AtomStructureExt, structure::partial::PartialStructure};
+
+        crate::test_support::test_initialize();
+        initialize_vectors();
+        // The component planner declines the antisymmetric epsilon head, so
+        // the literal fallback contracts this closed product of two sums.
+        let source = parse(
+            "(x*slot_contraction_p(1,mink(4,a))+y*slot_contraction_p(2,mink(4,a)))*(z*slot_contraction_p(0,mink(4,a))*epsilon(slot_contraction_q(0,mink(4)),slot_contraction_p(0,mink(4)),slot_contraction_q(1,mink(4)),slot_contraction_q(2,mink(4)))+epsilon(mink(4,a),slot_contraction_p(0,mink(4)),slot_contraction_q(1,mink(4)),slot_contraction_q(2,mink(4))))",
+        );
+        let dots = |expression: Atom| {
+            SymbolicTensor::<PartialStructure>::infer(expression)
+                .unwrap()
+                .contract(Default::default())
+                .unwrap()
+                .to_dots()
+                .unwrap()
+                .into_expression()
+        };
+        let result = dots(source.clone());
+        assert!(!result.has_repeated_explicit_indices(), "{result}");
+        assert_eq!(result.expand(), dots(source.expand()).expand());
     }
 
     #[test]
