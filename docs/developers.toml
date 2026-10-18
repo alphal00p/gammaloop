@@ -1690,7 +1690,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # compile-time Python, Atom, JSON and graph fixtures in their owning producers.
 # Native FeynKit rendering no longer keys its producer on obsolete Typst templates.
 # Reviewed 2026-10-16: API and integration runtime inputs include the approved frozen GL15; the cache-source ownership note records that boundary.
-digest = "634e2eaec56e9afc2fa75ad6d3f85ea9167a11e3"
+# No-impact attestation 2026-10-18: the captured d11 gamma0 chain is declared
+# in Idenso's compile-time test assets. The documented package-specific test
+# producer boundary is preserved; the fixture bytes and assertions are unchanged.
+digest = "f104db3a4efd798363d8c21cae15ff78dc3d4764"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
