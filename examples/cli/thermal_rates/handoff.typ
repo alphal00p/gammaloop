@@ -8,9 +8,15 @@ not a patch source. The first supported example is the scalar sunset with simple
 cuts, using the existing signed CFF representations and thermal weights.
 The 2026-10-17–18 continuation broadens root geometry and raised-cut normalization, reuses
 positive-E sampling maps, and connects cold Fermi sectors to the common rate evaluation.
-The new #link("scalar_bubble/run.toml")[massive scalar bubble card] and
+The initial continuation’s #link("scalar_bubble/run.toml")[massive scalar bubble card] and
 #link("scalar_bubble/benchmark.typ")[literature benchmark] provide IR-finite decay,
 absorption, spacelike, and raised-propagator controls.
+The subsequent inclusive-parity continuation removes the process-specific thermal
+whitelist and reuses the full vacuum graph, numerator, virtual-line, and local/integrated
+UV machinery with signed cuts and thermal weights. The restored
+#link("massive_double_triangle/benchmark.typ")[double triangle] and
+#link("massive_self_energy/benchmark.typ")[UV-renormalized insertion] distinguish
+historical evidence from current validation and its numerical precision limits.
 
 #link("scalar_sunset/run.toml")[The run card],
 #link("scalar_sunset/model.json")[the portable scalar model],
@@ -61,22 +67,21 @@ Shared signed algebra and derivative jets do not by themselves validate every ra
 
 == Supported scope and deferred work
 
-The enabled thermal `xs` path has one positive-energy probe. Finite-temperature cuts may
-contain massive or massless scalars without chemical-potential assignments, including raised
-propagators, timelike decay and absorption, and spacelike spectral kinematics. General virtual
-corrections and finite-temperature spinning cut particles remain guarded. Cold fermion cuts
-may carry chemical potentials; independent virtual spectator fermion cycles are also admitted.
+Thermal `xs` uses the ordinary inclusive cross-section scope: the shared vacuum
+machinery handles graph topology, particle spin, masses, chemical-potential assignments,
+virtual propagators, and raised cuts. There is no scalar-only, one-probe, or virtual-spectator
+whitelist. The usual model-domain checks and supported vacuum kinematics still apply;
+removing a whitelist does not certify every process or cancel singularities in an incomplete
+cut sum. Infrared-finite inclusive observables are the present target.
 
-Signed radial isolation retains the inexpensive
-$A r + B + s sqrt(a r^2 + 2 b r + c)$ chart. Broader equations use exact rational resultants
-of the represented affine momenta and masses, followed by Symbolica's certified real-root
-isolation and directed rejection of other square-root sheets. This general elimination chart
-permits six distinct affine energies. Identically zero elimination polynomials, unresolved
-root separation, vanishing-energy cusps, and tangencies fail explicitly. Positive-E rays
-starting inside their convex surface use the existing native solve without this resource cap;
-outward exterior rays can be certified closed and other exterior rays can have two roots.
-Closed channels contribute zero. External momentum no longer has to route through only one
-cut edge. Original signed energy occurrences are retained for every residue jet.
+Signed radial isolation now uses directed value and derivative enclosures on the entire
+compactified positive ray. Certified empty cells and simple crossing brackets account for
+all roots without a fixed cap on distinct energies or an elimination-polynomial degree cap.
+Positive-E rays starting inside their convex surface retain the existing inexpensive native
+solve. Exterior rays can have two roots; certified closed channels contribute zero.
+Unresolved tangencies, vanishing-energy cusps, and exhausted subdivision or precision budgets
+remain explicit errors, never evidence that a channel is absent. Ordered signed energy
+occurrences and their original affine routing are retained for every residue jet.
 
 Existing positive-E sampling maps are available for thermal rates. Registration, host matching,
 and cached-host adoption retain positive-E ownership even when H groups share physical cut IDs.
@@ -105,8 +110,10 @@ is retained. Active cold occupations at LU order above two, or existing positive
 distributions in a raised LU coefficient, remain explicit higher-intersection errors.
 
 Thermal threshold subtraction remains out of scope. Disable it both at generation and runtime.
-UV subtraction remains outside the enabled thermal-xs scope. Keep every remaining validation
-guard or algorithmic limitation separate from what the common machinery already implements.
+Thermal rates reuse ordinary local 3D UV subtraction and integrated counterterms, including
+their finite renormalization-scale dependence. Vacuum subtraction of the whole medium rate
+does not replace subgraph renormalization. Expanded-4D local medium counterterms remain
+unsupported. Keep algorithmic limitations separate from validation coverage.
 
 Focus on infrared-finite cases. Thermal infrared subtraction and screening/resummation are
 not implemented, and no new infrared-finiteness checks were added. Spacelike and near-light-cone
@@ -133,10 +140,56 @@ workspaces for distinct kinematics.
 settings and executable hashes, numerical values, and log paths. Its raw `/tmp` artifacts
 are local to the validation host and are not included in this commit.
 
-=== 2026-10-17–18 implementation and validation
+=== Inclusive vacuum-parity continuation: implementation and validation
+
+The comparison with `origin/thermal_rate_investigation` at
+`a0b2d4191cad17d8dc2f20891bb0f245f0df18b7` identified previously demonstrated
+finite-temperature scalar virtual corrections and local-plus-integrated UV renormalization
+that the rebuilt branch’s temporary guards excluded. The current continuation removes those
+policy restrictions through the existing shared owners; it does not import a parallel thermal
+evaluator or the old dependency-specific hyperbolic workaround.
+
+Restored entry points are #link("massive_double_triangle/run.toml")[the double-triangle card]
+for below/above-threshold real–virtual sums, #link("massive_self_energy/run.toml")[the exact
+raised insertion card] with both UV pieces and an auxiliary-scale control, and
+#link("qcd_vector/run.toml")[the inclusive QCD vector-current card]. Thermal threshold
+subtraction remains disabled. The above-threshold scalar comparison tests cancellation
+inside the inclusive cut sum rather than adding a new thermal subtraction prescription.
+
+#link("inclusive_validation.json")[The current acceptance manifest] records source and binary
+fingerprints, the test selection, checks, benchmark records, and numerical limitations.
+
+The restored independent NumPy quadratures reproduce `3.057651940618648e-4` below
+threshold, approximately `5.2820877369156e-6` above threshold, and
+`1.4011350428792406e-4` for the MSbar insertion. Their scripts, source formulas, and
+historical comparison records are retained in the corresponding example directories.
+The restored Typst benchmark/derivation documents render; the input JSON/TOML and Python
+syntax checks and Ruff pass. All 116 selected native regressions passed in run
+`07460a80-6bc8-4df6-b20a-d00fc0f77ac0` (64.499 seconds), including restored scalar
+point/channel/event closure, UV finite-addback and auxiliary-scale controls, state reload,
+and the QCD fixtures. Current scalar integrations total 1.1 million process evaluations,
+with zero final NaNs or unresolved stability failures. The below-threshold inclusive
+estimate is `3.01438e-4 +/- 6.50100e-6`; the independent-seed UV-renormalized estimate is
+`1.35990e-4 +/- 3.40253e-6`. Both agree with their references within reported Monte Carlo
+uncertainties, as do the auxiliary-scale and channel controls. Above threshold, the
+independent-seed estimate `4.77231e-6 +/- 1.37286e-6` agrees with `5.28209e-6`; its
+28.8% error and unresolved virtual relative precision remain documented. Four direct
+pole-approach controls independently reproduce the historical joint cancellation within
+`1.54e-16` relative. The QCD card records its separate current integrated comparison.
+
+Historical million-sample runs, interrupted pilots, and accepted current estimates remain
+separate in the validation records. Rejected low-precision attempts are rescued by higher
+precision and must not be counted as discarded samples. For the scalar insertion,
+different default sampling LMBs explain why correlated cube samples do not enforce exact
+closure of the final channel means; selecting the same basis restores the checked
+pointwise closure to `3.39e-21`.
+
+=== 2026-10-17–18 implementation and validation at `4a6519c64`
 
 The continuation from `9bc647ef2fb7ded5b6590f2e112a2b14a27d9c22` implements the root,
-raised-cut, positive-E sampling, and cold-sector connections described above. All 111 selected
+raised-cut, positive-E sampling, and cold-sector connections in commit `4a6519c64`. Its root
+isolation used a six-energy algebraic elimination chart, superseded by the interval solver
+in the inclusive continuation. All 111 selected
 tests passed in run `ff7869bf-c0be-49ae-8e97-6881e41a0363` on `itphlies`, using the
 `ci-optim` Cargo profile and `ci_gammaloop` Nextest profile. Runtime was 171.028 seconds;
 log: `/tmp/thermal-rates-verified-tests-3.log`. This is a targeted regression run, not the full suite.

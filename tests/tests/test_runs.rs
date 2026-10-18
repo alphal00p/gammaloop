@@ -89,3 +89,9 @@ mod thermal_bubble;
 
 #[path = "test_runs/cold_thermal_rates.rs"]
 mod cold_thermal_rates;
+
+#[path = "test_runs/thermal_inclusive_scalar.rs"]
+mod thermal_inclusive_scalar;
+
+#[path = "test_runs/thermal_inclusive_qcd.rs"]
+mod thermal_inclusive_qcd;

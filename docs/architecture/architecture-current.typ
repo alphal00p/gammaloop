@@ -345,13 +345,14 @@ treating missing or literal-zero assignments as zero; independent external input
 allowed when consistent. Vacuum evaluation does not consume or validate these assignments.
 Vacuum builders register no thermal distribution functions.
 
-The enabled thermal cross-section path has one positive-energy probe. Finite-temperature
-cuts may contain massive or massless scalars without chemical-potential assignments;
-timelike decay, absorption, and spacelike spectral kinematics use the same residue path.
-Raised cuts retain the shared derivative machinery. At zero temperature, fermion cuts
-with chemical potentials and independent virtual spectator fermion cycles are also admitted.
-Other virtual corrections, finite-temperature spinning cut particles, and UV subtraction
-remain outside the enabled rate scope. These are scope guards, not separate algebra engines.
+Fully inclusive thermal cross sections use the vacuum process, numerator, UV-forest,
+residue, and event machinery. Thermal occupation factors and additional signed H cuts
+extend the same physical-cut sum. Particle spin, ordinary virtual propagators, and incoming
+multiplicity follow the shared process support; there is no thermal-only scalar or one-probe
+whitelist. Local three-dimensional UV subtraction and its integrated renormalization
+counterterms use the existing medium-aware forest path, as for amplitudes. The inclusive
+sum of physical cuts supplies real–virtual and threshold cancellations before stability
+assessment. No separate thermal UV or cancellation engine is introduced.
 Optional vacuum subtraction uses the existing `thermal_weight(W - V(W))` transformation
 before evaluator construction, yielding the excess spectral kernel.
 Thermal threshold subtraction is unavailable; the runtime
@@ -378,13 +379,16 @@ Repeated energies are combined only in the root-isolation view; residue derivati
 their original occurrences. `Esurface` keeps its positive-energy geometry. An interior
 positive-E ray uses its convex native solve without a multiplicity limit; a smooth exterior
 ray pointing outward is certified closed. Exterior rays with two crossings and signed rays
-use complete algebraic enumeration. The one-nonhomogeneous-energy chart has a quadratic
-elimination. Broader charts form exact rational resultants from the represented affine
-components and use Symbolica's certified real-root isolation; directed checks of the original
-equation reject other square-root sheets before shared refinement. This chart permits at
-most six distinct affine energies. An identically zero elimination polynomial, unresolved
-root separation, vanishing-energy cusps, and tangencies remain explicit errors. None is
-interpreted as an absent channel, and no finite radial scan establishes completeness.
+use adaptive interval isolation over the compactified positive half-line. For
+$r=u/(1-u)$, each rescaled energy is a convex norm of an affine four-vector. Directed
+endpoint derivatives bound each norm throughout a cell, including its one-sided cusp
+limits; signed sums of those bounds certify monotonicity or exclude roots by a mean-value
+bound. Every retained finite crossing is refined in the original radial equation with
+the common native solver. Endpoint and interval data are local to the solve; original
+occurrences remain intact for residue jets. There is no bound on the number of energies
+and no polynomial elimination. Unresolved tangencies, nonisolated roots and exhausted
+numerical work or precision budgets fail explicitly rather than silently dropping a cut.
+
 
 Cross-section graph terms retain the H-surface catalogue. Localized roots enter the same LU
 residue evaluation, normalization, event processing, and precision ladder. Signed radial
@@ -392,7 +396,7 @@ derivative jets enter the common Laurent residue unchanged; multiplying its resu
 the root orientation supplies the absolute-measure convention at every pole order. For a
 simple cut this is the usual absolute radial Jacobian. Each root emits its own event.
 Absorbed cut particles are crossed into the
-incoming list before shared selectors run, while the original probe remains incoming.
+incoming list before shared selectors run, while the original incoming external states remain incoming.
 
 Thermal rates may reuse existing positive-E sampling maps. Host registration and matching
 exclude H groups even when they share the same physical cut IDs; retained host adoption also

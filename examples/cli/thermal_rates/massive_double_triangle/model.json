@@ -1,0 +1,237 @@
+{
+  "name": "massive_double_triangle",
+  "restriction": null,
+  "orders": [
+    {
+      "name": "SCALAR",
+      "expansion_order": 99,
+      "hierarchy": 1
+    }
+  ],
+  "parameters": [
+    {
+      "expression": null,
+      "lhablock": "SCALARS",
+      "lhacode": [
+        1337
+      ],
+      "name": "lam",
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "expression": null,
+      "lhablock": "SCALARS",
+      "lhacode": [
+        2002
+      ],
+      "name": "MX",
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "expression": null,
+      "lhablock": null,
+      "lhacode": null,
+      "name": "ZERO",
+      "nature": "internal",
+      "parameter_type": "real",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "expression": null,
+      "lhablock": "SCALARS",
+      "lhacode": [
+        2003
+      ],
+      "name": "MH",
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        0.6,
+        0.0
+      ]
+    },
+    {
+      "expression": null,
+      "lhablock": "SCALARS",
+      "lhacode": [
+        2004
+      ],
+      "name": "ML",
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        0.25,
+        0.0
+      ]
+    }
+  ],
+  "particles": [
+    {
+      "antiname": "X",
+      "antitexname": "X",
+      "charge": 0.0,
+      "chemical_potential": null,
+      "color": 1,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "mass": "MX",
+      "name": "X",
+      "pdg_code": 9000001,
+      "spin": 1,
+      "texname": "X",
+      "width": "ZERO",
+      "y_charge": 0
+    },
+    {
+      "antiname": "L",
+      "antitexname": "L",
+      "charge": 0.0,
+      "chemical_potential": null,
+      "color": 1,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "mass": "ML",
+      "name": "L",
+      "pdg_code": 9000002,
+      "spin": 1,
+      "texname": "L",
+      "width": "ZERO",
+      "y_charge": 0
+    },
+    {
+      "antiname": "H",
+      "antitexname": "H",
+      "charge": 0.0,
+      "chemical_potential": null,
+      "color": 1,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "mass": "MH",
+      "name": "H",
+      "pdg_code": 9000003,
+      "spin": 1,
+      "texname": "H",
+      "width": "ZERO",
+      "y_charge": 0
+    }
+  ],
+  "propagators": [
+    {
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MX^2",
+      "name": "X_propFeynman",
+      "numerator": "1\ud835\udc56",
+      "particle": "X"
+    },
+    {
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::ML^2",
+      "name": "L_propFeynman",
+      "numerator": "1\ud835\udc56",
+      "particle": "L"
+    },
+    {
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MH^2",
+      "name": "H_propFeynman",
+      "numerator": "1\ud835\udc56",
+      "particle": "H"
+    }
+  ],
+  "couplings": [
+    {
+      "expression": "-1\ud835\udc56*UFO::{}::lam",
+      "name": "SCALAR_COUPLING",
+      "orders": [
+        [
+          "SCALAR",
+          1
+        ]
+      ],
+      "value": [
+        0.0,
+        -1.0
+      ]
+    }
+  ],
+  "lorentz_structures": [
+    {
+      "name": "SCALAR_3_LORENTZ_STRUCTURE",
+      "spins": [
+        1,
+        1,
+        1
+      ],
+      "structure": "1"
+    }
+  ],
+  "vertex_rules": [
+    {
+      "name": "V_XHH",
+      "particles": [
+        "X",
+        "H",
+        "H"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_HHL",
+      "particles": [
+        "H",
+        "H",
+        "L"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_XLL",
+      "particles": [
+        "X",
+        "L",
+        "L"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    }
+  ]
+}

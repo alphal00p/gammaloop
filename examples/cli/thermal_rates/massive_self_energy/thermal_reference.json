@@ -1,0 +1,328 @@
+{
+  "sources": [
+    "https://arxiv.org/pdf/hep-ph/0302098, section III (thermal bubble)",
+    "https://arxiv.org/pdf/hep-ph/9409388, Eq. (3), Eqs. (13)-(15) (vacuum derivative and dispersion)"
+  ],
+  "method": "Independent spectral convolution and repeated-mass derivative using published bubble ingredients; these numerical values are not a published table.",
+  "conventions": {
+    "Pi_R": "-I_R, labelled graph overall factor 1",
+    "Gamma_rho": "Im(I_R)/M",
+    "production_source": "n_B(M)*Gamma_rho",
+    "renormalization": "MSbar at mu_r; vacuum contribution retained",
+    "derivative": "Only the squared mass of the repeated line varies; bubble and spectator masses stay fixed."
+  },
+  "parameters": {
+    "M": 1.6,
+    "H": 0.6,
+    "L": 0.25,
+    "T": 0.5,
+    "mu_r": 1.6
+  },
+  "convergence": [
+    {
+      "order": 32,
+      "bubble_vacuum_at_H_shell": 0.01902577198950608,
+      "bubble_thermal_at_H_shell": 0.004960618537472038,
+      "complex_step_convergence": [
+        {
+          "complex_mass_squared_step": 0.0001,
+          "Gamma_HH_vacuum": 6.118053359049982e-05,
+          "Gamma_HH_thermal": -8.825871161199282e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-08,
+          "Gamma_HH_vacuum": 6.118053358288027e-05,
+          "Gamma_HH_thermal": -8.82587238090025e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-20,
+          "Gamma_HH_vacuum": 6.118053358288024e-05,
+          "Gamma_HH_thermal": -8.825872380900275e-05
+        }
+      ],
+      "continuum_intervals": [
+        {
+          "spectator_energy_min": 0.6,
+          "spectator_energy_max": 0.6867187500000002,
+          "Gamma_HHL_vacuum": 7.930999160990007e-06,
+          "Gamma_HHL_thermal": 3.189593682915449e-05
+        },
+        {
+          "spectator_energy_min": 0.6867187500000002,
+          "spectator_energy_max": 0.87421875,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 3.2476054990911526e-07
+        },
+        {
+          "spectator_energy_min": 0.87421875,
+          "spectator_energy_max": 0.9125000000000001,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 6.425348850723435e-05
+        },
+        {
+          "spectator_energy_min": 0.9125000000000001,
+          "spectator_energy_max": 1.6,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 0.00012928757445709174
+        },
+        {
+          "spectator_energy_min": 1.6,
+          "spectator_energy_max": null,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 2.610469181683125e-06
+        }
+      ],
+      "Gamma_HH_vacuum": 6.118053358288024e-05,
+      "Gamma_HHL_vacuum": 7.930999160990007e-06,
+      "Gamma_inclusive_vacuum": 6.911153274387024e-05,
+      "Gamma_HH_thermal": -8.825872380900275e-05,
+      "Gamma_HHL_thermal": 0.00022837222952507282,
+      "Gamma_inclusive_thermal": 0.00014011350571607007,
+      "production_source_thermal": 5.954034884582071e-06
+    },
+    {
+      "order": 64,
+      "bubble_vacuum_at_H_shell": 0.019025771989506085,
+      "bubble_thermal_at_H_shell": 0.00496061853755355,
+      "complex_step_convergence": [
+        {
+          "complex_mass_squared_step": 0.0001,
+          "Gamma_HH_vacuum": 6.118053359049969e-05,
+          "Gamma_HH_thermal": -8.82587104195923e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-08,
+          "Gamma_HH_vacuum": 6.118053358288012e-05,
+          "Gamma_HH_thermal": -8.825872261661209e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-20,
+          "Gamma_HH_vacuum": 6.118053358288012e-05,
+          "Gamma_HH_thermal": -8.825872261661231e-05
+        }
+      ],
+      "continuum_intervals": [
+        {
+          "spectator_energy_min": 0.6,
+          "spectator_energy_max": 0.6867187500000002,
+          "Gamma_HHL_vacuum": 7.930999160990026e-06,
+          "Gamma_HHL_thermal": 3.189593682915456e-05
+        },
+        {
+          "spectator_energy_min": 0.6867187500000002,
+          "spectator_energy_max": 0.87421875,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 3.2476054990911584e-07
+        },
+        {
+          "spectator_energy_min": 0.87421875,
+          "spectator_energy_max": 0.9125000000000001,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 6.425348850723602e-05
+        },
+        {
+          "spectator_energy_min": 0.9125000000000001,
+          "spectator_energy_max": 1.6,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 0.00012928757183663006
+        },
+        {
+          "spectator_energy_min": 1.6,
+          "spectator_energy_max": null,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 2.6104691816074668e-06
+        }
+      ],
+      "Gamma_HH_vacuum": 6.118053358288012e-05,
+      "Gamma_HHL_vacuum": 7.930999160990026e-06,
+      "Gamma_inclusive_vacuum": 6.911153274387015e-05,
+      "Gamma_HH_thermal": -8.825872261661231e-05,
+      "Gamma_HHL_thermal": 0.00022837222690453722,
+      "Gamma_inclusive_thermal": 0.00014011350428792493,
+      "production_source_thermal": 5.954034823893945e-06
+    },
+    {
+      "order": 128,
+      "bubble_vacuum_at_H_shell": 0.019025771989506075,
+      "bubble_thermal_at_H_shell": 0.004960618537553498,
+      "complex_step_convergence": [
+        {
+          "complex_mass_squared_step": 0.0001,
+          "Gamma_HH_vacuum": 6.118053359050039e-05,
+          "Gamma_HH_thermal": -8.825871041958937e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-08,
+          "Gamma_HH_vacuum": 6.118053358288081e-05,
+          "Gamma_HH_thermal": -8.825872261660922e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-20,
+          "Gamma_HH_vacuum": 6.118053358288085e-05,
+          "Gamma_HH_thermal": -8.825872261660922e-05
+        }
+      ],
+      "continuum_intervals": [
+        {
+          "spectator_energy_min": 0.6,
+          "spectator_energy_max": 0.6867187500000002,
+          "Gamma_HHL_vacuum": 7.930999160989934e-06,
+          "Gamma_HHL_thermal": 3.18959368291542e-05
+        },
+        {
+          "spectator_energy_min": 0.6867187500000002,
+          "spectator_energy_max": 0.87421875,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 3.247605499091124e-07
+        },
+        {
+          "spectator_energy_min": 0.87421875,
+          "spectator_energy_max": 0.9125000000000001,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 6.425348850723531e-05
+        },
+        {
+          "spectator_energy_min": 0.9125000000000001,
+          "spectator_energy_max": 1.6,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 0.0001292875718366281
+        },
+        {
+          "spectator_energy_min": 1.6,
+          "spectator_energy_max": null,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 2.6104691816074625e-06
+        }
+      ],
+      "Gamma_HH_vacuum": 6.118053358288085e-05,
+      "Gamma_HHL_vacuum": 7.930999160989934e-06,
+      "Gamma_inclusive_vacuum": 6.911153274387078e-05,
+      "Gamma_HH_thermal": -8.825872261660922e-05,
+      "Gamma_HHL_thermal": 0.00022837222690453419,
+      "Gamma_inclusive_thermal": 0.00014011350428792498,
+      "production_source_thermal": 5.9540348238939474e-06
+    },
+    {
+      "order": 256,
+      "bubble_vacuum_at_H_shell": 0.01902577198950608,
+      "bubble_thermal_at_H_shell": 0.00496061853755354,
+      "complex_step_convergence": [
+        {
+          "complex_mass_squared_step": 0.0001,
+          "Gamma_HH_vacuum": 6.118053359049988e-05,
+          "Gamma_HH_thermal": -8.825871041959173e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-08,
+          "Gamma_HH_vacuum": 6.118053358288031e-05,
+          "Gamma_HH_thermal": -8.825872261661141e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-20,
+          "Gamma_HH_vacuum": 6.118053358288031e-05,
+          "Gamma_HH_thermal": -8.825872261661163e-05
+        }
+      ],
+      "continuum_intervals": [
+        {
+          "spectator_energy_min": 0.6,
+          "spectator_energy_max": 0.6867187500000002,
+          "Gamma_HHL_vacuum": 7.930999160990002e-06,
+          "Gamma_HHL_thermal": 3.1895936829154466e-05
+        },
+        {
+          "spectator_energy_min": 0.6867187500000002,
+          "spectator_energy_max": 0.87421875,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 3.2476054990911505e-07
+        },
+        {
+          "spectator_energy_min": 0.87421875,
+          "spectator_energy_max": 0.9125000000000001,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 6.425348850723584e-05
+        },
+        {
+          "spectator_energy_min": 0.9125000000000001,
+          "spectator_energy_max": 1.6,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 0.00012928757183662914
+        },
+        {
+          "spectator_energy_min": 1.6,
+          "spectator_energy_max": null,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 2.610469181607464e-06
+        }
+      ],
+      "Gamma_HH_vacuum": 6.118053358288031e-05,
+      "Gamma_HHL_vacuum": 7.930999160990002e-06,
+      "Gamma_inclusive_vacuum": 6.911153274387031e-05,
+      "Gamma_HH_thermal": -8.825872261661163e-05,
+      "Gamma_HHL_thermal": 0.00022837222690453603,
+      "Gamma_inclusive_thermal": 0.00014011350428792439,
+      "production_source_thermal": 5.954034823893922e-06
+    },
+    {
+      "order": 512,
+      "bubble_vacuum_at_H_shell": 0.019025771989506085,
+      "bubble_thermal_at_H_shell": 0.004960618537553554,
+      "complex_step_convergence": [
+        {
+          "complex_mass_squared_step": 0.0001,
+          "Gamma_HH_vacuum": 6.118053359049969e-05,
+          "Gamma_HH_thermal": -8.82587104195925e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-08,
+          "Gamma_HH_vacuum": 6.118053358288018e-05,
+          "Gamma_HH_thermal": -8.825872261661213e-05
+        },
+        {
+          "complex_mass_squared_step": 1e-20,
+          "Gamma_HH_vacuum": 6.118053358288014e-05,
+          "Gamma_HH_thermal": -8.825872261661233e-05
+        }
+      ],
+      "continuum_intervals": [
+        {
+          "spectator_energy_min": 0.6,
+          "spectator_energy_max": 0.6867187500000002,
+          "Gamma_HHL_vacuum": 7.930999160990028e-06,
+          "Gamma_HHL_thermal": 3.189593682915457e-05
+        },
+        {
+          "spectator_energy_min": 0.6867187500000002,
+          "spectator_energy_max": 0.87421875,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 3.247605499091158e-07
+        },
+        {
+          "spectator_energy_min": 0.87421875,
+          "spectator_energy_max": 0.9125000000000001,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 6.425348850723581e-05
+        },
+        {
+          "spectator_energy_min": 0.9125000000000001,
+          "spectator_energy_max": 1.6,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 0.0001292875718366292
+        },
+        {
+          "spectator_energy_min": 1.6,
+          "spectator_energy_max": null,
+          "Gamma_HHL_vacuum": 0.0,
+          "Gamma_HHL_thermal": 2.610469181607466e-06
+        }
+      ],
+      "Gamma_HH_vacuum": 6.118053358288014e-05,
+      "Gamma_HHL_vacuum": 7.930999160990028e-06,
+      "Gamma_inclusive_vacuum": 6.911153274387017e-05,
+      "Gamma_HH_thermal": -8.825872261661233e-05,
+      "Gamma_HHL_thermal": 0.00022837222690453616,
+      "Gamma_inclusive_thermal": 0.00014011350428792384,
+      "production_source_thermal": 5.954034823893899e-06
+    }
+  ]
+}

@@ -717,10 +717,8 @@ impl Generate {
             Some(GenerateCmd::Amp(a)) => Some((GenerationType::Amplitude, a)),
             _ => None,
         };
-        if let Some((generation_type, args)) = generation_mode.as_ref() {
-            global_settings
-                .generation
-                .validate_for_process(*generation_type)?;
+        if let Some((_, args)) = generation_mode.as_ref() {
+            global_settings.generation.validate()?;
             if !state.process_list.processes.is_empty() && args.clear_existing_processes {
                 info!(
                     "Clearing all {} existing processes as requested.",

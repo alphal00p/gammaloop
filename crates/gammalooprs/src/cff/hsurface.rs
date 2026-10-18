@@ -512,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn signed_radial_resource_limits_and_nonfinite_rays_are_errors_not_closed_channels() {
+    fn signed_radial_handles_many_energies_and_proportional_radicals() {
         let origin = [0.0; 3];
         // Interior positive-E rays retain the convex solver without a radical
         // count limit, including linearly dependent square-root sheets.
@@ -532,22 +532,67 @@ mod tests {
         .unwrap();
         assert_eq!(roots.len(), 1);
         assert!((roots[0].solution.0 - 1.0).abs() < 1.0e-12);
-        let unsupported = radial_roots(
-            &(1..=7)
-                .map(|mass| {
-                    (
-                        if mass == 1 { -1 } else { 1 },
-                        [1.0, 0.0, 0.0],
-                        origin,
-                        f64::from(mass),
-                    )
-                })
-                .collect::<Vec<_>>(),
-            30.0,
-        )
-        .unwrap_err();
-        assert!(unsupported.to_string().contains("at most six"));
+        // Seven distinct massive radicals with one absorption. The independent
+        // Pythagorean energies at r=1 sum to -5+13+17+25+29+37+41=157.
+        let energies = [
+            (3., 4.),
+            (5., 12.),
+            (8., 15.),
+            (7., 24.),
+            (20., 21.),
+            (12., 35.),
+            (9., 40.),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, (velocity, mass))| {
+            (
+                if index == 0 { -1 } else { 1 },
+                [velocity, 0.0, 0.0],
+                origin,
+                mass,
+            )
+        })
+        .collect::<Vec<_>>();
+        let roots = radial_roots(&energies, 157.0).unwrap();
+        assert_eq!(roots.len(), 1);
+        assert!((roots[0].solution.0 - 1.0).abs() < 1e-12);
+        let proportional = [
+            (1, [1.0, 0.0, 0.0], origin, 1.0),
+            (-1, [2.0, 0.0, 0.0], origin, 2.0),
+            (1, [3.0, 0.0, 0.0], origin, 3.0),
+        ];
+        // This physical sheet is 2 sqrt(r²+1). An extraneous conjugate sheet
+        // vanishes identically, which made the former resultant degenerate.
+        assert!(radial_roots(&proportional, 0.0).unwrap().is_empty());
+        let roots = radial_roots(&proportional, 4.0).unwrap();
+        assert_eq!(roots.len(), 1);
+        assert!((roots[0].solution.0 - 3.0_f64.sqrt()).abs() < 1e-12);
         assert!(radial_roots(&[(1, [f64::NAN, 0.0, 0.0], origin, 0.0)], 1.0).is_err());
+    }
+
+    #[test]
+    fn signed_radial_compactification_retains_large_roots_and_excludes_infinity() {
+        let origin = [0.0; 3];
+        // This root's compactified coordinate rounds to one in binary64.
+        // Original-radius refinement must still retain its finite solution.
+        let velocity = 2.0_f64.powi(-200);
+        let roots = radial_roots(&[(-1, [velocity, 0.0, 0.0], origin, 0.0)], -1.0).unwrap();
+        assert_eq!(roots.len(), 1);
+        assert!((roots[0].solution.0 * velocity - 1.0).abs() < 1e-12);
+        assert!(roots[0].derivative_at_solution.0 < 0.0);
+        // Equal leading energies cancel at the excluded infinite endpoint.
+        assert!(
+            radial_roots(
+                &[
+                    (1, [1.0, 0.0, 0.0], origin, 1.0),
+                    (-1, [1.0, 0.0, 0.0], origin, 2.0),
+                ],
+                1.0
+            )
+            .unwrap()
+            .is_empty()
+        );
     }
 
     #[test]

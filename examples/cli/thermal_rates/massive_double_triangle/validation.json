@@ -1,0 +1,738 @@
+{
+  "source_base_commit": "4a6519c645a2327a900d5c7588e381780633f820",
+  "status": "independent references, CLI/state smoke and all 116 native regressions passed; below-threshold 25k and above-threshold independent-seed 100k comparisons agree within reported uncertainties; direct pole cancellation passed. Above-threshold inclusive MC error remains 28.8% and virtual relative precision is unresolved.",
+  "reference_interpreter": "/nix/store/463ik27ppxhpbvw7c50s7qcfc7mgfa5x-python3-3.12.12-env/bin/python3",
+  "checks": {
+    "input_json_toml_python_syntax": "passed",
+    "ruff_check_and_format": "passed",
+    "typst_benchmark_and_derivation_render": "passed"
+  },
+  "reference_artifacts": {
+    "below_T05": {
+      "path": "/tmp/thermal-inclusive-double-triangle-reference.json",
+      "sha256": "84a14a29e5cfc47e7ffcd7abcba658b0f35a3fc8fca94b000300287875a12edc",
+      "last_row": {
+        "order": 512,
+        "triangle_vacuum": 0.012747019233442515,
+        "triangle_vacuum_energy": 0.01274701923344249,
+        "triangle_thermal": 0.004777955558031688,
+        "virtual_ImI_vacuum": 0.00021961875105919377,
+        "virtual_ImI_thermal": 0.0006533803740488675,
+        "real_U_parts_ImI": [
+          -3.854140962171151e-05,
+          8.943154965106681e-05,
+          -7.181513299192428e-05
+        ],
+        "real_ImI_thermal": -4.184998592513796e-05,
+        "inclusive_ImI_thermal": 0.0006115303881237295,
+        "Gamma_vacuum": 0.00010980937552959689,
+        "Gamma_virtual_thermal": 0.00032669018702443373,
+        "Gamma_real_thermal": -2.092499296256898e-05,
+        "Gamma_inclusive_thermal": 0.0003057651940618648,
+        "production_source_thermal": 4.785764740945714e-05,
+        "real_virtual_cancellation_fraction": 0.06405148912845662
+      }
+    },
+    "below_T025": {
+      "path": "/tmp/thermal-inclusive-double-triangle-t025-reference.json",
+      "sha256": "813070b21628a796664c8194b8dc0be4c5ed183cf4274bfedff4b1db25b561d1",
+      "last_row": {
+        "order": 512,
+        "triangle_vacuum": 0.012747019233442515,
+        "triangle_vacuum_energy": 0.01274701923344249,
+        "triangle_thermal": 0.0008181907164228401,
+        "virtual_ImI_vacuum": 0.00021961875105919377,
+        "virtual_ImI_thermal": 0.00030687654307653826,
+        "real_U_parts_ImI": [
+          -3.931163408209203e-06,
+          9.597247838358365e-06,
+          -1.262750376519559e-05
+        ],
+        "real_ImI_thermal": -1.3922838670092857e-05,
+        "inclusive_ImI_thermal": 0.0002929537044064454,
+        "Gamma_vacuum": 0.00010980937552959689,
+        "Gamma_virtual_thermal": 0.00015343827153826913,
+        "Gamma_real_thermal": -6.961419335046429e-06,
+        "Gamma_inclusive_thermal": 0.0001464768522032227,
+        "production_source_thermal": 2.7328714165067965e-06,
+        "real_virtual_cancellation_fraction": 0.045369510913124286
+      }
+    },
+    "above_T05": {
+      "path": "/tmp/thermal-inclusive-double-triangle-above-reference.json",
+      "sha256": "5739b53e8354a5d08731d1b3b71dec359d33ed732d95f1b64b77cf5fb2fec1e4",
+      "last_row": {
+        "order": 512,
+        "triangles": [
+          {
+            "cut": "B",
+            "triangle_vacuum_real": 0.009074680552697724,
+            "triangle_vacuum_imag": 0.012988361515072556,
+            "triangle_thermal": -9.424040868345925e-05,
+            "triangle_thermal_side_plus": 0.002217766209594551,
+            "triangle_thermal_side_minus": 0.0008037985961825627,
+            "triangle_thermal_central": -0.0031158052144605727,
+            "ImI_vacuum": 0.00017149343442564194,
+            "ImI_thermal": 0.00025557692814776517,
+            "Gamma_vacuum": 5.3591698258013105e-05,
+            "Gamma_thermal": 7.986779004617662e-05
+          },
+          {
+            "cut": "A",
+            "triangle_vacuum_real": -0.0030958640063356788,
+            "triangle_vacuum_imag": 0.018653114099804472,
+            "triangle_thermal": -0.00953827200185146,
+            "triangle_thermal_side_plus": -0.007812370904133314,
+            "triangle_thermal_side_minus": 0.002634025831173301,
+            "triangle_thermal_central": -0.004359926928891447,
+            "ImI_vacuum": -4.0738126111572176e-05,
+            "ImI_thermal": -0.0002503644098908429,
+            "Gamma_vacuum": -1.2730664409866305e-05,
+            "Gamma_thermal": -7.82388780908884e-05
+          }
+        ],
+        "real_U_parts": [
+          {
+            "signs": [
+              1,
+              1,
+              1
+            ],
+            "decay": false,
+            "ImI_U": -1.1934725696597856e-05
+          },
+          {
+            "signs": [
+              1,
+              -1,
+              -1
+            ],
+            "decay": false,
+            "ImI_U": 3.495126943547091e-05
+          },
+          {
+            "signs": [
+              -1,
+              -1,
+              1
+            ],
+            "decay": false,
+            "ImI_U": -3.2591872275530127e-05
+          },
+          {
+            "signs": [
+              1,
+              -1,
+              1
+            ],
+            "decay": true,
+            "ImI_U": 1.5420409787261007e-05
+          }
+        ],
+        "Gamma_virtual_vacuum": 4.08610338481468e-05,
+        "Gamma_real_vacuum": 2.4234211025786455e-06,
+        "Gamma_vacuum": 4.328445495072544e-05,
+        "Gamma_virtual_thermal": 1.628911955288214e-06,
+        "Gamma_real_thermal": 3.6531757816274576e-06,
+        "Gamma_inclusive_thermal": 5.282087736915672e-06,
+        "production_source_thermal": 2.244589805121977e-07
+      }
+    }
+  },
+  "native_acceptance": [
+    {
+      "label": "final-binary below-threshold 25k pilot",
+      "status": "completed; all five comparisons within 1.07 reported standard errors, no final NaNs or unresolved instability",
+      "command": "target/ci-optim/gammaloop -n -s /tmp/thermal-inclusive-double-state run below_threshold integrate -D samples=25000 -D batch=5000 -D cores=2 -D workspace=/tmp/thermal-inclusive-double-below-pilot-retry2",
+      "executable_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+      "workspace": "/tmp/thermal-inclusive-double-below-pilot-retry2",
+      "log": "/tmp/thermal-inclusive-double-below-pilot-retry2.log",
+      "result_path": "/tmp/thermal-inclusive-double-below-pilot-retry2/integration_result.json",
+      "result_sha256": "0d330103a498ec597942ae6a2cee1f706f0b5c51f2d9856b0e1c17ca1fef2d95",
+      "started_utc": "2026-10-18 10:52:17.089 UTC",
+      "ended_utc": "2026-10-18 10:58:37.174 UTC",
+      "wall_seconds": 380.085,
+      "seed": 271828,
+      "workers": 2,
+      "batch": 5000,
+      "comparisons": [
+        {
+          "process": "vacuum",
+          "samples": 25000,
+          "value": 0.00011064647119207875,
+          "error": 9.693200330401387e-07,
+          "reference": 0.00010980937552959695,
+          "difference_standard_errors": 0.8635905933527017,
+          "relative_mc_error": 0.008760514660765186,
+          "real_chisq": 0.3663153856592487,
+          "max_weight_impact": 0.001052037089105037,
+          "chi_sq_per_dof": 0.07326307713184974
+        },
+        {
+          "process": "thermal",
+          "samples": 25000,
+          "value": 0.00030143756338990173,
+          "error": 6.501004114952224e-06,
+          "reference": 0.0003057651940618648,
+          "difference_standard_errors": -0.6656864994146907,
+          "relative_mc_error": 0.021566668871136483,
+          "real_chisq": 2.9315741078938515,
+          "max_weight_impact": 0.011172293249913529,
+          "chi_sq_per_dof": 0.5863148215787704
+        },
+        {
+          "process": "virtual",
+          "samples": 25000,
+          "value": 0.0003286084320510548,
+          "error": 2.9766146014296333e-06,
+          "reference": 0.0003266901870244345,
+          "difference_standard_errors": 0.6444384925408206,
+          "relative_mc_error": 0.00905824169772724,
+          "real_chisq": 0.826880771678475,
+          "max_weight_impact": 0.0009758394467638347,
+          "chi_sq_per_dof": 0.165376154335695
+        },
+        {
+          "process": "real",
+          "samples": 25000,
+          "value": -2.7170868661153095e-05,
+          "error": 5.873024013786777e-06,
+          "reference": -2.0924992962569012e-05,
+          "difference_standard_errors": -1.0634854691419695,
+          "relative_mc_error": 0.21615149986660506,
+          "real_chisq": 3.4085576373037263,
+          "max_weight_impact": 0.1243394115202262,
+          "chi_sq_per_dof": 0.6817115274607453
+        },
+        {
+          "process": "zero_temperature",
+          "samples": 25000,
+          "value": 0.00011064647119207875,
+          "error": 9.693200330401389e-07,
+          "reference": 0.00010980937552959695,
+          "difference_standard_errors": 0.8635905933527015,
+          "relative_mc_error": 0.008760514660765188,
+          "real_chisq": 0.3663153856592771,
+          "max_weight_impact": 0.001052037089105037,
+          "chi_sq_per_dof": 0.07326307713185543
+        }
+      ],
+      "reported_combined_statistics": {
+        "num_evals": 125000,
+        "average_total_time_seconds": 0.005991536,
+        "average_parameterization_time_seconds": 7.7246e-05,
+        "average_integrand_time_seconds": 0.00589411,
+        "average_evaluator_time_seconds": 0.000106341,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 7.878e-06,
+        "f64_percentage": 99.5904,
+        "f128_percentage": 0.40959999999999996,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "label": "final-binary above-threshold 25k pilot",
+      "status": "completed with no final NaNs or unresolved instability; statistics limited. Inclusive and virtual errors do not resolve their small means; real comparison is 2.23 reported errors from reference with chi-squared/dof 0.69. More statistics required before strong integrated validation.",
+      "command": "target/ci-optim/gammaloop -n -s /tmp/thermal-inclusive-double-state run above_threshold integrate -D samples=25000 -D batch=5000 -D cores=2 -D workspace=/tmp/thermal-inclusive-double-above-pilot",
+      "executable_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+      "workspace": "/tmp/thermal-inclusive-double-above-pilot",
+      "log": "/tmp/thermal-inclusive-double-above-pilot.log",
+      "result_path": "/tmp/thermal-inclusive-double-above-pilot/integration_result.json",
+      "result_sha256": "2f7408eab02cda53927c685e7f0442b92c19e4bf9294c67b4b8f85672e482053",
+      "started_utc": "2026-10-18 10:59:30.480 UTC",
+      "ended_utc": "2026-10-18 11:07:21.829 UTC",
+      "wall_seconds": 471.349,
+      "seed": 271828,
+      "workers": 2,
+      "batch": 5000,
+      "comparisons": [
+        {
+          "process": "vacuum",
+          "samples": 25000,
+          "value": 4.2791695844001835e-05,
+          "error": 1.4461588700159955e-06,
+          "reference": 4.328445495072546e-05,
+          "difference_standard_errors": -0.3407364964806238,
+          "relative_mc_error": 0.033795315691343544,
+          "real_chisq": 2.019762360250109,
+          "max_weight_impact": 0.004308356805081859,
+          "chi_sq_per_dof": 0.40395247205002177
+        },
+        {
+          "process": "thermal",
+          "samples": 25000,
+          "value": 2.7763962525409747e-06,
+          "error": 3.6378537894614406e-06,
+          "reference": 5.282087736915636e-06,
+          "difference_standard_errors": -0.6887829004105225,
+          "relative_mc_error": 1.310279030283251,
+          "real_chisq": 1.3272029998926629,
+          "max_weight_impact": 0.17129203231575402,
+          "chi_sq_per_dof": 0.2654405999785326
+        },
+        {
+          "process": "virtual",
+          "samples": 25000,
+          "value": -3.433155350628486e-06,
+          "error": 3.345762573486617e-06,
+          "reference": 1.628911955288129e-06,
+          "difference_standard_errors": -1.5129786393185212,
+          "relative_mc_error": 0.9745444734605817,
+          "real_chisq": 1.5570821288028072,
+          "max_weight_impact": 0.14549482698590757,
+          "chi_sq_per_dof": 0.31141642576056144
+        },
+        {
+          "process": "real",
+          "samples": 25000,
+          "value": 6.209551603163961e-06,
+          "error": 1.147538605556651e-06,
+          "reference": 3.653175781627507e-06,
+          "difference_standard_errors": 2.2277035466675215,
+          "relative_mc_error": 0.18480216912473102,
+          "real_chisq": 3.448623351613385,
+          "max_weight_impact": 0.03971641588051614,
+          "chi_sq_per_dof": 0.689724670322677
+        },
+        {
+          "process": "zero_temperature",
+          "samples": 25000,
+          "value": 4.2791695844004254e-05,
+          "error": 1.446158870016025e-06,
+          "reference": 4.328445495072546e-05,
+          "difference_standard_errors": -0.3407364964789441,
+          "relative_mc_error": 0.03379531569134232,
+          "real_chisq": 2.0197623602394827,
+          "max_weight_impact": 0.004308356805081616,
+          "chi_sq_per_dof": 0.4039524720478965
+        }
+      ],
+      "reported_combined_statistics": {
+        "num_evals": 125000,
+        "average_total_time_seconds": 0.007305982,
+        "average_parameterization_time_seconds": 9.2678e-05,
+        "average_integrand_time_seconds": 0.007168955,
+        "average_evaluator_time_seconds": 0.000202615,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 1.35e-05,
+        "f64_percentage": 88.9984,
+        "f128_percentage": 11.0,
+        "arb_percentage": 0.0015999999999999999,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    },
+    {
+      "label": "final-binary above-threshold independent-seed 100k comparison",
+      "status": "completed; all three comparisons within 0.45 reported standard errors, zero final NaNs and unresolved instability. Inclusive estimate is positive at 3.48 reported errors; its MC error remains 28.8%. The smaller virtual mean is not resolved relative to its own error.",
+      "command": "target/ci-optim/gammaloop -n -s /tmp/thermal-inclusive-double-state run above_threshold -c 'set process -p thermal -i NLO kv integrator.n_max=100000 integrator.n_start=5000 integrator.seed=314159; set process -p virtual -i NLO kv integrator.n_max=100000 integrator.n_start=5000 integrator.seed=314159; set process -p real -i NLO kv integrator.n_max=100000 integrator.n_start=5000 integrator.seed=314159; integrate -p thermal -i NLO -p virtual -i NLO -p real -i NLO --n-cores 4 --workspace-path /tmp/thermal-inclusive-double-above-100k --restart --renderer tabled --no-stream-iterations --no-stream-updates'",
+      "executable_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+      "workspace": "/tmp/thermal-inclusive-double-above-100k",
+      "log": "/tmp/thermal-inclusive-double-above-100k.log",
+      "result_path": "/tmp/thermal-inclusive-double-above-100k/integration_result.json",
+      "result_sha256": "3b2578eb65949732ab8ea8995ee4ddf98616b093b78de19ebb7c7cdcc98d3903",
+      "started_utc": "2026-10-18 11:08:42.150 UTC",
+      "ended_utc": "2026-10-18 11:17:20.208 UTC",
+      "wall_seconds": 518.058,
+      "seed": 314159,
+      "workers": 4,
+      "batch": 5000,
+      "training_slot": "thermal@NLO",
+      "pilot_training_slot": "vacuum@NLO",
+      "combination_note": "This new-seed run trains on the full thermal observable and reports its own estimate. No combination with the statistically limited 25k pilot is made. Physics and reference targets are unchanged.",
+      "comparisons": [
+        {
+          "process": "thermal",
+          "samples": 100000,
+          "value": 4.772309881342516e-06,
+          "error": 1.3728562675696736e-06,
+          "reference": 5.282087736915636e-06,
+          "difference_standard_errors": -0.371326458286536,
+          "relative_mc_error": 0.2876712329467319,
+          "real_chisq": 18.729731968407194,
+          "chi_sq_per_dof": 0.9364865984203596,
+          "max_weight_impact": 0.027574417698237364
+        },
+        {
+          "process": "virtual",
+          "samples": 100000,
+          "value": 1.0782985942334119e-06,
+          "error": 1.2484230488390515e-06,
+          "reference": 1.628911955288129e-06,
+          "difference_standard_errors": -0.44104709662862296,
+          "relative_mc_error": 1.1577711920570435,
+          "real_chisq": 18.053543540300105,
+          "chi_sq_per_dof": 0.9026771770150053,
+          "max_weight_impact": 0.1257113252266362
+        },
+        {
+          "process": "real",
+          "samples": 100000,
+          "value": 3.6940112870490416e-06,
+          "error": 4.845551592851902e-07,
+          "reference": 3.653175781627507e-06,
+          "difference_standard_errors": 0.08427421448112221,
+          "relative_mc_error": 0.1311731669537688,
+          "real_chisq": 25.003506240632916,
+          "chi_sq_per_dof": 1.250175312031646,
+          "max_weight_impact": 0.014907169264887813
+        }
+      ],
+      "reported_combined_statistics": {
+        "num_evals": 300000,
+        "average_total_time_seconds": 0.006634286,
+        "average_parameterization_time_seconds": 8.5349e-05,
+        "average_integrand_time_seconds": 0.006512071,
+        "average_evaluator_time_seconds": 0.000280897,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 1.316e-05,
+        "f64_percentage": 91.40933333333334,
+        "f128_percentage": 8.588999999999999,
+        "arb_percentage": 0.0016666666666666668,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    }
+  ],
+  "source_sha256": {
+    "examples/cli/thermal_rates/massive_double_triangle/above_threshold/reference.py": "d446ea4adc5f9b88aa4daed627f133c9e938bbc30231194bdbb88a856b1e8102",
+    "examples/cli/thermal_rates/massive_double_triangle/double_triangle.dot": "54decc333449b9de14c715ae66cf5b0f7bdee619afb95eeaedc16c3ffd71ddf9",
+    "examples/cli/thermal_rates/massive_double_triangle/reference.py": "4bfd23a5776b35b0204ed5131f30b1fc0413ed30dc4dfe1e23109c2e2f1cf2b3",
+    "examples/cli/thermal_rates/massive_double_triangle/run.toml": "261f7c1575fabddd929c7b18f19d8292873af186925c00453ee865bb5a97fbfc"
+  },
+  "initial_cli_smoke": {
+    "executable": {
+      "path": "/shared/codex-2/kaapo/gammaloop/gammaloop-thermal-rates/target/ci-optim/gammaloop",
+      "sha256": "86a8e0f9e8998502699b9ff9f8fca94fe4330f11c0437781016ade8a026a4936",
+      "mtime_ns": 1792319200359408623,
+      "scope": "initial guard-removal CLI; may precede final general interval-root implementation"
+    },
+    "commands_exit_code": 0,
+    "saved_state": "/tmp/thermal-inclusive-double-state",
+    "logs": [
+      "/tmp/thermal-inclusive-double-smoke.log",
+      "/tmp/thermal-inclusive-double-above-smoke.log"
+    ],
+    "points": {
+      "thermal-inclusive-double-below-real-point.json": {
+        "integrand_result": {
+          "re": -4.207177395047418e-06,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 6,
+        "sha256": "dd7aedd61c06cce3ab331fe2899273944439a2848d39cb0c35400a8412bcb7af"
+      },
+      "thermal-inclusive-double-below-thermal-point.json": {
+        "integrand_result": {
+          "re": 5.1374134966977224e-05,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 7,
+        "sha256": "817d755e0f8db2fd2ba0d2044a9c17a11e515ceec71b393755c7990e53c22262"
+      },
+      "thermal-inclusive-double-below-vacuum-point.json": {
+        "integrand_result": {
+          "re": 1.6182849443221802e-05,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 1,
+        "sha256": "321e7fbc31fd0f59811e6a21b494f939bff23e244ee064721171b5383c56cade"
+      },
+      "thermal-inclusive-double-below-virtual-point.json": {
+        "integrand_result": {
+          "re": 5.558131236202464e-05,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 1,
+        "sha256": "a1b3b253c1ffc4a5dfc4dff97907f4b52c7b3631759cd74453c88e5272774e59"
+      },
+      "thermal-inclusive-double-below-zero_temperature-point.json": {
+        "integrand_result": {
+          "re": 1.6182849443221802e-05,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 7,
+        "sha256": "89f63624f0f7948905f0f9739b05d9d84beed0d466d9387c8fc08de4691d45bd"
+      },
+      "thermal-inclusive-double-above-real-point.json": {
+        "integrand_result": {
+          "re": -3.257695235491286e-06,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 8,
+        "sha256": "46a9204df98b8240a54ae88b42d149e623791d5170c707aa8656748abcacd511"
+      },
+      "thermal-inclusive-double-above-thermal-point.json": {
+        "integrand_result": {
+          "re": -9.588212931088474e-06,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 10,
+        "sha256": "8714a25f6e67ebd556c56d625e1dd306461d2429b7610f1f6522753898870db2"
+      },
+      "thermal-inclusive-double-above-vacuum-point.json": {
+        "integrand_result": {
+          "re": -6.845195254803981e-08,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 4,
+        "sha256": "509278033c3233e5bbdeb0ba6b9a7fc608dbe9342c9223bb660efbc4fba946cc"
+      },
+      "thermal-inclusive-double-above-virtual-point.json": {
+        "integrand_result": {
+          "re": -6.330517695597187e-06,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 2,
+        "sha256": "9857a5947b942ded984003376a6456631ae9e4ade7592949ae721c9475a67324"
+      },
+      "thermal-inclusive-double-above-zero_temperature-point.json": {
+        "integrand_result": {
+          "re": -6.845195254804193e-08,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 10,
+        "sha256": "a95ba9d53321e729a432524ff039a52d263b94d2aaaa99aae41dc72532fedcfe"
+      }
+    },
+    "scope": "generation, physical-point inspection and state save only; no Monte Carlo integration",
+    "save_artifact_issue": "The above-threshold reload omitted top-level -n. Its explicit save correctly updated the intended /tmp state, but a second automatic exit save prompted and treated EOF as an empty destination, writing another state to the repository cwd. Parent is quarantining those artifacts. Reproduction commands now use -n for every invocation; point values and intended saved state are unaffected."
+  },
+  "native_point_regression": {
+    "run_id": "d29eee02-e2ee-4044-971a-52dbe9788cda",
+    "log": "/tmp/thermal-inclusive-first-tests.log",
+    "batch_result": "44 of 45 tests passed; unrelated synthetic 2^200 root-certification test failed. The general root owner was subsequently corrected; this record is not a claim that the whole batch passed.",
+    "status": "passed",
+    "scope": "native point evaluations after state serialization/reload, not integrated acceptance",
+    "test": "thermal_virtual_scalar_cuts_preserve_channel_and_event_closure",
+    "structured_log": "/tmp/thermal-inclusive-tests-artifacts/thermal_double_triangle_4074139/logs/gammalog-2026-10-18T10-35-19.083Z.jsonl",
+    "structured_log_sha256": "5c6c47a7d6cd35769ab017ea40eb52f0207897c89b3390f4fd9bf4578ea9bd81",
+    "comparisons": [
+      {
+        "block": "below_threshold",
+        "process": "thermal",
+        "value": 5.1374134966977224e-05,
+        "historical": 5.137413496697824e-05,
+        "relative_difference": 1.9785044309913876e-14
+      },
+      {
+        "block": "below_threshold",
+        "process": "virtual",
+        "value": 5.558131236202464e-05,
+        "historical": 5.558131236202565e-05,
+        "relative_difference": 1.816551697359614e-14
+      },
+      {
+        "block": "below_threshold",
+        "process": "real",
+        "value": -4.207177395047418e-06,
+        "historical": -4.207177395047416e-06,
+        "relative_difference": 6.039913707356907e-16
+      },
+      {
+        "block": "above_threshold",
+        "process": "thermal",
+        "value": -9.58821293108847e-06,
+        "historical": -9.58821293108844e-06,
+        "relative_difference": 3.1802783605571503e-15
+      },
+      {
+        "block": "above_threshold",
+        "process": "virtual",
+        "value": -6.330517695597187e-06,
+        "historical": -6.330517695597147e-06,
+        "relative_difference": 6.288671864647059e-15
+      },
+      {
+        "block": "above_threshold",
+        "process": "real",
+        "value": -3.2576952354912816e-06,
+        "historical": -3.2576952354912934e-06,
+        "relative_difference": 3.640138319989847e-15
+      }
+    ],
+    "checks": [
+      "thermal = virtual + real at both masses",
+      "vacuum = zero-temperature at both masses",
+      "positive physical event energies and four-momentum closure",
+      "event weights sum to the integrand"
+    ]
+  },
+  "final_native_regression": {
+    "run_id": "07460a80-6bc8-4df6-b20a-d00fc0f77ac0",
+    "status": "passed",
+    "tests_passed": 116,
+    "duration_seconds": 64.499,
+    "log": "/tmp/thermal-inclusive-final-tests.log",
+    "scope": "all 116 selected thermal, geometry, shared-state and scalar/QCD native regressions passed; Monte Carlo acceptance is recorded separately"
+  },
+  "precision_recovery_diagnostic": {
+    "status": "512 points per slot completed with zero final NaNs or unresolved instability",
+    "result_path": "/tmp/thermal-inclusive-double-diagnostic512/integration_result.json",
+    "result_sha256": "8ee3150c88d2fd2aa56d73f60fe875d83d8577c94ba3028951282e3177a12848",
+    "slot_count": 5,
+    "samples_per_slot": 512,
+    "reported_statistics": {
+      "num_evals": 2560,
+      "average_total_time_seconds": 0.009910035,
+      "average_parameterization_time_seconds": 0.000115319,
+      "average_integrand_time_seconds": 0.009660121,
+      "average_evaluator_time_seconds": 0.000132314,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 1.4269e-05,
+      "f64_percentage": 99.0625,
+      "f128_percentage": 0.9375,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null
+    },
+    "interpretation": "process_final_nonfinite_sample warnings originate inside each precision level, before retry. The warned Double attempts are rescued by higher precision; warning count is not discarded-sample count. No production change was needed.",
+    "interrupted_pilots": "Original 25k pilots were interrupted to inspect these warnings before any iteration completed; they supply no accepted integral estimate. New retry2 pilots use 5k adaptation batches.",
+    "executable_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc"
+  },
+  "native_pole_cancellation": {
+    "binary_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+    "state": "/tmp/thermal-inclusive-double-state",
+    "state_mode": "--read-only-state; no save command",
+    "workers": 1,
+    "parameters": {
+      "M": 1.6,
+      "H": 0.6,
+      "L": 0.25,
+      "T": 0.5
+    },
+    "profile": {
+      "function": "poly_exponential",
+      "sigma": 1.0
+    },
+    "original_block_command": [
+      "target/ci-optim/gammaloop",
+      "--read-only-state",
+      "-n",
+      "-s",
+      "/tmp/thermal-inclusive-double-state",
+      "run",
+      "above_threshold",
+      "pole_probe",
+      "-D",
+      "output=/tmp/thermal-inclusive-pole"
+    ],
+    "historical_reference": {
+      "commit": "a0b2d4191cad17d8dc2f20891bb0f245f0df18b7",
+      "path": "examples/cli/thermal_production/massive_double_triangle/above_threshold/pole_cancellation.json",
+      "precision": "Quad (f128), exported f64 values"
+    },
+    "precision": "Arb internal; JSON values and event weights rounded to f64",
+    "status": "All four signed pole-approach points and twelve process evaluations finite; joint virtual results reproduce historical Quad controls within 1e-12 relative. Separate f64 exports lose cancellation digits and are recorded only as diagnostics.",
+    "maximum_joint_relative_difference": 1.5313708622054486e-16,
+    "maximum_four_momentum_residual": 0.0,
+    "artifact": "/tmp/thermal-inclusive-pole-comparison.json",
+    "artifact_sha256": "fb8b4bb2b299edbd225727308d29eed0b9c2906174a279604db980cb91901dc3",
+    "points": [
+      {
+        "delta": -0.0001,
+        "point": [
+          0.7599342076785333,
+          0,
+          0,
+          0,
+          0.529097347186697,
+          0
+        ],
+        "joint_virtual": 5.530559147517826e-06,
+        "historical_joint": 5.530559147517826e-06,
+        "joint_relative_difference": 0.0,
+        "virtual_hh": 0.0506497262849566,
+        "virtual_ll": -0.05064419572580908,
+        "sum_separate_f64_exports_minus_joint": -1.2256566746769726e-18,
+        "cancellation_condition": 18315.313028742756,
+        "joint_is_nan": false,
+        "joint_max_four_momentum_residual": 0.0
+      },
+      {
+        "delta": 0.0001,
+        "point": [
+          0.7599342076785333,
+          0,
+          0,
+          0,
+          0.5292031772391396,
+          0
+        ],
+        "joint_virtual": 5.531207156667595e-06,
+        "historical_joint": 5.531207156667596e-06,
+        "joint_relative_difference": 1.5313708622054486e-16,
+        "virtual_hh": -0.05062067906021703,
+        "virtual_ll": 0.0506262102673737,
+        "sum_separate_f64_exports_minus_joint": 2.286988957586611e-18,
+        "cancellation_condition": 18304.664146513234,
+        "joint_is_nan": false,
+        "joint_max_four_momentum_residual": 0.0
+      },
+      {
+        "delta": -1e-08,
+        "point": [
+          0.7599342076785333,
+          0,
+          0,
+          0,
+          0.5291502569214156,
+          0
+        ],
+        "joint_virtual": 5.530883598491006e-06,
+        "historical_joint": 5.530883598491006e-06,
+        "joint_relative_difference": 0.0,
+        "virtual_hh": 506.3520410517545,
+        "virtual_ll": -506.3520355208709,
+        "sum_separate_f64_exports_minus_joint": -1.4475905723957978e-14,
+        "cancellation_condition": 183099871.57367077,
+        "joint_is_nan": false,
+        "joint_max_four_momentum_residual": 0.0
+      },
+      {
+        "delta": 1e-08,
+        "point": [
+          0.7599342076785333,
+          0,
+          0,
+          0,
+          0.5291502675044208,
+          0
+        ],
+        "joint_virtual": 5.530883663291901e-06,
+        "historical_joint": 5.530883663291901e-06,
+        "joint_relative_difference": 0.0,
+        "virtual_hh": -506.35200247933034,
+        "virtual_ll": 506.352008010214,
+        "sum_separate_f64_exports_minus_joint": -2.2433381310893973e-14,
+        "cancellation_condition": 183099857.48042253,
+        "joint_is_nan": false,
+        "joint_max_four_momentum_residual": 0.0
+      }
+    ]
+  }
+}

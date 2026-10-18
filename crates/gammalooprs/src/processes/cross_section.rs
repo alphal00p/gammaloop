@@ -37,7 +37,6 @@ use crate::{
         surface::HybridSurfaceID,
     },
     debug_tags, define_index,
-    feyngen::GenerationType,
     graph::{
         GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
         ThresholdPinchStatus,
@@ -935,7 +934,7 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
-        global_settings.validate_for_process(GenerationType::CrossSection)?;
+        global_settings.validate()?;
         let integrand_name = self.name.clone();
         generation_progress::begin_phase(
             GenerationProgressPhase::GraphPreprocessing,
@@ -1525,73 +1524,6 @@ impl CrossSectionGraph {
         self.apply_spin_sum(model, settings, &runtime_default)?;
         debug_tags!(#generation; "generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
-        if settings.medium.mode != MediumMode::Vacuum {
-            let internal = self
-                .graph
-                .no_dummy()
-                .subtract(&self.graph.initial_state_cut);
-            let internal_edges = self
-                .graph
-                .iter_edges_of(&internal)
-                .filter(|(pair, _, _)| pair.is_paired())
-                .map(|(_, edge, _)| edge)
-                .sorted()
-                .collect_vec();
-            let raised_edges = self.graph.get_raised_edge_groups();
-            if self.graph.initial_state_cut.nedges(&self.graph) != 1
-                || self.cuts.is_empty()
-                || self.cuts.iter().any(|cut| {
-                    let cut_edges = self
-                        .graph
-                        .iter_edges_of(&cut.cut)
-                        .map(|(_, edge, _)| edge)
-                        .collect_vec();
-                    cut_edges.iter().any(|edge| {
-                        let edge = &self.graph[*edge];
-                        !edge.particle.particle().is_some_and(|particle| {
-                            (particle.is_scalar()
-                                && edge.particle.chemical_potential_atom().is_none())
-                                || (settings.medium.mode == MediumMode::ZeroTemperatureEquilibrium
-                                    && particle.is_fermion())
-                        })
-                    }) || internal_edges.iter().any(|edge| {
-                        if cut_edges.contains(edge)
-                            || raised_edges.iter().any(|group| {
-                                group.contains(edge)
-                                    && cut_edges.iter().any(|cut| group.contains(cut))
-                            })
-                        {
-                            return false;
-                        }
-                        // Cold spectator fermion cycles may carry Fermi-surface
-                        // terms. Keep their loop coordinates independent of
-                        // physical cut momenta; joint localization is certified
-                        // again in the sector's own basis before compilation.
-                        let signature = &self.graph.loop_momentum_basis.edge_signatures[*edge];
-                        settings.medium.mode != MediumMode::ZeroTemperatureEquilibrium
-                            || !self.graph[*edge]
-                                .particle
-                                .particle()
-                                .is_some_and(|particle| particle.is_fermion())
-                            || signature.external.iter().any(|sign| sign.is_sign())
-                            || cut_edges.iter().any(|cut| {
-                                signature
-                                    .internal
-                                    .iter()
-                                    .zip(
-                                        &self.graph.loop_momentum_basis.edge_signatures[*cut]
-                                            .internal,
-                                    )
-                                    .any(|(left, right)| left.is_sign() && right.is_sign())
-                            })
-                    })
-                })
-            {
-                return Err(eyre!(
-                    "Thermal `xs` requires one probe and scalar cut particles without chemical potentials, or cold fermion cuts; virtual lines must be cold spectator fermion cycles independent of the cut momenta"
-                ));
-            }
-        }
         debug_tags!(#generation; "generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
         debug_tags!(#generation; "generating cff");

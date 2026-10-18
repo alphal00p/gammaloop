@@ -4,7 +4,7 @@
 = Thermal and dense media
 
 Medium modes evaluate amplitudes in an equilibrium medium at finite temperature or density.
-An experimental cross-section path covers the equilibrium probe rates below.
+The experimental cross-section path evaluates fully inclusive thermal rates.
 The medium is at rest in the frame of the supplied momenta.
 
 == Scope and limitations
@@ -12,31 +12,33 @@ The medium is at rest in the frame of the supplied momenta.
 Connected vacuum graphs, which give the pressure, are the only amplitudes validated against
 literature values. Higher-point amplitudes are supported but remain experimental.
 
-The enabled thermal `xs` path has one positive-energy probe. At finite temperature it
-supports massive or massless scalar cut particles without chemical-potential assignments,
-including raised propagators, timelike decay and absorption, and spacelike spectral kernels.
-A spacelike kernel is not an on-shell particle's lifetime. At zero temperature, fermion cuts
-with chemical potentials and virtual spectator fermion cycles independent of the cut momenta
-are also admitted, subject to the Fermi-surface restrictions below. General virtual
-corrections, finite-temperature spinning cut particles, and rate UV subtraction remain
-outside the enabled scope. A runtime chemical potential of zero does not remove an
-adjustable assignment on a scalar particle.
+Thermal `xs` reuses the ordinary inclusive cross-section machinery for particles with spin,
+masses, chemical potentials, virtual propagators, and raised cuts. There is no separate
+scalar-only or one-probe whitelist. Existing vacuum kinematic capabilities, model-domain
+checks, and the Fermi-surface limitations below still apply. Removing a scope guard does
+not establish correctness or finiteness for every process. A spacelike spectral kernel is
+not an on-shell particle’s lifetime.
 
-The radial solver retains an inexpensive unrestricted positive-energy interior chart.
-More general signed or exterior charts use certified algebraic root enumeration with up to
-six distinct affine energies; algebraic degeneracies, unresolved tangencies, and
-unseparated roots are reported explicitly. A closed channel contributes zero. The former
-restriction routing external momentum through only one cut edge is no longer required.
-Positive-energy surface sampling is available when its host is strictly interior; the
-complete signed rate is evaluated at each mapped point. Mixed-sign surface targeting is
-not implemented. Compact sampling maps still require a full-support companion channel.
+Local 3D UV subtraction and integrated finite counterterms are shared with vacuum rates.
+Their physical renormalization-scale dependence is retained. Subtracting the vacuum rate
+alone does not renormalize vacuum subgraphs multiplying medium-dependent outer loops.
+Thermal threshold subtraction must remain disabled at generation and runtime; choose
+infrared-finite inclusive observables whose complete cut sum cancels the relevant internal
+singularities, or kinematics without such singularities. This does not make an isolated
+singular cut integrable.
+
+The radial solver retains the inexpensive positive-energy interior chart. General signed
+or exterior charts use directed value and derivative enclosures over the compactified
+positive ray, without a fixed energy-count cap. A certified closed channel contributes zero;
+unresolved tangencies, cusps, and exhausted work or precision budgets are reported explicitly.
+Original affine routing is retained throughout. Positive-energy surface sampling is available
+when its host is strictly interior; the complete signed rate is evaluated at the mapped point.
+Mixed-sign surface targeting is not implemented. Compact maps require a full-support companion.
 
 Optional vacuum subtraction uses the same distribution-weight transformation as medium amplitudes.
-The remaining scope guards are temporary validation limits or explicit geometric limitations.
-Thermal crossings and their occupation factors use the
-shared cross-section residue, normalization, selector, event, and precision machinery.
-The internal representation of signed cuts does not by itself establish support for the
-excluded processes.
+Thermal crossings and their occupation factors pass through the shared residue, normalization,
+selector, event, and precision machinery. The benchmark coverage described below is narrower
+than the shared architecture’s intended inclusive scope.
 
 #boundary("Infrared safety and thresholds", [
   GammaLoop has no thermal infrared subtraction or resummation, so fixed-order amplitudes
@@ -107,7 +109,9 @@ mode = "thermodynamic_equilibrium"
 vacuum_subtraction = false
 
 [cli_settings.global.generation.uv]
-subtract_uv = false
+subtract_uv = true
+generate_integrated = true
+local_uv_cts_from_expanded_4d_integrands = false
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = false
@@ -126,6 +130,22 @@ cover decay, absorption, a closed channel, spacelike support, and raised-propaga
 derivatives. The benchmark gives the normalization conversions for
 #link("https://arxiv.org/abs/1503.03534")[Ho and Scherrer (2015)] and
 #link("https://arxiv.org/abs/hep-ph/0302098")[Nishikawa, Morimatsu, and Hidaka (2003)].
+
+The restored #source-link("examples/cli/thermal_rates/massive_double_triangle/run.toml", label: "massive double-triangle card")
+checks inclusive virtual and real cuts below and above internal thresholds. The
+#source-link("examples/cli/thermal_rates/massive_self_energy/run.toml", label: "raised scalar insertion card")
+includes ordinary local and integrated UV subtraction and an auxiliary-scale control.
+Their benchmark notes explicitly separate historical native integrations from current
+acceptance runs. The #source-link("examples/cli/thermal_rates/qcd_vector/run.toml", label: "QCD vector-current card")
+exercises the shared spinning and gauge-theory path. All 116 selected native regressions
+pass, including restored scalar cut/event closure, UV-addback controls, saved-state reload,
+and QCD fixtures. Current integrated scalar and QCD comparisons agree with their
+independent references within the reported Monte Carlo errors. Precision varies by case:
+the UV-renormalized scalar insertion has 2.50% full-rate error, while the above-threshold
+double-triangle inclusive error is 28.8% and its smaller virtual mean remains unresolved
+relative to its own error. Direct pole controls separately check its local cancellation.
+The benchmark records preserve these limits and distinguish rescued precision attempts
+from final discarded samples.
 
 == Chemical potentials
 

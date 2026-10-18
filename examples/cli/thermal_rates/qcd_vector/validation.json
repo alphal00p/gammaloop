@@ -1,0 +1,1610 @@
+{
+  "status": "completed current native hard-timelike QCD LO/NLO literature comparison with independent thermal seed, vacuum normalization, and auxiliary UV-scale control; all six integrations have zero final discarded samples",
+  "base_commit": "4a6519c645a2327a900d5c7588e381780633f820",
+  "working_tree_changes": true,
+  "historical_record": "historical_validation.json",
+  "source_sha256": {
+    "examples/cli/thermal_rates/qcd_vector/run.toml": "a6e676c19f116e661fad69a14fd4215f566ff2a226f4bfd853a60813075d8fd1",
+    "tests/tests/test_runs/thermal_inclusive_qcd.rs": "2dddc548b8737dd96b583f4d2c0445f7bc9a1a594bb77ecc3204030d97b3e008"
+  },
+  "comparisons": [
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_lo_4073106/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "benchmark": true,
+      "coarse": 2.7028673015643094,
+      "extrapolated": 2.7034759917903606,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "fine": 2.7033238192338476,
+      "fixture": "qcd_vector",
+      "integration": true,
+      "level": "DEBUG",
+      "line": 189,
+      "message": "Native vector-current LO compared with the analytic Fermi phase-space integral",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "observable": "rho_lo",
+      "relative_error": 5.650923950994979e-09,
+      "stage": "thermal_rate_reference_comparison",
+      "summary": true,
+      "target": 2.7034759765132232,
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:18.999Z"
+    },
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_nlo_4073108/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "auxiliary_scale": 4.0,
+      "benchmark": true,
+      "evaluation": true,
+      "event_count": 15,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "graph": "inclusive",
+      "level": "DEBUG",
+      "line": 353,
+      "message": "Native thermal QCD point with shared local and integrated ultraviolet subtraction",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "stage": "thermal_qcd_nlo_point",
+      "summary": true,
+      "target": "test_runs::thermal_inclusive_qcd",
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:19.420Z",
+      "value_im": 0.0,
+      "value_re": -7.906301436272885e-05
+    },
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_nlo_4073108/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "auxiliary_scale": 4.0,
+      "benchmark": true,
+      "evaluation": true,
+      "event_count": 5,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "graph": "GL0",
+      "level": "DEBUG",
+      "line": 353,
+      "message": "Native thermal QCD point with shared local and integrated ultraviolet subtraction",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "stage": "thermal_qcd_nlo_point",
+      "summary": true,
+      "target": "test_runs::thermal_inclusive_qcd",
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:19.420Z",
+      "value_im": 0.0,
+      "value_re": 1.4603182167271558e-05
+    },
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_nlo_4073108/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "auxiliary_scale": 4.0,
+      "benchmark": true,
+      "evaluation": true,
+      "event_count": 10,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "graph": "GL2",
+      "level": "DEBUG",
+      "line": 353,
+      "message": "Native thermal QCD point with shared local and integrated ultraviolet subtraction",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "stage": "thermal_qcd_nlo_point",
+      "summary": true,
+      "target": "test_runs::thermal_inclusive_qcd",
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:19.420Z",
+      "value_im": 0.0,
+      "value_re": -9.36661965300004e-05
+    },
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_nlo_4073108/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "auxiliary_scale": 2.0,
+      "benchmark": true,
+      "evaluation": true,
+      "event_count": 15,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "graph": "inclusive",
+      "level": "DEBUG",
+      "line": 353,
+      "message": "Native thermal QCD point with shared local and integrated ultraviolet subtraction",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "stage": "thermal_qcd_nlo_point",
+      "summary": true,
+      "target": "test_runs::thermal_inclusive_qcd",
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:19.958Z",
+      "value_im": 0.0,
+      "value_re": -7.765789329176641e-05
+    },
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_nlo_4073108/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "auxiliary_scale": 2.0,
+      "benchmark": true,
+      "evaluation": true,
+      "event_count": 5,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "graph": "GL0",
+      "level": "DEBUG",
+      "line": 353,
+      "message": "Native thermal QCD point with shared local and integrated ultraviolet subtraction",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "stage": "thermal_qcd_nlo_point",
+      "summary": true,
+      "target": "test_runs::thermal_inclusive_qcd",
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:19.958Z",
+      "value_im": 0.0,
+      "value_re": 1.7537696280795053e-05
+    },
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_nlo_4073108/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "auxiliary_scale": 2.0,
+      "benchmark": true,
+      "evaluation": true,
+      "event_count": 10,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "graph": "GL2",
+      "level": "DEBUG",
+      "line": 353,
+      "message": "Native thermal QCD point with shared local and integrated ultraviolet subtraction",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "stage": "thermal_qcd_nlo_point",
+      "summary": true,
+      "target": "test_runs::thermal_inclusive_qcd",
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:19.958Z",
+      "value_im": 0.0,
+      "value_re": -9.519558957256147e-05
+    },
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_nlo_4073108/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "auxiliary_scale": 4.0,
+      "benchmark": true,
+      "evaluation": true,
+      "event_count": 15,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "graph": "inclusive",
+      "level": "DEBUG",
+      "line": 353,
+      "message": "Native thermal QCD point with shared local and integrated ultraviolet subtraction",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "stage": "thermal_qcd_nlo_point",
+      "summary": true,
+      "target": "test_runs::thermal_inclusive_qcd",
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:19.993Z",
+      "value_im": 0.0,
+      "value_re": -7.906301436272885e-05
+    },
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_nlo_4073108/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "auxiliary_scale": 4.0,
+      "benchmark": true,
+      "evaluation": true,
+      "event_count": 5,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "graph": "GL0",
+      "level": "DEBUG",
+      "line": 353,
+      "message": "Native thermal QCD point with shared local and integrated ultraviolet subtraction",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "stage": "thermal_qcd_nlo_point",
+      "summary": true,
+      "target": "test_runs::thermal_inclusive_qcd",
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:19.994Z",
+      "value_im": 0.0,
+      "value_re": 1.4603182167271558e-05
+    },
+    {
+      "log_path": "/tmp/thermal-inclusive-tests-artifacts/thermal_vector_nlo_4073108/logs/gammalog-2026-10-18T10-35-17.055Z.jsonl",
+      "auxiliary_scale": 4.0,
+      "benchmark": true,
+      "evaluation": true,
+      "event_count": 10,
+      "file": "tests/tests/test_runs/thermal_inclusive_qcd.rs",
+      "graph": "GL2",
+      "level": "DEBUG",
+      "line": 353,
+      "message": "Native thermal QCD point with shared local and integrated ultraviolet subtraction",
+      "module_path": "test_runs::thermal_inclusive_qcd",
+      "stage": "thermal_qcd_nlo_point",
+      "summary": true,
+      "target": "test_runs::thermal_inclusive_qcd",
+      "thermal": true,
+      "timestamp": "2026-10-18T10:35:19.994Z",
+      "value_im": 0.0,
+      "value_re": -9.36661965300004e-05
+    }
+  ],
+  "native_integrations": [
+    {
+      "binary_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+      "seed": 191007552,
+      "cores": 4,
+      "total_wall_seconds": 400,
+      "records": [
+        {
+          "order": "lo",
+          "source_result": "/tmp/thermal-inclusive-qcd-pilot25k-lo-integral/integration_result.json",
+          "samples": 50000,
+          "rho": 2.691174223654609,
+          "rho_error": 0.020090217037867925,
+          "reference_rho": 2.7034759765132232,
+          "pull": -0.6123255331401826,
+          "relative_mc_error": 0.007465223492883138,
+          "statistics": {
+            "num_evals": 50000,
+            "average_total_time_seconds": 0.001008333,
+            "average_parameterization_time_seconds": 2.9251e-05,
+            "average_integrand_time_seconds": 0.000964949,
+            "average_evaluator_time_seconds": 2.95e-06,
+            "average_observable_time_seconds": 0.0,
+            "average_integrator_time_seconds": 3.843e-06,
+            "f64_percentage": 100.0,
+            "f128_percentage": 0.0,
+            "arb_percentage": 0.0,
+            "nan_percentage": 0.0,
+            "nan_or_unstable_percentage": 0.0,
+            "generated_event_count": 0,
+            "accepted_event_count": 0,
+            "selection_efficiency_percentage": null
+          },
+          "raw_native_result": {
+            "slots": [
+              {
+                "key": "vector_lo@LO",
+                "process": "vector_lo",
+                "integrand": "LO",
+                "target": null,
+                "integral": {
+                  "neval": 50000,
+                  "real_zero": 3530,
+                  "im_zero": 50000,
+                  "result": {
+                    "re": 0.07475483954596135,
+                    "im": 0.0
+                  },
+                  "error": {
+                    "re": 0.0005580615843852201,
+                    "im": 0.0
+                  },
+                  "real_chisq": 0.0,
+                  "im_chisq": 0.0
+                },
+                "table_results": [
+                  {
+                    "component": "re",
+                    "value": 0.07475483954596135,
+                    "error": 0.0005580615843852201,
+                    "relative_error_percent": 0.7465223492883138,
+                    "chi_sq_per_dof": 0.0,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.0001283273556989442
+                  },
+                  {
+                    "component": "im",
+                    "value": 0.0,
+                    "error": 0.0,
+                    "relative_error_percent": null,
+                    "chi_sq_per_dof": 0.0,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.0
+                  }
+                ],
+                "integration_statistics": {
+                  "num_evals": 50000,
+                  "average_total_time_seconds": 0.001008333,
+                  "average_parameterization_time_seconds": 2.9251e-05,
+                  "average_integrand_time_seconds": 0.000964949,
+                  "average_evaluator_time_seconds": 2.95e-06,
+                  "average_observable_time_seconds": 0.0,
+                  "average_integrator_time_seconds": 3.843e-06,
+                  "f64_percentage": 100.0,
+                  "f128_percentage": 0.0,
+                  "arb_percentage": 0.0,
+                  "nan_percentage": 0.0,
+                  "nan_or_unstable_percentage": 0.0,
+                  "generated_event_count": 0,
+                  "accepted_event_count": 0,
+                  "selection_efficiency_percentage": null
+                },
+                "max_weight_info": [
+                  {
+                    "component": "re",
+                    "sign": "+",
+                    "max_eval": 0.4796545442316041,
+                    "coordinates": "xs: [ 2.8366110758018093e-01 4.0355131389267085e-01 3.8434059378179064e-01 ]"
+                  }
+                ],
+                "grid_breakdown": {
+                  "re": null,
+                  "im": null
+                },
+                "absolute": {
+                  "integral": {
+                    "neval": 50000,
+                    "real_zero": 3530,
+                    "im_zero": 50000,
+                    "result": {
+                      "re": 0.07475483954596135,
+                      "im": 0.0
+                    },
+                    "error": {
+                      "re": 0.0005580615843852201,
+                      "im": 0.0
+                    },
+                    "real_chisq": 0.0,
+                    "im_chisq": 0.0
+                  },
+                  "table_results": [
+                    {
+                      "component": "|re|",
+                      "value": 0.07475483954596135,
+                      "error": 0.0005580615843852201,
+                      "relative_error_percent": 0.7465223492883138,
+                      "chi_sq_per_dof": 0.0,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.0001283273556989442
+                    },
+                    {
+                      "component": "|im|",
+                      "value": 0.0,
+                      "error": 0.0,
+                      "relative_error_percent": null,
+                      "chi_sq_per_dof": 0.0,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.0
+                    }
+                  ],
+                  "max_weight_info": [
+                    {
+                      "component": "re",
+                      "sign": "+",
+                      "max_eval": 0.4796545442316041,
+                      "coordinates": "xs: [ 2.8366110758018093e-01 4.0355131389267085e-01 3.8434059378179064e-01 ]"
+                    }
+                  ],
+                  "grid_breakdown": {
+                    "re": null,
+                    "im": null
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "order": "nlo",
+          "source_result": "/tmp/thermal-inclusive-qcd-pilot25k-nlo-integral/integration_result.json",
+          "samples": 25000,
+          "rho": 0.10379515729761056,
+          "rho_error": 0.0064730487815206055,
+          "reference_rho": 0.10648332415676968,
+          "pull": -0.41528604988013673,
+          "relative_mc_error": 0.06236368776782633,
+          "statistics": {
+            "num_evals": 25000,
+            "average_total_time_seconds": 0.058476295,
+            "average_parameterization_time_seconds": 0.000317402,
+            "average_integrand_time_seconds": 0.057954923,
+            "average_evaluator_time_seconds": 0.002009604,
+            "average_observable_time_seconds": 0.0,
+            "average_integrator_time_seconds": 5.5285e-05,
+            "f64_percentage": 88.30799999999999,
+            "f128_percentage": 11.692,
+            "arb_percentage": 0.0,
+            "nan_percentage": 0.0,
+            "nan_or_unstable_percentage": 0.0,
+            "generated_event_count": 0,
+            "accepted_event_count": 0,
+            "selection_efficiency_percentage": null
+          },
+          "raw_native_result": {
+            "slots": [
+              {
+                "key": "vector_nlo@NLO",
+                "process": "vector_nlo",
+                "integrand": "NLO",
+                "target": null,
+                "integral": {
+                  "neval": 25000,
+                  "real_zero": 4,
+                  "im_zero": 3653,
+                  "result": {
+                    "re": 0.0028831988138225155,
+                    "im": 3.660618121123721e-23
+                  },
+                  "error": {
+                    "re": 0.0001798069105977946,
+                    "im": 2.135127791081749e-22
+                  },
+                  "real_chisq": 1.752377671566336,
+                  "im_chisq": 4.230298691983429
+                },
+                "table_results": [
+                  {
+                    "component": "re",
+                    "value": 0.0028831988138225155,
+                    "error": 0.0001798069105977946,
+                    "relative_error_percent": 6.2363687767826335,
+                    "chi_sq_per_dof": 0.35047553431326717,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.012965951391660631
+                  },
+                  {
+                    "component": "im",
+                    "value": 3.660618121123721e-23,
+                    "error": 2.135127791081749e-22,
+                    "relative_error_percent": 583.2697430963698,
+                    "chi_sq_per_dof": 0.8460597383966858,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 1.8528727388869666
+                  }
+                ],
+                "integration_statistics": {
+                  "num_evals": 25000,
+                  "average_total_time_seconds": 0.058476295,
+                  "average_parameterization_time_seconds": 0.000317402,
+                  "average_integrand_time_seconds": 0.057954923,
+                  "average_evaluator_time_seconds": 0.002009604,
+                  "average_observable_time_seconds": 0.0,
+                  "average_integrator_time_seconds": 5.5285e-05,
+                  "f64_percentage": 88.30799999999999,
+                  "f128_percentage": 11.692,
+                  "arb_percentage": 0.0,
+                  "nan_percentage": 0.0,
+                  "nan_or_unstable_percentage": 0.0,
+                  "generated_event_count": 0,
+                  "accepted_event_count": 0,
+                  "selection_efficiency_percentage": null
+                },
+                "max_weight_info": [
+                  {
+                    "component": "re",
+                    "sign": "+",
+                    "max_eval": 0.385246755198143,
+                    "coordinates": "xs: [\n1.7589278759848459e-01 7.2246644103361779e-01 5.5713799331726177e-01\n4.3587180331797948e-01 8.2573192171196563e-01 9.8063134798310136e-01 ]"
+                  },
+                  {
+                    "component": "re",
+                    "sign": "-",
+                    "max_eval": -0.9345853918129081,
+                    "coordinates": "xs: [\n4.1570642532853808e-02 6.6599732353158769e-01 3.7273621327124506e-01\n3.4171738115064565e-01 5.4449405547506524e-01 9.8297314744007369e-01 ]"
+                  },
+                  {
+                    "component": "im",
+                    "sign": "+",
+                    "max_eval": 1.6956648810264426e-18,
+                    "coordinates": "xs: [\n7.6047944921262123e-01 5.6008003203032386e-01 2.1766136560521129e-01\n1.8105904505230019e-01 4.0063986671747059e-01 2.3939250976985096e-01 ]"
+                  },
+                  {
+                    "component": "im",
+                    "sign": "-",
+                    "max_eval": -1.237147257038473e-18,
+                    "coordinates": "xs: [\n7.8377269084023260e-01 8.1532792966983236e-02 5.9272111898300450e-01\n2.3695308369734397e-01 8.5333640113491271e-01 4.9426743305882914e-01 ]"
+                  }
+                ],
+                "grid_breakdown": {
+                  "re": null,
+                  "im": null
+                },
+                "absolute": {
+                  "integral": {
+                    "neval": 25000,
+                    "real_zero": 4,
+                    "im_zero": 3653,
+                    "result": {
+                      "re": 0.0386705613860256,
+                      "im": 6.682041426433188e-21
+                    },
+                    "error": {
+                      "re": 0.00031435879487692447,
+                      "im": 2.340096427993814e-22
+                    },
+                    "real_chisq": 6.93370197096408,
+                    "im_chisq": 5.108670862390582
+                  },
+                  "table_results": [
+                    {
+                      "component": "|re|",
+                      "value": 0.0386705613860256,
+                      "error": 0.00031435879487692447,
+                      "relative_error_percent": 0.8129150020318155,
+                      "chi_sq_per_dof": 1.386740394192816,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.000990225924051193
+                    },
+                    {
+                      "component": "|im|",
+                      "value": 6.682041426433188e-21,
+                      "error": 2.340096427993814e-22,
+                      "relative_error_percent": 3.502068123577821,
+                      "chi_sq_per_dof": 1.0217341724781164,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.010227382510797712
+                    }
+                  ],
+                  "max_weight_info": [
+                    {
+                      "component": "re",
+                      "sign": "+",
+                      "max_eval": 0.9573148095513895,
+                      "coordinates": "xs: [\n7.9084857437392453e-01 6.9070850497291103e-01 7.4280826117467880e-01\n3.8773799417696270e-01 1.7738416683492561e-01 2.2944669058521758e-01 ]"
+                    },
+                    {
+                      "component": "im",
+                      "sign": "+",
+                      "max_eval": 1.7084948405282144e-18,
+                      "coordinates": "xs: [\n7.6047944921262123e-01 5.6008003203032386e-01 2.1766136560521129e-01\n1.8105904505230019e-01 4.0063986671747059e-01 2.3939250976985096e-01 ]"
+                    }
+                  ],
+                  "grid_breakdown": {
+                    "re": null,
+                    "im": null
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "binary_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+      "mode": "vacuum",
+      "seed": 191007552,
+      "cores": 2,
+      "total_wall_seconds": 24,
+      "records": [
+        {
+          "order": "lo",
+          "source_result": "/tmp/thermal-inclusive-qcd-vacuum25k-lo-integral/integration_result.json",
+          "samples": 25000,
+          "rho": 3.567921870284132,
+          "rho_error": 0.03761782070208095,
+          "reference_rho": 3.580986219567645,
+          "pull": -0.34729149747875987,
+          "relative_mc_error": 0.010543342054484296,
+          "statistics": {
+            "num_evals": 25000,
+            "average_total_time_seconds": 0.000118509,
+            "average_parameterization_time_seconds": 2.515e-05,
+            "average_integrand_time_seconds": 8.0905e-05,
+            "average_evaluator_time_seconds": 1.87e-06,
+            "average_observable_time_seconds": 0.0,
+            "average_integrator_time_seconds": 5.676e-06,
+            "f64_percentage": 100.0,
+            "f128_percentage": 0.0,
+            "arb_percentage": 0.0,
+            "nan_percentage": 0.0,
+            "nan_or_unstable_percentage": 0.0,
+            "generated_event_count": 0,
+            "accepted_event_count": 0,
+            "selection_efficiency_percentage": null
+          },
+          "raw_native_result": {
+            "slots": [
+              {
+                "key": "vector_lo@LO",
+                "process": "vector_lo",
+                "integrand": "LO",
+                "target": null,
+                "integral": {
+                  "neval": 25000,
+                  "real_zero": 1724,
+                  "im_zero": 25000,
+                  "result": {
+                    "re": 0.09910894084122589,
+                    "im": 0.0
+                  },
+                  "error": {
+                    "re": 0.001044939463946693,
+                    "im": 0.0
+                  },
+                  "real_chisq": 0.0,
+                  "im_chisq": 0.0
+                },
+                "table_results": [
+                  {
+                    "component": "re",
+                    "value": 0.09910894084122589,
+                    "error": 0.001044939463946693,
+                    "relative_error_percent": 1.0543342054484297,
+                    "chi_sq_per_dof": 0.0,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.00025503077576126404
+                  },
+                  {
+                    "component": "im",
+                    "value": 0.0,
+                    "error": 0.0,
+                    "relative_error_percent": null,
+                    "chi_sq_per_dof": 0.0,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.0
+                  }
+                ],
+                "integration_statistics": {
+                  "num_evals": 25000,
+                  "average_total_time_seconds": 0.000118509,
+                  "average_parameterization_time_seconds": 2.515e-05,
+                  "average_integrand_time_seconds": 8.0905e-05,
+                  "average_evaluator_time_seconds": 1.87e-06,
+                  "average_observable_time_seconds": 0.0,
+                  "average_integrator_time_seconds": 5.676e-06,
+                  "f64_percentage": 100.0,
+                  "f128_percentage": 0.0,
+                  "arb_percentage": 0.0,
+                  "nan_percentage": 0.0,
+                  "nan_or_unstable_percentage": 0.0,
+                  "generated_event_count": 0,
+                  "accepted_event_count": 0,
+                  "selection_efficiency_percentage": null
+                },
+                "max_weight_info": [
+                  {
+                    "component": "re",
+                    "sign": "+",
+                    "max_eval": 0.6318957516903766,
+                    "coordinates": "xs: [ 2.8416350952256442e-01 8.1092960996632291e-01 3.7165995780945782e-01 ]"
+                  }
+                ],
+                "grid_breakdown": {
+                  "re": null,
+                  "im": null
+                },
+                "absolute": {
+                  "integral": {
+                    "neval": 25000,
+                    "real_zero": 1724,
+                    "im_zero": 25000,
+                    "result": {
+                      "re": 0.09910894084122589,
+                      "im": 0.0
+                    },
+                    "error": {
+                      "re": 0.001044939463946693,
+                      "im": 0.0
+                    },
+                    "real_chisq": 0.0,
+                    "im_chisq": 0.0
+                  },
+                  "table_results": [
+                    {
+                      "component": "|re|",
+                      "value": 0.09910894084122589,
+                      "error": 0.001044939463946693,
+                      "relative_error_percent": 1.0543342054484297,
+                      "chi_sq_per_dof": 0.0,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.00025503077576126404
+                    },
+                    {
+                      "component": "|im|",
+                      "value": 0.0,
+                      "error": 0.0,
+                      "relative_error_percent": null,
+                      "chi_sq_per_dof": 0.0,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.0
+                    }
+                  ],
+                  "max_weight_info": [
+                    {
+                      "component": "re",
+                      "sign": "+",
+                      "max_eval": 0.6318957516903766,
+                      "coordinates": "xs: [ 2.8416350952256442e-01 8.1092960996632291e-01 3.7165995780945782e-01 ]"
+                    }
+                  ],
+                  "grid_breakdown": {
+                    "re": null,
+                    "im": null
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "order": "nlo",
+          "source_result": "/tmp/thermal-inclusive-qcd-vacuum25k-nlo-integral/integration_result.json",
+          "samples": 25000,
+          "rho": 0.09274639460663556,
+          "rho_error": 0.004109936051693417,
+          "reference_rho": 0.09070744059337357,
+          "pull": 0.4961035859479795,
+          "relative_mc_error": 0.04431370156354704,
+          "statistics": {
+            "num_evals": 25000,
+            "average_total_time_seconds": 0.001623075,
+            "average_parameterization_time_seconds": 0.000233897,
+            "average_integrand_time_seconds": 0.001340161,
+            "average_evaluator_time_seconds": 0.000147188,
+            "average_observable_time_seconds": 0.0,
+            "average_integrator_time_seconds": 4.0914e-05,
+            "f64_percentage": 99.988,
+            "f128_percentage": 0.012,
+            "arb_percentage": 0.0,
+            "nan_percentage": 0.0,
+            "nan_or_unstable_percentage": 0.0,
+            "generated_event_count": 0,
+            "accepted_event_count": 0,
+            "selection_efficiency_percentage": null
+          },
+          "raw_native_result": {
+            "slots": [
+              {
+                "key": "vector_nlo@NLO",
+                "process": "vector_nlo",
+                "integrand": "NLO",
+                "target": null,
+                "integral": {
+                  "neval": 25000,
+                  "real_zero": 45,
+                  "im_zero": 4225,
+                  "result": {
+                    "re": 0.00257628873907321,
+                    "im": -2.4377063383398445e-22
+                  },
+                  "error": {
+                    "re": 0.00011416489032481714,
+                    "im": 2.649982470162079e-22
+                  },
+                  "real_chisq": 3.1698433734546683,
+                  "im_chisq": 1.8785197444125532
+                },
+                "table_results": [
+                  {
+                    "component": "re",
+                    "value": 0.00257628873907321,
+                    "error": 0.00011416489032481714,
+                    "relative_error_percent": 4.431370156354704,
+                    "chi_sq_per_dof": 0.6339686746909337,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.00695987010875982
+                  },
+                  {
+                    "component": "im",
+                    "value": -2.4377063383398445e-22,
+                    "error": 2.649982470162079e-22,
+                    "relative_error_percent": 108.7080272337808,
+                    "chi_sq_per_dof": 0.37570394888251063,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.2834659448487347
+                  }
+                ],
+                "integration_statistics": {
+                  "num_evals": 25000,
+                  "average_total_time_seconds": 0.001623075,
+                  "average_parameterization_time_seconds": 0.000233897,
+                  "average_integrand_time_seconds": 0.001340161,
+                  "average_evaluator_time_seconds": 0.000147188,
+                  "average_observable_time_seconds": 0.0,
+                  "average_integrator_time_seconds": 4.0914e-05,
+                  "f64_percentage": 99.988,
+                  "f128_percentage": 0.012,
+                  "arb_percentage": 0.0,
+                  "nan_percentage": 0.0,
+                  "nan_or_unstable_percentage": 0.0,
+                  "generated_event_count": 0,
+                  "accepted_event_count": 0,
+                  "selection_efficiency_percentage": null
+                },
+                "max_weight_info": [
+                  {
+                    "component": "re",
+                    "sign": "+",
+                    "max_eval": 0.3206855253289357,
+                    "coordinates": "xs: [\n3.5233833020494620e-01 2.1088004360058976e-02 7.9187808860947584e-01\n4.1869476491275048e-01 8.7475857060255391e-01 9.3438842775178155e-01 ]"
+                  },
+                  {
+                    "component": "re",
+                    "sign": "-",
+                    "max_eval": -0.448265874665254,
+                    "coordinates": "xs: [\n1.6777593729130080e-01 7.5931696445867558e-01 5.0221930079724164e-01\n3.0280932414561512e-01 5.3745884470285787e-01 9.7979925962897507e-01 ]"
+                  },
+                  {
+                    "component": "im",
+                    "sign": "+",
+                    "max_eval": 1.5047094396207153e-18,
+                    "coordinates": "xs: [\n8.4422528528937502e-01 5.5976812526278708e-01 2.3689224227898856e-01\n1.9137549502072701e-01 4.0644148204398411e-01 2.8554373265931343e-01 ]"
+                  },
+                  {
+                    "component": "im",
+                    "sign": "-",
+                    "max_eval": -1.7275168261531335e-18,
+                    "coordinates": "xs: [\n8.4548700463017767e-01 2.8913853977160076e-01 7.8543552730546318e-01\n2.1047533307343469e-01 6.2469978309107344e-01 3.9026798448611455e-01 ]"
+                  }
+                ],
+                "grid_breakdown": {
+                  "re": null,
+                  "im": null
+                },
+                "absolute": {
+                  "integral": {
+                    "neval": 25000,
+                    "real_zero": 45,
+                    "im_zero": 4225,
+                    "result": {
+                      "re": 0.032263847854920195,
+                      "im": 9.941953106188135e-21
+                    },
+                    "error": {
+                      "re": 0.000302327052038055,
+                      "im": 2.9566745710652613e-22
+                    },
+                    "real_chisq": 1.2832481539027043,
+                    "im_chisq": 4.924112346095413
+                  },
+                  "table_results": [
+                    {
+                      "component": "|re|",
+                      "value": 0.032263847854920195,
+                      "error": 0.000302327052038055,
+                      "relative_error_percent": 0.9370458644533637,
+                      "chi_sq_per_dof": 0.25664963078054087,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.0009763785902650666
+                    },
+                    {
+                      "component": "|im|",
+                      "value": 9.941953106188135e-21,
+                      "error": 2.9566745710652613e-22,
+                      "relative_error_percent": 2.9739373536422624,
+                      "chi_sq_per_dof": 0.9848224692190826,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.006950412289021484
+                    }
+                  ],
+                  "max_weight_info": [
+                    {
+                      "component": "re",
+                      "sign": "+",
+                      "max_eval": 0.7875432571278393,
+                      "coordinates": "xs: [\n9.0621330244171117e-01 1.2699714711299079e-01 1.2193435731856808e-01\n3.4768394059172758e-01 1.1084294764194799e-01 3.6207151229711972e-02 ]"
+                    },
+                    {
+                      "component": "im",
+                      "sign": "+",
+                      "max_eval": 1.7275168261531335e-18,
+                      "coordinates": "xs: [\n8.4548700463017767e-01 2.8913853977160076e-01 7.8543552730546318e-01\n2.1047533307343469e-01 6.2469978309107344e-01 3.9026798448611455e-01 ]"
+                    }
+                  ],
+                  "grid_breakdown": {
+                    "re": null,
+                    "im": null
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "binary_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+      "records": [
+        {
+          "name": "independent50k",
+          "mode": "thermodynamic_equilibrium",
+          "order": "nlo",
+          "source_result": "/tmp/thermal-inclusive-qcd-independent50k-nlo-integral/integration_result.json",
+          "samples": 50000,
+          "seed": 271828,
+          "cores": 4,
+          "total_wall_seconds": 841,
+          "m_uv": 4,
+          "renormalization_localization_scale": 4,
+          "mu_r": 4,
+          "rho": 0.10896214747934255,
+          "rho_error": 0.003937670495860303,
+          "reference_rho": 0.10648332415676968,
+          "pull": 0.6295151727852456,
+          "relative_mc_error": 0.036137967055089676,
+          "statistics": {
+            "num_evals": 50000,
+            "average_total_time_seconds": 0.063447136,
+            "average_parameterization_time_seconds": 0.000341138,
+            "average_integrand_time_seconds": 0.062891975,
+            "average_evaluator_time_seconds": 0.002232081,
+            "average_observable_time_seconds": 0.0,
+            "average_integrator_time_seconds": 6.1952e-05,
+            "f64_percentage": 89.69200000000001,
+            "f128_percentage": 10.308,
+            "arb_percentage": 0.0,
+            "nan_percentage": 0.0,
+            "nan_or_unstable_percentage": 0.0,
+            "generated_event_count": 0,
+            "accepted_event_count": 0,
+            "selection_efficiency_percentage": null
+          },
+          "raw_native_result": {
+            "slots": [
+              {
+                "key": "vector_nlo@NLO",
+                "process": "vector_nlo",
+                "integrand": "NLO",
+                "target": null,
+                "integral": {
+                  "neval": 50000,
+                  "real_zero": 3,
+                  "im_zero": 6801,
+                  "result": {
+                    "re": 0.0030267263188706265,
+                    "im": 4.325852203154592e-23
+                  },
+                  "error": {
+                    "re": 0.00010937973599611954,
+                    "im": 1.7802400734199967e-22
+                  },
+                  "real_chisq": 7.621661004600355,
+                  "im_chisq": 2.474276698349468
+                },
+                "table_results": [
+                  {
+                    "component": "re",
+                    "value": 0.0030267263188706265,
+                    "error": 0.00010937973599611954,
+                    "relative_error_percent": 3.6137967055089675,
+                    "chi_sq_per_dof": 0.7621661004600355,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.006451131645145546
+                  },
+                  {
+                    "component": "im",
+                    "value": 4.325852203154592e-23,
+                    "error": 1.7802400734199967e-22,
+                    "relative_error_percent": 411.5351125777647,
+                    "chi_sq_per_dof": 0.24742766983494682,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 1.140636100442373
+                  }
+                ],
+                "integration_statistics": {
+                  "num_evals": 50000,
+                  "average_total_time_seconds": 0.063447136,
+                  "average_parameterization_time_seconds": 0.000341138,
+                  "average_integrand_time_seconds": 0.062891975,
+                  "average_evaluator_time_seconds": 0.002232081,
+                  "average_observable_time_seconds": 0.0,
+                  "average_integrator_time_seconds": 6.1952e-05,
+                  "f64_percentage": 89.69200000000001,
+                  "f128_percentage": 10.308,
+                  "arb_percentage": 0.0,
+                  "nan_percentage": 0.0,
+                  "nan_or_unstable_percentage": 0.0,
+                  "generated_event_count": 0,
+                  "accepted_event_count": 0,
+                  "selection_efficiency_percentage": null
+                },
+                "max_weight_info": [
+                  {
+                    "component": "re",
+                    "sign": "+",
+                    "max_eval": 0.6039614616700227,
+                    "coordinates": "xs: [\n4.6844133966805979e-02 1.2658345895924905e-01 9.8540100896233540e-01\n2.8488939900595400e-01 8.7897266481681902e-01 9.8922307918646135e-01 ]"
+                  },
+                  {
+                    "component": "re",
+                    "sign": "-",
+                    "max_eval": -0.9762904968430595,
+                    "coordinates": "xs: [\n2.5889879622695511e-02 8.2646589128799652e-01 3.0796882485920063e-01\n3.2599017667845509e-01 1.8286216177498138e-01 9.9490389233343868e-01 ]"
+                  },
+                  {
+                    "component": "im",
+                    "sign": "+",
+                    "max_eval": 2.211715365283669e-18,
+                    "coordinates": "xs: [\n7.7519296880098409e-01 3.8512358218259662e-01 2.2883962491882198e-01\n2.3200548931769580e-01 8.5704156023645273e-01 3.9984979222682476e-01 ]"
+                  },
+                  {
+                    "component": "im",
+                    "sign": "-",
+                    "max_eval": -2.467111594048151e-18,
+                    "coordinates": "xs: [\n7.9997521035909713e-01 9.7568260706063181e-01 4.3342714201729116e-01\n3.7312695308831151e-01 6.3742141467662139e-01 4.1247894900641058e-01 ]"
+                  }
+                ],
+                "grid_breakdown": {
+                  "re": null,
+                  "im": null
+                },
+                "absolute": {
+                  "integral": {
+                    "neval": 50000,
+                    "real_zero": 3,
+                    "im_zero": 6801,
+                    "result": {
+                      "re": 0.038655871410094585,
+                      "im": 6.60796261803424e-21
+                    },
+                    "error": {
+                      "re": 0.00023147910956853018,
+                      "im": 1.9408933741203469e-22
+                    },
+                    "real_chisq": 6.188106472354548,
+                    "im_chisq": 7.420891680909655
+                  },
+                  "table_results": [
+                    {
+                      "component": "|re|",
+                      "value": 0.038655871410094585,
+                      "error": 0.00023147910956853018,
+                      "relative_error_percent": 0.5988200527490418,
+                      "chi_sq_per_dof": 0.6188106472354548,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.0006683271403193902
+                    },
+                    {
+                      "component": "|im|",
+                      "value": 6.60796261803424e-21,
+                      "error": 1.9408933741203469e-22,
+                      "relative_error_percent": 2.937203925493348,
+                      "chi_sq_per_dof": 0.7420891680909655,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.0074670870180620855
+                    }
+                  ],
+                  "max_weight_info": [
+                    {
+                      "component": "re",
+                      "sign": "+",
+                      "max_eval": 1.2917383998031293,
+                      "coordinates": "xs: [\n7.8250390866450303e-01 7.0328842896867061e-01 2.9038593905457610e-01\n3.7311805728583375e-01 1.5188979721000911e-01 3.4152983781283480e-01 ]"
+                    },
+                    {
+                      "component": "im",
+                      "sign": "+",
+                      "max_eval": 2.467111594048151e-18,
+                      "coordinates": "xs: [\n7.9997521035909713e-01 9.7568260706063181e-01 4.3342714201729116e-01\n3.7312695308831151e-01 6.3742141467662139e-01 4.1247894900641058e-01 ]"
+                    }
+                  ],
+                  "grid_breakdown": {
+                    "re": null,
+                    "im": null
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "auxiliary25k",
+          "mode": "thermodynamic_equilibrium",
+          "order": "nlo",
+          "source_result": "/tmp/thermal-inclusive-qcd-auxiliary25k-nlo-integral/integration_result.json",
+          "samples": 25000,
+          "seed": 314159,
+          "cores": 2,
+          "total_wall_seconds": 834,
+          "m_uv": 2,
+          "renormalization_localization_scale": 2,
+          "mu_r": 4,
+          "rho": 0.1215862178961115,
+          "rho_error": 0.006427918841162957,
+          "reference_rho": 0.10648332415676968,
+          "pull": 2.349577540187075,
+          "relative_mc_error": 0.052867166627843035,
+          "statistics": {
+            "num_evals": 25000,
+            "average_total_time_seconds": 0.064307792,
+            "average_parameterization_time_seconds": 0.000346642,
+            "average_integrand_time_seconds": 0.063735102,
+            "average_evaluator_time_seconds": 0.002337759,
+            "average_observable_time_seconds": 0.0,
+            "average_integrator_time_seconds": 6.3528e-05,
+            "f64_percentage": 88.604,
+            "f128_percentage": 11.396,
+            "arb_percentage": 0.0,
+            "nan_percentage": 0.0,
+            "nan_or_unstable_percentage": 0.0,
+            "generated_event_count": 0,
+            "accepted_event_count": 0,
+            "selection_efficiency_percentage": null
+          },
+          "raw_native_result": {
+            "slots": [
+              {
+                "key": "vector_nlo@NLO",
+                "process": "vector_nlo",
+                "integrand": "NLO",
+                "target": null,
+                "integral": {
+                  "neval": 25000,
+                  "real_zero": 2,
+                  "im_zero": 3573,
+                  "result": {
+                    "re": 0.003377394941558653,
+                    "im": 1.002395363173439e-22
+                  },
+                  "error": {
+                    "re": 0.00017855330114341548,
+                    "im": 5.818672841590749e-23
+                  },
+                  "real_chisq": 6.125238944686089,
+                  "im_chisq": 5.001135258292576
+                },
+                "table_results": [
+                  {
+                    "component": "re",
+                    "value": 0.003377394941558653,
+                    "error": 0.00017855330114341548,
+                    "relative_error_percent": 5.286716662784303,
+                    "chi_sq_per_dof": 1.2250477889372178,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.007988990419089445
+                  },
+                  {
+                    "component": "im",
+                    "value": 1.002395363173439e-22,
+                    "error": 5.818672841590749e-23,
+                    "relative_error_percent": 58.04768313342622,
+                    "chi_sq_per_dof": 1.0002270516585152,
+                    "target_delta_sigma": null,
+                    "target_delta_percent": null,
+                    "max_weight_impact": 0.13461829219629218
+                  }
+                ],
+                "integration_statistics": {
+                  "num_evals": 25000,
+                  "average_total_time_seconds": 0.064307792,
+                  "average_parameterization_time_seconds": 0.000346642,
+                  "average_integrand_time_seconds": 0.063735102,
+                  "average_evaluator_time_seconds": 0.002337759,
+                  "average_observable_time_seconds": 0.0,
+                  "average_integrator_time_seconds": 6.3528e-05,
+                  "f64_percentage": 88.604,
+                  "f128_percentage": 11.396,
+                  "arb_percentage": 0.0,
+                  "nan_percentage": 0.0,
+                  "nan_or_unstable_percentage": 0.0,
+                  "generated_event_count": 0,
+                  "accepted_event_count": 0,
+                  "selection_efficiency_percentage": null
+                },
+                "max_weight_info": [
+                  {
+                    "component": "re",
+                    "sign": "+",
+                    "max_eval": 0.42855436258968255,
+                    "coordinates": "xs: [\n8.0647543570958713e-02 1.8276602445046375e-01 6.2135582507664044e-01\n4.2240518690790263e-01 2.1132981759095837e-02 9.7100514332246879e-01 ]"
+                  },
+                  {
+                    "component": "re",
+                    "sign": "-",
+                    "max_eval": -0.6745493957398309,
+                    "coordinates": "xs: [\n7.1287097284591816e-02 9.4323153323373710e-02 8.5459217974873802e-01\n3.1446384024448604e-01 4.1964651805961273e-01 9.3151731160792273e-01 ]"
+                  },
+                  {
+                    "component": "im",
+                    "sign": "+",
+                    "max_eval": 3.3735187973972604e-19,
+                    "coordinates": "xs: [\n8.0003903900630324e-01 4.0473045659027385e-01 1.1335390704845835e-01\n3.7365073069554761e-01 4.0546475619408828e-01 3.0929118502631464e-01 ]"
+                  },
+                  {
+                    "component": "im",
+                    "sign": "-",
+                    "max_eval": -1.9065837319009624e-19,
+                    "coordinates": "xs: [\n8.7483182009508709e-01 3.9750409558845590e-01 4.6183939789956235e-01\n2.7250544281955164e-01 8.3600072227113753e-01 3.5624573668966197e-01 ]"
+                  }
+                ],
+                "grid_breakdown": {
+                  "re": null,
+                  "im": null
+                },
+                "absolute": {
+                  "integral": {
+                    "neval": 25000,
+                    "real_zero": 2,
+                    "im_zero": 3573,
+                    "result": {
+                      "re": 0.03091643692828366,
+                      "im": 2.594140940140325e-21
+                    },
+                    "error": {
+                      "re": 0.0002463304539615993,
+                      "im": 6.396777005139876e-23
+                    },
+                    "real_chisq": 3.5685984304498106,
+                    "im_chisq": 4.195472723988658
+                  },
+                  "table_results": [
+                    {
+                      "component": "|re|",
+                      "value": 0.03091643692828366,
+                      "error": 0.0002463304539615993,
+                      "relative_error_percent": 0.7967621059729745,
+                      "chi_sq_per_dof": 0.7137196860899622,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.0008808457353321088
+                    },
+                    {
+                      "component": "|im|",
+                      "value": 2.594140940140325e-21,
+                      "error": 6.396777005139876e-23,
+                      "relative_error_percent": 2.465855615691357,
+                      "chi_sq_per_dof": 0.8390945447977316,
+                      "target_delta_sigma": null,
+                      "target_delta_percent": null,
+                      "max_weight_impact": 0.005201750984608842
+                    }
+                  ],
+                  "max_weight_info": [
+                    {
+                      "component": "re",
+                      "sign": "+",
+                      "max_eval": 0.6808152904985696,
+                      "coordinates": "xs: [\n7.1287097284591816e-02 9.4323153323373710e-02 8.5459217974873802e-01\n3.1446384024448604e-01 4.1964651805961273e-01 9.3151731160792273e-01 ]"
+                    },
+                    {
+                      "component": "im",
+                      "sign": "+",
+                      "max_eval": 3.3735187973972604e-19,
+                      "coordinates": "xs: [\n8.0003903900630324e-01 4.0473045659027385e-01 1.1335390704845835e-01\n3.7365073069554761e-01 4.0546475619408828e-01 3.0929118502631464e-01 ]"
+                    }
+                  ],
+                  "grid_breakdown": {
+                    "re": null,
+                    "im": null
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "pending": [],
+  "initial_focused_tests": {
+    "run_id": "d29eee02-e2ee-4044-971a-52dbe9788cda",
+    "profile": "ci-optim / ci_gammaloop",
+    "batch_tests": 45,
+    "batch_passed": 44,
+    "batch_failed": 1,
+    "batch_elapsed_seconds": 12.365,
+    "log": "/tmp/thermal-inclusive-first-tests.log",
+    "qcd_tests": {
+      "thermal_vector_current_lo_matches_fermi_phase_space": "passed",
+      "thermal_vector_current_nlo_retains_real_virtual_and_raised_cuts": "passed"
+    },
+    "separate_failure": "cff::hsurface::tests::signed_radial_compactification_retains_large_roots_and_excludes_infinity: synthetic very-large-root bracket materialization not sign-certified",
+    "scope": [
+      "LO independent pointwise Fermi phase-space oracle and deterministic integrated analytic trace",
+      "NLO GL0/GL2 real, virtual, raised, and crossed-cut structure",
+      "NLO inclusive and per-master finite point evaluations; event conservation and weight closure",
+      "Auxiliary scales 4 -> 2 -> 4, with saved-state reload and baseline replay"
+    ],
+    "timing_note": "Individual point/evaluator timings were not emitted by these tagged rows. Log timestamps include warm-up, command processing and reload, so they are not throughput measurements."
+  },
+  "focused_tests": {
+    "run_id": "07460a80-6bc8-4df6-b20a-d00fc0f77ac0",
+    "profile": "ci-optim / ci_gammaloop",
+    "batch_tests": 116,
+    "batch_passed": 116,
+    "batch_failed": 0,
+    "batch_elapsed_seconds": 64.499,
+    "log": "/tmp/thermal-inclusive-final-tests.log",
+    "qcd_tests": {
+      "thermal_vector_current_lo_matches_fermi_phase_space": "passed",
+      "thermal_vector_current_nlo_retains_real_virtual_and_raised_cuts": "passed"
+    },
+    "scope": [
+      "LO independent pointwise Fermi phase-space oracle and deterministic integrated analytic trace",
+      "NLO GL0/GL2 real, virtual, raised, and crossed-cut structure",
+      "NLO inclusive and per-master finite point evaluations; event conservation and weight closure",
+      "Auxiliary scales 4 -> 2 -> 4, with saved-state reload and baseline replay"
+    ],
+    "timing_note": "QCD point throughput was measured separately with the final CLI."
+  },
+  "cli": {
+    "binary": "/shared/codex-2/kaapo/gammaloop/gammaloop-thermal-rates/target/ci-optim/gammaloop",
+    "binary_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+    "verified_test_run": "07460a80-6bc8-4df6-b20a-d00fc0f77ac0",
+    "state": "/tmp/thermal-inclusive-qcd-final-state",
+    "card_sha256": "a6e676c19f116e661fad69a14fd4215f566ff2a226f4bfd853a60813075d8fd1",
+    "commands": [
+      {
+        "stage": "generate_export_inspect_save",
+        "command": "nix develop /tmp/thermal-rates-development-shell --command target/ci-optim/gammaloop -n -s /tmp/thermal-inclusive-qcd-final-state examples/cli/thermal_rates/qcd_vector/run.toml run model lo nlo export inspect save -D output=/tmp/thermal-inclusive-qcd-final",
+        "log": "/tmp/thermal-inclusive-qcd-final-generation.log",
+        "status": "passed",
+        "elapsed_seconds": 3
+      },
+      {
+        "stage": "point_benchmark",
+        "command": "nix develop /tmp/thermal-rates-development-shell --command target/ci-optim/gammaloop -n -s /tmp/thermal-inclusive-qcd-final-state bench -p vector_nlo -i NLO -m -x 0.17 -0.31 0.43 -0.29 0.53 0.71 --duration 2s --json-output /tmp/thermal-inclusive-qcd-final-bench.json",
+        "log": "/tmp/thermal-inclusive-qcd-final-bench.log",
+        "status": "passed",
+        "result": "/tmp/thermal-inclusive-qcd-final-bench.json"
+      },
+      {
+        "stage": "lo50k_nlo25k_pilot",
+        "command": "nix develop /tmp/thermal-rates-development-shell --command target/ci-optim/gammaloop -n -s /tmp/thermal-inclusive-qcd-final-state examples/cli/thermal_rates/qcd_vector/run.toml run integrate_lo integrate -D lo_samples=50000 -D samples=25000 -D batch=5000 -D cores=4 -D seed=191007552 -D output=/tmp/thermal-inclusive-qcd-pilot25k",
+        "log": "/tmp/thermal-inclusive-qcd-pilot25k.log",
+        "status": "passed",
+        "unified_session": 45598,
+        "elapsed_seconds": 400,
+        "exit_code": 0
+      },
+      {
+        "stage": "thermal_independent50k",
+        "command": "nix develop /tmp/thermal-rates-development-shell --command target/ci-optim/gammaloop -n --read-only-state -s /tmp/thermal-inclusive-qcd-final-state examples/cli/thermal_rates/qcd_vector/run.toml run integrate -D samples=50000 -D batch=5000 -D cores=4 -D seed=271828 -D output=/tmp/thermal-inclusive-qcd-independent50k",
+        "status": "passed",
+        "unified_session": 61446,
+        "log": "/tmp/thermal-inclusive-qcd-independent50k.log",
+        "elapsed_seconds": 841,
+        "exit_code": 0
+      },
+      {
+        "stage": "thermal_auxiliary25k",
+        "command": "nix develop /tmp/thermal-rates-development-shell --command target/ci-optim/gammaloop -n --read-only-state -s /tmp/thermal-inclusive-qcd-final-state examples/cli/thermal_rates/qcd_vector/run.toml run auxiliary_scales integrate -D samples=25000 -D batch=5000 -D cores=2 -D seed=314159 -D output=/tmp/thermal-inclusive-qcd-auxiliary25k",
+        "status": "passed",
+        "unified_session": 98833,
+        "log": "/tmp/thermal-inclusive-qcd-auxiliary25k.log",
+        "elapsed_seconds": 834,
+        "exit_code": 0
+      },
+      {
+        "stage": "vacuum_lo_nlo25k",
+        "command": "nix develop /tmp/thermal-rates-development-shell --command target/ci-optim/gammaloop -n -s /tmp/thermal-inclusive-qcd-final-vacuum-state examples/cli/thermal_rates/qcd_vector/run.toml run model lo nlo export inspect save integrate_lo integrate -D mode=vacuum -D lo_samples=25000 -D samples=25000 -D batch=5000 -D cores=2 -D seed=191007552 -D output=/tmp/thermal-inclusive-qcd-vacuum25k",
+        "status": "passed",
+        "unified_session": 95192,
+        "log": "/tmp/thermal-inclusive-qcd-vacuum25k.log",
+        "elapsed_seconds": 24,
+        "exit_code": 0
+      }
+    ]
+  },
+  "point_benchmark": {
+    "process_id": 1,
+    "integrand_name": "NLO",
+    "momentum_space": true,
+    "point": [
+      0.17,
+      -0.31,
+      0.43,
+      -0.29,
+      0.53,
+      0.71
+    ],
+    "discrete_dim": [],
+    "graph_name": null,
+    "orientation_id": null,
+    "target_seconds": 2.0,
+    "warmup_samples": 10,
+    "warmup_seconds": 0.104679173,
+    "total_samples": 192,
+    "n_batches": 10,
+    "minimal_integrand": false,
+    "parameterization_jacobian": null,
+    "displayed_result": {
+      "re": -7.906301436272885e-05,
+      "im": 0.0
+    },
+    "batches": [
+      {
+        "parameterization": 4.5195e-06,
+        "canonical_sampling": 1.5333950000000002e-05,
+        "integrand": 0.010059198200000001,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.00030166450000000005,
+        "other": 4.968900000000033e-05,
+        "total": 0.01043040515
+      },
+      {
+        "parameterization": 4.564000000000002e-06,
+        "canonical_sampling": 1.63725e-05,
+        "integrand": 0.01032731475,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.00031544290000000007,
+        "other": 5.4103249999997924e-05,
+        "total": 0.0107177974
+      },
+      {
+        "parameterization": 6.01373684210526e-06,
+        "canonical_sampling": 2.308542105263158e-05,
+        "integrand": 0.011490468578947366,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.00040869605263157895,
+        "other": 6.848436842105468e-05,
+        "total": 0.011996748157894737
+      },
+      {
+        "parameterization": 4.960578947368421e-06,
+        "canonical_sampling": 1.4117526315789473e-05,
+        "integrand": 0.01015241005263158,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.0003031542105263157,
+        "other": 4.958431578947278e-05,
+        "total": 0.010524226684210526
+      },
+      {
+        "parameterization": 4.343263157894734e-06,
+        "canonical_sampling": 1.3872736842105262e-05,
+        "integrand": 0.010004845947368418,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.00029389863157894735,
+        "other": 4.806173684210671e-05,
+        "total": 0.010365022315789472
+      },
+      {
+        "parameterization": 3.997736842105263e-06,
+        "canonical_sampling": 1.3480000000000001e-05,
+        "integrand": 0.009895846631578945,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.00029125084210526313,
+        "other": 4.647978947368639e-05,
+        "total": 0.010251055
+      },
+      {
+        "parameterization": 4.439105263157893e-06,
+        "canonical_sampling": 1.5561631578947367e-05,
+        "integrand": 0.010065427210526315,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.0003034218421052631,
+        "other": 5.125173684210338e-05,
+        "total": 0.010440101526315788
+      },
+      {
+        "parameterization": 4.767894736842102e-06,
+        "canonical_sampling": 1.710478947368421e-05,
+        "integrand": 0.010281369999999998,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.00035159173684210524,
+        "other": 5.5132473684212785e-05,
+        "total": 0.010709966894736841
+      },
+      {
+        "parameterization": 3.99473684210526e-06,
+        "canonical_sampling": 1.2405789473684213e-05,
+        "integrand": 0.009721857315789473,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.00027661773684210523,
+        "other": 4.3744368421054156e-05,
+        "total": 0.010058619947368421
+      },
+      {
+        "parameterization": 3.941999999999999e-06,
+        "canonical_sampling": 1.1189526315789473e-05,
+        "integrand": 0.009780153105263159,
+        "canonical_physical": 0.0,
+        "event_processing": 0.0,
+        "evaluator": 0.0002723745789473684,
+        "other": 4.299463157894645e-05,
+        "total": 0.010110653842105263
+      }
+    ],
+    "summary": [
+      {
+        "category": "sampling other",
+        "mean_seconds_per_sample": 4.5542552631578935e-06,
+        "standard_error_seconds_per_sample": 1.942946629129908e-07,
+        "percentage_of_total": 0.043125539948569006
+      },
+      {
+        "category": "canonical sampling",
+        "mean_seconds_per_sample": 1.5252387105263155e-05,
+        "standard_error_seconds_per_sample": 1.038628415449856e-06,
+        "percentage_of_total": 0.14442919674269045
+      },
+      {
+        "category": "physical other",
+        "mean_seconds_per_sample": 0.010177889179210527,
+        "standard_error_seconds_per_sample": 0.00015842756475448435,
+        "percentage_of_total": 96.37733087578461
+      },
+      {
+        "category": "canonical physical",
+        "mean_seconds_per_sample": 0.0,
+        "standard_error_seconds_per_sample": 0.0,
+        "percentage_of_total": 0.0
+      },
+      {
+        "category": "event processing",
+        "mean_seconds_per_sample": 0.0,
+        "standard_error_seconds_per_sample": 0.0,
+        "percentage_of_total": 0.0
+      },
+      {
+        "category": "evaluators",
+        "mean_seconds_per_sample": 0.00031181130315789473,
+        "standard_error_seconds_per_sample": 1.2809740518010952e-05,
+        "percentage_of_total": 2.9526300204409397
+      },
+      {
+        "category": "Total",
+        "mean_seconds_per_sample": 0.010560459691842104,
+        "standard_error_seconds_per_sample": 0.00017419148727220983,
+        "percentage_of_total": 100.0
+      }
+    ]
+  },
+  "standalone_inventory": [
+    {
+      "path": "/tmp/thermal-inclusive-qcd-final-standalone/processes/cross_sections/vector_lo/LO/standalone_cross_section.json",
+      "sha256": "ff009e87f20bd4c1c96ed73289ca10ad18ffa02d3e8a56af285c935f50f055eb",
+      "process": "vector_lo",
+      "graph": "GL0",
+      "orientations": 4,
+      "cut_groups": 3,
+      "lu_orders": {
+        "1": 3
+      },
+      "threshold_counterterms": 0
+    },
+    {
+      "path": "/tmp/thermal-inclusive-qcd-final-standalone/processes/cross_sections/vector_nlo/NLO/standalone_cross_section.json",
+      "sha256": "24d0d8543f41ab65a77d354a19aea287b939bfe50467b0f9daf8f6ce14780944",
+      "process": "vector_nlo",
+      "graph": "GL0",
+      "orientations": 32,
+      "cut_groups": 10,
+      "lu_orders": {
+        "1": 10,
+        "2": 3
+      },
+      "threshold_counterterms": 0
+    },
+    {
+      "path": "/tmp/thermal-inclusive-qcd-final-standalone/processes/cross_sections/vector_nlo/NLO/standalone_cross_section.json",
+      "sha256": "24d0d8543f41ab65a77d354a19aea287b939bfe50467b0f9daf8f6ce14780944",
+      "process": "vector_nlo",
+      "graph": "GL2",
+      "orientations": 32,
+      "cut_groups": 20,
+      "lu_orders": {
+        "1": 20
+      },
+      "threshold_counterterms": 0
+    }
+  ],
+  "integration_summary": {
+    "completed_integrations": 6,
+    "total_samples": 200000,
+    "final_nonfinite_samples": 0,
+    "final_nonfinite_or_unstable_samples": 0,
+    "largest_reference_pull": 2.349577540187075,
+    "auxiliary_vs_independent_thermal_pull": 1.6746954495415083,
+    "independent_thermal_nlo_relative_error": 0.036137967055089676,
+    "note": "Every independent result is retained. The auxiliary-scale control is 2.35 quoted errors above the reference and 1.67 combined errors above the independent thermal run; no result is selected away or averaged to hide this scatter."
+  },
+  "artifact_sha256": {
+    "/tmp/thermal-inclusive-qcd-pilot25k-lo-integral/integration_result.json": "4f50467ea5d92352c1a126b295eb865be8b9d72d2f55db8f7d7345b73b8bbf4d",
+    "/tmp/thermal-inclusive-qcd-pilot25k-nlo-integral/integration_result.json": "66de2f11722ad04af0125b015a287d3de3d797728da0fcb67bc2e7fa0c420bf6",
+    "/tmp/thermal-inclusive-qcd-vacuum25k-lo-integral/integration_result.json": "d99ff18a8ce6f9143da3779564ce119bafff171e8a7e17bfc94f70387bf9a0a8",
+    "/tmp/thermal-inclusive-qcd-vacuum25k-nlo-integral/integration_result.json": "6d669b0ccaefb3a980882c1ab9f8960ffacd591ea4c780ea42646a687c8f6ca6",
+    "/tmp/thermal-inclusive-qcd-independent50k-nlo-integral/integration_result.json": "55c11caf3c81b93a4294d7dc546dc7fb5e3603c9b5b51758080eff9ee374ccc3",
+    "/tmp/thermal-inclusive-qcd-auxiliary25k-nlo-integral/integration_result.json": "13cdc7cd7329ddbf1244196e858b96ac818f08ace012537ca4ed402c06562359"
+  },
+  "limitations": [
+    "Hard timelike K=(4,0,0,1), T=1, one massless quark flavor only; no claim of general soft/collinear safety, light-cone resummation, or thermal IR/threshold subtraction.",
+    "The current independent thermal NLO Monte Carlo uncertainty is 3.61percent, larger than the historical million-sample0.94percent result. The run-card0.2percent target was not reached and was not treated as a prerequisite.",
+    "Zero final discarded samples in these200000samples does not bound every unseen exceptional configuration. Intermediate nonfinite native attempts were recovered by ordinary precision escalation.",
+    "The auxiliary UV-scale control provides statistical compatibility at the quoted precision, not a high-precision scale-invariance certificate."
+  ]
+}

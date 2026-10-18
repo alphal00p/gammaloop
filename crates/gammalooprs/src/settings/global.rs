@@ -11,7 +11,6 @@ pub use three_dimensional_reps::MediumMode;
 use crate::{
     GammaLoopContext,
     cff::{expression::OrientationSelector, orientations::GraphOrientation},
-    feyngen::GenerationType,
     processes::EvaluatorSettings,
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
@@ -68,27 +67,17 @@ pub struct GenerationSettings {
     /// Sum all generated residue branches explicitly, removing runtime orientation selectors.
     #[serde(skip_serializing_if = "is_false")]
     pub explicit_orientation_sum_only: bool,
-    /// Medium for amplitudes and restricted finite-temperature cross sections. Medium amplitudes
-    /// use local 3D UV subtraction when enabled; thermal cross sections disable UV subtraction.
-    /// Both disable threshold subtraction.
+    /// Medium for amplitudes and fully inclusive cross sections. Both reuse local 3D
+    /// UV subtraction and require threshold subtraction disabled in thermal modes.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub medium: MediumSettings,
 }
 
 impl GenerationSettings {
-    pub fn validate_for_process(&self, generation_type: GenerationType) -> EyreResult<()> {
+    pub fn validate(&self) -> EyreResult<()> {
         if self.medium.mode == MediumMode::Vacuum && self.medium.vacuum_subtraction {
             return Err(eyre!(
                 "`global.generation.medium.vacuum_subtraction = true` requires a medium mode other than `vacuum`"
-            ));
-        }
-
-        if generation_type == GenerationType::CrossSection
-            && self.medium.mode != MediumMode::Vacuum
-            && (self.uv.subtract_uv || self.threshold_subtraction.enable_thresholds)
-        {
-            return Err(eyre!(
-                "Thermal `xs` requires UV and threshold subtraction disabled"
             ));
         }
 
@@ -130,13 +119,11 @@ impl GenerationSettings {
 
 #[cfg(test)]
 mod generation_settings_tests {
-    use super::{GenerationSettings, GenerationType, MediumMode, OrientationPattern};
+    use super::{GenerationSettings, MediumMode, OrientationPattern};
 
     #[test]
-    fn cross_sections_validate_supported_thermal_settings() {
-        GenerationSettings::default()
-            .validate_for_process(GenerationType::CrossSection)
-            .unwrap();
+    fn inclusive_thermal_settings_reuse_local_uv_subtraction() {
+        GenerationSettings::default().validate().unwrap();
 
         for mode in [
             MediumMode::ThermodynamicEquilibrium,
@@ -150,15 +137,19 @@ mod generation_settings_tests {
                         settings.medium.vacuum_subtraction = vacuum_subtraction;
                         settings.uv.subtract_uv = subtract_uv;
                         settings.threshold_subtraction.enable_thresholds = enable_thresholds;
-                        let result = settings.validate_for_process(GenerationType::CrossSection);
-                        let supported = !subtract_uv && !enable_thresholds;
+                        let result = settings.validate();
+                        let supported = !enable_thresholds;
                         assert_eq!(
                             result.is_ok(),
                             supported,
                             "mode={mode:?}, vacuum_subtraction={vacuum_subtraction}, subtract_uv={subtract_uv}, enable_thresholds={enable_thresholds}"
                         );
                         if let Err(error) = result {
-                            assert!(error.to_string().contains("Thermal `xs`"));
+                            assert!(
+                                error
+                                    .to_string()
+                                    .contains("Threshold subtraction is not supported")
+                            );
                         }
                     }
                 }
@@ -177,9 +168,7 @@ mod generation_settings_tests {
                 settings.medium.mode = mode;
                 settings.medium.vacuum_subtraction = vacuum_subtraction;
 
-                let error = settings
-                    .validate_for_process(GenerationType::Amplitude)
-                    .unwrap_err();
+                let error = settings.validate().unwrap_err();
                 assert!(
                     error
                         .to_string()
@@ -192,9 +181,7 @@ mod generation_settings_tests {
                 );
 
                 settings.threshold_subtraction.enable_thresholds = false;
-                settings
-                    .validate_for_process(GenerationType::Amplitude)
-                    .unwrap();
+                settings.validate().unwrap();
             }
         }
     }
@@ -203,11 +190,9 @@ mod generation_settings_tests {
     fn vacuum_subtraction_requires_a_medium_mode() {
         let mut settings = GenerationSettings::default();
         settings.medium.vacuum_subtraction = true;
-        for generation_type in [GenerationType::Amplitude, GenerationType::CrossSection] {
-            let error = settings.validate_for_process(generation_type).unwrap_err();
-            assert!(error.to_string().contains("vacuum_subtraction = true"));
-            assert!(error.to_string().contains("other than `vacuum`"));
-        }
+        let error = settings.validate().unwrap_err();
+        assert!(error.to_string().contains("vacuum_subtraction = true"));
+        assert!(error.to_string().contains("other than `vacuum`"));
     }
 
     #[test]
@@ -222,15 +207,11 @@ mod generation_settings_tests {
             settings.medium.mode = mode;
             settings.medium.vacuum_subtraction = vacuum_subtraction;
             settings.threshold_subtraction.enable_thresholds = false;
-            settings
-                .validate_for_process(GenerationType::Amplitude)
-                .unwrap();
+            settings.validate().unwrap();
 
             settings.explicit_orientation_sum_only = true;
             settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
-            let error = settings
-                .validate_for_process(GenerationType::Amplitude)
-                .unwrap_err();
+            let error = settings.validate().unwrap_err();
             assert!(
                 error
                     .to_string()
@@ -244,9 +225,7 @@ mod generation_settings_tests {
         let mut settings = GenerationSettings::default();
         settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
 
-        let error = settings
-            .validate_for_process(GenerationType::Amplitude)
-            .unwrap_err();
+        let error = settings.validate().unwrap_err();
         assert!(
             error
                 .to_string()
@@ -254,14 +233,10 @@ mod generation_settings_tests {
         );
 
         settings.explicit_orientation_sum_only = true;
-        settings
-            .validate_for_process(GenerationType::Amplitude)
-            .unwrap();
+        settings.validate().unwrap();
 
         settings.orientation_pattern = OrientationPattern::from_user_pattern("(+,-)").unwrap();
-        let error = settings
-            .validate_for_process(GenerationType::Amplitude)
-            .unwrap_err();
+        let error = settings.validate().unwrap_err();
         assert!(
             error
                 .to_string()

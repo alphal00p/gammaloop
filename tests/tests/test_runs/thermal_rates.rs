@@ -280,3 +280,144 @@ max = 1
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
+
+#[test]
+fn inclusive_thermal_scattering_reuses_two_particle_flux_and_cut_pipeline() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let root =
+        get_tests_workspace_path().join(format!("thermal_scattering_{}", std::process::id()));
+    let mut cli = get_test_cli(None, &root, None, true)?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model ./examples/cli/thermal_rates/scalar_sunset/model.json",
+            "set global kv global.n_cores.feyngen=1 global.n_cores.generate=1 global.n_cores.compile=1 global.n_cores.integrate=1",
+            "set global kv global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.uv.softct=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true",
+            "set global kv global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true global.generation.evaluator.iterative_orientation_optimization=false",
+            r#"set default-runtime string '
+[general]
+evaluator_method = "SummedFunctionMap"
+integral_unit = "none"
+inverse_temperature = 1.0
+generate_events = true
+[kinematics]
+e_cm = 2.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[1.0,0.0,0.0,1.0],[1.0,0.0,0.0,-1.0]]
+helicities = [0,0]
+[subtraction]
+disable_threshold_subtraction = true
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+[h_function]
+function = "poly_exponential"
+sigma = 1.0
+'"#,
+        ],
+    )?;
+    for (process, mode) in [
+        ("vacuum", "vacuum"),
+        ("thermal", "thermodynamic_equilibrium"),
+    ] {
+        cli.run_command(&format!(
+            "set global kv global.generation.medium.mode={mode}"
+        ))?;
+        cli.run_command(&format!(
+            "generate xs B1 B2 > B3 X FI^2==2 [{{{{1}}}}] -p {process} -i LO"
+        ))?;
+        cli.run_command(&format!("generate existing -p {process} -i LO"))?;
+    }
+    // The two-body cut has energies 3/4 and 5/4 in the bath frame. This is
+    // an equilibrium spectral weight, with no integration over incoming baths.
+    let enhancement = 1.0 + 1.0 / 0.75_f64.exp_m1() + 1.0 / 1.25_f64.exp_m1();
+    let mut integrals = Vec::new();
+    for process in ["vacuum", "thermal"] {
+        let (process_id, integrand_name) = cli.state.find_integrand_ref(
+            Some(&ProcessRef::Unqualified(process.into())),
+            Some(&"LO".into()),
+        )?;
+        let mut estimates = Vec::new();
+        for count in [128, 256] {
+            let mut coordinates = Vec::new();
+            let mut weights = Vec::new();
+            for index in 0..count {
+                let x = (index as f64 + 0.5) / count as f64;
+                let radius = 0.75 * x / (1.0 - x);
+                coordinates.extend([0.6 * radius, 0.8 * radius, 0.0]);
+                weights.push(4.0 * PI * radius.powi(2) * 0.75 / (1.0 - x).powi(2) / count as f64);
+            }
+            let points = ndarray::Array2::from_shape_vec((count, 3), coordinates)?;
+            let discrete = ndarray::Array2::<usize>::zeros((count, 0));
+            let batch = EvaluateSamples {
+                process_id: Some(process_id),
+                integrand_name: Some(integrand_name.clone()),
+                use_arb_prec: false,
+                minimal_output: false,
+                return_generated_events: Some(true),
+                momentum_space: true,
+                points: points.view(),
+                integrator_weights: None,
+                discrete_dims: Some(discrete.view()),
+                graph_names: None,
+                orientations: None,
+            }
+            .run(&mut cli.state)?;
+            let mut integral = 0.0;
+            for (sample, weight) in batch.samples.into_iter().zip(weights) {
+                let evaluation = sample.evaluation;
+                let value = evaluation.integrand_result;
+                assert!(value.re.0.is_finite() && value.im.0.abs() < 1e-12);
+                let mut event_sum = 0.0;
+                for event in evaluation
+                    .event_groups
+                    .iter()
+                    .flat_map(|group| group.iter())
+                {
+                    assert_eq!(event.kinematic_configuration.0.len(), 2);
+                    assert_eq!(event.kinematic_configuration.1.len(), 2);
+                    let mut residual = [0.0; 4];
+                    for (sign, momenta) in [
+                        (1.0, event.kinematic_configuration.0.as_slice()),
+                        (-1.0, event.kinematic_configuration.1.as_slice()),
+                    ] {
+                        for p in momenta {
+                            for (sum, component) in residual.iter_mut().zip([
+                                p.temporal.value.0,
+                                p.spatial.px.0,
+                                p.spatial.py.0,
+                                p.spatial.pz.0,
+                            ]) {
+                                *sum += sign * component;
+                            }
+                        }
+                    }
+                    assert!(residual.iter().all(|x| x.abs() < 1e-10));
+                    event_sum += event.weight.re.0;
+                }
+                assert!((event_sum - value.re.0).abs() < 1e-14 + 1e-10 * value.re.0.abs());
+                integral += value.re.0 * weight;
+            }
+            estimates.push(integral);
+        }
+        let extrapolated = (4.0 * estimates[1] - estimates[0]) / 3.0;
+        let expected = 3.0 / (256.0 * PI)
+            * if process == "thermal" {
+                enhancement
+            } else {
+                1.0
+            };
+        assert!(
+            (extrapolated / expected - 1.0).abs() < 1e-8,
+            "{process}: {estimates:?}, expected {expected}"
+        );
+        integrals.push(extrapolated);
+    }
+    assert!((integrals[1] / integrals[0] - enhancement).abs() < 1e-12);
+    clean_test(&root);
+    Ok(())
+}

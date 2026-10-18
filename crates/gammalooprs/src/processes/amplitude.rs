@@ -30,7 +30,6 @@ use crate::{
         CutCFFIndex,
         esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
     },
-    feyngen::GenerationType,
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
         cuts::{CutSet, ResidueSelector},
@@ -388,7 +387,7 @@ impl Amplitude {
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
-        settings.validate_for_process(GenerationType::Amplitude)?;
+        settings.validate()?;
         // preprocess each graph individually
         // Threshold directives of every member use the master's edge IDs and topology.
         // The supplied graph group is responsible for aligning their physical meaning.

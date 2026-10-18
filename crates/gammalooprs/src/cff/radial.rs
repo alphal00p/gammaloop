@@ -1,18 +1,12 @@
 //! Retained affine energy equations shared by LU roots, jets and host certificates.
 
-use std::sync::Arc;
-
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
 use rug::{Float, float::Round};
-use symbolica::{
-    domains::{
-        dual::HyperDual,
-        float::{Float as SymbolicaFloat, FloatLike as SymFloatLike, Real},
-        rational::{Q, Rational},
-    },
-    poly::{PolyVariable, PolynomialResultant, polynomial::MultivariatePolynomial},
+use symbolica::domains::{
+    dual::HyperDual,
+    float::{FloatLike as SymFloatLike, Real},
 };
 
 use super::esurface::{Esurface, ExternalShift};
@@ -683,11 +677,11 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
     }
 
     /// Enumerate simple positive roots of the represented affine-energy equation.
-    /// The one-curved-energy chart has a quadratic elimination; broader charts use
-    /// exact rational resultants and certified polynomial root isolation. Directed
-    /// checks of the original equation remove the extra square-root sheets.
-    /// Unresolved tangencies, algebraic degeneracies and excessive elimination
-    /// degree fail explicitly; no finite scan is used to infer root completeness.
+    /// Directed value and derivative enclosures on a compactified half-line
+    /// certify every empty cell and isolate every simple crossing. Convex
+    /// positive-E rays retain their native interior shortcut. Unresolved
+    /// tangencies, cusps and exhausted work or precision budgets are errors,
+    /// never evidence that a channel is absent.
     pub(crate) fn positive_radius_roots(
         &self,
         e_cm: &F<T>,
@@ -727,7 +721,9 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
                         || (velocity == &-previous.velocity.clone()
                             && offset == &-previous.offset.clone()))
             }) {
-                *multiplicity += energy.coefficient;
+                *multiplicity = multiplicity
+                    .checked_add(energy.coefficient)
+                    .ok_or_else(|| uncertain("energy multiplicity overflow"))?;
             } else {
                 terms.push((energy.coefficient, energy));
             }
@@ -743,7 +739,7 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
         {
             // Convex positive-E geometry gives a unique outward crossing from
             // an interior origin. Keep its inexpensive native LU policy for
-            // arbitrary multiplicity; no elimination polynomial is needed.
+            // arbitrary multiplicity; no subdivision is needed.
             let origin = Self::enclosed_native(&zero);
             let value = self.evaluate_interval(&origin, false)?.0;
             if value[1] < 0 {
@@ -756,7 +752,7 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
             }
             // An exterior origin with nonnegative slope cannot intersect a
             // convex E-surface in the positive direction. Require smooth
-            // energies here; origin cusps remain with algebraic isolation.
+            // energies here; origin cusps remain with interval isolation.
             if value[0] > 0
                 && self.energies.iter().all(|energy| {
                     energy.mass != zero
@@ -770,298 +766,315 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
             }
         }
 
-        // Share the existing directed arithmetic. The classification below is
-        // about the represented ray, and does not infer a missing root from a
-        // failed Newton iteration or a floating-point discriminant alone.
+        // Compactify the complete positive ray: r=u/(1-u), 0<u<1.
+        // Each (1-u)E(r) is the Euclidean norm of the affine four-vector
+        // ((1-u)b+uv, (1-u)m). Its convexity bounds its derivative by the
+        // one-sided endpoint derivatives, even when the signed sum is not convex.
         let add = Self::enclosed_add;
         let mul = Self::enclosed_mul;
         let square = Self::enclosed_square;
         let native = Self::enclosed_native;
-        let neg = |x: &[Float; 2]| [-x[1].clone(), -x[0].clone()];
-        let scale = |x: &[Float; 2], factor: i64| mul(x, &native(&zero.from_i64(factor)));
-        let sqrt = |x: &[Float; 2]| -> eyre::Result<[Float; 2]> {
-            if x[0] < 0 || x.iter().any(|value| !value.is_finite()) {
-                return Err(uncertain("an energy or discriminant is not sign-certified"));
-            }
-            Ok([
-                Float::with_val_round(x[0].prec(), x[0].sqrt_ref(), Round::Down).0,
-                Float::with_val_round(x[1].prec(), x[1].sqrt_ref(), Round::Up).0,
-            ])
+        let neg = |value: &[Float; 2]| [-value[1].clone(), -value[0].clone()];
+        let precision = Self::ENCLOSURE_PRECISION;
+        let exact_zero = Float::with_val(precision, 0);
+        let exact_one = Float::with_val(precision, 1);
+        let point = |value: &Float| [value.clone(), value.clone()];
+        let scale = |value: &[Float; 2], coefficient: i64| {
+            mul(value, &point(&Float::with_val(precision, coefficient)))
         };
-        let sign = |x: &[Float; 2]| -> eyre::Result<i64> {
-            if x.iter().any(|value| !value.is_finite()) {
-                Err(uncertain("nonfinite coefficient enclosure"))
-            } else if x[0] > 0 {
-                Ok(1)
-            } else if x[1] < 0 {
-                Ok(-1)
-            } else if x[0] == 0 && x[1] == 0 {
-                Ok(0)
-            } else {
-                Err(uncertain(
-                    "a coefficient sign is unresolved at the current precision",
-                ))
-            }
+        let sqrt = |value: &[Float; 2]| {
+            [
+                Float::with_val_round(precision, value[0].sqrt_ref(), Round::Down).0,
+                Float::with_val_round(precision, value[1].sqrt_ref(), Round::Up).0,
+            ]
         };
-        let divide = |x: &[Float; 2], y: &[Float; 2]| -> eyre::Result<[Float; 2]> {
-            match sign(y)? {
-                1 => Ok(Self::enclosed_divide(x, y)),
-                -1 => Ok(Self::enclosed_divide(&neg(x), &neg(y))),
-                _ => Err(uncertain("a degenerate equation cannot be divided")),
-            }
-        };
-        let coefficients = |v: &ThreeMomentum<F<T>>, b: &ThreeMomentum<F<T>>, mass: &F<T>| {
-            let mut a = native(&zero);
-            let mut dot = native(&zero);
-            let mut c = square(&native(mass));
-            for (velocity, offset) in [&v.px, &v.py, &v.pz].into_iter().zip([&b.px, &b.py, &b.pz]) {
-                let velocity = native(velocity);
-                let offset = native(offset);
-                a = add(&a, &square(&velocity));
-                dot = add(&dot, &mul(&velocity, &offset));
-                c = add(&c, &square(&offset));
-            }
-            (a, dot, c)
-        };
-        let is_zero_vector = |v: &ThreeMomentum<F<T>>| v.px == zero && v.py == zero && v.pz == zero;
-        let mut slope = native(&zero);
-        let mut shift = native(&self.shift);
-        let mut curved = None;
-        let mut multiple_curved = false;
-        for (index, (multiplicity, energy)) in terms.iter().enumerate() {
-            let (velocity, offset, mass) = (&energy.velocity, &energy.offset, &energy.mass);
-            let (a, _, c) = coefficients(velocity, offset, mass);
-            if is_zero_vector(velocity) {
-                shift = add(&shift, &scale(&sqrt(&c)?, *multiplicity));
-            } else if is_zero_vector(offset) && mass == &zero {
-                slope = add(&slope, &scale(&sqrt(&a)?, *multiplicity));
-            } else if curved.replace(index).is_some() {
-                multiple_curved = true;
-            }
-        }
-
-        let linear_roots = |a: &[Float; 2], b: &[Float; 2]| -> eyre::Result<Vec<[Float; 2]>> {
-            if sign(a)? == 0 {
-                return if sign(b)? == 0 {
-                    Err(uncertain(
-                        "the radial equation is identically zero or algebraically degenerate",
-                    ))
-                } else {
-                    Ok(Vec::new())
-                };
-            }
-            Ok(vec![divide(&neg(b), a)?])
-        };
-        let mut candidates = if multiple_curved {
-            // Eliminate E_i from sum(c_i E_i) + shift = 0 and
-            // E_i² = |v_i r + b_i|² + m_i². Build these quadratics from the
-            // exact represented components, never from rounded energy norms.
-            // The degree grows exponentially; exceeding this explicit resource
-            // bound is uncertainty, not evidence of a kinematically closed cut.
-            if terms.len() > 6 {
-                return Err(uncertain(
-                    "exact isolation supports at most six distinct affine energies",
-                ));
-            }
-            let exact = |value: &F<T>| -> eyre::Result<Rational> {
-                let value = value.to_arb_exact()?;
-                Ok(SymbolicaFloat::from(&value.0).to_rational())
-            };
-            let variables = Arc::new((0..=terms.len()).map(PolyVariable::Temporary).collect());
-            let mut polynomial = MultivariatePolynomial::<Q, u16>::new(&Q, None, variables);
-            let mut powers = vec![0; terms.len() + 1];
-            polynomial.append_monomial(exact(&self.shift)?, &powers);
-            for (index, (multiplicity, _)) in terms.iter().enumerate() {
-                powers[index + 1] = 1;
-                polynomial.append_monomial((*multiplicity).into(), &powers);
-                powers[index + 1] = 0;
-            }
-            for (index, (_, energy)) in terms.iter().enumerate() {
-                let mass = exact(&energy.mass)?;
-                let mut a = Rational::zero();
-                let mut b = Rational::zero();
-                let mut c = &mass * &mass;
-                for (velocity, offset) in [
-                    &energy.velocity.px,
-                    &energy.velocity.py,
-                    &energy.velocity.pz,
-                ]
-                .into_iter()
-                .zip([&energy.offset.px, &energy.offset.py, &energy.offset.pz])
-                {
-                    let velocity = exact(velocity)?;
-                    let offset = exact(offset)?;
-                    a += &velocity * &velocity;
-                    b += &velocity * &offset;
-                    c += &offset * &offset;
-                }
-                let mut relation = polynomial.zero();
-                relation.append_monomial(-c, &powers);
-                powers[0] = 1;
-                relation.append_monomial(-b * Rational::from(2), &powers);
-                powers[0] = 2;
-                relation.append_monomial(-a, &powers);
-                powers[0] = 0;
-                powers[index + 1] = 2;
-                relation.append_monomial(Rational::one(), &powers);
-                powers[index + 1] = 0;
-                polynomial = Q::resultant(&polynomial, &relation, index + 1);
-            }
-            if polynomial.is_zero() {
-                return Err(uncertain(
-                    "the elimination polynomial is identically zero; the radical dependencies are unresolved",
-                ));
-            }
-            let polynomial = polynomial.to_univariate_from_univariate(0);
-            let isolation_precision = e_cm.get_precision().saturating_add(64).clamp(128, 1024);
-            let tolerance = Rational::from((1, 2)).pow(u64::from(isolation_precision));
-            polynomial
-                .isolate_real_root_intervals()
-                .into_iter()
-                .filter(|(_, upper, _)| upper > &Rational::zero())
-                .map(|(lower, upper, _)| {
-                    let (lower, upper) =
-                        polynomial.refine_root_interval((lower, upper), &tolerance);
-                    // Keep conversion independent of Symbolica's integer backend.
-                    let lower = rug::Rational::from_str_radix(&lower.to_string(), 10)?;
-                    let upper = rug::Rational::from_str_radix(&upper.to_string(), 10)?;
-                    Ok([
-                        Float::with_val_round(Self::ENCLOSURE_PRECISION, lower, Round::Down).0,
-                        Float::with_val_round(Self::ENCLOSURE_PRECISION, upper, Round::Up).0,
-                    ])
-                })
-                .collect::<eyre::Result<Vec<_>>>()?
-        } else if let Some(index) = curved {
-            let (multiplicity, energy) = &terms[index];
-            let (velocity, offset, mass) = (&energy.velocity, &energy.offset, &energy.mass);
-            let signed_slope = scale(&slope, *multiplicity);
-            let signed_shift = scale(&shift, *multiplicity);
-            if signed_slope[0] >= 0
-                && signed_shift[0] >= 0
-                && (signed_slope[0] > 0 || signed_shift[0] > 0)
-            {
-                // The unsquared equation cannot vanish on the positive ray:
-                // its affine part has the same strict sign as the radical.
-                return Ok(Vec::new());
-            }
-            let (a, b, c) = coefficients(velocity, offset, mass);
-            let multiplicity_squared = multiplicity * multiplicity;
-            let quadratic = add(&square(&slope), &neg(&scale(&a, multiplicity_squared)));
-            let linear = scale(
-                &add(&mul(&slope, &shift), &neg(&scale(&b, multiplicity_squared))),
-                2,
-            );
-            let constant = add(&square(&shift), &neg(&scale(&c, multiplicity_squared)));
-            if sign(&quadratic)? == 0 {
-                linear_roots(&linear, &constant)?
-            } else if sign(&constant)? == 0 {
-                // The other polynomial root is exactly the excluded endpoint r=0.
-                linear_roots(&quadratic, &linear)?
-            } else {
-                let discriminant = add(
-                    &square(&linear),
-                    &neg(&scale(&mul(&quadratic, &constant), 4)),
+        let compactified = terms
+            .iter()
+            .map(|(coefficient, energy)| {
+                let origin = [
+                    native(&energy.offset.px),
+                    native(&energy.offset.py),
+                    native(&energy.offset.pz),
+                    native(&energy.mass),
+                ];
+                let end = [
+                    native(&energy.velocity.px),
+                    native(&energy.velocity.py),
+                    native(&energy.velocity.pz),
+                    point(&exact_zero),
+                ];
+                let direction: [_; 4] =
+                    std::array::from_fn(|axis| add(&end[axis], &neg(&origin[axis])));
+                let speed = sqrt(
+                    &direction
+                        .iter()
+                        .fold(point(&exact_zero), |sum, value| add(&sum, &square(value))),
                 );
-                match sign(&discriminant)? {
-                    -1 => Vec::new(),
-                    0 => {
-                        let root = divide(&neg(&linear), &scale(&quadratic, 2))?;
-                        if root[1] <= 0 {
-                            Vec::new()
-                        } else {
-                            return Err(uncertain(
-                                "a positive tangent or unresolved repeated root is not a simple cut",
-                            ));
+                (*coefficient, origin, end, direction, speed)
+            })
+            .collect::<Vec<_>>();
+        if compactified.is_empty() {
+            return if self.shift == zero {
+                Err(uncertain("the radial equation is identically zero"))
+            } else {
+                Ok(Vec::new())
+            };
+        }
+        let shift = native(&self.shift);
+        let endpoint = |u: &Float| -> eyre::Result<_> {
+            let remainder = add(&point(&exact_one), &neg(&point(u)));
+            let mut value = mul(&shift, &remainder);
+            let mut data = Vec::with_capacity(compactified.len());
+            // Exact equal squared norms at an endpoint share one radical.
+            // In particular, massive energies with equal velocities can cancel
+            // at u=1. Do not replace such exact cancellation by a rounding band
+            // which would make the excluded infinite endpoint look like a root.
+            let mut exact_norms: Vec<(Float, i64)> = Vec::new();
+            for (coefficient, origin, end, direction, speed) in &compactified {
+                let vector: [_; 4] = std::array::from_fn(|axis| {
+                    add(&mul(&origin[axis], &remainder), &mul(&end[axis], &point(u)))
+                });
+                let norm = vector.iter().fold(point(&exact_zero), |sum, component| {
+                    add(&sum, &square(component))
+                });
+                let energy = sqrt(&norm);
+                if norm[0] == norm[1] {
+                    if let Some((_, previous)) = exact_norms.iter_mut().find(|(n, _)| *n == norm[0])
+                    {
+                        *previous = previous
+                            .checked_add(*coefficient)
+                            .ok_or_else(|| uncertain("energy multiplicity overflow"))?;
+                    } else {
+                        exact_norms.push((norm[0].clone(), *coefficient));
+                    }
+                } else {
+                    value = add(&value, &scale(&energy, *coefficient));
+                }
+                let (left, right) = if energy[0] > 0 {
+                    let numerator = vector
+                        .iter()
+                        .zip(direction)
+                        .fold(point(&exact_zero), |sum, (q, v)| add(&sum, &mul(q, v)));
+                    let derivative = Self::enclosed_divide(&numerator, &energy);
+                    (derivative.clone(), derivative)
+                } else if energy[1] == 0 {
+                    // At an exact zero of a norm the left/right derivatives
+                    // are -/+ the affine speed; a constant zero has both zero.
+                    (neg(speed), speed.clone())
+                } else {
+                    // A rounded enclosure touching zero has no resolved side.
+                    let bound = [-speed[1].clone(), speed[1].clone()];
+                    (bound.clone(), bound)
+                };
+                data.push((
+                    scale(&left, *coefficient),
+                    scale(&right, *coefficient),
+                    vector,
+                ));
+            }
+            for (norm, coefficient) in exact_norms {
+                if coefficient != 0 {
+                    value = add(&value, &scale(&sqrt(&point(&norm)), coefficient));
+                }
+            }
+            if value
+                .iter()
+                .chain(
+                    data.iter()
+                        .flat_map(|(left, right, _)| left.iter().chain(right)),
+                )
+                .any(|number| !number.is_finite())
+            {
+                return Err(uncertain("nonfinite compactified energy enclosure"));
+            }
+            Ok((value, data))
+        };
+        let mut pending = vec![(
+            exact_zero.clone(),
+            exact_one.clone(),
+            endpoint(&exact_zero)?,
+            endpoint(&exact_one)?,
+        )];
+        let mut brackets = Vec::new();
+        let mut visited = 0;
+        while let Some((left, right, left_data, right_data)) = pending.pop() {
+            visited += 1;
+            if visited > 65536 {
+                return Err(uncertain(
+                    "cannot isolate all simple roots within the subdivision budget; tangent or unresolved geometry",
+                ));
+            }
+            let mut derivative = neg(&shift);
+            let mut analytic = true;
+            for (
+                ((coefficient, origin, end, _, _), (_, left_slope, left_vector)),
+                (right_slope, _, right_vector),
+            ) in compactified.iter().zip(&left_data.1).zip(&right_data.1)
+            {
+                let bound = if *coefficient > 0 {
+                    [left_slope[0].clone(), right_slope[1].clone()]
+                } else {
+                    [right_slope[0].clone(), left_slope[1].clone()]
+                };
+                derivative = add(&derivative, &bound);
+                // A nonzero affine component throughout the open cell excludes
+                // a cusp. Constant zero energies are harmless. Analyticity lets
+                // a monotone, nonconstant cell exclude a zero endpoint without
+                // mistaking a piecewise-linear zero plateau for an absent cut.
+                analytic &= origin.iter().chain(end).flatten().all(|x| *x == 0)
+                    || left_vector.iter().zip(right_vector).any(|(a, b)| {
+                        (a[0] >= 0 && b[0] >= 0 && (a[0] > 0 || b[0] > 0))
+                            || (a[1] <= 0 && b[1] <= 0 && (a[1] < 0 || b[1] < 0))
+                    });
+            }
+            let increasing = derivative[0] >= 0;
+            let decreasing = derivative[1] <= 0;
+            let left_value = &left_data.0;
+            let right_value = &right_data.0;
+            if (increasing && (left_value[0] > 0 || right_value[1] < 0))
+                || (decreasing && (left_value[1] < 0 || right_value[0] > 0))
+                || (analytic
+                    && ((increasing
+                        && ((left_value[0] >= 0 && right_value[0] > 0)
+                            || (right_value[1] <= 0 && left_value[1] < 0)))
+                        || (decreasing
+                            && ((left_value[1] <= 0 && right_value[1] < 0)
+                                || (right_value[0] >= 0 && left_value[0] > 0)))))
+            {
+                continue;
+            }
+            if analytic {
+                let crossing = if derivative[0] > 0 && left_value[1] < 0 && right_value[0] > 0 {
+                    Some(1)
+                } else if derivative[1] < 0 && left_value[0] > 0 && right_value[1] < 0 {
+                    Some(-1)
+                } else {
+                    None
+                };
+                if let Some(crossing) = crossing {
+                    let mut upper = right.clone();
+                    if upper == exact_one {
+                        // This whole cell already has exactly one root. Find a
+                        // finite upper endpoint while retaining its certified
+                        // lower endpoint; contracting both sides toward u=1
+                        // can round a large root's lower radius onto the root.
+                        let mut probe = left.clone();
+                        loop {
+                            let next = Float::with_val(precision, &probe + &right) / 2;
+                            visited += 1;
+                            if next == probe || next == right || visited > 65536 {
+                                return Err(uncertain(
+                                    "cannot separate a finite root from infinity",
+                                ));
+                            }
+                            let value = endpoint(&next)?.0;
+                            if (crossing > 0 && value[0] > 0) || (crossing < 0 && value[1] < 0) {
+                                upper = next;
+                                break;
+                            }
+                            probe = next;
                         }
                     }
-                    _ => {
-                        let radical = sqrt(&discriminant)?;
-                        [
-                            add(&neg(&linear), &neg(&radical)),
-                            add(&neg(&linear), &radical),
-                        ]
-                        .iter()
-                        .map(|numerator| divide(numerator, &scale(&quadratic, 2)))
-                        .collect::<eyre::Result<Vec<_>>>()?
-                    }
+                    brackets.push((left, upper, crossing));
+                    continue;
                 }
             }
-        } else {
-            linear_roots(&slope, &shift)?
-        };
-        candidates.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap());
-        if candidates.windows(2).any(|pair| pair[0][1] >= pair[1][0]) {
-            return Err(uncertain("distinct polynomial roots are not separated"));
-        }
-
-        let materialize = |interval: &[Float; 2]| -> eyre::Result<F<T>> {
-            let midpoint = Float::with_val(interval[0].prec(), &interval[0] + &interval[1]) / 2;
-            F::from_arb(&ArbPrec::from(midpoint))
-        };
-        let mut roots = Vec::new();
-        for (index, candidate) in candidates.iter().enumerate() {
-            if candidate[1] <= 0 {
-                continue;
-            }
-            if candidate[0] <= 0 {
+            let midpoint = Float::with_val(precision, &left + &right) / 2;
+            if midpoint == left || midpoint == right {
                 return Err(uncertain(
-                    "a root cannot be separated from the radial endpoint",
+                    "cannot separate a tangent, cusp, or unresolved root at enclosure precision",
                 ));
             }
-            // Elimination adds other square-root sheets. Exclude a candidate
-            // only when the unsquared equation is strictly separated from zero.
-            // Otherwise certify a crossing in its isolated polynomial-root cell.
-            let value = self.evaluate_interval(candidate, false)?.0;
-            if value[0] > 0 || value[1] < 0 {
+            let midpoint_data = endpoint(&midpoint)?;
+            if midpoint_data.0[0] == 0 && midpoint_data.0[1] == 0 {
+                let slope = midpoint_data
+                    .1
+                    .iter()
+                    .fold(neg(&shift), |sum, (_, right, _)| add(&sum, right));
+                if (slope[0] <= 0 && slope[1] >= 0)
+                    || midpoint_data.1.iter().any(|(left, right, _)| left != right)
+                {
+                    return Err(uncertain(
+                        "a tangent or vanishing-energy root is not a simple cut",
+                    ));
+                }
+            }
+            let reach_radius = Float::with_val_round(precision, &midpoint - &left, Round::Up)
+                .0
+                .max(&Float::with_val_round(precision, &right - &midpoint, Round::Up).0);
+            let maximum_derivative = derivative[0]
+                .clone()
+                .abs()
+                .max(&derivative[1].clone().abs());
+            let reach =
+                Float::with_val_round(precision, &maximum_derivative * &reach_radius, Round::Up).0;
+            let enclosure = add(&midpoint_data.0, &[-reach.clone(), reach]);
+            if enclosure[0] > 0 || enclosure[1] < 0 {
                 continue;
             }
-            let crossing = sign(&self.evaluate_interval(candidate, true)?.1)?;
-            if crossing == 0 {
-                return Err(uncertain("a positive tangent root is not a simple cut"));
+            if derivative[0] == 0 && derivative[1] == 0 {
+                return Err(uncertain(
+                    "the radial equation is identically zero on a cell",
+                ));
             }
-            let radius = materialize(candidate)?;
-            let four = zero.from_i64(4);
-            let mut width = &radius / &four;
-            if let Some(previous) = index.checked_sub(1).map(|i| &candidates[i]) {
-                let separation = (&radius - materialize(previous)?) / &four;
-                if separation < width {
-                    width = separation;
+            // Keep subdivision points away from roots. Otherwise an exact
+            // dyadic root would remain an uncertified endpoint of both children.
+            // Every accepted interior endpoint has a directed nonzero sign.
+            let mut split = midpoint;
+            let mut split_data = midpoint_data;
+            while split_data.0[0] <= 0 && split_data.0[1] >= 0 {
+                visited += 1;
+                let next = Float::with_val(precision, &left + &split) / 2;
+                if next == left || next == split || visited > 65536 {
+                    return Err(uncertain(
+                        "cannot separate a tangent or nonisolated root from subdivision endpoints",
+                    ));
                 }
+                split = next;
+                split_data = endpoint(&split)?;
             }
-            if let Some(next) = candidates.get(index + 1) {
-                let separation = (materialize(next)? - &radius) / &four;
-                if separation < width {
-                    width = separation;
+            pending.push((split.clone(), right, split_data.clone(), right_data));
+            pending.push((left, split, left_data, split_data));
+        }
+        // Enumeration finishes before evaluating any residue. Root identities
+        // follow physical radial order and remain stable across precision lanes.
+        brackets.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        let materialize = |u: &Float| -> eyre::Result<F<T>> {
+            let denominator = add(&point(&exact_one), &neg(&point(u)));
+            let radius = Self::enclosed_divide(&point(u), &denominator);
+            let midpoint = Float::with_val(precision, &radius[0] + &radius[1]) / 2;
+            F::from_arb(&ArbPrec::from(midpoint))
+        };
+        brackets
+            .into_iter()
+            .enumerate()
+            .map(|(index, (left, right, crossing))| {
+                let lower = materialize(&left)?;
+                let upper = materialize(&right)?;
+                if lower >= upper {
+                    return Err(uncertain("the isolated root bracket is not representable"));
                 }
-            }
-            let lower = &radius - &width;
-            let upper = &radius + &width;
-            if lower <= zero || lower >= radius || upper <= radius {
-                return Err(uncertain("the positive root bracket is not representable"));
-            }
-            if sign(&self.evaluate_interval(&native(&lower), false)?.0)? != -crossing
-                || sign(&self.evaluate_interval(&native(&upper), false)?.0)? != crossing
-            {
-                return Err(uncertain("the isolated root bracket is not sign-certified"));
-            }
-            let branch_identity =
-                RadialRootIdentity::new(format!("{identity} signed root {index}"));
-            let result = self
-                .refine_root(
+                let lower_value = self.evaluate_interval(&native(&lower), false)?.0;
+                let upper_value = self.evaluate_interval(&native(&upper), false)?.0;
+                if (crossing > 0 && (lower_value[1] >= 0 || upper_value[0] <= 0))
+                    || (crossing < 0 && (lower_value[0] <= 0 || upper_value[1] >= 0))
+                {
+                    return Err(uncertain(
+                        "the materialized root bracket is not sign-certified",
+                    ));
+                }
+                self.refine_root(
                     &lower,
                     &upper,
                     crossing,
                     0,
                     e_cm,
                     diagnostics,
-                    &branch_identity,
+                    &RadialRootIdentity::new(format!("{identity} signed root {index}")),
                 )
-                .map_err(|error| {
-                    uncertain(&format!("isolated root refinement failed: {error:?}"))
-                })?;
-            roots.push(result);
-        }
-        Ok(roots)
+                .map_err(|error| uncertain(&format!("isolated root refinement failed: {error:?}")))
+            })
+            .collect()
     }
 
     /// Original eta jet at the same represented coefficients used by the root.
@@ -1522,7 +1535,7 @@ mod tests {
     fn signed_root_isolation_retains_occurrences_and_shared_jet_slopes() {
         use crate::utils::hyperdual_utils::{extract_t_derivatives, simple_n_deriv_shape};
         let vector = |x| ThreeMomentum::new(F(x), F(0.0), F(0.0));
-        // Exercise both the quadratic and exact-resultant isolation charts.
+        // Exercise homogeneous and massive absorbed energies on the same chart.
         for negative_mass in [0.0, 0.25] {
             let repeated = RadialEnergy {
                 edge: EdgeIndex(4),

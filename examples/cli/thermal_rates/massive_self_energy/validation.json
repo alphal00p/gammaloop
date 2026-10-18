@@ -1,0 +1,465 @@
+{
+  "source_base_commit": "4a6519c645a2327a900d5c7588e381780633f820",
+  "status": "independent references, CLI/state smoke and all 116 native regressions passed; 25k controls and independent-seed 100k full/auxiliary/HH/HHL integrals agree with references within reported MC uncertainties",
+  "reference_interpreter": "/nix/store/463ik27ppxhpbvw7c50s7qcfc7mgfa5x-python3-3.12.12-env/bin/python3",
+  "checks": {
+    "input_json_toml_python_syntax": "passed",
+    "ruff_check_and_format": "passed",
+    "typst_benchmark_and_derivation_render": "passed"
+  },
+  "reference_artifacts": {
+    "thermal_MSbar": {
+      "path": "/tmp/thermal-inclusive-self-energy-reference.json",
+      "sha256": "f43a2a13ed667eabd2906fef53f64d169e063e98a6fa1ea843f7a174877c92e4",
+      "last_row": {
+        "order": 512,
+        "bubble_vacuum_at_H_shell": 0.01902577198950608,
+        "bubble_thermal_at_H_shell": 0.004960618537553536,
+        "complex_step_convergence": [
+          {
+            "complex_mass_squared_step": 0.0001,
+            "Gamma_HH_vacuum": 6.118053359049998e-05,
+            "Gamma_HH_thermal": -8.82587104195914e-05
+          },
+          {
+            "complex_mass_squared_step": 1e-08,
+            "Gamma_HH_vacuum": 6.11805335828804e-05,
+            "Gamma_HH_thermal": -8.825872261661107e-05
+          },
+          {
+            "complex_mass_squared_step": 1e-20,
+            "Gamma_HH_vacuum": 6.118053358288037e-05,
+            "Gamma_HH_thermal": -8.825872261661141e-05
+          }
+        ],
+        "continuum_intervals": [
+          {
+            "spectator_energy_min": 0.6,
+            "spectator_energy_max": 0.6867187500000002,
+            "Gamma_HHL_vacuum": 7.930999160989999e-06,
+            "Gamma_HHL_thermal": 3.189593682915445e-05
+          },
+          {
+            "spectator_energy_min": 0.6867187500000002,
+            "spectator_energy_max": 0.87421875,
+            "Gamma_HHL_vacuum": 0.0,
+            "Gamma_HHL_thermal": 3.2476054990911473e-07
+          },
+          {
+            "spectator_energy_min": 0.87421875,
+            "spectator_energy_max": 0.9125000000000001,
+            "Gamma_HHL_vacuum": 0.0,
+            "Gamma_HHL_thermal": 6.42534885072356e-05
+          },
+          {
+            "spectator_energy_min": 0.9125000000000001,
+            "spectator_energy_max": 1.6,
+            "Gamma_HHL_vacuum": 0.0,
+            "Gamma_HHL_thermal": 0.00012928757183662887
+          },
+          {
+            "spectator_energy_min": 1.6,
+            "spectator_energy_max": null,
+            "Gamma_HHL_vacuum": 0.0,
+            "Gamma_HHL_thermal": 2.610469181607466e-06
+          }
+        ],
+        "Gamma_HH_vacuum": 6.118053358288037e-05,
+        "Gamma_HHL_vacuum": 7.930999160989999e-06,
+        "Gamma_inclusive_vacuum": 6.911153274387038e-05,
+        "Gamma_HH_thermal": -8.825872261661141e-05,
+        "Gamma_HHL_thermal": 0.00022837222690453549,
+        "Gamma_inclusive_thermal": 0.00014011350428792406,
+        "production_source_thermal": 5.9540348238939085e-06
+      }
+    },
+    "vacuum_MSbar": {
+      "path": "/tmp/thermal-inclusive-vacuum-reference.json",
+      "sha256": "91e46887dafe842b503bb3b0516148dd711ea0796b845604a5418e7034c30a19",
+      "last_row": {
+        "order": 256,
+        "bubble_msbar": 0.019025771989506085,
+        "bubble_derivative": 0.009548304795918653,
+        "gamma_virtual_hh": 6.118053358288016e-05,
+        "gamma_real_hhl": 7.930999160990034e-06,
+        "gamma_inclusive": 6.911153274387019e-05
+      }
+    }
+  },
+  "native_acceptance": [
+    {
+      "label": "final-binary 25k pilot",
+      "status": "completed; all six comparisons within 1.27 reported standard errors, no final NaNs or unresolved instability",
+      "command": "target/ci-optim/gammaloop -n -s /tmp/thermal-inclusive-self-state run integrate -D samples=25000 -D batch=5000 -D cores=2 -D workspace=/tmp/thermal-inclusive-self-pilot-retry2",
+      "executable_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+      "workspace": "/tmp/thermal-inclusive-self-pilot-retry2",
+      "log": "/tmp/thermal-inclusive-self-pilot-retry2.log",
+      "result_path": "/tmp/thermal-inclusive-self-pilot-retry2/integration_result.json",
+      "result_sha256": "ff61e82531b062ac9b41af118cc699859be47f7bdce5dd3783681dd170d633e8",
+      "started_utc": "2026-10-18 10:52:21.433 UTC",
+      "ended_utc": "2026-10-18 10:57:20.581 UTC",
+      "wall_seconds": 299.148,
+      "seed": 271828,
+      "workers": 2,
+      "batch": 5000,
+      "comparisons": [
+        {
+          "process": "thermal",
+          "samples": 25000,
+          "value": 0.00013665699667180482,
+          "error": 8.348543357758708e-06,
+          "reference": 0.00014011350428792406,
+          "difference_standard_errors": -0.41402523386393364,
+          "relative_mc_error": 0.06109122519213966,
+          "real_chisq": 5.615032661064211,
+          "max_weight_impact": 0.00668145603684972,
+          "chi_sq_per_dof": 1.1230065322128422
+        },
+        {
+          "process": "vacuum",
+          "samples": 25000,
+          "value": 6.603829325572535e-05,
+          "error": 3.624476350349539e-06,
+          "reference": 6.911153274387019e-05,
+          "difference_standard_errors": -0.8479126889180726,
+          "relative_mc_error": 0.054884464326087144,
+          "real_chisq": 7.370170256184535,
+          "max_weight_impact": 0.004703605141966737,
+          "chi_sq_per_dof": 1.474034051236907
+        },
+        {
+          "process": "zero_temperature",
+          "samples": 25000,
+          "value": 6.603829325572574e-05,
+          "error": 3.624476350349541e-06,
+          "reference": 6.911153274387019e-05,
+          "difference_standard_errors": -0.8479126889179637,
+          "relative_mc_error": 0.054884464326086846,
+          "real_chisq": 7.370170256183522,
+          "max_weight_impact": 0.0047036051419667105,
+          "chi_sq_per_dof": 1.4740340512367045
+        },
+        {
+          "process": "thermal_hh",
+          "samples": 25000,
+          "value": -9.361991114174559e-05,
+          "error": 8.463695843371201e-06,
+          "reference": -8.825872261661141e-05,
+          "difference_standard_errors": -0.6334335052142828,
+          "relative_mc_error": 0.09040486943591208,
+          "real_chisq": 2.911810277623033,
+          "max_weight_impact": 0.01007923035195939,
+          "chi_sq_per_dof": 0.5823620555246066
+        },
+        {
+          "process": "thermal_hhl",
+          "samples": 25000,
+          "value": 0.00023324535371338983,
+          "error": 3.848209391448476e-06,
+          "reference": 0.00022837222690453549,
+          "difference_standard_errors": 1.2663361873403896,
+          "relative_mc_error": 0.0164985468314071,
+          "real_chisq": 2.7525193798244914,
+          "max_weight_impact": 0.0018950088264440437,
+          "chi_sq_per_dof": 0.5505038759648982
+        },
+        {
+          "process": "thermal_aux",
+          "samples": 25000,
+          "value": 0.0001363430580027118,
+          "error": 8.736170046858756e-06,
+          "reference": 0.00014011350428792406,
+          "difference_standard_errors": -0.4315903038732623,
+          "relative_mc_error": 0.0640749164265114,
+          "real_chisq": 5.016621833666044,
+          "max_weight_impact": 0.007041098071941286,
+          "chi_sq_per_dof": 1.0033243667332088
+        }
+      ],
+      "reported_combined_statistics": {
+        "num_evals": 150000,
+        "average_total_time_seconds": 0.003884166,
+        "average_parameterization_time_seconds": 7.7444e-05,
+        "average_integrand_time_seconds": 0.003778022,
+        "average_evaluator_time_seconds": 0.000153632,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 7.011e-06,
+        "f64_percentage": 86.37666666666667,
+        "f128_percentage": 13.619333333333334,
+        "arb_percentage": 0.004,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "precision_warning_note": "Warnings from failed lower-precision attempts precede successful retries; only final integration counters determine lost samples."
+    },
+    {
+      "label": "final-binary independent-seed 100k comparison",
+      "status": "completed; all four comparisons within 1.22 reported standard errors, no final NaNs or unresolved instability. Full-rate MC error remains 2.50%; no claim of reaching the card 0.5% target.",
+      "command": "target/ci-optim/gammaloop -n -s /tmp/thermal-inclusive-self-state run -c 'set process -p thermal -i NLO kv integrator.n_max=100000 integrator.n_start=5000 integrator.seed=314159; set process -p thermal_aux -i NLO kv integrator.n_max=100000 integrator.n_start=5000 integrator.seed=314159; set process -p thermal_hh -i NLO kv integrator.n_max=100000 integrator.n_start=5000 integrator.seed=314159; set process -p thermal_hhl -i NLO kv integrator.n_max=100000 integrator.n_start=5000 integrator.seed=314159; integrate -p thermal -i NLO -p thermal_aux -i NLO -p thermal_hh -i NLO -p thermal_hhl -i NLO --n-cores 2 --workspace-path /tmp/thermal-inclusive-self-100k --restart --renderer tabled --no-stream-iterations --no-stream-updates'",
+      "executable_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc",
+      "workspace": "/tmp/thermal-inclusive-self-100k",
+      "log": "/tmp/thermal-inclusive-self-100k.log",
+      "result_path": "/tmp/thermal-inclusive-self-100k/integration_result.json",
+      "result_sha256": "96c0f9dad2b6d3db3f96a5c268dcfdc4869e45479c7128975659f63b3941a805",
+      "started_utc": "2026-10-18 10:59:49.988 UTC",
+      "ended_utc": "2026-10-18 11:14:06.818 UTC",
+      "wall_seconds": 856.83,
+      "seed": 314159,
+      "workers": 2,
+      "batch": 5000,
+      "training_slot": "thermal@NLO",
+      "combination_note": "This new-seed run is reported independently, not combined with the 25k pilot. The integrator uses total_sum/processed_samples (update_iter(false)). Default channel #0 differs between full/HH and HHL, so correlated cube coordinates need not denote the same physical point. The exact same-basis closure diagnostic is recorded separately.",
+      "auxiliary_scale_central_shift": -1.4151075806927258e-07,
+      "channel_mean_closure_residual": -1.080577459659012e-06,
+      "comparisons": [
+        {
+          "process": "thermal",
+          "samples": 100000,
+          "value": 0.000135989609300696,
+          "error": 3.4025330992791854e-06,
+          "reference": 0.00014011350428792406,
+          "difference_standard_errors": -1.2120073095252708,
+          "relative_mc_error": 0.025020537354112176,
+          "real_chisq": 38.12471641590923,
+          "chi_sq_per_dof": 1.9062358207954617,
+          "max_weight_impact": 0.0017053719429772466
+        },
+        {
+          "process": "thermal_aux",
+          "samples": 100000,
+          "value": 0.00013584809854262674,
+          "error": 3.53726334122762e-06,
+          "reference": 0.00014011350428792406,
+          "difference_standard_errors": -1.2058490798756858,
+          "relative_mc_error": 0.02603837211691034,
+          "real_chisq": 37.696681547019125,
+          "chi_sq_per_dof": 1.8848340773509562,
+          "max_weight_impact": 0.0017510727967691073
+        },
+        {
+          "process": "thermal_hh",
+          "samples": 100000,
+          "value": -9.116930784154744e-05,
+          "error": 3.3565930057213334e-06,
+          "reference": -8.825872261661141e-05,
+          "difference_standard_errors": -0.8671248554635361,
+          "relative_mc_error": 0.03681713819254944,
+          "real_chisq": 33.217260189317585,
+          "chi_sq_per_dof": 1.6608630094658792,
+          "max_weight_impact": 0.0025546455616853336
+        },
+        {
+          "process": "thermal_hhl",
+          "samples": 100000,
+          "value": 0.00022823949460190247,
+          "error": 2.043482689024869e-06,
+          "reference": 0.00022837222690453549,
+          "difference_standard_errors": -0.06495396479055052,
+          "relative_mc_error": 0.00895323875733747,
+          "real_chisq": 15.54316801500238,
+          "chi_sq_per_dof": 0.777158400750119,
+          "max_weight_impact": 0.0014681266701994315
+        }
+      ],
+      "reported_combined_statistics": {
+        "num_evals": 400000,
+        "average_total_time_seconds": 0.004174095,
+        "average_parameterization_time_seconds": 8.6286e-05,
+        "average_integrand_time_seconds": 0.004050056,
+        "average_evaluator_time_seconds": 0.000224309,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 7.846e-06,
+        "f64_percentage": 88.13875,
+        "f128_percentage": 11.859,
+        "arb_percentage": 0.0022500000000000003,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      }
+    }
+  ],
+  "source_sha256": {
+    "examples/cli/thermal_rates/massive_self_energy/run.toml": "28702e217a06a1fe85d3c1e67241d9e8d7eaaff43f84c5e1c54b6718dc54d1b1",
+    "examples/cli/thermal_rates/massive_self_energy/self_energy.dot": "cd2bd1851f5a2b430da88c91d14fe248c70d01c9f93d34e26f7a23cd99998eee",
+    "examples/cli/thermal_rates/massive_self_energy/split_mass.dot": "b776a2b7780584af89f44a4379b87096cfcc4c6aebfa63e18fb0e6403837817f",
+    "examples/cli/thermal_rates/massive_self_energy/thermal_reference.py": "43e0e936a1d263612e63ba06d2b4a3d7216e98c3b057d876d5091f6af40a9f79",
+    "examples/cli/thermal_rates/massive_self_energy/vacuum_reference.py": "c6e7a2dc49310f4b7f2b80943959f460a6bed6897abb1509568a73dd9eb31fff"
+  },
+  "initial_cli_smoke": {
+    "executable": {
+      "path": "/shared/codex-2/kaapo/gammaloop/gammaloop-thermal-rates/target/ci-optim/gammaloop",
+      "sha256": "86a8e0f9e8998502699b9ff9f8fca94fe4330f11c0437781016ade8a026a4936",
+      "mtime_ns": 1792319200359408623,
+      "scope": "initial guard-removal CLI; may precede final general interval-root implementation"
+    },
+    "commands_exit_code": 0,
+    "saved_state": "/tmp/thermal-inclusive-self-state",
+    "logs": [
+      "/tmp/thermal-inclusive-self-smoke.log"
+    ],
+    "points": {
+      "thermal-inclusive-self-thermal-point.json": {
+        "integrand_result": {
+          "re": 6.097303454799157e-06,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 5,
+        "sha256": "40003e0421f175e9d4cb86b9c7960f94e86e0e640897a2092079688bde003fc9"
+      },
+      "thermal-inclusive-self-thermal_aux-point.json": {
+        "integrand_result": {
+          "re": 1.0460947484434384e-05,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 5,
+        "sha256": "48d8b17e6f731ad9739e9228c42dd5d8732afc02c38f6a08c3ef7e0bdfef7155"
+      },
+      "thermal-inclusive-self-thermal_bare-point.json": {
+        "integrand_result": {
+          "re": 2.091810044314621e-05,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 5,
+        "sha256": "f810d733a1261d68a2485b909b78eaf58dc53379b44986d7f64b01640a3f25af"
+      },
+      "thermal-inclusive-self-thermal_hh-point.json": {
+        "integrand_result": {
+          "re": 5.921439014043368e-06,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 1,
+        "sha256": "409e8dfd4a13983fbb8fc510b09cd5d489693396e10f2f1c844b12320b677a24"
+      },
+      "thermal-inclusive-self-thermal_hhl-point.json": {
+        "integrand_result": {
+          "re": 1.7586444075578794e-07,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 4,
+        "sha256": "9dd274066d50f3629d97ca1cb6a514858b218eb1598c2a015f8b558107737228"
+      },
+      "thermal-inclusive-self-vacuum-point.json": {
+        "integrand_result": {
+          "re": 8.000414708818143e-06,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 2,
+        "sha256": "65fc235ec8cba019157ac83ba0922ca7e5438165f34bb0ef1fde6ded638f1c91"
+      },
+      "thermal-inclusive-self-zero_temperature-point.json": {
+        "integrand_result": {
+          "re": 8.000414708818131e-06,
+          "im": 0.0
+        },
+        "event_group_count": 1,
+        "event_count": 5,
+        "sha256": "a38724ac44645a59c0375581edc0a0c971281be52ee34ddf6486540097d6e862"
+      }
+    },
+    "scope": "generation, physical-point inspection and state save only; no Monte Carlo integration"
+  },
+  "native_point_regression": {
+    "run_id": "d29eee02-e2ee-4044-971a-52dbe9788cda",
+    "log": "/tmp/thermal-inclusive-first-tests.log",
+    "batch_result": "44 of 45 tests passed; unrelated synthetic 2^200 root-certification test failed. The general root owner was subsequently corrected; this record is not a claim that the whole batch passed.",
+    "status": "passed",
+    "scope": "native point evaluations after state serialization/reload, not integrated acceptance",
+    "test": "thermal_raised_scalar_uv_addback_preserves_channel_closure",
+    "state_artifacts": "/tmp/thermal-inclusive-tests-artifacts/thermal_self_energy_uv_4073295",
+    "checks": [
+      "two points in each of seven independently generated slots",
+      "UV local and integrated settings enabled for six renormalized slots; disabled for bare control",
+      "double-pole residue present except pure continuum slot",
+      "thermal = HH + HHL; vacuum = zero-temperature",
+      "event weights sum to the integrand",
+      "bare first point matches historical split-mass baseline to relative 1e-8",
+      "auxiliary UV scales change point integrand; equality of their integrals still awaits integrated acceptance",
+      "changing physical mu_r changes finite integrated-addback point contribution"
+    ],
+    "numeric_log_note": "This test asserts closure and controls without logging its numerical point array; initial CLI smoke records independent point outputs."
+  },
+  "final_native_regression": {
+    "run_id": "07460a80-6bc8-4df6-b20a-d00fc0f77ac0",
+    "status": "passed",
+    "tests_passed": 116,
+    "duration_seconds": 64.499,
+    "log": "/tmp/thermal-inclusive-final-tests.log",
+    "scope": "all 116 selected thermal, geometry, shared-state and scalar/QCD native regressions passed; Monte Carlo acceptance is recorded separately"
+  },
+  "precision_recovery_diagnostic": {
+    "status": "512 points per slot completed with zero final NaNs or unresolved instability",
+    "result_path": "/tmp/thermal-inclusive-self-diagnostic512/integration_result.json",
+    "result_sha256": "bec4b0dfdfe76e7df7138d8500615e1a782963f07e28aba3528b74db0527f74e",
+    "slot_count": 6,
+    "samples_per_slot": 512,
+    "reported_statistics": {
+      "num_evals": 3072,
+      "average_total_time_seconds": 0.005177911,
+      "average_parameterization_time_seconds": 9.1018e-05,
+      "average_integrand_time_seconds": 0.00504551,
+      "average_evaluator_time_seconds": 0.000185881,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 1.1686e-05,
+      "f64_percentage": 77.47395833333334,
+      "f128_percentage": 22.4609375,
+      "arb_percentage": 0.06510416666666666,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null
+    },
+    "interpretation": "process_final_nonfinite_sample warnings originate inside each precision level, before retry. The warned Double attempts are rescued by higher precision; warning count is not discarded-sample count. No production change was needed.",
+    "interrupted_pilots": "Original 25k pilots were interrupted to inspect these warnings before any iteration completed; they supply no accepted integral estimate. New retry2 pilots use 5k adaptation batches.",
+    "executable_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc"
+  },
+  "channel_closure_diagnostic": {
+    "status": "resolved at sampling coordinate ownership; no production change",
+    "parent_lmb": [
+      5,
+      1
+    ],
+    "active_channel_zero": {
+      "thermal": "lmb(2,5)",
+      "thermal_hh": "lmb(2,5)",
+      "thermal_hhl": "lmb(4,2)"
+    },
+    "cube_point": [
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7
+    ],
+    "default_cube_values": {
+      "thermal": 1.7430551658534525e-05,
+      "thermal_hh": 7.742835161801285e-07,
+      "thermal_hhl": 1.7864849407880047e-06
+    },
+    "hhl_with_same_lmb_2_5": 1.6656268142354394e-05,
+    "same_basis_closure_residual": 3.3881317890172014e-21,
+    "conclusion": "The unchanged parent basis identifies the same physical coordinate convention. Different active sampling channels map the same cube point to different physical loop momenta; selecting the same existing channel restores pointwise closure. Mean nonclosure within MC uncertainties is not a physical coefficient discrepancy.",
+    "statistics_owner": "crates/gammalooprs/src/integrate/mod.rs calls update_iter(false); pinned numerica 3.0.1 uses total_sum/processed_samples, not inverse-variance iteration means.",
+    "artifacts": [
+      "/tmp/thermal-inclusive-self-sampling-bases-pretty.log",
+      "/tmp/thermal-inclusive-self-closure-point.log",
+      "/tmp/thermal-inclusive-self-closure-same-basis-quoted.log",
+      "/tmp/thermal-inclusive-self-closure-thermal.json",
+      "/tmp/thermal-inclusive-self-closure-hh.json",
+      "/tmp/thermal-inclusive-self-closure-hhl.json",
+      "/tmp/thermal-inclusive-self-closure-hhl-same-basis.json"
+    ]
+  }
+}

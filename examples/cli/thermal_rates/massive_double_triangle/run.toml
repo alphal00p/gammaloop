@@ -1,0 +1,193 @@
+# Inclusive massive double triangle; all model/graph normalization follows benchmark.typ.
+commands = []
+
+[cli_settings.state]
+folder = "/tmp/gammaloop-thermal-double-triangle-state"
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[cli_settings.global.generation.evaluator]
+compile = false
+store_atom = true
+summed = false
+summed_function_map = true
+iterative_orientation_optimization = false
+
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+vacuum_subtraction = false
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+softct = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[default_runtime_settings.general]
+inverse_temperature = 2.0
+integral_unit = "none"
+evaluator_method = "SummedFunctionMap"
+generate_events = false
+
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[1.0, 0.0, 0.0, 0.0]]
+helicities = [0]
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.h_function]
+function = "poly_exponential"
+sigma = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.integrator]
+n_start = 25000
+n_increase = 0
+n_max = 250000
+seed = 271828
+integrated_phase = "real"
+target_relative_accuracy = 0.005
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model ./examples/cli/thermal_rates/massive_double_triangle/model.json",
+  "set global kv global.generation.medium.mode=vacuum",
+  "import graphs ./examples/cli/thermal_rates/massive_double_triangle/double_triangle.dot --process-spec 'X > { H H, L L, H H L } [{{2}}]' -p vacuum -i NLO -o",
+  "generate existing -p vacuum -i NLO",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "import graphs ./examples/cli/thermal_rates/massive_double_triangle/double_triangle.dot --process-spec 'X > { H H, L L, H H L } [{{2}}]' -p thermal -i NLO -o",
+  "generate existing -p thermal -i NLO",
+  "set global kv global.generation.medium.mode=zero_temperature_equilibrium",
+  "import graphs ./examples/cli/thermal_rates/massive_double_triangle/double_triangle.dot --process-spec 'X > { H H, L L, H H L } [{{2}}]' -p zero_temperature -i NLO -o",
+  "generate existing -p zero_temperature -i NLO",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "import graphs ./examples/cli/thermal_rates/massive_double_triangle/double_triangle.dot --process-spec 'X > { H H, L L } [{{2}}]' -p virtual -i NLO -o",
+  "generate existing -p virtual -i NLO",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "import graphs ./examples/cli/thermal_rates/massive_double_triangle/double_triangle.dot --process-spec 'X > H H L [{{2}}]' -p real -i NLO -o",
+  "generate existing -p real -i NLO",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "import graphs ./examples/cli/thermal_rates/massive_double_triangle/double_triangle.dot --process-spec 'X > H H [{{2}}]' -p virtual_hh -i NLO -o",
+  "generate existing -p virtual_hh -i NLO",
+  "set global kv global.generation.medium.mode=thermodynamic_equilibrium",
+  "import graphs ./examples/cli/thermal_rates/massive_double_triangle/double_triangle.dot --process-spec 'X > L L [{{2}}]' -p virtual_ll -i NLO -o",
+  "generate existing -p virtual_ll -i NLO",
+]
+
+[[command_blocks]]
+name = "below_threshold"
+commands = [
+  "set model MX=1.0",
+  "set process -p vacuum -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p thermal -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p zero_temperature -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p virtual -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p real -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p virtual_hh -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p virtual_ll -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+]
+
+[[command_blocks]]
+name = "above_threshold"
+commands = [
+  "set model MX=1.6",
+  "set process -p vacuum -i NLO kv kinematics.e_cm=1.6 kinematics.externals.data.momenta=[[1.6,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p thermal -i NLO kv kinematics.e_cm=1.6 kinematics.externals.data.momenta=[[1.6,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p zero_temperature -i NLO kv kinematics.e_cm=1.6 kinematics.externals.data.momenta=[[1.6,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p virtual -i NLO kv kinematics.e_cm=1.6 kinematics.externals.data.momenta=[[1.6,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p real -i NLO kv kinematics.e_cm=1.6 kinematics.externals.data.momenta=[[1.6,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p virtual_hh -i NLO kv kinematics.e_cm=1.6 kinematics.externals.data.momenta=[[1.6,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+  "set process -p virtual_ll -i NLO kv kinematics.e_cm=1.6 kinematics.externals.data.momenta=[[1.6,0.0,0.0,0.0]] general.inverse_temperature=2.0",
+]
+
+[[command_blocks]]
+name = "lower_temperature"
+commands = [
+  "set model MX=1.0",
+  "set process -p vacuum -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=4.0",
+  "set process -p thermal -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=4.0",
+  "set process -p zero_temperature -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=4.0",
+  "set process -p virtual -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=4.0",
+  "set process -p real -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=4.0",
+  "set process -p virtual_hh -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=4.0",
+  "set process -p virtual_ll -i NLO kv kinematics.e_cm=1.0 kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.0]] general.inverse_temperature=4.0",
+]
+
+[[command_blocks]]
+name = "export"
+commands = [
+  "save standalone $(output:/tmp/thermal-double-triangle)-standalone --json",
+  "save dot $(output:/tmp/thermal-double-triangle)-dot --include-autogenerated-fields true",
+]
+
+[[command_blocks]]
+name = "inspect"
+commands = [
+  "set process -p thermal -i NLO kv general.generate_events=true general.store_additional_weights_in_event=false",
+  "inspect -p thermal -i NLO -m --graph-id 0 -x 0.4 0.2 0.1 -0.3 0.5 0.2 --json-output $(output:/tmp/thermal-double-triangle)-thermal-point.json",
+  "set process -p virtual -i NLO kv general.generate_events=true general.store_additional_weights_in_event=false",
+  "inspect -p virtual -i NLO -m --graph-id 0 -x 0.4 0.2 0.1 -0.3 0.5 0.2 --json-output $(output:/tmp/thermal-double-triangle)-virtual-point.json",
+  "set process -p real -i NLO kv general.generate_events=true general.store_additional_weights_in_event=false",
+  "inspect -p real -i NLO -m --graph-id 0 -x 0.4 0.2 0.1 -0.3 0.5 0.2 --json-output $(output:/tmp/thermal-double-triangle)-real-point.json",
+  "set process -p vacuum -i NLO kv general.generate_events=true general.store_additional_weights_in_event=false",
+  "inspect -p vacuum -i NLO -m --graph-id 0 -x 0.4 0.2 0.1 -0.3 0.5 0.2 --json-output $(output:/tmp/thermal-double-triangle)-vacuum-point.json",
+  "set process -p zero_temperature -i NLO kv general.generate_events=true general.store_additional_weights_in_event=false",
+  "inspect -p zero_temperature -i NLO -m --graph-id 0 -x 0.4 0.2 0.1 -0.3 0.5 0.2 --json-output $(output:/tmp/thermal-double-triangle)-zero_temperature-point.json",
+  "set process -p thermal -i NLO kv general.generate_events=false",
+  "set process -p virtual -i NLO kv general.generate_events=false",
+  "set process -p real -i NLO kv general.generate_events=false",
+  "set process -p vacuum -i NLO kv general.generate_events=false",
+  "set process -p zero_temperature -i NLO kv general.generate_events=false",
+]
+
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+  "set process -p thermal -i NLO kv integrator.n_max=$(samples:250000) integrator.n_start=$(batch:25000)",
+  "set process -p virtual -i NLO kv integrator.n_max=$(samples:250000) integrator.n_start=$(batch:25000)",
+  "set process -p real -i NLO kv integrator.n_max=$(samples:250000) integrator.n_start=$(batch:25000)",
+  "set process -p vacuum -i NLO kv integrator.n_max=$(samples:250000) integrator.n_start=$(batch:25000)",
+  "set process -p zero_temperature -i NLO kv integrator.n_max=$(samples:250000) integrator.n_start=$(batch:25000)",
+  "integrate -p vacuum -i NLO -p thermal -i NLO -p virtual -i NLO -p real -i NLO -p zero_temperature -i NLO --n-cores $(cores:2) --workspace-path $(workspace:/tmp/thermal-double-triangle-integral) --restart --renderer tabled --no-stream-iterations --no-stream-updates",
+]
+
+[[command_blocks]]
+name = "pole_probe"
+commands = [
+  "inspect -p virtual -i NLO -f -m --graph-id 0 -x 0.75993420767853326 0 0 0 0.52909734718669699 0 --json-output $(output:/tmp/thermal-double-triangle)-pole-minus-virtual.json",
+  "inspect -p virtual_hh -i NLO -f -m --graph-id 0 -x 0.75993420767853326 0 0 0 0.52909734718669699 0 --json-output $(output:/tmp/thermal-double-triangle)-pole-minus-virtual_hh.json",
+  "inspect -p virtual_ll -i NLO -f -m --graph-id 0 -x 0.75993420767853326 0 0 0 0.52909734718669699 0 --json-output $(output:/tmp/thermal-double-triangle)-pole-minus-virtual_ll.json",
+  "inspect -p virtual -i NLO -f -m --graph-id 0 -x 0.75993420767853326 0 0 0 0.52920317723913957 0 --json-output $(output:/tmp/thermal-double-triangle)-pole-plus-virtual.json",
+  "inspect -p virtual_hh -i NLO -f -m --graph-id 0 -x 0.75993420767853326 0 0 0 0.52920317723913957 0 --json-output $(output:/tmp/thermal-double-triangle)-pole-plus-virtual_hh.json",
+  "inspect -p virtual_ll -i NLO -f -m --graph-id 0 -x 0.75993420767853326 0 0 0 0.52920317723913957 0 --json-output $(output:/tmp/thermal-double-triangle)-pole-plus-virtual_ll.json",
+]
+
+[[command_blocks]]
+name = "save"
+commands = ["save state -o"]

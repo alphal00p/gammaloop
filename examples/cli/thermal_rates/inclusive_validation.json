@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "status": "Implementation, all 116 selected native regressions, and restored inclusive scalar/QCD acceptance controls completed; integrated comparisons have the statistical precision documented below.",
+  "recorded_at_utc": "2026-10-18T11:26:05.993187+00:00",
+  "scope": "Fully inclusive finite-temperature vacuum parity through shared real/virtual, local and integrated UV, spin/color, residue, event and stability machinery; signed H cuts use the shared uncapped radial solver.",
+  "source": {
+    "base_commit": "4a6519c645a2327a900d5c7588e381780633f820",
+    "source_sha256": {
+      "tests/tests/test_runs/thermal_inclusive_qcd.rs": "2dddc548b8737dd96b583f4d2c0445f7bc9a1a594bb77ecc3204030d97b3e008",
+      "tests/tests/test_runs/thermal_inclusive_scalar.rs": "ea47411137272eac0a742f394ccdbaa1a491467f529eef6156cfd17e01b694df",
+      "crates/gammaloop-api/src/commands/generate.rs": "3d8b5ccabb1956ceb86ba038e75c9b8cca0430b6f8e68b046c23a2c5b254348e",
+      "crates/gammalooprs/src/cff/hsurface.rs": "c5467af4122b9e4349c634fe24849935eb056444f4de1f69b5ca5269ba308a5b",
+      "crates/gammalooprs/src/cff/radial.rs": "10f2690d4fb3fadfc94466cfd99f7e0e374cd90983ad688d223a85e885d7c06b",
+      "crates/gammalooprs/src/integrands/process/cross_section/mod.rs": "cb472817721a02e2b6c340468200c96fb07ce893d04d4862b503a7ed252ea44c",
+      "crates/gammalooprs/src/processes/amplitude.rs": "86ad9667b373196f5a4acf1cf6503420ad1260781aaba1d79444ea1f078b6866",
+      "crates/gammalooprs/src/processes/cross_section.rs": "50b2c474728a56a40e4c28c6ce0de21b2b7bcb0edafcb42b976965561651c2df",
+      "crates/gammalooprs/src/processes/mod.rs": "e6e348be51646015d06556f645310cd65aec696152a53f842f98113bcc5aa4b1",
+      "crates/gammalooprs/src/settings/global.rs": "404bc5625dd310d4792f31cc1a00d25753398aa6b9d3b7391fb45e532ae3c219",
+      "tests/tests/test_runs.rs": "989a095c1a49fd13bc5de1c2ab13e7bea5580cf90d6563f891cea0cbd3afcbee",
+      "tests/tests/test_runs/thermal_rates.rs": "ea2c77ac9941b1dbab0067389b9a03e929e8dbc25bba6e21a6f2315bfd2e77dd"
+    },
+    "binary": "target/ci-optim/gammaloop",
+    "binary_sha256": "a7752162aa0b917e42fd41522d4752d676d8f20be5a0b3440eb3eafa05083dfc"
+  },
+  "state_manifest_version": 17,
+  "native_regressions": {
+    "run_id": "07460a80-6bc8-4df6-b20a-d00fc0f77ac0",
+    "passed": 116,
+    "failed": 0,
+    "skipped": 3590,
+    "duration_seconds": 64.499,
+    "cargo_profile": "ci-optim",
+    "nextest_profile": "ci_gammaloop",
+    "log": "/tmp/thermal-inclusive-final-tests.log",
+    "log_sha256": "a15ed16a5fc79044e246e06baed26002573007f277e4338e3d09ae6ef8cf7dca",
+    "full_suite": false,
+    "command": "just test --lib --test test_runs -E \"test(all_cuts) or test(graph::lmb::test) or test(graph::threshold_counterterms::tests) or test(composite_mass_geometry_matches_native_coefficients_after_reload) or test(cff::radial::tests) or test(cff::hsurface::tests) or test(cff::esurface::tests) or test(integrands::process::fermi_surface) or test(integrands::process::amplitude::fermi_tests) or test(cold_rate_localizes) or test(thermal_positive_esurface_sampling) or test(thermal_rates::) or test(thermal_bubble::) or test(cold_thermal_rates::) or test(thermal_inclusive_scalar::) or test(thermal_inclusive_qcd::) or test(generalized_raised_cross_section_covers_derivative_components_and_roundtrips) or test(generation_settings_tests) or test(state_manifest_)\"",
+    "environment": {
+      "CARGO_BUILD_JOBS": "8",
+      "NEXTEST_TEST_THREADS": "4",
+      "GL_DISPLAY_FILTER": "off",
+      "GL_LOGFILE_FILTER": "[{#thermal,#benchmark}]=debug",
+      "GL_TEST_LOG_DIR": "/tmp/thermal-inclusive-final-test-logs",
+      "TESTS_GAMMALOOP_STATE_PATH": "/tmp/thermal-inclusive-final-test-artifacts",
+      "GAMMALOOP_TESTS_NO_CLEAN_STATE": "1"
+    },
+    "development_shell": "nix develop /tmp/thermal-rates-development-shell",
+    "initial_diagnostic": {
+      "run_id": "d29eee02-e2ee-4044-971a-52dbe9788cda",
+      "passed": 44,
+      "failed": 1,
+      "log": "/tmp/thermal-inclusive-first-tests.log",
+      "finding": "A compactified bracket for a finite radius 2^200 rounded onto the root during native materialization. Retaining the certified lower endpoint while finding a finite upper bracket fixed the issue without changing sign or residual checks."
+    },
+    "coverage": [
+      "general signed roots beyond six energies and proportional radicals",
+      "finite radius 2^200 and excluded infinite endpoints",
+      "existing positive-E geometry and sampling",
+      "fully inclusive scalar real-virtual cuts",
+      "raised thermal scalar local and integrated UV",
+      "thermal QCD vector LO analytic phase space and NLO physical graph/scale controls",
+      "two-incoming thermal cross section and vacuum flux",
+      "prior cold Fermi localization and mass-insertion benchmarks",
+      "events, saved-state reload, physical basis and cut-enumeration regressions"
+    ]
+  },
+  "checks": {
+    "clippy": {
+      "status": "passed",
+      "command": "cargo clippy -p gammalooprs -p gammaloop-api -p gammaloop-integration-tests --lib --tests --profile ci-optim --locked -- -D warnings",
+      "log": "/tmp/thermal-inclusive-clippy-2.log"
+    },
+    "compiled_cli_settings_reference": {
+      "status": "passed",
+      "command": "cargo run --locked --profile ci-optim -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check",
+      "log": "/tmp/thermal-inclusive-reference-check.log"
+    },
+    "rust_formatting": "passed",
+    "diff_whitespace": "passed",
+    "authored_documentation": {
+      "status": "passed",
+      "documents_rendered": 9,
+      "results": "/tmp/thermal-inclusive-final-docs/results.json",
+      "note": "Architecture, handoff, thermal manual, and all six restored benchmark/derivation documents render. Benchmark JSON/TOML and Python syntax checks pass."
+    }
+  },
+  "benchmarks": {
+    "massive_double_triangle": "massive_double_triangle/validation.json",
+    "massive_self_energy": "massive_self_energy/validation.json",
+    "qcd_vector": "qcd_vector/validation.json"
+  },
+  "historical_baseline": {
+    "branch": "thermal_rate_investigation",
+    "commit": "a0b2d4191cad17d8dc2f20891bb0f245f0df18b7",
+    "note": "Historical outputs and references are retained separately in each benchmark directory; they are not current validation."
+  },
+  "algorithm_limits": [
+    "No fixed energy-count cap. Exhausted subdivision/precision budgets, unresolved tangencies, cusps or nonisolated roots produce explicit errors.",
+    "The existing convex positive-E shortcut and native refinement remain shared with vacuum calculations.",
+    "The zero-temperature Fermi distribution intersection restrictions are unchanged; this continuation does not extend their charts."
+  ],
+  "excluded": [
+    "Thermal threshold subtraction",
+    "Thermal IR subtraction",
+    "Thermal resummation"
+  ],
+  "ci_readiness": {
+    "top_level_nix_ci_enable": false,
+    "cache_uploaded": false,
+    "final_review_requested": false
+  },
+  "precision_recovery_note": "The existing process_final_nonfinite_sample warning is emitted per precision attempt. Final integration statistics, not warning counts, determine whether any samples remained nonfinite or unstable. Interrupted diagnostic pilots are retained separately and are not accepted integration estimates.",
+  "qcd_acceptance": {
+    "status": "Six integrated thermal/vacuum/auxiliary-scale comparisons complete; statistical compatibility at stated Monte Carlo precision.",
+    "total_samples": 200000,
+    "final_nonfinite_or_unstable_samples": 0,
+    "thermal_nlo_independent": {
+      "samples": 50000,
+      "rho": 0.10896214747934255,
+      "error": 0.003937670495860303,
+      "reference": 0.10648332415676968,
+      "pull": 0.6295
+    },
+    "auxiliary_scale_control": {
+      "samples": 25000,
+      "rho": 0.1215862178961115,
+      "error": 0.006427918841162957,
+      "pull_to_reference": 2.3496,
+      "pull_to_independent_baseline": 1.6747
+    },
+    "record": "qcd_vector/validation.json"
+  },
+  "scalar_acceptance": {
+    "status": "Below/above-threshold real-virtual, raised-line local-plus-integrated UV, vacuum/cold, and auxiliary-scale controls completed.",
+    "completed_process_evaluations": 1100000,
+    "final_nonfinite_or_unstable_samples": 0,
+    "double_triangle_below_threshold": {
+      "samples_per_process": 25000,
+      "full_rate": 0.000301437563,
+      "error": 6.501e-06,
+      "reference": 0.0003057651940618648,
+      "relative_mc_error_percent": 2.16
+    },
+    "double_triangle_above_threshold": {
+      "samples_per_process": 100000,
+      "seed": 314159,
+      "full_rate": 4.77230988e-06,
+      "error": 1.37286e-06,
+      "reference": 5.2820877369156e-06,
+      "relative_mc_error_percent": 28.8,
+      "note": "Independent seed and adaptation on the full thermal process. Inclusive and virtual means remain convergence limited; the separately recorded 25k pilot is retained."
+    },
+    "double_triangle_pole_cancellation": {
+      "evaluations": 12,
+      "relative_distances": [
+        -0.0001,
+        0.0001,
+        -1e-08,
+        1e-08
+      ],
+      "joint_virtual_at_negative_1e_8": 5.530883598491006e-06,
+      "separate_term_magnitudes": "approximately 506",
+      "maximum_relative_difference_from_historical_joint_controls": 1.54e-16,
+      "note": "Forced Arb evaluations are finite and stable. The comparison uses the internally summed result, not the difference of separately rounded exported terms."
+    },
+    "self_energy_uv": {
+      "samples_per_process": 100000,
+      "seed": 314159,
+      "full_rate": 0.000135989609,
+      "error": 3.40253e-06,
+      "reference": 0.00014011350428792406,
+      "relative_mc_error_percent": 2.5,
+      "auxiliary_rate": 0.000135848099,
+      "auxiliary_error": 3.53726e-06,
+      "maximum_absolute_reference_pull_full_auxiliary_and_channels": 1.22,
+      "note": "Both local UV subtraction and the finite integrated addback are enabled. All six 25k controls are retained separately."
+    },
+    "records": [
+      "massive_double_triangle/validation.json",
+      "massive_self_energy/validation.json"
+    ]
+  },
+  "acceptance_limits": [
+    "These cases establish current benchmark parity through the shared inclusive machinery; they do not prove every inclusive topology, kinematic point, or model is numerically integrable.",
+    "The above-threshold scalar inclusive estimate has a 28.8% Monte Carlo error; the direct pole probes separately test local cancellation.",
+    "The independent thermal QCD NLO estimate has a 3.61% Monte Carlo error. Its auxiliary-scale control is 2.35 reported errors from the reference and 1.67 combined errors from the independent baseline.",
+    "The UV-renormalized scalar full estimate has a 2.50% Monte Carlo error. Historical million-sample precision and the 0.5% run-card target are not claimed by these runs."
+  ]
+}

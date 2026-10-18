@@ -2754,23 +2754,12 @@ impl GraphTerm for CrossSectionGraphTerm {
         {
             settings.lu_h_function.validate_normalized_profile()?;
         }
-        if self.graph.param_builder.medium_mode != crate::settings::global::MediumMode::Vacuum {
-            if !settings.subtraction.disable_threshold_subtraction {
-                return Err(eyre!(
-                    "Thermal `xs` currently requires subtraction.disable_threshold_subtraction=true"
-                ));
-            }
-            let external = settings.kinematics.externals.get_indep_externals();
-            let [probe] = external.as_slice() else {
-                return Err(eyre!(
-                    "Thermal `xs` currently requires one positive-energy probe"
-                ));
-            };
-            if !probe.temporal.value.is_finite() || probe.temporal.value <= F(0.0) {
-                return Err(eyre!(
-                    "Thermal `xs` currently requires a finite positive probe energy"
-                ));
-            }
+        if self.graph.param_builder.medium_mode != crate::settings::global::MediumMode::Vacuum
+            && !settings.subtraction.disable_threshold_subtraction
+        {
+            return Err(eyre!(
+                "Inclusive thermal `xs` requires subtraction.disable_threshold_subtraction=true"
+            ));
         }
 
         self.param_builder = self.graph.param_builder.clone();

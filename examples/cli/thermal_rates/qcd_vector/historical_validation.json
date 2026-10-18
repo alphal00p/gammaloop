@@ -1,0 +1,139 @@
+{
+  "status": "historical evidence, not a rerun on the current implementation",
+  "investigation_tip": "a0b2d4191cad17d8dc2f20891bb0f245f0df18b7",
+  "source_path": "examples/cli/thermal_production/qcd_vector/results.json",
+  "gammaloop_revision": "866387db39eda30bb1bc2ed75c8923586daeeda7",
+  "paper": "https://arxiv.org/abs/1910.07552v2",
+  "reference_code": {
+    "url": "https://doi.org/10.5281/zenodo.3478144",
+    "version": "v0.9-spf",
+    "commit": "dca510d2d2c8bee2288345e972ee3a54b37cdbd5",
+    "archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+    "gsl_version": "2.8",
+    "quadrature_checks": [
+      {
+        "k0_over_T": 4.0,
+        "k_over_T": 1.0,
+        "absolute_tolerance": 0.0001,
+        "rho_lo": 2.7034759765132232,
+        "rho_nlo": 0.106483279519403
+      },
+      {
+        "k0_over_T": 4.0,
+        "k_over_T": 1.0,
+        "absolute_tolerance": 1e-05,
+        "rho_lo": 2.7034759765132232,
+        "rho_nlo": 0.10648332415676968
+      }
+    ],
+    "nlo_tolerance_change": 4.4637366677924284e-08
+  },
+  "benchmark": {
+    "T": 1,
+    "K": [
+      4,
+      0,
+      0,
+      1
+    ],
+    "K_squared": 15,
+    "Nc": 3,
+    "CF": 1.3333333333333333,
+    "e": 1,
+    "g": 1,
+    "Qd": -0.3333333333333333,
+    "mu_r": 4,
+    "vacuum_subtraction": false,
+    "local_uv": true,
+    "integrated_uv": true,
+    "threshold_subtraction": false,
+    "soft_counterterms": false,
+    "native_to_rho": 36,
+    "nB_k0": 0.01865736036377405
+  },
+  "runs": {
+    "thermal_lo": {
+      "mode": "thermodynamic_equilibrium",
+      "seed": 191007552,
+      "batch": 50000,
+      "m_uv": 4,
+      "localization_scale": 4,
+      "rho": 2.6965294358926015,
+      "rho_error": 0.013698268354773332,
+      "reference_rho": 2.7034759765132232,
+      "difference_sigma": -0.5071108581546451,
+      "nonfinite_samples": 0,
+      "samples": 100000
+    },
+    "thermal_nlo": {
+      "mode": "thermodynamic_equilibrium",
+      "seed": 191007552,
+      "batch": 100000,
+      "m_uv": 4,
+      "localization_scale": 4,
+      "rho": 0.10785546989137136,
+      "rho_error": 0.0010186070525503403,
+      "reference_rho": 0.10648332415676968,
+      "difference_sigma": 1.347080536273691,
+      "nonfinite_samples": 1,
+      "samples": 1000000
+    },
+    "vacuum_lo": {
+      "mode": "vacuum",
+      "seed": 191007552,
+      "batch": 50000,
+      "m_uv": 4,
+      "localization_scale": 4,
+      "rho": 3.5718446986343637,
+      "rho_error": 0.018166060065583807,
+      "reference_rho": 3.580986219567645,
+      "difference_sigma": -0.5032197901073979,
+      "nonfinite_samples": 0,
+      "samples": 100000
+    },
+    "vacuum_nlo": {
+      "mode": "vacuum",
+      "seed": 191007552,
+      "batch": 100000,
+      "m_uv": 4,
+      "localization_scale": 4,
+      "rho": 0.09241921300840296,
+      "rho_error": 0.0006205174883431102,
+      "reference_rho": 0.09070744059337357,
+      "difference_sigma": 2.7586207434702876,
+      "nonfinite_samples": 0,
+      "samples": 1000000
+    },
+    "vacuum_nlo_independent_seed": {
+      "mode": "vacuum",
+      "seed": 271828,
+      "batch": 200000,
+      "m_uv": 4,
+      "localization_scale": 4,
+      "rho": 0.09068381439278908,
+      "rho_error": 0.00043809581797604855,
+      "reference_rho": 0.09070744059337357,
+      "difference_sigma": -0.053929299516353654,
+      "nonfinite_samples": 0,
+      "samples": 2000000
+    },
+    "thermal_nlo_uv_control": {
+      "mode": "thermodynamic_equilibrium",
+      "seed": 314159,
+      "batch": 100000,
+      "m_uv": 2,
+      "localization_scale": 2,
+      "rho": 0.10918683087197438,
+      "rho_error": 0.0023949191004562216,
+      "reference_rho": 0.10648332415676968,
+      "difference_sigma": 1.1288509556292274,
+      "nonfinite_samples": 0,
+      "samples": 300000
+    }
+  },
+  "limitations": [
+    "One nonfinite sample was discarded in the million-sample thermal NLO run, after the configured Double/Quad/Arb escalation. Its cause was not isolated; the display log does not retain its coordinates.",
+    "The first vacuum NLO seed is 2.76 quoted errors above the analytic target. The independent two-million-sample seed is consistent with the target. Both are retained without averaging them or selecting away the first run.",
+    "This hard timelike point does not validate light-cone resummation or every soft/collinear limit."
+  ]
+}
