@@ -678,7 +678,7 @@ impl TypstRenderer {
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             // Build detailed error message
-            let mut error_msg = format!("typst failed while {description}");
+            let mut error_msg = format!("typst failed while {description} ({})", output.status);
 
             // Show the command that was executed
             let cmd_str = format!("{:?}", command);
