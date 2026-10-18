@@ -5961,6 +5961,60 @@ mod tests {
     }
 
     #[test]
+    fn raised_lu_pass_two_parameters_keep_the_full_first_derivative() {
+        use crate::{
+            integrands::process::evaluators::GenericEvaluatorFloat, processes::EvaluatorSettings,
+            utils::F,
+        };
+        use spenso::algebra::complex::Complex;
+        use symbolica::atom::Atom;
+
+        let f = function!(symbol!("f"), GS.rescale_star);
+        let eta = function!(GS.eta, GS.rescale_star);
+        let parameters = super::params_for_derivative_order(2);
+        assert_eq!(
+            parameters,
+            [
+                f.clone(),
+                f.derivative(GS.rescale_star),
+                eta.derivative(GS.rescale_star),
+                eta.derivative(GS.rescale_star).derivative(GS.rescale_star),
+            ]
+        );
+        // The shared CFF crate checks the general Laurent formula. Here the
+        // GammaLoop parameter layout must bind (f, f', eta', eta'') in that
+        // exact order, including the derivative of the complete LU prefactor.
+        let residue = super::build_derivative_structure_atom(2, -1);
+        let substitutions = parameters
+            .iter()
+            .zip([7, 11, 2, 3])
+            .map(|(parameter, value)| Replacement::new(parameter.to_pattern(), Atom::num(value)))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            residue.replace_multiple(&substitutions),
+            Atom::one() / Atom::num(8)
+        );
+        assert_eq!(
+            residue
+                .replace(parameters[1].to_pattern())
+                .with(0)
+                .replace_multiple(&substitutions),
+            -Atom::num(21) / Atom::num(8)
+        );
+        let settings = EvaluatorSettings {
+            compile: false,
+            ..Default::default()
+        };
+        let mut evaluator = super::build_derivative_structure(2, -1, &settings);
+        let mut evaluate = <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut evaluator);
+        // This explicit binary64 control uses exactly representable dyadics.
+        let mut values = [7, 11, 2, 3].map(|value| Complex::new_re(F(f64::from(value))));
+        assert_eq!(evaluate(&values), Complex::new_re(F(1.0 / 8.0)));
+        values[1] = Complex::new_re(F(0.0));
+        assert_eq!(evaluate(&values), Complex::new_re(F(-21.0 / 8.0)));
+    }
+
+    #[test]
     fn single_threshold_params_follow_effective_f_then_eta_contract() {
         let params = super::params_for_derivative_order(3);
         let f = symbol!("f");
