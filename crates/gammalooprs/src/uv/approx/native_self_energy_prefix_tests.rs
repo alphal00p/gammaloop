@@ -31,7 +31,7 @@ fn native_os_quark_proper_prefix_matches_mass_and_field_insertions() -> Result<(
 }
 
 impl QcdMassReference {
-    fn certify_os_quark_proper_prefix(&self) -> Result<()> {
+    pub(super) fn certify_os_quark_proper_prefix(&self) -> Result<CertifiedMassPrefixes> {
         let reference = self;
         let mut one_loop_sources = reference.sources(1)?;
         let one_loop = reference.project(&one_loop_sources.remove(0))?;
@@ -111,7 +111,7 @@ impl QcdMassReference {
         settings.vakint.normalization = "MSbar".to_owned();
         settings.vakint.additional_normalization = "1".to_owned();
         let velocity = settings.on_shell_velocity()?;
-        let mut prefixes = BTreeSet::<(String, Vec<usize>)>::new();
+        let mut prefixes = CertifiedMassPrefixes::new();
         for diagram in reference.sources(2)? {
             let graph = Graph::from_feynkit(&diagram, None, true)?;
             let model = &graph.model;
@@ -794,11 +794,14 @@ impl QcdMassReference {
                     diagram.name().to_owned(),
                     child_edges.iter().map(|edge| edge.0).collect(),
                 );
-                ensure!(prefixes.insert(key), "the actual quark prefix occurs once");
+                ensure!(
+                    prefixes.insert(key, transferred).is_none(),
+                    "the actual quark prefix occurs once"
+                );
             }
         }
         ensure!(prefixes.len() == 1);
-        Ok(())
+        Ok(prefixes)
     }
 }
 
