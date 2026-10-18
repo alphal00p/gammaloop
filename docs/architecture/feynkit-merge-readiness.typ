@@ -264,6 +264,15 @@ FeynCalc coverage guide and Linnet layout manual. Their existing first rows
 receive the same semantic-header correction. Cell content, order, measured
 values and configuration defaults remain intact; the checker is unchanged.
 
+At `59d23ddb`, all six authored HTML/PDF bundles and the unchanged accessibility
+checker pass across all 572 generated pages. All six PDFs and exact source
+metadata, the original Idenso public anchor and forward link, and the renderer's
+source dependencies pass their artifact checks. An independent before/after
+comparison preserves every page path and sidebar requirement, and every cell,
+span, row order and numeric token in the 24 repaired tables. All source and lock
+guards remain unchanged. These local authored-site results do not replace
+native Rustdoc, notebook-wheel or full Nix publication qualification.
+
 These repairs change no source-level numerical algorithm, indexed API or
 state format 21. They establish no performance improvement or executable
 equality, and do not resolve any historical inconclusive gate. The successful
