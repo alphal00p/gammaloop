@@ -495,7 +495,10 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
-    idenso = ["crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"];
+    idenso = [
+      "crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"
+      "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym"
+    ];
     "linnet-py" = ["crates/linnet-py/tests/test_svg_interaction.py"];
     linnet = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
     linnest = [
