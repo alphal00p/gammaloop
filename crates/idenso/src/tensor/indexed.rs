@@ -666,8 +666,9 @@ mod tests {
         // callback can observe that order even though reservation uses a set.
         let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let observed_calls = std::sync::Arc::clone(&calls);
-        let name = spenso::index_symbol!(
+        let name = symbol!(
             "indexed_reservation_order",
+            tag = &spenso::network::tags::SPENSO_TAG.index,
             norm = move |node, _| {
                 if let AtomView::Fun(function) = node {
                     observed_calls

@@ -525,10 +525,6 @@ impl SymbolicTensor<PartialStructure> {
         self.borrowed_parts().established_interface_is_valid()
     }
 
-    pub(super) fn algebra_preserves_interface(&self) -> bool {
-        self.borrowed_parts().algebra_preserves_interface()
-    }
-
     pub(super) fn rewrites_preserve_interface(&self) -> bool {
         self.borrowed_parts().rewrites_preserve_interface()
     }
