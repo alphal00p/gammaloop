@@ -1652,11 +1652,17 @@ mod tests {
                 format!("shared_series_factor_test::{name}").as_str()
             ))
         });
+        let dimension = Atom::var(symbol!("shared_series_factor_test::mu"));
+        let compact = LibraryRep::from(Minkowski {}).to_symbolic([&dimension]);
         let index = LibraryRep::from(Minkowski {})
-            .to_symbolic([Atom::var(symbol!("shared_series_factor_test::mu"))]);
+            .to_symbolic([dimension, Atom::num(87601)]);
         let g = (GS.emr_vec(EdgeIndex(0), &index) + GS.emr_vec(EdgeIndex(1), &index))
             * (Atom::var(symbol!("shared_series_factor_test::u"))
                 + Atom::var(symbol!("shared_series_factor_test::v")));
+        // The authored positive fixture has one explicit free axis. Preserve
+        // rejection of its original compact spelling at the same boundary.
+        let anonymous = g.replace(index.to_pattern()).with(compact);
+        assert!(AppliedFeynmanRule::new(anonymous).is_err());
         let family = symbol!("gammalooprs::uv::numerator_family");
         let cut = CutCFFIndex::new_all_none();
         let expected_coefficients = [&g * &a * &c, &g * (&a * &d + &b * &c), &g * &b * &d]
