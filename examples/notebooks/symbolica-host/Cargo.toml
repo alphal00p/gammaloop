@@ -23,6 +23,8 @@ native = ["linnet-py/native", "feynkit-py/native", "spynso3/native"]
 wasm = ["linnet-py/wasm", "feynkit-py/wasm", "spynso3/wasm"]
 
 [patch.crates-io]
+# Match the workspace's native and Wasm Clarabel clock handling.
+clarabel = { path = "../../../vendor/clarabel" }
 # Optional notebook compiler components; see vendor/typst.typ.
 typst-library = { path = "../../../vendor/typst-library" }
 typst-svg = { path = "../../../vendor/typst-svg" }
@@ -39,3 +41,12 @@ debug = 0
 [profile.docs]
 inherits = "dev"
 debug = false
+
+# Match the canonical documentation check's optimized native profile.
+[profile.ci-optim]
+inherits = "dev"
+opt-level = 2
+debug = false
+
+[profile.ci-optim.package."*"]
+opt-level = 3

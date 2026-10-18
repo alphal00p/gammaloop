@@ -193,6 +193,49 @@ all 74 documentation scope checks, and formatting. All 3,502 tracked source
 entries remain unchanged across that preflight. Full canonical Nix runtime and
 rendering qualification remains separate from these focused checks.
 
+Frozen `40105747` passes strict Clippy, formatting and the CI graph check,
+plus all 65 intended doctests with the 19 existing ignored cases unchanged.
+All nine Nix runtime groups pass: 5,719 executed cases, no failures or audit
+errors, all 5,129 prior identities retained, and the exact 225 documentation and
+365 integration controls preserved. The aggregate and nine leaf outputs are
+verified and retained. Canonical cache preparation and upload also pass, and the
+separate verifier binds all 105 selected outputs to this exact source. All
+3,502 tracked entries remain unchanged. These are distinct runtime and cache
+receipts; the full-site failure below still prevents overall CI qualification.
+
+The full-site check at `40105747` passes all five exact Python stub checks,
+88 documentation examples, three GammaLoop exporter tests and both Linnet
+exporter tests, then fails in two independent dependencies. The latest-site
+notebook host stops before wheel installation because its stale lock requests
+`bitflags` 2.11.1 outside the root vendor closure. The snapshot bundle reports a
+duplicate Idenso label: the same chapter appears in its HTML guide and in the
+complete PDF manual. The failed full-site attempt preserves all 3,502 source
+entries; rendering and publication remain unqualified.
+
+The notebook repair refreshes the native host lock against the existing
+root vendor set, adds the root's local Clarabel patch and supplies its missing
+`ci-optim` profile. That profile follows the relevant root optimization policy;
+standalone path dependencies have different package roles, so this is policy
+parity, not code-generation or binary equivalence. The companion Tydenso lock
+aligns only the three shared Symbolica-family revisions, preserving its
+independent registry pins and Wasm backends. Native and Wasm features remain
+separate. The Idenso repair gives the PDF placement a distinct label
+while retaining the public HTML anchor, both links and every example. Existing
+test assertions remain intact. Offline metadata and feature checks support the
+proposals. Both existing Tydenso Wasm libraries also type-check against the
+staged lock and unchanged Rust sources using the pinned toolchain. That staging
+check does not regenerate prebuilt assets or certify the applied source;
+post-application checks and full-site qualification remain separate.
+
+These repairs change no source-level numerical algorithm, indexed API or
+state format 21. They establish no performance improvement or executable
+equality, and do not resolve any historical inconclusive gate. The successful
+`40105747` upload does not certify a later amended source or authorize merging.
+After its runtime aggregate passed and all ten results were retained, the
+canonical command's redundant re-execution of the same failed site derivation
+was cancelled through its owned Nix client. Its final source guard passed; the
+separate complete full-site failure remains recorded as failed.
+
 Repair qualification uses the full canonical `just ci-checks` owner after CI
 regeneration and formatting. This exercises Nix's actual per-package runtime
 features and rendering policy; another workspace-default Cargo sweep cannot
@@ -204,7 +247,15 @@ inconclusive cases are not relabelled by this repair.
 
 Evidence is retained under `target/fully-indexed/ci-failure-8959f063`:
 `nixci/suite.json` and the Spenso/Clinnet logs, `clinnet-review/analysis.json`,
-`validation-plan.json` and `readiness/summary.json`.
+`validation-plan.json` and `readiness/summary.json`. The `40105747` follow-up
+is recorded in `doctest-401-review/summary.json`, `canonical-ci-checks-4`,
+`documentation-final-3/summary.json`, `final-ci-upload-401-1` and
+`final-ci-verification-401-1/verification.json`; staged repair evidence is in
+`notebook-lock-review` and `typst-label-review`. The complete runtime audit is
+`runtime-stage-audit-40105747-1/summary.json`, and the successful staging compile
+is `staging-tydenso-wasm-3`. Two preceding attempts stopped before compilation
+at a read-only global Cargo build directory; the accepted attempt explicitly
+uses the task's own target and build directories.
 
 The explicit-index continuation follows checkpoint `87b1d81f`, whose 105
 selected CI outputs were verified and uploaded through the canonical workflow.
