@@ -2198,8 +2198,17 @@ impl QcdMassReference {
         parent: &crate::uv::hedge_poset::OwnedForestNode,
         actual: &super::IntegratedCts,
         projection: &MassProjection,
-        common: &mut Option<(SymbolicTensor<IndexedStructure>, [Atom; 2], usize)>,
-    ) -> Result<SymbolicTensor<IndexedStructure>> {
+        common: &mut Option<(
+            SymbolicTensor<IndexedStructure>,
+            SymbolicTensor<IndexedStructure>,
+            Atom,
+            [Atom; 2],
+            usize,
+        )>,
+    ) -> Result<(
+        SymbolicTensor<IndexedStructure>,
+        SymbolicTensor<IndexedStructure>,
+    )> {
         use crate::{
             numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
             utils::GS,
@@ -2260,6 +2269,7 @@ impl QcdMassReference {
         let boundary = crown.included_iter().collect::<Vec<_>>();
         ensure!(boundary.len() == 2);
         let mut signs = BTreeMap::new();
+        let mut physical_mass = None;
         for hedge in boundary {
             let edge = graph[&hedge];
             let routed = diagram
@@ -2275,10 +2285,13 @@ impl QcdMassReference {
                 ));
             };
             if graph.flow(hedge) == Flow::Sink {
-                ensure!(sign == 1);
+                ensure!(sign == 1 && physical_mass.is_none());
+                physical_mass = Some(graph[edge].particle.mass_atom(&graph.model));
             }
             ensure!(signs.insert(edge.0, sign).is_none());
         }
+        let physical_mass = physical_mass
+            .ok_or_else(|| eyre!("the actual parent has no unique physical incoming mass owner"))?;
         for tensor in [&pole, &projector] {
             let mut unexpected = Vec::new();
             tensor.expression().visitor(&mut |view| {
@@ -2385,15 +2398,68 @@ impl QcdMassReference {
                 .external_structure()
                 == pole.structure().canonical().external_structure()
         );
+        // This unit matrix uses only the original projector's fixed source
+        // interface, never a produced pole coefficient. Its endpoint transport
+        // has its own inverse, even for a ranked-zero publication.
+        let mass_identity =
+            zero_projector.with_checked_expression(Atom::num(12) * zero_projector.expression())?;
+        let mut identity_transpose = HashMap::new();
+        let mut identity_inverse = HashMap::new();
+        for (position, slot) in mass_identity.structure().logical_slots().iter().enumerate() {
+            let role = cooked_endpoints
+                .iter()
+                .position(|index| slot.aind().to_atom() == *index)
+                .ok_or_else(|| eyre!("unit mass matrix has an unowned source port"))?;
+            identity_transpose.insert(position, endpoint_indices[1 - role]);
+            identity_inverse.insert(position, slot.aind());
+        }
+        ensure!(identity_transpose.len() == 4);
+        let transposed_identity = mass_identity.reindex_interface_ports(&identity_transpose)?;
+        ensure!(
+            transposed_identity
+                .reindex_interface_ports(&identity_inverse)?
+                .same_value(&mass_identity)
+        );
+        let zero_identity = mass_identity.with_checked_expression(Atom::Zero)?;
+        let moved_zero = zero_identity.reindex_interface_ports(&identity_transpose)?;
+        ensure!(
+            moved_zero.rank() == 4
+                && moved_zero
+                    .reindex_interface_ports(&identity_inverse)?
+                    .same_value(&zero_identity)
+        );
+        ensure!(
+            transposed_identity
+                .structure()
+                .canonical()
+                .external_structure()
+                == pole.structure().canonical().external_structure()
+        );
+        // Phi(I)=1 in this original unit-mass projector normalization, for
+        // generic p: the odd gamma trace is zero and Tr_spin,color(I)=4 Nc.
+        let unit_trace =
+            super::simplify(&projector.clone().multiply(transposed_identity.clone())?)?;
+        ensure!(unit_trace.is_scalar());
+        Self::certify_finite_tagged_rows_zero(
+            "independent unit matrix projector calibration",
+            unit_trace.with_checked_expression(unit_trace.expression() - Atom::one())?,
+        )?;
         let first_input = common.is_none();
         if first_input {
             *common = Some((
                 kinetic_template.clone(),
+                transposed_identity.clone(),
+                physical_mass.clone(),
                 endpoint_atoms.clone(),
                 incoming_edge,
             ));
         }
-        let (common_template, common_endpoint_atoms, common_edge) = common.as_ref().unwrap();
+        let (common_template, common_identity, common_mass, common_endpoint_atoms, common_edge) =
+            common.as_ref().unwrap();
+        ensure!(
+            &physical_mass == common_mass,
+            "native inputs must retain the same symbolic physical top mass"
+        );
         let common_endpoints = common_endpoint_atoms
             .iter()
             .map(|slot| -> Result<Atom> {
@@ -2456,6 +2522,11 @@ impl QcdMassReference {
         Self::certify_finite_tagged_rows_zero(
             "native kinetic templates have the same generic-p open frame",
             super::simplify(&aligned_template.try_sub(common_template)?)?,
+        )?;
+        let aligned_identity = align(&transposed_identity)?;
+        Self::certify_finite_tagged_rows_zero(
+            "native unit matrices have the same generic-p open frame",
+            super::simplify(&aligned_identity.try_sub(common_identity)?)?,
         )?;
 
         // Expose only compact vector arguments, retaining chain/trace factors.
@@ -2529,7 +2600,18 @@ impl QcdMassReference {
         let weight = &projection.kernel_weight * &projection.numerator_prefactor;
         ensure!(!weight.contains_symbol(GS.emr_mom) && !weight.contains(tau.as_view()));
         let weighted = linear.with_checked_expression(
-            self.model.expand_couplings(&(weight * linear.expression())),
+            self.model
+                .expand_couplings(&(&weight * linear.expression())),
+        )?;
+        let constant_tensor = pole.with_checked_expression(constant.clone())?;
+        ensure!(
+            !constant_tensor.expression().contains_symbol(GS.emr_mom),
+            "the complete tau-zero coefficient cannot retain live external momentum"
+        );
+        let constant_tensor = align(&constant_tensor)?;
+        let weighted_constant = constant_tensor.with_checked_expression(
+            self.model
+                .expand_couplings(&(weight * constant_tensor.expression())),
         )?;
         crate::debug_tags!(#uv, #integrated, #summary;
             stage = "native_overall_kinetic_pole_input", source = %diagram.name(),
@@ -2539,7 +2621,7 @@ impl QcdMassReference {
             file.weighted_linear_pole = %cooking.uncook(weighted.expression().as_view()).to_canonical_string(),
             "Actual integrated pole retains generic live momentum and ordered native spin/color output"
         );
-        Ok(weighted)
+        Ok((weighted, weighted_constant))
     }
 
     /// Apply both actual parent mass certificates to one original retained input.
@@ -3209,6 +3291,7 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
     let mut completed = BTreeSet::new();
     let mut kinetic_frame = None;
     let mut kinetic_sum: Option<SymbolicTensor<IndexedStructure>> = None;
+    let mut constant_sum: Option<SymbolicTensor<IndexedStructure>> = None;
     for (diagram, projection) in sources
         .iter()
         .filter(|(d, _)| d.loop_momentum_basis().loop_edges.len() == 2)
@@ -3250,7 +3333,7 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
                 "Starting one retained native bare/proper overall mass input"
             );
             let actual = reference.certify_actual_overall_mass_input(record, given, prefix)?;
-            let kinetic = reference.certify_native_overall_kinetic_pole(
+            let (kinetic, constant) = reference.certify_native_overall_kinetic_pole(
                 record,
                 &actual.0,
                 &actual.2,
@@ -3260,6 +3343,10 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
             kinetic_sum = Some(match kinetic_sum {
                 Some(sum) => sum.try_add(&kinetic)?,
                 None => kinetic,
+            });
+            constant_sum = Some(match constant_sum {
+                Some(sum) => sum.try_add(&constant)?,
+                None => constant,
             });
             let unique = completed.insert(key.clone());
             ensure!(unique);
@@ -3298,7 +3385,7 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
     // arXiv:1909.00697 A.18: CF[(CA+CF/2)/eps^2+(-17CA/4+3CF/4+TF*nf)/eps].
     // SU(3), nf=6 gives 44/(9 eps^2)-35/(3 eps). This target is not a definition
     // by subtraction of the produced bare/proper coefficients above.
-    let (kinetic_template, _, common_edge) = kinetic_frame
+    let (kinetic_template, mass_identity, physical_mass, _, common_edge) = kinetic_frame
         .ok_or_else(|| eyre!("the complete native inventory has no open kinetic frame"))?;
     let kinetic_sum = kinetic_sum.ok_or_else(|| eyre!("the actual pole sum is empty"))?;
     let epsilon = Atom::var(crate::utils::GS.dim_epsilon);
@@ -3313,6 +3400,39 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
         "complete generic-p native two-loop MS field pole",
         super::simplify(&kinetic_sum.try_sub(&expected_kinetic)?)?,
     )?;
+    // Independent hybrid Lagrangian: Gamma_CT2=i*a^2[w2*pslash-(w2+K2)*m].
+    // The separately local O branch owns -i*a^2*K2*m, hence the analytic
+    // V=-(U1-U1O) pole is i*a^2*w2*(pslash-m). No produced Phi-zero identity
+    // defines this expected constant matrix. Eq.5.11 of arXiv:2203.11038v1
+    // and the native one-loop bare-source anchor fix this same separation.
+    let constant_sum =
+        constant_sum.ok_or_else(|| eyre!("the actual constant pole sum is empty"))?;
+    let expected_constant = mass_identity.with_checked_expression(
+        -&normalization * &w2 * &physical_mass * mass_identity.expression(),
+    )?;
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "complete generic-p native two-loop analytic constant pole",
+        super::simplify(&constant_sum.try_sub(&expected_constant)?)?,
+    )?;
+    let full_pole = kinetic_sum.try_add(&constant_sum)?;
+    let full_expected = expected_kinetic.try_add(&expected_constant)?;
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "complete generic-p native two-loop fieldlike analytic pole",
+        super::simplify(&full_pole.try_sub(&full_expected)?)?,
+    )?;
+    let wrong_constant = expected_constant.with_checked_expression(
+        expected_constant.expression()
+            + &normalization * &physical_mass * mass_identity.expression() / &epsilon,
+    )?;
+    let error = QcdMassReference::certify_finite_tagged_rows_zero(
+        "wrong independent analytic constant pole",
+        super::simplify(&constant_sum.try_sub(&wrong_constant)?)?,
+    ).expect_err("the complete open-matrix field certificate must reject a nonzero constant-mass perturbation");
+    ensure!(
+        error
+            .to_string()
+            .contains("native finite-tensor coefficient is not zero")
+    );
     // Fixed bare xi_B=1 instead shifts the double pole by CF*z3=4/3.
     // A simple-pole shift is a second independent normalization control.
     for wrong in [
@@ -3384,6 +3504,10 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
     crate::debug_tags!(#uv, #integrated, #summary;
         stage = "native_two_loop_msbar_field_pole", overall_inputs = completed.len(),
         file.actual_generic_p = %kinetic_sum.expression().to_canonical_string(),
+        file.actual_constant_pole = %constant_sum.expression().to_canonical_string(),
+        file.symbolic_physical_mass = %physical_mass.to_canonical_string(),
+        full_analytic_fieldlike_matrix = true, independent_unit_matrix_calibrated = true,
+        constant_mass_perturbation_rejected = true,
         file.independent_w2 = %w2.to_canonical_string(),
         exact_generic_open_matrix = true, mass_trace_used_as_field_oracle = false,
         auxiliary_scales_substituted = false, renormalized_feynman_gauge = true,
