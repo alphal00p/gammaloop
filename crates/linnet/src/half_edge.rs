@@ -2363,12 +2363,14 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         // println!("//non_bridges:\n{}", self.dot(&non_bridges));
 
         let mut regions = AHashSet::new();
+        let mut visited = AHashSet::new();
         self.all_s_t_cuts_impl(
             &non_bridges,
             s_connectivity,
             source,
             &target,
             t_connectivity,
+            &mut visited,
             &mut regions,
         );
 
@@ -2407,6 +2409,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         cuts
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn all_s_t_cuts_impl<S: SubSetLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
@@ -2414,6 +2417,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         s: HedgeNode, // will grow
         t: &HedgeNode,
         t_connectivity: usize,
+        visited: &mut AHashSet<HedgeNode>,
         regions: &mut AHashSet<HedgeNode>,
     ) {
         // println!("regions size:{}", regions.len());
@@ -2422,34 +2426,38 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         let hairy = s.internal_graph.filter.union(&s.hairs);
         let mut complement = hairy.complement(self);
         complement.intersect_with(subgraph.included());
-        if !complement.includes(&t.hairs) {
+        if !complement.includes(&t.hairs) || !visited.insert(s.clone()) {
             return;
         }
 
         let t_count = self.count_connected_components(&complement);
         let s_count = self.count_connected_components(&hairy);
 
-        if t_count <= t_connectivity && s_count <= s_connectivity && regions.get(&s).is_none() {
-            for h in s.hairs.included_iter() {
-                let invh = self.inv(h);
+        // Connectivity bounds select completed cuts, not intermediate growth.
+        // Absorbing a source-attached component can reconnect the complement;
+        // growing between source components can also reduce their count.
+        for h in s.hairs.included_iter() {
+            let invh = self.inv(h);
 
-                if invh != h && !t.hairs.includes(&invh) && subgraph.includes(&invh) {
-                    let mut new_node = s.clone();
+            if invh != h && !t.hairs.includes(&invh) && subgraph.includes(&invh) {
+                let mut new_node = s.clone();
 
-                    new_node.hairs.union_with_iter(self.neighbors(invh));
-                    new_node.hairs.intersect_with(subgraph.included());
+                new_node.hairs.union_with_iter(self.neighbors(invh));
+                new_node.hairs.intersect_with(subgraph.included());
 
-                    new_node.fix(self);
-                    self.all_s_t_cuts_impl(
-                        subgraph,
-                        s_connectivity,
-                        new_node,
-                        t,
-                        t_connectivity,
-                        regions,
-                    );
-                }
+                new_node.fix(self);
+                self.all_s_t_cuts_impl(
+                    subgraph,
+                    s_connectivity,
+                    new_node,
+                    t,
+                    t_connectivity,
+                    visited,
+                    regions,
+                );
             }
+        }
+        if t_count <= t_connectivity && s_count <= s_connectivity {
             regions.insert(s);
         }
     }

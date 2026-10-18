@@ -820,6 +820,87 @@ fn double_triangle() {
 }
 
 #[test]
+fn all_cuts_match_exhaustive_partitions_with_spectator_cycles() {
+    // Exhaust all connected simple graphs on three/four vertices, then double
+    // every edge. This includes A--B and A--C doubled edges: the complement of
+    // source A initially has disconnected B,C, but absorbing C gives the valid
+    // cut containing the two A--B edges. Edge labels distinguish parallel lines.
+    let mut checked = 0;
+    for count in [3, 4] {
+        let pairs = (0..count)
+            .flat_map(|left| (left + 1..count).map(move |right| (left, right)))
+            .collect::<Vec<_>>();
+        for graph_mask in 0..1usize << pairs.len() {
+            let edges = pairs
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| graph_mask & (1 << index) != 0)
+                .flat_map(|(_, &(left, right))| [(left, right), (right, left)])
+                .collect::<Vec<_>>();
+            // Independent vertex-adjacency oracle, without the half-edge
+            // traversal or cut-enumeration implementation under test.
+            let connected = |mask: usize| {
+                let mut reached = 1usize << mask.trailing_zeros();
+                loop {
+                    let expanded = edges.iter().fold(reached, |found, &(left, right)| {
+                        let endpoints = (1 << left) | (1 << right);
+                        if endpoints & mask == endpoints && endpoints & found != 0 {
+                            found | endpoints
+                        } else {
+                            found
+                        }
+                    });
+                    if expanded == reached {
+                        break reached == mask;
+                    }
+                    reached = expanded;
+                }
+            };
+            let all = (1usize << count) - 1;
+            if !connected(all) {
+                continue;
+            }
+            let mut builder = HedgeGraphBuilder::new();
+            let nodes = (0..count).map(|_| builder.add_node(())).collect::<Vec<_>>();
+            for (index, &(left, right)) in edges.iter().enumerate() {
+                builder.add_edge(nodes[left], nodes[right], index, true);
+            }
+            let graph: HedgeGraph<usize, (), ()> = builder.build();
+            let expected = (1..all)
+                .filter(|mask| mask & 1 != 0 && mask & 2 == 0)
+                .filter(|&mask| connected(mask) && connected(all ^ mask))
+                .map(|mask| {
+                    edges
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (left, right))| {
+                            (mask & (1 << left) != 0) != (mask & (1 << right) != 0)
+                        })
+                        .map(|(index, _)| index)
+                        .collect::<Vec<_>>()
+                })
+                .collect::<BTreeSet<_>>();
+            let cuts = graph.all_cuts_from_ids(&nodes[..1], &nodes[1..2]);
+            let actual = cuts
+                .iter()
+                .map(|(_, cut, _)| {
+                    let mut edges = graph
+                        .iter_edges_of(cut)
+                        .map(|(_, _, edge)| *edge.data)
+                        .collect::<Vec<_>>();
+                    edges.sort();
+                    edges
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(actual.len(), cuts.len(), "duplicate cuts: {edges:?}");
+            assert_eq!(actual, expected, "graph edges: {edges:?}");
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 42);
+}
+
+#[test]
 fn bounded_all_cycles_are_subgraph_capable_and_backend_neutral() {
     type ForestStore = Forest<(), ChildVecStore<()>>;
 

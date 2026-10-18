@@ -1657,7 +1657,9 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 16 stores signed LU cuts with shared E/H surface-alias groups,
 // residue orders, physical cut signs, and the cross-section H-surface catalogue.
 // Regenerate older states; the positional cut layouts have changed.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 16;
+// Version 17 stores Fermi localization strategies, rate-sector evaluators, and
+// native-precision composite-mass evaluators.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 17;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -296,15 +296,10 @@ impl ThresholdCountertermSpec {
                             edge_numbers(parent_lmb),
                         ));
                     }
-                    // A cross-section graph closes the incoming external lines into
-                    // topological cycles; generation turns those cycles back into fixed
-                    // external momenta before exposing the physical loop-momentum basis.
-                    let mut topological_parent = parent_lmb.clone();
-                    if !graph_is_amplitude {
-                        topological_parent.extend(graph.external_momentum_edge_order());
-                    }
+                    // The selected-basis owner keeps sewn initial-state lines
+                    // external; metadata names only physical integration loops.
                     let resolved_parent = graph
-                        .lmb_with_loop_edges(topological_parent.as_slice())
+                        .lmb_with_loop_edges(parent_lmb.as_slice())
                         .with_context(|| format!(
                             "graph '{}' threshold_counterterms variant {:?} has invalid full parent_lmb {:?}",
                             graph.name,
@@ -316,7 +311,7 @@ impl ThresholdCountertermSpec {
                         .iter()
                         .copied()
                         .collect::<BTreeSet<_>>()
-                        != topological_parent.iter().copied().collect::<BTreeSet<_>>()
+                        != parent_lmb.iter().copied().collect::<BTreeSet<_>>()
                     {
                         return Err(eyre!(
                             "graph '{}' threshold_counterterms variant {:?} parent_lmb {:?} does not define a full loop-momentum basis",
@@ -496,6 +491,53 @@ mod tests {
         THRESHOLD_COUNTERTERM_SCHEMA_VERSION, ThresholdCountertermCut, ThresholdCountertermSpec,
         ThresholdCountertermThreshold, ThresholdCountertermVariant,
     };
+
+    #[test]
+    fn threshold_parent_basis_uses_physical_loops_with_a_sewn_probe() {
+        use crate::{dot, graph::parse::IntoGraph, initialisation::test_initialise};
+
+        test_initialise().unwrap();
+        let graph: crate::graph::Graph = dot!(digraph sewn_threshold_parent {
+            node [num=1]
+            edge [num=1 particle="H"]
+            ext [style=invis is_cut=0]
+            ext -> A [id=0]
+            A -> B [id=1 lmb_id=0]
+            A -> B [id=2]
+            A -> C [id=3 lmb_id=1]
+            C -> A [id=4]
+            B -> ext [id=5]
+        })
+        .unwrap();
+        assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 2);
+        for (parent, valid) in [
+            (vec![1, 3], true),
+            (vec![2, 4], true),
+            (vec![1, 2], false),
+            (vec![0, 3], false),
+            (vec![1], false),
+        ] {
+            let spec = ThresholdCountertermSpec {
+                cuts: vec![ThresholdCountertermCut {
+                    edges: vec![EdgeIndex(1), EdgeIndex(2)],
+                    thresholds: vec![ThresholdCountertermThreshold {
+                        edges: vec![EdgeIndex(3), EdgeIndex(4)],
+                        counterterms: vec![ThresholdCountertermVariant {
+                            name: None,
+                            group_id: None,
+                            subspace: None,
+                            parent_lmb: Some(parent.iter().copied().map(EdgeIndex).collect()),
+                            disable: false,
+                            multiplier: None,
+                        }],
+                    }],
+                }],
+                ..Default::default()
+            };
+            let result = spec.validate_for_graph(&graph);
+            assert_eq!(result.is_ok(), valid, "parent={parent:?}: {result:?}");
+        }
+    }
 
     #[test]
     fn verbose_threshold_settings_preserve_optional_semantics() {

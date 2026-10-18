@@ -3,6 +3,7 @@
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Linnet source on
 2026-08-28.
+Source/target cut enumeration was reviewed on 2026-10-17.
 
 This note covers the `linnet` Rust crate. `clinnet` is a separate command-line renderer and
 `linnest` owns Typst layout and drawing; neither is part of Linnet's graph core.
@@ -98,6 +99,13 @@ the platform cannot represent before enumeration. Tadpole classification similar
 canonicalizes a non-empty terminal set, compares components against every terminal-incident edge,
 and returns deduplicated structural results. These guards make malformed input return errors and
 keep retained node-identification history on canonical structural paths instead of panic paths.
+
+Source/target cut enumeration grows the source region while retaining the target. Visited
+growth states are memoized separately from accepted partitions. The connectivity bounds of
+the original source and target select completed cuts; they do not prune intermediate growth.
+For example, when a spectator cycle attaches only to the source, the initial complement can
+be disconnected. Absorbing that cycle into the source restores the valid target-side cut.
+The same rule permits growth to join initially separate source components.
 
 DOT interchange follows a separate adapter path:
 

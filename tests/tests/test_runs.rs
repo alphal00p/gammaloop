@@ -83,3 +83,9 @@ mod scalar_virtual_phase_conventions;
 
 #[path = "test_runs/thermal_rates.rs"]
 mod thermal_rates;
+
+#[path = "test_runs/thermal_bubble.rs"]
+mod thermal_bubble;
+
+#[path = "test_runs/cold_thermal_rates.rs"]
+mod cold_thermal_rates;

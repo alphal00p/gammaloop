@@ -12,6 +12,7 @@ use symbolica::atom::Atom;
 use crate::{
     GammaLoopContext,
     cff::expression::OrientationID,
+    cff::surface::HybridSurfaceRef,
     graph::Graph,
     integrands::{
         evaluation::EvaluationMetaData,
@@ -20,17 +21,20 @@ use crate::{
             evaluators::{
                 EvaluatorStack, GenericEvaluator, SingleOrAllOrientations, evaluate_evaluator,
             },
-            param_builder::FnMapEntry,
+            param_builder::{FnMapEntry, LUParams},
         },
     },
     momentum::sample::{LoopMomenta, MomentumSample},
     processes::{EvaluatorBuildTimings, EvaluatorSettings},
     settings::{RuntimeSettings, global::FrozenCompilationMode},
-    utils::{F, FloatLike, h_dual, hyperdual_utils::DualOrNot},
+    utils::{
+        F, FloatLike, h_dual,
+        hyperdual_utils::{DualOrNot, new_constant},
+    },
     uv::uv_graph::UVE,
 };
 
-use super::{FermiSurfaceProduct, FermiSurfaceSector};
+use super::{FermiCutLocalization, FermiSurfaceProduct, FermiSurfaceSector, PreparedFermiSurface};
 
 /// A smooth compiled coefficient together with its localized Fermi support.
 /// Shell parameters use the same parameter layout and native precision as the
@@ -41,6 +45,7 @@ pub(crate) struct FermiSurfaceEvaluator {
     product: FermiSurfaceProduct,
     shell_parameters: GenericEvaluator,
     coefficient: EvaluatorStack,
+    localization: FermiCutLocalization,
 }
 
 impl FermiSurfaceEvaluator {
@@ -96,6 +101,7 @@ impl FermiSurfaceEvaluator {
                 product: sector.product,
                 shell_parameters,
                 coefficient,
+                localization: FermiCutLocalization::Independent,
             },
             timings,
         ))
@@ -103,6 +109,47 @@ impl FermiSurfaceEvaluator {
 
     pub(crate) fn dual_len(&self) -> usize {
         self.product.shape.len()
+    }
+
+    pub(crate) fn with_cut(mut self, graph: &Graph, surface: HybridSurfaceRef<'_>) -> Result<Self> {
+        self.localization = self.product.classify_cut(graph, surface)?;
+        Ok(self)
+    }
+
+    pub(crate) fn requires_cut(&self) -> bool {
+        self.localization == FermiCutLocalization::CutAngle
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn prepare_cut<T: FloatLike>(
+        &mut self,
+        sample: &MomentumSample<T>,
+        graph: &Graph,
+        surface: HybridSurfaceRef<'_>,
+        masses: &EdgeVec<F<T>>,
+        settings: &RuntimeSettings,
+        param_builder: &mut ParamBuilder,
+        metadata: &mut EvaluationMetaData,
+    ) -> Result<Option<PreparedFermiSurface<T>>> {
+        ensure!(
+            self.requires_cut(),
+            "Fermi evaluator has no angular cut chart"
+        );
+        let Some(mut prepared) = self.prepare(sample, graph, settings, param_builder, metadata)?
+        else {
+            return Ok(None);
+        };
+        if !self.product.localize_cut_angle(
+            &mut prepared,
+            graph,
+            surface,
+            sample.external_moms(),
+            masses,
+            &F::from_f64(settings.kinematics.e_cm),
+        )? {
+            return Ok(None);
+        }
+        Ok(Some(prepared))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -113,11 +160,35 @@ impl FermiSurfaceEvaluator {
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder,
         orientations: SingleOrAllOrientations<'_, OID>,
+        lu_params: Option<&LUParams<T>>,
         metadata: &mut EvaluationMetaData,
     ) -> Result<Complex<F<T>>>
     where
         usize: From<OID>,
     {
+        let Some(prepared) = self.prepare(sample, graph, settings, param_builder, metadata)? else {
+            return Ok(Complex::new_re(sample.zero()));
+        };
+        self.evaluate_prepared(
+            prepared,
+            sample,
+            graph,
+            settings,
+            param_builder,
+            orientations,
+            lu_params,
+            metadata,
+        )
+    }
+
+    pub(crate) fn prepare<T: FloatLike>(
+        &mut self,
+        sample: &MomentumSample<T>,
+        graph: &Graph,
+        settings: &RuntimeSettings,
+        param_builder: &mut ParamBuilder,
+        metadata: &mut EvaluationMetaData,
+    ) -> Result<Option<PreparedFermiSurface<T>>> {
         ensure!(
             sample.sample.dual_loop_moms.is_none(),
             "Fermi evaluation requires an unlocalized sampling point"
@@ -151,44 +222,103 @@ impl FermiSurfaceEvaluator {
             chemical_potentials.push(nu.re.clone());
         }
         let adapted = sample.lmb_transform(&graph.loop_momentum_basis, self.product.lmb());
-        self.product.localize(
+        self.product.prepare(
             adapted.loop_moms(),
             &masses,
             &chemical_potentials,
             |scale| Ok(h_dual(scale, None, None, &settings.lu_h_function)),
-            |momenta| {
-                let mut projected = adapted.clone();
-                projected.sample.loop_moms = LoopMomenta::from_iter(
-                    momenta
-                        .iter()
-                        .map(|momentum| momentum.map_ref(&|value| value.values[0].clone())),
-                );
-                projected.sample.dual_loop_moms = Some(momenta.clone());
-                let projected =
-                    projected.lmb_transform(self.product.lmb(), &graph.loop_momentum_basis);
-                let input = T::get_parameters(
-                    param_builder,
-                    cache,
-                    graph,
-                    &projected,
-                    helicities,
-                    &additional_params,
-                    None,
-                    None,
-                    None,
-                );
-                match self
-                    .coefficient
-                    .evaluate(input, orientations, settings, metadata)?
-                    .pop()
-                {
-                    Some(DualOrNot::Dual(value)) => Ok(value),
-                    _ => Err(eyre!(
-                        "Fermi coefficient evaluator must return a derivative jet"
-                    )),
-                }
-            },
         )
+    }
+
+    pub(crate) fn projected_sample<T: FloatLike>(
+        &self,
+        sample: &MomentumSample<T>,
+        prepared: &PreparedFermiSurface<T>,
+        graph: &Graph,
+    ) -> MomentumSample<T> {
+        let mut projected = sample.lmb_transform(&graph.loop_momentum_basis, self.product.lmb());
+        projected.sample.loop_moms = LoopMomenta::from_iter(
+            prepared
+                .momenta
+                .iter()
+                .map(|momentum| momentum.map_ref(&|value| value.values[0].clone())),
+        );
+        projected.sample.dual_loop_moms = Some(prepared.momenta.clone());
+        projected.lmb_transform(self.product.lmb(), &graph.loop_momentum_basis)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn evaluate_prepared<T: FloatLike, OID: IndexLike>(
+        &mut self,
+        prepared: PreparedFermiSurface<T>,
+        sample: &MomentumSample<T>,
+        graph: &Graph,
+        settings: &RuntimeSettings,
+        param_builder: &mut ParamBuilder,
+        orientations: SingleOrAllOrientations<'_, OID>,
+        lu_params: Option<&LUParams<T>>,
+        metadata: &mut EvaluationMetaData,
+    ) -> Result<Complex<F<T>>>
+    where
+        usize: From<OID>,
+    {
+        // An angular branch has already integrated the cut delta. Its shell
+        // profile is the sole inserted scale integral; radial LU symbols are
+        // therefore neutral regardless of the caller's surrounding branch.
+        let unit_lu = LUParams {
+            tstar: DualOrNot::NonDual(sample.one()),
+            h_function: DualOrNot::NonDual(sample.one()),
+        };
+        let lu_params = if self.requires_cut() {
+            Some(&unit_lu)
+        } else {
+            lu_params
+        };
+        // A conditional LU chart may be independent of the localized shell
+        // coordinates. Keep its parameters constant on the shell-offset jets;
+        // intersecting cuts require their complete joint derivatives instead.
+        let lu_parameters = lu_params
+            .map(|params| match (&params.tstar, &params.h_function) {
+                (DualOrNot::NonDual(tstar), DualOrNot::NonDual(h_function)) => {
+                    Ok((tstar, h_function))
+                }
+                _ => Err(eyre!(
+                    "Fermi evaluation requires scalar LU parameters independent of its shell coordinates"
+                )),
+            })
+            .transpose()?;
+        let helicities = settings.kinematics.externals.get_helicities();
+        let additional_params = settings.additional_params();
+        let cache = (settings.general.enable_cache, settings.general.debug_cache);
+        let projected = self.projected_sample(sample, &prepared, graph);
+        let lu_params = lu_parameters.map(|(tstar, h_function)| {
+            let template = &prepared.momenta.0[0].px;
+            LUParams {
+                tstar: DualOrNot::Dual(new_constant(template, tstar)),
+                h_function: DualOrNot::Dual(new_constant(template, h_function)),
+            }
+        });
+        let input = T::get_parameters(
+            param_builder,
+            cache,
+            graph,
+            &projected,
+            helicities,
+            &additional_params,
+            None,
+            None,
+            lu_params.as_ref(),
+        );
+        let Some(DualOrNot::Dual(value)) = self
+            .coefficient
+            .evaluate(input, orientations, settings, metadata)?
+            .pop()
+        else {
+            return Err(eyre!(
+                "Fermi coefficient evaluator must return a derivative jet"
+            ));
+        };
+        self.product.localize_prepared(prepared, value)
     }
 
     pub(crate) fn compile(
@@ -242,7 +372,7 @@ mod tests {
     };
 
     #[test]
-    fn compiled_fermi_sector_uses_fixed_orientation_and_projected_energy_jets() -> Result<()> {
+    fn compiled_fermi_sector_preserves_orientation_energy_jets_and_lu_constants() -> Result<()> {
         test_initialise()?;
         let graph: Graph = dot!(digraph fermi_runtime_cycle {
             node [num=1]
@@ -285,7 +415,9 @@ mod tests {
                     }],
                 )?,
                 orientations: vec![orientation],
-                coefficient: GS.ose(EdgeIndex(1)).pow(2),
+                coefficient: GS.ose(EdgeIndex(1)).pow(2)
+                    * Atom::var(GS.rescale_star).pow(2)
+                    * Atom::var(GS.hfunction_lu_cut),
             };
             let (mut evaluator, _) = FermiSurfaceEvaluator::new(
                 &graph,
@@ -328,11 +460,18 @@ mod tests {
                         &runtime,
                         &mut builder,
                         orientations,
+                        Some(&LUParams {
+                            tstar: DualOrNot::NonDual(F(1.25)),
+                            h_function: DualOrNot::NonDual(F(0.4)),
+                        }),
                         &mut EvaluationMetaData::new_empty(),
                     )?;
                     // -d_E [h(sqrt(E²-9)/2) E³(E²-9)/16] at E=5.
                     let expected = if orientation as f64 * mu > 0.0 {
-                        1275.0 / 8.0 * h(&F(2.0), None, None, &runtime.lu_h_function).0
+                        1275.0 / 8.0
+                            * h(&F(2.0), None, None, &runtime.lu_h_function).0
+                            * 1.25_f64.powi(2)
+                            * 0.4
                     } else {
                         0.0
                     };

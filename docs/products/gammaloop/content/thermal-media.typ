@@ -4,7 +4,7 @@
 = Thermal and dense media
 
 Medium modes evaluate amplitudes in an equilibrium medium at finite temperature or density.
-An initial finite-temperature cross-section path covers the restricted probe cuts below.
+An experimental cross-section path covers the equilibrium probe rates below.
 The medium is at rest in the frame of the supplied momenta.
 
 == Scope and limitations
@@ -12,17 +12,28 @@ The medium is at rest in the frame of the supplied momenta.
 Connected vacuum graphs, which give the pressure, are the only amplitudes validated against
 literature values. Higher-point amplitudes are supported but remain experimental.
 
-The currently enabled thermal `xs` path is restricted to one future-directed timelike probe and simple cuts
-through massless scalar particles, with no virtual propagators and no chemical-potential
-assignments on the cut particles. Choose a generation loop-momentum basis in which at most
-one cut-particle momentum contains both loop and external momentum; the signed radial solver
-supports at most one distinct cut energy that scales nonhomogeneously with the radial variable.
-A runtime chemical potential of zero does not remove an adjustable assignment. This path remains
-experimental. Spacelike probes, massive or spinning
-cut particles, raised cuts, cold modes, UV subtraction, threshold subtraction,
-and surface-targeted sampling are unavailable for thermal `xs`. Optional vacuum subtraction
-uses the same distribution-weight transformation as medium amplitudes.
-These are temporary validation limits. Thermal crossings and their occupation factors use the
+The enabled thermal `xs` path has one positive-energy probe. At finite temperature it
+supports massive or massless scalar cut particles without chemical-potential assignments,
+including raised propagators, timelike decay and absorption, and spacelike spectral kernels.
+A spacelike kernel is not an on-shell particle's lifetime. At zero temperature, fermion cuts
+with chemical potentials and virtual spectator fermion cycles independent of the cut momenta
+are also admitted, subject to the Fermi-surface restrictions below. General virtual
+corrections, finite-temperature spinning cut particles, and rate UV subtraction remain
+outside the enabled scope. A runtime chemical potential of zero does not remove an
+adjustable assignment on a scalar particle.
+
+The radial solver retains an inexpensive unrestricted positive-energy interior chart.
+More general signed or exterior charts use certified algebraic root enumeration with up to
+six distinct affine energies; algebraic degeneracies, unresolved tangencies, and
+unseparated roots are reported explicitly. A closed channel contributes zero. The former
+restriction routing external momentum through only one cut edge is no longer required.
+Positive-energy surface sampling is available when its host is strictly interior; the
+complete signed rate is evaluated at each mapped point. Mixed-sign surface targeting is
+not implemented. Compact sampling maps still require a full-support companion channel.
+
+Optional vacuum subtraction uses the same distribution-weight transformation as medium amplitudes.
+The remaining scope guards are temporary validation limits or explicit geometric limitations.
+Thermal crossings and their occupation factors use the
 shared cross-section residue, normalization, selector, event, and precision machinery.
 The internal representation of signed cuts does not by itself establish support for the
 excluded processes.
@@ -87,8 +98,7 @@ inverse_temperature = 10.0
 muB = [0.5, 0.0]
 ```
 
-For the restricted thermal `xs` path, disable threshold subtraction at both generation and
-runtime, and use ordinary loop-momentum sampling:
+For thermal `xs`, disable threshold subtraction at both generation and runtime:
 
 // docs-example: syntax
 ```toml
@@ -110,6 +120,12 @@ The experimental scalar sunset #source-link("examples/cli/thermal_rates/scalar_s
 and #source-link("examples/cli/thermal_rates/scalar_sunset/benchmark.typ", label: "benchmark notes")
 provide a concrete example and an independent phase-space reference. The reference alone does
 not validate native generation or integration.
+The #source-link("examples/cli/thermal_rates/scalar_bubble/run.toml", label: "massive scalar bubble card")
+and #source-link("examples/cli/thermal_rates/scalar_bubble/benchmark.typ", label: "bubble benchmark")
+cover decay, absorption, a closed channel, spacelike support, and raised-propagator mass
+derivatives. The benchmark gives the normalization conversions for
+#link("https://arxiv.org/abs/1503.03534")[Ho and Scherrer (2015)] and
+#link("https://arxiv.org/abs/hep-ph/0302098")[Nishikawa, Morimatsu, and Hidaka (2003)].
 
 == Chemical potentials
 
@@ -165,7 +181,7 @@ difference from the vacuum limit, and UV counterterms covering all loops are omi
 including when bridges remain in the graph.
 This option requires a medium mode.
 
-For the supported simple scalar thermal `xs` cuts, the result is the excess spectral kernel
+For supported thermal `xs` processes, the result is the excess spectral kernel
 $Gamma_rho(P) - Gamma_("vac")(P)$. The scalar sunset card calls this process `thermal_excess`,
 alongside the full `equilibrium` kernel and the `vacuum` control. To obtain the production
 source for an initially empty bosonic probe through KMS, use the full kernel:
@@ -206,4 +222,20 @@ This is checked when the selected term is evaluated, at that evaluation's precis
 ordinary order-zero occupation steps are not rejected by this check. The
 #source-link("tests/resources/run_cards/fermi_surface_1l_integration.toml", label: "one-loop Fermi-surface run card")
 illustrates regular-shell localization.
+
+Rates use the same Fermi-surface sector extraction and coefficient evaluators as amplitudes.
+Independent virtual spectator shells retain the existing derivative localization. A cut
+depending on the shell momentum is currently supported only for one regular Fermi delta
+and a two-energy cut with a simple LU coefficient. That chart fixes the shell radius and
+localizes the cut in its polar angle; its prepared event passes through the usual selectors
+and event-weight accounting. Higher derivatives of a delta on a dependent cut, multiple
+dependent Fermi shells, tangent intersections, and a vanishing angular axis are rejected.
+For a double LU pole, generation also retains the boundary delta produced when its radial
+derivative acts on an order-zero Fermi occupation. This symbolic boundary is passed to the
+same simple-cut localizer; differentiating the step numerically would omit it. Cold occupation
+terms at LU pole order above two and pre-existing Fermi distributions inside a raised LU
+coefficient are rejected until their higher boundary intersections are implemented.
+This does not provide thermal threshold or infrared subtraction. The finite-density
+boundary terms and their pole-derivative origin are discussed by
+#link("https://arxiv.org/abs/2208.14479")[Gorda, Österman, and Säppi (2022)].
 ]

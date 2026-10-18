@@ -1,12 +1,19 @@
 use std::collections::BTreeMap;
 
 use color_eyre::eyre::{Result, ensure, eyre};
-use linnet::half_edge::involution::EdgeIndex;
-use symbolica::atom::{Atom, AtomCore, AtomView};
-use three_dimensional_reps::{ThermalDistributionCall, ThermalDistributionFactor};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use symbolica::atom::{Atom, AtomCore, AtomView, Indeterminate};
+use three_dimensional_reps::{
+    ThermalDistributionCall, ThermalDistributionFactor, thermal::OCCUPATION_FORM,
+};
 
 use crate::{
-    graph::Graph, momentum::SignOrZero, numerator::symbolica_ext::NumeratorAtomExt, utils::GS,
+    cff::{expression::OrientationID, orientations::GraphOrientation, surface::HybridSurfaceRef},
+    graph::Graph,
+    momentum::SignOrZero,
+    numerator::symbolica_ext::NumeratorAtomExt,
+    processes::{build_derivative_structure_atom, params_for_derivative_order},
+    utils::GS,
     uv::uv_graph::UVE,
 };
 
@@ -22,6 +29,113 @@ pub(crate) struct FermiSurfaceSector {
 }
 
 impl FermiSurfaceSector {
+    fn has_fermi_surface(graph: &Graph, edge_id: EdgeIndex) -> Result<bool> {
+        let (_, _, edge) = graph
+            .iter_edges()
+            .find(|(_, edge, _)| *edge == edge_id)
+            .ok_or_else(|| eyre!("Unknown thermal distribution edge {edge_id}"))?;
+        Ok(edge.data.is_fermion() && edge.data.chemical_potential_atom().is_some())
+    }
+
+    /// The ordinary dual evaluator differentiates cold steps only away from
+    /// their boundary. Retain the missing distributional part of a double LU
+    /// pole as a simple-cut coefficient before building that evaluator.
+    pub(crate) fn lu_boundary(
+        graph: &Graph,
+        expression: &Atom,
+        order: usize,
+        surface: HybridSurfaceRef<'_>,
+        catalogue: Option<(&[EdgeVec<Orientation>], &[OrientationID])>,
+    ) -> Result<Atom> {
+        if order <= 1 {
+            return Ok(Atom::Zero);
+        }
+        let mut branches = Vec::new();
+        for (_, branch, selector) in Self::oriented_branches(expression, catalogue)? {
+            // Thermal wrappers contain only the weight polynomial. Normalize
+            // contour offsets and cancel its polynomial terms here, before a
+            // derivative can attach them to the factorized smooth coefficient.
+            // Neither the surrounding coefficient nor graph numerators expand.
+            let branch = branch
+                .replace_multiple(&*OCCUPATION_FORM)
+                .replace_map(|atom, _, out| {
+                    if let AtomView::Fun(function) = atom
+                        && function.get_symbol() == GS.thermal_weight_wrapper
+                        && function.get_nargs() == 1
+                    {
+                        let weight = function.iter().next().unwrap().expand();
+                        **out = symbolica::function!(GS.thermal_weight_wrapper, weight);
+                    }
+                });
+            let mut active = Vec::new();
+            for (key, call) in Self::calls(&branch)? {
+                if !call.temperature_flag.is_zero() || !Self::has_fermi_surface(graph, call.edge)? {
+                    continue;
+                }
+                ensure!(
+                    call.derivative_order == 0,
+                    "Raised cold LU coefficients with existing Fermi distributions require higher joint intersections"
+                );
+                active.push((key, call));
+            }
+            if !active.is_empty() {
+                ensure!(
+                    order == 2,
+                    "Cold occupation derivatives of LU poles above order two require higher joint intersections"
+                );
+                branches.push((branch, selector, active));
+            }
+        }
+        if branches.is_empty() {
+            return Ok(Atom::Zero);
+        }
+        let (energies, _) = FermiSurfaceProduct::cut_equation(surface)?;
+        let eta_derivative = energies.into_iter().fold(Atom::Zero, |sum, (edge, sign)| {
+            sum + Atom::num(sign)
+                * graph
+                    .loop_momentum_basis
+                    .radial_energy_derivative_atom(edge)
+        });
+        let parameters = params_for_derivative_order(2);
+        // Extract the f' coefficient from the shared Laurent owner itself.
+        // Multiplying by eta' converts its radial residue weight into a
+        // coefficient of the simple cut delta used by the joint localizer.
+        let laurent_multiplier = (build_derivative_structure_atom(2, -1)
+            .replace(parameters[1].to_pattern())
+            .with(Atom::one())
+            .replace(parameters[0].to_pattern())
+            .with(Atom::Zero)
+            * &parameters[2])
+            .replace(parameters[2].to_pattern())
+            .with(eta_derivative);
+        let mut boundary = Atom::Zero;
+        for (branch, selector, active) in branches {
+            let smooth = branch.unwrap_function(GS.thermal_weight_wrapper);
+            for (key, call) in active {
+                let variable = Indeterminate::try_from(key)
+                    .map_err(|error| eyre!("Invalid thermal differentiation variable: {error}"))?;
+                let coefficient = smooth.derivative(&variable);
+                if coefficient.is_zero() {
+                    continue;
+                }
+                boundary += coefficient
+                    * ThermalDistributionCall::atom(
+                        call.edge.0 as i64,
+                        1,
+                        0,
+                        call.thermal_sign,
+                        call.orientation_sign,
+                    )
+                    * graph
+                        .loop_momentum_basis
+                        .radial_energy_derivative_atom(call.edge)
+                    * &laurent_multiplier
+                    * &selector;
+            }
+        }
+        Ok(boundary)
+    }
+
     fn calls(expression: &Atom) -> Result<Vec<(Atom, ThermalDistributionCall)>> {
         let mut calls = Vec::new();
         let mut error = None;
@@ -78,6 +192,64 @@ impl FermiSurfaceSector {
             .any(|(_, call)| call.temperature_flag.is_zero() && call.derivative_order > 0))
     }
 
+    fn oriented_branches(
+        expression: &Atom,
+        catalogue: Option<(&[EdgeVec<Orientation>], &[OrientationID])>,
+    ) -> Result<Vec<(Option<OrientationID>, Atom, Atom)>> {
+        let branches = if let Some((orientations, production_ids)) = catalogue {
+            ensure!(
+                orientations.len() == production_ids.len(),
+                "Fermi extraction requires matching physical and production orientation catalogues"
+            );
+            orientations
+                .iter()
+                .zip(production_ids)
+                .enumerate()
+                .map(|(index, (orientation, production_id))| {
+                    // Remove inactive residue maps before resolving physical
+                    // directions, just as the ordinary evaluator does.
+                    let selected = production_id.select(expression);
+                    (
+                        Some(OrientationID(index)),
+                        GS.collect_orientation_if(orientation.select(selected)),
+                        production_id.atom(),
+                    )
+                })
+                .collect()
+        } else {
+            vec![(None, expression.clone(), Atom::one())]
+        };
+        Ok(branches)
+    }
+
+    /// Resolve the same physical and residue-map channels as the smooth
+    /// evaluator before extracting distribution support. Each coefficient
+    /// retains its production selector, including repeated physical directions.
+    // The tuple keeps the regular expression and orientation-tagged supports
+    // together without adding another persistent sector representation.
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn extract_orientations(
+        graph: &Graph,
+        expression: &Atom,
+        catalogue: Option<(&[EdgeVec<Orientation>], &[OrientationID])>,
+    ) -> Result<(Atom, Vec<(Option<OrientationID>, Self)>)> {
+        if !Self::is_present(expression)? {
+            return Ok((expression.clone(), Vec::new()));
+        }
+        let branches = Self::oriented_branches(expression, catalogue)?;
+        let mut bulk = Atom::Zero;
+        let mut localized = Vec::new();
+        for (orientation_id, branch, selector) in branches {
+            let (regular, sectors) = Self::extract(graph, &branch)?;
+            bulk += regular * &selector;
+            for mut sector in sectors {
+                sector.coefficient *= &selector;
+                localized.push((orientation_id, sector));
+            }
+        }
+        Ok((bulk, localized))
+    }
+
     /// Separate regular terms and Fermi supports after residue and physical
     /// orientation selection. The fifth N argument must be a definite sign;
     /// distinct signs in an explicit sum remain distinct supports.
@@ -86,13 +258,6 @@ impl FermiSurfaceSector {
         // Fermi surface. A missing chemical potential is zero, and warm-up
         // restricts bosons to |mu| < m or m = mu = 0. Either occupation is then
         // constant on the shell E > 0, so its positive-order derivatives vanish.
-        let has_fermi_surface = |edge_id: EdgeIndex| -> Result<bool> {
-            let (_, _, edge) = graph
-                .iter_edges()
-                .find(|(_, edge, _)| *edge == edge_id)
-                .ok_or_else(|| eyre!("Unknown thermal distribution edge {edge_id}"))?;
-            Ok(edge.data.is_fermion() && edge.data.chemical_potential_atom().is_some())
-        };
         let calls = Self::calls(expression)?;
         let mut expression = expression.unwrap_function(GS.thermal_weight_wrapper);
         let mut active = Vec::new();
@@ -100,7 +265,7 @@ impl FermiSurfaceSector {
             if !call.temperature_flag.is_zero() || call.derivative_order == 0 {
                 continue;
             }
-            if !has_fermi_surface(call.edge)? {
+            if !Self::has_fermi_surface(graph, call.edge)? {
                 expression = expression.replace(key.to_pattern()).with(Atom::Zero);
                 continue;
             }
@@ -191,7 +356,7 @@ impl FermiSurfaceSector {
             *grouped.entry(support).or_insert(Atom::Zero) += coefficient;
         }
         let mut sectors = Vec::with_capacity(grouped.len());
-        for (support, coefficient) in grouped {
+        for (support, mut coefficient) in grouped {
             if coefficient.is_zero() {
                 continue;
             }
@@ -201,11 +366,37 @@ impl FermiSurfaceSector {
                 !coefficient.contains_symbol(GS.heaviside),
                 "An explicit step in a Fermi coefficient has no certified independent routing"
             );
-            for (_, step) in Self::calls(&coefficient)? {
+            for (key, step) in Self::calls(&coefficient)? {
                 if !step.temperature_flag.is_zero()
                     || step.derivative_order != 0
-                    || !has_fermi_surface(step.edge)?
+                    || !Self::has_fermi_surface(graph, step.edge)?
                 {
+                    continue;
+                }
+                // Active shells have nu > m >= 0. An exactly opposite
+                // oriented chemical potential has no occupied positive-energy
+                // states anywhere on this support. Retain N's contour offset.
+                let step_mu = &step.orientation_sign
+                    * graph[step.edge]
+                        .chemical_potential_atom()
+                        .expect("validated cold step has a chemical potential");
+                if factors
+                    .iter()
+                    .zip(&orientations)
+                    .any(|(factor, orientation)| {
+                        let shell_mu = Atom::num(*orientation)
+                            * graph[factor.edge_id]
+                                .chemical_potential_atom()
+                                .expect("validated shell has a chemical potential");
+                        (&step_mu + shell_mu).expand().is_zero()
+                    })
+                {
+                    coefficient = coefficient
+                        .replace(key.to_pattern())
+                        .with(ThermalDistributionFactor::vacuum_atom(0, step.thermal_sign));
+                    if coefficient.is_zero() {
+                        break;
+                    }
                     continue;
                 }
                 let routing = product
@@ -224,6 +415,9 @@ impl FermiSurfaceSector {
                     "Thermal step on edge {} depends on an active Fermi momentum; its boundary intersection is unsupported in production localization",
                     step.edge
                 );
+            }
+            if coefficient.is_zero() {
+                continue;
             }
             sectors.push(Self {
                 product,
@@ -252,7 +446,9 @@ mod tests {
         let y = Atom::var(symbol!("fermi_sector_y"));
         let numerator = function!(symbol!("fermi_sector_numerator"), &x, &y);
         let coefficient = numerator * (&x + Atom::num(1)) * (&y + Atom::num(2));
-        let independent_step = ThermalDistributionCall::atom(3, 0, 0, -1, -1);
+        // Keep a nontrivial occupation on the independent momentum. The
+        // opposite chemical orientation is identically empty on this shell.
+        let independent_step = ThermalDistributionCall::atom(3, 0, 0, -1, 1);
         let bulk = Atom::num(7) * ThermalDistributionCall::atom(1, 3, 1, 1, 1);
         for derivative_order in [2, 3] {
             for sign in [-1, 0, 1] {
@@ -429,6 +625,234 @@ mod tests {
                 "accepted {malformed}"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn opposite_chemical_potential_steps_keep_the_contour_offset() -> Result<()> {
+        let graph = routing::test_graph()?;
+        for orientation in [-1, 1] {
+            for thermal_sign in [-1, 0, 1] {
+                let delta = ThermalDistributionCall::atom(1, 1, 0, 1, orientation);
+                let opposite = ThermalDistributionCall::atom(0, 0, 0, thermal_sign, -orientation);
+                let (bulk, sectors) =
+                    FermiSurfaceSector::extract(&graph, &(Atom::num(7) * &delta * opposite))?;
+                assert!(bulk.is_zero());
+                if thermal_sign == -1 {
+                    assert!(sectors.is_empty());
+                } else {
+                    assert_eq!(sectors.len(), 1);
+                    assert_eq!(sectors[0].orientations, vec![orientation]);
+                    assert_eq!(
+                        sectors[0].coefficient,
+                        Atom::num(7 * (1 + thermal_sign)) / Atom::num(2),
+                    );
+                }
+                let same = ThermalDistributionCall::atom(0, 0, 0, thermal_sign, orientation);
+                assert!(FermiSurfaceSector::extract(&graph, &(delta * same)).is_err());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn cold_lu_boundary_preserves_numerator_and_original_affine_dilation() -> Result<()> {
+        use crate::{
+            cff::{VertexSet, esurface::Esurface, hsurface::Hsurface},
+            integrands::process::param_builder::ParamBuilderGraph,
+        };
+        test_initialise()?;
+        let graph: Graph = dot!(digraph cold_lu_bubble {
+            node [num=1]
+            edge [num=1]
+            ext [style=invis is_cut=0]
+            ext -> A [id=0 particle="H"]
+            A -> B [id=1 lmb_id=0 particle="b"]
+            B -> A [id=2 particle="b"]
+            B -> ext [id=3 particle="H"]
+        })?;
+        let surface = Esurface {
+            energies: vec![EdgeIndex(1), EdgeIndex(2)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        // An actual edge-local numerator sum must remain a factor; an opaque
+        // function alone would not detect accidental whole-coefficient expansion.
+        let numerator =
+            GS.emr_mom(EdgeIndex(1), GS.cind(1)).pow(2) + graph[EdgeIndex(1)].mass_atom().pow(2);
+        let prefactor =
+            &numerator * Atom::var(GS.rescale_star).pow(3) * Atom::var(GS.hfunction_lu_cut);
+        let d1 = graph
+            .loop_momentum_basis
+            .radial_energy_derivative_atom(EdgeIndex(1));
+        let d2 = graph
+            .loop_momentum_basis
+            .radial_energy_derivative_atom(EdgeIndex(2));
+        for orientation in [-1, 1] {
+            let occupation = ThermalDistributionCall::atom(1, 0, 0, -1, orientation);
+            let coefficient = &prefactor * function!(GS.thermal_weight_wrapper, occupation);
+            let lifted = FermiSurfaceSector::lu_boundary(
+                &graph,
+                &coefficient,
+                2,
+                HybridSurfaceRef::Esurface(&surface),
+                None,
+            )?;
+            let expected =
+                &prefactor * ThermalDistributionCall::atom(1, 1, 0, -1, orientation) * &d1
+                    / (&d1 + &d2);
+            assert_eq!(lifted, expected);
+            assert!(
+                FermiSurfaceSector::lu_boundary(
+                    &graph,
+                    &coefficient,
+                    3,
+                    HybridSurfaceRef::Esurface(&surface),
+                    None,
+                )
+                .is_err()
+            );
+        }
+        let crossed = Hsurface {
+            positive_energies: vec![EdgeIndex(1)],
+            negative_energies: vec![EdgeIndex(2)],
+            external_shift: vec![(EdgeIndex(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        for orientation in [-1, 1] {
+            let [first_plus, first_minus, second_plus, second_minus] =
+                [(1, 1), (1, -1), (2, 1), (2, -1)].map(|(edge, sign)| {
+                    ThermalDistributionCall::atom(edge, 0, 0, sign, orientation)
+                });
+            let weight = first_plus * &second_minus - &first_minus * second_plus;
+            let canonical = (&first_minus + Atom::one()) * &second_minus
+                - &first_minus * (&second_minus + Atom::one());
+            let expected = &prefactor
+                * (ThermalDistributionCall::atom(2, 1, 0, -1, orientation) * &d2
+                    - ThermalDistributionCall::atom(1, 1, 0, -1, orientation) * &d1)
+                / (&d1 - &d2);
+            let mut reference = None;
+            for weight in [weight, canonical, second_minus - first_minus] {
+                let source = &prefactor * function!(GS.thermal_weight_wrapper, weight);
+                let lifted = FermiSurfaceSector::lu_boundary(
+                    &graph,
+                    &source,
+                    2,
+                    HybridSurfaceRef::Hsurface(&crossed),
+                    None,
+                )?;
+                assert!(
+                    (lifted.clone() - &expected)
+                        .replace(numerator.to_pattern())
+                        .with(Atom::one())
+                        .expand()
+                        .is_zero()
+                );
+                assert!(
+                    FermiSurfaceSector::calls(&lifted)?
+                        .iter()
+                        .all(|(_, call)| call.derivative_order == 1)
+                );
+                let (_, sectors) = FermiSurfaceSector::extract(&graph, &lifted)?;
+                assert_eq!(sectors.len(), 2);
+                for sector in sectors {
+                    assert!(FermiSurfaceSector::calls(&sector.coefficient)?.is_empty());
+                    assert!(sector.coefficient.contains(&numerator));
+                }
+                if let Some(reference) = &reference {
+                    assert_eq!(
+                        &lifted, reference,
+                        "contour canonicalization must be idempotent"
+                    );
+                } else {
+                    reference = Some(lifted);
+                }
+            }
+        }
+        let warm = &prefactor * ThermalDistributionCall::atom(1, 0, 1, -1, 1);
+        assert!(
+            FermiSurfaceSector::lu_boundary(
+                &graph,
+                &warm,
+                2,
+                HybridSurfaceRef::Esurface(&surface),
+                None,
+            )?
+            .is_zero()
+        );
+        let existing_delta = &prefactor * ThermalDistributionCall::atom(1, 1, 0, -1, 1);
+        assert!(
+            FermiSurfaceSector::lu_boundary(
+                &graph,
+                &existing_delta,
+                2,
+                HybridSurfaceRef::Esurface(&surface),
+                None,
+            )
+            .is_err()
+        );
+
+        // Resolve physical signs only after selecting the production map.
+        // An unsupported derivative on an inactive map must disappear first.
+        let positive: EdgeVec<_> =
+            vec![Orientation::Default; graph.loop_momentum_basis.edge_signatures.iter().count()]
+                .into();
+        let mut negative = positive.clone();
+        negative[EdgeIndex(1)] = Orientation::Reversed;
+        let catalogue = [positive, negative];
+        let ids = [OrientationID(3), OrientationID(9)];
+        let unresolved = ThermalDistributionCall::atom(1, 0, 0, -1, GS.sign(EdgeIndex(1)));
+        let coefficient = &prefactor * (ids[0].atom() + Atom::num(2) * ids[1].atom()) * unresolved
+            + OrientationID(15).atom() * existing_delta;
+        let lifted = FermiSurfaceSector::lu_boundary(
+            &graph,
+            &coefficient,
+            2,
+            HybridSurfaceRef::Esurface(&surface),
+            Some((&catalogue, &ids)),
+        )?;
+        for (id, orientation, multiple) in [(ids[0], 1, 1), (ids[1], -1, 2)] {
+            let selected = id.select(&lifted);
+            let expected = Atom::num(multiple)
+                * &prefactor
+                * ThermalDistributionCall::atom(1, 1, 0, -1, orientation)
+                * &d1
+                / (&d1 + &d2);
+            assert_eq!(selected, expected);
+        }
+
+        // Independently differentiate the shared explicit on-shell expression.
+        // Only this energy polynomial is expanded; the graph numerator stays opaque.
+        let dilation = symbol!("cold_lu_dilation");
+        let mut scaled_energy = graph.explicit_ose_atom(EdgeIndex(2));
+        let mut actual = d2
+            .replace(GS.ose(EdgeIndex(2)))
+            .with(graph.explicit_ose_atom(EdgeIndex(2)));
+        for component in 1..=3 {
+            let index = GS.cind(component);
+            let internal = graph.loop_momentum_basis.loop_atom(
+                EdgeIndex(2),
+                GS.emr_mom,
+                std::slice::from_ref(&index),
+                true,
+            );
+            let external = graph.loop_momentum_basis.ext_atom(
+                EdgeIndex(2),
+                GS.emr_mom,
+                std::slice::from_ref(&index),
+                true,
+            );
+            let edge_momentum = GS.emr_mom(EdgeIndex(2), index);
+            scaled_energy = scaled_energy
+                .replace(edge_momentum.to_pattern())
+                .with(Atom::var(dilation) * &internal + &external);
+            actual = actual.replace(edge_momentum).with(internal + external);
+        }
+        let expected = scaled_energy
+            .derivative(dilation)
+            .replace(dilation)
+            .with(Atom::one());
+        assert!((actual - expected).expand().is_zero());
         Ok(())
     }
 }

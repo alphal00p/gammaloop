@@ -935,6 +935,260 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
 }
 
 #[test]
+fn thermal_positive_esurface_sampling_preserves_signed_channels() {
+    std::thread::Builder::new()
+        .name("thermal-cut-sampling".to_owned())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(|| {
+            use crate::{
+                cff::surface::HybridSurfaceID,
+                integrands::process::{
+                    MomentumSpaceEvaluationInput, SamplingChannelId,
+                    evaluators::EvaluatorMethod,
+                },
+                momentum::ThreeMomentum,
+                settings::{
+                    global::MediumMode,
+                    runtime::{
+                        DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
+                        MultiChannelingSettings, ParameterizationSettings,
+                        SamplingChannelDefinition, SamplingSettings, StabilityLevelSetting,
+                    },
+                },
+            };
+
+            test_initialise().unwrap();
+            let model = Model::from_str(
+                include_str!("../../../../examples/cli/thermal_rates/scalar_sunset/model.json")
+                    .to_owned(),
+                "json",
+            )
+            .unwrap();
+            let graph: Graph = r#"digraph thermal_sampling_sunset {
+                num=1; node [num=1];
+                ext [style=invis, is_cut=0];
+                ext -> a [id=0, pdg=9000001];
+                a -> b [id=1, pdg=9000002, lmb_id=0];
+                a -> b [id=2, pdg=9000003, lmb_id=1];
+                a -> b [id=3, pdg=9000004];
+                b -> ext [id=4, pdg=9000001];
+            }"#
+            .into_graph(&model)
+            .unwrap();
+            let mut generation = generation_settings();
+            generation.medium.mode = MediumMode::ThermodynamicEquilibrium;
+            generation.threshold_subtraction.enable_thresholds = false;
+            generation.uv.generate_integrated = false;
+            generation.evaluator.compile = false;
+            generation.evaluator.summed = false;
+            generation.evaluator.summed_function_map = true;
+            generation.evaluator.iterative_orientation_optimization = false;
+            let mut runtime = runtime_settings();
+            runtime.general.evaluator_method = EvaluatorMethod::SummedFunctionMap;
+            runtime.general.inverse_temperature = 1.0;
+            runtime.subtraction.disable_threshold_subtraction = true;
+            let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
+            let definition = ProcessDefinition::from_graph_list(
+                std::slice::from_ref(&cross_section.supergraphs[0].graph),
+                GenerationType::CrossSection,
+                &model,
+            )
+            .unwrap();
+            cross_section
+                .build_integrand(
+                    &model,
+                    &definition,
+                    &GlobalSettings {
+                        generation,
+                        ..Default::default()
+                    },
+                    (&runtime).into(),
+                    &generation_pool(),
+                )
+                .unwrap();
+            // Bind the maps after reload, exercising the persisted signed cut
+            // catalogue rather than relying on generation-only host metadata.
+            let save_root = TemporaryDirectory::new("thermal-cut-sampling");
+            cross_section.save(&save_root.0, true).unwrap();
+            let mut state_bytes = Vec::new();
+            State::export(&mut state_bytes).unwrap();
+            let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
+            let mut loaded = CrossSection::load(
+                save_root.0.join("raised_cross_section"),
+                GammaLoopContextContainer {
+                    model: &model,
+                    state_map: &state_map,
+                },
+            )
+            .unwrap();
+            let matched = loaded.integrand.as_mut().unwrap();
+            let ProcessIntegrand::CrossSection(prepared) = &*matched else {
+                unreachable!()
+            };
+            let term = &prepared.data.graph_terms[0];
+            let parent_lmb = term
+                .graph
+                .loop_momentum_basis
+                .loop_edges
+                .iter()
+                .map(|edge| edge.0)
+                .collect::<Vec<_>>();
+            let host_group = term
+                .cut_group_data
+                .cut_groups
+                .iter()
+                .find(|group| matches!(group.residue.surface_ids[0], HybridSurfaceID::Esurface(_)))
+                .unwrap();
+            assert!(term.cut_group_data.cut_groups.iter().any(|group| {
+                matches!(group.residue.surface_ids[0], HybridSurfaceID::Hsurface(_))
+                    && group.cuts.iter().any(|cut| host_group.cuts.contains(cut))
+            }));
+            let cut_id = host_group.cuts[0];
+            let cut_edges = term.cut_esurface[cut_id]
+                .energies
+                .iter()
+                .map(|edge| edge.0.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let mut parameterization = ParameterizationSettings::default();
+            parameterization.sampling_channels.default_channel_selection =
+                vec!["physical_cut".into(), "ordinary".into()];
+            parameterization.sampling_channels.channel_definitions.insert(
+                term.graph.name.clone(),
+                BTreeMap::from([
+                    (
+                        "physical_cut".into(),
+                        SamplingChannelDefinition {
+                            around: format!("phase_space(cut({cut_edges}))"),
+                            parent_lmb: parent_lmb.clone(),
+                            subspace_lmb: parent_lmb.clone(),
+                            on_cut: vec![cut_id.0],
+                            ..Default::default()
+                        },
+                    ),
+                    (
+                        "ordinary".into(),
+                        SamplingChannelDefinition {
+                            around: format!(
+                                "lmb({})",
+                                parent_lmb.iter().map(usize::to_string).collect::<Vec<_>>().join(",")
+                            ),
+                            parent_lmb,
+                            ..Default::default()
+                        },
+                    ),
+                ]),
+            );
+            for pz in [0.0_f64, 1.0] {
+                let mut kinematics = runtime_settings().kinematics;
+                kinematics.externals = toml::from_str(&format!(
+                    "type='constant'\n[data]\nmomenta=[[{},0.0,0.0,{pz}]]\nhelicities=['summed_averaged']",
+                    (25.0 + pz * pz).sqrt()
+                ))
+                .unwrap();
+                let settings = matched.get_mut_settings();
+                settings.kinematics = kinematics;
+                settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                    sample_orientations: false,
+                    sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
+                        MultiChannelingSettings {
+                            parameterization_settings: parameterization.clone(),
+                        },
+                    ),
+                    ..Default::default()
+                });
+                settings.stability.rotation_axis.clear();
+                settings.stability.levels = vec![StabilityLevelSetting::default_double()];
+                matched.warm_up(&model).unwrap();
+                let ProcessIntegrand::CrossSection(prepared) = &*matched else {
+                    unreachable!()
+                };
+                let bridge = prepared.data.graph_terms[0]
+                    .multi_channeling_setup
+                    .sampling_bridge::<f64>()
+                    .unwrap()
+                    .clone();
+                assert_eq!(bridge.channels().len(), 2);
+                for channel in 0..2 {
+                    for coordinates in [
+                        [0.31, 0.27, 0.43, 0.61, 0.39, 0.71],
+                        [0.57, 0.63, 0.19, 0.42, 0.74, 0.33],
+                    ] {
+                        let point = bridge.forward(SamplingChannelId(channel), &coordinates).unwrap();
+                        assert!((point.partition.weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+                        let raw = matched.evaluate_momentum_configuration(
+                            &model,
+                            &MomentumSpaceEvaluationInput {
+                                loop_momenta: point.raw_coordinates.as_chunks::<3>().0.iter()
+                                    .map(|k| ThreeMomentum::new(F(k[0]), F(k[1]), F(k[2])))
+                                    .collect(),
+                                integrator_weight: F(1.0), graph_id: Some(0), group_id: None,
+                                orientation: None, channel_id: None,
+                            },
+                            false,
+                        ).unwrap();
+                        let sample = Sample::Discrete(F(1.0), 0, Some(Box::new(Sample::Discrete(
+                            F(1.0), channel, Some(Box::new(Sample::Continuous(
+                                F(1.0), coordinates.into_iter().map(F).collect(),
+                            ))),
+                        ))));
+                        let mapped = matched.evaluate_samples_raw(
+                            EvaluationTarget::Physical(&model), std::slice::from_ref(&sample),
+                            0, false, false, Complex::new(F(0.0), F(0.0)),
+                        ).unwrap().samples.remove(0);
+                        let factor = point.selected_factor().unwrap();
+                        for (actual, expected) in [
+                            (mapped.integrand_result.re.0, raw.integrand_result.re.0 * factor),
+                            (mapped.integrand_result.im.0, raw.integrand_result.im.0 * factor),
+                        ] {
+                            assert!((actual - expected).abs() <= 1e-8 * actual.abs().max(expected.abs()));
+                        }
+                        let raw_events = raw.event_groups.iter().flat_map(|group| group.iter()).collect::<Vec<_>>();
+                        let mapped_events = mapped.event_groups.iter().flat_map(|group| group.iter()).collect::<Vec<_>>();
+                        assert_eq!(raw_events.len(), 4, "pz={pz}, channel={channel}");
+                        assert_eq!(mapped_events.len(), raw_events.len());
+                        let mut sum = Complex::new(F(0.0), F(0.0));
+                        for (raw, mapped) in raw_events.iter().zip(mapped_events) {
+                            assert_eq!(mapped.cut_info.particle_pdgs, raw.cut_info.particle_pdgs);
+                            sum += mapped.weight;
+                            for (actual, expected) in [
+                                (mapped.weight.re.0, raw.weight.re.0 * factor),
+                                (mapped.weight.im.0, raw.weight.im.0 * factor),
+                            ] {
+                                assert!((actual - expected).abs() <= 1e-8 * actual.abs().max(expected.abs()));
+                            }
+                            let mut residual = [0.0; 4];
+                            for (sign, momenta) in [
+                                (1.0, mapped.kinematic_configuration.0.as_slice()),
+                                (-1.0, mapped.kinematic_configuration.1.as_slice()),
+                            ] {
+                                for momentum in momenta {
+                                    for (sum, value) in residual.iter_mut().zip([
+                                        momentum.temporal.value.0, momentum.spatial.px.0,
+                                        momentum.spatial.py.0, momentum.spatial.pz.0,
+                                    ]) {
+                                        *sum += sign * value;
+                                    }
+                                }
+                            }
+                            assert!(residual.into_iter().all(|value: f64| value.abs() < 1e-9));
+                        }
+                        for (actual, expected) in [
+                            (sum.re.0, mapped.integrand_result.re.0),
+                            (sum.im.0, mapped.integrand_result.im.0),
+                        ] {
+                            assert!((actual - expected).abs() <= 1e-9 * actual.abs().max(expected.abs()));
+                        }
+                    }
+                }
+            }
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
 fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
     std::thread::Builder::new()
         .name("physical-cut-sampling".to_owned())

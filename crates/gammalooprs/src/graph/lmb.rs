@@ -1308,9 +1308,24 @@ impl LMBwithEdges<SuBitGraph> for Graph {
     fn lmb_with_loop_edges(&self, lmb_edges: &SuBitGraph) -> LmbResult<LoopMomentumBasis> {
         let full_filter = self.full_filter();
         let externals = self.internal_crown(&full_filter);
-        let cut_graph = full_filter.subtract(lmb_edges);
-
-        self.lmb_impl(&full_filter, &cut_graph, externals)
+        // Sewn initial-state lines are graph chords but fixed external
+        // momenta. Exclude them from the tree guide, as in the cross-section
+        // basis catalogue, then convert their defining loops back to externals.
+        let cut_graph = full_filter
+            .subtract(lmb_edges)
+            .subtract(&self.initial_state_cut.right);
+        let mut lmb = self.lmb_impl(&full_filter, &cut_graph, externals)?;
+        for edge in self.external_momentum_edge_order() {
+            if let Some(position) = lmb
+                .loop_edges
+                .iter()
+                .position(|candidate| *candidate == edge)
+            {
+                lmb.put_loop_to_ext(LoopIndex(position));
+            }
+        }
+        self.canonicalize_lmb_external_order(&mut lmb);
+        Ok(lmb)
     }
 }
 impl LMBwithEdges<[EdgeIndex]> for Graph {
@@ -1712,6 +1727,19 @@ impl LMBext for &Graph {
 }
 
 impl LoopMomentumBasis {
+    /// On-shell energy derivative at lambda=1 when all loop coordinates are
+    /// dilated by lambda while the external momenta remain fixed. The complete
+    /// edge momentum and its loop part differ for affine routings.
+    pub(crate) fn radial_energy_derivative_atom(&self, edge: EdgeIndex) -> Atom {
+        (1..=3)
+            .map(|component| {
+                let index = GS.cind(component);
+                GS.emr_mom(edge, &index) * self.loop_atom(edge, GS.emr_mom, &[index], true)
+            })
+            .fold(Atom::Zero, |sum, term| sum + term)
+            / GS.ose(edge)
+    }
+
     pub fn map_to(&self, other: &Self) -> Vec<Atom> {
         let selfmom = symbol!("K");
         let othermom = symbol!("L");
@@ -1844,6 +1872,8 @@ pub struct LmbIndex(usize);
 #[cfg(test)]
 pub mod test {
 
+    use super::LMBwithEdges;
+
     use insta::assert_snapshot;
     use linnet::{
         half_edge::{
@@ -1862,6 +1892,63 @@ pub mod test {
 
     static SHRUNKEN_LMB_TEST_INIT: std::sync::Once = std::sync::Once::new();
     static SHRUNKEN_LMB_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn selected_loop_basis_retains_sewn_initial_state_coordinates() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph sewn_spectator {
+            node [num=1]
+            edge [num=1 particle="H"]
+            ext [style=invis is_cut=0]
+            ext -> A [id=0]
+            A -> B [id=1 lmb_id=0]
+            A -> B [id=2]
+            A -> C [id=3 lmb_id=1 particle="b"]
+            C -> A [id=4 particle="b"]
+            B -> ext [id=5]
+        })
+        .unwrap();
+        for requested in [vec![EdgeIndex(4)], vec![EdgeIndex(2), EdgeIndex(4)]] {
+            let lmb = graph.lmb_with_loop_edges(requested.as_slice()).unwrap();
+            assert_eq!(
+                lmb.loop_edges.len(),
+                graph.loop_momentum_basis.loop_edges.len()
+            );
+            assert_eq!(lmb.ext_edges, graph.loop_momentum_basis.ext_edges);
+            for edge in requested {
+                let position = lmb
+                    .loop_edges
+                    .iter()
+                    .position(|candidate| *candidate == edge)
+                    .unwrap();
+                let signature = &lmb.edge_signatures[edge];
+                assert!(
+                    signature
+                        .external
+                        .iter()
+                        .all(|sign| *sign == SignOrZero::Zero)
+                );
+                assert!(signature.internal.iter().enumerate().all(|(index, sign)| {
+                    *sign
+                        == if index == position {
+                            SignOrZero::Plus
+                        } else {
+                            SignOrZero::Zero
+                        }
+                }));
+            }
+            let probe = &lmb.edge_signatures[EdgeIndex(0)];
+            assert!(probe.internal.iter().all(|sign| *sign == SignOrZero::Zero));
+            assert_eq!(probe.external.to_momtrop_format(), vec![1]);
+            for (left, right) in lmb.edge_signatures[EdgeIndex(1)]
+                .internal
+                .iter()
+                .zip(lmb.edge_signatures[EdgeIndex(2)].internal.iter())
+            {
+                assert_eq!(*left * 1_i64 + *right * 1_i64, 0);
+            }
+        }
+    }
 
     #[test]
     fn generated_singleton_lmbs_conserve_external_momentum() {

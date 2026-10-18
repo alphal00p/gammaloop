@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use symbolica::state::State;
+use symbolica::{atom::Atom, state::State};
 
 use super::*;
 use crate::{

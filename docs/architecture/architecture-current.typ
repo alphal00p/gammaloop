@@ -3,6 +3,7 @@
 #quote(block: true)[
 #strong[Reviewed:] 2026-08-18 against the verified source scopes registered in
 `docs/developers.toml`.
+Thermal rates, cut enumeration, and the state-format continuation were reviewed on 2026-10-18.
 
 #strong[Lifecycle:] Current implementation architecture. The review
 checked the state, evaluator, event-processing, integration, and
@@ -344,18 +345,22 @@ treating missing or literal-zero assignments as zero; independent external input
 allowed when consistent. Vacuum evaluation does not consume or validate these assignments.
 Vacuum builders register no thermal distribution functions.
 
-The currently enabled thermal cross-section scope remains finite-temperature, single-probe
-simple cuts through massless scalars without virtual propagators or chemical-potential
-assignments. The probe must be future-directed and timelike. The generation loop-momentum
-basis must route external momentum through at most one cut line that also carries loop momentum.
+The enabled thermal cross-section path has one positive-energy probe. Finite-temperature
+cuts may contain massive or massless scalars without chemical-potential assignments;
+timelike decay, absorption, and spacelike spectral kinematics use the same residue path.
+Raised cuts retain the shared derivative machinery. At zero temperature, fermion cuts
+with chemical potentials and independent virtual spectator fermion cycles are also admitted.
+Other virtual corrections, finite-temperature spinning cut particles, and UV subtraction
+remain outside the enabled rate scope. These are scope guards, not separate algebra engines.
 Optional vacuum subtraction uses the existing `thermal_weight(W - V(W))` transformation
-before evaluator construction, yielding the excess spectral kernel. Cold modes, UV subtraction,
-raised thermal cuts, and surface-targeted sampling remain rejected by the temporary validation
-policy. These restrictions do not define separate thermal residue or event pipelines.
+before evaluator construction, yielding the excess spectral kernel.
 Thermal threshold subtraction is unavailable; the runtime
 also requires `subtraction.disable_threshold_subtraction = true` so canonical physical-overlap
 preparation cannot reinterpret a mixed-sign cut as a positive E-surface cut.
 No broader infrared-finiteness or thermal-rate validation follows from the shared architecture.
+The #link("../../examples/cli/thermal_rates/scalar_bubble/benchmark.typ")[massive scalar bubble benchmark]
+records the spectral conventions, primary literature, and independent decay, absorption,
+spacelike, and mass-derivative reference results.
 
 `LuCutSelection` pairs physical cut-edge alternatives with a `RaisedSurfaceGroup` containing
 `surface_ids: Vec<HybridSurfaceID>` and `max_occurrence`. E- and H-surface aliases use the same
@@ -370,21 +375,36 @@ Both surface kinds construct an `EnergySurfaceRay` below the positive `Esurface`
 affine momenta, masses, and the external energy shift. Routing, native evaluation, directed
 enclosures, root refinement, and hyperdual derivatives use that same represented equation.
 Repeated energies are combined only in the root-isolation view; residue derivatives retain
-their original occurrences. `Esurface` keeps its positive-energy geometry and convex solve.
-Signed H-surface root isolation currently covers rays with at most one distinct nonhomogeneous
-energy, after combining identical affine energies. It enumerates every simple positive root
-within that chart and distinguishes proven absent roots from unsupported equations and unresolved
-tangencies; it does not claim general signed-root coverage.
+their original occurrences. `Esurface` keeps its positive-energy geometry. An interior
+positive-E ray uses its convex native solve without a multiplicity limit; a smooth exterior
+ray pointing outward is certified closed. Exterior rays with two crossings and signed rays
+use complete algebraic enumeration. The one-nonhomogeneous-energy chart has a quadratic
+elimination. Broader charts form exact rational resultants from the represented affine
+components and use Symbolica's certified real-root isolation; directed checks of the original
+equation reject other square-root sheets before shared refinement. This chart permits at
+most six distinct affine energies. An identically zero elimination polynomial, unresolved
+root separation, vanishing-energy cusps, and tangencies remain explicit errors. None is
+interpreted as an absent channel, and no finite radial scan establishes completeness.
 
 Cross-section graph terms retain the H-surface catalogue. Localized roots enter the same LU
-residue evaluation, normalization, event processing, and precision ladder. Each root emits its
-own event with an absolute simple-cut Jacobian. Absorbed cut particles are crossed into the
+residue evaluation, normalization, event processing, and precision ladder. Signed radial
+derivative jets enter the common Laurent residue unchanged; multiplying its result once by
+the root orientation supplies the absolute-measure convention at every pole order. For a
+simple cut this is the usual absolute radial Jacobian. Each root emits its own event.
+Absorbed cut particles are crossed into the
 incoming list before shared selectors run, while the original probe remains incoming.
 
+Thermal rates may reuse existing positive-E sampling maps. Host registration and matching
+exclude H groups even when they share the same physical cut IDs; retained host adoption also
+checks positive-E ownership. The full signed integrand is evaluated on the resulting raw
+momentum sample, so H cuts retain their own roots and weights. Strict-interior host checks
+and the existing full-support mixture requirements remain in force. There is no signed-H
+target map and no extension of thermal threshold subtraction.
+
 `integrands::process::fermi_surface::FermiSurfaceProduct` localizes zero-temperature
-distribution derivatives. Production amplitude evaluation separates these
-distributions from the completed UV-subtracted expression before compiling
-numerical evaluators. Each positive-order
+distribution derivatives. Production amplitude and rate evaluation share orientation-aware
+sector extraction before numerical evaluator construction; amplitudes extract from their
+completed UV-subtracted expression and rates from each cut-group coefficient. Each positive-order
 thermal factor belongs to an independent cyclic chain: a derivative of order
 `r` represents `delta^(r-1)(E - sigma*mu)`, while the CFF coefficient retains its
 existing cyclic-chain sign and factorial. The constructor checks the selected
@@ -411,12 +431,39 @@ Masses and chemical potentials are held fixed during differentiation.
 
 The callback receives momenta in the adapted basis, with all unconstrained
 coordinates held fixed. It must preserve the jets through every momentum-dependent
-factor. A future conditional Cutkosky localization can return its complete
-root- and Jacobian-dependent weight through this callback before the Fermi
-derivatives are extracted. Deltas and steps must not be differentiated
-numerically inside it; such boundary and intersection terms have to be expanded
-symbolically and validated as Fermi products first. Thermal cross sections
-and threshold subtraction remain rejected by the existing settings validation.
+factor. For rate sectors whose cut is independent of every localized shell coordinate,
+the same localizer acts on the LU-rescaled sample with constant LU parameters.
+Dependent cut/Fermi support has a separate coordinate chart within this owner: one regular
+Fermi delta and a two-energy cut are localized in the shell's polar angle, preserving the
+sampled azimuth. The shell radius fixes one energy and the cut fixes the other, so a directed
+cosine-domain check distinguishes empty support from unresolved tangencies. The angular
+Jacobian replaces the radial LU factor; it does not add another LU profile.
+The transverse direction uses the existing double cross product rather than subtracting
+nearly equal longitudinal components. This preserves orthogonality for translated shells
+near the sampling axis without loosening the final cut- and shell-equation checks.
+Prepared shell branches enter the same physical branch, event, selector, and precision loop
+as ordinary radial roots. They require a simple LU coefficient. Higher delta derivatives,
+multiple dependent Fermi constraints, zero angular axes, and tangent intersections remain
+unsupported in this chart. Deltas and steps are never differentiated numerically inside
+the smooth callback; boundary terms must be extracted symbolically first. Thermal threshold
+subtraction remains unavailable.
+
+A double LU pole can create another cold boundary when its radial derivative acts on an
+order-zero occupation. The numerical derivative away from the step cannot supply this
+distribution. Before compiling the bulk, generation selects each retained orientation,
+resolves shared scalar definitions while keeping numerator bodies opaque, and differentiates
+the tagged occupation symbolically. Before differentiation, order-zero contour weights are
+written as one common occupation plus their constant offsets. This makes equivalent
+derivatives cancel algebraically before dependent-step guards run. The occupation's first
+energy derivative is multiplied by its edge's original affine radial energy derivative.
+The coefficient of the first numerator
+derivative is taken from the existing Laurent-residue builder and converted to a simple-cut
+coefficient. The resulting term then enters the same Fermi-sector extraction and angular
+localization as other simple-cut deltas; it does not add a separate thermal residue rule.
+Active cold occupation terms at LU order above two, or existing positive-order Fermi
+distributions inside a raised LU coefficient, are rejected because they require higher
+distribution or boundary intersections. Inactive orientation branches are removed before
+these guards run. The ordinary smooth raised residue is retained alongside this boundary.
 
 Production sector extraction collects the tagged thermal functions while
 retaining factorized smooth coefficients and shared numerator definitions.
@@ -1176,7 +1223,11 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 16` currently).
+- State format is versioned with `state_manifest.toml` (`version = 17` currently).
+- Version 17 stores Fermi-surface sectors and their cut-localization classification on
+  cross-section cut groups. Composite edge masses now retain the shared native-precision
+  evaluator, so shell geometry and coefficient evaluation use the same arithmetic.
+  Earlier positional binary layouts must be regenerated.
 - Version 16 stores shared E/H surface-alias groups and their residue orders, the physical
   surface sign in each cut group, and the H-surface catalogue in cross-section graph terms.
   Older states use a different positional binary layout and must be regenerated.

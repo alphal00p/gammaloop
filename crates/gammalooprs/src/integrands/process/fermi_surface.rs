@@ -3,7 +3,7 @@
 //! Each factor `N^(r)(E)` becomes `delta^(r-1)(E - sigma*mu)`. The CFF coefficient
 //! already owns the cyclic-chain sign and factorial. This module supplies the
 //! distribution action and spatial measure, and evaluates compiled smooth
-//! coefficients in the amplitude's existing momentum and parameter layout.
+//! coefficients in the shared process momentum and parameter layout.
 //!
 //! In a basis containing one edge from each chain, insert a normalized positive
 //! scale integral and dilate that edge momentum, `q = t*k`. With shell offset
@@ -33,6 +33,7 @@ use crate::{
     utils::{F, FloatLike, Length, hyperdual_utils::new_constant},
 };
 
+mod cut;
 mod evaluation;
 mod routing;
 mod sectors;
@@ -53,6 +54,21 @@ pub(crate) struct FermiSurfaceProduct {
     shape: Vec<Vec<usize>>,
 }
 
+/// A shell projection and its separate measure factors, retained before event
+/// selection and smooth coefficient evaluation. Momenta are in the product LMB.
+pub(crate) struct PreparedFermiSurface<T: FloatLike> {
+    pub(crate) momenta: LoopMomenta<HyperDual<F<T>>>,
+    factors: Vec<(HyperDual<F<T>>, bool)>,
+    shell_energies: Vec<F<T>>,
+    shell_masses: Vec<F<T>>,
+}
+
+#[derive(Clone, Copy, Encode, Decode, PartialEq, Eq)]
+enum FermiCutLocalization {
+    Independent,
+    CutAngle,
+}
+
 impl FermiSurfaceProduct {
     /// Localize a smooth coefficient while preserving the spatial integration dimension.
     ///
@@ -64,21 +80,38 @@ impl FermiSurfaceProduct {
     /// includes all routed numerator/denominator dependence; the localizer owns
     /// the scale profiles, spatial dilation factors and delta Jacobians.
     ///
-    /// A future conditional Cutkosky localization can be evaluated inside the
-    /// coefficient callback. Its root and Jacobian must retain their dependence
-    /// on all shell-offset jets before the Fermi derivatives are extracted.
+    /// A conditional cut's root and Jacobian must retain their dependence on
+    /// all shell-offset jets before Fermi derivatives are extracted. The current
+    /// angular cut chart acts on prepared momenta and supports a regular delta.
     /// No delta or discontinuous step function may be numerically differentiated
     /// inside this smooth callback. Expand such derivatives symbolically first,
     /// and validate any generated intersection together with its host surface
     /// using `FermiSurfaceProduct::new`.
+    #[cfg(test)]
     pub(crate) fn localize<T: FloatLike>(
         &self,
         loop_momenta: &LoopMomenta<F<T>>,
         masses: &[F<T>],
         oriented_chemical_potentials: &[F<T>],
-        mut profile: impl FnMut(&HyperDual<F<T>>) -> Result<HyperDual<F<T>>>,
+        profile: impl FnMut(&HyperDual<F<T>>) -> Result<HyperDual<F<T>>>,
         coefficient: impl FnOnce(&LoopMomenta<HyperDual<F<T>>>) -> Result<HyperDual<Complex<F<T>>>>,
     ) -> Result<Complex<F<T>>> {
+        let Some(prepared) =
+            self.prepare(loop_momenta, masses, oriented_chemical_potentials, profile)?
+        else {
+            return Ok(Complex::new_re(oriented_chemical_potentials[0].zero()));
+        };
+        let value = coefficient(&prepared.momenta)?;
+        self.localize_prepared(prepared, value)
+    }
+
+    pub(crate) fn prepare<T: FloatLike>(
+        &self,
+        loop_momenta: &LoopMomenta<F<T>>,
+        masses: &[F<T>],
+        oriented_chemical_potentials: &[F<T>],
+        mut profile: impl FnMut(&HyperDual<F<T>>) -> Result<HyperDual<F<T>>>,
+    ) -> Result<Option<PreparedFermiSurface<T>>> {
         if loop_momenta.len() != self.lmb.loop_edges.len()
             || masses.len() != self.factors.len()
             || oriented_chemical_potentials.len() != self.factors.len()
@@ -118,7 +151,7 @@ impl FermiSurfaceProduct {
             .zip(oriented_chemical_potentials)
             .any(|(mass, nu)| nu < mass || nu.is_zero())
         {
-            return Ok(Complex::new_re(representative.zero()));
+            return Ok(None);
         }
         let mut template = HyperDual::from_values(
             self.shape.clone(),
@@ -130,7 +163,7 @@ impl FermiSurfaceProduct {
                 .iter()
                 .map(|momentum| momentum.map_ref(&|value| new_constant(&template, value))),
         );
-        let mut measures = Vec::with_capacity(self.factors.len());
+        let mut factors = Vec::with_capacity(5 * self.factors.len());
 
         for (axis, ((factor, mass), nu)) in self
             .factors
@@ -200,11 +233,31 @@ impl FermiSurfaceProduct {
             }
             momenta[axis.into()] =
                 momentum.map_ref(&|value| new_constant(&template, value) * &scale);
-            measures.push((density, energy, scale, norm_squared));
+            // Preserve separate factors until the smooth coefficient is known.
+            factors.extend([
+                (density, false),
+                (energy, false),
+                (scale.clone(), false),
+                (scale, false),
+                (new_constant(&template, &norm_squared), true),
+            ]);
         }
 
-        let value = coefficient(&momenta)?;
-        if value.get_shape() != template.get_shape() || value.values.len() != self.shape.len() {
+        Ok(Some(PreparedFermiSurface {
+            momenta,
+            factors,
+            shell_energies: oriented_chemical_potentials.to_vec(),
+            shell_masses: masses,
+        }))
+    }
+
+    pub(crate) fn localize_prepared<T: FloatLike>(
+        &self,
+        prepared: PreparedFermiSurface<T>,
+        value: HyperDual<Complex<F<T>>>,
+    ) -> Result<Complex<F<T>>> {
+        let representative = &prepared.momenta.0[0].px.values[0];
+        if value.get_shape() != self.shape.as_slice() || value.values.len() != self.shape.len() {
             return Err(eyre!(
                 "Fermi coefficient returned an incompatible derivative shape"
             ));
@@ -213,35 +266,27 @@ impl FermiSurfaceProduct {
         // separate until the coefficient is available: either multiplying the
         // small profile first or the large geometry first can lose a finite
         // fully weighted result. Logs below only choose the arithmetic order.
-        let mut factors = Vec::with_capacity(5 * measures.len());
-        for (density, energy, scale, norm_squared) in measures {
-            for (factor, divide) in [
-                (density, false),
-                (energy, false),
-                (scale.clone(), false),
-                (scale, false),
-                (new_constant(&template, &norm_squared), true),
-            ] {
-                if factor.values.iter().any(|value| !value.is_finite()) {
-                    return Err(SamplingEvaluationError::Unrepresentable {
-                        operation: "Fermi localization",
-                        detail: "Nonfinite Fermi measure jet".to_owned(),
-                    }
-                    .into());
+        let mut factors = Vec::with_capacity(prepared.factors.len());
+        for (factor, divide) in prepared.factors {
+            if factor.values.iter().any(|value| !value.is_finite()) {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "Fermi localization",
+                    detail: "Nonfinite Fermi measure jet".to_owned(),
                 }
-                let magnitude = factor
-                    .values
-                    .iter()
-                    .map(|value| value.abs())
-                    .max_by(|left, right| left.partial_cmp(right).unwrap())
-                    .unwrap();
-                let score = if divide {
-                    -magnitude.log()
-                } else {
-                    magnitude.log()
-                };
-                factors.push((factor, divide, score));
+                .into());
             }
+            let magnitude = factor
+                .values
+                .iter()
+                .map(|value| value.abs())
+                .max_by(|left, right| left.partial_cmp(right).unwrap())
+                .unwrap();
+            let score = if divide {
+                -magnitude.log()
+            } else {
+                magnitude.log()
+            };
+            factors.push((factor, divide, score));
         }
         let index = self
             .shape

@@ -19,18 +19,18 @@ use symbolica::{domains::float::Complex as SymComplex, prelude::*};
 
 use crate::{
     feyngen::diagram_generator::EdgeColor,
-    integrands::process::ParamBuilder,
+    integrands::process::{ParamBuilder, evaluators::GenericEvaluator},
     model::{ArcParticle, Model, UFOSymbol},
     momentum::{Helicity, sample::LoopIndex},
     numerator::aind::{Aind, NewAind},
-    utils::{F, FloatLike, GS},
+    processes::EvaluatorSettings,
+    utils::{F, FloatLike, GS, SamplingPrecision},
     uv::uv_graph::UVE,
 };
 
 use super::parse::{StripParse, ToQuoted};
 use crate::graph::Autogen;
 use color_eyre::Result;
-use eyre::eyre;
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
@@ -216,7 +216,7 @@ pub enum EdgeMass {
     Zero,
     Value(Complex<F<f64>>),
     ModelVar(Symbol),
-    Evaluator(Arc<Mutex<ExpressionEvaluator<Complex<F<f64>>>>>),
+    Evaluator(Arc<Mutex<GenericEvaluator>>),
 }
 
 impl PartialEq for EdgeMass {
@@ -245,21 +245,15 @@ impl EdgeMass {
             }));
         }
 
-        let params: Vec<Atom> = (&paramb.pairs)
-            .into_iter()
-            .flat_map(|p| p.params.clone())
-            .collect();
-
-        let a = atom
-            .evaluator(&params)
-            .function_map(paramb.fn_map.clone())
-            .optimization_settings(OptimizationSettings::default())
-            .build()
-            .map_err(|a| eyre!(a))?;
-
-        Ok(EdgeMass::Evaluator(Arc::new(Mutex::new(a.map_coeff(
-            &|r| Complex::new(F::from(&r.re), F::from(&r.im)),
-        )))))
+        let evaluator = GenericEvaluator::new_from_builder(
+            [atom],
+            paramb,
+            None,
+            OptimizationSettings::default(),
+            &EvaluatorSettings::default(),
+        )?
+        .into_eager_only();
+        Ok(EdgeMass::Evaluator(Arc::new(Mutex::new(evaluator))))
     }
 
     pub fn value<T: FloatLike>(
@@ -271,7 +265,28 @@ impl EdgeMass {
             EdgeMass::Zero => None,
             EdgeMass::Value(v) => Some(*v),
             EdgeMass::ModelVar(s) => model.get_symbol_value(UFOSymbol(*s)),
-            EdgeMass::Evaluator(a) => Some(a.lock().unwrap().evaluate_single(&paramb.values[0])),
+            EdgeMass::Evaluator(evaluator) => {
+                // Model/settings inputs keep their existing f64 boundary, but
+                // expression coefficients and operations use the requested lane,
+                // exactly as the shared integrand and Fermi-shell evaluators do.
+                let parameters = paramb.values[0]
+                    .iter()
+                    .map(|value| value.map_ref(|value| F::<T>::from_ff64(*value)))
+                    .collect::<Vec<_>>();
+                let mut evaluator = evaluator.lock().unwrap();
+                if T::sampling_precision() == SamplingPrecision::Fixed256
+                    && evaluator.sampling_fixed256.as_ref().is_none()
+                {
+                    let program = evaluator
+                        .rational
+                        .as_ref()
+                        .expect("composite masses retain their rational program")
+                        .clone()
+                        .map_coeff(&|value| Complex::new(F::from(&value.re), F::from(&value.im)));
+                    evaluator.sampling_fixed256.set(program);
+                }
+                return Some(T::get_evaluator_single(&mut evaluator)(&parameters));
+            }
         }
         .map(|a| a.map_ref(|a| F::from_ff64(*a)))
     }
@@ -689,5 +704,94 @@ impl ParseEdge {
                 orientation,
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::*;
+    use crate::{
+        GammaLoopContextContainer,
+        graph::{Graph, feynman_graph::FeynmanGraph, parse::IntoGraph},
+        initialisation::test_initialise,
+        integrands::process::evaluators::GenericEvaluatorFloat,
+        utils::{ArbPrec, SamplingFloat, f128, load_generic_model},
+    };
+
+    #[test]
+    fn composite_mass_geometry_matches_native_coefficients_after_reload() -> Result<()> {
+        test_initialise()?;
+        let model = load_generic_model("scalars");
+        let graph: Graph = r#"digraph native_mass_overrides {
+            node [num=1]; edge [num=1];
+            A -> A [id=0, lmb_id=0, mass="sqrt(2)"];
+            A -> A [id=1, lmb_id=1, mass="1/3"];
+        }"#
+        .into_graph(&model)?;
+        let encoded = bincode::encode_to_vec(&graph, bincode::config::standard())?;
+        let mut state = Vec::new();
+        State::export(&mut state)?;
+        let state_map = State::import(&mut Cursor::new(state), None)?;
+        let (decoded, consumed): (Graph, _) = bincode::decode_from_slice_with_context(
+            &encoded,
+            bincode::config::standard(),
+            GammaLoopContextContainer {
+                model: &model,
+                state_map: &state_map,
+            },
+        )?;
+        assert_eq!(consumed, encoded.len());
+        for graph in [&graph, &decoded] {
+            let double = graph.get_real_mass_vector::<f64>(&model);
+            assert_eq!(double[EdgeIndex(0)], F(2.0_f64.sqrt()));
+            assert_eq!(double[EdgeIndex(1)], F(1.0 / 3.0));
+            let fixed = graph.get_real_mass_vector::<SamplingFloat>(&model);
+            let one = F::<SamplingFloat>::default().one();
+            assert_eq!(fixed[EdgeIndex(0)], one.from_i64(2).sqrt());
+            assert_eq!(fixed[EdgeIndex(1)], &one / one.from_i64(3));
+            for index in 0..2 {
+                let edge = EdgeIndex(index);
+                // This is the same mass-atom boundary used by shell parameters
+                // and integrand coefficients, independent of EdgeMass's cache.
+                let mut coefficient = GenericEvaluator::new_from_builder(
+                    [graph[edge].mass_atom()],
+                    &graph.param_builder,
+                    None,
+                    OptimizationSettings::default(),
+                    &EvaluatorSettings::default(),
+                )?
+                .into_eager_only();
+                macro_rules! check_lane {
+                    ($scalar:ty) => {{
+                        let one = F::<$scalar>::default().one();
+                        let expected = if index == 0 {
+                            one.from_i64(2).sqrt()
+                        } else {
+                            &one / one.from_i64(3)
+                        };
+                        let geometry = graph.get_real_mass_vector::<$scalar>(&model);
+                        let parameters = graph.param_builder.values[0]
+                            .iter()
+                            .map(|value| value.map_ref(|value| F::<$scalar>::from_ff64(*value)))
+                            .collect::<Vec<_>>();
+                        let coefficient =
+                            <$scalar>::get_evaluator_single(&mut coefficient)(&parameters);
+                        assert_eq!(geometry[edge], coefficient.re);
+                        assert_eq!(coefficient.im, one.zero());
+                        assert!(
+                            (&geometry[edge] - expected).abs() <= one.epsilon() * one.from_i64(16)
+                        );
+                        // A promoted binary64 result would pass f64 checks but
+                        // cannot satisfy this native-precision contract.
+                        assert_ne!(geometry[edge], F::<$scalar>::from_ff64(double[edge]));
+                    }};
+                }
+                check_lane!(f128);
+                check_lane!(ArbPrec);
+            }
+        }
+        Ok(())
     }
 }

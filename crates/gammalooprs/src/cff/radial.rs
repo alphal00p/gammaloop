@@ -1,12 +1,18 @@
 //! Retained affine energy equations shared by LU roots, jets and host certificates.
 
+use std::sync::Arc;
+
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
 use rug::{Float, float::Round};
-use symbolica::domains::{
-    dual::HyperDual,
-    float::{FloatLike as SymFloatLike, Real},
+use symbolica::{
+    domains::{
+        dual::HyperDual,
+        float::{Float as SymbolicaFloat, FloatLike as SymFloatLike, Real},
+        rational::{Q, Rational},
+    },
+    poly::{PolyVariable, PolynomialResultant, polynomial::MultivariatePolynomial},
 };
 
 use super::esurface::{Esurface, ExternalShift};
@@ -153,17 +159,17 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
         })
     }
 
-    const ENCLOSURE_PRECISION: u32 = 2048;
+    pub(crate) const ENCLOSURE_PRECISION: u32 = 2048;
 
     // These directed operations serve the represented and original-routed
     // affine-energy checks; they do not introduce a second certificate engine.
-    fn enclosed_add(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
+    pub(crate) fn enclosed_add(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
         [
             Float::with_val_round(Self::ENCLOSURE_PRECISION, &a[0] + &b[0], Round::Down).0,
             Float::with_val_round(Self::ENCLOSURE_PRECISION, &a[1] + &b[1], Round::Up).0,
         ]
     }
-    fn enclosed_mul(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
+    pub(crate) fn enclosed_mul(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
         let lower = a
             .iter()
             .flat_map(|x| {
@@ -184,7 +190,7 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
             .unwrap();
         [lower, upper]
     }
-    fn enclosed_square(a: &[Float; 2]) -> [Float; 2] {
+    pub(crate) fn enclosed_square(a: &[Float; 2]) -> [Float; 2] {
         let upper = a[0].clone().abs().max(&a[1].clone().abs());
         let lower = if a[0] <= 0 && a[1] >= 0 {
             Float::with_val(Self::ENCLOSURE_PRECISION, 0)
@@ -196,7 +202,7 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
             Float::with_val_round(Self::ENCLOSURE_PRECISION, &upper * &upper, Round::Up).0,
         ]
     }
-    fn enclosed_divide(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
+    pub(crate) fn enclosed_divide(a: &[Float; 2], b: &[Float; 2]) -> [Float; 2] {
         debug_assert!(b[0] > 0);
         let reciprocal = [
             Float::with_val_round(Self::ENCLOSURE_PRECISION, b[1].recip_ref(), Round::Down).0,
@@ -205,12 +211,12 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
         Self::enclosed_mul(a, &reciprocal)
     }
 
-    pub(super) fn enclosed_native(value: &F<T>) -> [Float; 2] {
+    pub(crate) fn enclosed_native(value: &F<T>) -> [Float; 2] {
         let (lo, hi) = value.0.mpfr_enclosure(Self::ENCLOSURE_PRECISION);
         [lo, hi]
     }
 
-    pub(super) fn enclosed_sum(terms: impl Iterator<Item = (i64, [Float; 2])>) -> [Float; 2] {
+    pub(crate) fn enclosed_sum(terms: impl Iterator<Item = (i64, [Float; 2])>) -> [Float; 2] {
         let zero = Float::with_val(Self::ENCLOSURE_PRECISION, 0);
         terms.fold([zero.clone(), zero], |sum, (coefficient, value)| {
             let coefficient = Float::with_val(Self::ENCLOSURE_PRECISION, coefficient);
@@ -282,7 +288,7 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
         Ok((value, slope))
     }
 
-    fn evaluate_interval(
+    pub(crate) fn evaluate_interval(
         &self,
         radius: &[Float; 2],
         with_derivative: bool,
@@ -676,12 +682,12 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
         Ok(())
     }
 
-    /// Enumerate all simple positive roots when the ray reduces to
-    /// `A*r + B + s*sqrt(a*r² + 2*b*r + c)`. This includes a massless sunset
-    /// with its external momentum routed through one cut edge, also away from rest.
-    /// Identical affine energies are combined before counting nonhomogeneous terms.
-    /// Other rays and unresolved tangencies fail explicitly: a finite scan cannot
-    /// establish that every physical root was found.
+    /// Enumerate simple positive roots of the represented affine-energy equation.
+    /// The one-curved-energy chart has a quadratic elimination; broader charts use
+    /// exact rational resultants and certified polynomial root isolation. Directed
+    /// checks of the original equation remove the extra square-root sheets.
+    /// Unresolved tangencies, algebraic degeneracies and excessive elimination
+    /// degree fail explicitly; no finite scan is used to infer root completeness.
     pub(crate) fn positive_radius_roots(
         &self,
         e_cm: &F<T>,
@@ -692,6 +698,9 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
         let uncertain = |detail: &str| eyre::eyre!("{identity}: signed radial equation: {detail}");
         if !e_cm.0.is_finite() || e_cm <= &zero {
             return Err(uncertain("the residual scale must be finite and positive"));
+        }
+        if !self.shift.0.is_finite() {
+            return Err(uncertain("nonfinite external energy shift"));
         }
         // Collapse only an isolation view. The represented ray, native fold and
         // residue jets retain every signed occurrence and its physical edge.
@@ -724,6 +733,42 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
             }
         }
         terms.retain(|(sign, _)| *sign != 0);
+
+        if self.energies.iter().all(|energy| energy.coefficient == 1)
+            && self.energies.iter().any(|energy| {
+                energy.velocity.px != zero
+                    || energy.velocity.py != zero
+                    || energy.velocity.pz != zero
+            })
+        {
+            // Convex positive-E geometry gives a unique outward crossing from
+            // an interior origin. Keep its inexpensive native LU policy for
+            // arbitrary multiplicity; no elimination polynomial is needed.
+            let origin = Self::enclosed_native(&zero);
+            let value = self.evaluate_interval(&origin, false)?.0;
+            if value[1] < 0 {
+                return self
+                    .solve_lu_cut(e_cm, diagnostics, identity)
+                    .map(|root| vec![root])
+                    .map_err(|error| {
+                        uncertain(&format!("convex root refinement failed: {error:?}"))
+                    });
+            }
+            // An exterior origin with nonnegative slope cannot intersect a
+            // convex E-surface in the positive direction. Require smooth
+            // energies here; origin cusps remain with algebraic isolation.
+            if value[0] > 0
+                && self.energies.iter().all(|energy| {
+                    energy.mass != zero
+                        || energy.offset.px != zero
+                        || energy.offset.py != zero
+                        || energy.offset.pz != zero
+                })
+                && self.evaluate_interval(&origin, true)?.1[0] >= 0
+            {
+                return Ok(Vec::new());
+            }
+        }
 
         // Share the existing directed arithmetic. The classification below is
         // about the represented ray, and does not infer a missing root from a
@@ -780,11 +825,9 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
         };
         let is_zero_vector = |v: &ThreeMomentum<F<T>>| v.px == zero && v.py == zero && v.pz == zero;
         let mut slope = native(&zero);
-        if !self.shift.0.is_finite() {
-            return Err(uncertain("nonfinite external energy shift"));
-        }
         let mut shift = native(&self.shift);
         let mut curved = None;
+        let mut multiple_curved = false;
         for (index, (multiplicity, energy)) in terms.iter().enumerate() {
             let (velocity, offset, mass) = (&energy.velocity, &energy.offset, &energy.mass);
             let (a, _, c) = coefficients(velocity, offset, mass);
@@ -793,9 +836,7 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
             } else if is_zero_vector(offset) && mass == &zero {
                 slope = add(&slope, &scale(&sqrt(&a)?, *multiplicity));
             } else if curved.replace(index).is_some() {
-                return Err(uncertain(
-                    "unsupported ray with more than one distinct nonhomogeneous energy",
-                ));
+                multiple_curved = true;
             }
         }
 
@@ -811,7 +852,86 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
             }
             Ok(vec![divide(&neg(b), a)?])
         };
-        let mut candidates = if let Some(index) = curved {
+        let mut candidates = if multiple_curved {
+            // Eliminate E_i from sum(c_i E_i) + shift = 0 and
+            // E_i² = |v_i r + b_i|² + m_i². Build these quadratics from the
+            // exact represented components, never from rounded energy norms.
+            // The degree grows exponentially; exceeding this explicit resource
+            // bound is uncertainty, not evidence of a kinematically closed cut.
+            if terms.len() > 6 {
+                return Err(uncertain(
+                    "exact isolation supports at most six distinct affine energies",
+                ));
+            }
+            let exact = |value: &F<T>| -> eyre::Result<Rational> {
+                let value = value.to_arb_exact()?;
+                Ok(SymbolicaFloat::from(&value.0).to_rational())
+            };
+            let variables = Arc::new((0..=terms.len()).map(PolyVariable::Temporary).collect());
+            let mut polynomial = MultivariatePolynomial::<Q, u16>::new(&Q, None, variables);
+            let mut powers = vec![0; terms.len() + 1];
+            polynomial.append_monomial(exact(&self.shift)?, &powers);
+            for (index, (multiplicity, _)) in terms.iter().enumerate() {
+                powers[index + 1] = 1;
+                polynomial.append_monomial((*multiplicity).into(), &powers);
+                powers[index + 1] = 0;
+            }
+            for (index, (_, energy)) in terms.iter().enumerate() {
+                let mass = exact(&energy.mass)?;
+                let mut a = Rational::zero();
+                let mut b = Rational::zero();
+                let mut c = &mass * &mass;
+                for (velocity, offset) in [
+                    &energy.velocity.px,
+                    &energy.velocity.py,
+                    &energy.velocity.pz,
+                ]
+                .into_iter()
+                .zip([&energy.offset.px, &energy.offset.py, &energy.offset.pz])
+                {
+                    let velocity = exact(velocity)?;
+                    let offset = exact(offset)?;
+                    a += &velocity * &velocity;
+                    b += &velocity * &offset;
+                    c += &offset * &offset;
+                }
+                let mut relation = polynomial.zero();
+                relation.append_monomial(-c, &powers);
+                powers[0] = 1;
+                relation.append_monomial(-b * Rational::from(2), &powers);
+                powers[0] = 2;
+                relation.append_monomial(-a, &powers);
+                powers[0] = 0;
+                powers[index + 1] = 2;
+                relation.append_monomial(Rational::one(), &powers);
+                powers[index + 1] = 0;
+                polynomial = Q::resultant(&polynomial, &relation, index + 1);
+            }
+            if polynomial.is_zero() {
+                return Err(uncertain(
+                    "the elimination polynomial is identically zero; the radical dependencies are unresolved",
+                ));
+            }
+            let polynomial = polynomial.to_univariate_from_univariate(0);
+            let isolation_precision = e_cm.get_precision().saturating_add(64).clamp(128, 1024);
+            let tolerance = Rational::from((1, 2)).pow(u64::from(isolation_precision));
+            polynomial
+                .isolate_real_root_intervals()
+                .into_iter()
+                .filter(|(_, upper, _)| upper > &Rational::zero())
+                .map(|(lower, upper, _)| {
+                    let (lower, upper) =
+                        polynomial.refine_root_interval((lower, upper), &tolerance);
+                    // Keep conversion independent of Symbolica's integer backend.
+                    let lower = rug::Rational::from_str_radix(&lower.to_string(), 10)?;
+                    let upper = rug::Rational::from_str_radix(&upper.to_string(), 10)?;
+                    Ok([
+                        Float::with_val_round(Self::ENCLOSURE_PRECISION, lower, Round::Down).0,
+                        Float::with_val_round(Self::ENCLOSURE_PRECISION, upper, Round::Up).0,
+                    ])
+                })
+                .collect::<eyre::Result<Vec<_>>>()?
+        } else if let Some(index) = curved {
             let (multiplicity, energy) = &terms[index];
             let (velocity, offset, mass) = (&energy.velocity, &energy.offset, &energy.mass);
             let signed_slope = scale(&slope, *multiplicity);
@@ -888,16 +1008,12 @@ impl<T: FloatLike> EnergySurfaceRay<T> {
                     "a root cannot be separated from the radial endpoint",
                 ));
             }
-            if let Some(curved_index) = curved {
-                // Squaring adds the opposite square-root sheet. Reject it by
-                // the unsquared sign constraint, never by a small residual test.
-                let constraint =
-                    scale(&add(&mul(&slope, candidate), &shift), terms[curved_index].0);
-                match sign(&constraint)? {
-                    1 => continue,
-                    -1 => (),
-                    _ => return Err(uncertain("a root lies at a vanishing cut energy")),
-                }
+            // Elimination adds other square-root sheets. Exclude a candidate
+            // only when the unsquared equation is strictly separated from zero.
+            // Otherwise certify a crossing in its isolated polynomial-root cell.
+            let value = self.evaluate_interval(candidate, false)?.0;
+            if value[0] > 0 || value[1] < 0 {
+                continue;
             }
             let crossing = sign(&self.evaluate_interval(candidate, true)?.1)?;
             if crossing == 0 {
@@ -1406,54 +1522,57 @@ mod tests {
     fn signed_root_isolation_retains_occurrences_and_shared_jet_slopes() {
         use crate::utils::hyperdual_utils::{extract_t_derivatives, simple_n_deriv_shape};
         let vector = |x| ThreeMomentum::new(F(x), F(0.0), F(0.0));
-        let repeated = RadialEnergy {
-            edge: EdgeIndex(4),
-            coefficient: 1,
-            velocity: vector(1.0),
-            offset: vector(0.0),
-            mass: F(1.0),
-        };
-        let ray = EnergySurfaceRay {
-            energies: vec![
-                repeated.clone(),
-                RadialEnergy {
-                    edge: EdgeIndex(7),
-                    coefficient: -1,
-                    velocity: vector(1.9),
-                    offset: vector(0.0),
-                    mass: F(0.0),
-                },
-                repeated,
-            ],
-            shift: F(-1.0),
-        };
-        let retained = ray.energies.clone();
-        let roots = ray
-            .positive_radius_roots(
-                &F(2.0),
-                &mut RadialRootDiagnostics::default(),
-                &RadialRootIdentity::new("shared signed ray".into()),
-            )
-            .unwrap();
-        assert_eq!(roots.len(), 2);
-        assert!(roots[0].derivative_at_solution < F(0.0));
-        assert!(roots[1].derivative_at_solution > F(0.0));
-        assert_eq!(ray.energies, retained);
-        for root in &roots {
-            let (residual, slope) = ray.evaluate(&root.solution);
-            assert!(residual.abs() < F(1.0e-13));
-            assert_eq!(slope, root.derivative_at_solution);
-            let radius =
-                HyperDual::<F<f64>>::new(simple_n_deriv_shape(1)).variable(0, root.solution);
-            let jet = extract_t_derivatives(ray.evaluate_dual(&radius));
-            assert!((jet[1] - slope).abs() < F(1.0e-14));
+        // Exercise both the quadratic and exact-resultant isolation charts.
+        for negative_mass in [0.0, 0.25] {
+            let repeated = RadialEnergy {
+                edge: EdgeIndex(4),
+                coefficient: 1,
+                velocity: vector(1.0),
+                offset: vector(0.0),
+                mass: F(1.0),
+            };
+            let ray = EnergySurfaceRay {
+                energies: vec![
+                    repeated.clone(),
+                    RadialEnergy {
+                        edge: EdgeIndex(7),
+                        coefficient: -1,
+                        velocity: vector(1.9),
+                        offset: vector(0.0),
+                        mass: F(negative_mass),
+                    },
+                    repeated,
+                ],
+                shift: F(-1.0),
+            };
+            let retained = ray.energies.clone();
+            let roots = ray
+                .positive_radius_roots(
+                    &F(2.0),
+                    &mut RadialRootDiagnostics::default(),
+                    &RadialRootIdentity::new("shared signed ray".into()),
+                )
+                .unwrap();
+            assert_eq!(roots.len(), 2);
+            assert!(roots[0].derivative_at_solution < F(0.0));
+            assert!(roots[1].derivative_at_solution > F(0.0));
+            assert_eq!(ray.energies, retained);
+            for root in &roots {
+                let (residual, slope) = ray.evaluate(&root.solution);
+                assert!(residual.abs() < F(1.0e-13));
+                assert_eq!(slope, root.derivative_at_solution);
+                let radius =
+                    HyperDual::<F<f64>>::new(simple_n_deriv_shape(1)).variable(0, root.solution);
+                let jet = extract_t_derivatives(ray.evaluate_dual(&radius));
+                assert!((jet[1] - slope).abs() < F(1.0e-14));
+            }
+            assert!(
+                ray.verify_lu_candidate(&ray, &roots[0], 6, &F(1.0e-6))
+                    .unwrap_err()
+                    .to_string()
+                    .contains("positive E-surface rays")
+            );
         }
-        assert!(
-            ray.verify_lu_candidate(&ray, &roots[0], 6, &F(1.0e-6))
-                .unwrap_err()
-                .to_string()
-                .contains("positive E-surface rays")
-        );
     }
 
     #[test]

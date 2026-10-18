@@ -1,0 +1,623 @@
+{
+  "schema": 1,
+  "status": "All 111 selected native tests and relevant Clippy checks passed; all 19 recorded literature-based comparisons satisfy their unchanged tolerances.",
+  "recorded_at_utc": "2026-10-18T00:33:16.728320+00:00",
+  "host": "itphlies",
+  "source": {
+    "recorded_at_utc": "2026-10-18T00:26:31.013410+00:00",
+    "base_commit": "9bc647ef2fb7ded5b6590f2e112a2b14a27d9c22",
+    "branch": "thermal_rates",
+    "source_sha256": {
+      "crates/gammalooprs/src/integrands/process/cross_section/cold_tests.rs": "66471597cb2141ce0cd748246e5e4a1454bd3fdf1768ffea4652d18f286c053a",
+      "crates/gammalooprs/src/integrands/process/fermi_surface/cut.rs": "ad51e1872e1c400ad1f8bd4a542cefc660ae374e6d6021b358360f5d485e9a12",
+      "examples/cli/thermal_rates/scalar_bubble/model.json": "307081da19c5405c89af01aeed9264760f12559848cf2d323dff7233bb8a8d49",
+      "examples/cli/thermal_rates/scalar_bubble/reference.py": "10349483b1113c910d518dcadfcead5232f2f6a3677977b56c274b98dd5bfea5",
+      "examples/cli/thermal_rates/scalar_bubble/run.toml": "e39327317352eaf24a66507ca431eaa04c3589f9f5d3a70189c857e2ec076ec5",
+      "tests/tests/test_runs/cold_thermal_rates.rs": "59546058ef0ada7b3bcc8b42ccf90576cd2894d7e4144bd8aab19068125bbf87",
+      "tests/tests/test_runs/thermal_bubble.rs": "e3b2137ed8e0b27a24d8a84f661807cc5fed2cf5a4bb139595fb09edf1bf5a2b",
+      "crates/gammaloop-api/src/state.rs": "46d4c03563853b19c8a18a67fd4faf399f7232cd88ab2a7b905072053d1ff22f",
+      "crates/gammalooprs/src/cff/hsurface.rs": "f09fdc9071041cab8942974edd2d1c0accf4c19bf23c657d497cbf4d43aca437",
+      "crates/gammalooprs/src/cff/radial.rs": "60aaff764bfadc9b449222422f505a2d48bbaacccdd6926621091c1a97a2f23a",
+      "crates/gammalooprs/src/graph/edge.rs": "263b9a1cdcbcf52603e0a0a7e61974ede6db8613673922596bbc7d6ee3cd51be",
+      "crates/gammalooprs/src/graph/lmb.rs": "5a74d598f43fb024d2265766909dc903c689f55797ac78b437f537e049144c6f",
+      "crates/gammalooprs/src/graph/threshold_counterterms.rs": "c59c19cfbb95c150c70d901218456ee1370c817051be9ba94ed6a486de37e6b8",
+      "crates/gammalooprs/src/integrands/process/amplitude/fermi_tests.rs": "f57fe4d1edc4daebba1bb5f234f701b7c9df81460e06e1069014f6b7220033c8",
+      "crates/gammalooprs/src/integrands/process/amplitude/mod.rs": "af8f41826211731ee8170d39342f84d92e92050b7665e8b0ee97299554d615a6",
+      "crates/gammalooprs/src/integrands/process/cross_section/export.rs": "e4711ec32c765ad7a4992bb17613694debc07f475b006154ac8bb2c537c6c444",
+      "crates/gammalooprs/src/integrands/process/cross_section/mod.rs": "f05be2c1547245dc14903730bd83fe72b282f960cb55c54b418a03f1f46918d3",
+      "crates/gammalooprs/src/integrands/process/fermi_surface.rs": "2f93936b012315b80529c18665438e31480b711e46656e7588ca1f7eb247a362",
+      "crates/gammalooprs/src/integrands/process/fermi_surface/evaluation.rs": "3c764e5a625cf76537fbe2892d724e5621560789e10d6218b29bf7ae45aef887",
+      "crates/gammalooprs/src/integrands/process/fermi_surface/sectors.rs": "f82f07f8652cf5c946fc1c197afed6ddc078d990ae481ad20a416fe4ed79a1d9",
+      "crates/gammalooprs/src/processes/cross_section.rs": "6ac321e383b0dedba7fc05125b8f4d6e67e9e509a532c4deb95b960e8838b31e",
+      "crates/gammalooprs/src/processes/raised_cross_section_tests.rs": "67a1e3678ec020404d412df1ad5d1f93b256be32ae233ec6cfa2b40f7ee33231",
+      "crates/gammalooprs/src/settings/global.rs": "59cc04d6498db9b0670b557ee17fbb6f356e8e437adb3e80e1eaa6bf8146d0e1",
+      "crates/linnet/src/half_edge.rs": "ac944502b1cfd32d2a1825078a83821ede1aa65f36d169545c5f89ada811a43b",
+      "crates/linnet/src/half_edge/tests.rs": "4da1f8cce679206e732f14ce255de983c53f2499887d61604aefb45495e71e2a",
+      "tests/tests/test_runs.rs": "063184774b1068e6962a939161f80f84baba7167fe565200963f79f3d80747b8"
+    }
+  },
+  "state_manifest_version": 17,
+  "checkout_status": "Uncommitted implementation on thermal_rates; source hashes identify the tested working tree.",
+  "scope": "Shared signed-root geometry, raised-cut orientation, positive-E sampling reuse, and cold Fermi localization including double-LU occupation boundaries. Thermal threshold subtraction and thermal IR treatment are excluded.",
+  "native_tests": {
+    "run_id": "ff7869bf-c0be-49ae-8e97-6881e41a0363",
+    "passed": 111,
+    "failed": 0,
+    "skipped": 3589,
+    "profile": "ci_gammaloop",
+    "cargo_profile": "ci-optim",
+    "duration_seconds": 171.028,
+    "build_duration_seconds": 252,
+    "command": "just test --lib --test test_runs -E \"test(all_cuts) or test(graph::lmb::test) or test(graph::threshold_counterterms::tests) or test(composite_mass_geometry_matches_native_coefficients_after_reload) or test(cff::radial::tests) or test(cff::hsurface::tests) or test(cff::esurface::tests) or test(integrands::process::fermi_surface) or test(integrands::process::amplitude::fermi_tests) or test(cold_rate_localizes) or test(thermal_positive_esurface_sampling) or test(thermal_rates::) or test(thermal_scalar_) or test(thermal_raised_) or test(cold_yukawa_rate) or test(generalized_raised_cross_section_covers_derivative_components_and_roundtrips) or test(generation_settings_tests) or test(state_manifest_)\"",
+    "environment": {
+      "CARGO_BUILD_JOBS": "8",
+      "NEXTEST_TEST_THREADS": "4",
+      "GL_DISPLAY_FILTER": "off",
+      "GL_LOGFILE_FILTER": "[{#thermal,#benchmark}]=debug,[{#thermal,#fermi,#lu}]=debug",
+      "GL_TEST_LOG_DIR": "/tmp/thermal-rates-verified-logs-3",
+      "GAMMALOOP_TESTS_NO_CLEAN_STATE": "1",
+      "TESTS_GAMMALOOP_STATE_PATH": "/tmp/thermal-rates-verified-artifacts-3"
+    },
+    "development_shell": "nix develop /tmp/thermal-rates-development-shell",
+    "log": "/tmp/thermal-rates-verified-tests-3.log",
+    "log_sha256": "60c6c8aee50e58e6ff8c33aec983d98f4d1d2d9793f6354fb03fa63906fa0539",
+    "coverage": [
+      "five massive scalar cut domains",
+      "positive and negative slope raised scalar cuts",
+      "physical cold Yukawa rates and both fermion mass insertions at both chemical-potential signs",
+      "independent virtual spectator Fermi boundary",
+      "shared amplitude Fermi sectors",
+      "positive-E thermal sampling with signed channels",
+      "existing scalar sunset",
+      "event conservation and weight closure",
+      "state reload and native composite masses",
+      "root isolation",
+      "exhaustive small-graph cut partitions",
+      "physical loop basis and threshold metadata",
+      "rotated near-axis Fermi geometry in Double, Quad, and Arb"
+    ],
+    "full_suite": false
+  },
+  "clippy": {
+    "command": "cargo clippy -p gammalooprs -p gammaloop-integration-tests -p gammaloop-api -p linnet --lib --tests --profile ci-optim --locked -- -D warnings",
+    "exit_code": 0,
+    "log": "/tmp/thermal-rates-final-clippy-4.log"
+  },
+  "other_checks": {
+    "changed_rust_formatting": "passed using each crate edition",
+    "diff_whitespace": "passed",
+    "python_ruff_check_and_format": "passed",
+    "model_json_and_run_card_toml": "parsed",
+    "architecture_scope_fingerprints": "passed",
+    "typst_rendering": "passed"
+  },
+  "native_comparisons": [
+    {
+      "fixture": "cold_yukawa",
+      "process": "cold",
+      "chemical_potential": 2.5,
+      "yb": 0.9999999999625923,
+      "coarse": 0.08658028958906437,
+      "fine": 0.08658028903551993,
+      "extrapolated": 0.0865802888510051,
+      "target": 0.08658028903551353,
+      "absolute_error": 1.8450842242945242e-10,
+      "relative_error": 2.1310672958572675e-09,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "process": "excess",
+      "chemical_potential": 2.5,
+      "yb": 0.9999999999625923,
+      "coarse": -0.03565069660467048,
+      "fine": -0.035650707252295466,
+      "extrapolated": -0.03565071080150379,
+      "target": -0.035650707249917334,
+      "absolute_error": 3.551586455485811e-09,
+      "relative_error": 9.962176712480357e-08,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "process": "vacuum",
+      "chemical_potential": 2.5,
+      "yb": 0.9999999999625923,
+      "coarse": 0.12223098619373486,
+      "fine": 0.12223099628781545,
+      "extrapolated": 0.12223099965250898,
+      "target": 0.12223099628543085,
+      "absolute_error": 3.3670781302008734e-09,
+      "relative_error": 2.754684353826385e-08,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "process": "mass_b",
+      "chemical_potential": 2.5,
+      "yb": 0.9999999999625923,
+      "coarse": -0.02864788981481566,
+      "fine": -0.028647889754402425,
+      "extrapolated": -0.028647889734264683,
+      "target": -0.028647889754397856,
+      "absolute_error": 2.0133172906611208e-11,
+      "relative_error": 7.027803122399436e-10,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "process": "mass_antib",
+      "chemical_potential": 2.5,
+      "yb": 0.9999999999625923,
+      "coarse": -0.059205638488556096,
+      "fine": -0.05920563882576264,
+      "extrapolated": -0.05920563893816482,
+      "target": -0.05920563882575557,
+      "absolute_error": 1.1240924857602863e-10,
+      "relative_error": 1.898624029830221e-09,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "observable": "common_mass_derivative",
+      "chemical_potential": 2.5,
+      "yb": 0.9999999999625923,
+      "derivative": -0.0878535286724295,
+      "target": -0.08785352858015344,
+      "absolute_error": 9.227606179162962e-11,
+      "relative_error": 1.0503398472770648e-09,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "process": "cold",
+      "chemical_potential": -2.5,
+      "yb": 0.9999999999625923,
+      "coarse": 0.08658027838338173,
+      "fine": 0.08658028903789157,
+      "extrapolated": 0.08658029258939486,
+      "target": 0.08658028903551353,
+      "absolute_error": 3.553881328111075e-09,
+      "relative_error": 4.104723335646688e-08,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "process": "excess",
+      "chemical_potential": -2.5,
+      "yb": 0.9999999999625923,
+      "coarse": -0.035650707810353156,
+      "fine": -0.035650707249924,
+      "extrapolated": -0.03565070706311429,
+      "target": -0.035650707249917334,
+      "absolute_error": 1.868030452545355e-10,
+      "relative_error": 5.2398131668192546e-09,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "process": "vacuum",
+      "chemical_potential": -2.5,
+      "yb": 0.9999999999625923,
+      "coarse": 0.12223098619373486,
+      "fine": 0.12223099628781545,
+      "extrapolated": 0.12223099965250898,
+      "target": 0.12223099628543085,
+      "absolute_error": 3.3670781302008734e-09,
+      "relative_error": 2.754684353826385e-08,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "process": "mass_b",
+      "chemical_potential": -2.5,
+      "yb": 0.9999999999625923,
+      "coarse": -0.05920559802890022,
+      "fine": -0.059205639022537136,
+      "extrapolated": -0.05920565268708278,
+      "target": -0.05920563882575557,
+      "absolute_error": 1.3861327204101048e-08,
+      "relative_error": 2.3412174041218367e-07,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "process": "mass_antib",
+      "chemical_potential": -2.5,
+      "yb": 0.9999999999625923,
+      "coarse": -0.028648440046401193,
+      "fine": -0.02864788709784895,
+      "extrapolated": -0.02864770278166487,
+      "target": -0.028647889754397856,
+      "absolute_error": 1.8697273298715067e-07,
+      "relative_error": 6.526579604644272e-06,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "cold_yukawa",
+      "observable": "common_mass_derivative",
+      "chemical_potential": -2.5,
+      "yb": 0.9999999999625923,
+      "derivative": -0.08785335546874765,
+      "target": -0.08785352858015344,
+      "absolute_error": 1.7311140579345796e-07,
+      "relative_error": 1.9704547852681776e-06,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/cold_yukawa_rate_2216834/state/logs/gammalog-2026-10-18T00-28-08.860Z.jsonl"
+    },
+    {
+      "fixture": "scalar_bubble",
+      "case": "rest_decay",
+      "observable": "mass1_squared_derivative",
+      "energy": 2.0,
+      "mass1": 0.4,
+      "mass2": 0.7,
+      "coarse": -0.0052061722687417565,
+      "fine": -0.005206172268741889,
+      "extrapolated": -0.0052061722687419335,
+      "target": -0.005206172268741891,
+      "absolute_error": 4.2500725161431774e-17,
+      "relative_error": 8.163526477333102e-15,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/thermal_raised_scalar_bubble_2216836/logs/gammalog-2026-10-18T00-28-09.006Z.jsonl"
+    },
+    {
+      "fixture": "scalar_bubble",
+      "case": "absorption",
+      "observable": "mass1_squared_derivative",
+      "energy": 1.0,
+      "mass1": 0.3,
+      "mass2": 1.8,
+      "coarse": 0.00036810356346982125,
+      "fine": 0.0003681035634698258,
+      "extrapolated": 0.0003681035634698273,
+      "target": 0.00036810356346982456,
+      "absolute_error": 2.7647155398380363e-18,
+      "relative_error": 7.510700287107313e-15,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/thermal_raised_scalar_bubble_2216836/logs/gammalog-2026-10-18T00-28-09.006Z.jsonl"
+    },
+    {
+      "fixture": "scalar_bubble",
+      "case": "rest_decay",
+      "observable": "spectral_rate",
+      "energy": 2.0,
+      "momentum": 0.0,
+      "mass1": 0.4,
+      "mass2": 0.7,
+      "temperature": 0.6,
+      "coarse": 0.012104501646328416,
+      "fine": 0.012104501639179104,
+      "extrapolated": 0.012104501636796,
+      "target": 0.012104501639179106,
+      "absolute_error": 2.3831058654222304e-12,
+      "relative_error": 1.968776523362796e-10,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/thermal_scalar_bubble_2216837/logs/gammalog-2026-10-18T00-28-09.006Z.jsonl"
+    },
+    {
+      "fixture": "scalar_bubble",
+      "case": "boosted_decay",
+      "observable": "spectral_rate",
+      "energy": 2.5,
+      "momentum": 1.5,
+      "mass1": 0.4,
+      "mass2": 0.7,
+      "temperature": 0.6,
+      "coarse": 0.009078371224041813,
+      "fine": 0.009090059336775843,
+      "extrapolated": 0.009093955374353853,
+      "target": 0.009094016657615578,
+      "absolute_error": 6.128326172569198e-08,
+      "relative_error": 6.738855231188927e-06,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/thermal_scalar_bubble_2216837/logs/gammalog-2026-10-18T00-28-09.006Z.jsonl"
+    },
+    {
+      "fixture": "scalar_bubble",
+      "case": "closed",
+      "observable": "spectral_rate",
+      "energy": 1.0,
+      "momentum": 0.0,
+      "mass1": 0.6,
+      "mass2": 0.8,
+      "temperature": 0.6,
+      "coarse": 0.0,
+      "fine": 0.0,
+      "extrapolated": 0.0,
+      "target": 0.0,
+      "absolute_error": 0.0,
+      "relative_error": null,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/thermal_scalar_bubble_2216837/logs/gammalog-2026-10-18T00-28-09.006Z.jsonl"
+    },
+    {
+      "fixture": "scalar_bubble",
+      "case": "absorption",
+      "observable": "spectral_rate",
+      "energy": 1.0,
+      "momentum": 0.0,
+      "mass1": 0.3,
+      "mass2": 1.8,
+      "temperature": 0.6,
+      "coarse": 0.006880508783819071,
+      "fine": 0.0068805087831333685,
+      "extrapolated": 0.006880508782904801,
+      "target": 0.00688050878313337,
+      "absolute_error": 2.285688999181801e-13,
+      "relative_error": 3.3219767189090086e-11,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/thermal_scalar_bubble_2216837/logs/gammalog-2026-10-18T00-28-09.006Z.jsonl"
+    },
+    {
+      "fixture": "scalar_bubble",
+      "case": "spacelike",
+      "observable": "spectral_rate",
+      "energy": 1.0,
+      "momentum": 2.0,
+      "mass1": 0.5,
+      "mass2": 0.5,
+      "temperature": 1.0,
+      "coarse": 0.010354506913494804,
+      "fine": 0.010362413129984096,
+      "extrapolated": 0.010365048535480526,
+      "target": 0.010364773879410214,
+      "absolute_error": 2.746560703124207e-07,
+      "relative_error": 2.6498992984114133e-05,
+      "log_path": "/tmp/thermal-rates-verified-artifacts-3/thermal_scalar_bubble_2216837/logs/gammalog-2026-10-18T00-28-09.006Z.jsonl"
+    }
+  ],
+  "acceptance": {
+    "scalar_spectral_rate": "absolute error < 1e-12 + 1e-4*abs(target)",
+    "scalar_mass_squared_derivative": "relative error < 1e-8",
+    "cold_yukawa_rates_and_mass_insertions": "relative error < 1e-4",
+    "quad_method": "Two radial midpoint refinements with Richardson extrapolation. Cold angular integration uses Gauss-Legendre orders 8 and 16 on exact Pauli-step intervals; translated negative-mu insertion profiles use twice the radial resolution."
+  },
+  "independent_scalar_reference": {
+    "command": "python3 -B examples/cli/thermal_rates/scalar_bubble/reference.py --orders 32 64 128 --output /tmp/thermal-rates-bubble-reference-final.json",
+    "python_with_numpy": "/nix/store/463ik27ppxhpbvw7c50s7qcfc7mgfa5x-python3-3.12.12-env/bin/python3",
+    "stdlib_only_command": "python3 examples/cli/thermal_rates/scalar_bubble/reference.py",
+    "maximum_absolute_occupation_quadrature_error_by_order": {
+      "32": 3.5914049512086876e-12,
+      "64": 8.673617379884035e-18,
+      "128": 1.0408340855860843e-17
+    },
+    "results": [
+      {
+        "case": "rest_decay",
+        "energy": 2,
+        "momentum": 0,
+        "mass1": 0.4,
+        "mass2": 0.7,
+        "temperature": 0.6,
+        "coupling": 1,
+        "invariant": 4,
+        "domain": "decay",
+        "spectral_rate": 0.012104501639179106,
+        "vacuum_spectral_rate": 0.008213544945456787,
+        "thermal_excess": 0.003890956693722318,
+        "rest_mass_squared_derivatives": {
+          "mass1_squared": {
+            "spectral_rate": -0.00520617226874189,
+            "vacuum_spectral_rate": -0.003260149933891399,
+            "thermal_excess": -0.0019460223348504912
+          },
+          "mass2_squared": {
+            "spectral_rate": -0.003670617610479006,
+            "vacuum_spectral_rate": -0.002763221768448369,
+            "thermal_excess": -0.0009073958420306371
+          }
+        },
+        "quadrature": [
+          {
+            "order": 32,
+            "spectral_rate": 0.012104501639179106
+          },
+          {
+            "order": 64,
+            "spectral_rate": 0.012104501639179106
+          },
+          {
+            "order": 128,
+            "spectral_rate": 0.012104501639179106
+          }
+        ]
+      },
+      {
+        "case": "boosted_decay",
+        "energy": 2.5,
+        "momentum": 1.5,
+        "mass1": 0.4,
+        "mass2": 0.7,
+        "temperature": 0.6,
+        "coupling": 1,
+        "invariant": 4.0,
+        "domain": "decay",
+        "spectral_rate": 0.00909401665761558,
+        "vacuum_spectral_rate": 0.006570835956365432,
+        "thermal_excess": 0.002523180701250149,
+        "rest_mass_squared_derivatives": null,
+        "quadrature": [
+          {
+            "order": 32,
+            "spectral_rate": 0.009094016657615583
+          },
+          {
+            "order": 64,
+            "spectral_rate": 0.009094016657615578
+          },
+          {
+            "order": 128,
+            "spectral_rate": 0.00909401665761559
+          }
+        ]
+      },
+      {
+        "case": "closed",
+        "energy": 1,
+        "momentum": 0,
+        "mass1": 0.6,
+        "mass2": 0.8,
+        "temperature": 0.6,
+        "coupling": 1,
+        "invariant": 1,
+        "domain": "closed",
+        "spectral_rate": 0.0,
+        "vacuum_spectral_rate": 0.0,
+        "thermal_excess": 0.0,
+        "rest_mass_squared_derivatives": null,
+        "quadrature": [
+          {
+            "order": 32,
+            "spectral_rate": 0.0
+          },
+          {
+            "order": 64,
+            "spectral_rate": 0.0
+          },
+          {
+            "order": 128,
+            "spectral_rate": 0.0
+          }
+        ]
+      },
+      {
+        "case": "absorption",
+        "energy": 1,
+        "momentum": 0,
+        "mass1": 0.3,
+        "mass2": 1.8,
+        "temperature": 0.6,
+        "coupling": 1,
+        "invariant": 1,
+        "domain": "absorption",
+        "spectral_rate": 0.006880508783133373,
+        "vacuum_spectral_rate": 0.0,
+        "thermal_excess": 0.006880508783133373,
+        "rest_mass_squared_derivatives": {
+          "mass1_squared": {
+            "spectral_rate": 0.0003681035634698234,
+            "vacuum_spectral_rate": 0.0,
+            "thermal_excess": 0.0003681035634698234
+          },
+          "mass2_squared": {
+            "spectral_rate": -0.0035964947813623143,
+            "vacuum_spectral_rate": 0.0,
+            "thermal_excess": -0.0035964947813623143
+          }
+        },
+        "quadrature": [
+          {
+            "order": 32,
+            "spectral_rate": 0.006880508783133373
+          },
+          {
+            "order": 64,
+            "spectral_rate": 0.006880508783133373
+          },
+          {
+            "order": 128,
+            "spectral_rate": 0.006880508783133373
+          }
+        ]
+      },
+      {
+        "case": "spacelike",
+        "energy": 1,
+        "momentum": 2,
+        "mass1": 0.5,
+        "mass2": 0.5,
+        "temperature": 1,
+        "coupling": 1,
+        "invariant": -3,
+        "domain": "spacelike",
+        "spectral_rate": 0.010364773879410216,
+        "vacuum_spectral_rate": 0.0,
+        "thermal_excess": 0.010364773879410216,
+        "rest_mass_squared_derivatives": null,
+        "quadrature": [
+          {
+            "order": 32,
+            "spectral_rate": 0.01036477388300162
+          },
+          {
+            "order": 64,
+            "spectral_rate": 0.010364773879410224
+          },
+          {
+            "order": 128,
+            "spectral_rate": 0.010364773879410209
+          }
+        ]
+      }
+    ]
+  },
+  "literature": [
+    {
+      "url": "https://arxiv.org/abs/hep-ph/0302098",
+      "comparison": "Massive scalar bubble decay, absorption and spacelike domains; retarded spectral normalization."
+    },
+    {
+      "url": "https://arxiv.org/abs/1503.03534",
+      "comparison": "Boosted scalar and fermion decay; forward-loss to spectral-rate conversion."
+    },
+    {
+      "url": "https://arxiv.org/abs/2007.01224",
+      "comparison": "Finite-chemical-potential fermion phase space; cold Yukawa targets are independently derived from this phase space."
+    },
+    {
+      "url": "https://arxiv.org/abs/2208.14479",
+      "comparison": "Distributional finite-density boundary terms under pole/mass differentiation; independent spectator boundary control."
+    }
+  ],
+  "limitations": [
+    "General algebraic signed-root elimination is limited to six distinct affine energies; convex positive-E interior rays retain their uncapped existing solver. Degenerate polynomials, unresolved roots and tangencies fail explicitly.",
+    "Dependent Fermi localization supports one regular delta and a two-energy cut. Higher dependent distribution derivatives, multiple dependent shells and singular angular intersections remain unsupported.",
+    "Cold occupation derivatives from LU poles above order two, and existing positive-order Fermi distributions inside raised LU coefficients, remain guarded.",
+    "Finite-temperature spinning cuts, general virtual corrections and UV subtraction remain outside enabled thermal-xs scope.",
+    "Standalone evaluator export does not encode Fermi momentum localization; use saved process state."
+  ],
+  "numerical_convergence_note": "The earlier scalar-sunset Monte Carlo convergence work and its 0.5 percent run-card target remain documented separately; they were not a prerequisite for this extension and were not rerun here.",
+  "diagnostic_runs_before_final_fixes": [
+    {
+      "run_id": "1961548e-dbe0-4a25-a789-689a2e17843a",
+      "passed": 63,
+      "failed": 1,
+      "log": "/tmp/thermal-rates-geometry-cold-tests.log",
+      "finding": "Cold spectator fixture parsing failed before numerical evaluation."
+    },
+    {
+      "run_id": "cf19abdc-a6d2-46c0-bcdd-cd4e8216b4c0",
+      "passed": 74,
+      "failed": 4,
+      "log": "/tmp/thermal-rates-joint-tests.log",
+      "finding": "Sewn external basis conversion and a now-zero fixture step needed correction."
+    },
+    {
+      "run_id": "8581f472-7bae-4a18-a677-e77d70d9cd0b",
+      "passed": 4,
+      "failed": 1,
+      "log": "/tmp/thermal-rates-cold-basis-tests.log",
+      "finding": "Missing cold occupation boundary in raised LU differentiation; measured deficit matches independent prediction within 4e-11 absolute."
+    },
+    {
+      "run_id": "7f460436-7dc0-4ee8-88db-370cdf23f28c",
+      "passed": 98,
+      "failed": 3,
+      "log": "/tmp/thermal-rates-final-tests.log",
+      "finding": "Stale threshold caller conversion and equivalent contour derivatives left as separate supports."
+    },
+    {
+      "run_id": "2600feec-0390-4f4b-afc1-f1b1f8494cb1",
+      "passed": 108,
+      "failed": 2,
+      "log": "/tmp/thermal-rates-verified-tests.log",
+      "finding": "Contour identity required normalization within the thermal-weight polynomial before differentiation."
+    },
+    {
+      "run_id": "038b338b-a302-42f8-a8ac-53d66b2ae926",
+      "passed": 109,
+      "failed": 1,
+      "log": "/tmp/thermal-rates-verified-tests-2.log",
+      "finding": "Near-axis projection lost orthogonality on translated, rotated shells; corrected using existing cross-product operation without relaxing residual tolerances."
+    }
+  ],
+  "ci_readiness": {
+    "top_level_nix_ci_enable": false,
+    "artifacts_uploaded": false,
+    "final_review_requested": false
+  }
+}

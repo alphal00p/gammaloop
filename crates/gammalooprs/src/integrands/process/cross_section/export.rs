@@ -432,6 +432,15 @@ impl CrossSectionIntegrand {
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
+        if self.data.graph_terms.iter().any(|term| {
+            term.fermi_surfaces
+                .iter()
+                .any(|sectors| !sectors.is_empty())
+        }) {
+            return Err(eyre!(
+                "Standalone evaluator export does not encode Fermi-surface localization; use the saved process state to retain its momentum maps and distribution derivatives"
+            ));
+        }
         if settings.precision != StandaloneNumericTarget::Double {
             return Err(eyre!(
                 "Cross-section standalone export currently only supports double precision",

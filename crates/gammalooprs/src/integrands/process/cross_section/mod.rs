@@ -7,7 +7,7 @@ use crate::{
         hsurface::{Hsurface, HsurfaceID},
         orientations::GraphOrientation,
         radial::EnergySurfaceRay,
-        surface::HybridSurfaceID,
+        surface::{HybridSurfaceID, HybridSurfaceRef},
     },
     graph::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
@@ -20,7 +20,11 @@ use crate::{
             GraphTermEvaluationContext, ParamBuilder, SamplingChannelBridge,
             SamplingChannelCompileContext, SamplingChannelId, SamplingCutSide,
             SharedEnergyJointMap,
-            evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
+            evaluators::{
+                ActiveF64Backend, EvaluatorStack, SingleOrAllOrientations,
+                evaluate_evaluator_single,
+            },
+            fermi_surface::{FermiSurfaceEvaluator, FermiSurfaceSector, PreparedFermiSurface},
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
             prepare_buffered_event,
@@ -84,7 +88,7 @@ use eyre::Context;
 use eyre::eyre;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
-    sync::Arc,
+    sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
 
@@ -104,11 +108,12 @@ use std::{
     vec,
 };
 use symbolica::{
+    atom::Atom,
     domains::{dual::HyperDual, float::SingleFloat},
     numerical_integration::{Grid, Sample},
 };
 use tracing::{debug, warn};
-use typed_index_collections::{TiVec, ti_vec};
+use typed_index_collections::{TiSlice, TiVec, ti_vec};
 
 use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, create_grid, evaluate_sample,
@@ -117,6 +122,8 @@ use super::{
     validate_group_orientation_catalogs, validate_process_runtime_settings,
 };
 
+#[cfg(test)]
+mod cold_tests;
 pub mod export;
 pub mod load;
 #[cfg(test)]
@@ -604,6 +611,8 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraphTerm {
     pub integrand: TiVec<CutGroupId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
+    pub(crate) fermi_surfaces:
+        TiVec<CutGroupId, Vec<(Option<OrientationID>, FermiSurfaceEvaluator)>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub hsurfaces: TiVec<HsurfaceID, Hsurface>,
@@ -629,6 +638,15 @@ pub struct CrossSectionGraphTerm {
 struct CutEventGenerationContext<'a> {
     model: &'a Model,
     channel_id: Option<SamplingChannelId>,
+}
+
+enum PreparedCutBranch<T: FloatLike> {
+    Radial(NewtonIterationResult<T>),
+    FermiAngular {
+        sector_index: usize,
+        prepared: PreparedFermiSurface<T>,
+        physical_point: Box<MomentumSample<T>>,
+    },
 }
 
 struct DeferredCutEvaluation<T: FloatLike> {
@@ -982,6 +1000,7 @@ impl CrossSectionGraphTerm {
         }
 
         let mut integrand = TiVec::new();
+        let mut fermi_surfaces = TiVec::new();
         for (cut_group_id, integrand_for_cut_group) in
             masked_cut_parametric_integrand.iter_enumerated()
         {
@@ -989,15 +1008,140 @@ impl CrossSectionGraphTerm {
                 return Err(eyre!("Generation interrupted by user"));
             }
             let mut cut_group_integrands = BTreeMap::new();
-            for (cut_cff_index, integrand_for_subset) in integrand_for_cut_group.integrands.iter() {
+            let mut cut_group_fermi_surfaces = Vec::new();
+            let cut_group = &graph.derived_data.cut_group_data.cut_groups[cut_group_id];
+            let surface = match cut_group.residue.surface_ids[0] {
+                HybridSurfaceID::Esurface(_) => {
+                    HybridSurfaceRef::Esurface(&graph.cut_esurface[cut_group.cuts[0]])
+                }
+                HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(
+                    &graph
+                        .derived_data
+                        .global_cff_expression
+                        .as_ref()
+                        .unwrap()
+                        .expression
+                        .surfaces
+                        .hsurface_cache[id],
+                ),
+                _ => unreachable!("LU residues contain energy surfaces"),
+            };
+            let mut coefficients = integrand_for_cut_group
+                .integrands
+                .iter()
+                .map(|(index, atom)| (*index, atom.clone()))
+                .collect::<BTreeMap<_, _>>();
+            if settings.generation.medium.mode
+                == crate::settings::global::MediumMode::ZeroTemperatureEquilibrium
+            {
+                // Resolve only retained scalar arithmetic. Graph numerator
+                // bodies stay opaque while differentiating tagged occupations.
+                let mut resolve_scalar = crate::uv::Integrands::scalar_resolver(
+                    integrand_for_cut_group
+                        .integrands
+                        .scalar_definitions()
+                        .iter()
+                        .cloned(),
+                )?;
+                for coefficient in coefficients.values_mut() {
+                    *coefficient = resolve_scalar(coefficient)?;
+                }
+                let mut boundary = Atom::Zero;
+                for (index, coefficient) in &coefficients {
+                    if let Some(order) = index.lu_cut_order
+                        && order > 1
+                    {
+                        boundary += FermiSurfaceSector::lu_boundary(
+                            &graph.graph,
+                            coefficient,
+                            order,
+                            surface.clone(),
+                            (!settings.generation.explicit_orientation_sum_only)
+                                .then_some((&orientations.raw, &production_orientation_ids)),
+                        )?;
+                    }
+                }
+                crate::debug_tags!(#generation, #thermal, #fermi, #lu, #trace;
+                    stage = "thermal_lu_distribution_lift",
+                    graph = %graph.graph.name,
+                    cut_group = cut_group_id.0,
+                    file.lu_boundary_coefficient = %boundary.to_plain_string(),
+                    "Distributional boundary created by Laurent differentiation"
+                );
+                if !boundary.is_zero() {
+                    let simple_cut = CutCFFIndex {
+                        lu_cut_order: Some(1),
+                        left_threshold_order: None,
+                        right_threshold_order: None,
+                    };
+                    *coefficients.entry(simple_cut).or_insert(Atom::Zero) += boundary;
+                }
+            }
+            for (cut_cff_index, integrand_for_subset) in &coefficients {
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }
                 let dual_shape = shape_from_cut_cff_index(cut_cff_index);
+                let (bulk_integrand, sectors) = FermiSurfaceSector::extract_orientations(
+                    &graph.graph,
+                    integrand_for_subset,
+                    (!settings.generation.explicit_orientation_sum_only)
+                        .then_some((&orientations.raw, &production_orientation_ids)),
+                )?;
+                crate::debug_tags!(#generation, #thermal, #fermi, #lu, #trace;
+                    stage = "thermal_lu_distribution_split",
+                    graph = %graph.graph.name,
+                    cut_group = cut_group_id.0,
+                    lu_order = cut_cff_index.lu_cut_order.unwrap_or(0),
+                    orientation_count = orientations.len(),
+                    explicit_orientation_sum_only = settings.generation.explicit_orientation_sum_only,
+                    file.source_coefficient = %integrand_for_subset.to_plain_string(),
+                    file.bulk_coefficient = %bulk_integrand.to_plain_string(),
+                    sector_count = sectors.len(),
+                    "Thermal LU coefficient before and after Fermi extraction"
+                );
+                for (orientation_id, sector) in sectors {
+                    crate::debug_tags!(#generation, #thermal, #fermi, #lu, #trace;
+                        stage = "thermal_lu_distribution_sector",
+                        graph = %graph.graph.name,
+                        cut_group = cut_group_id.0,
+                        lu_order = cut_cff_index.lu_cut_order.unwrap_or(0),
+                        orientation = ?orientation_id,
+                        support = ?sector.product.factors(),
+                        file.factorized_coefficient = %sector.coefficient.to_plain_string(),
+                        "Factorized Fermi support in the shared cut coefficient"
+                    );
+                    let orientation_catalog = orientation_id.map(|id| {
+                        (
+                            std::slice::from_ref(&orientations[id]),
+                            std::slice::from_ref(&production_orientation_ids[id.0]),
+                        )
+                    });
+                    eyre::ensure!(
+                        cut_cff_index.lu_cut_order == Some(1),
+                        "Joint raised-cut and Fermi-surface localization is not supported"
+                    );
+                    eyre::ensure!(
+                        !settings.generation.threshold_subtraction.enable_thresholds,
+                        "Fermi-surface rate localization requires threshold subtraction disabled"
+                    );
+                    let (evaluator, timings) = FermiSurfaceEvaluator::new(
+                        &graph.graph,
+                        sector,
+                        &graph.graph.param_builder,
+                        integrand_for_cut_group.integrands.numerators(),
+                        orientation_catalog,
+                        &settings.generation.evaluator,
+                    )?;
+                    let evaluator = evaluator.with_cut(&graph.graph, surface.clone())?;
+                    stats.add_evaluator_build_timings(timings);
+                    stats.evaluator_count += evaluator.generic_evaluator_count();
+                    cut_group_fermi_surfaces.push((orientation_id, evaluator));
+                }
 
                 let (evaluator_stack, evaluator_timings) =
                     EvaluatorStack::from_integrand_with_timings(
-                        integrand_for_subset,
+                        &bulk_integrand,
                         &graph.graph.param_builder,
                         integrand_for_cut_group.integrands.numerators(),
                         (!settings.generation.explicit_orientation_sum_only)
@@ -1019,6 +1163,7 @@ impl CrossSectionGraphTerm {
                 cut_group_integrands.insert(*cut_cff_index, evaluator_stack);
             }
             integrand.push(cut_group_integrands);
+            fermi_surfaces.push(cut_group_fermi_surfaces);
             processes::cut_finished(
                 "",
                 &graph.graph.name,
@@ -1398,10 +1543,21 @@ impl CrossSectionGraphTerm {
             })
             .collect();
 
+        let mut runtime_graph = graph.graph.clone();
+        runtime_graph.param_builder.initialize_duals(
+            fermi_surfaces
+                .iter()
+                .flatten()
+                .map(|(_, sector)| sector.dual_len())
+                .max()
+                .unwrap_or(1),
+        );
+        let param_builder = runtime_graph.param_builder.clone();
         Ok((
             Self {
                 integrand,
-                graph: graph.graph.clone(),
+                fermi_surfaces,
+                graph: runtime_graph,
                 cut_esurface: graph.cut_esurface.clone(),
                 hsurfaces: graph
                     .derived_data
@@ -1438,7 +1594,7 @@ impl CrossSectionGraphTerm {
                 lmbs: graph.derived_data.lmbs.as_ref().unwrap().clone(),
                 estimated_scale: None,
                 real_mass_vec: None,
-                param_builder: graph.graph.param_builder.clone(),
+                param_builder,
                 orientation_filter: SubSet::full(orientations.len()),
                 orientations,
                 production_orientation_keys,
@@ -1481,6 +1637,15 @@ impl CrossSectionGraphTerm {
                 )?;
             }
         }
+        for (cut_group_id, sectors) in self.fermi_surfaces.iter_mut_enumerated() {
+            for (index, (_, sector)) in sectors.iter_mut().enumerate() {
+                sector.compile(
+                    format!("fermi_surface_{}_{}", cut_group_id.0, index),
+                    &graph_path,
+                    frozen_mode,
+                )?;
+            }
+        }
 
         self.counterterm.compile(&graph_path, frozen_mode)?;
 
@@ -1514,6 +1679,9 @@ impl CrossSectionGraphTerm {
                 evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
+        for (_, sector) in self.fermi_surfaces.iter_mut().flatten() {
+            sector.for_each_generic_evaluator_mut(&mut f)?;
+        }
 
         self.counterterm.for_each_generic_evaluator_mut(&mut f)?;
 
@@ -1527,15 +1695,11 @@ impl CrossSectionGraphTerm {
     fn generate_event_for_cut<T: FloatLike>(
         &self,
         event_context: CutEventGenerationContext<'_>,
-        t_scaling_solution: &NewtonIterationResult<T>,
         momentum_sample: &MomentumSample<T>,
         cut_id: CutId,
         cut: &CrossSectionCut,
         absorbed_edges: &[EdgeIndex],
     ) -> Result<GenericEvent<T>> {
-        let rescaled_momenta =
-            momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
-
         let mut new_event = GenericEvent::<T>::default();
         new_event.cut_info.cut_id = cut_id.0;
         new_event.cut_info.orientation_id = if self.explicit_orientation_sum_only {
@@ -1575,7 +1739,7 @@ impl CrossSectionGraphTerm {
         new_event
             .kinematic_configuration
             .0
-            .extend(rescaled_momenta.external_moms().clone());
+            .extend(momentum_sample.external_moms().clone());
 
         let mut incoming_pdgs = self
             .graph
@@ -1626,7 +1790,7 @@ impl CrossSectionGraphTerm {
 
             let mut edge_spatial_momentum = self.graph.loop_momentum_basis.edge_signatures[eid]
                 .compute_three_momentum_from_four(
-                    rescaled_momenta.loop_moms(),
+                    momentum_sample.loop_moms(),
                     momentum_sample.external_moms(),
                 );
 
@@ -1749,11 +1913,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                 .iter()
                 .any(|block| !block.target.energy_edge_sets().is_empty())
         }) {
-            if self.graph.param_builder.medium_mode != crate::settings::global::MediumMode::Vacuum {
-                return Err(eyre!(
-                    "Surface-targeted sampling is not supported for thermal `xs` yet; use ordinary loop-momentum sampling"
-                ));
-            }
             if self.graph.loop_momentum_basis
                 != self.multi_channeling_setup.graph.loop_momentum_basis
             {
@@ -1802,7 +1961,15 @@ impl GraphTerm for CrossSectionGraphTerm {
                     )
                 }));
             for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-                if !self.counterterm.cut_group_is_active(cut_group_id) {
+                // Sampling hosts retain positive-E geometry. Signed groups
+                // may share physical cut IDs, but use their own root equations
+                // when the complete integrand evaluates this mapped sample.
+                if !self.counterterm.cut_group_is_active(cut_group_id)
+                    || !matches!(
+                        cut_group.residue.surface_ids[0],
+                        HybridSurfaceID::Esurface(_)
+                    )
+                {
                     continue;
                 }
                 for cut_id in &cut_group.cuts {
@@ -1918,6 +2085,10 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .iter_enumerated()
                         .filter(|(group_id, group)| {
                             self.counterterm.cut_group_is_active(*group_id)
+                                && matches!(
+                                    group.residue.surface_ids[0],
+                                    HybridSurfaceID::Esurface(_)
+                                )
                                 && group.cuts.iter().any(|id| matching_cuts.contains(id))
                         })
                         .collect_vec();
@@ -2576,6 +2747,13 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.graph.param_builder.update_model_values(model)?;
         self.graph
             .validate_medium_parameters(model, settings.general.inverse_temperature)?;
+        if self
+            .fermi_surfaces
+            .iter()
+            .any(|sectors| !sectors.is_empty())
+        {
+            settings.lu_h_function.validate_normalized_profile()?;
+        }
         if self.graph.param_builder.medium_mode != crate::settings::global::MediumMode::Vacuum {
             if !settings.subtraction.disable_threshold_subtraction {
                 return Err(eyre!(
@@ -2584,27 +2762,13 @@ impl GraphTerm for CrossSectionGraphTerm {
             }
             let external = settings.kinematics.externals.get_indep_externals();
             let [probe] = external.as_slice() else {
-                return Err(eyre!("Thermal `xs` currently requires one timelike probe"));
-            };
-            if probe.temporal.value <= F(0.0) || probe.dot(probe) <= F(0.0) {
                 return Err(eyre!(
-                    "Thermal `xs` currently requires a future-directed timelike probe; spacelike and lightlike probes are not supported yet"
+                    "Thermal `xs` currently requires one positive-energy probe"
                 ));
-            }
-            if self
-                .cut_esurface
-                .iter()
-                .flat_map(|surface| &surface.energies)
-                .any(|edge| {
-                    !matches!(self.graph[*edge].mass, crate::graph::edge::EdgeMass::Zero)
-                        && self.graph[*edge]
-                            .mass
-                            .value::<f64>(model, &self.graph.param_builder)
-                            .is_none_or(|mass| !mass.re.is_zero() || !mass.im.is_zero())
-                })
-            {
+            };
+            if !probe.temporal.value.is_finite() || probe.temporal.value <= F(0.0) {
                 return Err(eyre!(
-                    "Thermal `xs` currently requires massless cut particles"
+                    "Thermal `xs` currently requires a finite positive probe energy"
                 ));
             }
         }
@@ -2653,6 +2817,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 .map_err(|error| SamplingEvaluationError::UncertifiedRoot {
                     detail: format!("{identity}: {error:?}"),
                 })?;
+            let physical_point = sample.rescaled_loop_momenta(&solution.solution, Subspace::None);
             if let Some(runtime) = context.event_processing_runtime.as_deref_mut()
                 && runtime.has_selectors()
             {
@@ -2661,8 +2826,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         model: context.model,
                         channel_id: context.sampling_channel,
                     },
-                    &solution,
-                    sample,
+                    &physical_point,
                     cut_id,
                     &self.cuts[cut_id],
                     &[],
@@ -2671,10 +2835,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     continue;
                 }
             }
-            representatives.push((
-                cut_group_id,
-                sample.rescaled_loop_momenta(&solution.solution, Subspace::None),
-            ));
+            representatives.push((cut_group_id, physical_point));
         }
         self.counterterm
             .prepare_shared_overlaps(
@@ -2747,10 +2908,11 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .get(plan.cut_group_id)
                     .ok_or_else(|| eyre!("LU host claims unknown cut group {:?}", plan))?;
                 if !self.counterterm.cut_group_is_active(plan.cut_group_id)
+                    || !matches!(group.residue.surface_ids[0], HybridSurfaceID::Esurface(_))
                     || group.cuts.first() != Some(&plan.representative_cut_id)
                 {
                     return Err(eyre!(
-                        "LU host claims incompatible active representative {:?}",
+                        "LU host claims incompatible active positive-E representative {:?}",
                         plan
                     ));
                 }
@@ -3007,18 +3169,25 @@ impl GraphTerm for CrossSectionGraphTerm {
                     if let Some((ray, solution)) = adopted_hosts.remove(&cut_group_id) {
                         Ok((ray, vec![solution]))
                     } else {
-                        self.cut_esurface[cut_group.cuts[0]]
-                            .solve_lu_cut(
-                                momentum_sample.loop_moms(),
-                                momentum_sample.external_moms(),
-                                &masses,
-                                &self.graph.loop_momentum_basis,
-                                &F::from_f64(context.settings.kinematics.e_cm),
-                                &mut context.evaluation_metadata.radial_root_diagnostics,
-                                &identity,
-                            )
-                            .map(|(ray, solution)| (ray, vec![solution]))
-                            .map_err(|error| eyre!("{identity}: {error:?}"))
+                        let center = LoopMomenta::from_iter(
+                            momentum_sample
+                                .loop_moms()
+                                .iter()
+                                .map(|momentum| momentum.map_ref(&|value| value.zero())),
+                        );
+                        let ray = self.cut_esurface[cut_group.cuts[0]].routed_ray(
+                            momentum_sample.loop_moms(),
+                            &center,
+                            momentum_sample.external_moms(),
+                            &masses,
+                            &self.graph.loop_momentum_basis,
+                        );
+                        ray.positive_radius_roots(
+                            &F::from_f64(context.settings.kinematics.e_cm),
+                            &mut context.evaluation_metadata.radial_root_diagnostics,
+                            &identity,
+                        )
+                        .map(|roots| (ray, roots))
                     }
                 }
                 HybridSurfaceID::Hsurface(id) => self.hsurfaces[id].positive_radius_roots(
@@ -3073,6 +3242,22 @@ impl GraphTerm for CrossSectionGraphTerm {
             let (ray, roots) = lu_solutions
                 .remove(&cut_group_id)
                 .expect("all active LU cut roots were validated before evaluation");
+            static SECTOR_ORIENTATION_FILTER: LazyLock<SubSet<OrientationID>> =
+                LazyLock::new(|| SubSet::full(1));
+            let sector_orientations = |orientation_id: Option<OrientationID>| {
+                if let Some(id) = orientation_id {
+                    let selected = match orientations {
+                        SingleOrAllOrientations::Single { id: selected, .. } => selected == id,
+                        SingleOrAllOrientations::All { filter, .. } => filter[id],
+                    };
+                    selected.then(|| SingleOrAllOrientations::All {
+                        all: TiSlice::from_ref(std::slice::from_ref(&self.orientations[id])),
+                        filter: &SECTOR_ORIENTATION_FILTER,
+                    })
+                } else {
+                    Some(orientations)
+                }
+            };
             let absorbed_edges: &[EdgeIndex] = match cut_group.residue.surface_ids[0] {
                 HybridSurfaceID::Esurface(_) => &[],
                 HybridSurfaceID::Hsurface(id) => {
@@ -3085,7 +3270,50 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
                 _ => unreachable!("LU residue groups contain E- or H-surfaces"),
             };
-            for solution in roots {
+            let surface = match cut_group.residue.surface_ids[0] {
+                HybridSurfaceID::Esurface(_) => {
+                    HybridSurfaceRef::Esurface(&self.cut_esurface[cut_group.cuts[0]])
+                }
+                HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(&self.hsurfaces[id]),
+                _ => unreachable!("LU residues contain energy surfaces"),
+            };
+            let mut branches = roots
+                .into_iter()
+                .map(PreparedCutBranch::Radial)
+                .collect_vec();
+            for (sector_index, (orientation_id, sector)) in
+                self.fermi_surfaces[cut_group_id].iter_mut().enumerate()
+            {
+                if !sector.requires_cut() || sector_orientations(*orientation_id).is_none() {
+                    continue;
+                }
+                if let Some(prepared) = sector.prepare_cut(
+                    momentum_sample,
+                    &self.graph,
+                    surface.clone(),
+                    &masses,
+                    context.settings,
+                    &mut self.param_builder,
+                    context.evaluation_metadata,
+                )? {
+                    let physical_point =
+                        sector.projected_sample(momentum_sample, &prepared, &self.graph);
+                    branches.push(PreparedCutBranch::FermiAngular {
+                        sector_index,
+                        prepared,
+                        physical_point: Box::new(physical_point),
+                    });
+                }
+            }
+            for branch in branches {
+                let physical_point = match &branch {
+                    PreparedCutBranch::Radial(solution) => {
+                        momentum_sample.rescaled_loop_momenta(&solution.solution, Subspace::None)
+                    }
+                    PreparedCutBranch::FermiAngular { physical_point, .. } => {
+                        physical_point.as_ref().clone()
+                    }
+                };
                 let prepared_event = prepare_buffered_event(
                     context.settings,
                     context.rotation,
@@ -3100,8 +3328,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                                 // default-sampling LMB reinterpretation path.
                                 channel_id: context.sampling_channel,
                             },
-                            &solution,
-                            momentum_sample,
+                            &physical_point,
                             self.cut_group_data.cut_groups[cut_group_id].cuts[0],
                             &self.cuts[self.cut_group_data.cut_groups[cut_group_id].cuts[0]],
                             absorbed_edges,
@@ -3126,163 +3353,234 @@ impl GraphTerm for CrossSectionGraphTerm {
                 let accepted_event = prepared_event.buffered_event;
                 let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
                 let threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
-                let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
+                let mut kinematic_point = LUCTKinematicPoint::new(match &branch {
+                    PreparedCutBranch::Radial(_) => momentum_sample.clone(),
+                    PreparedCutBranch::FermiAngular { .. } => physical_point,
+                });
                 // The sampling partition multiplies the fully subtracted graph
                 // outside this LU calculation, after raised-residue derivatives.
                 // It is distinct from overlap-group multichanneling internal to
                 // threshold subtraction and is common to every cut at this point.
-                for num_esurfaces in 1..=max_occurrence {
-                    let dual_shape = if num_esurfaces > 1 {
-                        Some(HyperDual::<F<T>>::new(
-                            self.cut_group_data.dual_shapes[num_esurfaces - 2].clone(),
-                        ))
-                    } else {
-                        None
-                    };
+                match branch {
+                    PreparedCutBranch::Radial(solution) => {
+                        for num_esurfaces in 1..=max_occurrence {
+                            let dual_shape = if num_esurfaces > 1 {
+                                Some(HyperDual::<F<T>>::new(
+                                    self.cut_group_data.dual_shapes[num_esurfaces - 2].clone(),
+                                ))
+                            } else {
+                                None
+                            };
 
-                    let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
-                        if let Some(dual_shape) = dual_shape {
-                            let dual_t_for_integrand =
-                                dual_shape.variable(0, solution.solution.clone());
-                            let dual_h_function = h_dual(
-                                &dual_t_for_integrand,
+                            let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
+                                if let Some(dual_shape) = dual_shape {
+                                    let dual_t_for_integrand =
+                                        dual_shape.variable(0, solution.solution.clone());
+                                    let dual_h_function = h_dual(
+                                        &dual_t_for_integrand,
+                                        None,
+                                        None,
+                                        &context.settings.lu_h_function,
+                                    );
+                                    let dual_momenta_for_integrand = momentum_sample
+                                        .loop_moms()
+                                        .rescale_with_hyper_dual(&dual_t_for_integrand, None);
+
+                                    let dual_shape_for_esurface =
+                                        HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
+
+                                    let dual_t_for_esurface = dual_shape_for_esurface
+                                        .variable(0, solution.solution.clone());
+                                    // Reuse the exact represented equation whose root was
+                                    // accepted above. Integrand momentum jets remain on their
+                                    // existing independent shape and kinematic owner.
+                                    let dual_e_surface = ray.evaluate_dual(&dual_t_for_esurface);
+
+                                    let mut momentum_sample_with_duals = momentum_sample.clone();
+                                    momentum_sample_with_duals.sample.dual_loop_moms =
+                                        Some(dual_momenta_for_integrand);
+
+                                    (
+                                        DualOrNot::Dual(dual_t_for_integrand),
+                                        DualOrNot::Dual(dual_h_function),
+                                        DualOrNot::Dual(dual_e_surface),
+                                        momentum_sample_with_duals,
+                                    )
+                                } else {
+                                    let h_function = h(
+                                        &solution.solution,
+                                        None,
+                                        None,
+                                        &context.settings.lu_h_function,
+                                    );
+                                    let rescaled_momenta = momentum_sample
+                                        .rescaled_loop_momenta(&solution.solution, Subspace::None);
+
+                                    (
+                                        DualOrNot::NonDual(solution.solution.clone()),
+                                        DualOrNot::NonDual(h_function),
+                                        DualOrNot::NonDual(solution.derivative_at_solution.clone()),
+                                        rescaled_momenta,
+                                    )
+                                };
+
+                            debug!("tstar: {}", tstar);
+                            debug!("h(tstar): {}", h_function);
+                            debug!("esurface derivative at tstar: {}", esurface_derivatives);
+
+                            let lu_params = LUParams { h_function, tstar };
+
+                            if !context.settings.subtraction.disable_threshold_subtraction {
+                                kinematic_point
+                                    .dualized_momentum_sample_cache
+                                    .push(rescaled_momenta.clone());
+                                kinematic_point
+                                    .lu_cut_parameter_cache
+                                    .push(lu_params.clone());
+                                kinematic_point
+                                    .lu_cut_esurface_values
+                                    .push(esurface_derivatives.clone());
+                            }
+
+                            let params = T::get_parameters(
+                                &mut self.param_builder,
+                                (
+                                    context.settings.general.enable_cache,
+                                    context.settings.general.debug_cache,
+                                ),
+                                &self.graph,
+                                &rescaled_momenta,
+                                hel,
+                                &context.settings.additional_params(),
                                 None,
                                 None,
-                                &context.settings.lu_h_function,
+                                Some(&lu_params),
                             );
-                            let dual_momenta_for_integrand = momentum_sample
-                                .loop_moms()
-                                .rescale_with_hyper_dual(&dual_t_for_integrand, None);
+                            let cut_index = CutCFFIndex {
+                                lu_cut_order: Some(num_esurfaces),
+                                left_threshold_order: None,
+                                right_threshold_order: None,
+                            };
 
-                            let dual_shape_for_esurface =
-                                HyperDual::<F<T>>::new(simple_n_deriv_shape(num_esurfaces));
+                            let mut result = self.integrand[cut_group_id]
+                                .get_mut(&cut_index)
+                                .unwrap()
+                                .evaluate(
+                                    params,
+                                    orientations,
+                                    context.settings,
+                                    context.evaluation_metadata,
+                                )?
+                                .pop()
+                                .ok_or_else(|| eyre!("Evaluator returned no cut result"))?;
 
-                            let dual_t_for_esurface =
-                                dual_shape_for_esurface.variable(0, solution.solution.clone());
-                            // Reuse the exact represented equation whose root was
-                            // accepted above. Integrand momentum jets remain on their
-                            // existing independent shape and kinematic owner.
-                            let dual_e_surface = ray.evaluate_dual(&dual_t_for_esurface);
+                            // The generation certificate makes this cut's root and
+                            // event independent of every localized shell coordinate.
+                            // Keep the original LU measure: shell localization acts
+                            // on the already rescaled momenta before the common
+                            // residue normalization and event weighting.
+                            if num_esurfaces == 1 {
+                                for (orientation_id, sector) in
+                                    &mut self.fermi_surfaces[cut_group_id]
+                                {
+                                    if sector.requires_cut() {
+                                        continue;
+                                    }
+                                    let Some(sector_orientations) =
+                                        sector_orientations(*orientation_id)
+                                    else {
+                                        continue;
+                                    };
+                                    result += DualOrNot::NonDual(sector.evaluate(
+                                        &rescaled_momenta,
+                                        &self.graph,
+                                        context.settings,
+                                        &mut self.param_builder,
+                                        sector_orientations,
+                                        Some(&lu_params),
+                                        context.evaluation_metadata,
+                                    )?);
+                                }
+                            }
 
-                            let mut momentum_sample_with_duals = momentum_sample.clone();
-                            momentum_sample_with_duals.sample.dual_loop_moms =
-                                Some(dual_momenta_for_integrand);
+                            debug!("pass 1 result {}", result);
 
-                            (
-                                DualOrNot::Dual(dual_t_for_integrand),
-                                DualOrNot::Dual(dual_h_function),
-                                DualOrNot::Dual(dual_e_surface),
-                                momentum_sample_with_duals,
-                            )
-                        } else {
-                            let h_function = h(
-                                &solution.solution,
-                                None,
-                                None,
-                                &context.settings.lu_h_function,
+                            let mut params_for_pass_two = vec![];
+                            match result {
+                                DualOrNot::Dual(dual_result) => {
+                                    params_for_pass_two.extend_from_slice(
+                                        &extract_t_derivatives_complex(dual_result),
+                                    );
+                                }
+                                DualOrNot::NonDual(non_dual_result) => {
+                                    params_for_pass_two.push(non_dual_result);
+                                }
+                            }
+
+                            match esurface_derivatives {
+                                DualOrNot::Dual(dual_e_surface) => {
+                                    extract_t_derivatives(dual_e_surface)[1..].iter().for_each(
+                                        |v| {
+                                            params_for_pass_two.push(Complex::new_re(v.clone()));
+                                        },
+                                    );
+                                }
+                                DualOrNot::NonDual(non_dual_e_surface) => {
+                                    params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
+                                }
+                            }
+
+                            let pass_two_evaluator =
+                                &mut self.cut_group_data.pass_two_evaluators[num_esurfaces - 1];
+
+                            let pass_two_result = evaluate_evaluator_single(
+                                pass_two_evaluator,
+                                &params_for_pass_two,
+                                context.evaluation_metadata,
                             );
-                            let rescaled_momenta = momentum_sample
-                                .rescaled_loop_momenta(&solution.solution, Subspace::None);
 
-                            (
-                                DualOrNot::NonDual(solution.solution.clone()),
-                                DualOrNot::NonDual(h_function),
-                                DualOrNot::NonDual(solution.derivative_at_solution.abs()),
-                                rescaled_momenta,
-                            )
-                        };
+                            debug!("pass_two_result: {:+16e}", pass_two_result);
+                            //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                    debug!("tstar: {}", tstar);
-                    debug!("h(tstar): {}", h_function);
-                    debug!("esurface derivative at tstar: {}", esurface_derivatives);
-
-                    let lu_params = LUParams { h_function, tstar };
-
-                    if !context.settings.subtraction.disable_threshold_subtraction {
-                        kinematic_point
-                            .dualized_momentum_sample_cache
-                            .push(rescaled_momenta.clone());
-                        kinematic_point
-                            .lu_cut_parameter_cache
-                            .push(lu_params.clone());
-                        kinematic_point
-                            .lu_cut_esurface_values
-                            .push(esurface_derivatives.clone());
+                            // A delta-function discontinuity integrates with |g'|, whereas
+                            // the Laurent residue uses the oriented inverse map 1/g'.
+                            // The root orientation multiplies every pole order equally;
+                            // keep the signed jets intact before applying it once here.
+                            let bare_contribution =
+                                if solution.derivative_at_solution < momentum_sample.zero() {
+                                    -pass_two_result
+                                } else {
+                                    pass_two_result
+                                };
+                            bare_cut_total += bare_contribution.clone();
+                            cut_results[cut_group_id].push(bare_contribution);
+                        }
                     }
-
-                    let params = T::get_parameters(
-                        &mut self.param_builder,
-                        (
-                            context.settings.general.enable_cache,
-                            context.settings.general.debug_cache,
-                        ),
-                        &self.graph,
-                        &rescaled_momenta,
-                        hel,
-                        &context.settings.additional_params(),
-                        None,
-                        None,
-                        Some(&lu_params),
-                    );
-                    let cut_index = CutCFFIndex {
-                        lu_cut_order: Some(num_esurfaces),
-                        left_threshold_order: None,
-                        right_threshold_order: None,
-                    };
-
-                    let result = self.integrand[cut_group_id]
-                        .get_mut(&cut_index)
-                        .unwrap()
-                        .evaluate(
-                            params,
-                            orientations,
+                    PreparedCutBranch::FermiAngular {
+                        sector_index,
+                        prepared,
+                        ..
+                    } => {
+                        let (orientation_id, sector) =
+                            &mut self.fermi_surfaces[cut_group_id][sector_index];
+                        let selected = sector_orientations(*orientation_id)
+                            .expect("prepared Fermi branch has an active orientation");
+                        // Both delta Jacobians are already in this branch's
+                        // shared Fermi measure. The inserted radial LU profile
+                        // is absent, so do not apply a second radial residue.
+                        let contribution = sector.evaluate_prepared(
+                            prepared,
+                            momentum_sample,
+                            &self.graph,
                             context.settings,
+                            &mut self.param_builder,
+                            selected,
+                            None,
                             context.evaluation_metadata,
-                        )?
-                        .pop()
-                        .ok_or_else(|| eyre!("Evaluator returned no cut result"))?;
-
-                    debug!("pass 1 result {}", result);
-
-                    let mut params_for_pass_two = vec![];
-                    match result {
-                        DualOrNot::Dual(dual_result) => {
-                            params_for_pass_two
-                                .extend_from_slice(&extract_t_derivatives_complex(dual_result));
-                        }
-                        DualOrNot::NonDual(non_dual_result) => {
-                            params_for_pass_two.push(non_dual_result);
-                        }
+                        )?;
+                        bare_cut_total += contribution.clone();
+                        cut_results[cut_group_id].push(contribution);
                     }
-
-                    match esurface_derivatives {
-                        DualOrNot::Dual(dual_e_surface) => {
-                            extract_t_derivatives(dual_e_surface)[1..]
-                                .iter()
-                                .for_each(|v| {
-                                    params_for_pass_two.push(Complex::new_re(v.clone()));
-                                });
-                        }
-                        DualOrNot::NonDual(non_dual_e_surface) => {
-                            params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
-                        }
-                    }
-
-                    let pass_two_evaluator =
-                        &mut self.cut_group_data.pass_two_evaluators[num_esurfaces - 1];
-
-                    let pass_two_result = evaluate_evaluator_single(
-                        pass_two_evaluator,
-                        &params_for_pass_two,
-                        context.evaluation_metadata,
-                    );
-
-                    debug!("pass_two_result: {:+16e}", pass_two_result);
-                    //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
-
-                    let bare_contribution = pass_two_result;
-                    bare_cut_total += bare_contribution.clone();
-                    cut_results[cut_group_id].push(bare_contribution);
                 }
 
                 deferred_cut_evaluations.push(DeferredCutEvaluation {

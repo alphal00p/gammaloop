@@ -85,12 +85,10 @@ impl GenerationSettings {
 
         if generation_type == GenerationType::CrossSection
             && self.medium.mode != MediumMode::Vacuum
-            && (self.medium.mode != MediumMode::ThermodynamicEquilibrium
-                || self.uv.subtract_uv
-                || self.threshold_subtraction.enable_thresholds)
+            && (self.uv.subtract_uv || self.threshold_subtraction.enable_thresholds)
         {
             return Err(eyre!(
-                "Thermal `xs` supports finite-temperature simple cuts with UV and threshold subtraction disabled; cold modes are not supported yet"
+                "Thermal `xs` requires UV and threshold subtraction disabled"
             ));
         }
 
@@ -153,9 +151,7 @@ mod generation_settings_tests {
                         settings.uv.subtract_uv = subtract_uv;
                         settings.threshold_subtraction.enable_thresholds = enable_thresholds;
                         let result = settings.validate_for_process(GenerationType::CrossSection);
-                        let supported = mode == MediumMode::ThermodynamicEquilibrium
-                            && !subtract_uv
-                            && !enable_thresholds;
+                        let supported = !subtract_uv && !enable_thresholds;
                         assert_eq!(
                             result.is_ok(),
                             supported,

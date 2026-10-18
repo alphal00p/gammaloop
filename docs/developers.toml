@@ -68,7 +68,12 @@ anchor = "load_state_manifest(&save_path)?"
 # architecture-current.typ records regeneration, shared radial-equation ownership,
 # and the restricted thermal-xs scope. The uncommitted layout changes share one
 # version bump from 15; this review does not claim numerical benchmark validation.
-digest = "79d11d13e39e738ab23ed12c25e73fbbf953c360"
+# Reviewed 2026-10-17: state version 17 persists Fermi localization strategies
+# and cross-section sector evaluators, plus native composite-mass evaluators.
+# architecture-current.typ documents
+# regeneration, shared rate-sector extraction, and the restricted angular cut/Fermi chart.
+# This source review does not claim completion of the new native validation batch.
+digest = "8c5bc3dd6128ac0c6ff56b5f3c5f4cea25d13e14"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -639,7 +644,10 @@ anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> =
 # Reviewed 2026-10-12: The default nodestore documentation now states the
 # existing Vec/forest feature selection; graph storage and algorithms are
 # unchanged.
-digest = "ab9af84a52f5a11adfd57083fb87d524b28bdd55"
+# Reviewed 2026-10-17: linnet-architecture.typ documents separate visited and
+# accepted source-growth states and connectivity bounds on completed cuts,
+# preserving cuts with source-attached spectator cycles.
+digest = "0abc413acaa29f7408f940e60e71263bf4084640"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"

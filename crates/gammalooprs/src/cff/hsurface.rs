@@ -429,17 +429,124 @@ mod tests {
     }
 
     #[test]
-    fn signed_radial_unsupported_and_nonfinite_rays_are_errors_not_closed_channels() {
+    fn signed_radial_isolates_distinct_massive_and_shifted_energies() {
         let origin = [0.0; 3];
-        let unsupported = radial_roots(
+        // Two-body phase space: |k| = sqrt(lambda(M²,m1²,m2²))/(2M).
+        // Translating the ray center outside the ellipsoid gives two positive
+        // intersections; the E-surface must not assume the origin is interior.
+        for center in [0.0, 3.0] {
+            let energies = [
+                (1, [1.0, 0.0, 0.0], [-center, 0.0, 0.0], 1.0),
+                (1, [1.0, 0.0, 0.0], [-center, 0.0, 0.0], 2.0),
+            ];
+            let momentum = 105.0_f64.sqrt() / 8.0;
+            let expected: Vec<_> = [center - momentum, center + momentum]
+                .into_iter()
+                .filter(|radius| *radius > 0.0)
+                .collect();
+            let roots = radial_roots(&energies, 4.0).unwrap();
+            assert_eq!(roots.len(), expected.len());
+            for (root, radius) in roots.iter().zip(expected) {
+                assert!((root.solution.0 - radius).abs() < 1.0e-12);
+                assert!(root.derivative_at_solution.0 * (radius - center) > 0.0);
+            }
+            assert!(radial_roots(&energies, 2.0).unwrap().is_empty());
+        }
+        let energies = [
+            (1, [1.0, 0.0, 0.0], origin, 1.0),
+            (-1, [2.0, 0.0, 0.0], origin, 1.0),
+        ];
+        assert!(radial_roots(&energies, 1.0).unwrap().is_empty());
+        let roots = radial_roots(&energies, -1.0).unwrap();
+        assert_eq!(roots.len(), 1);
+        let expected = ((5.0 + 2.0 * 13.0_f64.sqrt()) / 9.0).sqrt();
+        assert!((roots[0].solution.0 - expected).abs() < 1.0e-12);
+        assert!(roots[0].derivative_at_solution.0 < 0.0);
+
+        // Three distinct shifted radicals with rational energies at r=2,4.
+        // The origin is outside, so this exercises exact elimination rather
+        // than the convex interior chart.
+        let roots = radial_roots(
             &[
-                (1, [1.0, 0.0, 0.0], origin, 1.0),
-                (-1, [2.0, 0.0, 0.0], origin, 1.0),
+                (1, [3.0, 0.0, 0.0], [-9.0, 0.0, 0.0], 4.0),
+                (1, [5.0, 0.0, 0.0], [-15.0, 0.0, 0.0], 12.0),
+                (1, [8.0, 0.0, 0.0], [-24.0, 0.0, 0.0], 15.0),
+            ],
+            35.0,
+        )
+        .unwrap();
+        assert_eq!(roots.len(), 2);
+        assert!((roots[0].solution.0 - 2.0).abs() < 1.0e-12);
+        assert!((roots[1].solution.0 - 4.0).abs() < 1.0e-12);
+        assert!(roots[0].derivative_at_solution.0 < 0.0);
+        assert!(roots[1].derivative_at_solution.0 > 0.0);
+
+        // Unequal-mass absorption support, with negative radial orientation.
+        // E_light = (m_heavy²-m_light²-M²)/(2M).
+        let roots = radial_roots(
+            &[
+                (1, [1.0, 0.0, 0.0], origin, 1.8),
+                (-1, [1.0, 0.0, 0.0], origin, 0.3),
             ],
             1.0,
         )
+        .unwrap();
+        assert_eq!(roots.len(), 1);
+        let momentum = (1.075_f64.powi(2) - 0.3_f64.powi(2)).sqrt();
+        assert!((roots[0].solution.0 - momentum).abs() < 1.0e-12);
+        assert!(roots[0].derivative_at_solution.0 < 0.0);
+
+        // Spacelike Landau support: P=(1,0,0,2), m1=m2=1/2,
+        // with k perpendicular to P. E(k+P)-E(k)=1 gives |k|=sqrt(2).
+        let roots = radial_roots(
+            &[
+                (1, [1.0, 0.0, 0.0], [0.0, 0.0, 2.0], 0.5),
+                (-1, [1.0, 0.0, 0.0], origin, 0.5),
+            ],
+            1.0,
+        )
+        .unwrap();
+        assert_eq!(roots.len(), 1);
+        assert!((roots[0].solution.0 - 2.0_f64.sqrt()).abs() < 1.0e-12);
+        assert!(roots[0].derivative_at_solution.0 < 0.0);
+    }
+
+    #[test]
+    fn signed_radial_resource_limits_and_nonfinite_rays_are_errors_not_closed_channels() {
+        let origin = [0.0; 3];
+        // Interior positive-E rays retain the convex solver without a radical
+        // count limit, including linearly dependent square-root sheets.
+        let roots = radial_roots(
+            &(1..=7)
+                .map(|scale| {
+                    (
+                        1,
+                        [3.0 * f64::from(scale), 0.0, 0.0],
+                        origin,
+                        4.0 * f64::from(scale),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            140.0,
+        )
+        .unwrap();
+        assert_eq!(roots.len(), 1);
+        assert!((roots[0].solution.0 - 1.0).abs() < 1.0e-12);
+        let unsupported = radial_roots(
+            &(1..=7)
+                .map(|mass| {
+                    (
+                        if mass == 1 { -1 } else { 1 },
+                        [1.0, 0.0, 0.0],
+                        origin,
+                        f64::from(mass),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            30.0,
+        )
         .unwrap_err();
-        assert!(unsupported.to_string().contains("unsupported ray"));
+        assert!(unsupported.to_string().contains("at most six"));
         assert!(radial_roots(&[(1, [f64::NAN, 0.0, 0.0], origin, 0.0)], 1.0).is_err());
     }
 

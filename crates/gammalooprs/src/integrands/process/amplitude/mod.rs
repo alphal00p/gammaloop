@@ -22,7 +22,7 @@ use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::AtomCore,
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
@@ -38,7 +38,6 @@ use crate::{
             get_representative,
         },
         expression::OrientationID,
-        orientations::GraphOrientation,
         radial::EnergySurfaceRay,
         surface::{HsurfaceID, HybridSurfaceID},
     },
@@ -88,7 +87,7 @@ use crate::{
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
     utils::{
-        ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, RuntimeCache, W_, compute_shift_part,
+        ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, RuntimeCache, W_, compute_shift_part,
         serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS,
     },
 };
@@ -304,54 +303,31 @@ impl AmplitudeGraphTerm {
             orientation_count = orientations.len(),
             "Generation timing milestone"
         );
-        let mut bulk_integrand = graph.derived_data.all_mighty_integrand.clone();
+        let (bulk_integrand, sectors) = FermiSurfaceSector::extract_orientations(
+            &graph.graph,
+            &graph.derived_data.all_mighty_integrand,
+            (!settings.generation.explicit_orientation_sum_only)
+                .then_some((&orientations.raw, &production_orientation_ids)),
+        )?;
         let mut fermi_surfaces = Vec::new();
-        if FermiSurfaceSector::is_present(&bulk_integrand)? {
-            let branches = if settings.generation.explicit_orientation_sum_only {
-                vec![(None, bulk_integrand.clone())]
-            } else {
-                orientations
-                    .iter_enumerated()
-                    .zip(&production_orientation_ids)
-                    .map(|((id, orientation), production_id)| {
-                        // Eliminate inactive residue maps before resolving edge
-                        // directions, just as the ordinary evaluator does.
-                        let selected = production_id.select(&bulk_integrand);
-                        (
-                            Some(id),
-                            GS.collect_orientation_if(orientation.select(selected)),
-                        )
-                    })
-                    .collect()
-            };
-            bulk_integrand = Atom::Zero;
-            for (orientation_id, branch) in branches {
-                let selector = orientation_id
-                    .map(|id| production_orientation_ids[id.0].atom())
-                    .unwrap_or_else(Atom::one);
-                let (bulk, sectors) = FermiSurfaceSector::extract(&graph.graph, &branch)?;
-                bulk_integrand += bulk * &selector;
-                let orientation_catalog = orientation_id.map(|id| {
-                    (
-                        std::slice::from_ref(&orientations[id]),
-                        std::slice::from_ref(&production_orientation_ids[id.0]),
-                    )
-                });
-                for mut sector in sectors {
-                    sector.coefficient *= &selector;
-                    let (evaluator, timings) = FermiSurfaceEvaluator::new(
-                        &graph.graph,
-                        sector,
-                        &graph.graph.param_builder,
-                        &graph.derived_data.all_mighty_numerators,
-                        orientation_catalog,
-                        &settings.generation.evaluator,
-                    )?;
-                    stats.add_evaluator_build_timings(timings);
-                    stats.evaluator_count += evaluator.generic_evaluator_count();
-                    fermi_surfaces.push((orientation_id, evaluator));
-                }
-            }
+        for (orientation_id, sector) in sectors {
+            let orientation_catalog = orientation_id.map(|id| {
+                (
+                    std::slice::from_ref(&orientations[id]),
+                    std::slice::from_ref(&production_orientation_ids[id.0]),
+                )
+            });
+            let (evaluator, timings) = FermiSurfaceEvaluator::new(
+                &graph.graph,
+                sector,
+                &graph.graph.param_builder,
+                &graph.derived_data.all_mighty_numerators,
+                orientation_catalog,
+                &settings.generation.evaluator,
+            )?;
+            stats.add_evaluator_build_timings(timings);
+            stats.evaluator_count += evaluator.generic_evaluator_count();
+            fermi_surfaces.push((orientation_id, evaluator));
         }
         let (original_integrand, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
             &bulk_integrand,
@@ -1032,6 +1008,7 @@ impl AmplitudeGraphTerm {
                 context.settings,
                 &mut self.param_builder,
                 sector_orientations,
+                None,
                 context.evaluation_metadata,
             )?;
         }
