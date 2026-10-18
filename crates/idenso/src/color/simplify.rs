@@ -2186,6 +2186,111 @@ impl ColorAlgebraSimplifier {
                 if left_args.len() != right_args.len() {
                     continue;
                 }
+                if left_args.len() == 4 && common.len() == 2 {
+                    let Some(dimension) = color_structure_dimension(&left.args) else {
+                        continue;
+                    };
+                    if color_structure_dimension(&right.args).as_ref() != Some(&dimension) {
+                        continue;
+                    }
+                    // For invariant symmetric rank-four tensors, (sum_i T_i)^2=0
+                    // gives 4 CA G + 12 K = 0. Since T_A=-i F, the explicit
+                    // f(x,a,e) f(x,b,f) contraction is +CA G/3. A raw adjoint
+                    // two-matrix chain has the opposite sign. Keep the existing
+                    // Gram normalization and raw-adjoint trace phases.
+                    let coefficient = Atom::num(left.phase * right.phase)
+                        * adjoint_casimir_for_dimension(dimension.clone())
+                        * color_symmetric_product(4, left.rep.to_owned(), right.rep.to_owned())
+                        / Atom::num(3);
+                    let pair = |a: AtomView, b: AtomView, ports: &[Atom]| {
+                        (a == ports[0] && b == ports[1]) || (a == ports[1] && b == ports[0])
+                    };
+                    let replace = |indices: &[usize], value| {
+                        let mut excluded = vec![false; product.len()];
+                        for &index in indices {
+                            excluded[index] = true;
+                        }
+                        product.excluding(&excluded, value)
+                    };
+                    let adjoint = adjoint_rep(dimension.clone());
+                    for (index, factor) in product.factors.iter().enumerate() {
+                        let Some(chain) = &factor.chain else { continue };
+                        let [a, b] = chain.factors.as_slice() else {
+                            continue;
+                        };
+                        let Some((a, ca)) = adjoint_generator(adjoint.as_view(), *a) else {
+                            continue;
+                        };
+                        let Some((b, cb)) = adjoint_generator(adjoint.as_view(), *b) else {
+                            continue;
+                        };
+                        if (pair(chain.start, chain.end, &left_open) && pair(a, b, &right_open))
+                            || (pair(chain.start, chain.end, &right_open) && pair(a, b, &left_open))
+                        {
+                            return Some(replace(
+                                &[left_index, right_index, index],
+                                -ca * cb * &coefficient,
+                            ));
+                        }
+                    }
+                    for (a_index, a_factor) in product.factors.iter().enumerate() {
+                        let Some(a) = &a_factor.structure else {
+                            continue;
+                        };
+                        if color_structure_dimension(&a.args).as_ref() != Some(&dimension) {
+                            continue;
+                        }
+                        let Some(al) = a
+                            .args
+                            .iter()
+                            .position(|arg| left_open.iter().any(|x| x == arg))
+                        else {
+                            continue;
+                        };
+                        let Some(ar) = a
+                            .args
+                            .iter()
+                            .position(|arg| right_open.iter().any(|x| x == arg))
+                        else {
+                            continue;
+                        };
+                        let bridge = 3 - al - ar;
+                        if left.args.contains(&a.args[bridge])
+                            || right.args.contains(&a.args[bridge])
+                        {
+                            continue;
+                        }
+                        for (b_index, b_factor) in
+                            product.factors.iter().enumerate().skip(a_index + 1)
+                        {
+                            let Some(b) = &b_factor.structure else {
+                                continue;
+                            };
+                            if color_structure_dimension(&b.args).as_ref() != Some(&dimension) {
+                                continue;
+                            }
+                            let Some(bl) = b.args.iter().position(|arg| {
+                                left_open.iter().any(|x| x == arg) && *arg != a.args[al]
+                            }) else {
+                                continue;
+                            };
+                            let Some(br) = b.args.iter().position(|arg| {
+                                right_open.iter().any(|x| x == arg) && *arg != a.args[ar]
+                            }) else {
+                                continue;
+                            };
+                            let other = 3 - bl - br;
+                            if a.args[bridge] == b.args[other] {
+                                let sign = StructureView::orientation(bridge, al)
+                                    * StructureView::orientation(other, bl);
+                                return Some(replace(
+                                    &[left_index, right_index, a_index, b_index],
+                                    sign * &coefficient,
+                                ));
+                            }
+                        }
+                    }
+                }
                 // Contract equal-rank symmetric traces into the corresponding
                 // scalar invariant family, leaving a metric for one open pair.
                 if common.len() == left_args.len() {
@@ -4032,6 +4137,127 @@ mod reconstruction_tests {
             args: [&a, &b, &wrong_dimension].map(Atom::as_view),
         };
         assert!(left.contract_loop(&mixed).is_none());
+    }
+
+    #[test]
+    fn closed_quartic_invariant_pairs_preserve_orientations_and_chain_phases() {
+        crate::test_support::test_initialize();
+        let [a, b, c, d, e, f, x] =
+            adjoint_slots("closed_quartic", ["a", "b", "c", "d", "e", "f", "x"]);
+        let fundamental = fundamental_rep(Atom::num(3));
+        let adjoint = adjoint_rep(Atom::num(8));
+        let permutations = [
+            ([0, 1, 2], 1),
+            ([1, 2, 0], 1),
+            ([2, 0, 1], 1),
+            ([1, 0, 2], -1),
+            ([0, 2, 1], -1),
+            ([2, 1, 0], -1),
+        ];
+        let spectator = Atom::var(symbol!("closed_quartic::spectator"));
+        for swapped_representations in [false, true] {
+            let (left_rep, right_rep) = if swapped_representations {
+                (&adjoint, &fundamental)
+            } else {
+                (&fundamental, &adjoint)
+            };
+            let left = shadowing::trace_sym(
+                left_rep,
+                [&a, &b, &c, &d].map(|port| {
+                    ColorAlgebraSimplifier::trace_generator_factor(swapped_representations, port)
+                }),
+            );
+            let right = shadowing::trace_sym(
+                right_rep,
+                [&e, &f, &c, &d].map(|port| {
+                    ColorAlgebraSimplifier::trace_generator_factor(!swapped_representations, port)
+                }),
+            );
+            let expected = &spectator
+                * adjoint_casimir_for_dimension(Atom::num(8))
+                * color_symmetric_product(4, adjoint.clone(), fundamental.clone())
+                / Atom::num(3);
+            for (left_order, left_sign) in permutations {
+                for (right_order, right_sign) in permutations {
+                    let left_ports = left_order.map(|i| [&x, &a, &e][i]);
+                    let right_ports = right_order.map(|i| [&x, &b, &f][i]);
+                    let source = &spectator
+                        * &left
+                        * &right
+                        * color_f!(left_ports[0], left_ports[1], left_ports[2])
+                        * color_f!(right_ports[0], right_ports[1], right_ports[2]);
+                    assert_eq!(
+                        ColorAlgebraSimplifier::simplify_symmetric_invariant_product(
+                            &ProductView::parse(source.as_view())
+                        ),
+                        Some(Atom::num(left_sign * right_sign) * &expected),
+                        "{source}"
+                    );
+                }
+            }
+            for reverse_endpoints in [false, true] {
+                for (first_order, first_sign) in permutations {
+                    for (second_order, second_sign) in permutations {
+                        let input = Atom::var(T.chain_in);
+                        let output = Atom::var(T.chain_out);
+                        let first = first_order.map(|i| [&input, &output, &e][i]);
+                        let second = second_order.map(|i| [&input, &output, &f][i]);
+                        let (start, end) = if reverse_endpoints {
+                            (&b, &a)
+                        } else {
+                            (&a, &b)
+                        };
+                        let chain = chain!(start, end; [
+                            color_f!(first[0], first[1], first[2]),
+                            color_f!(second[0], second[1], second[2])]);
+                        let source = &spectator * &left * &right * chain;
+                        assert_eq!(
+                            ColorAlgebraSimplifier::simplify_symmetric_invariant_product(
+                                &ProductView::parse(source.as_view())
+                            ),
+                            Some(-Atom::num(first_sign * second_sign) * &expected),
+                            "{source}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn closed_quartic_invariant_pairs_require_symmetric_distinct_closed_ports() {
+        crate::test_support::test_initialize();
+        let [a, b, c, d, e, f, x, y] =
+            adjoint_slots("quartic_guard", ["a", "b", "c", "d", "e", "f", "x", "y"]);
+        let rep = fundamental_rep(Atom::num(3));
+        let left = CS.symmetric_d(&rep, vec![a.clone(), b.clone(), c.clone(), d.clone()]);
+        let right = CS.symmetric_d(&rep, vec![e.clone(), f.clone(), c.clone(), d.clone()]);
+        let structures = color_f!(&x, &a, &e) * color_f!(&x, &b, &f);
+        let ordinary = trace!(&rep; [&a, &b, &c, &d].map(|a| color_t!(a)));
+        let repeated = CS.symmetric_d(&rep, vec![a.clone(), b.clone(), c.clone(), c.clone()]);
+        let rank_three = CS.symmetric_d(&rep, vec![a.clone(), b.clone(), c.clone()])
+            * CS.symmetric_d(&rep, vec![e.clone(), f.clone(), c.clone()]);
+        let wrong_dimension = ColorAdjoint {}.to_symbolic([Atom::num(15), Atom::num(701)]);
+        for source in [
+            // The bridge and all four remaining invariant ports must close.
+            &left * &right * color_f!(&x, &a, &e) * color_f!(&y, &b, &f),
+            &left * &right * color_f!(&x, &a, &e),
+            ordinary * &right * &structures,
+            repeated * &right * &structures,
+            rank_three * &structures,
+            &left
+                * &right
+                * color_f!(&wrong_dimension, &a, &e)
+                * color_f!(&wrong_dimension, &b, &f),
+        ] {
+            assert!(
+                ColorAlgebraSimplifier::simplify_symmetric_invariant_product(&ProductView::parse(
+                    source.as_view()
+                ))
+                .is_none(),
+                "{source}"
+            );
+        }
     }
 
     #[test]
