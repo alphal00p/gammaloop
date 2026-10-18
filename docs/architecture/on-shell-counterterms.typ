@@ -735,6 +735,38 @@ the three physics routes. Compiling an evaluator and contracting a tensor at a
 fixed point have different costs, so their construction and evaluation times
 are recorded separately.
 
+=== Retained private oracle and isolated native references
+
+At retained-tensor source `137afa91448d3c0479ff327e51facbe23fe0853d`, eight
+private forest-oracle controls pass in run `01af0491-9e04-44a2-a0d9-1b56021d3cd6`.
+The oracle retains typed RHS carriers and reserves existing dummy names from
+prepared roots, RHS logical interfaces and the graph projector before
+allocating one shared execution-output frame. Local metric bridges preserve
+independent additive scopes. Native selectors open valid fixed spinor
+components at their graph-owned ports. A ranked matrix zero retains its
+ordered interface, while a closed scalar zero stays scalar. Three existing
+Idenso reservation controls and one Spenso reservation control also pass.
+These private-oracle rules do not modify production counterterms.
+
+The same source passes the native thirteen-source mass-projection control and
+both isolated qg-child controls in run `988f0f4b-c1a9-47de-b93b-a1ace0ab8c54`.
+Actual typed diagram and child/cograph carriers retain their complete poles,
+source factors, phases and formal-dimensional interfaces. The isolated
+abelian and nonabelian child results agree with the independent open-tree
+Laurent references through epsilon one. The complete boosted finite-child
+three-route consumer passes in run `1aa340cb-2a30-4350-8c59-ed183990c98e`
+(39.618 seconds). All sixteen selected controls retain the ordinary
+240-second per-case cap. Exact source, interface and assertion evidence is in
+`target/os-feynkit/retained-tensor-os-rebase/oracle-prerequisite/` and
+`target/os-feynkit/retained-tensor-os-rebase/19-native3/`.
+
+These source and isolated-child certificates neither admit a mixed-prescription
+parent nor prove the full integrated two-loop OS condition. The mandatory
+nonignored numerical bare reference and its pinned backend/Nix wiring remain
+a separately preserved next slice. No three-loop geometry or extensive soft
+sweep is included in this qualification.
+
+
 == Validation graphs and support boundaries
 
 #import "../assets/typst/portal-graphs/layout.typ": layout as draw-graphs
