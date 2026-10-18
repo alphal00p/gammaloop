@@ -5281,8 +5281,8 @@ pub(crate) mod tests {
         // Both boundaries can retain the public order when encoded owners prove
         // that moving the explicit Lorentz port past AUTO axes is harmless.
         for finish in [
-            SymbolicTensor::with_checked_expression,
-            SymbolicTensor::with_rewritten_expression,
+            SymbolicTensor::<PartialStructure>::with_checked_expression,
+            SymbolicTensor::<PartialStructure>::with_rewritten_expression,
         ] {
             let accepted = finish(&source, result.clone()).unwrap();
             assert_eq!(accepted.expression, result);

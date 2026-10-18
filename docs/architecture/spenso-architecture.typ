@@ -46,6 +46,22 @@ canonical order alongside its immutable `CanonicalLayout`; `reindex_storage` ins
 `Reindexed`, with a checked pending index permutation to apply to the payload. `HasStructure`
 keeps metadata separate from that payload.
 
+`IndexedStructure` names
+`Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>>`. Its
+`logical_slots()` applies the retained layout to recover the declared axis order.
+The alias alone does not exclude `AbstractIndex::Open`; the strict `TryFrom`
+conversion from `PartialStructure` rejects unresolved ports, including open
+indices nested in scopes. It allocates no indices and preserves canonical slot
+order, representation partitions and both layout permutations without sorting
+again. This matters when symbolic dimensions compare equal during ordering.
+
+`PartialStructure` keeps the same layout with `PartialIndex<AbstractIndex>` for
+general symbolic and positional composition. Indexed-to-partial metadata
+projection wraps each index as explicit and retains the existing order. These
+structure operations do not rewrite tensor payloads; Idenso owns checked carrier
+conversion and proof preservation. Neither layout-bearing wrapper implements the
+canonical-storage `TensorStructure` contract of bare `OrderedStructure`.
+
 The principal materialized payloads are:
 
 - `DenseTensor<T, S>`, an element vector plus structure. Its checked constructor requires the

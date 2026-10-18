@@ -757,7 +757,7 @@ fn dummy_reservation_reuses_observed_domains_including_opaque_metadata() {
         HashSet::from([AbstractIndex::Normal(99201), AbstractIndex::Normal(99202),])
     );
     DUMMY_RESERVATION_WALKS.with(|count| count.set(0));
-    let _ = SymbolicTensor::reserved_dummies([&source, &source]);
+    let _ = SymbolicTensor::<PartialStructure>::reserved_dummies([&source, &source]);
     assert_eq!(DUMMY_RESERVATION_WALKS.with(|count| count.get()), 0);
     let replaced = source.with_identity_result(metadata, None).unwrap();
     assert_eq!(

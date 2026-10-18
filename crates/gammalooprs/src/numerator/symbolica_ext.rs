@@ -322,7 +322,7 @@ impl NumeratorAtomExt for AtomView<'_> {
                                 .try_cook(key.as_view())
                                 .ok()
                                 .and_then(|cooked| {
-                                    idenso::tensor::SymbolicTensor::infer(cooked).ok()
+                                    idenso::tensor::SymbolicTensor::infer_indexed(cooked).ok()
                                 })
                                 .is_some_and(|tensor| tensor.is_scalar())
                     }
@@ -800,7 +800,7 @@ impl NumeratorAtomExt for AtomView<'_> {
                 .with_representation_payloads(true, true);
             let cooked = cooking.try_cook(dependent.as_view())?;
             let already_native = cooked == dependent;
-            let reduced = idenso::tensor::SymbolicTensor::infer(cooked)?.simplify_algebra(
+            let reduced = idenso::tensor::SymbolicTensor::infer_indexed(cooked)?.simplify_algebra(
                 &idenso::tensor::AlgebraSettings {
                     gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
                     contract: idenso::tensor::AlgebraContraction::Minimal,
@@ -1039,7 +1039,7 @@ mod tests {
                 "source: {source}; actual: {result}; expected: {expected}"
             );
             if native {
-                let tensor = idenso::tensor::SymbolicTensor::infer(source).unwrap();
+                let tensor = idenso::tensor::SymbolicTensor::infer_indexed(source).unwrap();
                 let transformed = tensor.with_checked_expression(result).unwrap();
                 assert_eq!(tensor.structure(), transformed.structure());
             }

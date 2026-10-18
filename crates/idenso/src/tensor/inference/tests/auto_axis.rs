@@ -458,9 +458,9 @@ fn changed_auto_axis_order_cannot_relabel_asymmetric_components() {
     assert!(source.with_checked_expression(mixed).is_err());
 
     for finish in [
-        SymbolicTensor::with_rewritten_expression,
-        SymbolicTensor::with_algebra_result,
-        SymbolicTensor::with_checked_expression,
+        SymbolicTensor::<PartialStructure>::with_rewritten_expression,
+        SymbolicTensor::<PartialStructure>::with_algebra_result,
+        SymbolicTensor::<PartialStructure>::with_checked_expression,
     ] {
         let doubled = finish(&source, Atom::num(2) * source.expression()).unwrap();
         assert_eq!(
@@ -514,8 +514,8 @@ fn one_anonymous_axis_stays_unambiguous_across_explicit_port_movement() {
     let source = SymbolicTensor::infer(atom).unwrap();
     let changed = function!(head, rep.to_symbolic([]), explicit);
     for finish in [
-        SymbolicTensor::with_rewritten_expression,
-        SymbolicTensor::with_algebra_result,
+        SymbolicTensor::<PartialStructure>::with_rewritten_expression,
+        SymbolicTensor::<PartialStructure>::with_algebra_result,
     ] {
         let result = finish(&source, changed.clone()).unwrap();
         assert_eq!(result.structure, source.structure);
@@ -583,9 +583,9 @@ fn one_anonymous_axis_stays_unambiguous_across_explicit_port_movement() {
         rep.to_symbolic([])
     );
     for finish in [
-        SymbolicTensor::with_rewritten_expression,
-        SymbolicTensor::with_algebra_result,
-        SymbolicTensor::with_checked_expression,
+        SymbolicTensor::<PartialStructure>::with_rewritten_expression,
+        SymbolicTensor::<PartialStructure>::with_algebra_result,
+        SymbolicTensor::<PartialStructure>::with_checked_expression,
     ] {
         // A scalar weight leaves this exact ordered tensor witness unchanged.
         // Distinct off-diagonal values detect an accidental transpose.

@@ -124,7 +124,7 @@ impl Renormalize {
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let simplified = SymbolicTensor::infer(cooking.try_cook(part.as_view())?)?
+            let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(part.as_view())?)?
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default()),
                     ..Default::default()

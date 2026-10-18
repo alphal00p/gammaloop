@@ -1,7 +1,7 @@
 use color_eyre::Result;
 use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::subgraph::{SubSetLike, SubSetOps};
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::IndexedStructure;
 use symbolica::atom::Atom;
 use three_dimensional_reps::CffGenerationContext;
 
@@ -20,7 +20,7 @@ use super::{FrozenActiveCt, Localizer, OrientationIntegrandBranch, OrientationIn
 impl Localizer<'_> {
     pub(crate) fn localize<S: ForestNodeLike>(
         &self,
-        expr: &SymbolicTensor<PartialStructure>,
+        expr: &SymbolicTensor<IndexedStructure>,
         graph: &mut Graph,
         integrated_node: &S,
     ) -> Result<FrozenActiveCt> {

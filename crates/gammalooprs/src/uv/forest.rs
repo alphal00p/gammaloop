@@ -375,7 +375,7 @@ impl Forest {
                 "Term before simplification"
             );
 
-            let overall = SymbolicTensor::infer(graph.overall_factor.clone())?;
+            let overall = SymbolicTensor::infer_indexed(graph.overall_factor.clone())?;
             let prefactor = graph
                 .global_prefactor
                 .projector

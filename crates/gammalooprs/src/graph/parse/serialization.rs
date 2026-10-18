@@ -96,8 +96,8 @@ impl Graph {
         };
         let mut builder = FeynmanDiagram::builder(self.model.clone(), self.name.clone())
             .overall_factor(self.overall_factor.clone())
-            .numerator_prefactor(self.global_prefactor.num.clone())
-            .projector(self.global_prefactor.projector.clone())
+            .numerator_prefactor(self.global_prefactor.num.clone().into())
+            .projector(self.global_prefactor.projector.clone().into())
             .half_edge_order(
                 self.underlying
                     .iter_hedges()
@@ -114,7 +114,7 @@ impl Graph {
             let added = builder.add_vertex(DiagramVertex {
                 name: vertex.name.value.clone(),
                 interaction: vertex.vertex_rule,
-                numerator: vertex.num.value.clone(),
+                numerator: vertex.num.value.clone().into(),
             });
             eyre::ensure!(
                 added.0 == id.0,
@@ -127,7 +127,7 @@ impl Graph {
                 eyre::eyre!("canonical cross-section export requires a model particle on edge {id}")
             })?;
             let mut edge = DiagramEdge::new(particle, data.orientation != Orientation::Undirected);
-            edge.numerator = data.data.num.value.clone();
+            edge.numerator = data.data.num.value.clone().into();
             edge.is_dummy = data.data.is_dummy;
             let (source, target, source_slot, target_slot, state) = match pair {
                 HedgePair::Paired { source, sink } => (

@@ -27,7 +27,7 @@ use idenso::{color::ColorSimplifySettings, tensor::SymbolicTensor};
 use spenso::{
     shadowing::{IntoAtom, TensorCollectFilter, symbolica_utils::LogPrint},
     structure::{
-        partial::{PartialStructure, PartialStructureExt},
+        IndexedStructure,
         representation::{Minkowski, Representation},
         slot::{IsAbstractSlot, Slot},
     },
@@ -613,8 +613,8 @@ impl Graph {
         let (mut initial_data, graph) =
             Self::extract_initial_data(&parsed, model, NumeratorIndexSource::Feynkit)?;
         initial_data.global_prefactor = GlobalPrefactor {
-            num: diagram.numerator_prefactor().clone(),
-            projector: diagram.projector().clone(),
+            num: diagram.numerator_prefactor().clone().try_into_indexed()?,
+            projector: diagram.projector().clone().try_into_indexed()?,
         };
         initial_data.add_polarizations = false;
 
@@ -697,8 +697,18 @@ impl Graph {
             model,
             &param_builder,
             &initial_data.name,
-            |vertex, _| Ok(diagram.underlying()[vertex].numerator.clone()),
-            |edge, _| Ok(diagram.underlying()[edge].numerator.clone()),
+            |vertex, _| {
+                Ok(diagram.underlying()[vertex]
+                    .numerator
+                    .clone()
+                    .try_into_indexed()?)
+            },
+            |edge, _| {
+                Ok(diagram.underlying()[edge]
+                    .numerator
+                    .clone()
+                    .try_into_indexed()?)
+            },
         )
         .with_context(|| {
             format!(
@@ -737,10 +747,11 @@ impl Graph {
         )?;
         let runtime = result.numerator(&result.full_filter(), &result.empty_subgraph())?;
         let runtime = runtime.state.expr;
-        if !runtime.same_value(diagram.numerator()) {
+        let source = diagram.numerator().clone().try_into_indexed()?;
+        if !runtime.same_value(&source) {
             // Keep graph numerators factorized, including at this validation
             // boundary. Only an exact coefficient proof certifies a rewrite.
-            if runtime.coefficients_equal(diagram.numerator(), TensorCollectFilter::<0>::Tensors)?
+            if runtime.coefficients_equal(&source, TensorCollectFilter::<0>::Tensors)?
                 != ConditionResult::True
             {
                 return Err(eyre!(
@@ -842,19 +853,19 @@ impl Graph {
                 let expression = data.num.clone().ok_or_else(|| {
                     eyre!("finalized graph is missing the numerator for vertex {vertex}")
                 })?;
-                Ok(NumeratorInterface::admit(
-                    expression,
-                    data.num_interface.clone(),
-                )?)
+                Ok(
+                    NumeratorInterface::admit(expression, data.num_interface.clone())?
+                        .try_into_indexed()?,
+                )
             },
             |edge, data| {
                 let expression = data.num.clone().ok_or_else(|| {
                     eyre!("finalized graph is missing the numerator for edge {edge}")
                 })?;
-                Ok(NumeratorInterface::admit(
-                    expression,
-                    data.num_interface.clone(),
-                )?)
+                Ok(
+                    NumeratorInterface::admit(expression, data.num_interface.clone())?
+                        .try_into_indexed()?,
+                )
             },
         )
         .with_context(|| format!("Failed to build underlying graph {}", initial_data.name))?;
@@ -1117,11 +1128,13 @@ impl Graph {
                 num: NumeratorInterface::admit(
                     global_data.num.clone(),
                     global_data.num_interface.clone(),
-                )?,
+                )?
+                .try_into_indexed()?,
                 projector: NumeratorInterface::admit(
                     global_data.projectors.clone().unwrap_or(Atom::one()),
                     global_data.projector_interface.clone(),
-                )?,
+                )?
+                .try_into_indexed()?,
             },
             add_polarizations: global_data.projectors.is_none(),
             group_id: global_data.group_id,
@@ -1202,11 +1215,11 @@ impl Graph {
         mut vertex_numerator: impl FnMut(
             NodeIndex,
             &ParseVertex,
-        ) -> Result<SymbolicTensor<PartialStructure>>,
+        ) -> Result<SymbolicTensor<IndexedStructure>>,
         mut edge_numerator: impl FnMut(
             EdgeIndex,
             &ParseEdge,
-        ) -> Result<SymbolicTensor<PartialStructure>>,
+        ) -> Result<SymbolicTensor<IndexedStructure>>,
     ) -> Result<UnderlyingGraph> {
         // Diagnose malformed momentum syntax while these are still source
         // expressions. Tensor admission is the following, distinct boundary;

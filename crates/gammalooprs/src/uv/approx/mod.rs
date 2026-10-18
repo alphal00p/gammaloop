@@ -1467,7 +1467,7 @@ mod tests {
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let value = SymbolicTensor::infer(
+            let value = SymbolicTensor::infer_indexed(
                 cooking
                     .try_cook(expression.as_view())
                     .expect("test-only index admission must succeed"),
@@ -1764,7 +1764,7 @@ mod tests {
                 let cooking = CookSettings::indices()
                     .with_mode(CookMode::ReversibleEncoding)
                     .with_representation_payloads(true, true);
-                let value = SymbolicTensor::infer(
+                let value = SymbolicTensor::infer_indexed(
                     cooking
                         .try_cook(expression.as_view())
                         .expect("test-only index admission must succeed"),
@@ -2076,14 +2076,15 @@ mod tests {
                 let cooking = CookSettings::indices()
                     .with_mode(CookMode::ReversibleEncoding)
                     .with_representation_payloads(true, true);
-                let explicit_taylor_sum =
-                    SymbolicTensor::infer(cooking.try_cook(explicit_taylor_sum.as_view())?)?
-                        .contract(ContractSettings {
-                            collect_chains: false,
-                            collect_traces: false,
-                            ..Default::default()
-                        })?
-                        .to_dots()?;
+                let explicit_taylor_sum = SymbolicTensor::infer_indexed(
+                    cooking.try_cook(explicit_taylor_sum.as_view())?,
+                )?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .to_dots()?;
                 let explicit_taylor_sum =
                     cooking.uncook(explicit_taylor_sum.expression().as_view());
                 let local_atom =
@@ -2172,7 +2173,7 @@ mod tests {
                 let cooking = CookSettings::indices()
                     .with_mode(CookMode::ReversibleEncoding)
                     .with_representation_payloads(true, true);
-                let value = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                let value = SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view())?)?
                     .contract(ContractSettings {
                         collect_chains: false,
                         collect_traces: false,
@@ -2427,7 +2428,7 @@ mod tests {
                 let cooking = CookSettings::indices()
                     .with_mode(CookMode::ReversibleEncoding)
                     .with_representation_payloads(true, true);
-                let value = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                let value = SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view())?)?
                     .contract(ContractSettings {
                         collect_chains: false,
                         collect_traces: false,

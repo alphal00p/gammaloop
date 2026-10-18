@@ -54,6 +54,7 @@ pub(crate) use collection::CollectionMode;
 #[cfg(test)]
 pub(crate) use collection::SELECTED_OPENS;
 pub mod composition;
+mod indexed;
 pub mod inference;
 mod network;
 #[cfg(feature = "bincode")]

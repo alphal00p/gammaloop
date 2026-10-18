@@ -24,7 +24,7 @@ use tracing::debug;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
 use spenso::shadowing::symbolica_utils::LogPrint;
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::IndexedStructure;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::warn;
 use typed_index_collections::TiVec;
@@ -131,7 +131,7 @@ impl Graph {
     pub(crate) fn with_global_numerator_only(
         &self,
         name: String,
-        numerator: SymbolicTensor<PartialStructure>,
+        numerator: SymbolicTensor<IndexedStructure>,
     ) -> Self {
         let mut graph = self.clone();
         graph.name = name;
@@ -192,8 +192,9 @@ impl Graph {
         )
     }
 
-    pub(crate) fn global_numerator(&self) -> color_eyre::Result<SymbolicTensor<PartialStructure>> {
-        let factor = SymbolicTensor::infer(evaluate_overall_factor(self.overall_factor.as_view()))?;
+    pub(crate) fn global_numerator(&self) -> color_eyre::Result<SymbolicTensor<IndexedStructure>> {
+        let factor =
+            SymbolicTensor::infer_indexed(evaluate_overall_factor(self.overall_factor.as_view()))?;
         eyre::ensure!(
             factor.is_scalar(),
             "the overall graph factor must be scalar"

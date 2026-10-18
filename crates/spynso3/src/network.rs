@@ -241,7 +241,7 @@ fn non_scalar_zero_network(value: &SymbolicTensor<PartialStructure>) -> Option<P
             PartialIndex::Open(id) => Some((
                 id,
                 dummies
-                    .get_or_init(|| SymbolicTensor::reserved_dummies([value]))
+                    .get_or_init(|| SymbolicTensor::<PartialStructure>::reserved_dummies([value]))
                     .fresh_index(),
             )),
         })
@@ -333,7 +333,7 @@ impl SpensoNet {
             SymbolicTensor::project_factors(&sources, kind).map_err(composition_error)?;
         // Give spectator ports stable identities across permutations. Aligning
         // anonymous axes by position would exchange the spectator data as well.
-        let indices = SymbolicTensor::reserved_dummies(
+        let indices = SymbolicTensor::<PartialStructure>::reserved_dummies(
             factors
                 .iter()
                 .flat_map(|factor| [&factor.structure, &factor.materialized]),

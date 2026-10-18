@@ -18,7 +18,7 @@ use color_eyre::Result;
 use eyre::eyre;
 use idenso::tensor::SymbolicTensor;
 use itertools::{EitherOrBoth, Itertools};
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::IndexedStructure;
 #[cfg(test)]
 use spenso::{
     network::parsing::ShadowedStructure,
@@ -316,8 +316,8 @@ impl Integrands {
     pub(crate) fn map_numerators(
         &self,
         mut map: impl FnMut(
-            &SymbolicTensor<PartialStructure>,
-        ) -> Result<SymbolicTensor<PartialStructure>>,
+            &SymbolicTensor<IndexedStructure>,
+        ) -> Result<SymbolicTensor<IndexedStructure>>,
     ) -> Result<Self> {
         let numerators = self
             .numerators

@@ -52,6 +52,12 @@ pub enum PartialIndex<A> {
     Open(OpenPortId),
 }
 
+impl From<AbstractIndex> for PartialIndex<AbstractIndex> {
+    fn from(index: AbstractIndex) -> Self {
+        Self::Explicit(index)
+    }
+}
+
 impl<A: Display> Display for PartialIndex<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

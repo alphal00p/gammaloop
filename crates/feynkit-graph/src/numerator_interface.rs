@@ -3,10 +3,11 @@
 use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spenso::structure::{
+    Canonicalized, OrderedStructure, TensorStructure,
     abstract_index::AbstractIndex,
     partial::{OpenPortId, PartialIndex, PartialStructure, PartialStructureExt},
     representation::LibraryRep,
-    slot::{IsAbstractSlot, SlotMatcher},
+    slot::{AbsInd, IsAbstractSlot, SlotMatcher},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
@@ -87,19 +88,30 @@ impl NumeratorInterface {
     }
 
     /// Export source notation, retaining metadata whenever syntax loses ports.
-    pub fn export(tensor: &SymbolicTensor<PartialStructure>) -> (Atom, Option<Self>) {
+    pub fn export<A>(
+        tensor: &SymbolicTensor<Canonicalized<OrderedStructure<LibraryRep, A>>>,
+    ) -> (Atom, Option<Self>)
+    where
+        A: AbsInd + Into<PartialIndex<AbstractIndex>>,
+    {
+        let canonical = tensor.structure().canonical().external_structure();
+        let logical = tensor
+            .structure()
+            .layout()
+            .canonical_to_logical(&canonical)
+            .into_iter()
+            .map(|slot| slot.rep().slot(slot.aind.into()))
+            .collect::<Vec<_>>();
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let expression = cooking.uncook(tensor.expression().as_view());
-        if Self::admit(expression.clone(), None).is_ok_and(|restored| {
-            restored.structure().logical_slots() == tensor.structure().logical_slots()
-        }) {
+        if Self::admit(expression.clone(), None)
+            .is_ok_and(|restored| restored.structure().logical_slots() == logical)
+        {
             return (expression, None);
         }
-        let ports = tensor
-            .structure()
-            .logical_slots()
+        let ports = logical
             .into_iter()
             .map(|slot| {
                 let port = match slot.aind {

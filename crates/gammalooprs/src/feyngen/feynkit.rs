@@ -417,6 +417,35 @@ mod tests {
     }
 
     #[test]
+    fn direct_conversion_rejects_anonymous_projector_ports() {
+        use idenso::tensor::SymbolicTensor;
+        use spenso::structure::{
+            partial::{OpenPortId, PartialIndex, PartialStructure, PartialStructureExt},
+            representation::{Minkowski, RepName},
+        };
+        let model = model();
+        let rep = Minkowski {}.new_rep(4).to_lib();
+        let zero = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([
+                rep.slot(PartialIndex::Open(OpenPortId(0))),
+                rep.slot(PartialIndex::Open(OpenPortId(1))),
+            ]),
+        )
+        .unwrap();
+        let diagram = diagram(&model, None).with_projector(zero);
+        assert_eq!(diagram.projector().rank(), 2);
+        let error = diagram
+            .to_gamma_loop_graph(None, true)
+            .err()
+            .expect("GammaLoop must not assign indices to a finalized projector");
+        assert!(
+            format!("{error:?}").contains("requires an explicit index"),
+            "{error:?}"
+        );
+    }
+
+    #[test]
     fn direct_conversion_preserves_finalized_physics_and_routing() {
         let model = model();
         let draft = diagram(&model, None);

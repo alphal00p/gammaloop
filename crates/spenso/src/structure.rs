@@ -56,6 +56,13 @@ pub mod representation;
 pub mod slot;
 pub use ordered::OrderedStructure;
 
+/// Explicit-index canonical storage with its original logical axis order.
+///
+/// Use the checked conversion from `PartialStructure` when unresolved ports
+/// must be rejected rather than assigned fresh indices.
+pub type IndexedStructure =
+    Canonicalized<OrderedStructure<representation::LibraryRep, abstract_index::AbstractIndex>>;
+
 pub mod smart_shadow;
 pub use smart_shadow::SmartShadowStructure;
 
