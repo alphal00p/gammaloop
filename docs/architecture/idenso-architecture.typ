@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Idenso source on
-2026-10-17. This date records source review; qualification is recorded separately below.
+2026-10-18. This date records source review; qualification is recorded separately below.
 
 This note covers the `idenso` Rust crate: representation-aware Symbolica transformations built
 on Spenso's tensor syntax and network parser. It does not describe concrete tensor-component
@@ -110,6 +110,9 @@ original Atom and proof cells through a private `BorrowedTensorParts` view, so
 new validation facts update the source and the supplied result moves into its
 carrier. Dummy reservation likewise borrows the payload and preserves logical
 index order, including the order observable by named-index callbacks.
+The generic payload parameter alone does not provide this borrowed engine API:
+the existing carrier still owns its proof cells. The private view borrows both,
+so observing a source does not update a detached copy of its validation cache.
 
 The reduction planner accepts borrowed or owned input through one `Cow` core.
 Validation and wildcard-label handling precede ownership acquisition. An indexed
