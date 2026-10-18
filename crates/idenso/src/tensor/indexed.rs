@@ -1,9 +1,11 @@
 //! Fully indexed public boundaries backed by the existing tensor algebra.
 //!
-//! The engine projection only changes index metadata. It retains the payload,
-//! logical layout, classification flags and immutable proof/cache handles. A
-//! borrowed operation copies O(rank) metadata; it does not infer the expression
-//! again or discard the engine's completed reduction state.
+//! Owned engine projection moves the payload, layout and proof state. Borrowed
+//! checked-result publication and dummy reservation use the original expression
+//! and proof cells. Reduction owns one source copy and moves it through the shared
+//! planner. Remaining borrowed adapters still clone the full owned Atom before
+//! invoking their existing engine operations; index metadata is also O(rank).
+//! No conversion re-infers an admitted payload or discards completion facts.
 
 use std::{collections::HashMap, hash::Hasher};
 
@@ -34,8 +36,10 @@ use symbolica::{
 };
 
 use super::{
-    AlgebraSettings, ContractSettings, SymbolicTensor, composition::TensorCompositionError,
-    inference::TensorInferenceError, simplification::ReductionStatus,
+    AlgebraSettings, ContractSettings, SymbolicTensor,
+    composition::TensorCompositionError,
+    inference::{BorrowedTensorParts, TensorInferenceError},
+    simplification::{ReductionRequest, ReductionStatus},
 };
 use crate::{AdjointError, CanonicalizationError};
 
@@ -130,6 +134,16 @@ impl IndexedTensor {
         }
     }
 
+    fn borrowed_parts<'a>(&'a self, structure: &'a PartialStructure) -> BorrowedTensorParts<'a> {
+        BorrowedTensorParts {
+            expression: &self.expression,
+            structure,
+            is_metric: self.is_metric,
+            is_composite: self.is_composite,
+            proofs: &self.proofs,
+        }
+    }
+
     fn partial_engine(&self) -> PartialTensor {
         self.clone().into_partial_engine()
     }
@@ -169,26 +183,30 @@ impl IndexedTensor {
     }
 
     pub fn with_checked_expression(&self, expression: Atom) -> Result<Self> {
-        self.partial_engine()
+        let structure = self.structure.clone().into_partial();
+        self.borrowed_parts(&structure)
             .with_checked_expression(expression)?
             .try_into_indexed()
     }
 
     pub fn with_algebra_result(&self, expression: Atom) -> Result<Self> {
-        self.partial_engine()
+        let structure = self.structure.clone().into_partial();
+        self.borrowed_parts(&structure)
             .with_algebra_result(expression)?
             .try_into_indexed()
     }
 
     pub fn with_rewritten_expression(&self, expression: Atom) -> Result<Self> {
-        self.partial_engine()
+        let structure = self.structure.clone().into_partial();
+        self.borrowed_parts(&structure)
             .with_rewritten_expression(expression)?
             .try_into_indexed()
     }
 
     pub fn with_transformed_expression(&self, expression: Atom) -> Result<(Self, bool)> {
+        let structure = self.structure.clone().into_partial();
         let (value, contracted) = self
-            .partial_engine()
+            .borrowed_parts(&structure)
             .with_transformed_expression(expression)?;
         Ok((value.try_into_indexed()?, contracted))
     }
@@ -275,12 +293,14 @@ impl IndexedTensor {
 
     pub fn simplify_algebra(&self, settings: &AlgebraSettings) -> Result<Self> {
         self.partial_engine()
-            .simplify_algebra(settings)?
+            .into_plan_reduction(ReductionRequest::Algebra(settings))?
             .try_into_indexed()
     }
 
     pub fn contract(&self, settings: ContractSettings<'_>) -> Result<Self> {
-        self.partial_engine().contract(settings)?.try_into_indexed()
+        self.partial_engine()
+            .into_plan_reduction(ReductionRequest::Contract(settings))?
+            .try_into_indexed()
     }
 
     pub fn canonize(&self) -> std::result::Result<Self, CanonicalizationError> {
@@ -326,11 +346,23 @@ impl IndexedTensor {
     pub fn reserved_dummies<'a>(
         values: impl IntoIterator<Item = &'a Self>,
     ) -> ParseState<AbstractIndex> {
-        let values = values
-            .into_iter()
-            .map(Self::partial_engine)
-            .collect::<Vec<_>>();
-        PartialTensor::reserved_dummies(&values)
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::DummyReservation,
+        );
+        let state = ParseState::default();
+        for value in values {
+            value.proofs.reserve_indices(
+                &value.expression,
+                value
+                    .structure
+                    .logical_slots()
+                    .into_iter()
+                    .map(|slot| slot.aind),
+                &state,
+            );
+        }
+        state
     }
 
     pub fn dirac_adjoint(&self, preserve_indices: bool) -> std::result::Result<Self, AdjointError> {
@@ -522,6 +554,143 @@ mod tests {
             .unwrap();
         assert!(identity.same_reduction_state(&fixed));
         assert_eq!(fixed.reduction_status(), ReductionStatus::Complete);
+    }
+
+    #[test]
+    fn owned_completed_reduction_retains_payload_allocation_and_cached_graph() {
+        crate::test_support::test_initialize();
+        let settings = AlgebraSettings::default();
+        let source = PartialTensor::infer(symbolica::parse!(
+            "(owned_reduction_x+owned_reduction_y)^17"
+        ))
+        .unwrap()
+        .simplify_algebra(&settings)
+        .unwrap();
+        assert_eq!(source.reduction_status(), ReductionStatus::Complete);
+        let graph = source.shallow_graph().unwrap();
+        let expected = source.clone();
+        // The shared borrowed entry still leaves the caller's allocation intact;
+        // its owned counterpart can reuse that allocation at completed return.
+        let borrowed = source
+            .plan_reduction(ReductionRequest::Algebra(&settings))
+            .unwrap();
+        assert!(borrowed.same_value(&source));
+        assert!(borrowed.same_reduction_state(&source));
+        let storage = source.expression().as_view().get_data().as_ptr();
+        let result = source
+            .into_plan_reduction(ReductionRequest::Algebra(&settings))
+            .unwrap();
+        assert_eq!(result.expression().as_view().get_data().as_ptr(), storage);
+        assert!(result.same_value(&expected));
+        assert!(result.same_reduction_state(&expected));
+        assert!(std::sync::Arc::ptr_eq(
+            &graph,
+            &result.shallow_graph().unwrap()
+        ));
+    }
+
+    #[test]
+    fn indexed_checked_publication_borrows_source_proof_cells_and_consumes_result() {
+        crate::test_support::test_initialize();
+        let slot = Euclidean {}
+            .new_rep(2)
+            .to_lib()
+            .slot::<AbstractIndex, _>(211);
+        let expression = function!(
+            spenso::tensor_symbol!("borrowed_publication_vector"),
+            slot.to_atom()
+        );
+        let mut source = IndexedTensor::infer_indexed(expression).unwrap();
+        source.proofs.validated = Default::default();
+        source.proofs.algebra = Default::default();
+        let result = source
+            .with_algebra_result(Atom::num(2) * source.expression())
+            .unwrap();
+        assert_eq!(source.proofs.algebra.get(), Some(&true));
+        assert_eq!(source.proofs.validated.get(), Some(&true));
+        assert_eq!(result.structure.logical_slots(), vec![slot]);
+        let structure = source.structure.clone().into_partial();
+        let borrowed = source.borrowed_parts(&structure);
+        assert!(std::ptr::eq(borrowed.expression, source.expression()));
+        assert!(std::ptr::eq(borrowed.proofs, &source.proofs));
+
+        let replacement = Atom::num(3) * source.expression();
+        let allocation = replacement.as_view().get_data().as_ptr();
+        let checked = source.with_checked_expression(replacement).unwrap();
+        assert_eq!(
+            checked.expression().as_view().get_data().as_ptr(),
+            allocation
+        );
+        assert_eq!(checked.structure.logical_slots(), vec![slot]);
+        assert!(source.with_checked_expression(Atom::one()).is_err());
+        let zero = source.with_rewritten_expression(Atom::Zero).unwrap();
+        assert_eq!(zero.structure.logical_slots(), vec![slot]);
+    }
+
+    #[test]
+    fn indexed_dummy_reservation_reuses_borrowed_observations_and_public_ports() {
+        use super::super::composition::DUMMY_RESERVATION_WALKS;
+        crate::test_support::test_initialize();
+        let rep = Minkowski {}.new_rep(4).to_lib();
+        let public = AbstractIndex::Normal(223);
+        let hidden = AbstractIndex::Normal(227);
+        let metadata = function!(
+            symbol!("indexed_reservation_metadata"; Scalar),
+            rep.slot::<AbstractIndex, _>(hidden).to_atom()
+        );
+        let source = PartialTensor::infer(
+            metadata
+                * function!(
+                    spenso::tensor_symbol!("indexed_reservation_vector"),
+                    rep.slot::<AbstractIndex, _>(public).to_atom()
+                ),
+        )
+        .unwrap();
+        let observations = std::sync::Arc::clone(source.reduction_observations());
+        assert!(observations.reserved_indices.contains(&hidden));
+        let indexed = source.clone().try_into_indexed().unwrap();
+        DUMMY_RESERVATION_WALKS.with(|count| count.set(0));
+        let partial_names = PartialTensor::reserved_dummies([&source]);
+        let indexed_names = IndexedTensor::reserved_dummies([&indexed]);
+        assert_eq!(DUMMY_RESERVATION_WALKS.with(|count| count.get()), 0);
+        assert!(std::sync::Arc::ptr_eq(
+            indexed.proofs.observations.get().unwrap(),
+            &observations
+        ));
+        for index in [partial_names.fresh_index(), indexed_names.fresh_index()] {
+            assert_ne!(index, public);
+            assert_ne!(index, hidden);
+        }
+
+        // Public labels are serialized in logical order. A named label's
+        // callback can observe that order even though reservation uses a set.
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let observed_calls = std::sync::Arc::clone(&calls);
+        let name = spenso::index_symbol!(
+            "indexed_reservation_order",
+            norm = move |node, _| {
+                if let AtomView::Fun(function) = node {
+                    observed_calls
+                        .lock()
+                        .unwrap()
+                        .push(usize::try_from(function.iter().nth(1).unwrap()).unwrap());
+                }
+            }
+        );
+        let logical = [
+            rep.slot(AbstractIndex::Named(name.into(), 0, 19)),
+            rep.slot(AbstractIndex::Named(name.into(), 0, 7)),
+        ];
+        let indexed =
+            IndexedTensor::from_indexed_parts(Atom::Zero, logical.into_iter().collect()).unwrap();
+        assert_ne!(indexed.structure.canonical().external_structure(), logical);
+        let partial: PartialTensor = indexed.clone().into();
+        calls.lock().unwrap().clear();
+        let _ = PartialTensor::reserved_dummies([&partial]);
+        assert_eq!(*calls.lock().unwrap(), [19, 7]);
+        calls.lock().unwrap().clear();
+        let _ = IndexedTensor::reserved_dummies([&indexed]);
+        assert_eq!(*calls.lock().unwrap(), [19, 7]);
     }
 
     #[test]

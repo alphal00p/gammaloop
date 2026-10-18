@@ -296,6 +296,20 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         request: ReductionRequest<'_>,
     ) -> Result<Self, TensorInferenceError> {
+        Self::plan_reduction_source(std::borrow::Cow::Borrowed(self), request)
+    }
+
+    pub(crate) fn into_plan_reduction(
+        self,
+        request: ReductionRequest<'_>,
+    ) -> Result<Self, TensorInferenceError> {
+        Self::plan_reduction_source(std::borrow::Cow::Owned(self), request)
+    }
+
+    fn plan_reduction_source(
+        source: std::borrow::Cow<'_, Self>,
+        request: ReductionRequest<'_>,
+    ) -> Result<Self, TensorInferenceError> {
         #[cfg(feature = "reference-cases")]
         let _phase =
             crate::reference_cases::timing::scope(crate::reference_cases::timing::Phase::Planning);
@@ -304,9 +318,9 @@ impl SymbolicTensor<PartialStructure> {
             ReductionRequest::Contract(_) => "contract",
             ReductionRequest::Algebra(_) => "simplify_algebra",
         };
-        self.ensure_validated()?;
+        source.ensure_validated()?;
         let policy = request.policy();
-        if let Some(record) = &self.proofs.reduction
+        if let Some(record) = &source.proofs.reduction
             && record.completed.contains(&policy)
         {
             #[cfg(feature = "reference-cases")]
@@ -314,15 +328,15 @@ impl SymbolicTensor<PartialStructure> {
                 diagnostic_operation,
                 ReductionStatus::Complete,
             );
-            let mut result = self.clone();
+            let mut result = source.into_owned();
             result.proofs.reduction.as_mut().unwrap().status = ReductionStatus::Complete;
             return Ok(result);
         }
         if let ReductionRequest::Algebra(settings) = request
             && settings.color.is_some()
-            && let Some(aliases) = WildcardLabelAliases::of(self.expression.as_view())
+            && let Some(aliases) = WildcardLabelAliases::of(source.expression.as_view())
         {
-            return aliases.reduce(self, request);
+            return aliases.reduce(source.as_ref(), request);
         }
         let enabled = request.enabled();
         // Identity prerequisites are independent of the additional structural
@@ -351,7 +365,13 @@ impl SymbolicTensor<PartialStructure> {
         // Whether colour rounds certify their fixed points.
         let one_shot_colour = matches!(request, ReductionRequest::Algebra(settings)
             if settings.color.is_some_and(|color| color.one_shot_traces));
-        let mut plan = DomainPlan::new(self.clone(), enabled);
+        let initial_contracted = source.proofs.contracted;
+        let initial_completed = source
+            .proofs
+            .reduction
+            .as_ref()
+            .map_or_else(Vec::new, |record| record.completed.clone());
+        let mut plan = DomainPlan::new(source.into_owned(), enabled);
         while plan.pending != 0 {
             let candidates = plan.local_candidates();
             plan.pending &= candidates;
@@ -578,17 +598,14 @@ impl SymbolicTensor<PartialStructure> {
         let changed = plan.changes != 0;
         let status = plan.status;
         let mut result = plan.value;
-        result.proofs.contracted = (!changed && self.proofs.contracted)
+        result.proofs.contracted = (!changed && initial_contracted)
             || ((matches!(request, ReductionRequest::Contract(settings) if settings.unrestricted())
                 || matches!(request, ReductionRequest::Algebra(settings) if matches!(settings.contract, AlgebraContraction::Fully | AlgebraContraction::Dots)))
                 && status == ReductionStatus::Complete);
         let mut completed = if changed {
             Vec::new()
         } else {
-            self.proofs
-                .reduction
-                .as_ref()
-                .map_or_else(Vec::new, |record| record.completed.clone())
+            initial_completed
         };
         if status == ReductionStatus::Complete {
             completed.push(policy);
