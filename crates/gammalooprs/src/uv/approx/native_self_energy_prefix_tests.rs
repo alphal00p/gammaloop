@@ -31,7 +31,9 @@ fn native_os_quark_proper_prefix_matches_mass_and_field_insertions() -> Result<(
 }
 
 impl QcdMassReference {
-    pub(super) fn certify_os_quark_proper_prefix(&self) -> Result<CertifiedMassPrefixes> {
+    pub(super) fn certify_os_quark_proper_prefix(
+        &self,
+    ) -> Result<BTreeMap<(String, Vec<usize>), CertifiedMassPrefix>> {
         let reference = self;
         let mut one_loop_sources = reference.sources(1)?;
         let one_loop = reference.project(&one_loop_sources.remove(0))?;
@@ -111,7 +113,7 @@ impl QcdMassReference {
         settings.vakint.normalization = "MSbar".to_owned();
         settings.vakint.additional_normalization = "1".to_owned();
         let velocity = settings.on_shell_velocity()?;
-        let mut prefixes = CertifiedMassPrefixes::new();
+        let mut prefixes = BTreeMap::new();
         for diagram in reference.sources(2)? {
             let graph = Graph::from_feynkit(&diagram, None, true)?;
             let model = &graph.model;
@@ -795,7 +797,22 @@ impl QcdMassReference {
                     child_edges.iter().map(|edge| edge.0).collect(),
                 );
                 ensure!(
-                    prefixes.insert(key, transferred).is_none(),
+                    prefixes
+                        .insert(
+                            key,
+                            CertifiedMassPrefix {
+                                coefficient: transferred,
+                                diagram: diagram.clone(),
+                                graph: graph.clone(),
+                                given: OwnedForestNode {
+                                    spinney: child.spinney.clone(),
+                                    topo_order: child.topo_order,
+                                },
+                                completed: prefix.clone(),
+                                settings: settings.clone(),
+                            }
+                        )
+                        .is_none(),
                     "the actual quark prefix occurs once"
                 );
             }

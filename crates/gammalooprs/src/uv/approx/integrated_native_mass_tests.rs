@@ -44,6 +44,17 @@ type CertifiedMassPole = (usize, Atom, Atom, Atom);
 // Actual source/child incidence mapped to its certified integrated mass coefficient.
 type CertifiedMassPrefixes = BTreeMap<(String, Vec<usize>), Atom>;
 
+// Same native D09 graph and completed child retained for the first real parent
+// consumer. Other P2 entries remain scalar transfers until their own consumers.
+struct CertifiedMassPrefix {
+    coefficient: Atom,
+    diagram: FeynmanDiagram,
+    graph: crate::graph::Graph,
+    given: crate::uv::hedge_poset::OwnedForestNode,
+    completed: crate::uv::approx::local_4d::Full4dCts,
+    settings: crate::uv::UVgenerationSettings,
+}
+
 /// Completed finite projection; raw_phi retains internal MT for the derivative oracle.
 struct MassProjection {
     raw_phi: Atom,
@@ -1926,7 +1937,15 @@ fn native_two_loop_proper_prefix_sum_matches_the_independent_mass_reference() ->
     let reference = QcdMassReference::new()?;
     let mut prefixes = CertifiedMassPrefixes::new();
     for (kind, expected_count, certified) in [
-        ("OS quark", 1, reference.certify_os_quark_proper_prefix()?),
+        (
+            "OS quark",
+            1,
+            reference
+                .certify_os_quark_proper_prefix()?
+                .into_iter()
+                .map(|(key, input)| (key, input.coefficient))
+                .collect::<CertifiedMassPrefixes>(),
+        ),
         (
             "QCD vertex",
             4,
@@ -2030,4 +2049,336 @@ fn native_two_loop_proper_prefix_sum_matches_the_independent_mass_reference() ->
         "Actual native child/cograph certificates transfer all fourteen proper insertions to independent P2"
     );
     Ok(())
+}
+
+// First overall continuation gate: the same retained D09 graph owns both inputs.
+// This does not claim the full thirteen-source / fourteen-prefix K2 condition.
+#[test]
+fn native_d09_bare_and_completed_child_preserve_overall_mass_condition() -> Result<()> {
+    use crate::{
+        utils::GS,
+        uv::{
+            ApproximationType, Spinney,
+            approx::{
+                ForestNodeLike, Rooted,
+                local_4d::{Full4dCts, Local4dCts},
+            },
+            hedge_poset::OwnedForestNode,
+        },
+    };
+    use linnet::half_edge::subgraph::SubSetLike;
+
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    // Do not reimport the graph after computing its child. The record includes
+    // the actual local and finite sectors with their original dummy scopes.
+    let mut records = reference.certify_os_quark_proper_prefix()?;
+    ensure!(records.len() == 1);
+    let record = records
+        .remove(&("D09".to_owned(), vec![2, 3]))
+        .ok_or_else(|| eyre!("the certified native D09 child is missing"))?;
+    let graph = &record.graph;
+    ensure!(record.diagram.name() == "D09" && graph.name == "D09");
+    let settings = &record.settings;
+    ensure!(settings.generate_integrated && !settings.add_marker);
+    ensure!(settings.on_shell_velocity()? == [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero]);
+    ensure!(record.given.renormalization_scheme() == ApproximationType::OS);
+    let root = OwnedForestNode {
+        spinney: Spinney::empty(graph),
+        topo_order: 0,
+    };
+    let bare = Full4dCts::from_factorized_local(&Local4dCts::root());
+    let mut completed = 0;
+    for (label, given, prefix) in [
+        ("bare", &root, &bare),
+        ("completed OS child", &record.given, &record.completed),
+    ] {
+        crate::debug_tags!(#uv, #integrated, #inspect;
+            stage = "native_d09_overall_input", label, source = %record.diagram.name(),
+            given = %given.subgraph().string_label(),
+            file.prefix = %cooking.uncook(prefix.atom().expression().as_view()).to_canonical_string(),
+            file.velocity = ?settings.on_shell_velocity()?,
+            "Same native graph and retained component sectors enter the overall operator"
+        );
+        let integrated = reference.certify_actual_overall_mass_input(&record, given, prefix)?;
+        if given.subgraph().is_empty() {
+            ensure!(
+                !integrated.physical_finite_counterterm()?.is_zero(),
+                "the bare rainbow has a nonzero finite field correction before mass projection"
+            );
+        }
+        completed += 1;
+        crate::debug_tags!(#uv, #integrated, #summary;
+            stage = "native_d09_overall_input_complete", label, completed,
+            local_parent_certificate = true, actual_integrated_finite_projection_zero = true,
+            public_complete_forest_evaluated = false,
+            "D09 actual parent operator and its finite scheme insertion obey the matched mass projection"
+        );
+    }
+    ensure!(completed == 2);
+    // The consumed loop marker is checked at its owner; it is never treated
+    // as a physical momentum or an extra finite counterterm here.
+    ensure!(
+        record
+            .completed
+            .atom()
+            .expression()
+            .contains_symbol(GS.integrated_loop_scale)
+    );
+    Ok(())
+}
+
+impl QcdMassReference {
+    /// Apply both actual parent mass certificates to one original retained input.
+    /// The returned value remains available for nonzero finite-field controls.
+    fn certify_actual_overall_mass_input(
+        &self,
+        record: &CertifiedMassPrefix,
+        given: &crate::uv::hedge_poset::OwnedForestNode,
+        prefix: &crate::uv::approx::local_4d::Full4dCts,
+    ) -> Result<super::IntegratedCts> {
+        use crate::uv::{
+            ApproximationType, UltravioletGraph,
+            approx::{
+                ForestNodeLike, Rooted, UVCtx,
+                local_4d::{Full4dCts, Local4dCts},
+            },
+            hedge_poset::OwnedForestNode,
+        };
+        use linnet::half_edge::subgraph::{Inclusion, SubSetLike, SubSetOps};
+        let graph = &record.graph;
+        let settings = &record.settings;
+        ensure!(settings.generate_integrated && !settings.add_marker);
+        ensure!(settings.on_shell_velocity()? == [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero]);
+        if given.subgraph().is_empty() {
+            ensure!(given.topo_order == 0);
+            ensure!(prefix == &Full4dCts::from_factorized_local(&Local4dCts::root()));
+        } else {
+            ensure!(given.subgraph() == record.given.subgraph());
+            ensure!(
+                given.lmb() == record.given.lmb()
+                    && given.topo_order == record.given.topo_order
+                    && given.dod() == record.given.dod()
+                    && given.renormalization_scheme() == record.given.renormalization_scheme()
+            );
+            ensure!(prefix == &record.completed);
+        }
+        let uncut = graph.full_filter().subtract(&graph.initial_state_cut.left);
+        let mut parents = graph
+            .classified_spinneys(&uncut, &graph.model, settings, &graph.loop_momentum_basis)?
+            .into_iter()
+            .filter(|component| {
+                component.n_components() == 1
+                    && component.dod == 1
+                    && component.renormalization_scheme == ApproximationType::OS
+                    && graph.n_loops(component.filter()) == 2
+                    && component.filter().includes(record.given.subgraph())
+            })
+            .collect::<Vec<_>>();
+        ensure!(parents.len() == 1);
+        let parent = OwnedForestNode {
+            spinney: parents.remove(0),
+            topo_order: given.topo_order + 1,
+        };
+        let ctx = UVCtx::new(graph, &graph.model, settings);
+        let backend = vakint::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 3,
+            evaluation_order: vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
+                vakint::AlphaLoopOptions {
+                    susbstitute_masters: false,
+                },
+            )]),
+            ..settings.vakint.true_settings()
+        };
+        let local = self.certify_parent_mass_projection_input(
+            &record.diagram,
+            &ctx,
+            &parent,
+            given,
+            prefix,
+        )?;
+        let integrated = super::Integrated::new(crate::utils::vakint()?, &backend)
+            .run(&local, &ctx, &parent, given, &parent, given)?;
+        let label = if given.subgraph().is_empty() {
+            "bare".to_owned()
+        } else {
+            format!("completed {} child", given.renormalization_scheme())
+        };
+        self.certify_parent_integrated_finite_mass_projection(
+            &label,
+            &record.diagram,
+            &ctx,
+            &parent,
+            &integrated,
+        )?;
+        Ok(integrated)
+    }
+
+    fn certify_parent_integrated_finite_mass_projection(
+        &self,
+        label: &str,
+        diagram: &FeynmanDiagram,
+        ctx: &crate::uv::approx::UVCtx<'_>,
+        parent: &crate::uv::hedge_poset::OwnedForestNode,
+        actual: &super::IntegratedCts,
+    ) -> Result<()> {
+        use crate::{
+            utils::GS,
+            uv::{UltravioletGraph, approx::ForestNodeLike},
+        };
+        use linnet::half_edge::{
+            involution::{EdgeIndex, Flow},
+            subgraph::SubSetLike,
+        };
+        let graph = ctx.graph;
+        let crown = graph.dummy_less_full_crown(parent.subgraph());
+        let boundary = crown.included_iter().collect::<Vec<_>>();
+        ensure!(boundary.len() == 2);
+        let incoming = boundary
+            .iter()
+            .copied()
+            .find(|h| graph.flow(*h) == Flow::Sink)
+            .ok_or_else(|| eyre!("native parent incoming port missing"))?;
+        let owner = graph[&incoming];
+        let mass = graph[owner].particle.mass_atom(&graph.model);
+        let (projector, reference_p) = self.mass_projector(diagram, &Atom::var(GS.dim))?;
+        // The generic reference retains Nc; the actual runtime graph is SU(3).
+        // Map both the native representations and scalar coefficients before
+        // the owned publication into the runtime's explicit Indexed frame.
+        let projector = projector
+            .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))?;
+        let projector =
+            projector.with_checked_expression(projector.expression().replace(CS.nc).with(3))?;
+        let projector = projector.try_into_indexed()?;
+        let basis = diagram.loop_momentum_basis();
+        let routed_p = basis.route_expression(&reference_p);
+        let owner_p = basis.route_expression(&function!(GS.emr_mom, owner.0));
+        ensure!(
+            (&owner_p - &routed_p).expand().is_zero(),
+            "incoming owner sign differs from the native mass projector"
+        );
+        let mut signs = BTreeMap::new();
+        for hedge in &boundary {
+            let edge = graph[hedge];
+            let routed = basis.route_expression(&function!(GS.emr_mom, edge.0));
+            let sign = if (&routed - &routed_p).expand().is_zero() {
+                1
+            } else if (&routed + &routed_p).expand().is_zero() {
+                -1
+            } else {
+                return Err(eyre!(
+                    "finite-parent boundary is not the same signed external momentum"
+                ));
+            };
+            signs.insert(edge, sign);
+        }
+        let velocity = ctx.settings.on_shell_velocity()?;
+        ensure!(velocity == [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero]);
+        let finite = actual.physical_finite_counterterm()?;
+        ensure!(
+            !finite.expression().contains_symbol(GS.den)
+                && !finite.expression().contains_symbol(GS.loop_mom)
+                && !finite.expression().contains_symbol(vakint::symbols::S.k)
+                && !finite.expression().contains_symbol(vakint::symbols::S.p),
+            "actual parent integration must consume hard momenta and restore every backend alias"
+        );
+        // Integration must consume all loop momenta. An external Q occurrence
+        // is admitted only by its actual signed boundary signature above.
+        for value in [finite.expression(), projector.expression()] {
+            let mut unexpected = Vec::new();
+            value.visitor(&mut |view| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                    && (momentum.get_nargs() == 0
+                        || usize::try_from(momentum.get(0))
+                            .ok()
+                            .is_none_or(|edge| !signs.contains_key(&EdgeIndex(edge))))
+                {
+                    unexpected.push(view.to_owned());
+                }
+                true
+            });
+            ensure!(
+                unexpected.is_empty(),
+                "{label}: active/internal momenta survived actual parent integration: {unexpected:?}"
+            );
+        }
+        let at_point =
+            |value: &SymbolicTensor<IndexedStructure>| -> Result<SymbolicTensor<IndexedStructure>> {
+                let mapped = GS
+                    .erase_uv_momentum_provenance(value.expression())
+                    .replace_map(|view, _, output| {
+                        if let AtomView::Fun(momentum) = view
+                            && momentum.get_symbol() == GS.emr_mom
+                            && let Ok(edge) = usize::try_from(momentum.get(0))
+                        {
+                            let sign = signs[&EdgeIndex(edge)];
+                            let point =
+                                GS.on_shell_momentum(owner, &(Atom::num(sign) * &mass), &velocity);
+                            let indices = momentum
+                                .iter()
+                                .skip(1)
+                                .map(|index| index.to_owned())
+                                .collect::<Vec<_>>();
+                            **output = GS.indexed_momentum(&point, &indices);
+                        }
+                    });
+                // Unit physical mass is imposed only after all parent operators
+                // and actual integration, never on active auxiliary vacuum scales.
+                let expression = GS
+                    .resolve_os_momenta(&mapped)
+                    .replace(mass.to_pattern())
+                    .with(1);
+                Ok(value.with_checked_expression(expression)?)
+            };
+        let projected = at_point(&projector)?.multiply(at_point(&finite)?)?;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        ensure!(
+            projected.structure().canonical().is_scalar(),
+            "finite parent mass projection leaves a native port open"
+        );
+        // After integration only fixed external vectors remain. Native algebra
+        // identifies gamma0 and the temporal basis slash without introducing
+        // the reversible frame used by the unintegrated parent-source proof.
+        let reduced = projected
+            .simplify_algebra(&AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::canonical()),
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                ..Default::default()
+            })?
+            .contract(ContractSettings::default())?;
+        ensure!(
+            reduced.contraction_complete(),
+            "finite parent mass projection must contract before Laurent truncation"
+        );
+        let scalar = cooking.uncook(reduced.to_dots()?.expression().as_view());
+        let regulated = super::Integrated::dimensionally_regularized(&scalar);
+        let coefficient = super::series(&regulated, 0)?.to_atom();
+        let admitted = reduced.with_checked_expression(cooking.try_cook(coefficient.as_view())?)?;
+        ensure!(admitted.is_scalar());
+        let zero = admitted
+            .expression()
+            .collect_compact_factors()
+            .together()
+            .is_zero();
+        crate::debug_tags!(#uv, #integrated, #inspect;
+            stage = "native_parent_integrated_finite_mass_projection", label,
+            file.raw_finite = %cooking.uncook(finite.expression().as_view()).to_canonical_string(),
+            file.projected = %cooking.uncook(projected.expression().as_view()).to_canonical_string(),
+            file.reduced = %coefficient.to_canonical_string(),
+            file.boundary_signs = ?signs, auxiliary_scales_substituted = false,
+            exact_zero = zero, epsilon_output_depth = 0,
+            "Actual Integrated output is projected after full formal-d contraction and only then Laurent truncated"
+        );
+        ensure!(
+            zero,
+            "{label}: actual integrated finite parent insertion has a nonzero matched mass projection"
+        );
+        Ok(())
+    }
 }
