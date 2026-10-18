@@ -524,12 +524,23 @@ impl SlotMatcher {
         {
             return None;
         }
-        let component = vector.get(0);
+        let representation = self.compact_representation(vector.get(1))?;
+        let component = self.fixed_basis_component(vector.get(0), representation)?;
+        Some((component, representation))
+    }
+
+    /// Validate a concrete basis coordinate against borrowed representation
+    /// syntax. Compact vectors and indexed selector leaves share these bounds;
+    /// neither the dimension nor an index payload is materialized or normalized.
+    pub fn fixed_basis_component(
+        &self,
+        component: AtomView<'_>,
+        representation: RepresentationView<'_>,
+    ) -> Option<usize> {
         if !matches!(component, AtomView::Fun(marker) if marker.get_symbol() == AIND_SYMBOLS.cind) {
             return None;
         }
         let component = self.concrete_component(component)?.ok()?;
-        let representation = self.compact_representation(vector.get(1))?;
         let dimension = representation.dimension();
         let in_bounds = if matches!(dimension, AtomView::Num(_)) {
             usize::try_from(dimension).is_ok_and(|dimension| component < dimension)
@@ -539,7 +550,7 @@ impl SlotMatcher {
                     == LibraryRep::from(super::representation::Minkowski {}).symbol()
                 && component < 4
         };
-        in_bounds.then_some((component, representation))
+        in_bounds.then_some(component)
     }
 
     /// Validate a recognized slot using the requested representation and index types.
@@ -1389,5 +1400,114 @@ mod shadowing_tests {
                 .is_none()
         );
         assert!(matcher.concrete_component(Atom::num(0).as_view()).is_none());
+    }
+
+    #[test]
+    fn fixed_basis_component_bounds_are_borrowed_and_compact_vectors_stay_compact() {
+        let mut matcher = SlotMatcher::default();
+        let index = Atom::var(symbol!("fixed_basis_bounds::index"));
+        for dimension in [Atom::var(symbol!("fixed_basis_bounds::D")), Atom::num(4)] {
+            let compact = Minkowski {}.to_symbolic([&dimension]);
+            let indexed = Minkowski {}.to_symbolic([&dimension, &index]);
+            let representation = matcher.compact_representation(compact.as_view()).unwrap();
+            let SlotMatch::Explicit(slot) = matcher.classify(indexed.as_view()) else {
+                panic!("explicit borrowed slot");
+            };
+            for component in 0..6 {
+                let coordinate = function!(AIND_SYMBOLS.cind, component);
+                let expected = (component < 4).then_some(component as usize);
+                assert_eq!(
+                    matcher.fixed_basis_component(coordinate.as_view(), representation),
+                    expected
+                );
+                assert_eq!(
+                    matcher.fixed_basis_component(coordinate.as_view(), slot.representation()),
+                    expected
+                );
+                let vector = function!(
+                    crate::network::library::symbolic::ETS.delta,
+                    &coordinate,
+                    &compact
+                );
+                assert_eq!(
+                    matcher.fixed_basis_vector(vector.as_view()).map(|(i, _)| i),
+                    expected
+                );
+                let indexed_selector = function!(
+                    crate::network::library::symbolic::ETS.delta,
+                    &coordinate,
+                    &indexed
+                );
+                assert!(
+                    matcher
+                        .fixed_basis_vector(indexed_selector.as_view())
+                        .is_none()
+                );
+            }
+            for coordinate in [
+                function!(AIND_SYMBOLS.cind, -1),
+                function!(AIND_SYMBOLS.cind, symbol!("fixed_basis_bounds::unknown")),
+                function!(AIND_SYMBOLS.cind, 1, 2),
+                function!(AIND_SYMBOLS.find, 1),
+                Atom::num(1),
+            ] {
+                assert_eq!(
+                    matcher.fixed_basis_component(coordinate.as_view(), representation),
+                    None
+                );
+            }
+        }
+        for (dimension, component, expected) in [(2, 2, None), (6, 4, Some(4))] {
+            let compact = Minkowski {}.to_symbolic([Atom::num(dimension)]);
+            let coordinate = function!(AIND_SYMBOLS.cind, component);
+            let representation = matcher.compact_representation(compact.as_view()).unwrap();
+            assert_eq!(
+                matcher.fixed_basis_component(coordinate.as_view(), representation),
+                expected
+            );
+            let vector = function!(
+                crate::network::library::symbolic::ETS.delta,
+                &coordinate,
+                &compact
+            );
+            assert_eq!(
+                matcher.fixed_basis_vector(vector.as_view()).map(|(i, _)| i),
+                expected
+            );
+        }
+        let wrong = Lorentz {}.to_symbolic([Atom::var(symbol!("fixed_basis_bounds::other_D"))]);
+        let wrong = matcher.compact_representation(wrong.as_view()).unwrap();
+        assert_eq!(
+            matcher.fixed_basis_component(function!(AIND_SYMBOLS.cind, 1).as_view(), wrong),
+            None
+        );
+    }
+
+    #[test]
+    fn fixed_basis_bounds_observe_callback_payloads_without_normalization() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        let hook = symbol!("fixed_basis_bounds::callback"; Scalar;
+            norm = |_, _| { CALLS.fetch_add(1, Ordering::SeqCst); });
+        let dimension = function!(hook, symbol!("fixed_basis_bounds::formal_D"));
+        let index = function!(hook, 123);
+        let indexed = Minkowski {}.to_symbolic([&dimension, &index]);
+        let coordinate = function!(AIND_SYMBOLS.cind, 2);
+        let original = indexed.clone();
+        let calls = CALLS.load(Ordering::SeqCst);
+        let mut matcher = SlotMatcher::default();
+        let SlotMatch::Explicit(slot) = matcher.classify(indexed.as_view()) else {
+            panic!("explicit slot");
+        };
+        assert_eq!(
+            matcher.fixed_basis_component(coordinate.as_view(), slot.representation()),
+            Some(2)
+        );
+        assert_eq!(slot.index(), index.as_view());
+        assert_eq!(slot.representation().dimension(), dimension.as_view());
+        assert_eq!(CALLS.load(Ordering::SeqCst), calls);
+        assert_eq!(indexed, original);
+        // The query only borrows syntax: it never converts/materializes the
+        // compound index payload or invokes a dummy-index constructor.
     }
 }
