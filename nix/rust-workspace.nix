@@ -554,6 +554,7 @@
       "crates/gammalooprs/src/graph/parse/finalized_reference.json"
       "crates/gammalooprs/tests/fixtures/renormalization"
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
+      "crates/gammalooprs/tests/resources/uv_fixed_basis"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL256.dot"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot"
     ];
