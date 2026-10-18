@@ -985,6 +985,392 @@ impl QcdMassReference {
                 emitted_mass_cancellation_proved = false, dimensional_R2_condition_proved = false,
                 "Actual D09 parent CFF retains its certified factorized operands"
             );
+            // Construct the actual source lanes next. Keep the external matrix
+            // open in this separate projection view; no mass projector or
+            // matched-point specialization enters source/assignment selection.
+            {
+                use crate::numerator::symbolica_ext::NumeratorAtomExt;
+                use crate::uv::approx::direct_3d::{Direct3dCts, DirectResidueBranches};
+                use std::{collections::HashMap, sync::Arc};
+
+                let retained_prefix = prefix.clone();
+                let retained_global_projector = projection_graph.global_prefactor.projector.clone();
+                let mut source_graph = projection_graph.clone();
+                source_graph.global_prefactor.projector =
+                    SymbolicTensor::infer_indexed(Atom::one())?;
+                eyre::ensure!(
+                    source_graph.global_prefactor.num == projection_graph.global_prefactor.num
+                );
+                eyre::ensure!(source_graph.overall_factor == projection_graph.overall_factor);
+                eyre::ensure!(
+                    source_graph.loop_momentum_basis == projection_graph.loop_momentum_basis
+                );
+                // The production expression above uses this full graph's
+                // numerator without its external global projector. Reusing it
+                // retains the actual stored energy bounds/maps for this view.
+                eyre::ensure!(
+                    !retained_global_projector
+                        .expression()
+                        .contains_symbol(GS.loop_mom)
+                );
+                let external_owners = boundary
+                    .iter()
+                    .map(|hedge| graph[hedge].0)
+                    .collect::<BTreeSet<_>>();
+                let mut unexpected_external = Vec::new();
+                retained_global_projector.expression().visitor(&mut |view| {
+                    if let AtomView::Fun(factor) = view
+                        && [GS.u, GS.ubar, GS.emr_mom].contains(&factor.get_symbol())
+                        && (factor.get_nargs() == 0
+                            || usize::try_from(factor.get(0))
+                                .ok()
+                                .is_none_or(|edge| !external_owners.contains(&edge)))
+                    {
+                        unexpected_external.push(view.to_owned());
+                    }
+                    true
+                });
+                eyre::ensure!(
+                    unexpected_external.is_empty(),
+                    "the external projection view cannot remove a hard-loop-dependent factor: {unexpected_external:?}"
+                );
+                let source_result = if given.subgraph().is_empty() {
+                    let direct = Direct3dCts::root(&source_graph, localizer)?;
+                    FinalIntegrandBuilder::new(localizer, &settings)
+                        .build_direct(&mut source_graph, given, &direct, &IntegratedCts::root())?
+                        .into_integrands()
+                } else {
+                    let sectors = prefix.sectors().collect::<Vec<_>>();
+                    let active = sectors
+                        .iter()
+                        .filter(|sector| sector.frozen_lmbs().is_empty())
+                        .map(|sector| (*sector).clone())
+                        .collect::<Vec<_>>();
+                    let finite = sectors
+                        .iter()
+                        .filter(|sector| !sector.frozen_lmbs().is_empty())
+                        .copied()
+                        .collect::<Vec<_>>();
+                    eyre::ensure!(active.len() == 1 && finite.len() == 1);
+                    eyre::ensure!(finite[0].active_components.is_empty());
+                    eyre::ensure!(finite[0].frozen_lmbs() == std::slice::from_ref(given.lmb()));
+                    eyre::ensure!(graph.n_loops(given.subgraph()) == 1);
+                    let active_source = Local4dCts(FourDSectors::new(active, Vec::new())?);
+                    Self::certify_parent_tensor_zero(
+                        "D09 actual source prefix active/finite recomposition",
+                        &prefix
+                            .atom()
+                            .try_sub(&active_source.atom().try_add(&finite[0].atom)?)?,
+                    )?;
+                    let mut physical_child_finite =
+                        finite[0].atom.with_checked_expression(Atom::Zero)?;
+                    let terms = finite[0].physical_terms()?;
+                    eyre::ensure!(!terms.is_empty());
+                    for term in terms {
+                        eyre::ensure!(
+                            term.denominators.is_empty(),
+                            "a retained finite child cannot own physical propagators"
+                        );
+                        physical_child_finite = physical_child_finite.try_add(&term.numerator)?;
+                    }
+                    eyre::ensure!(!physical_child_finite.is_zero());
+                    eyre::ensure!(
+                        !physical_child_finite
+                            .expression()
+                            .contains_symbol(GS.localizing_integrand)
+                    );
+                    let bookkeeping = physical_child_finite.with_checked_expression(
+                        physical_child_finite.expression()
+                            * Atom::var(GS.integrated_loop_scale).pow(4),
+                    )?;
+                    Self::certify_parent_tensor_zero(
+                        "D09 actual finite child retains exactly its consumed one-loop measure",
+                        &finite[0].atom.try_sub(&bookkeeping)?,
+                    )?;
+                    let active_groups = active_source.projection_sectors()?;
+                    let mut child_context = Local4dProjectionContext {
+                        certify_denominator_reconstruction: true,
+                        ..Default::default()
+                    };
+                    eyre::ensure!(child_context.source_preparation_builds == 0);
+                    eyre::ensure!(child_context.denominator_reconstruction_certificates == 0);
+                    let child_projected =
+                        Projected4dApproximation::new(localizer, &mut source_graph, &settings)
+                            .project_local_4d(&active_source, &mut child_context)?;
+                    eyre::ensure!(child_projected.sectors().len() == active_groups.len());
+                    eyre::ensure!(child_context.source_preparation_builds > 0);
+                    eyre::ensure!(
+                        child_context.denominator_reconstruction_certificates
+                            == child_context.source_preparation_builds
+                    );
+                    for (ordinal, group) in active_groups.iter().enumerate() {
+                        let expected = group
+                            .frozen_lmbs()
+                            .iter()
+                            .fold(Atom::one(), |product, lmb| {
+                                product * GS.localizing_integrand(lmb)
+                            });
+                        eyre::ensure!(child_projected.sectors()[ordinal].frozen_factor == expected);
+                    }
+                    // This zero means no ADDITIONAL finite child term here.
+                    // The actual retained finite completion is localized below.
+                    let active_result = FinalIntegrandBuilder::new(localizer, &settings)
+                        .build_projected(
+                            &mut source_graph,
+                            given,
+                            &child_projected,
+                            &IntegratedCts::root(),
+                        )?
+                        .into_integrands();
+                    check_store(&active_result)?;
+                    let finite_localized =
+                        localizer.localize(&physical_child_finite, &mut source_graph, given)?;
+                    let actual_kernel = GS.localizing_integrand(given.lmb());
+                    eyre::ensure!(!actual_kernel.is_zero());
+                    eyre::ensure!(
+                        finite_localized.frozen_integrands.iter().count() == allowed_keys.len()
+                    );
+                    for (key, kernel) in finite_localized.frozen_integrands.iter() {
+                        eyre::ensure!(allowed_keys.contains(key) && kernel == &actual_kernel);
+                    }
+                    let finite_branches =
+                        DirectResidueBranches::from_transient(&finite_localized.combine()?)?;
+                    let mut finite_entries = HashMap::new();
+                    for (key, integrands) in finite_branches.iter_keys() {
+                        check_store(integrands)?;
+                        eyre::ensure!(integrands.numerators().len() == 1);
+                        eyre::ensure!(
+                            finite_entries
+                                .insert(key.clone(), Arc::clone(&integrands.numerators()[0]))
+                                .is_none()
+                        );
+                    }
+                    let reduced_source = graph
+                        .full_filter()
+                        .subtract(given.subgraph())
+                        .subtract(&graph.initial_state_cut);
+                    let outside = source_graph
+                        .numerator(&reduced_source, given.subgraph())?
+                        .state
+                        .expr
+                        .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                            color: Some(ColorSimplifySettings::default()),
+                            ..Default::default()
+                        })?
+                        .multiply(source_graph.global_numerator()?)?;
+                    eyre::ensure!(
+                        !outside.is_scalar(),
+                        "the actual D09 finite child has a tensor cograph"
+                    );
+                    let complete_source =
+                        physical_child_finite.clone().multiply(outside.clone())?;
+                    eyre::ensure!(
+                        complete_source.structure().canonical().external_structure()
+                            == numerator.structure().canonical().external_structure()
+                    );
+                    let completed_branches = finite_branches.multiply_key_mapped(
+                        orientation,
+                        &source_graph,
+                        &outside,
+                        DirectResidueBranches::numerator_scope(),
+                    )?;
+                    let mut witnessed = 0usize;
+                    let mut source_keys = 0usize;
+                    for (key, integrands) in completed_branches.iter_keys() {
+                        source_keys += 1;
+                        check_store(integrands)?;
+                        let finite_entry = finite_entries
+                            .get(key)
+                            .ok_or_else(|| eyre!("finite child lost its exact residue key"))?;
+                        eyre::ensure!(
+                            integrands
+                                .numerators()
+                                .iter()
+                                .any(|entry| Arc::ptr_eq(entry, finite_entry))
+                        );
+                        let outside_entries = integrands
+                            .numerators()
+                            .iter()
+                            .filter(|entry| !Arc::ptr_eq(entry, finite_entry))
+                            .collect::<Vec<_>>();
+                        eyre::ensure!(
+                            outside_entries.len() == 1 && integrands.numerators().len() == 2
+                        );
+                        let outside_entry = outside_entries[0];
+                        let actual_calls = calls(integrands).into_iter().collect::<Vec<_>>();
+                        for (cut, root) in integrands.iter() {
+                            let Some(rows) = root.coefficient_list_exact(&actual_calls) else {
+                                debug_tags!(#uv, #local, #cff, #summary;
+                                    stage = "native_d09_source_monomial_refused", file.residue_key = ?key,
+                                    file.cut = ?cut, file.root = %root.to_canonical_string(),
+                                    calls = actual_calls.len(), root_bytes = root.as_view().get_byte_size(),
+                                    "Existing bounded complete-family-call polynomial owner refused; no fallback"
+                                );
+                                return Err(eyre!(
+                                    "D09 source complete-call polynomial extraction refused"
+                                ));
+                            };
+                            let reconstructed = rows
+                                .iter()
+                                .map(|(monomial, coefficient)| monomial * coefficient)
+                                .sum::<Atom>();
+                            let residual = (root - &reconstructed)
+                                .coefficient_list_exact(&actual_calls)
+                                .ok_or_else(|| {
+                                    eyre!("D09 source complete-call reconstruction refused")
+                                })?;
+                            eyre::ensure!(
+                                residual
+                                    .iter()
+                                    .all(|(_, coefficient)| coefficient.is_zero())
+                            );
+                            for (monomial, coefficient) in rows {
+                                if coefficient.is_zero() {
+                                    continue;
+                                }
+                                let AtomView::Mul(product) = monomial.as_view() else {
+                                    return Err(eyre!(
+                                        "D09 actual finite source did not retain its complete two-factor call monomial"
+                                    ));
+                                };
+                                let factors = product
+                                    .iter()
+                                    .map(|factor| factor.to_owned())
+                                    .collect::<Vec<_>>();
+                                eyre::ensure!(factors.len() == 2);
+                                let matches = |call: &Atom, entry: &crate::integrands::process::param_builder::NumeratorDefinition| {
+                                    matches!(call.as_view(), AtomView::Fun(call) if call.get_symbol() == family
+                                        && call.get_nargs() == entry.tags.len() + entry.args.len()
+                                        && entry.tags.iter().enumerate().all(|(index, tag)| call.get(index) == tag.as_view()))
+                                };
+                                let child_call = factors
+                                    .iter()
+                                    .filter(|call| matches(call, finite_entry))
+                                    .collect::<Vec<_>>();
+                                let outside_call = factors
+                                    .iter()
+                                    .filter(|call| matches(call, outside_entry))
+                                    .collect::<Vec<_>>();
+                                eyre::ensure!(
+                                    child_call.len() == 1
+                                        && outside_call.len() == 1
+                                        && child_call[0] != outside_call[0]
+                                );
+                                if witnessed == 0 {
+                                    let bind = |call: &Atom, entry: &crate::integrands::process::param_builder::NumeratorDefinition| -> Result<_> {
+                                        let AtomView::Fun(function) = call.as_view() else { unreachable!() };
+                                        let replacements = entry.args.iter().enumerate().map(|(index, formal)| Replacement::new(
+                                            Atom::from(formal.clone()).to_pattern(), function.get(entry.tags.len() + index).to_owned(),
+                                        )).collect::<Vec<_>>();
+                                        eyre::ensure!(entry.lhs.replace_multiple(&replacements) == *call);
+                                        Ok(entry.rhs.with_checked_expression(entry.rhs.expression().replace_multiple(&replacements))?)
+                                    };
+                                    let child_body = bind(child_call[0], finite_entry)?;
+                                    let outside_body = bind(outside_call[0], outside_entry)?;
+                                    for (label, body, original) in [
+                                        (
+                                            "actual finite child call",
+                                            &child_body,
+                                            &physical_child_finite,
+                                        ),
+                                        (
+                                            "actual finite child cograph call",
+                                            &outside_body,
+                                            &outside,
+                                        ),
+                                    ] {
+                                        let expected = original.with_checked_expression(
+                                            key.map_numerator(
+                                                orientation,
+                                                &source_graph,
+                                                original.expression(),
+                                            )?,
+                                        )?;
+                                        Self::certify_parent_tensor_zero(
+                                            label,
+                                            &body.try_sub(&expected)?,
+                                        )?;
+                                    }
+                                    let complete_body = child_body.multiply(outside_body)?;
+                                    eyre::ensure!(
+                                        complete_body.structure().canonical().external_structure()
+                                            == complete_source
+                                                .structure()
+                                                .canonical()
+                                                .external_structure()
+                                    );
+                                    let expected = complete_source.with_checked_expression(
+                                        key.map_numerator(
+                                            orientation,
+                                            &source_graph,
+                                            complete_source.expression(),
+                                        )?,
+                                    )?;
+                                    Self::certify_parent_tensor_zero(
+                                        "actual same-key finite child/cograph complete monomial",
+                                        &complete_body.try_sub(&expected)?,
+                                    )?;
+                                    debug_tags!(#uv, #local, #four_d, #cff, #summary;
+                                        stage = "native_d09_source_complete_monomial", file.residue_key = ?key,
+                                        file.cut = ?cut, file.monomial = %monomial.to_canonical_string(),
+                                        file.child_call = %child_call[0].to_canonical_string(),
+                                        file.cograph_call = %outside_call[0].to_canonical_string(),
+                                        file.frozen_domain = ?finite[0].frozen_lmbs(),
+                                        file.active_domains = ?active_groups.iter().map(|group| (&group.active_components, group.frozen_lmbs())).collect::<Vec<_>>(),
+                                        file.kernel = %actual_kernel.to_canonical_string(),
+                                        whole_parent_rank = complete_body.rank(), actual_call_pair_bound = true,
+                                        mass_projector_applied = false,
+                                        "Two actual partial families form one native open parent matrix under the same exact source key"
+                                    );
+                                    witnessed += 1;
+                                }
+                            }
+                        }
+                    }
+                    eyre::ensure!(source_keys == finite_entries.len() && witnessed == 1);
+                    let normalize_source =
+                        FinalIntegrandBuilder::final_normalizer(&source_graph, &reduced_source);
+                    let normalize_source_scalar =
+                        FinalIntegrandBuilder::scalar_normalizer(&source_graph, &reduced_source);
+                    let finite_result = completed_branches
+                        .resolved_scalars()?
+                        .fallible_map(|_, atom| {
+                            Ok(normalize_source_scalar(atom)
+                                .replace(GS.m_uv_expansion)
+                                .with(GS.m_uv_vacuum)
+                                .replace(GS.dim_epsilon)
+                                .with(0))
+                        })?
+                        .map_numerators(|entry| normalize_source(&entry.rhs))?
+                        .materialize(false)?;
+                    check_store(&finite_result)?;
+                    active_result.zip_add([finite_result])?
+                };
+                check_store(&source_result)?;
+                eyre::ensure!(source_result.scalar_definitions().is_empty());
+                eyre::ensure!(!source_result.numerators().is_empty());
+                eyre::ensure!(source_result.iter().count() == allowed_keys.len());
+                eyre::ensure!(
+                    source_result
+                        .iter()
+                        .all(|(key, _)| allowed_keys.contains(key))
+                );
+                eyre::ensure!(prefix == &retained_prefix);
+                eyre::ensure!(local == &retained_local);
+                eyre::ensure!(integrated.physical_finite_counterterm()? == retained_finite);
+                eyre::ensure!(
+                    projection_graph.global_prefactor.projector == retained_global_projector
+                );
+                debug_tags!(#uv, #local, #four_d, #cff, #summary;
+                    stage = "native_d09_actual_source_cff", given = %given.subgraph().string_label(),
+                    families = source_result.numerators().len(),
+                    root_bytes = source_result.iter().map(|(_, root)| root.as_view().get_byte_size()).sum::<usize>(),
+                    body_bytes = source_result.numerators().iter().map(|entry| entry.rhs.expression().as_view().get_byte_size()).sum::<usize>(),
+                    actual_source_constructed = true, projection_only_open_external_matrix = true,
+                    analytic_backend_repeated = false, emitted_mass_cancellation_proved = false,
+                    "Actual D09 source CFF retains local and finite child contributions; no Phi or full mass claim"
+                );
+            }
         }
         debug_tags!(#uv, #integrated, #summary;
             stage = "native_d09_rational_finalizer_mass_projection",
