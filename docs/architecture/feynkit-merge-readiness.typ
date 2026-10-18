@@ -2,6 +2,102 @@
 
 == Fully indexed GammaLoop continuation
 
+=== Current owned-product checkpoint 2f556851
+
+Frozen source `2f556851` passes all 5,690 Rust tests, retaining the exact
+`8272f78a` test inventory with 128 unchanged skips, no failures and no timeouts.
+The fresh JUnit run identity and all 3,502 tracked source entries are verified.
+Strict workspace Clippy, formatting, documentation checks covering all 74
+registered scopes, and the normal Nix CLI build also pass.
+
+Canonical CI preparation and upload now pass at this checkpoint. The accepted
+`ci-upload-2` receipt records exit zero, its completion marker and unchanged
+source guards. The separate verifier confirms all 105 selected outputs and their
+derivations are valid and bound to this CI-enabled frozen source; useful output
+roots are retained. These receipts prepare static checks, runtime launchers and
+compiled producers. They do not certify remote NixCI runtime execution. Required remote checks
+and unresolved performance gates still prevent an unqualified merge claim.
+
+The original thirteen-case performance matrix completes with ten passes and
+three inconclusive cases, with every numerical check passing. The evidence audit
+verifies the exact sources, tools, policies, artifact seals and original gate
+recomputations with zero integrity errors. All predeclared first attempts, five
+pairs, sample counts, absolute floors, time budgets and noise rules are retained.
+No confirmation was requested by the unchanged framework. No retry or pooled
+result replaces an outcome. The concurrent full correctness run is not timing
+evidence.
+
+#table(
+  columns: (2fr, 1fr, 1fr, 1fr, 0.9fr),
+  [Metric], [Main median], [Owned-product median], [Paired change], [Gate],
+  [GL1 generation], [4.1146 s], [4.6244 s], [+12.28%], [Pass],
+  [GL1 SingleParametric build], [142.2316 ms], [59.6660 ms], [-57.40%], [Pass],
+  [GL1 SingleParametric runtime], [161.6771 µs], [146.1588 µs], [-13.69%], [Inconclusive],
+  [GL1 generation peak RSS], [82.5917 MB], [98.4433 MB], [+19.96%], [Pass],
+  [Thermal generation], [8.1275 s], [6.5752 s], [-19.01%], [Pass],
+  [Thermal SingleParametric build], [595.8538 ms], [170.3632 ms], [-71.46%], [Pass],
+  [Thermal SingleParametric runtime], [910.9720 µs], [799.6572 µs], [-12.44%], [Inconclusive],
+  [Thermal generation peak RSS], [119.2837 MB], [146.3624 MB], [+28.72%], [Pass],
+)
+
+Changes are medians of paired changes, not ratios of the displayed medians; MB
+is decimal. GL1 generation is slower in all five pairs, adding a paired median
+502.76 ms, and passes its original gate. GL1 and thermal peak memory also rise
+in all five pairs, by paired medians 16.38 and 31.16 MB; both pass the original
+combined limits. Passing a gate does not erase these costs.
+
+The three inconclusive cases are GL16 evaluator aliases, GL1 evaluator guards
+and thermal GL1. GL16 SingleParametric runtime is 9.79 percent slower in all five
+pairs, with 3.32 percent paired noise: its upper screening value crosses the
+15 percent allowance. GL16 Summed build time improves 5.39 percent but has
+18.65 percent noise. GL1 SingleParametric runtime improves in all five pairs,
+but three times its 8.86 percent noise exceeds the 15 percent allowance; its
+Summed runtime also remains inconclusive at 5.03 percent noise. Thermal
+SingleParametric runtime improves in all five pairs but has 14.30 percent noise.
+These are screening rules, not confidence intervals. Faster medians are not
+reported as passing noisy gates, and no metric is a confirmed gate regression.
+
+The separate topology comparison retains all 66 entries in all five pairs.
+Complete fresh-process medians are 0.955653 s on main and 1.240258 s on the
+candidate: a median paired increase of 29.52 percent, or 274.33 ms, with every
+pair slower. It includes startup, model loading, generation, runtime graph
+conversion and saving. It excludes integrand construction. This supplemental
+inventory/timing check is not a fourteenth gate or full numerator equivalence.
+
+A separately predeclared eight-process control holds the indexed layout and
+shared correctness fixes constant while comparing old `8272f78a` with owned-product
+`2f556851`. The two saved pairs preserve all 66 entries; they improve by 117.22
+and 48.15 ms (8.68 and 3.82 percent). The two no-save pairs worsen by 33.23 and
+17.87 ms (3.45 and 1.82 percent). The median paired changes are therefore
+−6.25 percent with saving and +2.63 percent without it. No saved inventory is
+claimed for no-save runs. This small mixed control does not establish a pre-save
+speedup, a precise saving benefit or an internal cause. Independent old/main
+and new/main runs cannot assign their different headline overheads to this repair.
+
+The removed payload copies are established by source ownership, while the
+observed construction costs remain. Strict final-result validation is currently
+the first complete check of new intrinsic products. A faster compositional
+certificate would need to establish normalization, scoped multiplicities and
+logical layout; copying operand proofs or bypassing observation would weaken
+correctness. The current evidence supports no further small production fix.
+Performance qualification remains incomplete until the three inconclusive gates
+are resolved; these results do not authorize merging.
+
+The audit is retained at
+`target/fully-indexed/owned-products/performance-final-2f556851/aggregate-1/report.json`,
+with its final source guard and ownership-control audit. The bounded control is
+`target/fully-indexed/owned-products/topology-cost-diagnostic-1/analysis.json`.
+This publication record changes documentation only above the frozen measured
+source; Rust, tests and performance inputs remain unchanged.
+
+
+Receipts are retained under `target/fully-indexed/owned-products`: the full
+runtime inventory and guards are in `full-workspace-1/summary.json`, and static
+checks are in `validation/final-static-summary.json`. Canonical upload and
+output verification are in `ci-upload-2` and
+`ci-output-verification-1/verification.json`. The implementation and prior
+qualification history follow separately.
+
 The explicit-index continuation follows checkpoint `87b1d81f`, whose 105
 selected CI outputs were verified and uploaded through the canonical workflow.
 That checkpoint's test and timing evidence remains tied to its own source.
@@ -17,8 +113,8 @@ build also pass.
 All 105 selected CI artifacts were prepared, uploaded through the canonical
 cache workflow and verified against this frozen source. These are static-check
 outputs, runtime launchers and compiled producers; uploading them does not
-certify remote runtime execution. CI is enabled, and the required remote NixCI
-runtime results for final publication remain pending.
+certify remote runtime execution. CI was enabled at that checkpoint; its
+artifact receipts remain attached to that source.
 
 The original thirteen-case comparison at `8272f78a` matches every numerical
 reference. Nine cases pass their performance gates and four are inconclusive;
@@ -86,9 +182,24 @@ sector operands likewise require explicit clones. No input contraction or
 reduction proof is assigned to a new product, and validation is not skipped.
 The partial-interface multiplication API keeps its existing borrowed contract.
 
-This continuation requires its own build, runtime and performance qualification.
-The measured share of the topology overhead removed by ownership transfer is
-not yet established; the `8272f78a` results above do not qualify a changed source.
+The preliminary composition check counts explicit index occurrences; it does
+not establish the final placeholder scopes, declared interface or logical layout.
+For intrinsic products, indexed conversion currently performs the first complete
+observation of the new result. Operand validation alone cannot certify new
+contractions or cross-factor multiplicities.
+
+A bounded CPU diagnostic of the earlier fd9 and `8272f78a` normal CLIs found
+more sampled work in interface observation and validation on the indexed branch.
+Both retained the exact 66-graph inventory. These profiles ran during concurrent
+compilation, their inclusive percentages overlap, and the source comparison
+includes other shared algebra changes. They identify work to investigate; they
+do not measure the consuming-product repair or prove that the checks are
+redundant. A narrow callback-result validation reuse opportunity was reviewed
+and deferred. Validation remains unchanged in `2f556851`.
+
+The new source's successful build, runtime checks and bounded measurements are
+recorded first. The ownership control does not demonstrate a pre-save speedup;
+the removed static copies must not be presented as a measured generation gain.
 
 === Implementation and checkpoint history
 
@@ -97,9 +208,10 @@ states, UV bodies, integrated projections and shared numerator definitions now
 use `SymbolicTensor<IndexedStructure>`. Here `IndexedStructure` means
 `Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>>`. The outer layout
 preserves logical port order and the axes of zero; it must not be replaced by
-bare canonical storage. The portable FeynKit source codec retains its broader
-partial-interface support, and arbitrary symbolic utilities remain separate
-from GammaLoop runtime storage.
+bare canonical storage. Native FeynKit generation, grouping, sewing and amplitude
+carriers retain `SymbolicTensor<PartialStructure>`, as does the portable source
+codec's broader interface boundary. These and arbitrary symbolic utilities
+remain separate from GammaLoop runtime storage.
 
 Admission rejects unresolved public ports rather than assigning dummy labels.
 Closed scalar dots can still contain compact vector notation. The checked
@@ -172,8 +284,11 @@ Export back to a native FeynKit diagram uses a lossless typed `From` conversion,
 not source serialization and re-admission. The selected-coefficient diagnostic
 collector remains a general-interface boundary because individual factors can
 have unresolved ports even when their complete product is scalar.
-Native archives store explicit slots, requiring full-state manifest version 21;
-regenerate earlier full states. Standalone evaluator formats remain unchanged.
+GammaLoop archives store explicit slots, requiring full-state manifest version
+21; regenerate earlier full states. Standalone evaluator formats remain
+unchanged. The on-shell branch used 21 for a different layout: a future combined
+OS state format must use a distinct version, at least 22. That state-layout
+integration is not part of this candidate.
 
 The new controls cover unresolved-port rejection, closed compact scalars,
 ranked-zero and nonsymmetric component layouts, callback validation, proof reuse,
@@ -743,7 +858,9 @@ results from diagnostic timing probes. Private generated states remain local.
 The source comparison uses three immutable checkpoints: main `ff533fcd`, the
 previously qualified FeynKit implementation `6002674d`, and the first retained-
 tensor candidate `48b8acfa`. This distinguishes the earlier FeynKit integration
-from the newer tensor-ownership migration. The full path/symbol evidence is in
+from the newer tensor-ownership migration. The current indexed continuation
+extends that history; the storage and persistence descriptions below identify
+its explicit runtime interface. The full path/symbol evidence is in
 `target/symbolic-tensor-flow/main-candidate-rust-flow.json`.
 
 + #strong[Generation and model.] Main's `ProcessDefinition` directly owns its
@@ -767,9 +884,10 @@ from the newer tensor-ownership migration. The full path/symbol evidence is in
 + #strong[Numerators.] Main stores `Autogen<Atom>` on edges and vertices and an
   `Atom` in `SymbolicExpression<State>` inside `Numerator<State>`. The earlier
   FeynKit branch also stores Atoms, constructing temporary Idenso tensors for
-  algebra and exporting their expressions afterward. The migration retains
-  `SymbolicTensor<PartialStructure>` in those same owners. The Atom remains its
-  payload; logical ports, zero rank and reduction facts now travel with it.
+  algebra and exporting their expressions afterward. The first migration retained
+  `SymbolicTensor<PartialStructure>` in those same owners; the current GammaLoop
+  carrier is `SymbolicTensor<IndexedStructure>`. The Atom remains its payload;
+  logical ports, zero rank and reduction facts travel with it.
   `UltravioletGraph::numerator` becomes fallible because typed composition must
   validate the fragments it combines.
 + #strong[CFF and UV.] `AmplitudeGraph::preprocess` still orders CFF generation,
@@ -779,8 +897,8 @@ from the newer tensor-ownership migration. The full path/symbol evidence is in
   data. `OperationNode`, `ComputeStore` and `ComputeNode` schedule the hedge-poset
   forests. Main already has `Arc`-shared numerator definitions and separate
   scalar roots in `Integrands`; this sharing is not a new tensor-migration
-  optimization. The migration makes `FnMapEntry<E = Atom>` generic and uses
-  `NumeratorDefinition = FnMapEntry<SymbolicTensor<PartialStructure>>` for
+  optimization. The migration makes `FnMapEntry<E = Atom>` generic; the current
+  `NumeratorDefinition = FnMapEntry<SymbolicTensor<IndexedStructure>>` carries
   tensor bodies. Direct-3D mapping, `FourDSector`, `FourDTerm` and
   `CanonicalUvTerm` retain those bodies. The forest combinatorics, cut keys and
   residue maps stay with their existing owners. Vakint and scalar Laurent
@@ -809,8 +927,9 @@ from the newer tensor-ownership migration. The full path/symbol evidence is in
   unchanged from `6002674d`; the migration adds no per-sample tensor inference
   and does not change the Monte Carlo estimator or event accumulation.
 + #strong[Persistence.] Main's full-state format is version 15; the current
-  full-state format is version 20, including retained native diagrams and global
-  prefactors. Regenerate older full states. The payload stores expressions and
+  full-state format is version 21, including explicit runtime interfaces,
+  retained native diagrams and global prefactors. Regenerate older full states.
+  The payload stores expressions and
   logical interfaces, remaps symbols and validates them on load, and excludes
   planner/proof caches. Standalone amplitude version 12 and cross-section version
   15 remain unchanged because they store already
@@ -837,8 +956,8 @@ Three causes have been investigated separately:
 
 + Mixed physical `gamma0` traces remained unevaluated before finite component
   execution. The shared Idenso Dirac simplifier now feeds the physical time
-  basis directly to its existing trace recurrence. The rule requires explicit
-  four-dimensional spin and Lorentz representations and preserves formal
+  basis directly to its existing trace recurrence. That initial trace rule requires
+  explicit four-dimensional spin and Lorentz representations and preserves formal
   dimensions and requests to leave traces unevaluated. It avoids a cycle through
   temporal-slash normalization. The concrete matrix already exists as
   `spenso_hep_lib::gamma0_weyl` and is registered in the component library.
@@ -1384,11 +1503,13 @@ and reusable validation facts. Scalar coefficients, source-model recipes whose
 ports are not instantiated yet, and the final scalar evaluator have distinct
 representation requirements.
 
-The migration changes runtime edge/vertex fragments,
+The current GammaLoop carrier for runtime edge/vertex fragments,
 `SymbolicExpression<State>.expr`, FourD sectors and projection witnesses, and
-retained numerator function bodies to `SymbolicTensor<PartialStructure>`. The existing
-`FnMapEntry` becomes generic in its body type; scalar definitions still hold
-`Atom`. Color/gamma processing, direct-3D numerator mapping, Taylor coefficients,
+retained numerator function bodies is `SymbolicTensor<IndexedStructure>`. The
+first retained-tensor checkpoint used `PartialStructure`; native FeynKit and
+its portable source boundary still support that broader interface. `FnMapEntry`
+is generic in its body type; scalar definitions still hold `Atom`. Color/gamma
+processing, direct-3D numerator mapping, Taylor coefficients,
 final normalization and evaluator component lowering retain typed bodies.
 Opaque family calls in scalar dispatch roots must not be inferred as complete
 scalar tensor expressions: their body catalog owns the hidden interfaces.
@@ -1398,9 +1519,9 @@ Against main `ff533fcd`, the concrete storage changes are:
 #table(
   columns: (1.1fr, 1fr, 1.4fr),
   inset: 6pt,
-  [Stage], [Main], [Retained-tensor branch],
+  [Stage], [Main], [Current indexed GammaLoop branch],
   [Runtime edge/vertex numerator], [`Autogen<Atom>`],
-    [`Autogen<SymbolicTensor<PartialStructure>>`],
+    [`Autogen<SymbolicTensor<IndexedStructure>>`],
   [Numerator processing state], [`SymbolicExpression<State>.expr: Atom`],
     [Same state machine, typed tensor payload],
   [Shared numerator definition], [`Arc<FnMapEntry>` with `rhs: Atom`],
@@ -1488,17 +1609,20 @@ Concrete Rust API difficulties found during implementation:
   Internal symbolic materialization and the integrated residual-contraction
   observer now use `AbstractIndex` directly, removing their legacy decode,
   parse and recook detour while retaining all structural checks.
-- Persistence previously had no carrier support. Archives must store payload
-  and logical interface, including ranked zero and unresolved axis order.
-  Decode remaps symbols and validates those parts once. Proof and planner
+- Persistence previously had no carrier support. Archives store payload and
+  logical interface, including ranked zero. Portable tensor archives also retain
+  unresolved axis order; GammaLoop's indexed runtime rejects unresolved public
+  ports. Decode remaps symbols and validates the restored parts. Proof and planner
   caches are never serialized. Existing equality also observes the metric and
   composite flags, so those flags are retained to preserve exact round trips.
-- Declared source interfaces need `from_declared_parts`; merely attaching
-  `checked_parts` does not certify an arbitrary external payload against its
-  declared ports. Runtime DOT exports add `num_interface` only when the
-  expression cannot recover its logical interface, notably for ranked zero.
-  Source scalar overrides remain scalars. Full state version 20 rejects older
-  positional archives; standalone scalar evaluator layouts are unchanged.
+- Portable declared source interfaces need `from_declared_parts`; merely
+  attaching `checked_parts` does not certify an arbitrary external payload
+  against its declared ports. GammaLoop's boundary then requires strict indexed
+  conversion; `from_indexed_parts` checks an explicitly declared runtime layout.
+  Runtime DOT exports add `num_interface` only when the expression cannot recover
+  its logical interface, notably for ranked zero. Source scalar overrides remain
+  scalars. Full state version 21 rejects older positional archives; standalone
+  scalar evaluator layouts are unchanged.
 - `with_lorentz_dimension` specifically changes four-dimensional Lorentz
   spaces. `map_representation_dimensions` now owns general dimension changes
   in both payloads and declared ports, including ranked zero. A compound raw
