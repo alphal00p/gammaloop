@@ -41,6 +41,9 @@ pub(in crate::uv) struct QcdMassReference {
 
 type CertifiedMassPole = (usize, Atom, Atom, Atom);
 
+// Actual source/child incidence mapped to its certified integrated mass coefficient.
+type CertifiedMassPrefixes = BTreeMap<(String, Vec<usize>), Atom>;
+
 /// Completed finite projection; raw_phi retains internal MT for the derivative oracle.
 struct MassProjection {
     raw_phi: Atom,
@@ -1512,383 +1515,519 @@ fn native_nonabelian_qg_children_match_integrated_open_tree_through_epsilon() ->
 
 #[test]
 fn native_qg_vertex_proper_prefixes_match_one_loop_mass_density() -> Result<()> {
-    use crate::{
-        graph::{LMBext, lmb::LMBwithEdges},
-        utils::GS,
-        uv::{
-            ApproximationType, UltravioletGraph,
-            approx::{
-                ForestNodeLike,
-                local_4d::{FourDTerm, Full4dCts},
-            },
-            hedge_poset::OwnedForestNode,
-        },
-    };
-    use linnet::half_edge::subgraph::{Inclusion, SubSetLike, SubSetOps};
-
     crate::initialisation::test_initialise()?;
-    let reference = QcdMassReference::new()?;
-    ensure!(GS.emr_mom == symbols::momentum());
-    let one_sources = reference.sources(1)?;
-    let [one_source] = one_sources.as_slice() else {
-        return Err(eyre!("one native one-loop source"));
-    };
-    let one = reference.project(one_source)?;
-    one.certify_one_loop()?;
-    let d = Atom::var(GS.dim);
-    let eps = Atom::var(GS.dim_epsilon);
-    let coupling = Atom::var(symbol!("UFO::G"));
-    let pi = Atom::var(symbolica::atom::Symbol::PI);
-    let a = coupling.pow(2) / (Atom::num(16) * pi.pow(2));
-    let reference_d = symbol!("native_mass_reference::d");
-    let coordinates = one
-        .family
-        .scalar_products()
-        .iter()
-        .enumerate()
-        .map(|(i, product)| {
-            (
-                product.clone(),
-                Atom::var(symbol!(&format!("native_mass_reference::sp{i}"))),
-            )
-        })
-        .collect::<Vec<_>>();
-    let coordinate_rules = coordinates
-        .iter()
-        .map(|(product, variable)| Replacement::new(product.to_pattern(), variable.to_pattern()))
-        .collect::<Vec<_>>();
-    let k_ref = &one.family.loop_momenta()[0];
-    let p_ref = &one.family.external_momenta()[0];
-    let kk = one
-        .family
-        .kinematics()
-        .scalar_product(k_ref, k_ref)?
-        .replace_multiple(&coordinate_rules);
-    let kp = one
-        .family
-        .kinematics()
-        .scalar_product(k_ref, p_ref)?
-        .replace_multiple(&coordinate_rules);
-    let reference_numerator = one
-        .scalar
-        .replace(reference_d)
-        .with(d.clone())
-        .replace(symbol!("native_mass_reference::CF"))
-        .with(Atom::num((4, 3)));
-    let reference_poles = one
-        .poles
-        .iter()
-        .map(|(_, _, _, full)| full.replace_multiple(&coordinate_rules))
-        .collect::<Vec<_>>();
-    ensure!(reference_poles.len() == 2);
-    let cooking = CookSettings::indices()
-        .with_mode(CookMode::ReversibleEncoding)
-        .with_representation_payloads(true, true);
-    let mut records = reference.certify_integrated_qg_children(&[6, 6, 21])?;
-    records.extend(reference.certify_integrated_qg_children(&[6, 21, 21])?);
-    ensure!(records.len() == 4);
-    let mut counts = BTreeMap::<String, usize>::new();
-    for record in records {
-        let graph = &record.graph;
-        let child = &record.child;
-        let uncut = graph.full_filter().subtract(&graph.initial_state_cut.left);
-        let parents = graph
-            .classified_spinneys(
-                &uncut,
-                &graph.model,
-                &record.settings,
-                &graph.loop_momentum_basis,
-            )?
-            .into_iter()
-            .filter(|node| {
-                node.n_components() == 1
-                    && node.dod == 1
-                    && node.renormalization_scheme == ApproximationType::OS
-                    && graph.n_loops(node.filter()) == 2
-                    && node.filter().includes(child.subgraph())
-            })
-            .collect::<Vec<_>>();
-        ensure!(parents.len() == 1);
-        let parent = OwnedForestNode {
-            spinney: parents[0].clone(),
-            topo_order: 2,
-        };
-        let reduced = parent.reduced_subgraph(child);
-        let edges = graph.paired_edges(&reduced);
-        ensure!(edges.len() == 2);
-        let mut quark = None;
-        let mut gluon = None;
-        for edge in &edges {
-            match graph
-                .model
-                .particle_by_id(graph[*edge].particle.particle().unwrap())?
-                .pdg_code
-                .abs()
-            {
-                6 => {
-                    ensure!(quark.replace(*edge).is_none());
-                }
-                21 => {
-                    ensure!(gluon.replace(*edge).is_none());
-                }
-                pdg => return Err(eyre!("unexpected quotient particle {pdg}")),
-            }
-            ensure!(
-                child.lmb().edge_signatures[*edge]
-                    .internal
-                    .iter()
-                    .all(|s| s.is_zero())
-            );
-        }
-        let quark = quark.ok_or_else(|| eyre!("missing quotient quark"))?;
-        let gluon = gluon.ok_or_else(|| eyre!("missing quotient gluon"))?;
-        ensure!(child.lmb().loop_edges.len() == 1);
-        let chart =
-            graph.lmb_with_loop_edges(&[*child.lmb().loop_edges.first().unwrap(), quark][..])?;
-        let routing =
-            graph.normal_emr_replacement(&graph.full_filter(), &chart, &[] as &[Atom], |_| true);
-        let q = function!(GS.emr_mom, quark.0);
-        ensure!(q.replace_multiple(&routing) == q);
-        let (projector, p_native) = reference.mass_projector(&record.diagram, &d)?;
-        let p_routed = p_native.replace_multiple(&routing);
-        let basis = chart
-            .loop_edges
-            .iter()
-            .chain(chart.ext_edges.iter())
-            .map(|edge| function!(GS.emr_mom, edge.0))
-            .collect::<BTreeSet<_>>();
-        let declared = Kinematics::in_dimension(&d)?.with_momenta(basis)?;
-        let p_terms = declared.linear_terms(&p_routed)?;
-        let [(p, p_sign)] = p_terms.as_slice() else {
-            return Err(eyre!("one native external basis coordinate"));
-        };
-        ensure!(*p_sign == Atom::one() || *p_sign == Atom::num(-1));
-        let gluon_routed = function!(GS.emr_mom, gluon.0).replace_multiple(&routing);
-        let mut orientations = Vec::new();
-        for sign in [1, -1] {
-            let expected = Atom::num(sign) * &q - &p_routed;
-            if (&gluon_routed - &expected).expand().is_zero()
-                || (&gluon_routed + &expected).expand().is_zero()
-            {
-                orientations.push(sign);
-            }
-        }
-        let [quark_sign] = orientations.as_slice() else {
-            return Err(eyre!("unique signed quotient loop map"));
-        };
-        let mut kin = declared
-            .with_scalar_product(&q, &q, kk.clone())?
-            .with_scalar_product(p, p, Atom::one())?
-            .with_scalar_product(&q, p, Atom::num(*quark_sign) * p_sign * &kp)?;
-        // Add native edge-product aliases to the same exact signed chart; an
-        // unassigned consumed-child product remains symbolic and is rejected.
-        let routed = (0..graph.underlying.n_edges())
-            .map(|edge| {
-                let native = function!(GS.emr_mom, edge);
-                let value = native.replace_multiple(&routing);
-                (native, value)
-            })
-            .collect::<Vec<_>>();
-        let chart_kin = kin.clone();
-        for (left, l) in &routed {
-            for (right, r) in &routed {
-                kin = kin.with_scalar_product(left, right, chart_kin.scalar_product(l, r)?)?;
-            }
-        }
-        let denominator = graph.denominator(&reduced, &graph.model, |_| -1);
-        let terms = FourDTerm::from_view(denominator.as_view())?;
-        ensure!(
-            terms.len() == 1
-                && terms[0].denominators.len() == 2
-                && terms[0].numerator.is_scalar()
-                && terms[0].numerator.expression().is_one()
-        );
-        ensure!(
-            terms[0]
-                .denominators
-                .iter()
-                .map(|pole| pole.source_edge)
-                .collect::<BTreeSet<_>>()
-                == BTreeSet::from([quark, gluon])
-        );
-        let mut poles = Vec::new();
-        for pole in &terms[0].denominators {
-            let polynomial = pole.polynomial_in_lmb(&chart)?;
-            let scalar = kin.apply(&polynomial).replace(symbol!("UFO::MT")).with(1);
-            let expected = &reference_poles[usize::from(pole.source_edge != quark)];
-            ensure!(
-                (&scalar - expected).expand().is_zero(),
-                "complete native quotient denominator differs"
-            );
-            poles.push(serde_json::json!({"edge":pole.source_edge.0,
-                "momentum":pole.momentum.to_canonical_string(),
-                "mass_squared":pole.mass_squared.to_canonical_string(),
-                "full_polynomial":pole.full_expr.to_canonical_string(),
-                "routed_polynomial":polynomial.to_canonical_string()}));
-        }
-        let prefix = Full4dCts::recursion_input(
-            &record.local,
-            &record.integrated,
-            ApproximationType::MUV,
-            false,
-            child.lmb(),
-        )?;
-        let finite = prefix
-            .sectors()
-            .filter(|sector| !sector.frozen_lmbs().is_empty())
-            .collect::<Vec<_>>();
-        ensure!(finite.len() == 1 && finite[0].active_components.is_empty());
-        ensure!(finite[0].frozen_lmbs() == std::slice::from_ref(child.lmb()));
-        let frozen_completion = finite[0].atom.with_checked_expression(
-            finite[0]
-                .atom
-                .expression()
-                .replace(GS.integrated_loop_scale)
-                .with(1),
-        )?;
-        let completed = record
-            .integrated
-            .physical_pole()?
-            .try_sub(&record.integrated.physical_finite_counterterm()?)?
-            .try_add(&frozen_completion)?;
-        let cograph = graph
-            .numerator(&reduced, child.subgraph())?
-            .to_d_dim(GS.dim)?
-            .state
-            .expr;
-        let empty = graph.empty_subgraph();
-        let child_source = graph
-            .numerator(child.subgraph(), &empty)?
-            .to_d_dim(GS.dim)?
-            .state
-            .expr;
-        let parent_source = graph
-            .numerator(parent.subgraph(), &empty)?
-            .to_d_dim(GS.dim)?
-            .state
-            .expr;
-        ensure!(
-            child_source
-                .multiply(cograph.clone())?
-                .try_sub(&parent_source)?
-                .is_zero(),
-            "actual native child/cograph factor ownership"
-        );
-        let projector = projector
-            .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))?;
-        let projector =
-            projector.with_checked_expression(projector.expression().replace(CS.nc).with(3))?;
-        let projector = projector.try_into_indexed()?;
-        let closed = completed.multiply(cograph)?.multiply(projector)?;
-        let closed_source = cooking.uncook(closed.expression().as_view());
-        let mut wrong_dimension = false;
-        closed_source.visitor(&mut |view| {
-            if let AtomView::Fun(rep) = view
-                && rep.get_symbol() == symbol!("spenso::mink")
-            {
-                wrong_dimension |= rep.get(0) != d.as_view();
-            }
-            true
-        });
-        ensure!(
-            !wrong_dimension,
-            "newly internal child Lorentz slots remain formal d before mass trace"
-        );
-        let cooked = cooking.try_cook(closed_source.as_view())?;
-        ensure!(cooking.uncook(cooked.as_view()) == closed_source);
-        let tensor = &closed;
-        ensure!(tensor.structure().canonical().is_scalar());
-        let contracted = tensor
-            .simplify_algebra(&AlgebraSettings {
-                gamma: Some(GammaSimplifySettings::canonical()),
-                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
-                ..Default::default()
-            })?
-            .contract(ContractSettings::default())?;
-        crate::debug_tags!(#uv, #integrated, #inspect;
-            stage = "native_vertex_proper_prefix_trace", source = %record.diagram.name(),
-            child = %child.subgraph().string_label(),
-            contraction_complete = contracted.contraction_complete(), rank = contracted.rank(),
-            file.closed_source = %closed_source.to_canonical_string(),
-            file.contracted = %cooking.uncook(contracted.expression().as_view()).to_canonical_string(),
-            "Actual formal-d child/cograph mass trace before scalar-product notation"
-        );
-        ensure!(
-            contracted.contraction_complete() && contracted.structure().canonical().is_scalar()
-        );
-        let dotted = contracted.to_dots()?;
-        ensure!(dotted.structure().canonical().is_scalar());
-        let trace = cooking.uncook(dotted.expression().as_view());
-        let scalar = graph
-            .model
-            .expand_couplings(&kin.apply(&trace))
-            .replace(symbol!("UFO::MT"))
-            .with(1)
-            .replace(GS.m_uv_vacuum)
-            .with(1)
-            .replace(GS.m_uv_expansion)
-            .with(1)
-            .replace(GS.mu_r_sq)
-            .with(1);
-        let source = reference.project(&record.diagram)?;
-        ensure!(source.kernel_weight.is_one() && source.numerator_prefactor.is_one());
-        // Child loop measure is already present. Only the remaining outer
-        // measure and Γ2=-iΣ conversion enter this normalized two-loop density.
-        let actual = (Atom::i()
-            * (Atom::i() / (Atom::num(16) * pi.pow(2)))
-            * &source.kernel_weight
-            * &source.numerator_prefactor
-            * scalar
-            / a.pow(2))
-        .collect_compact_factors();
-        let is_abelian = graph
-            .paired_edges(child.subgraph())
-            .iter()
-            .filter(|edge| {
-                graph
-                    .model
-                    .particle_by_id(graph[**edge].particle.particle().unwrap())
-                    .is_ok_and(|particle| particle.pdg_code.abs() == 6)
-            })
-            .count()
-            == 2;
-        let vertex_pole = Atom::num(if is_abelian { (1, 6) } else { (-9, 2) }) / &eps;
-        let expected = &vertex_pole * &reference_numerator;
-        crate::debug_tags!(#uv, #integrated, #inspect;
-            stage = "native_vertex_proper_prefix_density", source = %record.diagram.name(),
-            child = %child.subgraph().string_label(),
-            file.actual = %actual.to_canonical_string(), file.expected = %expected.to_canonical_string(),
-            file.poles = %serde_json::to_string(&poles)?,
-            file.native_external = %p_native.to_canonical_string(),
-            file.routed_external = %p_routed.to_canonical_string(), quark_sign = *quark_sign,
-            "Actual completed vertex times untouched native cograph before integration"
-        );
-        let difference = dotted.with_checked_expression(&actual - &expected)?;
-        ensure!(
-            super::simplify(&difference)?.is_zero(),
-            "actual native vertex proper prefix differs from the independent one-loop mass density"
-        );
-        // The independent one-loop integral is retained through epsilon^1:
-        // multiplication by the actual vertex pole fixes the finite two-loop term.
-        let f = Atom::num((4, 3))
-            * (Atom::num(3) / &eps
-                + Atom::num(4)
-                + &eps * (Atom::num(8) + pi.pow(2) / Atom::num(4)));
-        let integrated_reference = (&vertex_pole * f).series(GS.dim_epsilon, 0, 0)?.to_atom();
-        crate::debug_tags!(#uv, #integrated, #summary;
-            stage = "native_vertex_proper_prefix_certificate", source = %record.diagram.name(),
-            child = %child.subgraph().string_label(),
-            file.integrated_reference = %integrated_reference.to_canonical_string(),
-            highest_one_loop_epsilon_power = 1, public_parent_admitted = false,
-            "Exact SU(3) density certificate transfers the independently integrated one-loop reference"
-        );
-        *counts.entry(record.diagram.name().to_owned()).or_default() += 1;
-    }
-    ensure!(counts.values().copied().collect::<Vec<_>>() == [2, 2]);
+    QcdMassReference::new()?.certify_qg_vertex_proper_prefixes()?;
     Ok(())
+}
+
+impl QcdMassReference {
+    fn certify_qg_vertex_proper_prefixes(&self) -> Result<CertifiedMassPrefixes> {
+        use crate::{
+            graph::{LMBext, lmb::LMBwithEdges},
+            utils::GS,
+            uv::{
+                ApproximationType, UltravioletGraph,
+                approx::{
+                    ForestNodeLike,
+                    local_4d::{FourDTerm, Full4dCts},
+                },
+                hedge_poset::OwnedForestNode,
+            },
+        };
+        use linnet::half_edge::subgraph::{Inclusion, SubSetLike, SubSetOps};
+
+        let reference = self;
+        ensure!(GS.emr_mom == symbols::momentum());
+        let one_sources = reference.sources(1)?;
+        let [one_source] = one_sources.as_slice() else {
+            return Err(eyre!("one native one-loop source"));
+        };
+        let one = reference.project(one_source)?;
+        one.certify_one_loop()?;
+        let d = Atom::var(GS.dim);
+        let eps = Atom::var(GS.dim_epsilon);
+        let coupling = Atom::var(symbol!("UFO::G"));
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let a = coupling.pow(2) / (Atom::num(16) * pi.pow(2));
+        let reference_d = symbol!("native_mass_reference::d");
+        let coordinates = one
+            .family
+            .scalar_products()
+            .iter()
+            .enumerate()
+            .map(|(i, product)| {
+                (
+                    product.clone(),
+                    Atom::var(symbol!(&format!("native_mass_reference::sp{i}"))),
+                )
+            })
+            .collect::<Vec<_>>();
+        let coordinate_rules = coordinates
+            .iter()
+            .map(|(product, variable)| {
+                Replacement::new(product.to_pattern(), variable.to_pattern())
+            })
+            .collect::<Vec<_>>();
+        let k_ref = &one.family.loop_momenta()[0];
+        let p_ref = &one.family.external_momenta()[0];
+        let kk = one
+            .family
+            .kinematics()
+            .scalar_product(k_ref, k_ref)?
+            .replace_multiple(&coordinate_rules);
+        let kp = one
+            .family
+            .kinematics()
+            .scalar_product(k_ref, p_ref)?
+            .replace_multiple(&coordinate_rules);
+        let reference_numerator = one
+            .scalar
+            .replace(reference_d)
+            .with(d.clone())
+            .replace(symbol!("native_mass_reference::CF"))
+            .with(Atom::num((4, 3)));
+        let reference_poles = one
+            .poles
+            .iter()
+            .map(|(_, _, _, full)| full.replace_multiple(&coordinate_rules))
+            .collect::<Vec<_>>();
+        ensure!(reference_poles.len() == 2);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let mut records = reference.certify_integrated_qg_children(&[6, 6, 21])?;
+        records.extend(reference.certify_integrated_qg_children(&[6, 21, 21])?);
+        ensure!(records.len() == 4);
+        let mut counts = BTreeMap::<String, usize>::new();
+        let mut prefixes = CertifiedMassPrefixes::new();
+        for record in records {
+            let graph = &record.graph;
+            let child = &record.child;
+            let uncut = graph.full_filter().subtract(&graph.initial_state_cut.left);
+            let parents = graph
+                .classified_spinneys(
+                    &uncut,
+                    &graph.model,
+                    &record.settings,
+                    &graph.loop_momentum_basis,
+                )?
+                .into_iter()
+                .filter(|node| {
+                    node.n_components() == 1
+                        && node.dod == 1
+                        && node.renormalization_scheme == ApproximationType::OS
+                        && graph.n_loops(node.filter()) == 2
+                        && node.filter().includes(child.subgraph())
+                })
+                .collect::<Vec<_>>();
+            ensure!(parents.len() == 1);
+            let parent = OwnedForestNode {
+                spinney: parents[0].clone(),
+                topo_order: 2,
+            };
+            let reduced = parent.reduced_subgraph(child);
+            let edges = graph.paired_edges(&reduced);
+            ensure!(edges.len() == 2);
+            let mut quark = None;
+            let mut gluon = None;
+            for edge in &edges {
+                match graph
+                    .model
+                    .particle_by_id(graph[*edge].particle.particle().unwrap())?
+                    .pdg_code
+                    .abs()
+                {
+                    6 => {
+                        ensure!(quark.replace(*edge).is_none());
+                    }
+                    21 => {
+                        ensure!(gluon.replace(*edge).is_none());
+                    }
+                    pdg => return Err(eyre!("unexpected quotient particle {pdg}")),
+                }
+                ensure!(
+                    child.lmb().edge_signatures[*edge]
+                        .internal
+                        .iter()
+                        .all(|s| s.is_zero())
+                );
+            }
+            let quark = quark.ok_or_else(|| eyre!("missing quotient quark"))?;
+            let gluon = gluon.ok_or_else(|| eyre!("missing quotient gluon"))?;
+            ensure!(child.lmb().loop_edges.len() == 1);
+            let chart = graph
+                .lmb_with_loop_edges(&[*child.lmb().loop_edges.first().unwrap(), quark][..])?;
+            let routing =
+                graph
+                    .normal_emr_replacement(&graph.full_filter(), &chart, &[] as &[Atom], |_| true);
+            let q = function!(GS.emr_mom, quark.0);
+            ensure!(q.replace_multiple(&routing) == q);
+            let (projector, p_native) = reference.mass_projector(&record.diagram, &d)?;
+            let p_routed = p_native.replace_multiple(&routing);
+            let basis = chart
+                .loop_edges
+                .iter()
+                .chain(chart.ext_edges.iter())
+                .map(|edge| function!(GS.emr_mom, edge.0))
+                .collect::<BTreeSet<_>>();
+            let declared = Kinematics::in_dimension(&d)?.with_momenta(basis)?;
+            let p_terms = declared.linear_terms(&p_routed)?;
+            let [(p, p_sign)] = p_terms.as_slice() else {
+                return Err(eyre!("one native external basis coordinate"));
+            };
+            ensure!(*p_sign == Atom::one() || *p_sign == Atom::num(-1));
+            let gluon_routed = function!(GS.emr_mom, gluon.0).replace_multiple(&routing);
+            let mut orientations = Vec::new();
+            for sign in [1, -1] {
+                let expected = Atom::num(sign) * &q - &p_routed;
+                if (&gluon_routed - &expected).expand().is_zero()
+                    || (&gluon_routed + &expected).expand().is_zero()
+                {
+                    orientations.push(sign);
+                }
+            }
+            let [quark_sign] = orientations.as_slice() else {
+                return Err(eyre!("unique signed quotient loop map"));
+            };
+            let mut kin = declared
+                .with_scalar_product(&q, &q, kk.clone())?
+                .with_scalar_product(p, p, Atom::one())?
+                .with_scalar_product(&q, p, Atom::num(*quark_sign) * p_sign * &kp)?;
+            // Add native edge-product aliases to the same exact signed chart; an
+            // unassigned consumed-child product remains symbolic and is rejected.
+            let routed = (0..graph.underlying.n_edges())
+                .map(|edge| {
+                    let native = function!(GS.emr_mom, edge);
+                    let value = native.replace_multiple(&routing);
+                    (native, value)
+                })
+                .collect::<Vec<_>>();
+            let chart_kin = kin.clone();
+            for (left, l) in &routed {
+                for (right, r) in &routed {
+                    kin = kin.with_scalar_product(left, right, chart_kin.scalar_product(l, r)?)?;
+                }
+            }
+            let denominator = graph.denominator(&reduced, &graph.model, |_| -1);
+            let terms = FourDTerm::from_view(denominator.as_view())?;
+            ensure!(
+                terms.len() == 1
+                    && terms[0].denominators.len() == 2
+                    && terms[0].numerator.is_scalar()
+                    && terms[0].numerator.expression().is_one()
+            );
+            ensure!(
+                terms[0]
+                    .denominators
+                    .iter()
+                    .map(|pole| pole.source_edge)
+                    .collect::<BTreeSet<_>>()
+                    == BTreeSet::from([quark, gluon])
+            );
+            let mut poles = Vec::new();
+            for pole in &terms[0].denominators {
+                let polynomial = pole.polynomial_in_lmb(&chart)?;
+                let scalar = kin.apply(&polynomial).replace(symbol!("UFO::MT")).with(1);
+                let expected = &reference_poles[usize::from(pole.source_edge != quark)];
+                ensure!(
+                    (&scalar - expected).expand().is_zero(),
+                    "complete native quotient denominator differs"
+                );
+                poles.push(serde_json::json!({"edge":pole.source_edge.0,
+                    "momentum":pole.momentum.to_canonical_string(),
+                    "mass_squared":pole.mass_squared.to_canonical_string(),
+                    "full_polynomial":pole.full_expr.to_canonical_string(),
+                    "routed_polynomial":polynomial.to_canonical_string()}));
+            }
+            let prefix = Full4dCts::recursion_input(
+                &record.local,
+                &record.integrated,
+                ApproximationType::MUV,
+                false,
+                child.lmb(),
+            )?;
+            let finite = prefix
+                .sectors()
+                .filter(|sector| !sector.frozen_lmbs().is_empty())
+                .collect::<Vec<_>>();
+            ensure!(finite.len() == 1 && finite[0].active_components.is_empty());
+            ensure!(finite[0].frozen_lmbs() == std::slice::from_ref(child.lmb()));
+            let frozen_completion = finite[0].atom.with_checked_expression(
+                finite[0]
+                    .atom
+                    .expression()
+                    .replace(GS.integrated_loop_scale)
+                    .with(1),
+            )?;
+            let completed = record
+                .integrated
+                .physical_pole()?
+                .try_sub(&record.integrated.physical_finite_counterterm()?)?
+                .try_add(&frozen_completion)?;
+            let cograph = graph
+                .numerator(&reduced, child.subgraph())?
+                .to_d_dim(GS.dim)?
+                .state
+                .expr;
+            let empty = graph.empty_subgraph();
+            let child_source = graph
+                .numerator(child.subgraph(), &empty)?
+                .to_d_dim(GS.dim)?
+                .state
+                .expr;
+            let parent_source = graph
+                .numerator(parent.subgraph(), &empty)?
+                .to_d_dim(GS.dim)?
+                .state
+                .expr;
+            ensure!(
+                child_source
+                    .multiply(cograph.clone())?
+                    .try_sub(&parent_source)?
+                    .is_zero(),
+                "actual native child/cograph factor ownership"
+            );
+            let projector = projector
+                .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))?;
+            let projector =
+                projector.with_checked_expression(projector.expression().replace(CS.nc).with(3))?;
+            let projector = projector.try_into_indexed()?;
+            let closed = completed.multiply(cograph)?.multiply(projector)?;
+            let closed_source = cooking.uncook(closed.expression().as_view());
+            let mut wrong_dimension = false;
+            closed_source.visitor(&mut |view| {
+                if let AtomView::Fun(rep) = view
+                    && rep.get_symbol() == symbol!("spenso::mink")
+                {
+                    wrong_dimension |= rep.get(0) != d.as_view();
+                }
+                true
+            });
+            ensure!(
+                !wrong_dimension,
+                "newly internal child Lorentz slots remain formal d before mass trace"
+            );
+            let cooked = cooking.try_cook(closed_source.as_view())?;
+            ensure!(cooking.uncook(cooked.as_view()) == closed_source);
+            let tensor = &closed;
+            ensure!(tensor.structure().canonical().is_scalar());
+            let contracted = tensor
+                .simplify_algebra(&AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::canonical()),
+                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    ..Default::default()
+                })?
+                .contract(ContractSettings::default())?;
+            crate::debug_tags!(#uv, #integrated, #inspect;
+                stage = "native_vertex_proper_prefix_trace", source = %record.diagram.name(),
+                child = %child.subgraph().string_label(),
+                contraction_complete = contracted.contraction_complete(), rank = contracted.rank(),
+                file.closed_source = %closed_source.to_canonical_string(),
+                file.contracted = %cooking.uncook(contracted.expression().as_view()).to_canonical_string(),
+                "Actual formal-d child/cograph mass trace before scalar-product notation"
+            );
+            ensure!(
+                contracted.contraction_complete() && contracted.structure().canonical().is_scalar()
+            );
+            let dotted = contracted.to_dots()?;
+            ensure!(dotted.structure().canonical().is_scalar());
+            let trace = cooking.uncook(dotted.expression().as_view());
+            let scalar = graph
+                .model
+                .expand_couplings(&kin.apply(&trace))
+                .replace(symbol!("UFO::MT"))
+                .with(1)
+                .replace(GS.m_uv_vacuum)
+                .with(1)
+                .replace(GS.m_uv_expansion)
+                .with(1)
+                .replace(GS.mu_r_sq)
+                .with(1);
+            let source = reference.project(&record.diagram)?;
+            ensure!(source.kernel_weight.is_one() && source.numerator_prefactor.is_one());
+            // Child loop measure is already present. Only the remaining outer
+            // measure and Γ2=-iΣ conversion enter this normalized two-loop density.
+            let actual = (Atom::i()
+                * (Atom::i() / (Atom::num(16) * pi.pow(2)))
+                * &source.kernel_weight
+                * &source.numerator_prefactor
+                * scalar
+                / a.pow(2))
+            .collect_compact_factors();
+            let is_abelian = graph
+                .paired_edges(child.subgraph())
+                .iter()
+                .filter(|edge| {
+                    graph
+                        .model
+                        .particle_by_id(graph[**edge].particle.particle().unwrap())
+                        .is_ok_and(|particle| particle.pdg_code.abs() == 6)
+                })
+                .count()
+                == 2;
+            let vertex_pole = Atom::num(if is_abelian { (1, 6) } else { (-9, 2) }) / &eps;
+            let expected = &vertex_pole * &reference_numerator;
+            crate::debug_tags!(#uv, #integrated, #inspect;
+                stage = "native_vertex_proper_prefix_density", source = %record.diagram.name(),
+                child = %child.subgraph().string_label(),
+                file.actual = %actual.to_canonical_string(), file.expected = %expected.to_canonical_string(),
+                file.poles = %serde_json::to_string(&poles)?,
+                file.native_external = %p_native.to_canonical_string(),
+                file.routed_external = %p_routed.to_canonical_string(), quark_sign = *quark_sign,
+                "Actual completed vertex times untouched native cograph before integration"
+            );
+            let difference = dotted.with_checked_expression(&actual - &expected)?;
+            ensure!(
+                super::simplify(&difference)?.is_zero(),
+                "actual native vertex proper prefix differs from the independent one-loop mass density"
+            );
+            // The independent one-loop integral is retained through epsilon^1:
+            // multiplication by the actual vertex pole fixes the finite two-loop term.
+            let f = Atom::num((4, 3))
+                * (Atom::num(3) / &eps
+                    + Atom::num(4)
+                    + &eps * (Atom::num(8) + pi.pow(2) / Atom::num(4)));
+            let integrated_reference = (&vertex_pole * f).series(GS.dim_epsilon, 0, 0)?.to_atom();
+            crate::debug_tags!(#uv, #integrated, #summary;
+                stage = "native_vertex_proper_prefix_certificate", source = %record.diagram.name(),
+                child = %child.subgraph().string_label(),
+                file.integrated_reference = %integrated_reference.to_canonical_string(),
+                highest_one_loop_epsilon_power = 1, public_parent_admitted = false,
+                "Exact SU(3) density certificate transfers the independently integrated one-loop reference"
+            );
+            let key = (
+                record.diagram.name().to_owned(),
+                graph
+                    .paired_edges(child.subgraph())
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect(),
+            );
+            ensure!(
+                prefixes.insert(key, integrated_reference).is_none(),
+                "a native vertex occurrence was counted twice"
+            );
+            *counts.entry(record.diagram.name().to_owned()).or_default() += 1;
+        }
+        ensure!(counts.values().copied().collect::<Vec<_>>() == [2, 2]);
+        ensure!(prefixes.len() == 4);
+        Ok(prefixes)
+    }
 }
 
 #[path = "native_gluon_prefix_tests.rs"]
 mod native_gluon_prefix_tests;
 #[path = "native_self_energy_prefix_tests.rs"]
 mod native_self_energy_prefix_tests;
+
+#[test]
+fn native_two_loop_proper_prefix_sum_matches_the_independent_mass_reference() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let mut prefixes = CertifiedMassPrefixes::new();
+    for (kind, expected_count, certified) in [
+        ("OS quark", 1, reference.certify_os_quark_proper_prefix()?),
+        (
+            "QCD vertex",
+            4,
+            reference.certify_qg_vertex_proper_prefixes()?,
+        ),
+        (
+            "fermion bubble",
+            6,
+            reference.certify_fermion_gluon_prefixes()?,
+        ),
+        (
+            "pure gauge",
+            3,
+            reference.certify_pure_gauge_gluon_prefixes()?,
+        ),
+    ] {
+        ensure!(
+            certified.len() == expected_count,
+            "{kind}: proper-child incidence"
+        );
+        for (key, coefficient) in certified {
+            ensure!(
+                prefixes.insert(key, coefficient).is_none(),
+                "a proper occurrence was counted twice"
+            );
+        }
+    }
+    let expected_keys = BTreeSet::from([
+        ("D00".to_owned(), vec![5, 6]),
+        ("D01".to_owned(), vec![5, 6]),
+        ("D02".to_owned(), vec![2, 4, 5]),
+        ("D02".to_owned(), vec![3, 4, 6]),
+        ("D03".to_owned(), vec![5]),
+        ("D04".to_owned(), vec![5, 6]),
+        ("D05".to_owned(), vec![5, 6]),
+        ("D06".to_owned(), vec![5, 6]),
+        ("D07".to_owned(), vec![5, 6]),
+        ("D08".to_owned(), vec![5, 6]),
+        ("D09".to_owned(), vec![2, 3]),
+        ("D10".to_owned(), vec![2, 3]),
+        ("D11".to_owned(), vec![2, 3, 5]),
+        ("D11".to_owned(), vec![2, 4, 6]),
+    ]);
+    ensure!(prefixes.keys().cloned().collect::<BTreeSet<_>>() == expected_keys);
+    ensure!(
+        prefixes[&("D03".to_owned(), vec![5])].is_zero(),
+        "the certified zero tadpole remains in the forest inventory"
+    );
+    let actual = super::series(&prefixes.values().sum::<Atom>(), 0)?.to_atom();
+    let epsilon = Atom::var(crate::utils::GS.dim_epsilon);
+    let pi = Atom::var(symbolica::atom::Symbol::PI);
+    let cf = Atom::num((4, 3));
+    let beta0 = Atom::num(7); // SU(3), five light and one heavy active flavor.
+    let f = &cf
+        * (Atom::num(3) / &epsilon
+            + Atom::num(4)
+            + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(4)));
+    let h = &cf
+        * (Atom::num(6) / &epsilon
+            + Atom::num(2)
+            + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(2)));
+    let z1 = -&f;
+    let w1 = -&cf / &epsilon;
+    // Independent Lagrangian/Slavnov-Taylor combination: quark z1 H-w1 F,
+    // two vertex occurrences 2v1 F, and gluon -a1 F. No actual overall
+    // counterterm or bare two-loop coefficient defines this expected P2.
+    let expected = super::series(&(&z1 * &h - &beta0 * &f / &epsilon + &w1 * &f), 0)?.to_atom();
+    let explicit = -Atom::num((196, 3)) / epsilon.pow(2)
+        - Atom::num((880, 9)) / &epsilon
+        - Atom::num((2080, 9))
+        - Atom::num((73, 9)) * pi.pow(2);
+    ensure!((&expected - &explicit).together().is_zero());
+    ensure!(
+        (&actual - &explicit).together().is_zero(),
+        "the fourteen actual proper insertions differ from independent P2"
+    );
+
+    // Keeping only epsilon^0 in both one-loop reference integrals preserves
+    // the poles but loses a known nonzero finite two-loop coefficient.
+    let f0 = &cf * (Atom::num(3) / &epsilon + Atom::num(4));
+    let h0 = &cf * (Atom::num(6) / &epsilon + Atom::num(2));
+    let prematurely_truncated =
+        super::series(&(-&f0 * &h0 - &beta0 * &f0 / &epsilon + &w1 * &f0), 0)?.to_atom();
+    let lost_finite = -Atom::num((1952, 9)) - Atom::num((73, 9)) * pi.pow(2);
+    ensure!(!lost_finite.is_zero());
+    ensure!(
+        (&actual - &prematurely_truncated - &lost_finite)
+            .together()
+            .is_zero()
+    );
+    let records = prefixes.iter().map(|((source, edges), coefficient)| serde_json::json!({
+        "source": source, "child_edges": edges, "coefficient": coefficient.to_canonical_string()
+    })).collect::<Vec<_>>();
+    crate::debug_tags!(#uv, #integrated, #summary;
+        stage = "native_two_loop_complete_proper_prefix_sum", occurrences = prefixes.len(),
+        file.records = %serde_json::to_string(&records)?,
+        file.actual = %actual.to_canonical_string(), file.reference = %explicit.to_canonical_string(),
+        file.lost_finite = %lost_finite.to_canonical_string(),
+        parent_overall_operator_computed = false, public_complete_forest_evaluated = false,
+        emitted_four_d_condition_proved = false,
+        "Actual native child/cograph certificates transfer all fourteen proper insertions to independent P2"
+    );
+    Ok(())
+}
