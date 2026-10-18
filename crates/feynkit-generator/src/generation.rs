@@ -600,13 +600,16 @@ impl NumeratorInstantiation<'_> {
                     if arguments.is_empty() {
                         Err(self.invalid_tensor(term, "expected at least one Lorentz index"))
                     } else {
+                        // UFO/ALOHA uses the real epsilon(0,1,2,3) = -1,
+                        // while Idenso includes -i in its Lorentz epsilon.
                         Ok(arguments
                             .into_iter()
                             .fold(
                                 FunctionBuilder::new(*EPSILON_SYMBOL),
                                 |builder, argument| builder.add_arg(self.minkowski(argument)),
                             )
-                            .finish())
+                            .finish()
+                            * -Atom::i())
                     }
                 }
                 "C" => self.exact_arguments(term, &arguments, 2).map(|args| {
@@ -6909,6 +6912,106 @@ mod tests {
                 "spenso::g(spenso::bis(4,gammalooprs::hedge(20,1)),spenso::bis(4,gammalooprs::hedge(41,1)))"
             )
         );
+    }
+
+    #[test]
+    fn ufo_lorentz_epsilon_matches_aloha_and_native_gamma5() {
+        use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
+        use spenso::{
+            network::{
+                ExecutionResult, Sequential, SmallestDegree,
+                library::symbolic::ExplicitKey,
+                parsing::{ParseSettings as TensorParseSettings, StrictTensorFilter},
+            },
+            structure::abstract_index::{AIND_SYMBOLS, AbstractIndex},
+            tensors::parametric::MixedTensor,
+        };
+        use spenso_hep_lib::{FUN_LIB, HepNet, hep_lib_atom};
+        use symbolica::function;
+
+        let mut legs = tensor_test_legs();
+        for leg in &mut legs {
+            leg.spin = 3;
+        }
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs,
+        };
+        let lowered = instantiation
+            .instantiate(&test_atom("Epsilon(1,2,3,4)"), NumeratorSector::Spin)
+            .unwrap();
+        let native_epsilon = test_atom(
+            "spenso::epsilon(spenso::mink(4,gammalooprs::hedge(20,1)),spenso::mink(4,gammalooprs::hedge(41,1)),spenso::mink(4,gammalooprs::hedge(60,1)),spenso::mink(4,gammalooprs::hedge(81,1)))",
+        );
+        assert_eq!(lowered, -Atom::i() * &native_epsilon);
+        assert_eq!(instantiation.lower_spin(lowered.clone()).unwrap(), lowered);
+        assert_eq!(
+            instantiation
+                .instantiate(&test_atom("Epsilon(2,1,3,4)"), NumeratorSector::Spin)
+                .unwrap(),
+            -&lowered,
+        );
+
+        // Use the unchanged gamma5/gamma library as an exact component oracle,
+        // not a second epsilon table. Idenso defines Tr(g5*g^a*g^b*g^c*g^d)
+        // = 4*epsilon(a,b,c,d), with epsilon(0,1,2,3) = -i.
+        let trace = instantiation
+            .instantiate(
+                &test_atom(
+                    "Gamma5(-1,-2)*Gamma(1,-2,-3)*Gamma(2,-3,-4)*Gamma(3,-4,-5)*Gamma(4,-5,-1)",
+                ),
+                NumeratorSector::Spin,
+            )
+            .unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplified = SymbolicTensor::infer(cooking.cook(trace.as_view()))
+            .unwrap()
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            cooking.uncook(simplified.expression().as_view()),
+            Atom::num(4) * &native_epsilon,
+        );
+        let component_expression = lowered
+            .replace(native_epsilon.to_pattern())
+            .with(&trace / Atom::num(4));
+        let library = hep_lib_atom::<AbstractIndex, MixedTensor<f64, ExplicitKey<AbstractIndex>>>();
+        let settings = TensorParseSettings::default()
+            .with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+        // MadGraph/ALOHA L_Epsilon.give_parity gives (0,1,2,3) -> -1.
+        // Include an odd permutation and a repeated index. Four Minkowski
+        // selectors add a minus sign for the three spatial directions.
+        for (coordinates, aloha_component) in [
+            ([0, 1, 2, 3], -1),
+            ([1, 0, 2, 3], 1),
+            ([0, 2, 3, 1], -1),
+            ([0, 1, 2, 2], 0),
+        ] {
+            let mut selected = component_expression.clone();
+            for (coordinate, hedge) in coordinates.into_iter().zip([20, 41, 60, 81]) {
+                selected *= function!(
+                    ETS.delta,
+                    function!(AIND_SYMBOLS.cind, coordinate),
+                    test_atom(&format!("spenso::mink(4,gammalooprs::hedge({hedge},1))"))
+                );
+            }
+            let selected = cooking.cook(selected.as_view());
+            let mut network =
+                HepNet::<AbstractIndex>::try_from_view(selected.as_view(), &library, &settings)
+                    .unwrap();
+            network
+                .execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)
+                .unwrap();
+            let actual = match network.result_scalar().unwrap() {
+                ExecutionResult::One => Atom::one(),
+                ExecutionResult::Zero => Atom::Zero,
+                ExecutionResult::Val(value) => value.into_owned(),
+            };
+            assert_eq!(actual, Atom::num(-aloha_component), "{coordinates:?}");
+        }
     }
 
     #[test]
