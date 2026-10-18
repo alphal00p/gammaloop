@@ -1033,6 +1033,34 @@ fn native_qcd_mass_projections_certify_all_one_and_two_loop_sources() -> Result<
             );
         }
     }
+    // Captured generic-field residual before the SU(3) scalar comparison.
+    // Its logarithm cancels only after the native invariants are evaluated in
+    // the same declared group as the independent numerical reference.
+    let fundamental = ColorFundamental {}.to_symbolic([Atom::num(3)]);
+    let adjoint = ColorAdjoint {}.to_symbolic([Atom::num(8)]);
+    let cf = idenso::color_cas!(2, fundamental.clone());
+    let ca = idenso::color_cas!(2, adjoint);
+    let tf = idenso::color_idx!(2, fundamental);
+    let epsilon = Atom::var(crate::utils::GS.dim_epsilon);
+    let ell = Atom::var(symbol!("native_msbar_field_reference::auxiliary_log"));
+    let inverse_epsilon = epsilon.pow(-1);
+    let double_pole = epsilon.pow(-2);
+    let residual = (((Atom::num(12) * &ell + Atom::num(43)) * Atom::num(8) * &tf
+        - Atom::num(153) * &ca)
+        * &inverse_epsilon
+        - Atom::num(3)
+            * &cf
+            * ((Atom::num(12) * &ell + Atom::num(7)) * &inverse_epsilon
+                - Atom::num(18) * &double_pole)
+        + (Atom::num(-8) * &tf + Atom::num(3) * &ca) * Atom::num(12) * &double_pole)
+        * &cf
+        - Atom::num(176) * &double_pole
+        + Atom::num(420) * &inverse_epsilon;
+    ensure!(!residual.together().is_zero());
+    let cooked = cooking.try_cook(residual.as_view())?;
+    let normalized = cooked.to_cof_dimension_invariants();
+    ensure!(normalized.together().is_zero());
+    ensure!(normalized.to_cof_dimension_invariants() == normalized);
     Ok(())
 }
 
@@ -2736,7 +2764,8 @@ impl QcdMassReference {
         ensure!(!weight.contains_symbol(GS.emr_mom) && !weight.contains(tau.as_view()));
         let weighted = linear.with_checked_expression(
             self.model
-                .expand_couplings(&(&weight * linear.expression())),
+                .expand_couplings(&(&weight * linear.expression()))
+                .to_cof_dimension_invariants(),
         )?;
         let constant_tensor = pole.with_checked_expression(constant.clone())?;
         ensure!(
@@ -2746,11 +2775,12 @@ impl QcdMassReference {
         let constant_tensor = align(&constant_tensor)?;
         let weighted_constant = constant_tensor.with_checked_expression(
             self.model
-                .expand_couplings(&(weight * constant_tensor.expression())),
+                .expand_couplings(&(weight * constant_tensor.expression()))
+                .to_cof_dimension_invariants(),
         )?;
         crate::debug_tags!(#uv, #integrated, #summary;
             stage = "native_overall_kinetic_pole_input", source = %diagram.name(),
-            generic_external_affine = true, exact_open_frame = true,
+            generic_external_affine = true, exact_open_frame = true, su3_color_invariants_evaluated = true,
             file.external_signs = ?signs, file.scalar_source_weight = %(&projection.kernel_weight * &projection.numerator_prefactor).to_canonical_string(),
             file.constant_pole = %cooking.uncook(constant.as_view()).to_canonical_string(),
             file.weighted_linear_pole = %cooking.uncook(weighted.expression().as_view()).to_canonical_string(),
