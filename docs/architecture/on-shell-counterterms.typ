@@ -24,6 +24,9 @@ Current validation records must identify the tested revision, test selection
 and run; exact reconstruction, local limits and integrated renormalization
 remain separate claims.
 
+The owning Indexed FeynKit rebase qualification at the end of this note records
+the current replay. Earlier records retain their stated source and scope.
+
 At retained-tensor source `bb4ee859bb121796015db6ba3e4a9faa40089cff`, the
 finite-density case passed in run `a9ef128e-92bc-4870-b449-b0eb9aac73a0`
 (25.472 seconds): eighteen grouped-master comparisons retain both charge-mate
@@ -2644,4 +2647,64 @@ projection consumer. Scalar dispatch roots and retained tensor bodies keep their
 normalization owners. The actual D09 finite-child dimensional contribution has
 its own certificate; neither result establishes the complete two-loop emitted
 condition, general off-shell/R2 matching, or public mixed-prescription support.
+
+=== Owning Indexed FeynKit rebase qualification
+
+The replay descends from FeynKit `8959f063dd3a`, preserving the original OS
+input `35d011195068` and its earlier qualified checkpoint `170773df7e1c`.
+The two named bounded-coordinate proof changes precede the thirty-eight OS
+functionality changes. All twenty-seven Rust-changing OS prefixes compile;
+the eleven remaining prefixes retain the preceding checked Rust sources.
+Transient Indexed products move their operands, while retained or shared
+operands are cloned explicitly. The generic PartialStructure reference API
+keeps its borrowed operation. The final API-state formatting uses that crate's
+declared Rust edition 2021. An independent source review preserves the physics
+assertions, ordering, factorization and ownership rules.
+
+Fresh producer source `8fb7c81b45ef` passes 235 distinct ordinary cases and
+two full-main cases. These cover the local and analytic one-loop references,
+primitive dimensional bridge, completed CFF reconstruction, fixed boosted
+points and ordered projectors, complete rainbow soft controls, nested and
+disjoint route comparisons, native proper-prefix sums, physical complete-cut
+soft behavior, and state-format 22 persistence. Exact source, binary, selector,
+JUnit and profile bindings are retained. No case is skipped or retried. The
+ordinary cap remains 240 seconds, with a longest observed case of 205.896
+seconds; both larger cases retain the 7200-second full-main cap.
+
+The standalone denominator-source regression also passes its previously
+compiled fixtures. Five vacuum occurrences agree after their explicit
+auxiliary-mass identification, with the differing literal comparisons recorded
+separately. Two retained physical-crown occurrences agree literally as well.
+Raw-prescription drift and six ownership or metadata corruptions remain
+rejected. This fixture does not certify the separate opt-in Wood-hook consumer.
+
+The full nested CLI case passes in 427.341 seconds. Its two points, three
+routes and five repeats yield thirty emitted values; repeats are identical
+within each route. An independent review verifies every direct/projected pair
+against the stricter binary64-epsilon floor of the original accuracy bound.
+This numerical check supplements the separate exact source certificates.
+
+The twenty-six-input mass case passes in 408.745 seconds. Independent review
+checks all twelve bare and fourteen proper inputs in order, all 104 literal
+projector attachments, and all twenty-six exact zero finite mass projections
+without auxiliary-scale substitution. The final scalar coefficients agree
+exactly with the independently specified $z_2+w_1 z_1$ reference above.
+The matched-rest, formal-dimensional SU(3) reference scope remains unchanged.
+
+The fresh 23477-byte scalar payload, numerical consumer and pinned runtime
+launcher match the qualified nine-kernel input exactly. All forty-seven
+retained numerical reference checks are independently rechecked; the backend
+integrals are reused without a new numerical integration. The fresh physical
+finite-addback case passes all eighteen density cells, with an independent
+review of their emitted distances and coupling-rounding control. Individual
+Born and separate on/off inputs are not emitted by this artifact, so that
+review does not independently reconstruct the Born-density oracle.
+
+Strict Clippy, formatting, documentation checks and canonical CI regeneration
+pass. Generated CI configuration is unchanged and implementation CI remains
+disabled. Timings and sampled memory are shared-host diagnostics, not controlled
+route rankings. The inclusive Monte Carlo result remains historical; its
+separate full-main case is retained but was not rerun for this rebase. Public
+complete-forest admission, complete two-loop emitted/R2 matching, the two-loop
+field pole, and the larger scaling and performance matrices remain outstanding.
 
