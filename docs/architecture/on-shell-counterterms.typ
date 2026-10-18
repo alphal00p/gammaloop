@@ -2516,3 +2516,26 @@ four-dimensional/R2 bridge. The nine-kernel numerical result above remains
 historical on its stated source: no new scalar-input bridge or backend run is
 claimed here. The held main-only geometry and performance inventories also
 remain unexecuted on this Indexed checkpoint.
+
+=== Complete proper-prefix sum and first actual overall input
+
+The subsequent private proof source `544f1e0b` passed six affected and new cases
+before its actual D09 parent test. The pure-gauge child proof combines the
+native ghost, gluon and tadpole sources before requiring a transverse pole;
+its inverse crown map retains the complete tensor value, including the ordered
+ports of zero. Together with the quark, vertex and six fermion-bubble records,
+the complete fourteen-occurrence proper-prefix sum agrees exactly with the
+independent mass reference through the finite coefficient. The unchanged Ward
+and D03 controls reuse their exact `89e6043c` passes; their bodies and shared
+finite-row owner are byte-identical. No new external numerical backend run is
+part of this step.
+
+The D09 test then evaluates the actual parent operator and analytic integral on
+both its bare source and its completed OS child, using the same retained graph,
+child, settings and frozen sectors. Both finite mass projections vanish after
+formal-dimensional contraction and Laurent truncation, without substituting
+auxiliary scales. The native log records both input-completion certificates;
+the test passed in 26.146 seconds under the unchanged 240-second limit. This is
+a two-input qualification. The full twenty-six-input mass condition, public
+mixed-scheme admission, and the emitted four-dimensional/R2 comparison remain
+separate gates.
