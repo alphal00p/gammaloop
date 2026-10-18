@@ -818,6 +818,188 @@ fn native_qcd_mass_projections_certify_all_one_and_two_loop_sources() -> Result<
     Ok(())
 }
 
+impl MassProjection {
+    /// Serialize only the certified finite scalar projection and its native poles.
+    fn numeric_input(&self, diagram: &FeynmanDiagram, model: &Model) -> Result<serde_json::Value> {
+        use serde_json::json;
+        use symbolica_utils::AtomPrintExt;
+        let family = &self.family;
+        let momentum_names = family
+            .loop_momenta()
+            .iter()
+            .enumerate()
+            .map(|(index, momentum)| {
+                (
+                    momentum.clone(),
+                    Atom::var(symbol!(&format!("native_mass_reference::k{index}"))),
+                )
+            })
+            .chain(family.external_momenta().iter().map(|momentum| {
+                (
+                    momentum.clone(),
+                    Atom::var(symbol!("native_mass_reference::p")),
+                )
+            }))
+            .collect::<Vec<_>>();
+        let momentum_rules = momentum_names
+            .iter()
+            .map(|(native, named)| Replacement::new(native.to_pattern(), named.to_pattern()))
+            .collect::<Vec<_>>();
+        let mut coordinates = Vec::new();
+        let mut coordinate_rules = Vec::new();
+        for (index, product) in family.scalar_products().iter().enumerate() {
+            let variable = Atom::var(symbol!(&format!("native_mass_reference::sp{index}")));
+            let mut pair = None;
+            for (i, (left, left_name)) in momentum_names.iter().enumerate() {
+                for (right, right_name) in momentum_names.iter().skip(i) {
+                    if family.kinematics().scalar_product(left, right)? == *product {
+                        ensure!(
+                            pair.is_none(),
+                            "scalar coordinate must have a unique momentum pair"
+                        );
+                        pair = Some((
+                            left_name.to_bare_ordered_string(),
+                            right_name.to_bare_ordered_string(),
+                        ));
+                    }
+                }
+            }
+            let (left, right) =
+                pair.ok_or_else(|| eyre!("scalar coordinate has no exact momentum pair"))?;
+            coordinates.push(json!({"variable": variable.to_bare_ordered_string(), "left": left, "right": right}));
+            coordinate_rules.push(Replacement::new(
+                product.to_pattern(),
+                variable.to_pattern(),
+            ));
+        }
+        let cf = Atom::var(symbol!("native_mass_reference::CF"));
+        let ca = Atom::var(symbol!("native_mass_reference::CA"));
+        let tf = Atom::var(symbol!("native_mass_reference::TF"));
+        let color_rows = self
+            .colors
+            .iter()
+            .map(|(color, coefficient)| {
+                let channel = if *color == cf {
+                    "CF"
+                } else if *color == cf.pow(2) {
+                    "CF2"
+                } else if *color == &cf * &ca {
+                    "CFCA"
+                } else if *color == &cf * &tf {
+                    "CFTF"
+                } else {
+                    return Err(eyre!("uncertified color channel"));
+                };
+                Ok(json!({"channel": channel, "coefficient": coefficient.to_bare_ordered_string()}))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let propagators = self.poles.iter().map(|(edge, momentum, mass_squared, polynomial)| {
+            ensure!(mass_squared.is_zero() || mass_squared.is_one(), "reference masses must be zero or one");
+            Ok(json!({
+                "edge": edge,
+                "momentum": momentum.replace_multiple(&momentum_rules).to_bare_ordered_string(),
+                "mass_squared": mass_squared.to_bare_ordered_string(),
+                "power": 1,
+                "polynomial": polynomial.replace_multiple(&coordinate_rules).to_bare_ordered_string(),
+            }))
+        }).collect::<Result<Vec<_>>>()?;
+        let light_flavors = diagram
+            .edges()
+            .filter(|(_, _, edge)| edge.external.is_none() && !edge.is_dummy)
+            .map(|(_, _, edge)| {
+                model
+                    .particle_by_id(edge.particle)
+                    .map(|p| p.pdg_code.abs())
+            })
+            .collect::<Result<BTreeSet<_>, _>>()?
+            .into_iter()
+            .filter(|pdg| (1..=5).contains(pdg))
+            .collect::<Vec<_>>();
+        ensure!(light_flavors.len() <= 1);
+        let loops = family.loop_momenta().len();
+        Ok(json!({
+            "name": diagram.name(),
+            "loops": loops,
+            "light_flavor": light_flavors.first(),
+            "integral_zero_certified": self.scaleless,
+            "color_rows": color_rows,
+            "loop_momenta": momentum_names[..loops].iter().map(|(_, n)| n.to_bare_ordered_string()).collect::<Vec<_>>(),
+            "external_momenta": momentum_names[loops..].iter().map(|(_, n)| n.to_bare_ordered_string()).collect::<Vec<_>>(),
+            "scalar_products": coordinates,
+            "propagators": propagators,
+        }))
+    }
+}
+
+#[test]
+fn native_two_loop_qcd_bare_mass_matches_primary_reference() -> Result<()> {
+    use color_eyre::eyre::WrapErr;
+    use std::{
+        fs,
+        process::Command,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let sources = reference
+        .certified_projections()?
+        .iter()
+        .map(|(diagram, projected)| projected.numeric_input(diagram, &reference.model))
+        .collect::<Result<Vec<_>>>()?;
+    let directory = std::env::temp_dir().join(format!(
+        "gammaloop-os-mass-reference-{}-{}",
+        std::process::id(),
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+    ));
+    fs::create_dir(&directory)?;
+    let input = directory.join("native-sources.json");
+    let script = directory.join("os_mass_reference.py");
+    let output = directory.join("results");
+    fs::write(
+        &input,
+        serde_json::to_vec_pretty(&serde_json::json!({"sources": sources}))?,
+    )?;
+    fs::write(
+        &script,
+        include_str!("../../../tests/resources/os_mass_reference.py"),
+    )?;
+    let python = std::env::var("PYTHON_BIN_PATH")
+        .unwrap_or_else(|_| "gammaloop-os-mass-reference-python".to_owned());
+    let log = fs::File::create(directory.join("backend.log"))?;
+    let status = Command::new(python)
+        .arg(&script)
+        .arg(&input)
+        .arg(&output)
+        .stdout(log.try_clone()?)
+        .stderr(log)
+        .status()
+        .wrap_err_with(|| {
+            format!(
+                "failed to launch pinned reference backend; inputs retained at {}",
+                directory.display()
+            )
+        })?;
+    ensure!(
+        status.success(),
+        "independent two-loop bare-mass reference failed; retained inputs and backend log at {}",
+        directory.display()
+    );
+    let summary: serde_json::Value =
+        serde_json::from_slice(&fs::read(output.join("summary.json"))?)?;
+    ensure!(summary["one_loop_anchors_passed"] == true);
+    ensure!(summary["bare_four_color_reference_passed"] == true);
+    ensure!(summary["independent_insertions_reconstruct_Zm_reference"] == true);
+    ensure!(summary["SU3_reference_passed"] == true);
+    ensure!(summary["production_OS_forest_integrated_condition_evaluated"] == false);
+    crate::debug_tags!(#uv, #integrated, #summary;
+        stage = "native_two_loop_qcd_bare_mass_reference",
+        file.reference = %summary,
+        "Independent bare reference and insertions agree; production forest remains a separate condition"
+    );
+    fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
 impl QcdMassReference {
     // This checks valid standalone MUV children, never the guarded OS parent.
     fn certify_integrated_qg_children(

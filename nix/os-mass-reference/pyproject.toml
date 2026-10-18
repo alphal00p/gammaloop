@@ -1,0 +1,14 @@
+[project]
+name = "gammaloop-os-mass-reference-runtime"
+version = "0.0.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "pysecdec==1.6.6",
+  "numpy==2.5.4",
+  "sympy==1.14.0",
+  "mpmath==1.3.0",
+  "nest-asyncio==1.6.0",
+]
+
+[tool.uv]
+package = false

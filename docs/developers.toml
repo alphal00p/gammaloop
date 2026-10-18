@@ -461,7 +461,11 @@ end_anchor = "                coefficient = Atom::from(integrand_vakint).replace
 # algebra, then scalar Laurent evaluation. This range owns the phase ordering required
 # by evanescent coefficients.
 # Reviewed 2026-10-17: Scalar stage timers preserve tensor projection, native dimensional algebra and scalar backend evaluation order.
-digest = "46b735343d9c8be6b69c1bf738fda6a0733a2f4c"
+# Reviewed 2026-10-20: a cfg(test) observer borrows completed angular terms
+# before scalar-master evaluation, restoring their reversible native ports only
+# in a checked copy. Projection, dimensional algebra, Laurent depth and settings
+# remain owned by the same production sequence; no coefficient is replaced.
+digest = "6c5428121e1a615f25febf802b11aac36ce2fe58"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"
@@ -2095,7 +2099,18 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # plus FeynKit's installed_squared_amplitude_display.py to compile-time test inputs.
 # The documented source ownership and producer/runtime boundaries are unchanged.
 # Reviewed 2026-11-19 against 27ba0987: Parameter binding fixtures are owned by the core test source tier. Test and lint retain them; production and docs Cargo exclude them.
-digest = "feed8d8226f0818aedb8701736d1f189e89e7c22"
+# Reviewed 2026-10-18: The native mass reference embeds its pinned Python consumer
+# in the core test source. Its locked external runtime is supplied by a separate
+# mandatory full-main consumer; ordinary source and runtime owners are unchanged.
+# Reviewed 2026-10-20: rebase retains the latest UFO metadata helper and
+# STIX runtime inputs together with OS reference compile-time fixtures; package
+# source ownership and producer/runtime partitioning remain unchanged.
+# Reviewed 2026-10-20: the emitted D09 field checks share an embedded JSON
+# reference with the Python owner. It is a compile-time test input; the existing
+# dedicated Python runtime and production/cache ownership are unchanged.
+# Reviewed 2026-11-16: the FeynKit replay retains both OS reference fixtures
+# in the core compile-time inputs alongside the current rendering and UFO owners.
+digest = "48cef80b1db3e1be0c53037e4d94a87ff1a16ffd"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
