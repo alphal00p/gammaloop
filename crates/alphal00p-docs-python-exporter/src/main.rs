@@ -151,7 +151,7 @@ fn validate_runtime_stub_surface(
     let stub = if module_name == "symbolica.community.graph" {
         // Macro-generated classes need the same name normalization as the shipped stub.
         pyo3::Python::attach(|py| -> pyo3::PyResult<BTreeSet<String>> {
-            let source = linnet_py::canonical_stub()
+            let source = linnet_py::canonical_stub(module)
                 .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
             let ast = py.import("ast")?;
             let mut names = BTreeSet::new();
@@ -200,7 +200,7 @@ fn render(
         #[cfg(feature = "feynkit")]
         "feynkit-community" => Ok(feynkit_py::FeynkitModule::stub_source(module)),
         #[cfg(feature = "linnet")]
-        "linnet-graph" => Ok(linnet_py::canonical_stub()?),
+        "linnet-graph" => Ok(linnet_py::canonical_stub(module)?),
         _ => Ok(module.to_string()),
     }
 }
@@ -595,7 +595,9 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_package_and_docs_share_the_typed_stub_info_surface() {
-        let canonical = linnet_py::canonical_stub().unwrap();
+        let (module_name, info) = super::gather("linnet-graph").unwrap();
+        let module = info.modules.get(module_name).unwrap();
+        let canonical = linnet_py::canonical_stub(module).unwrap();
         assert_eq!(
             canonical,
             include_str!("../../linnet-py/python/symbolica/community/graph/__init__.pyi")

@@ -197,12 +197,7 @@ _RenderSelectors: typing.TypeAlias = DrawingSelectors | None | Inherit
 
 /// Render the installed and documented Python surface from one stub inventory.
 #[cfg(feature = "python_stubgen")]
-pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
-    let info = stub_info()?;
-    let module = info
-        .modules
-        .get("symbolica.community.graph")
-        .expect("linnet StubInfo must contain the linnet module");
+pub fn canonical_stub(module: &pyo3_stub_gen::generate::Module) -> pyo3_stub_gen::Result<String> {
     let mut exports = module
         .class
         .values()
