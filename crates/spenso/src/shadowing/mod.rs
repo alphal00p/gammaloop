@@ -29,9 +29,13 @@ mod trace;
 pub mod symbolica_utils;
 
 pub use atom_conversion::IntoAtom;
-pub use collect::{COLLECT, Collectable, TensorCollectExt, TensorCollectFilter};
-pub(crate) use projectors::expand_chain_like_projector;
-pub use projectors::{ANTISYM, CYCLIC, ProjectorExpander, SYM, antisym, cyclic, sym};
+pub use collect::{
+    COLLECT, Collectable, TensorCollectExt, TensorCollectFilter, TermLeaf, TermTape,
+};
+pub use projectors::{
+    ANTISYM, CYCLIC, FactorProjector, ProjectorExpander, SYM, antisym, cyclic, sym,
+};
+pub(crate) use projectors::{expand_chain_like_projector, projector_factor};
 pub use trace::{trace, trace_factor_views, trace_parts, trace_sym};
 
 initialize!(|| {
@@ -44,7 +48,9 @@ initialize!(|| {
         let _ = ETS.force_in_initializer().delta;
         let _ = ETS.force_in_initializer().metric;
         let _ = SPENSO_TAG.force_in_initializer().bracket;
-        let _ = AIND_SYMBOLS.force_in_initializer().cind;
+        let _ = AIND_SYMBOLS.force_in_initializer().scope;
+        #[cfg(test)]
+        crate::network::parsing::scalar_batch_tests::initialize_occupied_result_head();
     });
 });
 

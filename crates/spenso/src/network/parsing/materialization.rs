@@ -500,8 +500,373 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind, View> SchoonschipMaterializer
     }
 }
 
+impl SlotMatcher {
+    fn is_structured_scalar<Aind: AbsInd + ParseableAind>(&mut self, value: AtomView<'_>) -> bool {
+        OrderedStructure::<LibraryRep, Aind>::syntactic_structure_from_atom(value, self)
+            .is_ok_and(|structure| structure.canonical().is_scalar())
+    }
+
+    /// Recognize one inner product's unique compact axis on each operand.
+    /// Metrics may retain explicit spectator ports; scalar dots require rank-one
+    /// operands. This observation does not allocate indices or construct components.
+    #[allow(clippy::type_complexity)]
+    pub fn compact_inner_product_parts<'node, Aind: AbsInd + ParseableAind>(
+        &mut self,
+        value: FunView<'node>,
+    ) -> Option<(
+        AtomView<'node>,
+        AtomView<'node>,
+        Representation<LibraryRep>,
+        Representation<LibraryRep>,
+    )> {
+        if !(value.get_symbol() == self.metric() || value.get_symbol() == self.tags().dot) {
+            return None;
+        }
+
+        let mut args = value.iter();
+        let (lhs, rhs) = (args.next()?, args.next()?);
+        if args.next().is_some() {
+            return None;
+        }
+
+        let lhs_rep = self.compact_vector_rep::<Aind>(lhs)?;
+        let rhs_rep = self.compact_vector_rep::<Aind>(rhs)?;
+        if !lhs_rep.matches(&rhs_rep)
+            || (value.get_symbol() == self.tags().dot
+                && (!self.is_structured_scalar::<Aind>(lhs)
+                    || !self.is_structured_scalar::<Aind>(rhs)))
+        {
+            return None;
+        }
+
+        Some((lhs, rhs, lhs_rep, rhs_rep))
+    }
+
+    /// Infer the unique compact axis carried by a shorthand atom.
+    ///
+    /// Tensor-tagged functions expose a compact representation through exactly
+    /// one direct representation argument. Scalar products, unary broadcasts,
+    /// projectors, and sums preserve it when they contain one compatible vector.
+    /// The remaining product must have a scalar interface; its factors may
+    /// carry internal contractions.
+    fn compact_vector_rep<Aind: AbsInd + ParseableAind>(
+        &mut self,
+        value: AtomView<'_>,
+    ) -> Option<Representation<LibraryRep>> {
+        match value {
+            AtomView::Fun(fun) if fun.get_symbol().is_scalar() => None,
+            AtomView::Fun(fun) if fun.get_symbol().has_tag(&self.tags().broadcast) => {
+                let args = fun.iter().collect::<Vec<_>>();
+                let [argument] = args.as_slice() else {
+                    return None;
+                };
+                self.compact_vector_rep::<Aind>(*argument)
+            }
+            AtomView::Fun(fun) if self.is_projector(fun.get_symbol()) => {
+                let mut selected = None;
+                for argument in fun.iter() {
+                    if let Some(rep) = self.compact_vector_rep::<Aind>(argument)
+                        && selected.replace((argument, rep)).is_some()
+                    {
+                        return None;
+                    }
+                }
+                let (argument, rep) = selected?;
+                for candidate in fun.iter() {
+                    if candidate != argument
+                        && super::structure_inference::TensorialSyntax::is_tensorial(
+                            candidate,
+                            StrictTensorFilter::Tagged,
+                            self,
+                        )
+                        && !self.is_structured_scalar::<Aind>(candidate)
+                    {
+                        return None;
+                    }
+                }
+                Some(rep)
+            }
+            AtomView::Fun(fun)
+                if fun.get_symbol() == self.tags().chain
+                    || fun.get_symbol() == self.tags().trace =>
+            {
+                let skip = if fun.get_symbol() == self.tags().chain {
+                    2
+                } else {
+                    1
+                };
+                self.compact_vector_sequence::<Aind>(fun.iter().enumerate().skip(skip), true)
+                    .map(|(_, rep)| rep)
+            }
+            AtomView::Fun(fun) => self.compact_tensor_rep_arg::<Aind>(fun).map(|(_, rep)| rep),
+            AtomView::Add(add) => {
+                let mut reps = add
+                    .iter()
+                    .map(|value| self.compact_vector_rep::<Aind>(value));
+                let rep = reps.next()??;
+                reps.all(|candidate| candidate == Some(rep)).then_some(rep)
+            }
+            AtomView::Mul(product) => self
+                .compact_vector_sequence::<Aind>(product.iter().enumerate(), false)
+                .map(|(_, representation)| representation),
+            _ => None,
+        }
+    }
+
+    /// Locate the only compact vector in a scalar-weighted product.
+    ///
+    /// Failure to identify a compact vector does not prove that a factor is
+    /// scalar: explicit-slot tensors also have no compact representation. The
+    /// ordinary syntactic structure inference is therefore the authority for
+    /// the product of remaining factors, which can contain internal contractions.
+    /// Chain/trace words may expose explicit spectator
+    /// ports; ordinary weighted products still require scalar coefficients.
+    pub fn compact_vector_sequence<'node, Aind: AbsInd + ParseableAind>(
+        &mut self,
+        factors: impl Iterator<Item = (usize, AtomView<'node>)>,
+        allow_spectators: bool,
+    ) -> Option<(usize, Representation<LibraryRep>)> {
+        let mut compact_vector = None;
+        let mut coefficient = Vec::new();
+
+        for (position, factor) in factors {
+            if let Some(representation) = self.compact_vector_rep::<Aind>(factor) {
+                if compact_vector.is_some() {
+                    return None;
+                }
+                compact_vector = Some((position, representation));
+            } else {
+                coefficient.push(factor);
+            }
+        }
+
+        let structure = OrderedStructure::<LibraryRep, Aind>::syntactic_structure_from_atom(
+            Atom::mul_many(coefficient).as_view(),
+            self,
+        )
+        .ok()?;
+        if !allow_spectators && !structure.canonical().is_scalar() {
+            return None;
+        }
+        compact_vector
+    }
+
+    /// Locate the compact representation argument of one tensor function.
+    ///
+    /// A compact tensor function is tensor-tagged, is not itself a representation,
+    /// metric or dot product, and has exactly one direct representation argument.
+    /// Explicit slots are spectators: only that unique unindexed axis is replaced.
+    fn compact_tensor_rep_arg<Aind: AbsInd + ParseableAind>(
+        &mut self,
+        value: FunView<'_>,
+    ) -> Option<(usize, Representation<LibraryRep>)> {
+        if value.get_symbol().is_scalar()
+            || !value.get_symbol().has_tag(&self.tags().tensor)
+            || value.get_symbol() == self.metric()
+            || value.get_symbol() == self.tags().dot
+        {
+            return None;
+        }
+
+        if self.is_representation(value.as_view()) {
+            return None;
+        }
+
+        let mut rep_args = value.iter().enumerate().filter_map(|(position, arg)| {
+            if self.parse::<LibraryRep, Aind>(arg).is_ok() {
+                None
+            } else {
+                self.compact_rep_pattern_match(arg)
+                    .map(|rep| (position, rep))
+            }
+        });
+
+        let result = rep_args.next()?;
+        // Consume all arguments, including custom index readers, in the same
+        // order as the previous collection into a vector.
+        (rep_args.count() == 0).then_some(result)
+    }
+
+    /// Match one argument against the symbolic representation wildcard.
+    ///
+    /// Matching is restricted to the argument itself (`max_level = 0`) so a
+    /// nested representation inside metadata does not accidentally become the
+    /// tensor's compact slot.
+    fn compact_rep_pattern_match(
+        &mut self,
+        arg: AtomView<'_>,
+    ) -> Option<Representation<LibraryRep>> {
+        if let Ok(representation) = self.representation_from_atom(arg) {
+            return Some(representation);
+        }
+
+        let rep_pattern = Atom::var(self.tags().rep_).to_pattern();
+        let settings = MatchSettings::new().max_level(0).partial(false);
+        let mut matches = arg.pattern_match(&rep_pattern, None, Some(&settings));
+        let matched = matches.next_detailed()?;
+        let rep = rep_pattern.replace_wildcards_with_matches(matched.match_stack);
+        self.representation_from_atom(rep.as_view()).ok()
+    }
+}
+
+impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
+    fn materialize_chain_endpoint(
+        &self,
+        value: AtomView<'_>,
+        label: &str,
+        mode: SchoonschipExpansionMode,
+    ) -> Result<ChainEndpoint<Aind>, String> {
+        let slot_error = match self.matcher.borrow_mut().parse::<LibraryRep, Aind>(value) {
+            Ok(slot) => {
+                return Ok(ChainEndpoint {
+                    slot,
+                    additional_factors: Vec::new(),
+                });
+            }
+            Err(error) => error,
+        };
+        if let Ok(rep) = self
+            .matcher
+            .borrow_mut()
+            .parse_representation::<LibraryRep>(value)
+        {
+            return Ok(ChainEndpoint {
+                slot: self.slot(&rep),
+                additional_factors: Vec::new(),
+            });
+        }
+        if mode.any()
+            && let Some(materialized) =
+                SchoonschipMaterializer::with_mode(self, mode).materialize_shorthand_arg(value)
+        {
+            let slot = self
+                .matcher
+                .borrow_mut()
+                .parse::<LibraryRep, Aind>(materialized.current.as_view())
+                .map_err(|error| {
+                    format!(
+                        "invalid materialized chain {label} `{}` from `{value}`: {error}",
+                        materialized.current
+                    )
+                })?;
+            return Ok(ChainEndpoint {
+                slot,
+                additional_factors: materialized.additional_factors,
+            });
+        }
+        Err(format!("invalid chain {label} `{value}`: {slot_error}"))
+    }
+
+    /// Unfold one indexed chain using the same placeholder substitution as the
+    /// network parser, including supplied rank-one endpoints. Fresh names
+    /// remain disjoint across separate conversions.
+    /// Unrelated arithmetic and compact spectator ports stay opaque.
+    pub fn materialize_indexed_chain(&self, value: FunView<'_>) -> Result<Atom, String> {
+        // A projector groups ordered matrix factors, not one matrix with shared
+        // endpoints. Expand its normalized permutations before wiring each chain.
+        if let Some(expanded) = shadowing::expand_chain_like_projector(value.as_view()) {
+            let mut error = None;
+            let expression = expanded.replace_map(|atom, _, output| {
+                let AtomView::Fun(chain) = atom else { return };
+                if chain.get_symbol() != SPENSO_TAG.chain {
+                    return;
+                }
+                match self.materialize_indexed_chain(chain) {
+                    Ok(indexed) => **output = indexed,
+                    Err(reason) => error = Some(reason),
+                }
+            });
+            return error.map_or(Ok(expression), Err);
+        }
+        if value
+            .iter()
+            .skip(2)
+            .any(|factor| shadowing::projector_factor(factor).is_some())
+        {
+            return Err("cannot expand normalized chain projector".into());
+        }
+        let mut arguments = value.iter();
+        let start = arguments.next().ok_or("chain requires two endpoints")?;
+        let end = arguments.next().ok_or("chain requires two endpoints")?;
+        let ChainEndpoint {
+            slot: mut left,
+            additional_factors: start_factors,
+        } = self.materialize_chain_endpoint(start, "start", SchoonschipExpansionMode::full())?;
+        let ChainEndpoint {
+            slot: end_slot,
+            additional_factors: end_factors,
+        } = self.materialize_chain_endpoint(end, "end", SchoonschipExpansionMode::full())?;
+        // Bare representations remain unresolved public ports when unfolding.
+        // Their temporary slots only establish the channel and internal wiring.
+        let start_atom = if self
+            .matcher
+            .borrow_mut()
+            .compact_representation(start)
+            .is_some()
+        {
+            start.to_owned()
+        } else {
+            left.to_atom()
+        };
+        let end_atom = if self
+            .matcher
+            .borrow_mut()
+            .compact_representation(end)
+            .is_some()
+        {
+            end.to_owned()
+        } else {
+            end_slot.to_atom()
+        };
+        let endpoints = start_factors.into_iter().chain(end_factors);
+        if !left.rep.matches(&end_slot.rep) {
+            return Err("incompatible chain endpoints".into());
+        }
+        if arguments.len() == 0 {
+            let metric = FunctionBuilder::new(ETS.metric)
+                .add_arg(start_atom)
+                .add_arg(end_atom)
+                .finish();
+            return Ok(Atom::mul_many(endpoints.chain([metric])));
+        }
+        let count = arguments.len();
+        let factors = arguments.enumerate().map(|(position, factor)| {
+            let right = if position + 1 == count {
+                end_slot.dual()
+            } else {
+                left.rep.slot(self.fresh_index())
+            };
+            let factor = ChainExpansion::replace_placeholders(
+                factor,
+                &if position == 0 {
+                    start_atom.clone()
+                } else {
+                    left.to_atom()
+                },
+                &if position + 1 == count {
+                    end_atom.clone()
+                } else {
+                    right.dual().to_atom()
+                },
+                &mut self.matcher.borrow_mut(),
+            );
+            left = right;
+            factor
+        });
+        Ok(Atom::mul_many(endpoints.chain(factors)))
+    }
+
+    /// Open only this compact inner product using the operation's reserved indices.
+    /// Callers select the algebraic domain; unrelated arguments are not traversed.
+    pub fn materialize_inner_product(&self, value: FunView<'_>) -> Option<Atom> {
+        SchoonschipMaterializer::with_mode(self, SchoonschipExpansionMode::none())
+            .compact_inner_product(value)
+            .map(SchoonschipMaterialization::into_expression)
+    }
+}
+
 impl<
-    'a,
+    'src,
     Sc,
     T: HasStructure + TensorStructure,
     K: Clone + Display + Debug,
@@ -509,56 +874,65 @@ impl<
     Aind: AbsInd + DummyAind + ParseableAind,
 > Network<Str, K, Symbol, Aind>
 where
-    Sc: for<'r> TryFrom<AtomView<'r>> + Clone,
-    TensorNetworkError<K, Symbol>: for<'r> From<<Sc as TryFrom<AtomView<'r>>>::Error>,
+    Sc: TryFrom<AtomView<'src>> + TryFrom<Atom> + Clone,
+    TensorNetworkError<K, Symbol>:
+        From<<Sc as TryFrom<AtomView<'src>>>::Error> + From<<Sc as TryFrom<Atom>>::Error>,
 {
     #[allow(clippy::result_large_err)]
-    pub(super) fn is_shorthand_function(value: FunView<'a>) -> bool {
+    pub(super) fn is_shorthand_function(
+        value: FunView<'_>,
+        state: &ParseState<Aind, AtomView<'_>>,
+    ) -> bool {
         let symbol = value.get_symbol();
-        symbol == SPENSO_TAG.chain
-            || symbol == SPENSO_TAG.trace
-            || symbol == SPENSO_TAG.dot
-            || SchoonschipMaterializer::<Aind>::contains_schoonschip_shorthand(value.as_view())
+        symbol == state.matcher.borrow().tags().chain
+            || symbol == state.matcher.borrow().tags().trace
+            || symbol == state.matcher.borrow().tags().dot
+            || SchoonschipMaterializer::with_mode(state, SchoonschipExpansionMode::full())
+                .contains_schoonschip_shorthand(value.as_view())
     }
 
     #[allow(clippy::result_large_err)]
-    pub(super) fn materialize_shorthand<S, Lib, FunLib>(
-        value: FunView<'a>,
-        state: ParseState<Aind>,
+    pub(super) fn materialize_shorthand<'node, S, Lib, FunLib>(
+        construction: &mut Construction<Str, K, Aind>,
+        value: FunView<'node>,
+        state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
+    ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let symbol = value.get_symbol();
-        let root_chain_disabled =
-            symbol == SPENSO_TAG.chain && !settings.shorthand_parsing.expands_chain();
-        let root_trace_disabled =
-            symbol == SPENSO_TAG.trace && !settings.shorthand_parsing.expands_trace();
+        let root_chain_disabled = symbol == state.matcher.borrow().tags().chain
+            && !settings.shorthand_parsing.expands_chain();
+        let root_trace_disabled = symbol == state.matcher.borrow().tags().trace
+            && !settings.shorthand_parsing.expands_trace();
 
-        if ((symbol == SPENSO_TAG.chain && !root_chain_disabled)
-            || (symbol == SPENSO_TAG.trace && !root_trace_disabled))
+        if ((symbol == state.matcher.borrow().tags().chain && !root_chain_disabled)
+            || (symbol == state.matcher.borrow().tags().trace && !root_trace_disabled))
             && let Some(expanded) = shadowing::expand_chain_like_projector(value.as_view())
         {
             return Self::try_from_view_impl(
+                construction,
                 expanded.as_view(),
-                state,
+                state.materialized(),
                 library,
                 function_library,
                 settings,
+                |value| AtomOrView::Atom(value.to_owned()),
             );
         }
 
-        if symbol == SPENSO_TAG.chain && !root_chain_disabled {
+        if symbol == state.matcher.borrow().tags().chain && !root_chain_disabled {
             return Self::materialize_chain_shorthand(
+                construction,
                 value,
                 state,
                 library,
@@ -567,8 +941,9 @@ where
             );
         }
 
-        if symbol == SPENSO_TAG.trace && !root_trace_disabled {
+        if symbol == state.matcher.borrow().tags().trace && !root_trace_disabled {
             return Self::materialize_trace_shorthand(
+                construction,
                 value,
                 state,
                 library,
@@ -578,7 +953,8 @@ where
         }
 
         let has_schoonschip_shorthand =
-            SchoonschipMaterializer::<Aind>::contains_schoonschip_shorthand(value.as_view());
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full())
+                .contains_schoonschip_shorthand(value.as_view());
         let schoonschip_mode = settings
             .shorthand_parsing
             .schoonschip_expansion()
@@ -589,32 +965,47 @@ where
             schoonschip_mode
         };
         let materialized = if effective_schoonschip_mode.any() {
-            SchoonschipMaterializer::<Aind>::with_mode(&state, effective_schoonschip_mode)
-                .materialize_shorthand(value.as_view())
+            SchoonschipMaterializer::<Aind, _>::with_mode(&state, effective_schoonschip_mode)
+                .materialize_shorthand_root(value.as_view())
+                .map(SchoonschipMaterialization::into_expression)
         } else {
-            value.as_view().to_owned()
+            None
         };
 
-        if materialized == value.as_view().to_owned() {
+        if materialized
+            .as_ref()
+            .is_none_or(|atom| atom.as_view() == value.as_view())
+        {
             // The atom rewriter is at a fixed point; recurse only after an actual rewrite.
             if root_chain_disabled || root_trace_disabled || has_schoonschip_shorthand {
                 return Self::as_inferred_leaf::<S, Lib, FunLib>(
+                    construction,
                     value.as_view(),
-                    super::StructureInferenceMode::Fast,
+                    &state,
                     library,
                     function_library,
                     settings,
+                    retain,
                 );
             }
-            return Self::parse_regular_function_leaf::<S, Lib>(value, library);
+            return Self::parse_regular_function_leaf::<S, Lib, FunLib>(
+                construction,
+                value,
+                &state,
+                library,
+                retain,
+            );
         }
 
+        let materialized = materialized.expect("changed shorthand has an owned expression");
         Self::try_from_view_impl(
+            construction,
             materialized.as_view(),
-            state,
+            state.materialized(),
             library,
             function_library,
             settings,
+            |value| AtomOrView::Atom(value.to_owned()),
         )
     }
 

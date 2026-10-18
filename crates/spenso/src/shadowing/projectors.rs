@@ -206,7 +206,7 @@ pub(crate) fn expand_chain_like_projector(arg: AtomView) -> Option<Atom> {
     None
 }
 
-fn projector_factor(factor: AtomView) -> Option<(Atom, Symbol, Vec<Atom>)> {
+pub(crate) fn projector_factor(factor: AtomView) -> Option<(Atom, Symbol, Vec<Atom>)> {
     if let Some((projector_symbol, factors)) = projector_parts(factor) {
         return Some((Atom::num(1), projector_symbol, factors));
     }
