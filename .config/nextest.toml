@@ -146,6 +146,13 @@ filter = "test(/(^|::)epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv
 test-group = "integration"
 threads-required = 10
 
+# Nextest isolates tests in separate processes, so the public Typst fixture
+# cache does not share its expensive render across these SVG probes. Bound
+# concurrent renderer children using the existing resource group.
+[[profile.default.overrides]]
+filter = "package(clinnet) and binary(=public_typst_behavior)"
+test-group = "memory-intensive"
+
 [[profile.default.overrides]]
 filter = "test(heavy) or test(memory) or test(large)"
 test-group = "memory-intensive"

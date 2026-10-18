@@ -125,6 +125,7 @@ Expression, float, complex, or list
 Notes
 -----
 Coordinates follow axes, the current component view; structure.axes is a canonical signature.
+The canonical storage-axis order is not exposed by component indexing.
 
 Examples
 --------
@@ -158,6 +159,7 @@ None
 Notes
 -----
 Coordinates follow axes, the current component view; structure.axes is a canonical signature.
+The canonical storage-axis order is not exposed by component indexing.
 
 Examples
 --------

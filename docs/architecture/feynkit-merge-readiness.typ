@@ -4,7 +4,8 @@
 
 === Current owned-product checkpoint 2f556851
 
-Frozen source `2f556851` passes all 5,690 Rust tests, retaining the exact
+Frozen source `2f556851` passes all 5,690 tests selected by the recorded Cargo
+workspace archive, retaining the exact
 `8272f78a` test inventory with 128 unchanged skips, no failures and no timeouts.
 The fresh JUnit run identity and all 3,502 tracked source entries are verified.
 Strict workspace Clippy, formatting, documentation checks covering all 74
@@ -87,8 +88,8 @@ The audit is retained at
 `target/fully-indexed/owned-products/performance-final-2f556851/aggregate-1/report.json`,
 with its final source guard and ownership-control audit. The bounded control is
 `target/fully-indexed/owned-products/topology-cost-diagnostic-1/analysis.json`.
-This publication record changes documentation only above the frozen measured
-source; Rust, tests and performance inputs remain unchanged.
+The `8959f063` publication changed documentation only above the frozen measured
+source; its Rust, tests and performance inputs were unchanged.
 
 
 Receipts are retained under `target/fully-indexed/owned-products`: the full
@@ -98,13 +99,61 @@ output verification are in `ci-upload-2` and
 `ci-output-verification-1/verification.json`. The implementation and prior
 qualification history follow separately.
 
+=== Postpublication NixCI failure at 8959f063
+
+The remote NixCI suite at published `8959f063` failed. Its retained status
+snapshot has three failed run records: one Clinnet runtime and two Spenso-group
+runs with the same Spynso3 assertion. Seven other records are cancelled,
+including documentation publication, doctests, core/docs/integration runtimes,
+a later Clinnet run and the aggregate completion check. Cancelled records do not
+establish either success or an additional test failure. The separate GitHub
+readiness workflow intentionally stopped before checkout because the non-draft
+PR lacked `final-review`; that label gate does not explain the NixCI runtime
+failures.
+
+The 5,690-test local result above covers the recorded Cargo workspace archive,
+not every feature combination selected by NixCI. Its actual JUnit inventory
+contains no `tests::tensor_indexing_stubs_document_logical_order` case. That
+case is conditional on `python_stubgen`. Nix's per-package feature owner also
+includes incoming dependency feature requests: the documentation Python exporter
+requests Spynso3's stub-generation feature. The remote Spynso3 run therefore
+executes the existing assertion that generated indexing documentation states
+both logical row-major order and that canonical storage-axis order is not
+exposed. The shared indexing-documentation macro omitted the latter contract.
+The repair adds that documentation; the assertion stays unchanged.
+
+Clinnet ran the same 38-test inventory remotely, with 35 passes and three
+failures before the SVG assertions. The three Typst children returned
+unsuccessful status with blank output; the renderer's old error omitted their
+exit status. All 38 cases passed in the local four-worker run. The remote owner
+allowed 16 workers, and independent public-fixture tests launch separate Typst
+compilations. Resource contention is a hypothesis, not an established OOM or
+signal diagnosis. The repair includes `ExitStatus` in the existing
+error and assigns the `public_typst_behavior` binary to the existing
+`memory-intensive` group, capped at two concurrent tests. Test selection,
+assertions, expected output, timeout and retry policies remain unchanged.
+
+Repair qualification uses the full canonical `just ci-checks` owner after CI
+regeneration and formatting. This exercises Nix's actual per-package runtime
+features and rendering policy; another workspace-default Cargo sweep cannot
+substitute for that coverage. Execution results belong to their exact frozen
+source and retained receipts. The earlier successful cache upload establishes
+producer preparation, not runtime success. The `2f556851` correctness and
+performance receipts remain historical: ten performance passes and three
+inconclusive cases are not relabelled by this repair.
+
+Evidence is retained under `target/fully-indexed/ci-failure-8959f063`:
+`nixci/suite.json` and the Spenso/Clinnet logs, `clinnet-review/analysis.json`,
+`validation-plan.json` and `readiness/summary.json`.
+
 The explicit-index continuation follows checkpoint `87b1d81f`, whose 105
 selected CI outputs were verified and uploaded through the canonical workflow.
 That checkpoint's test and timing evidence remains tied to its own source.
 
 === Indexed checkpoint 8272f78a
 
-Frozen combined source `8272f78a` passes all 5,690 Rust tests, with 128 unchanged
+Frozen combined source `8272f78a` passes all 5,690 tests selected by its Cargo
+workspace archive, with 128 unchanged
 skips, no failures and no timeouts. Every prior test identity and all new controls
 are retained; exact source guards and fresh JUnit identities are verified.
 Strict workspace Clippy, formatting, documentation checks and the normal Nix CLI
