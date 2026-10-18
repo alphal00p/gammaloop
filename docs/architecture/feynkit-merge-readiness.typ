@@ -227,6 +227,18 @@ staged lock and unchanged Rust sources using the pinned toolchain. That staging
 check does not regenerate prebuilt assets or certify the applied source;
 post-application checks and full-site qualification remain separate.
 
+Applied checkpoint `e8d05d53` passes the existing three-lock feature-isolation
+guard, both locked offline metadata checks and the pinned-toolchain Wasm check
+for both Tydenso libraries. Its combined Idenso HTML/PDF render gets past the
+duplicate-label boundary, then the existing generated-link validator reports
+four absent historical JSON records and a malformed relative link to an
+existing performance note. The source-link helper now addresses that note.
+The unavailable local JSON artifacts are identified explicitly in the chapter,
+with its historical figures, methods and checkpoint names retained; current
+benchmark drivers remain linked. No raw record is fabricated and link
+validation stays enabled. This failed focused attempt does not qualify the
+complete site; its source and lock guards pass unchanged.
+
 These repairs change no source-level numerical algorithm, indexed API or
 state format 21. They establish no performance improvement or executable
 equality, and do not resolve any historical inconclusive gate. The successful
@@ -256,6 +268,10 @@ is recorded in `doctest-401-review/summary.json`, `canonical-ci-checks-4`,
 is `staging-tydenso-wasm-3`. Two preceding attempts stopped before compilation
 at a read-only global Cargo build directory; the accepted attempt explicitly
 uses the task's own target and build directories.
+Applied-source receipts are `notebook-isolation-applied-1`,
+`tydenso-wasm-applied-1/summary.json` and
+`idenso-bundle-applied-1/summary.json`. The bounded cross-product link review is
+`product-source-link-sweep.json`.
 
 The explicit-index continuation follows checkpoint `87b1d81f`, whose 105
 selected CI outputs were verified and uploaded through the canonical workflow.
