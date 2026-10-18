@@ -964,9 +964,29 @@ three-route consumer passes in run `1aa340cb-2a30-4350-8c59-ed183990c98e`
 
 These source and isolated-child certificates neither admit a mixed-prescription
 parent nor prove the full integrated two-loop OS condition. The mandatory
-nonignored numerical bare reference and its pinned backend/Nix wiring remain
-a separately preserved next slice. No three-loop geometry or extensive soft
-sweep is included in this qualification.
+nonignored numerical bare reference and its pinned backend/Nix qualification
+are recorded separately in #link(<mandatory-bare-mass-numerical-reference>)[Mandatory bare-mass numerical reference]. No
+three-loop geometry or extensive soft sweep is included in this qualification.
+
+The later retained-tensor checkpoint `f02380d4` passes the exact
+four-dimensional finite-field-vertex/live-bridge pinch certificate before
+energy projection (`ada21d70`). Its pointwise test then compares all sixteen
+components of the full, local and finite contributions across three routes,
+including the independently projected pinched sibling (`6ebdf4ff`). The actual
+carriers retain their source factors, full poles and frozen child domains;
+only independent finite-component proof copies export their expressions.
+The pinched scalar roots use the same final mass and epsilon substitutions
+as the production projected builder.
+
+Three existing disjoint finite-prefix/product controls, two shared output-frame
+controls and the complete raised-LU derivative regression pass in `5ef9fa21`.
+The physical GL1 self-energy master also passes its complete-cut, two-seed soft
+control in `2e099092`. All nine cases pass the unchanged ordinary 240-second
+cap; the largest case takes 202.012 seconds. Their source and binary guards
+remain unchanged. The detailed evidence is retained under
+`target/os-feynkit/retained-tensor-os-rebase/21-22-durable/`. These exact
+reconstruction and finite pointwise controls remain separate from an inclusive
+cross-section calculation or the full production OS renormalization condition.
 
 
 == Validation graphs and support boundaries
@@ -2375,6 +2395,7 @@ independently separate field and coupling schemes; their local and analytic
 certificates above remain necessary.
 
 == Mandatory bare-mass numerical reference
+<mandatory-bare-mass-numerical-reference>
 
 The native QCD source certificates feed a separate numerical reference through
 an already closed finite scalar codec. The nonignored

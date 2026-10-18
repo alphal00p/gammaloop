@@ -2437,3 +2437,294 @@ fn complete_two_loop_rainbow_soft_limit_at_nonaxial_boost_compares_fixed_points(
     ))?
     .assert_boosted_rainbow_soft_limit(["5/4", "1/4", "1/2", "1/2"])
 }
+
+#[test]
+fn disjoint_finite_field_vertices_pinch_the_live_bridge_before_energy_projection() -> Result<()> {
+    use crate::uv::approx::integrated::Integrated;
+    use crate::uv::overlap_numerators::NumeratorJetCache;
+    use spenso::{
+        network::{library::symbolic::ETS, parsing::ParseState},
+        structure::{TensorStructure, slot::IsAbstractSlot},
+    };
+    test_initialise()?;
+    let (graph, left, right, root) = disjoint_quark_fixture()?;
+    let full = Component {
+        edges: &[2, 3, 4, 5, 6],
+        degree: 0,
+        scheme: ApproximationType::MUV,
+        on_shell: None,
+    }
+    .node(&graph)?;
+    let union = Component {
+        edges: &[2, 3, 5, 6],
+        degree: 2,
+        scheme: ApproximationType::MUV,
+        on_shell: None,
+    }
+    .node(&graph)?;
+    let settings = UVgenerationSettings {
+        generate_integrated: true,
+        add_marker: false,
+        ..Default::default()
+    };
+    let ctx = UVCtx::new(&graph, &graph.model, &settings);
+    let local_left = uv_limit(&Full4dCts::root(), &ctx, &left, &root, &left, &root)?;
+    let local_right = uv_limit(&Full4dCts::root(), &ctx, &right, &root, &right, &root)?;
+    let bridge = full.reduced_subgraph(&union);
+    assert_eq!(graph.paired_edges(&bridge), [EdgeIndex(4)]);
+    assert_eq!(
+        graph.loop_momentum_basis.edge_signatures[EdgeIndex(4)],
+        graph.loop_momentum_basis.edge_signatures[EdgeIndex(0)],
+        "the live bridge has the same signed physical momentum as the incoming line"
+    );
+    assert_eq!(
+        graph.loop_momentum_basis.edge_signatures[EdgeIndex(1)],
+        graph.loop_momentum_basis.edge_signatures[EdgeIndex(0)],
+        "the outgoing and incoming external edges have the same signed physical momentum"
+    );
+    let routing =
+        graph.uv_wrapped_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[W_.x___]);
+    // UV routing deliberately selects paired propagators. The right finite
+    // vertex instead retains external edge1; put that equivalent external
+    // carrier in the same neutral chart through the existing signed owner.
+    let external_routing = graph.normal_emr_replacement(
+        &graph.full_filter(),
+        &graph.loop_momentum_basis,
+        &[W_.x___],
+        |pair| !pair.is_paired(),
+    );
+    for slot in std::iter::once(spenso::mink!(4)).chain((0..4).map(|component| GS.cind(component)))
+    {
+        assert_eq!(
+            function!(GS.emr_mom, 1, &slot).replace_multiple(&external_routing),
+            function!(GS.emr_mom, 0, &slot),
+            "the native external routing preserves each represented or fixed component"
+        );
+    }
+    let physical = |atom: &Atom| {
+        GS.resolve_os_momenta(atom)
+            .replace_multiple(&routing)
+            .replace_multiple(&external_routing)
+            .replace(GS.dim)
+            .with(4)
+    };
+    // Match the scalar scales in the companion finite-point test. The momentum,
+    // physical mass and coupling remain symbolic throughout this certificate.
+    let finite_part = |atom: &Atom| {
+        physical(atom)
+            .replace(GS.dim_epsilon)
+            .with(0)
+            .replace(GS.integrated_loop_scale)
+            .with(1)
+            .replace(GS.m_uv_vacuum)
+            .with(20)
+            .replace(GS.mu_r_sq)
+            .with(400)
+    };
+    let bridge_numerator = physical(
+        &graph
+            .numerator(&bridge, union.subgraph())?
+            .to_d_dim(4)?
+            .color_simplify()?
+            .get_single_atom()?,
+    );
+    let terms = FourDTerm::from_view(graph.denominator(&bridge, &graph.model, |_| -1).as_view())?;
+    assert_eq!(terms.len(), 1);
+    assert_eq!(terms[0].denominators.len(), 1);
+    let bridge_pole = &terms[0].denominators[0];
+    assert_eq!(bridge_pole.source_edge, EdgeIndex(4));
+    let mass = graph[EdgeIndex(4)].mass_atom(&graph.model);
+    assert_eq!(bridge_pole.mass_squared, mass.pow(2));
+    let p = function!(GS.emr_mom, 0, spenso::mink!(4));
+    let physical_polynomial =
+        function!(spenso::network::tags::SPENSO_TAG.dot, &p, &p) - mass.pow(2);
+    assert_rational_zero(
+        "live bridge complete pole polynomial",
+        &graph,
+        &full,
+        &(physical(&bridge_pole.full_expr) - &physical_polynomial),
+        SpinReduction::SymbolicFirst,
+    )?;
+    let scalar = Atom::num((4, 3)) * Atom::from(crate::model::UFOSymbol::from("GC_11")).pow(2);
+    let finite_scalar =
+        Atom::i() * scalar / (Atom::num(16) * Atom::var(symbolica::atom::Symbol::PI).pow(2));
+    for (label, component, other, local, sibling, row, column, bridge_outer, external) in [
+        (
+            "left finite",
+            &left,
+            &right,
+            &local_left,
+            &local_right,
+            6,
+            0,
+            7,
+            0,
+        ),
+        (
+            "right finite",
+            &right,
+            &left,
+            &local_right,
+            &local_left,
+            1,
+            7,
+            6,
+            1,
+        ),
+    ] {
+        assert_eq!(
+            graph
+                .dummy_less_full_crown(component.subgraph())
+                .included_iter()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([Hedge(row), Hedge(column)])
+        );
+        assert_eq!(graph.flow(Hedge(row)), Flow::Source);
+        assert_eq!(graph.flow(Hedge(column)), Flow::Sink);
+        let vakint_settings = vakint::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 4,
+            ..settings.vakint.true_settings()
+        };
+        let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
+            .run(local, &ctx, component, &root, component, &root)?;
+        let completed_finite = integrated.physical_finite_counterterm()?;
+        let finite = finite_part(&NumeratorInterface::export(&completed_finite).0);
+        let indices = ParseState::<Aind>::default();
+        indices.reserve_indices(finite.as_view());
+        indices.reserve_indices(bridge_numerator.as_view());
+        let lorentz = spenso::mink!(4, Atom::from(indices.fresh_index()));
+        let spin = [row, column].map(|hedge| {
+            graph.underlying[Hedge(hedge)]
+                .edge_spin_slots()
+                .next()
+                .expect("one physical spinor boundary")
+                .to_atom()
+        });
+        let color = [row, column].map(|hedge| {
+            graph.underlying[Hedge(hedge)]
+                .num_indices
+                .color_indices
+                .vertex_indices
+                .external_structure_iter()
+                .next()
+                .expect("one physical vertex color boundary")
+                .to_atom()
+        });
+        let field = (function!(GS.emr_mom, 0, &lorentz)
+            * idenso::gamma!(&spin[0], &spin[1], &lorentz)
+            - &mass * function!(ETS.metric, &spin[0], &spin[1]))
+            * function!(ETS.metric, &color[0], &color[1]);
+        assert_rational_zero(
+            &format!("{label}: independent analytic finite field vertex"),
+            &graph,
+            &full,
+            &(&finite - &finite_scalar * &field),
+            SpinReduction::SymbolicFirst,
+        )?;
+        let outer_spin = graph.underlying[Hedge(bridge_outer)]
+            .edge_spin_slots()
+            .next()
+            .unwrap()
+            .to_atom();
+        let external_spin = graph.underlying[Hedge(external)]
+            .edge_spin_slots()
+            .next()
+            .unwrap()
+            .to_atom();
+        let outer_color = graph.underlying[Hedge(bridge_outer)]
+            .edge_color_slots()
+            .next()
+            .unwrap()
+            .to_atom();
+        let external_color = graph.underlying[Hedge(external)]
+            .num_indices
+            .color_indices
+            .vertex_indices
+            .external_structure_iter()
+            .next()
+            .unwrap()
+            .to_atom();
+        let identity = function!(ETS.metric, &outer_spin, &external_spin)
+            * function!(ETS.metric, &outer_color, &external_color);
+        // N=i*(p-slash+m), so F*N=i*D_phys*I. Prove the numerator
+        // identity before cancelling the real polynomial. No nonzero i0 is
+        // dropped: with an explicit regulator this is only its causal limit.
+        let expected = Atom::i() * &finite_scalar * &physical_polynomial * &identity;
+        assert_rational_zero(
+            &format!("{label}: finite vertex times native bridge numerator"),
+            &graph,
+            &full,
+            &(&finite * &bridge_numerator - &expected),
+            SpinReduction::SymbolicFirst,
+        )?;
+        assert!(
+            !NumeratorJetCache::default()
+                .canonicalize(&expected.undo_dots::<Aind>()?)?
+                .is_zero
+        );
+        let right = finite_part(&NumeratorInterface::export(sibling.atom()).0);
+        assert!(
+            !NumeratorJetCache::default()
+                .canonicalize(&right.undo_dots::<Aind>()?)?
+                .is_zero
+        );
+        let product = Local4dCts::from_full_product([
+            Full4dCts::recursion_input(
+                local,
+                &integrated,
+                ApproximationType::OS,
+                false,
+                component.lmb(),
+            )?,
+            Full4dCts::from_factorized_local(sibling),
+        ])?;
+        let finite_sectors = product
+            .active_sectors()
+            .iter()
+            .filter(|sector| !sector.frozen_lmbs().is_empty())
+            .collect::<Vec<_>>();
+        assert!(!finite_sectors.is_empty());
+        for sector in &finite_sectors {
+            assert_eq!(sector.active_components.len(), 1);
+            assert_eq!(
+                &sector.active_components[0].0,
+                other.subgraph(),
+                "the finite child is frozen; only the untouched sibling remains active"
+            );
+            assert_eq!(
+                sector.frozen_lmbs(),
+                std::slice::from_ref(component.lmb()),
+                "only the integrated component owns the untouched localization kernel"
+            );
+        }
+        let actual_finite_product = finite_sectors
+            .iter()
+            .map(|sector| finite_part(&NumeratorInterface::export(&sector.atom).0))
+            .sum::<Atom>();
+        assert_rational_zero(
+            &format!("{label}: actual finite-sector product source"),
+            &graph,
+            &full,
+            &(&actual_finite_product - &finite * &right),
+            SpinReduction::SymbolicFirst,
+        )?;
+        assert_rational_zero(
+            &format!("{label}: completed source numerator pinches before CFF"),
+            &graph,
+            &full,
+            &(&actual_finite_product * &bridge_numerator - &expected * &right),
+            SpinReduction::SymbolicFirst,
+        )?;
+        let frozen = GS.localizing_integrand(component.lmb());
+        crate::debug_tags!(#uv,#integrated,#summary;
+            stage="disjoint_finite_live_bridge_certificate", label,
+            source_reconstruction_certified=true, numerator_pinch_certified=true,
+            explicit_nonzero_prescription_cancelled=false,
+            file.frozen_kernel=%frozen.to_canonical_string(),
+            file.finite_vertex=%finite.to_canonical_string(),
+            file.pinched_scalar=%(Atom::i()*&finite_scalar).to_canonical_string(),
+            "Certified the finite field insertion and its untouched sibling/kernel before energy projection"
+        );
+    }
+    Ok(())
+}
