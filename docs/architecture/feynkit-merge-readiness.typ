@@ -177,6 +177,16 @@ Rendering and publication checks are not certified by the stopped
 attempt. These failures concern runtime assets and generated API metadata;
 their repairs preserve the numerical tests and performance policy.
 
+The `c15ee4e1` isolated preflight passes the GammaLoop stub check and all three
+GammaLoop exporter tests, then reaches a second Linnet assertion: the supplied
+module's edited docstring is absent. The Linnet branch of `render` discards its
+module and calls a canonical renderer which gathers a fresh inventory. The
+existing canonical renderer now borrows the supplied module; its callers own
+inventory gathering. The AST import handling and all prose, alias-placement
+and exact package/docs comparisons remain unchanged. Broader checks of the
+known-failing source were cancelled through their owned Nix clients; all frozen
+source guards passed. Their partial builds do not establish CI success.
+
 Repair qualification uses the full canonical `just ci-checks` owner after CI
 regeneration and formatting. This exercises Nix's actual per-package runtime
 features and rendering policy; another workspace-default Cargo sweep cannot
