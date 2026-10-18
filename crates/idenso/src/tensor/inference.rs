@@ -69,10 +69,23 @@ type InferenceResult<T> = Result<T, TensorInferenceError>;
 mod observation;
 pub(super) use observation::ObservationScope;
 
-impl SymbolicTensor<PartialStructure> {
-    /// Admit an unchecked carrier once at an algebra boundary. Derived tensors
-    /// retain this fact; it is invalidated with mutable payload/interface access.
-    pub(crate) fn ensure_validated(&self) -> InferenceResult<()> {
+/// A transient view of one admitted source. Its proof cells are borrowed so
+/// observations update the original carrier rather than a detached clone.
+#[derive(Clone, Copy)]
+pub(super) struct BorrowedTensorParts<'a> {
+    pub(super) expression: &'a Atom,
+    pub(super) structure: &'a PartialStructure,
+    pub(super) is_metric: bool,
+    pub(super) is_composite: bool,
+    pub(super) proofs: &'a super::TensorProofs,
+}
+
+impl BorrowedTensorParts<'_> {
+    fn is_scalar(&self) -> bool {
+        self.structure.canonical().is_scalar()
+    }
+
+    pub(super) fn ensure_validated(&self) -> InferenceResult<()> {
         if self.proofs.validated.get() == Some(&true) {
             return Ok(());
         }
@@ -80,9 +93,9 @@ impl SymbolicTensor<PartialStructure> {
         let _phase = crate::reference_cases::timing::scope(
             crate::reference_cases::timing::Phase::Validation,
         );
-        let (_, occurrences) = Self::validate_observed_interface(
-            &self.expression,
-            &self.structure,
+        let (_, occurrences) = SymbolicTensor::<PartialStructure>::validate_observed_interface(
+            self.expression,
+            self.structure,
             LeafInference::Observe,
         )?;
         let occurrences = match occurrences {
@@ -97,6 +110,369 @@ impl SymbolicTensor<PartialStructure> {
         Ok(())
     }
 
+    pub(super) fn normalization_is_intrinsic(&self) -> bool {
+        *self.proofs.intrinsic.get_or_init(|| {
+            !self.expression.as_view().needs_normalization()
+                && InterfaceInference::normalization_is_intrinsic(self.expression.as_view())
+        })
+    }
+
+    pub(super) fn established_interface_is_valid(&self) -> bool {
+        *self.proofs.validated.get_or_init(|| {
+            let mut inference = InterfaceInference::default();
+            if let AtomView::Fun(function) = self.expression.as_view()
+                && function.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                && function.iter().all(|argument| {
+                    inference
+                        .slots
+                        .parse::<LibraryRep, AbstractIndex>(argument)
+                        .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. }))
+                })
+            {
+                // An unchecked explicit leaf still needs validation, but its
+                // physical ports are already readable without tree inference.
+                let mut checked = || -> InferenceResult<bool> {
+                    let occurrences = InterfaceInference::scoped_occurrences(
+                        self.expression.as_view(),
+                        &mut inference.slots,
+                    )?;
+                    inference.validate_tensor_syntax_after_scopes(self.expression.as_view())?;
+                    let Some(interface) =
+                        inference.direct_leaf_interface(function, LeafInference::Observe)
+                    else {
+                        return Ok(false);
+                    };
+                    let interface =
+                        InterfaceInference::merge_explicit_interface_sequence(&[interface])?;
+                    occurrences.validate()?;
+                    Ok(InterfaceInference::additive_interfaces_match(
+                        self.structure,
+                        &interface,
+                    ))
+                };
+                return checked().unwrap_or(false);
+            }
+            let occurrences = match SymbolicTensor::<PartialStructure>::validate_observed_interface(
+                self.expression,
+                self.structure,
+                LeafInference::Observe,
+            ) {
+                Ok((_, Some(occurrences))) => occurrences,
+                Ok((_, None)) => match InterfaceInference::scoped_occurrences(
+                    self.expression.as_view(),
+                    &mut SlotMatcher::default(),
+                ) {
+                    Ok(occurrences) => occurrences,
+                    Err(_) => return false,
+                },
+                Err(_) => return false,
+            };
+            occurrences.validate().is_ok()
+        })
+    }
+
+    pub(super) fn algebra_preserves_interface(&self) -> bool {
+        *self.proofs.algebra.get_or_init(|| {
+            self.structure.open_positions().is_empty()
+                && !self.expression.as_view().needs_normalization()
+                && InterfaceInference::default()
+                    .algebra_preserves_leaf_interfaces(self.expression.as_view())
+                && self.established_interface_is_valid()
+        })
+    }
+
+    pub(super) fn rewrites_preserve_interface(&self) -> bool {
+        *self.proofs.rewrite.get_or_init(|| {
+            self.structure.open_positions().is_empty()
+                && !self.expression.as_view().needs_normalization()
+                && InterfaceInference::default()
+                    .rewrites_preserve_leaf_interfaces(self.expression.as_view())
+                && self.established_interface_is_valid()
+        })
+    }
+
+    pub(super) fn with_checked_expression(
+        &self,
+        expression: Atom,
+    ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
+        if expression.as_view() != self.expression.as_view()
+            && !expression.as_view().is_zero()
+            && !self.structure.open_positions().is_empty()
+        {
+            return self.finish_checked_open_expression(expression);
+        }
+        self.finish_checked_expression(expression, self.structure, LeafInference::Observe)
+    }
+
+    fn finish_checked_open_expression(
+        &self,
+        expression: Atom,
+    ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
+        // The source already supplies the interface; recover only its encoded
+        // boundary identities here. Validate scopes on the actual result once.
+        let encoded = InterfaceInference {
+            leaf_inference: LeafInference::ObserveEncoded,
+            ..Default::default()
+        }
+        .infer_view(self.expression.as_view())
+        .and_then(|interface| {
+            InterfaceInference::merge_explicit_interface_sequence(&[interface])
+                .map(|interface| interface.canonicalize_open_ports())
+        });
+        if let Ok(encoded) = encoded
+            && (encoded.open_positions().is_empty()
+                || InterfaceInference::unambiguous_anonymous_ports(&encoded))
+        {
+            // Retain occurrence/axis identities when explicit ports move past
+            // AUTO ports. Observing only anonymous positions can silently swap
+            // tensor components after a callback changes normalized factor order.
+            let partial = PartialStructure::from_logical_slots(
+                encoded.logical_slots().into_iter().map(|slot| {
+                    slot.rep().slot(match slot.aind {
+                        PartialIndex::Explicit(index) => {
+                            InterfaceInference::partial_index(index, LeafInference::Observe)
+                        }
+                        open => open,
+                    })
+                }),
+            );
+            if partial.canonical() == self.structure.canonical()
+                && (encoded.open_positions().is_empty()
+                    || partial.logical_slots() == self.structure.logical_slots())
+            {
+                return self.finish_checked_expression(
+                    expression,
+                    &encoded,
+                    LeafInference::ObserveEncoded,
+                );
+            }
+        }
+        // Closed scalar factors do not identify anonymous tensor ports. Keep
+        // the ordered non-scalar factors as witnesses. One changed rank-one
+        // anonymous factor has one possible port correspondence if every other
+        // factor stays exactly in place; multiple changed factors do not have
+        // that certificate, even when their ranks and representations agree.
+        self.ensure_validated()?;
+        let tensor_factors =
+            |expression: AtomView<'_>| -> InferenceResult<Vec<(Atom, PartialStructure)>> {
+                let factors = match expression {
+                    AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                    expression => vec![expression],
+                };
+                let mut inference = InterfaceInference {
+                    leaf_inference: LeafInference::Observe,
+                    ..Default::default()
+                };
+                let mut tensors = Vec::new();
+                for factor in factors {
+                    // Scalar weights carry no anonymous-axis identity. Match
+                    // ordinary product inference here; the checked finisher
+                    // still validates the complete result's syntax and scopes.
+                    if !InterfaceInference::has_structured_syntax(factor) {
+                        continue;
+                    }
+                    let interface = inference.infer_view(factor)?;
+                    if !interface.canonical().is_scalar() {
+                        tensors.push((factor.to_owned(), interface));
+                    }
+                }
+                Ok(tensors)
+            };
+        let retained = tensor_factors(self.expression.as_view())?;
+        let rewritten = tensor_factors(expression.as_view())?;
+        let mut changed_vectors = 0;
+        let retained_ports = !retained.is_empty()
+            && retained.len() == rewritten.len()
+            && retained
+                .iter()
+                .zip(&rewritten)
+                .all(|((before, left), (after, right))| {
+                    if before == after {
+                        return true;
+                    }
+                    changed_vectors += 1;
+                    changed_vectors == 1
+                        && left.canonical().order() == 1
+                        && left.open_positions().len() == 1
+                        && left.logical_slots() == right.logical_slots()
+                });
+        if retained_ports {
+            return self.finish_checked_expression(
+                expression,
+                self.structure,
+                LeafInference::Observe,
+            );
+        }
+        // Report invalid result syntax before refusing an otherwise valid
+        // rewrite whose unresolved identities have no safe witness. This
+        // observation cannot admit the rewrite or replay a normalizer.
+        SymbolicTensor::<PartialStructure>::validate_interface(&expression, self.structure)?;
+        Err(TensorInferenceError::invalid(
+            "cannot certify unresolved tensor port identities after transformation",
+        ))
+    }
+
+    fn finish_checked_expression(
+        &self,
+        expression: Atom,
+        observed: &PartialStructure,
+        policy: LeafInference,
+    ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
+        if expression.as_view() == self.expression.as_view() {
+            return Ok(SymbolicTensor {
+                proofs: self.proofs.clone(),
+                expression,
+                structure: self.structure.clone(),
+                is_metric: self.is_metric,
+                is_composite: self.is_composite,
+            });
+        }
+        let (inferred, occurrences) =
+            SymbolicTensor::<PartialStructure>::validate_observed_interface(
+                &expression,
+                observed,
+                policy,
+            )?;
+        if policy == LeafInference::ObserveEncoded && !expression.as_view().is_zero() {
+            // Explicit ports can move around unresolved ones, but relabelling
+            // same-representation AUTO axes by their new syntax positions would
+            // change the tensor's component map.
+            if !InterfaceInference::encoded_open_orders_match(observed, &inferred) {
+                return Err(TensorInferenceError::invalid(
+                    "transformed expression changes the ordered identities of unresolved tensor ports",
+                ));
+            }
+        }
+        let occurrences = match occurrences {
+            Some(occurrences) => occurrences,
+            None => InterfaceInference::scoped_occurrences(
+                expression.as_view(),
+                &mut SlotMatcher::default(),
+            )?,
+        };
+        occurrences.validate()?;
+        let value = SymbolicTensor::<PartialStructure>::from_normalized_parts(
+            expression,
+            self.structure.clone(),
+        );
+        let _ = value.proofs.validated.set(true);
+        value.finish_parts()
+    }
+
+    pub(super) fn with_algebra_result(
+        &self,
+        expression: Atom,
+    ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
+        if expression.as_view() == self.expression.as_view() {
+            return Ok(SymbolicTensor {
+                proofs: self.proofs.clone(),
+                expression,
+                structure: self.structure.clone(),
+                is_metric: self.is_metric,
+                is_composite: self.is_composite,
+            });
+        }
+        if expression.as_view().is_zero() || self.algebra_preserves_interface() {
+            return Ok(SymbolicTensor::<PartialStructure>::from_validated_parts(
+                expression,
+                self.structure.clone(),
+            ));
+        }
+        if !self.structure.open_positions().is_empty() {
+            return self.with_rewritten_expression(expression);
+        }
+        self.with_checked_expression(expression)
+    }
+
+    pub(super) fn with_rewritten_expression(
+        &self,
+        expression: Atom,
+    ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
+        if expression.as_view() == self.expression.as_view() {
+            return Ok(SymbolicTensor {
+                proofs: self.proofs.clone(),
+                expression,
+                structure: self.structure.clone(),
+                is_metric: self.is_metric,
+                is_composite: self.is_composite,
+            });
+        }
+        if expression.as_view().is_zero()
+            || (self.structure.open_positions().is_empty()
+                && !self.expression.as_view().needs_normalization()
+                && {
+                    let mut inference = InterfaceInference::default();
+                    self.rewrites_preserve_interface()
+                        // Reserve source validation for substantial trace expansion.
+                        || (expression.as_view().get_byte_size()
+                            > self.expression.as_view().get_byte_size().saturating_mul(2)
+                            && inference.terminal_trace_preserves_interface(
+                                self.expression,
+                                self.structure,
+                            ))
+                })
+        {
+            return Ok(SymbolicTensor::<PartialStructure>::from_validated_parts(
+                expression,
+                self.structure.clone(),
+            ));
+        }
+        self.with_checked_expression(expression)
+    }
+
+    pub(super) fn with_transformed_expression(
+        &self,
+        expression: Atom,
+    ) -> InferenceResult<(SymbolicTensor<PartialStructure>, bool)> {
+        if expression.as_view() == self.expression.as_view() {
+            return Ok((
+                SymbolicTensor {
+                    proofs: self.proofs.clone(),
+                    expression,
+                    structure: self.structure.clone(),
+                    is_metric: self.is_metric,
+                    is_composite: self.is_composite,
+                },
+                false,
+            ));
+        }
+        let (structure, inferred_contraction) = if expression.as_view().is_zero() {
+            (self.structure.clone(), false)
+        } else if self.is_scalar()
+            || InterfaceInference::has_structured_syntax(expression.as_view())
+        {
+            let (value, contracted) =
+                SymbolicTensor::<PartialStructure>::infer_with_contractions(expression.clone())?;
+            (value.structure, contracted)
+        } else {
+            return Err(TensorInferenceError::invalid(
+                "Tensor transformation removed the tensor syntax of a non-scalar expression",
+            ));
+        };
+        let raw_rank = structure.canonical().order();
+        let value = SymbolicTensor::<PartialStructure>::checked_parts(expression, structure)?;
+        let contracted = inferred_contraction || value.rank() != raw_rank;
+        Ok((value, contracted))
+    }
+}
+
+impl SymbolicTensor<PartialStructure> {
+    pub(super) fn borrowed_parts(&self) -> BorrowedTensorParts<'_> {
+        BorrowedTensorParts {
+            expression: &self.expression,
+            structure: &self.structure,
+            is_metric: self.is_metric,
+            is_composite: self.is_composite,
+            proofs: &self.proofs,
+        }
+    }
+
+    /// Admit an unchecked carrier once at an algebra boundary. Derived tensors
+    /// retain this fact; it is invalidated with mutable payload/interface access.
+    pub(crate) fn ensure_validated(&self) -> InferenceResult<()> {
+        self.borrowed_parts().ensure_validated()
+    }
+
     /// Construct parts whose algebra owner has established their interface.
     /// This performs no inference, validation, or normalization. Callers must
     /// account for callbacks before publishing a derived tensor through it.
@@ -107,10 +483,7 @@ impl SymbolicTensor<PartialStructure> {
     }
 
     pub(crate) fn normalization_is_intrinsic(&self) -> bool {
-        *self.proofs.intrinsic.get_or_init(|| {
-            !self.expression.as_view().needs_normalization()
-                && InterfaceInference::normalization_is_intrinsic(self.expression.as_view())
-        })
+        self.borrowed_parts().normalization_is_intrinsic()
     }
 
     /// Publish an identity implemented by our algebra, preserving its proven
@@ -149,77 +522,15 @@ impl SymbolicTensor<PartialStructure> {
     /// Cached facts belong to this exact payload/interface pair. Unchecked
     /// storage construction starts with no facts; mutable trait access clears them.
     pub(super) fn established_interface_is_valid(&self) -> bool {
-        *self.proofs.validated.get_or_init(|| {
-            let mut inference = InterfaceInference::default();
-            if let AtomView::Fun(function) = self.expression.as_view()
-                && function.get_symbol().has_tag(&SPENSO_TAG.tensor)
-                && function.iter().all(|argument| {
-                    inference
-                        .slots
-                        .parse::<LibraryRep, AbstractIndex>(argument)
-                        .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. }))
-                })
-            {
-                // An unchecked explicit leaf still needs validation, but its
-                // physical ports are already readable without tree inference.
-                let mut checked = || -> InferenceResult<bool> {
-                    let occurrences = InterfaceInference::scoped_occurrences(
-                        self.expression.as_view(),
-                        &mut inference.slots,
-                    )?;
-                    inference.validate_tensor_syntax_after_scopes(self.expression.as_view())?;
-                    let Some(interface) =
-                        inference.direct_leaf_interface(function, LeafInference::Observe)
-                    else {
-                        return Ok(false);
-                    };
-                    let interface =
-                        InterfaceInference::merge_explicit_interface_sequence(&[interface])?;
-                    occurrences.validate()?;
-                    Ok(InterfaceInference::additive_interfaces_match(
-                        &self.structure,
-                        &interface,
-                    ))
-                };
-                return checked().unwrap_or(false);
-            }
-            let occurrences = match Self::validate_observed_interface(
-                &self.expression,
-                &self.structure,
-                LeafInference::Observe,
-            ) {
-                Ok((_, Some(occurrences))) => occurrences,
-                Ok((_, None)) => match InterfaceInference::scoped_occurrences(
-                    self.expression.as_view(),
-                    &mut SlotMatcher::default(),
-                ) {
-                    Ok(occurrences) => occurrences,
-                    Err(_) => return false,
-                },
-                Err(_) => return false,
-            };
-            occurrences.validate().is_ok()
-        })
+        self.borrowed_parts().established_interface_is_valid()
     }
 
     pub(super) fn algebra_preserves_interface(&self) -> bool {
-        *self.proofs.algebra.get_or_init(|| {
-            self.structure.open_positions().is_empty()
-                && !self.expression.as_view().needs_normalization()
-                && InterfaceInference::default()
-                    .algebra_preserves_leaf_interfaces(self.expression.as_view())
-                && self.established_interface_is_valid()
-        })
+        self.borrowed_parts().algebra_preserves_interface()
     }
 
     pub(super) fn rewrites_preserve_interface(&self) -> bool {
-        *self.proofs.rewrite.get_or_init(|| {
-            self.structure.open_positions().is_empty()
-                && !self.expression.as_view().needs_normalization()
-                && InterfaceInference::default()
-                    .rewrites_preserve_leaf_interfaces(self.expression.as_view())
-                && self.established_interface_is_valid()
-        })
+        self.borrowed_parts().rewrites_preserve_interface()
     }
 
     /// Construct an unresolved tensor from a named, canonically ordered signature.
@@ -446,158 +757,7 @@ impl SymbolicTensor<PartialStructure> {
     /// Observation checks tensor scopes before index multiplicity; scalar results
     /// still check those scopes after their interface has been accepted.
     pub fn with_checked_expression(&self, expression: Atom) -> InferenceResult<Self> {
-        if expression != self.expression
-            && !expression.as_view().is_zero()
-            && !self.structure.open_positions().is_empty()
-        {
-            return self.finish_checked_open_expression(expression);
-        }
-        self.finish_checked_expression(expression, &self.structure, LeafInference::Observe)
-    }
-
-    fn finish_checked_open_expression(&self, expression: Atom) -> InferenceResult<Self> {
-        // The source already supplies the interface; recover only its encoded
-        // boundary identities here. Validate scopes on the actual result once.
-        let encoded = InterfaceInference {
-            leaf_inference: LeafInference::ObserveEncoded,
-            ..Default::default()
-        }
-        .infer_view(self.expression.as_view())
-        .and_then(|interface| {
-            InterfaceInference::merge_explicit_interface_sequence(&[interface])
-                .map(|interface| interface.canonicalize_open_ports())
-        });
-        if let Ok(encoded) = encoded
-            && (encoded.open_positions().is_empty()
-                || InterfaceInference::unambiguous_anonymous_ports(&encoded))
-        {
-            // Retain occurrence/axis identities when explicit ports move past
-            // AUTO ports. Observing only anonymous positions can silently swap
-            // tensor components after a callback changes normalized factor order.
-            let partial = PartialStructure::from_logical_slots(
-                encoded.logical_slots().into_iter().map(|slot| {
-                    slot.rep().slot(match slot.aind {
-                        PartialIndex::Explicit(index) => {
-                            InterfaceInference::partial_index(index, LeafInference::Observe)
-                        }
-                        open => open,
-                    })
-                }),
-            );
-            if partial.canonical() == self.structure.canonical()
-                && (encoded.open_positions().is_empty()
-                    || partial.logical_slots() == self.structure.logical_slots())
-            {
-                return self.finish_checked_expression(
-                    expression,
-                    &encoded,
-                    LeafInference::ObserveEncoded,
-                );
-            }
-        }
-        // Closed scalar factors do not identify anonymous tensor ports. Keep
-        // the ordered non-scalar factors as witnesses. One changed rank-one
-        // anonymous factor has one possible port correspondence if every other
-        // factor stays exactly in place; multiple changed factors do not have
-        // that certificate, even when their ranks and representations agree.
-        self.ensure_validated()?;
-        let tensor_factors =
-            |expression: AtomView<'_>| -> InferenceResult<Vec<(Atom, PartialStructure)>> {
-                let factors = match expression {
-                    AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
-                    expression => vec![expression],
-                };
-                let mut inference = InterfaceInference {
-                    leaf_inference: LeafInference::Observe,
-                    ..Default::default()
-                };
-                let mut tensors = Vec::new();
-                for factor in factors {
-                    // Scalar weights carry no anonymous-axis identity. Match
-                    // ordinary product inference here; the checked finisher
-                    // still validates the complete result's syntax and scopes.
-                    if !InterfaceInference::has_structured_syntax(factor) {
-                        continue;
-                    }
-                    let interface = inference.infer_view(factor)?;
-                    if !interface.canonical().is_scalar() {
-                        tensors.push((factor.to_owned(), interface));
-                    }
-                }
-                Ok(tensors)
-            };
-        let retained = tensor_factors(self.expression.as_view())?;
-        let rewritten = tensor_factors(expression.as_view())?;
-        let mut changed_vectors = 0;
-        let retained_ports = !retained.is_empty()
-            && retained.len() == rewritten.len()
-            && retained
-                .iter()
-                .zip(&rewritten)
-                .all(|((before, left), (after, right))| {
-                    if before == after {
-                        return true;
-                    }
-                    changed_vectors += 1;
-                    changed_vectors == 1
-                        && left.canonical().order() == 1
-                        && left.open_positions().len() == 1
-                        && left.logical_slots() == right.logical_slots()
-                });
-        if retained_ports {
-            return self.finish_checked_expression(
-                expression,
-                &self.structure,
-                LeafInference::Observe,
-            );
-        }
-        // Report invalid result syntax before refusing an otherwise valid
-        // rewrite whose unresolved identities have no safe witness. This
-        // observation cannot admit the rewrite or replay a normalizer.
-        Self::validate_interface(&expression, &self.structure)?;
-        Err(TensorInferenceError::invalid(
-            "cannot certify unresolved tensor port identities after transformation",
-        ))
-    }
-
-    fn finish_checked_expression(
-        &self,
-        expression: Atom,
-        observed: &PartialStructure,
-        policy: LeafInference,
-    ) -> InferenceResult<Self> {
-        if expression == self.expression {
-            return Ok(Self {
-                proofs: self.proofs.clone(),
-                expression,
-                structure: self.structure.clone(),
-                is_metric: self.is_metric,
-                is_composite: self.is_composite,
-            });
-        }
-        let (inferred, occurrences) =
-            Self::validate_observed_interface(&expression, observed, policy)?;
-        if policy == LeafInference::ObserveEncoded && !expression.as_view().is_zero() {
-            // Explicit ports can move around unresolved ones, but relabelling
-            // same-representation AUTO axes by their new syntax positions would
-            // change the tensor's component map.
-            if !InterfaceInference::encoded_open_orders_match(observed, &inferred) {
-                return Err(TensorInferenceError::invalid(
-                    "transformed expression changes the ordered identities of unresolved tensor ports",
-                ));
-            }
-        }
-        let occurrences = match occurrences {
-            Some(occurrences) => occurrences,
-            None => InterfaceInference::scoped_occurrences(
-                expression.as_view(),
-                &mut SlotMatcher::default(),
-            )?,
-        };
-        occurrences.validate()?;
-        let value = Self::from_normalized_parts(expression, self.structure.clone());
-        let _ = value.proofs.validated.set(true);
-        value.finish_parts()
+        self.borrowed_parts().with_checked_expression(expression)
     }
 
     /// Build a symbolic evaluator without expanding or contracting this payload.
@@ -659,94 +819,21 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Retain this interface after scalar algebra which treats tensor leaves as opaque.
     pub fn with_algebra_result(&self, expression: Atom) -> InferenceResult<Self> {
-        if expression == self.expression {
-            return Ok(Self {
-                proofs: self.proofs.clone(),
-                expression,
-                structure: self.structure.clone(),
-                is_metric: self.is_metric,
-                is_composite: self.is_composite,
-            });
-        }
-        if expression.as_view().is_zero() || self.algebra_preserves_interface() {
-            return Ok(Self::from_validated_parts(
-                expression,
-                self.structure.clone(),
-            ));
-        }
-        if !self.structure.open_positions().is_empty() {
-            return self.with_rewritten_expression(expression);
-        }
-        self.with_checked_expression(expression)
+        self.borrowed_parts().with_algebra_result(expression)
     }
 
     /// Retain this interface after a tensor identity, checking callback-sensitive results.
     /// Arbitrary replacements must validate or infer their new interface instead.
     pub fn with_rewritten_expression(&self, expression: Atom) -> InferenceResult<Self> {
-        if expression == self.expression {
-            return Ok(Self {
-                proofs: self.proofs.clone(),
-                expression,
-                structure: self.structure.clone(),
-                is_metric: self.is_metric,
-                is_composite: self.is_composite,
-            });
-        }
-        if expression.as_view().is_zero()
-            || (self.structure.open_positions().is_empty()
-                && !self.expression.as_view().needs_normalization()
-                && {
-                    let mut inference = InterfaceInference::default();
-                    self.rewrites_preserve_interface()
-                        // Reserve source validation for substantial trace expansion.
-                        || (expression.as_view().get_byte_size()
-                            > self.expression.as_view().get_byte_size().saturating_mul(2)
-                            && inference.terminal_trace_preserves_interface(
-                                &self.expression,
-                                &self.structure,
-                            ))
-                })
-        {
-            return Ok(Self::from_validated_parts(
-                expression,
-                self.structure.clone(),
-            ));
-        }
-        self.with_checked_expression(expression)
+        self.borrowed_parts().with_rewritten_expression(expression)
     }
 
     /// Infer an arbitrary transformation and report whether finishing contracted
     /// raw inferred ports. Presentation adapters use that fact to discard a
     /// stored-data descriptor, even when the input and final ranks are equal.
     pub fn with_transformed_expression(&self, expression: Atom) -> InferenceResult<(Self, bool)> {
-        if expression == self.expression {
-            return Ok((
-                Self {
-                    proofs: self.proofs.clone(),
-                    expression,
-                    structure: self.structure.clone(),
-                    is_metric: self.is_metric,
-                    is_composite: self.is_composite,
-                },
-                false,
-            ));
-        }
-        let (structure, inferred_contraction) = if expression.as_view().is_zero() {
-            (self.structure.clone(), false)
-        } else if self.is_scalar()
-            || InterfaceInference::has_structured_syntax(expression.as_view())
-        {
-            let (value, contracted) = Self::infer_with_contractions(expression.clone())?;
-            (value.structure, contracted)
-        } else {
-            return Err(TensorInferenceError::invalid(
-                "Tensor transformation removed the tensor syntax of a non-scalar expression",
-            ));
-        };
-        let raw_rank = structure.canonical().order();
-        let value = Self::checked_parts(expression, structure)?;
-        let contracted = inferred_contraction || value.rank() != raw_rank;
-        Ok((value, contracted))
+        self.borrowed_parts()
+            .with_transformed_expression(expression)
     }
 
     /// Change four-dimensional Lorentz ports in the expression and its logical interface.

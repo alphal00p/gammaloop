@@ -587,22 +587,43 @@ impl SymbolicTensor<PartialStructure> {
         );
         let state = ParseState::default();
         for value in values {
-            if let Some(observed) = value.proofs.observations.get() {
-                for &index in &observed.reserved_indices {
-                    state.reserve_index(index);
-                }
-            } else {
-                #[cfg(test)]
-                DUMMY_RESERVATION_WALKS.with(|count| count.set(count.get() + 1));
-                state.reserve_indices(value.expression.as_view());
-            }
-            for slot in value.structure.logical_slots() {
-                if let PartialIndex::Explicit(index) = slot.aind {
-                    state.reserve_index(index);
-                }
-            }
+            value.proofs.reserve_indices(
+                &value.expression,
+                value
+                    .structure
+                    .logical_slots()
+                    .into_iter()
+                    .filter_map(|slot| match slot.aind {
+                        PartialIndex::Explicit(index) => Some(index),
+                        PartialIndex::Open(_) => None,
+                    }),
+                &state,
+            );
         }
         state
+    }
+}
+
+impl super::TensorProofs {
+    /// Reserve source names through the same borrowed observer for either interface.
+    pub(super) fn reserve_indices(
+        &self,
+        expression: &Atom,
+        explicit_indices: impl IntoIterator<Item = AbstractIndex>,
+        state: &ParseState<AbstractIndex>,
+    ) {
+        if let Some(observed) = self.observations.get() {
+            for &index in &observed.reserved_indices {
+                state.reserve_index(index);
+            }
+        } else {
+            #[cfg(test)]
+            DUMMY_RESERVATION_WALKS.with(|count| count.set(count.get() + 1));
+            state.reserve_indices(expression.as_view());
+        }
+        for index in explicit_indices {
+            state.reserve_index(index);
+        }
     }
 }
 
