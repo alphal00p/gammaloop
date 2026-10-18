@@ -2539,3 +2539,76 @@ the test passed in 26.146 seconds under the unchanged 240-second limit. This is
 a two-input qualification. The full twenty-six-input mass condition, public
 mixed-scheme admission, and the emitted four-dimensional/R2 comparison remain
 separate gates.
+
+=== Actual native twenty-six-input mass condition
+
+The private proof source `c6d1d6c5` passes the complete native inventory and
+all twenty-six overall inputs at the matched rest point. The inventory binds
+thirteen native sources, fourteen proper occurrences and fifty-two classified
+nodes. Independently composed source views can expose the same named ports in
+a different logical order: the private reference is transported by the native
+axis-permutation owner, with exact canonical and logical interfaces, unchanged
+expression, inverse-value and ranked-zero checks. The actual runtime carrier
+and the final exact value comparison remain unchanged.
+
+The inventory's 23477-byte scalar payload has the same SHA-256
+`e7ce7a27c02d203386e2a69a809fc033b88c384239fa609b5ed010e55ffab5bd`
+as the qualified nine-kernel numerical input. The embedded consumer and pinned
+runtime launcher also match. This certifies reuse of that numerical result for
+the identical input; no new backend integration was performed.
+
+The full-main run `81cba6eb` completed all twelve bare and fourteen proper
+inputs, retaining both D03 occurrences. All twenty-six actual integrated finite
+mass projections vanish without auxiliary-scale substitution. The exact
+operator and source identities then transfer the independently qualified bare
+reference and the actual proper densities to the independent source-level
+mass condition. For SU(3), five massless and one massive flavor, with the
+reference scales and physical mass set to one, the result through the finite
+coefficient is
+$ K_2 = 82/(3 epsilon^2) + 13/(9 epsilon) - 1285/18
+  + 8 pi^2/9 + 8 zeta(3)/3 - 16 pi^2 log(2)/9. $
+This equals the independently specified $z_2+w_1 z_1$; the expected value is not
+defined by subtracting the produced forest input.
+
+The run took 416.070 seconds under the existing 7200-second full-main cap.
+The ordinary inventory retains its 240-second cap. Public complete-forest
+admission, emitted four-dimensional/R2 equivalence and the two-loop field pole
+are separate outstanding claims. This result does not qualify the deferred
+three-loop soft or performance inventories.
+
+=== Physical finite-addback and inclusive NLO continuation
+
+The retained `89e6043c` NLO executable was used with an exact source-closure
+bridge to `c6d1d6c5`: production code, API, NLO tests, fixtures and locked inputs
+are unchanged; the intervening Rust additions are private core-test modules.
+No freshly compiled NLO binary is claimed. The finite-addback test passed all
+eighteen master-graph, point and auxiliary-scale comparisons, retaining both
+charge-conjugate Born contributions and the original model-coupling rounding
+control.
+
+The subsequent full-main run `4b7abc1c` passed LO and all nine NLO measurements
+at center-of-mass energy 400, pole mass 173 and renormalization scale 173.
+Each NLO measurement retains 320000 evaluations and ten workers; LO retains
+10000 evaluations. The analytic NLO reference is 0.43283008677698553.
+The table records the actual measurements, with $(M,L)$ denoting the UV and
+localization scales.
+
+#table(
+  columns: (1fr, 1fr, 1fr, 1fr),
+  table.header([Route], [$(M,L)=(173,173)$], [$(346,173)$], [$(173,346)$]),
+  [Projected 4D], [$0.430876 plus.minus 0.002979$],
+    [$0.431886 plus.minus 0.003062$], [$0.433900 plus.minus 0.003027$],
+  [Explicit direct], [$0.436993 plus.minus 0.002976$],
+    [$0.433092 plus.minus 0.003061$], [$0.431606 plus.minus 0.003015$],
+  [Orientation direct], [$0.429829 plus.minus 0.002976$],
+    [$0.430986 plus.minus 0.003057$], [$0.428941 plus.minus 0.003005$],
+)
+
+The largest discrepancy from the reference is 1.400 standard deviations.
+The largest uncertainty is 0.708% of that reference, below the unchanged 5%
+bound. Prescribed scale and route comparisons are below 1.272 and 1.453 standard
+deviations, respectively. The original seeds, including their documented stream
+overlap, and all tolerances are unchanged. All ten result files and the exact
+source/binary mapping are retained. The run took 2438.704 seconds under the
+7200-second cap on a shared host; it establishes no route-performance ranking
+or all-angle symbolic soft proof.
