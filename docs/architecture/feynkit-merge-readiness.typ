@@ -1,15 +1,24 @@
 = FeynKit merge readiness and performance
 
-The frozen `e6a3bb46` checkpoint passes the complete 5,661-test workspace run,
-all 1,048 selected Idenso tests, strict workspace Clippy, the documentation check
-and the normal Nix CLI build. Quiet repaired-build comparisons pass all exact
-ghost assertions: the earlier large d53 slowdown is absent, with a small residual
-increase still reported, and d76 is faster. All 105 selected local CI outputs
-also pass. All thirteen original CLI cases now have sealed results: eleven
-performance passes and two inconclusive cases, with every numerical check
-passing. The separate topology comparison is complete. Diagnosis and further
-qualification of the inconclusive metrics, preparation of the final CI-enabled
-source, cache upload and publication remain pending; this is not a merge-ready
+Production revision `fd9ed336` passes the normal Nix CLI build and all numerical
+checks in the thirteen original CLI cases. Twelve cases pass their performance
+gates; GL16 SingleParametric runtime remains inconclusive under the unchanged
+noise policy. The separate topology comparison preserves all 66 entries in each
+of five pairs. The production-equivalent test child `663ee049` passes all 1,054
+selected Idenso tests and all 664 selected consumers, strict workspace Clippy,
+formatting and the documentation registry check. Later documentation checks also
+pass at `575606be`. A later quiet ghost follow-up of the `663ee049` consumer
+binary passes all eight exact checks without the earlier large slowdown,
+subject to the build-feature limits recorded below.
+
+The complete 5,661-test workspace sweep, earlier quiet ghost comparisons and
+successful 105-output local CI preparation belong to the earlier `e6a3bb46`
+checkpoint.
+Their source identities remain separate from the newer qualification. At this
+documentation checkpoint, CI is enabled, but preparation of all 105 outputs for
+the final exact source, cache upload and push/publication remain pending. The early `9c76b732` preparation was
+intentionally stopped as superseded; it is neither active nor a completed pass.
+The remaining inconclusive gate is not waived, and this is not a merge-ready
 checkpoint.
 
 This record follows the reconciliation of local FeynKit, remote FeynKit and
@@ -35,17 +44,99 @@ Frozen `663ee049` passes all 1,054 selected Idenso tests: the exact earlier
 workspace Clippy, formatting and the documentation registry check also pass.
 All 664 selected GammaLoop and tensor consumers also pass in 635.552 seconds,
 with the exact previous inventory retained, no failures or timeouts, and unchanged
-source hashes. The normal Nix CLI and all 105 selected local CI outputs remain
-pending for this newer source. The first CI attempts exposed the test-map type
-ambiguity and a missing compile-time fixture. The map correction above preserves
-the exact assertion; `ea221df3` adds the 819-byte captured temporal chain to
-Idenso's existing compile-time test assets. Receipts are under
+source hashes. The normal Nix CLI build passes at `fd9ed336`; its source, exit
+status and binary identity are retained in
+`target/symbolic-tensor-flow/shared-selector-temporal-cli`. The first CI attempts
+exposed the test-map type ambiguity and a missing compile-time fixture. The map
+correction above preserves the exact assertion; `ea221df3` adds the 819-byte
+captured temporal chain to Idenso's existing compile-time test assets. Receipts are under
 `target/symbolic-tensor-flow/shared-selector-temporal-validation-2`, with import
-mappings in `onshell-api-coordination.json`. The complete workspace and performance
-results below qualify e6, not these later changes; no new performance benefit
-is claimed for them.
+mappings in `onshell-api-coordination.json`. The reviewed fixture-source digest
+and documentation registry pass at `575606be`. At this documentation checkpoint,
+final exact-source CI preparation remains pending; the newer CLI performance
+results follow separately from the historical e6 full-workspace sweep.
 
-== Frozen e6 qualification
+== Current fd9 CLI qualification
+
+The aggregate at
+`target/symbolic-tensor-flow/performance-final-fd9ed336-aggregate-1/report.json`
+verifies all thirteen fresh, predeclared case attempts against main
+`ff533fcd`, with zero evidence errors and every numerical check passing. It
+records twelve performance passes and one inconclusive case. No e6 trials are
+substituted or pooled into these results.
+
+#table(
+  columns: (2fr, 1fr, 1fr, 1.2fr, 0.7fr),
+  [Metric], [Main median], [fd9 median], [Median paired change], [Gate],
+  [GL1 generation], [4.08535 s], [4.53491 s], [+10.7000%], [Pass],
+  [GL1 SingleParametric runtime], [158.9323 µs], [137.6361 µs], [−14.3240%], [Pass],
+  [GL1 generation peak RSS], [83.6362 MB], [99.2707 MB], [+16.9070%], [Pass],
+  [Thermal generation], [7.13200 s], [6.45814 s], [−9.5860%], [Pass],
+  [Thermal SingleParametric runtime], [825.4038 µs], [744.0008 µs], [−10.1271%], [Pass],
+  [Thermal generation peak RSS], [112.7711 MB], [155.1483 MB], [+25.8318%], [Pass],
+)
+
+MB denotes decimal megabytes. Median paired changes are not ratios of the two
+reported medians. Thermal RSS retains a measurable increase: the median paired
+absolute difference is 31.04 MB. It passes the original combined relative and
+absolute rule, including the 64 MiB floor; a passing gate does not mean unchanged
+memory use. All GL1 and thermal gates pass without changing their limits.
+
+GL16 alias SingleParametric runtime has a +8.3801 percent median paired change
+and 2.6763 percent robust paired noise. The median is below the 15 percent
+allowance, but the median plus three times noise crosses it, with the absolute
+floor also exceeded. This produces the unchanged inconclusive status, not a
+pass or a confirmed regression. The screen is not a statistical confidence
+interval. Its other metrics pass.
+
+The separate topology comparison preserves all 66 inventory entries in each of
+five pairs. Fresh-process medians are 0.913906216 seconds on main and
+0.962177605 seconds at fd9, with a +5.1210 percent median paired change. Timing
+includes model import, generation and state save, and excludes integrand
+construction. This is a supplemental inventory comparison, not a fourteenth
+performance gate or a full numerator-equivalence certificate. Its receipt is
+`target/symbolic-tensor-flow/performance-final-fd9ed336-topology-1/topology-report/report.json`.
+
+== Current CPE policy controls
+
+The SingleParametric compiler keeps the scoped `cpe_iterations = 0` policy for
+conditional residue dispatch when the user has not specified a value. CPE means
+common-pair elimination. Explicit settings remain honored, and Horner ordering,
+ordinary common-instruction elimination and stack reuse still run.
+
+An fd9 two-pair ABBA comparison of explicit zero versus one CPE iteration gives
+mixed results. GL16 SingleParametric runtime changes by −5.87 percent in one
+pair and +0.29 percent in the other; thermal changes by −0.48 and +0.44 percent.
+All 48 physical checks pass and stored settings are verified. The original
+runner exits with a post-check GL16 history-path error; the preserved history
+was subsequently verified at its actual cross-section path. The failure receipt
+is retained. This comparison neither establishes a safe repeatable gain nor
+isolates the scoped production override: explicit zero also changes other modes
+from their unspecified fixed-point policy. One iteration is a bound on each
+construction or merge, not the native fixed-point default. Evidence and limits
+are in `target/symbolic-tensor-flow/fd9-cpe-counterfactual/analysis.json`.
+
+A separate fd9 ABBA control compares the production default with explicit
+fixed-point CPE. All 48 physical checks and eight stored-settings checks pass.
+Separate invariants also hold: the preoptimization source shapes,
+non-SingleParametric operation vectors and other scalar-build vectors match
+across policies. These invariants describe source/operation metadata, not
+byte-identical serialized programs. On GL16,
+fixed-point CPE makes SingleParametric runtime about 5.2 percent faster in both
+pairs. On thermal GL1, it makes that runtime 32.7--38.5 percent slower and
+evaluator construction 46.7--56.4 percent slower. These are bounded two-pair observations on the original
+physical points, not a replacement gate or an exact decomposition of the
+main-versus-branch difference. The complete receipt is
+`target/symbolic-tensor-flow/fd9-cpe-fixedpoint-counterfactual/conclusions.json`.
+
+Both programs have fewer static additions and multiplications with fixed-point
+CPE, yet thermal evaluation becomes slower. Static operation counts therefore
+do not establish executed cost. The measured tradeoff supports retaining the
+existing scoped zero policy. It does not support removing that policy globally
+or adding workload-specific heuristics from these two cases. No new production
+policy or gate threshold is introduced by these diagnostics.
+
+== Earlier frozen e6 qualification
 
 `e6a3bb4664d6927c46b0e463eee0850fc6285fa4` passes 1,048 of 1,048 selected Idenso
 tests, with all 24 existing skips preserved. Strict workspace Clippy completed
@@ -79,7 +170,7 @@ no external cache upload and no Nix runtime-launcher execution; the complete
 Cargo runtime suite above is separate evidence. Receipts are retained under
 `target/symbolic-tensor-flow/e6-ci-cache-preparation`.
 
-All thirteen original CLI cases have completed: eleven pass and two are
+At e6, all thirteen original CLI cases completed: eleven passed and two were
 inconclusive, with all numerical checks passing. The coverage index verifies all
 evidence with zero errors. It preserves four original sealed reports and nine
 predeclared continuations without pooling partial trials or selecting retries.
@@ -87,8 +178,8 @@ The initial interrupted invocation remains recorded with exit 143; no cause is
 assigned here. The aggregate and exact per-case reports are indexed by
 `target/symbolic-tensor-flow/performance-final-e6a3bb46-aggregate-1/report.json`.
 
-GL1 passes every unchanged gate while retaining measurable generation and
-memory costs:
+At that earlier e6 checkpoint, GL1 passed every unchanged gate while retaining
+measurable generation and memory costs:
 
 #table(
   columns: (2fr, 1fr, 1fr, 1.2fr, 0.7fr),
@@ -103,9 +194,9 @@ changes, not ratios of the two reported medians. GL1's median RSS increases by
 about 18.64 MB; it passes the original combined relative/absolute rule, including
 the 64 MiB absolute floor. Passing does not mean unchanged memory use.
 
-The GL16 alias case remains inconclusive for SingleParametric runtime: its
+The e6 GL16 alias case was inconclusive for SingleParametric runtime: its
 median paired change is +1.0652 percent with 6.3495 percent robust paired noise.
-The thermal GL1 case remains inconclusive for SingleParametric runtime and
+The e6 thermal GL1 case was inconclusive for SingleParametric runtime and
 peak RSS. Its runtime median improves by 8.3747 percent, with 6.7367 percent
 paired noise; RSS increases by 26.4654 percent (31.38 MB absolute), with
 18.5406 percent paired noise. Thermal generation passes, improving by
@@ -117,8 +208,8 @@ absolute change plus three times absolute noise exceeds its absolute floor.
 The runtime allowance is 15 percent with a 1 µs floor; RSS uses 20 percent and
 64 MiB. Both conditions matter, including for thermal runtime's negative median.
 This is a robust-noise screen, not a statistical confidence interval. The two
-cases are neither passes nor confirmed regressions; further diagnosis and
-qualification remain pending without relaxing the policy.
+e6 cases were neither passes nor confirmed regressions. The later fd9 results
+are recorded above without replacing this evidence or relaxing the policy.
 
 Two predeclared fixed-state GL16 ABBA diagnostics retain the original four
 methods, two points and numerical checks: one unbound, then one with both
@@ -157,9 +248,10 @@ branch-local arithmetic, Horner ordering, ordinary DAG sharing and stack reuse,
 and honors explicit user settings. This predates retained tensor storage: a
 normal-Nix diagnostic at `c0e78d26` measured thermal runtime at 969/974 microseconds
 with default CPE and 732/735 with zero, passing the original corpus comparisons.
-Later scoped production passed its paired runtime gate. These historical timings,
-not synthetic interpreter counts, justify retaining the policy. No current e6
-default-versus-zero comparison or new performance claim is implied.
+Later scoped production passed its paired runtime gate. These are historical
+`c0e78d26` measurements, not a default-versus-zero comparison at e6. The fd9
+zero/one and fixed-point controls in the current CPE section above provide the
+later measured tradeoff supporting the retained policy.
 
 The separate five-pair topology comparison preserves all 66 inventory entries
 in every pair. Fresh-process medians are 0.910630843 seconds on main and
@@ -169,8 +261,8 @@ construction, DOT export and inventory verification. This supplemental check is
 not one of the thirteen metric gates or a full numerator-equivalence certificate.
 Its receipt is
 `target/symbolic-tensor-flow/performance-final-e6a3bb46-topology-1/topology-report/report.json`.
-Preparation of the final documentation/CI-enabled source, cache upload and
-publication remain pending.
+These topology results qualify e6 only; current fd9 qualification and the
+remaining final-source CI/upload/publication steps are recorded above.
 
 The earlier full run of `880ad11dcce02724c178eac628e0f28dad6e17fa` finished in
 3,175.357 seconds with 5,639 passes, five failures, five slow cases and zero
@@ -336,6 +428,21 @@ still reported. d76 improves by about 42 percent. These measurements do not
 attribute the residual d53 cost to an unmeasured stage. Raw trials and the exact
 source/fixture scope are recorded in
 `target/symbolic-tensor-flow/ghost-performance-audit/loop-square-quiet-final-analysis.json`.
+
+A later quiet follow-up uses the `663ee049` consumer binary, whose production
+code is `fd9ed336`, against frozen `16787f71`. All eight exact checks pass under
+the original 240-second deadline, with no timeouts. The nine relevant source,
+input and reference groups are reverified byte-identical. Candidate d53 takes
+20.971--21.890 seconds versus 20.087--20.131 on the baseline; candidate d76 takes
+19.585--20.206 seconds versus 32.928--33.404. The earlier large slowdowns do not
+return in these binaries. This is a bounded follow-up, not a sealed CLI gate or
+a feature-identical causal timing comparison: 663 omits Idenso's optional
+`reference-cases` hooks present in the saved 167/e6 builds, and 167 has broader
+historical Python/portable-payload linkage. The hooks are dormant in these tests,
+but their TLS/code-layout presence can still affect cost. Small differences are
+therefore not attributed to the late shared fixes. The e6 comparison above
+remains separate; the follow-up receipt is
+`target/symbolic-tensor-flow/ghost-performance-audit/consumer663-quiet-analysis.json`.
 
 A separate scalar GL01 check compares `880ad11d` with e6 using sequential ABBA
 runs, byte-identical test/fixture inputs and the unchanged 240-second deadline.
@@ -518,11 +625,12 @@ from the newer tensor-ownership migration. The full path/symbol evidence is in
   host plans retain their existing responsibilities. The sampling subtree is
   unchanged from `6002674d`; the migration adds no per-sample tensor inference
   and does not change the Monte Carlo estimator or event accumulation.
-+ #strong[Persistence.] Main's full-state format is version 15; the earlier
-  reconciled branch uses 18; retained tensor fields require 19. The new payload
-  stores expressions and logical interfaces, remaps symbols and validates them
-  on load, and excludes planner/proof caches. Standalone amplitude version 12
-  and cross-section version 15 remain unchanged because they store already
++ #strong[Persistence.] Main's full-state format is version 15; the current
+  full-state format is version 20, including retained native diagrams and global
+  prefactors. Regenerate older full states. The payload stores expressions and
+  logical interfaces, remaps symbols and validates them on load, and excludes
+  planner/proof caches. Standalone amplitude version 12 and cross-section version
+  15 remain unchanged because they store already
   lowered scalar evaluators. Canonical diagram/model recipes remain source
   artifacts; runtime tensor interfaces are retained at their admission boundary.
 
@@ -1310,14 +1418,17 @@ interface, reject collisions and preserve callback validation. These are not
 safe uses of an Atom replacement followed by fresh inference. Python transfers
 reuse `TensorExpression::from_structured` to keep the same carrier.
 
-The completed `880ad11d` checkpoint, qualified `8f24069f` boundary repairs,
-approved `79c95409` references and completed e6 native/full-runtime and normal
-CLI checks are distinguished above, together with completed quiet ghost
-comparisons, local preparation of all 105 CI outputs, the complete topology
-comparison and thirteen sealed CLI results. Two CLI cases remain inconclusive;
-their diagnosis and qualification, preparation of the CI-enabled source, cache
-upload and publication remain pending. Artifacts and logs are retained under
-`target/symbolic-tensor-flow`.
+Current production `fd9ed336` has twelve passing CLI cases and one inconclusive
+GL16 SingleParametric case, with all numerical checks and evidence verified.
+Its normal Nix CLI build and five-pair topology comparison are complete.
+The `663ee049` test child passes 1,054 native and 664 consumer tests; its separate
+quiet follow-up passes eight exact ghost checks with the feature limits above.
+The complete 5,661-test sweep, earlier quiet ghost comparisons and completed
+105-output preparation remain explicitly tied to e6. The CPE controls above support keeping
+the scoped policy and do not replace the remaining inconclusive gate. At this
+documentation checkpoint, final exact-source preparation of all 105 CI outputs,
+cache upload and push/publication remain pending; the early 9c76 preparation was
+stopped as superseded. Artifacts and logs are retained under `target/symbolic-tensor-flow`.
 
 The first immutable candidate `48b8acfa` passed a fresh 533-case core sweep and
 workspace Clippy. The broader 151-case physics/state/backend run then reported
