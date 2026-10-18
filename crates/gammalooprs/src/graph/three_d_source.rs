@@ -2543,6 +2543,219 @@ impl<'a> GraphThreeDSource<'a> {
         }
     }
 
+    /// Test-only proof of the actual proper-source denominator occurrences.
+    /// The numerator and immutable assignment retain their production owners.
+    #[cfg(test)]
+    pub(crate) fn certify_denominator_reconstruction(
+        &self,
+        classes: &[CanonicalUvDenominatorClass],
+    ) -> Result<()> {
+        use spenso::structure::representation::{Minkowski, RepName};
+
+        let denominators = self
+            .exact_denominators
+            .ok_or_else(|| eyre::eyre!("denominator certificate requires an exact source"))?;
+        let (lmb, frame) = self.exact_coordinates.as_ref().ok_or_else(|| {
+            eyre::eyre!("the concrete UV certificate requires its retained component sub-LMB")
+        })?;
+        let parsed = self.exact_parsed_graph()?;
+        let energy_map = self.exact_energy_edge_index_map.as_ref().ok_or_else(|| {
+            eyre::eyre!("denominator certificate requires the actual occurrence energy map")
+        })?;
+        eyre::ensure!(
+            self.exact_occurrences.len() == denominators.len(),
+            "denominator certificate lost an input occurrence"
+        );
+        let mut original_ids = BTreeSet::new();
+        let mut local_ids = BTreeSet::new();
+        let mut energy_ids = BTreeSet::new();
+        let mut expected_powers = BTreeMap::<EdgeIndex, usize>::new();
+        for denominator in denominators {
+            *expected_powers.entry(denominator.source_edge).or_default() += 1;
+        }
+        let mut reconstructed_powers = BTreeMap::<EdgeIndex, usize>::new();
+        let mut polynomials = Vec::with_capacity(denominators.len());
+        for occurrence in &self.exact_occurrences {
+            eyre::ensure!(
+                original_ids.insert(occurrence.original_occurrence)
+                    && local_ids.insert(occurrence.local_edge_id)
+                    && energy_ids.insert(occurrence.energy_edge_id),
+                "denominator certificate has a duplicate occurrence"
+            );
+            let denominator = denominators
+                .get(occurrence.original_occurrence)
+                .ok_or_else(|| eyre::eyre!("denominator certificate has an unknown input"))?;
+            let edge = parsed
+                .internal_edges
+                .get(occurrence.local_edge_id)
+                .ok_or_else(|| eyre::eyre!("denominator certificate has an unknown parsed edge"))?;
+            eyre::ensure!(
+                edge.edge_id == occurrence.local_edge_id
+                    && energy_map.internal.get(&edge.edge_id) == Some(&occurrence.energy_edge_id)
+                    && self.uv_edges.contains(&denominator.source_edge),
+                "denominator certificate changed occurrence or component ownership"
+            );
+            let raw = denominator.momentum_signature_in_lmb(lmb, true)?;
+            eyre::ensure!(
+                self.exact_signatures.get(occurrence.original_occurrence) == Some(&raw),
+                "denominator certificate changed the raw component chart"
+            );
+            let raw_to_parsed_sign = if edge.signature == raw {
+                1
+            } else if edge.signature == raw.negated() {
+                -1
+            } else {
+                return Err(eyre::eyre!(
+                    "denominator certificate changed signed loop/external routing"
+                ));
+            };
+            // Physical source keys name the mass; rewritten keys name mass².
+            // Check the actual parsed key before using the retained mass below.
+            let source_edge = &self.graph.underlying[denominator.source_edge];
+            let expected_mass_key =
+                if denominator.mass_squared == source_edge.mass_atom(&self.graph.model).pow(2) {
+                    source_edge
+                        .particle
+                        .mass_atom(&self.graph.model)
+                        .to_canonical_string()
+                } else {
+                    denominator.mass_squared.to_canonical_string()
+                };
+            eyre::ensure!(
+                edge.mass_key.as_deref() == Some(expected_mass_key.as_str()),
+                "denominator certificate changed parsed mass metadata"
+            );
+            let momentum = CanonicalUvDenominatorClass::momentum(&edge.signature, lmb);
+            let quadratic = Minkowski {}
+                .new_rep(GS.dim)
+                .inner_product(&momentum, &momentum)
+                - &denominator.mass_squared;
+            let reconstructed = FourDDenominator {
+                source_edge: denominator.source_edge,
+                momentum,
+                mass_squared: denominator.mass_squared.clone(),
+                full_expr: quadratic,
+            };
+            // Only these individual scalar denominator polynomials are expanded.
+            // The actual raw full expression is independent of the reconstruction.
+            let original = denominator.polynomial_in_lmb(lmb)?;
+            let reconstructed = reconstructed.polynomial_in_lmb(lmb)?;
+            let literal_equal = (&original - &reconstructed).expand().is_zero();
+            let matched_original = original.replace(GS.m_uv_expansion).with(GS.m_uv_vacuum);
+            let matched_reconstructed = reconstructed
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum);
+            eyre::ensure!(
+                (&matched_original - &matched_reconstructed)
+                    .expand()
+                    .is_zero(),
+                "denominator certificate does not reproduce the complete raw polynomial/prescription"
+            );
+            *reconstructed_powers
+                .entry(denominator.source_edge)
+                .or_default() += 1;
+            polynomials.push((
+                occurrence,
+                original,
+                reconstructed,
+                literal_equal,
+                raw_to_parsed_sign,
+            ));
+        }
+        eyre::ensure!(
+            original_ids == (0..denominators.len()).collect()
+                && expected_powers == reconstructed_powers,
+            "denominator certificate changed propagator multiplicities"
+        );
+        // This concrete proper-source certificate is uncut. External crown
+        // edges remain external, but every parsed internal propagator must be
+        // one of the retained input occurrences, with exactly one energy ID.
+        let parsed_ids = parsed
+            .internal_edges
+            .iter()
+            .map(|edge| edge.edge_id)
+            .collect::<BTreeSet<_>>();
+        eyre::ensure!(
+            parsed.initial_state_cut_edges.is_empty()
+                && parsed_ids.len() == parsed.internal_edges.len()
+                && local_ids == parsed_ids
+                && energy_map.internal.len() == local_ids.len()
+                && energy_map.internal.keys().copied().collect::<BTreeSet<_>>() == local_ids
+                && energy_map
+                    .internal
+                    .values()
+                    .copied()
+                    .collect::<BTreeSet<_>>()
+                    == energy_ids,
+            "denominator certificate found unmatched parsed propagator or energy-map support"
+        );
+
+        // Construct only the existing mapper from this very same immutable
+        // source. Its fixed bindings and signed class pools are the ones used
+        // by the immediately following production preparation.
+        let mapper = self.exact_source_energy_mapper(classes)?;
+        for (occurrence, original, reconstructed, literal_equal, raw_to_parsed_sign) in polynomials
+        {
+            let denominator = &denominators[occurrence.original_occurrence];
+            let owned = mapper
+                .source_edge_occurrences
+                .get(&denominator.source_edge)
+                .and_then(|values| {
+                    values
+                        .iter()
+                        .find(|value| value.energy_edge_id == occurrence.energy_edge_id)
+                })
+                .ok_or_else(|| eyre::eyre!("denominator certificate lost its raw signed owner"))?;
+            eyre::ensure!(
+                owned.raw_momentum == denominator.momentum
+                    && owned.raw_to_parsed_sign == raw_to_parsed_sign,
+                "denominator certificate changed the raw/parsed numerator routing sign"
+            );
+            let bound_original = FourDDenominator {
+                full_expr: mapper.bind_source_externals(&original),
+                ..denominator.clone()
+            }
+            .polynomial_in_lmb(lmb)?;
+            let bound_reconstructed = FourDDenominator {
+                full_expr: mapper.bind_source_externals(&reconstructed),
+                ..denominator.clone()
+            }
+            .polynomial_in_lmb(lmb)?;
+            let bound_literal_equal = (&bound_original - &bound_reconstructed).expand().is_zero();
+            let matched_original = bound_original
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum);
+            let matched_reconstructed = bound_reconstructed
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum);
+            eyre::ensure!(
+                (&matched_original - &matched_reconstructed)
+                    .expand()
+                    .is_zero(),
+                "denominator certificate changed its full polynomial at the fixed component point"
+            );
+            crate::debug_tags!(#uv, #local, #four_d, #cff, #inspect;
+                stage = "exact_source_full_denominator_certificate",
+                graph = %self.graph.name,
+                original_occurrence = occurrence.original_occurrence,
+                parsed_edge = occurrence.local_edge_id,
+                energy_edge = occurrence.energy_edge_id,
+                source_owner = usize::from(denominator.source_edge),
+                raw_to_parsed_sign, literal_equal, bound_literal_equal,
+                auxiliary_mass_identification_equal = true,
+                file.raw_momentum = %denominator.momentum.to_canonical_string(),
+                file.raw_full_polynomial = %denominator.full_expr.to_canonical_string(),
+                file.normalized_original = %original.to_canonical_string(),
+                file.normalized_reconstructed = %reconstructed.to_canonical_string(),
+                file.fixed_bindings = ?self.fixed_external_momenta,
+                file.component_lmb = ?lmb, file.component_frame = ?frame,
+                file.owner_multiplicities = ?expected_powers,
+                "Certified this actual source occurrence before CFF preparation"
+            );
+        }
+        Ok(())
+    }
+
     pub(crate) fn exact_ose_replacements(&self) -> Option<Vec<Replacement>> {
         let denominators = self.exact_denominators?;
         let mut replacements = self
@@ -7268,6 +7481,193 @@ mod tests {
                 .is_zero(),
             "the reconstructed triangle must preserve the complete mapped Minkowski numerator residue"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_source_full_denominator_certificate_preserves_powers_and_rejects_drift() -> Result<()>
+    {
+        use spenso::structure::representation::{Minkowski, RepName};
+        test_initialise()?;
+        let context = crate::uv::approx::projected_4d::Local4dProjectionContext::default();
+        assert!(!context.certify_denominator_reconstruction);
+        assert_eq!(context.denominator_reconstruction_certificates, 0);
+        assert_eq!(context.source_preparation_builds, 0);
+        assert_eq!(context.preparations.len(), 0);
+        let graph: Graph = finalized_runtime_dot!(digraph full_denominator_certificate {
+            graph [projector=1]
+            edge [num=1 particle="t"]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0 sink="{ufo_order:2}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=2 particle="g" source="{ufo_order:1}" sink="{ufo_order:1}"]
+            b -> c [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            c -> outgoing [id=4 source="{ufo_order:1}"]
+        }, "sm")?;
+        let owners = [EdgeIndex(1), EdgeIndex(2)];
+        let filter = graph
+            .get_edge_subgraph(owners[0])
+            .union(&graph.get_edge_subgraph(owners[1]));
+        let subgraph = InternalSubGraph::cleaned_filter_optimist(filter, graph.as_ref());
+        let crown = graph.dummy_stripped_external_flows_of(&subgraph);
+        let lmb =
+            graph.try_compatible_sub_lmb(&subgraph, crown.clone(), &graph.loop_momentum_basis)?;
+        let carrier = FunctionBuilder::new(GS.emr_mom).add_arg(1).finish();
+        let metadata_mass = Atom::var(GS.m_uv_expansion).pow(2);
+        let full_mass = Atom::var(GS.m_uv_vacuum).pow(2);
+        let denominators = [(owners[0], 1, 2), (owners[1], -1, 3)]
+            .into_iter()
+            .flat_map(|(source_edge, sign, power)| {
+                let momentum = Atom::num(sign) * &carrier;
+                let full_expr = Minkowski {}
+                    .new_rep(GS.dim)
+                    .inner_product(&momentum, &momentum)
+                    - &full_mass;
+                std::iter::repeat_n(
+                    FourDDenominator {
+                        source_edge,
+                        momentum,
+                        mass_squared: metadata_mass.clone(),
+                        full_expr,
+                    },
+                    power,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_ne!(metadata_mass, full_mass);
+        let source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &denominators,
+            owners,
+            [],
+            &lmb,
+            ExactUvSubLmbFrame::TaylorVacuum,
+        )?;
+        source.certify_denominator_reconstruction(&[])?;
+        assert_eq!(source.exact_occurrences.len(), 5);
+
+        // Change only the raw full polynomial. The source routing, mass,
+        // occurrence list and parsed pole data remain unchanged.
+        let mut altered_full = denominators.clone();
+        altered_full[0].full_expr += Atom::i()
+            * Atom::var(symbolica::symbol!(
+                "full_denominator_certificate::extra_prescription"; Scalar
+            ));
+        let altered_source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &altered_full,
+            owners,
+            [],
+            &lmb,
+            ExactUvSubLmbFrame::TaylorVacuum,
+        )?;
+        assert!(
+            altered_source
+                .certify_denominator_reconstruction(&[])
+                .expect_err("unchanged pole metadata cannot absorb a new raw prescription")
+                .to_string()
+                .contains("complete raw polynomial/prescription")
+        );
+        for corruption in 0..6 {
+            let mut altered_source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+                &graph,
+                &denominators,
+                owners,
+                [],
+                &lmb,
+                ExactUvSubLmbFrame::TaylorVacuum,
+            )?;
+            let local = altered_source.exact_occurrences[0].local_edge_id;
+            match corruption {
+                0 => {
+                    altered_source.exact_parsed.as_mut().unwrap().internal_edges[local].mass_key =
+                        Some("unrelated_mass".into());
+                }
+                1 => {
+                    altered_source.exact_parsed.as_mut().unwrap().internal_edges[local]
+                        .signature
+                        .loop_signature[0] *= 2;
+                }
+                2 => {
+                    altered_source.exact_occurrences.pop();
+                }
+                3 => {
+                    altered_source.exact_occurrences[1] = altered_source.exact_occurrences[0];
+                }
+                4 => {
+                    let parsed = altered_source.exact_parsed.as_mut().unwrap();
+                    let mut extra = parsed.internal_edges[local].clone();
+                    extra.edge_id = parsed.internal_edges.len();
+                    parsed.internal_edges.push(extra);
+                }
+                _ => {
+                    let extra_local = altered_source
+                        .exact_parsed
+                        .as_ref()
+                        .unwrap()
+                        .internal_edges
+                        .len();
+                    altered_source
+                        .exact_energy_edge_index_map
+                        .as_mut()
+                        .unwrap()
+                        .internal
+                        .insert(extra_local, usize::MAX);
+                }
+            }
+            assert!(
+                altered_source
+                    .certify_denominator_reconstruction(&[])
+                    .is_err(),
+                "parsed mass, signed routing and exact input multiplicity are independent witnesses"
+            );
+        }
+
+        let top_mass = graph.underlying[owners[0]].particle.mass_atom(&graph.model);
+        assert!(!top_mass.is_zero());
+        assert_ne!(top_mass, top_mass.pow(2));
+        let physical = owners.map(|source_edge| {
+            let momentum = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(source_edge))
+                .finish();
+            let mass_squared = graph.underlying[source_edge]
+                .particle
+                .mass_atom(&graph.model)
+                .pow(2);
+            let full_expr = Minkowski {}
+                .new_rep(GS.dim)
+                .inner_product(&momentum, &momentum)
+                - &mass_squared;
+            FourDDenominator {
+                source_edge,
+                momentum,
+                mass_squared,
+                full_expr,
+            }
+        });
+        let external = *lmb.ext_edges.iter().next().unwrap();
+        let point = GS.on_shell_momentum(
+            external,
+            &top_mass,
+            &[
+                Atom::num((5, 4)),
+                Atom::num((1, 4)),
+                Atom::num((1, 2)),
+                Atom::num((1, 2)),
+            ],
+        );
+        let physical_source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &physical,
+            owners,
+            crown.included_iter(),
+            &lmb,
+            ExactUvSubLmbFrame::RetainedPhysicalCrown,
+        )?
+        .with_fixed_external_momenta(&BTreeMap::from([(external, point)]))?;
+        physical_source.certify_denominator_reconstruction(&[])?;
         Ok(())
     }
 
