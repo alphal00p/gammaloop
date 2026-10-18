@@ -555,6 +555,7 @@
       "crates/gammalooprs/tests/fixtures/renormalization"
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
       "crates/gammalooprs/tests/resources/uv_fixed_basis"
+      "crates/gammalooprs/tests/resources/os_mass_reference.py"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL256.dot"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot"
     ];
@@ -1412,6 +1413,44 @@
       dontUsePythonImportsCheck = true;
     };
   in [ufoModelLoader]);
+
+  # The mandatory two-loop mass reference is the sole automatic PySecDec
+  # consumer. Keep its locked, CPU-only runtime out of ordinary test closures.
+  osMassReferencePython = pkgs.python313.withPackages (pythonPackages: let
+    locked = (builtins.fromTOML (builtins.readFile
+      (workspaceRoot + "/nix/os-mass-reference/uv.lock"))).package;
+    wheelPackage = pname: tag: dependencies: let
+      package = lib.findFirst (package: package.name == pname)
+        (throw "Missing ${pname} in the OS mass-reference runtime lock") locked;
+      wheel = lib.findFirst (wheel: lib.hasInfix tag wheel.url)
+        (throw "Missing ${tag} wheel for ${pname}") package.wheels;
+    in pythonPackages.buildPythonPackage {
+      inherit pname dependencies;
+      inherit (package) version;
+      format = "wheel";
+      src = pkgs.fetchurl {inherit (wheel) url hash;};
+      nativeBuildInputs = [pkgs.autoPatchelfHook];
+      buildInputs = [pkgs.stdenv.cc.cc.lib pkgs.zlib];
+      doCheck = false;
+      pythonImportsCheck = [
+        (if pname == "pysecdec" then "pySecDec" else builtins.replaceStrings ["-"] ["_"] pname)
+      ];
+      meta.platforms = ["x86_64-linux"];
+    };
+    mpmath = wheelPackage "mpmath" "-py3-none-any.whl" [];
+    sympy = wheelPackage "sympy" "-py3-none-any.whl" [mpmath];
+    numpy = wheelPackage "numpy" "-cp313-cp313-manylinux_2_27_x86_64." [];
+    nestAsyncio = wheelPackage "nest-asyncio" "-py3-none-any.whl" [];
+    pysecdec = wheelPackage "pysecdec" "-py3-none-manylinux_2_28_x86_64.whl"
+      [numpy sympy nestAsyncio];
+  in [pysecdec]);
+  osMassReferenceLauncher = pkgs.writeShellApplication {
+    name = "gammaloop-os-mass-reference-python";
+    runtimeInputs = [pkgs.gnumake pkgs.gcc];
+    text = ''
+      exec ${osMassReferencePython}/bin/python3 "$@"
+    '';
+  };
 
   # Common arguments can be set here to avoid repeating them later
   commonArgs = {
@@ -2913,6 +2952,7 @@
     profile ? nextestProfile,
     partition ? null,
     name ? "gammaloop-nextest-${target.name}",
+    noTests ? "pass",
   }: let
     junitPath = "target/nextest/${profile}/junit.xml";
   in
@@ -3020,7 +3060,7 @@
             --workspace-remap . \
             --profile ${lib.escapeShellArg profile} \
             ${lib.optionalString ((target.runFilter or null) != null) "-E ${lib.escapeShellArg target.runFilter}"} \
-            --no-fail-fast --final-status-level fail --no-tests=pass \
+            --no-fail-fast --final-status-level fail --no-tests=${lib.escapeShellArg noTests} \
             ${lib.optionalString (partition != null) "--partition ${lib.escapeShellArg partition}"}
           package_status=$?
           nextest-failure-summary ${lib.escapeShellArg junitPath} || true
@@ -3206,7 +3246,22 @@
         profile = "ci_slow";
         partition = "hash:${toString index}/4";
       };
-    }) [1 2 3 4]);
+    }) [1 2 3 4])
+    // lib.optionalAttrs (system == "x86_64-linux") {
+      gammaloop-nextest-os-mass-reference = nextestCheckFor {
+        name = "gammaloop-nextest-os-mass-reference";
+        target = (lib.findFirst (target: target.name == "core")
+          (throw "OS mass reference requires the core archive")
+          checkedNextestPackageGroups) // {
+          packages = ["gammalooprs"];
+          runtimeUfoLoader = false;
+          runtimeTools = [osMassReferenceLauncher];
+          runFilter = "test(=uv::approx::integrated::native_mass_tests::native_two_loop_qcd_bare_mass_matches_primary_reference)";
+        };
+        profile = "ci_os_mass_reference";
+        noTests = "fail";
+      };
+    };
 in {
   inherit (documentation) docsTypst docsFontPath linnetPython alphal00pDocsCargoArtifacts
     alphal00pDocsPages alphal00pDocsSnapshotFixture;
@@ -3222,6 +3277,7 @@ in {
     clinnet-cli
     gammaloop-python-module
     nextestUfoPython
+    osMassReferenceLauncher
     symbolicaRenderData
     nixCiConfiguration
     guppyWorkspaceGraphJson
