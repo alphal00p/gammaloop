@@ -1,0 +1,17 @@
+// Presentation-only view of native D02; no Feynman rules are supplied here.
+digraph os_mass_D02 {
+  graph [feynkit_name="D02"];
+  v0 [id=0];
+  v1 [id=1];
+  v2 [id=2];
+  v3 [id=3];
+  ext0 [style=invis];
+  ext0 -> v2 [id=0, particle="t", pdg=6, directed=true, source_slot=0, target_slot=1, dir=forward];
+  ext1 [style=invis];
+  v1 -> ext1 [id=1, particle="t", pdg=6, directed=true, source_slot=0, target_slot=0, dir=forward];
+  v0 -> v1 [id=2, particle="t", pdg=6, directed=true, source_slot=0, target_slot=1, dir=forward];
+  v2 -> v0 [id=3, particle="t", pdg=6, directed=true, source_slot=0, target_slot=1, dir=forward];
+  v0 -> v3 [id=4, particle="g", pdg=21, directed=false, source_slot=2, target_slot=0, dir=none];
+  v1 -> v3 [id=5, particle="g", pdg=21, directed=false, source_slot=2, target_slot=1, dir=none];
+  v2 -> v3 [id=6, particle="g", pdg=21, directed=false, source_slot=2, target_slot=2, dir=none];
+}

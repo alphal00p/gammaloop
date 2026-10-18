@@ -1,0 +1,15 @@
+// Presentation-only view of native D03; no Feynman rules are supplied here.
+digraph os_mass_D03 {
+  graph [feynkit_name="D03"];
+  v0 [id=0];
+  v1 [id=1];
+  v2 [id=2];
+  ext0 [style=invis];
+  ext0 -> v1 [id=0, particle="t", pdg=6, directed=true, source_slot=0, target_slot=1, dir=forward];
+  ext1 [style=invis];
+  v0 -> ext1 [id=1, particle="t", pdg=6, directed=true, source_slot=0, target_slot=0, dir=forward];
+  v1 -> v0 [id=2, particle="t", pdg=6, directed=true, source_slot=0, target_slot=1, dir=forward];
+  v0 -> v2 [id=3, particle="g", pdg=21, directed=false, source_slot=2, target_slot=0, dir=none];
+  v1 -> v2 [id=4, particle="g", pdg=21, directed=false, source_slot=2, target_slot=1, dir=none];
+  v2 -> v2 [id=5, particle="g", pdg=21, directed=false, source_slot=2, target_slot=3, dir=none];
+}
