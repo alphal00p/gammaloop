@@ -1009,6 +1009,7 @@ pub(in crate::uv) struct CertifiedVertexChild {
     pub(in crate::uv) local: crate::uv::approx::local_4d::Local4dCts,
     pub(in crate::uv) integrated: super::IntegratedCts,
     pub(in crate::uv) settings: crate::uv::UVgenerationSettings,
+    pub(in crate::uv) pole_reference: SymbolicTensor<IndexedStructure>,
 }
 
 impl QcdMassReference {
@@ -1055,6 +1056,11 @@ impl QcdMassReference {
         let pi = Atom::var(symbolica::atom::Symbol::PI);
         let epsilon = Atom::var(GS.dim_epsilon);
         // Independent single-scale vacuum references at mu=M=1, SU(3).
+        let pole_weight = if internal_pdgs == [6, 6, 21] {
+            Atom::num((-1, 6))
+        } else {
+            Atom::num((9, 2))
+        };
         let vertex_series = if internal_pdgs == [6, 6, 21] {
             let color = Atom::num((-1, 6)); // CF-CA/2
             &color
@@ -1398,6 +1404,12 @@ impl QcdMassReference {
                     local,
                     integrated,
                     settings: settings.clone(),
+                    pole_reference: tree.with_checked_expression(
+                        -&loop_factor
+                            * model.expand_couplings(tree.expression())
+                            * &pole_weight
+                            * epsilon.pow(-1),
+                    )?,
                 });
             }
         }
