@@ -2329,7 +2329,12 @@ mod tests {
                             .into_iter()
                             .map(|(key, weight)| (key.expression, weight.expression))
                             .collect::<std::collections::BTreeMap<_, _>>();
-                        assert_eq!(actual, expected.into_iter().collect());
+                        assert_eq!(
+                            actual,
+                            expected
+                                .into_iter()
+                                .collect::<std::collections::BTreeMap<_, _>>()
+                        );
                         assert_eq!(source, before);
                     }
                 }
