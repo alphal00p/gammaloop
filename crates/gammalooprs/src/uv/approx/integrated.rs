@@ -6113,3 +6113,7 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "integrated_native_mass_tests.rs"]
+pub(in crate::uv) mod native_mass_tests;
