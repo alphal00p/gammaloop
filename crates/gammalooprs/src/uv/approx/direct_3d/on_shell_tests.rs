@@ -22,11 +22,11 @@ use eyre::WrapErr;
 use idenso::{
     CookMode, CookSettings,
     shorthands::UndoShorthands,
-    tensor::{SymbolicNetExt, SymbolicNetParse},
+    tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
 };
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
-use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::{IndexedStructure, abstract_index::AIND_SYMBOLS};
 use symbolica::domains::float::Real;
 
 #[test]
@@ -1082,6 +1082,8 @@ impl DirectForestFixture {
 
 type ForestNumber = spenso::algebra::complex::Complex<crate::utils::F<crate::utils::ArbPrec>>;
 type ForestComponents = std::collections::BTreeMap<Vec<(Atom, usize)>, ForestNumber>;
+// Execution ports remain distinct; graph labels are used only for result keys.
+type ForestOutputLabels = std::collections::BTreeMap<Atom, Atom>;
 type ForestEvaluationNetwork = spenso::network::Network<
     spenso::network::store::NetworkStore<
         spenso::tensors::parametric::EvalTreeTensor<
@@ -1111,6 +1113,7 @@ pub(super) struct ForestTensorEvaluator {
     route: usize,
     loop_count: usize,
     prepare_sum_boundaries: bool,
+    output_labels: ForestOutputLabels,
     backend: ForestEvaluationBackend,
 }
 
@@ -1124,9 +1127,17 @@ impl ForestTensorEvaluator {
     ) -> Result<(
         crate::uv::Integrands,
         crate::integrands::process::ParamBuilder,
+        ForestOutputLabels,
     )> {
         use crate::integrands::process::{ParamBuilder, param_builder::FnMapEntry};
-        use spenso::structure::slot::IsAbstractSlot;
+        use spenso::{
+            network::library::symbolic::ETS,
+            structure::{
+                abstract_index::AbstractIndex,
+                representation::LibrarySlot,
+                slot::{IsAbstractSlot, SlotMatcher},
+            },
+        };
         let full = graph.full_filter();
         let spatial_replacements =
             graph.uv_spatial_wrapped_replacement(&full, &graph.loop_momentum_basis, &[W_.x___]);
@@ -1190,8 +1201,8 @@ impl ForestTensorEvaluator {
                     }
                 })
         };
-        let bind = |expression: &Atom| -> Result<Atom> {
-            let mut value = expression
+        let prepare = |expression: &Atom| -> Result<Atom> {
+            let value = expression
                 .replace(function!(GS.tree_denom_wrapper, W_.x_))
                 .with(W_.x_)
                 .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
@@ -1211,9 +1222,9 @@ impl ForestTensorEvaluator {
                 .replace(GS.renormalization_localization_scale)
                 .with(20);
             // A wavefunction can occupy a spinor slot in Schoonschip
-            // notation. Expose that contraction before amputation, then
-            // identify its fresh index with the graph's external port.
-            value = value
+            // notation. Expose that contraction before reserving the shared
+            // output frame across all roots and retained bodies.
+            Ok(value
                 .parse_to_symbolic_net::<Aind>(&ParseSettings {
                     shorthand_parsing: ShorthandParsing::Expand {
                         schoonschip: SchoonschipExpansionMode {
@@ -1226,8 +1237,47 @@ impl ForestTensorEvaluator {
                     },
                     ..Default::default()
                 })?
-                .simple_execute::<()>()?;
-            let mut spinor_ports = std::collections::BTreeMap::new();
+                .simple_execute::<()>()?)
+        };
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let expressions = expressions
+            .resolved_scalars()?
+            .fallible_map(&prepare)?
+            .map_numerators(|tensor| {
+                let source = cooking.uncook(tensor.expression().as_view());
+                let prepared = prepare(&source)?;
+                Ok(tensor.with_checked_expression(cooking.try_cook(prepared.as_view())?)?)
+            })?;
+        // Compact CFF roots have an Atom ABI. Admit only their explicit
+        // finite factors once here; opaque family calls do not supply an
+        // output interface. Keep these carriers until binding completes.
+        let prepared_roots = expressions
+            .iter()
+            .map(|(key, atom)| {
+                Ok((
+                    *key,
+                    NumeratorInterface::admit(atom.clone(), None)?.try_into_indexed()?,
+                ))
+            })
+            .collect::<Result<std::collections::BTreeMap<_, _>>>()?;
+        // The native owner reserves written indices and established logical
+        // ports, including names carried only by a ranked zero. Allocate the
+        // shared output frame only after every root, RHS and projector is known.
+        let dummies = SymbolicTensor::<IndexedStructure>::reserved_dummies(
+            prepared_roots
+                .values()
+                .chain(expressions.numerators().iter().map(|entry| &entry.rhs))
+                .chain(std::iter::once(&graph.global_prefactor.projector)),
+        );
+        let mut output_ports = std::collections::BTreeMap::<usize, (Atom, Atom)>::new();
+        let mut bind = |source_kind: &'static str,
+                        source: &SymbolicTensor<IndexedStructure>|
+         -> Result<SymbolicTensor<IndexedStructure>> {
+            let mut value = cooking.uncook(source.expression().as_view());
+            let mut graph_spinor_ports =
+                std::collections::BTreeMap::<usize, LibrarySlot<Aind>>::new();
             let mut invalid_wavefunction = false;
             let _ = value.replace_map(|view, _, _| {
                 let AtomView::Fun(wavefunction) = view else {
@@ -1238,8 +1288,8 @@ impl ForestTensorEvaluator {
                 }
                 if wavefunction.get_nargs() != 2
                     || !matches!(wavefunction.get(1), AtomView::Fun(index)
-                        if index.get_symbol() != AIND_SYMBOLS.cind
-                            && index.get_nargs() == 2)
+                        if (index.get_symbol() == AIND_SYMBOLS.cind && index.get_nargs() == 1)
+                            || (index.get_symbol() != AIND_SYMBOLS.cind && index.get_nargs() == 2))
                 {
                     invalid_wavefunction = true;
                     return;
@@ -1264,30 +1314,89 @@ impl ForestTensorEvaluator {
                     invalid_wavefunction = true;
                     return;
                 };
-                match spinor_ports.entry(wavefunction.get(1).to_owned()) {
-                    std::collections::btree_map::Entry::Occupied(entry) => {
-                        invalid_wavefunction |= entry.get() != &port.to_atom();
-                    }
-                    std::collections::btree_map::Entry::Vacant(entry) => {
-                        entry.insert(port.to_atom());
-                    }
+                if port.rep_name() != (idenso::representations::Bispinor {}).into() {
+                    invalid_wavefunction = true;
+                    return;
                 }
+                graph_spinor_ports.insert(edge, *port);
+                if matches!(wavefunction.get(1), AtomView::Fun(index)
+                    if index.get_symbol() == AIND_SYMBOLS.cind)
+                {
+                    // Parse the fixed coordinate with the native marker owner
+                    // and check its range against this graph-owned spinor port.
+                    // Tensor inference alone only validates the interface.
+                    let component = SlotMatcher::default().concrete_component(wavefunction.get(1));
+                    let dimension = usize::try_from(port.dim());
+                    if !matches!((component, dimension),
+                        (Some(Ok(component)), Ok(dimension)) if component < dimension)
+                    {
+                        invalid_wavefunction = true;
+                    }
+                    return;
+                }
+                // The edge owns this wavefunction, independently of the
+                // spelling of its contraction index in another Add scope.
+                invalid_wavefunction |= !LibrarySlot::<Aind>::try_from(wavefunction.get(1))
+                    .is_ok_and(|source| source.rep() == port.rep());
             });
             if invalid_wavefunction {
                 return Err(eyre!(
-                    "amputation requires one explicit graph-owned external spinor port"
+                    "amputation requires one explicit graph-owned external spinor port ({source_kind})"
                 ));
             }
-            value = value.replace_multiple(spinor_ports.into_iter().map(|(source, target)| {
-                symbolica::id::Replacement::new(source.to_pattern(), target.to_pattern())
-            }));
+            let opens_spinors = !graph_spinor_ports.is_empty();
+            for (edge, port) in graph_spinor_ports {
+                output_ports.entry(edge).or_insert_with(|| {
+                    (
+                        port.rep()
+                            .slot::<AbstractIndex, _>(dummies.fresh_index())
+                            .to_atom(),
+                        port.to_atom(),
+                    )
+                });
+            }
             value = value.replace_map(|view, _, output| {
                 if let AtomView::Fun(wavefunction) = view
                     && [GS.u, GS.ubar, GS.v, GS.vbar].contains(&wavefunction.get_symbol())
                 {
-                    **output = Atom::one();
+                    let edge = usize::try_from(wavefunction.get(0))
+                        .expect("external wavefunction owner was validated");
+                    if matches!(wavefunction.get(1), AtomView::Fun(index)
+                        if index.get_symbol() == AIND_SYMBOLS.cind)
+                    {
+                        **output =
+                            function!(GS.delta_vec, wavefunction.get(1), &output_ports[&edge].0);
+                    } else {
+                        // Open this occurrence locally. A slot that belongs to
+                        // a wavefunction in one summand may be contracted inside
+                        // a different summand; globally renaming it captures
+                        // that private index and changes the matrix coefficient.
+                        **output =
+                            function!(ETS.metric, wavefunction.get(1), &output_ports[&edge].0);
+                    }
                 }
             });
+            let opened = if opens_spinors {
+                // Amputation deliberately changes this retained interface. The
+                // native transform owner checks the new explicit ports; only
+                // Bispinor metrics are contracted, without re-inferring the RHS.
+                source
+                    .with_transformed_expression(cooking.try_cook(value.as_view())?)?
+                    .0
+                    .contract(idenso::tensor::ContractSettings {
+                        representations: Some(&[(idenso::representations::Bispinor {}).into()]),
+                        rank_one: false,
+                        collect_chains: false,
+                        collect_traces: false,
+                        expand: false,
+                        ..Default::default()
+                    })?
+            } else {
+                source.clone()
+            };
+            // Keep these output indices distinct from the family's live
+            // connection ports until all retained bodies are composed.
+            value = cooking.uncook(opened.expression().as_view());
             for (pair, edge, _) in graph.iter_edges_of(&full) {
                 if !pair.is_paired() {
                     continue;
@@ -1322,24 +1431,22 @@ impl ForestTensorEvaluator {
                 .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
                 .with_map(|matched| matched.get(W_.prop_).unwrap().to_atom().sqrt());
             let value = GS.lower_esurfaces(&value).undo_dots::<Aind>()?;
-            Ok(bind_coordinates(&value))
+            let value = bind_coordinates(&value);
+            Ok(opened.with_checked_expression(cooking.try_cook(value.as_view())?)?)
         };
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
-        let expressions = expressions
-            .resolved_scalars()?
-            .fallible_map(&bind)?
-            .map_numerators(|tensor| {
-                // The oracle deliberately amputates external wavefunctions.
-                // Preserve the donor's source-notation binding, then publish
-                // its changed interface through the retained transformation owner.
-                let source = cooking.uncook(tensor.expression().as_view());
-                let bound = bind(&source)?;
-                Ok(tensor
-                    .with_transformed_expression(cooking.try_cook(bound.as_view())?)?
-                    .0)
-            })?;
+        let bound_roots = prepared_roots
+            .iter()
+            .map(|(key, source)| {
+                let bound = bind("cut-indexed root", source)?;
+                Ok((*key, cooking.uncook(bound.expression().as_view())))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let bound_bodies =
+            expressions.map_numerators(|tensor| bind("shared numerator body", tensor))?;
+        // resolved_scalars above has consumed the scalar definition store.
+        // Rebuild only the root Atom map and retain the mapped typed RHS store.
+        let expressions: crate::uv::Integrands = bound_roots.into_iter().collect();
+        let expressions = expressions.with_numerators(bound_bodies.numerators().iter().cloned())?;
         let mut builder = ParamBuilder::new_empty();
         builder.pairs.additional_params = parameters.iter().cloned().collect();
         builder.pairs.update_ranges();
@@ -1380,7 +1487,8 @@ impl ForestTensorEvaluator {
                 })
                 .map_err(|error| eyre!(error))?;
         }
-        Ok((expressions, builder))
+        let output_labels = output_ports.into_values().collect();
+        Ok((expressions, builder, output_labels))
     }
 
     /// Independent resolved-network reference, retained for small controls and
@@ -1395,7 +1503,9 @@ impl ForestTensorEvaluator {
         let input = [(crate::cff::CutCFFIndex::new_all_none(), expression.clone())]
             .into_iter()
             .collect();
-        let (bound, builder) = Self::bind(graph, &input)?;
+        let (bound, builder, output_labels) = Self::bind(graph, &input).wrap_err_with(|| {
+            format!("forest reference binding: fixture={fixture:?}, route={route}, source=resolved input")
+        })?;
         let value: Atom = bound.resolved()?.iter().map(|(_, atom)| atom).sum();
         let mut network = value.parse_into_net()?;
         DirectForestFixture::materialize_library(&mut network)?;
@@ -1409,6 +1519,7 @@ impl ForestTensorEvaluator {
             route,
             loop_count: graph.loop_momentum_basis.loop_edges.len(),
             prepare_sum_boundaries: true,
+            output_labels,
             backend: ForestEvaluationBackend::Reference(Box::new(evaluated)),
         })
     }
@@ -1420,7 +1531,6 @@ impl ForestTensorEvaluator {
         input: &crate::uv::Integrands,
     ) -> Result<Self> {
         use crate::integrands::process::evaluators::EvaluatorStack;
-        use idenso::IndexTooling;
         use spenso::{
             iterators::IteratableTensor,
             network::{ExecutionResult, tags::SPENSO_TAG},
@@ -1432,20 +1542,60 @@ impl ForestTensorEvaluator {
         };
         use symbolica::atom::FunctionBuilder;
         let started = std::time::Instant::now();
-        let (bound, mut builder) = Self::bind(graph, input)?;
+        let (bound, mut builder, output_labels) = Self::bind(graph, input).wrap_err_with(|| {
+            format!("forest shared binding: fixture={fixture:?}, route={route}, source=retained roots/shared bodies")
+        })?;
         // The original graph owns the common external tensor interface for every
         // completed forest term. This small factorized view is used only for
         // admission; evaluator roots remain the original compact family calls.
-        let physical = graph.production_numerator_atom_for_full_3d_expression();
-        let physical = [(crate::cff::CutCFFIndex::new_all_none(), physical)]
+        let reduced = graph.full_filter().subtract(&graph.initial_state_cut);
+        let physical_tensor = graph
+            .numerator(&reduced, &graph.empty_subgraph())?
+            .state
+            .expr
+            .multiply(graph.global_numerator()?)?;
+        let physical_tag = DirectResidueBranches::numerator_scope().1;
+        let physical_lhs = function!(symbol!("gammalooprs::uv::numerator_family"), &physical_tag);
+        let physical: crate::uv::Integrands = [(
+            crate::cff::CutCFFIndex::new_all_none(),
+            physical_lhs.clone(),
+        )]
+        .into_iter()
+        .collect();
+        let physical = physical.with_numerators([std::sync::Arc::new(
+            crate::integrands::process::param_builder::NumeratorDefinition {
+                lhs: physical_lhs,
+                rhs: physical_tensor,
+                args: vec![],
+                tags: vec![physical_tag],
+                inlining: symbolica::evaluate::InliningPolicy::Always,
+                is_alias: false,
+            },
+        )])?;
+        let (physical, _, physical_labels) = Self::bind(graph, &physical).wrap_err_with(|| {
+            format!("forest shared binding: fixture={fixture:?}, route={route}, source=physical output interface")
+        })?;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let mut slots = physical.numerators()[0]
+            .rhs
+            .structure()
+            .canonical()
+            .external_structure()
             .into_iter()
-            .collect();
-        let (physical, _) = Self::bind(graph, &physical)?;
-        let interface: Atom = physical.iter().map(|(_, atom)| atom).sum();
-        let mut slots = interface
-            .list_dangling::<Aind>()?
-            .iter()
-            .map(|slot| Slot::<LibraryRep, Aind>::try_from(slot.as_view()))
+            .map(|slot| {
+                let slot = cooking.uncook(slot.to_atom().as_view());
+                // Match the template's graph-owned output to this input's
+                // execution frame. Only these probe-port descriptors change;
+                // no retained body is renamed onto a live family-link index.
+                let label = physical_labels.get(&slot).unwrap_or(&slot);
+                let actual = output_labels
+                    .iter()
+                    .find_map(|(actual, graph_label)| (graph_label == label).then_some(actual))
+                    .unwrap_or(label);
+                Slot::<LibraryRep, Aind>::try_from(actual.as_view())
+            })
             .collect::<std::result::Result<Vec<_>, _>>()?;
         slots.sort_by_key(|slot| slot.to_atom());
         let dimensions = slots
@@ -1491,7 +1641,13 @@ impl ForestTensorEvaluator {
                 let mut key = probe_slots
                     .iter()
                     .zip(&coordinates.indices)
-                    .map(|(slot, coordinate)| (slot.dual().to_atom(), *coordinate))
+                    .map(|(slot, coordinate)| {
+                        let actual = slot.dual().to_atom();
+                        (
+                            output_labels.get(&actual).cloned().unwrap_or(actual),
+                            *coordinate,
+                        )
+                    })
                     .collect::<Vec<_>>();
                 key.sort_by(|left, right| left.0.cmp(&right.0));
                 let sign = probe_slots.iter().zip(&coordinates.indices).fold(
@@ -1544,6 +1700,7 @@ impl ForestTensorEvaluator {
             route,
             loop_count: graph.loop_momentum_basis.loop_edges.len(),
             prepare_sum_boundaries: true,
+            output_labels,
             backend: ForestEvaluationBackend::Shared {
                 evaluator: Box::new(stack.single_parametric),
                 components,
@@ -1689,7 +1846,10 @@ impl ForestTensorEvaluator {
         };
         let slots = tensor
             .external_structure_iter()
-            .map(|slot| slot.to_atom())
+            .map(|slot| {
+                let actual = slot.to_atom();
+                self.output_labels.get(&actual).cloned().unwrap_or(actual)
+            })
             .collect::<Vec<_>>();
         tensor
             .iter_flat()
@@ -1877,21 +2037,335 @@ fn shared_forest_output_probe_recovers_native_components_exactly() -> Result<()>
 }
 
 #[test]
-fn shared_forest_oracle_preserves_factored_matrix_functions() -> Result<()> {
-    use crate::integrands::process::param_builder::{FnMapEntry, NumeratorDefinition};
-    use crate::utils::{ArbPrec, F};
-    use idenso::IndexTooling;
+fn shared_forest_oracle_keeps_output_frame_across_matrix_and_state_families() -> Result<()> {
+    use crate::{
+        integrands::process::param_builder::{FnMapEntry, NumeratorDefinition},
+        utils::{ArbPrec, F, FUN_LIB, TENSORLIB},
+    };
+    use spenso::{
+        iterators::IteratableTensor,
+        network::{ExecutionResult, Sequential, SmallestDegree},
+        structure::{
+            TensorStructure,
+            slot::{DummyAind, IsAbstractSlot},
+        },
+        tensors::data::SparseOrDense,
+    };
     test_initialise()?;
     let (graph, _, _) = fixture(false)?;
-    let physical = [(
+    let ports = [EdgeIndex(0), EdgeIndex(1)].map(|edge| {
+        graph.underlying[graph[&edge].1.any_hedge()]
+            .edge_spin_slots()
+            .next()
+            .expect("one graph-owned spinor port")
+            .to_atom()
+    });
+    let mu = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+    let matrix = spenso::g!(&ports[0], &ports[1])
+        + (Atom::num(2) + Atom::i()) * idenso::gamma0!(&ports[0], &ports[1])
+        + [3, 5, 7]
+            .into_iter()
+            .enumerate()
+            .map(|(index, weight)| {
+                Atom::num(weight)
+                    * function!(GS.delta_vec, GS.cind(index + 1), &mu)
+                    * idenso::gamma!(&ports[0], &ports[1], &mu)
+            })
+            .sum::<Atom>();
+    let states = function!(GS.u, 0, &ports[0]) * function!(GS.ubar, 1, &ports[1]);
+    let p0 = GS.emr_mom(EdgeIndex(0), GS.cind(0));
+    let p3 = GS.emr_mom(EdgeIndex(0), GS.cind(3));
+    let power = (&p0 + &p3).pow(11);
+    let spectator = &power / (&p0 - &p3).pow(2);
+
+    // Materialize only the small native matrix, independently of either
+    // retained-family layout. Its asymmetric complex entries fix all16 axes.
+    let mut network = matrix.parse_into_net()?;
+    network
+        .execute::<Sequential, SmallestDegree, _, _, _>(&*TENSORLIB.read().unwrap(), &*FUN_LIB)?;
+    let ExecutionResult::Val(tensor) = network.result_tensor(&*TENSORLIB.read().unwrap())? else {
+        return Err(eyre!("the native matrix must retain its two output ports"));
+    };
+    // Sparse native iteration omits zero entries. This oracle checks the
+    // complete 4×4 matrix, so materialize its sixteen coordinates explicitly.
+    let tensor = tensor.into_owned().to_dense();
+    let slots = tensor
+        .external_structure_iter()
+        .map(|slot| slot.to_atom())
+        .collect::<Vec<_>>();
+    let mut expected_components = std::collections::BTreeMap::new();
+    let mut explicit_closed = Atom::Zero;
+    for (flat, value) in tensor.iter_flat() {
+        let coordinates = tensor.expanded_index(flat)?;
+        let mut key = slots
+            .iter()
+            .cloned()
+            .zip(coordinates.indices)
+            .collect::<Vec<_>>();
+        key.sort_by(|left, right| left.0.cmp(&right.0));
+        assert_eq!(
+            key.iter().map(|(slot, _)| slot).collect::<Vec<_>>(),
+            ports.iter().collect::<Vec<_>>()
+        );
+        explicit_closed += &spectator
+            * value.to_owned()
+            * function!(GS.u, 0, GS.cind(key[0].1))
+            * function!(GS.ubar, 1, GS.cind(key[1].1));
+        expected_components.insert(key, value.to_owned());
+    }
+    assert_eq!(expected_components.len(), 16);
+    let joint = &spectator * &matrix * &states;
+    assert!(
+        NumeratorJetCache::default()
+            .canonicalize(&(&joint - explicit_closed))?
+            .is_zero,
+        "the single closed joint equals its independent sixteen native matrix coefficients"
+    );
+
+    let family = symbol!("gammalooprs::uv::numerator_family");
+    let entries = [(&spectator * &matrix), states.clone(), joint.clone()]
+        .into_iter()
+        .map(|rhs| -> Result<_> {
+            let tag = DirectResidueBranches::numerator_scope().1;
+            Ok(std::sync::Arc::new(NumeratorDefinition::try_from(
+                FnMapEntry {
+                    lhs: function!(family, &tag),
+                    rhs,
+                    args: vec![],
+                    tags: vec![tag],
+                    inlining: symbolica::evaluate::InliningPolicy::Always,
+                    is_alias: false,
+                },
+            )?))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    assert_eq!(
+        entries[0].rhs.expression() * entries[1].rhs.expression(),
+        *entries[2].rhs.expression(),
+        "one occurrence of each factor is the exact complete source joint"
+    );
+    let split: crate::uv::Integrands = [(
         crate::cff::CutCFFIndex::new_all_none(),
-        graph.production_numerator_atom_for_full_3d_expression(),
+        &entries[0].lhs * &entries[1].lhs,
     )]
     .into_iter()
     .collect();
-    let (physical, _) = ForestTensorEvaluator::bind(&graph, &physical)?;
-    let physical: Atom = physical.iter().map(|(_, atom)| atom).sum();
-    let ports = physical.list_dangling::<Aind>()?;
+    let split = split.with_numerators(entries[..2].iter().cloned())?;
+    let complete: crate::uv::Integrands = [(
+        crate::cff::CutCFFIndex::new_all_none(),
+        entries[2].lhs.clone(),
+    )]
+    .into_iter()
+    .collect();
+    let complete = complete.with_numerators([entries[2].clone()])?;
+    let (bound, _, output_labels) = ForestTensorEvaluator::bind(&graph, &split)?;
+    assert_eq!(output_labels.len(), 2);
+    assert!(output_labels.iter().all(|(actual, label)| actual != label));
+    let state_body = &bound
+        .numerators()
+        .iter()
+        .find(|entry| entry.tags == entries[1].tags)
+        .expect("retained state family")
+        .rhs;
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let state_ports = state_body
+        .structure()
+        .canonical()
+        .external_structure()
+        .into_iter()
+        .map(|slot| cooking.uncook(slot.to_atom().as_view()))
+        .collect::<Vec<_>>()
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    let expected_ports = ports
+        .iter()
+        .chain(output_labels.keys())
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        state_ports, expected_ports,
+        "the state family retains both live connection ports and two distinct output ports"
+    );
+    // A zero matrix still owns the original ordered connection ports. The
+    // nonzero state family independently supplies the amputation history and
+    // therefore the new execution output frame; no zero syntax invents ports.
+    let matrix_ports = entries[0].rhs.structure().logical_slots();
+    let zero_matrix = entries[0].rhs.with_checked_expression(Atom::Zero)?;
+    assert!(!zero_matrix.is_scalar());
+    assert_eq!(zero_matrix.structure().logical_slots(), matrix_ports);
+    let zero_split = split.clone().with_numerators([
+        std::sync::Arc::new(entries[0].with_rhs(zero_matrix)),
+        entries[1].clone(),
+    ])?;
+    let (zero_bound, _, zero_output_labels) = ForestTensorEvaluator::bind(&graph, &zero_split)?;
+    let zero_matrix_body = &zero_bound
+        .numerators()
+        .iter()
+        .find(|entry| entry.tags == entries[0].tags)
+        .expect("retained zero matrix family")
+        .rhs;
+    assert!(zero_matrix_body.expression().is_zero());
+    assert_eq!(zero_matrix_body.structure().logical_slots(), matrix_ports);
+    assert_eq!(zero_output_labels.len(), 2);
+    assert!(
+        zero_output_labels
+            .iter()
+            .all(|(actual, label)| actual != label)
+    );
+    let zero_state_body = &zero_bound
+        .numerators()
+        .iter()
+        .find(|entry| entry.tags == entries[1].tags)
+        .expect("retained state family next to zero matrix")
+        .rhs;
+    let zero_state_ports = zero_state_body
+        .structure()
+        .canonical()
+        .external_structure()
+        .into_iter()
+        .map(|slot| cooking.uncook(slot.to_atom().as_view()))
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        zero_state_ports,
+        ports
+            .iter()
+            .chain(zero_output_labels.keys())
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>(),
+        "the actual state family owns the output frame even when its matrix partner is zero"
+    );
+
+    // In contrast, zeroing the already closed joint loses its wavefunction
+    // history. Preserve that scalar interface; do not assert an amputated
+    // matrix or call the physical-output evaluator on this provenance-free zero.
+    let closed_zero = entries[2].rhs.with_checked_expression(Atom::Zero)?;
+    assert!(closed_zero.is_scalar());
+    let closed_zero = complete
+        .clone()
+        .with_numerators([std::sync::Arc::new(entries[2].with_rhs(closed_zero))])?;
+    let (closed_zero, _, closed_zero_labels) = ForestTensorEvaluator::bind(&graph, &closed_zero)?;
+    assert!(closed_zero_labels.is_empty());
+    assert!(closed_zero.numerators()[0].rhs.expression().is_zero());
+    assert!(
+        closed_zero.numerators()[0]
+            .rhs
+            .structure()
+            .logical_slots()
+            .is_empty()
+    );
+
+    let mut zero_split = ForestTensorEvaluator::new_shared(
+        DirectForestFixture::OsQuarkInQuark,
+        &graph,
+        2,
+        &zero_split,
+    )?;
+    let mut split =
+        ForestTensorEvaluator::new_shared(DirectForestFixture::OsQuarkInQuark, &graph, 0, &split)?;
+    let mut complete = ForestTensorEvaluator::new_shared(
+        DirectForestFixture::OsQuarkInQuark,
+        &graph,
+        1,
+        &complete,
+    )?;
+    for source in [&split, &complete] {
+        let ForestEvaluationBackend::Shared { evaluator, .. } = &source.backend else {
+            unreachable!()
+        };
+        assert!(
+            evaluator
+                .fn_map_entries
+                .iter()
+                .any(|entry| entry.rhs.contains(power.as_view())),
+            "the compiled joint retains the same opaque positive-power factor"
+        );
+    }
+    for external in [[3, 1, 2, 4], [7, -2, 1, 5]] {
+        let point = external.map(Atom::num);
+        let loops = [[Atom::num(9), Atom::num(12), Atom::Zero]];
+        let zeros = zero_split.evaluate(&point, &loops)?;
+        assert_eq!(
+            zeros.keys().collect::<Vec<_>>(),
+            expected_components.keys().collect::<Vec<_>>()
+        );
+        let zero = ForestNumber::new(F(ArbPrec::default()), F(ArbPrec::default()));
+        assert!(zeros.values().all(|value| value == &zero));
+        let actual = split.evaluate(&point, &loops)?;
+        let same_source = complete.evaluate(&point, &loops)?;
+        assert_eq!(actual.len(), 16);
+        assert_eq!(
+            actual, same_source,
+            "separate matrix/state families retain all output coordinates"
+        );
+        for (key, coefficient) in &expected_components {
+            let expected = (&spectator * coefficient)
+                .replace(p0.to_pattern())
+                .with(external[0])
+                .replace(p3.to_pattern())
+                .with(external[3]);
+            let mut evaluator = expected
+                .evaluator::<Atom>(&[])
+                .build()
+                .map_err(|error| eyre!(error))?
+                .map_coeff(&|value| {
+                    ForestNumber::new(F::<ArbPrec>::from(&value.re), F::<ArbPrec>::from(&value.im))
+                });
+            assert_eq!(
+                actual[key],
+                evaluator.evaluate_single(&[]),
+                "exact native matrix component {key:?}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn shared_forest_oracle_preserves_factored_matrix_functions() -> Result<()> {
+    use crate::integrands::process::param_builder::{FnMapEntry, NumeratorDefinition};
+    use crate::utils::{ArbPrec, F};
+    use spenso::structure::{TensorStructure, slot::IsAbstractSlot};
+    test_initialise()?;
+    let (graph, _, _) = fixture(false)?;
+    let reduced = graph.full_filter().subtract(&graph.initial_state_cut);
+    let physical_tensor = graph
+        .numerator(&reduced, &graph.empty_subgraph())?
+        .state
+        .expr
+        .multiply(graph.global_numerator()?)?;
+    let physical_tag = DirectResidueBranches::numerator_scope().1;
+    let physical_lhs = function!(symbol!("gammalooprs::uv::numerator_family"), &physical_tag);
+    let physical: crate::uv::Integrands = [(
+        crate::cff::CutCFFIndex::new_all_none(),
+        physical_lhs.clone(),
+    )]
+    .into_iter()
+    .collect();
+    let physical = physical.with_numerators([std::sync::Arc::new(
+        crate::integrands::process::param_builder::NumeratorDefinition {
+            lhs: physical_lhs,
+            rhs: physical_tensor,
+            args: vec![],
+            tags: vec![physical_tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
+        },
+    )])?;
+    let (physical, _, output_labels) = ForestTensorEvaluator::bind(&graph, &physical)?;
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let ports = physical.numerators()[0]
+        .rhs
+        .structure()
+        .canonical()
+        .external_structure()
+        .into_iter()
+        .map(|slot| cooking.uncook(slot.to_atom().as_view()))
+        .map(|port| output_labels.get(&port).cloned().unwrap_or(port))
+        .collect::<Vec<_>>();
     eyre::ensure!(
         ports.len() == 2,
         "the raw fermion fixture has two open spinor ports"
@@ -1980,18 +2454,46 @@ fn shared_forest_oracle_preserves_factored_matrix_functions() -> Result<()> {
 fn shared_forest_oracle_preserves_kinematic_parameter_order() -> Result<()> {
     use crate::integrands::process::param_builder::{FnMapEntry, NumeratorDefinition};
     use crate::utils::{ArbPrec, F, FloatLike};
-    use idenso::IndexTooling;
+    use spenso::structure::{TensorStructure, slot::IsAbstractSlot};
     test_initialise()?;
     let (graph, _, _) = fixture(false)?;
-    let physical = [(
+    let reduced = graph.full_filter().subtract(&graph.initial_state_cut);
+    let physical_tensor = graph
+        .numerator(&reduced, &graph.empty_subgraph())?
+        .state
+        .expr
+        .multiply(graph.global_numerator()?)?;
+    let physical_tag = DirectResidueBranches::numerator_scope().1;
+    let physical_lhs = function!(symbol!("gammalooprs::uv::numerator_family"), &physical_tag);
+    let physical: crate::uv::Integrands = [(
         crate::cff::CutCFFIndex::new_all_none(),
-        graph.production_numerator_atom_for_full_3d_expression(),
+        physical_lhs.clone(),
     )]
     .into_iter()
     .collect();
-    let (physical, _) = ForestTensorEvaluator::bind(&graph, &physical)?;
-    let physical: Atom = physical.iter().map(|(_, atom)| atom).sum();
-    let ports = physical.list_dangling::<Aind>()?;
+    let physical = physical.with_numerators([std::sync::Arc::new(
+        crate::integrands::process::param_builder::NumeratorDefinition {
+            lhs: physical_lhs,
+            rhs: physical_tensor,
+            args: vec![],
+            tags: vec![physical_tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
+        },
+    )])?;
+    let (physical, _, output_labels) = ForestTensorEvaluator::bind(&graph, &physical)?;
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let ports = physical.numerators()[0]
+        .rhs
+        .structure()
+        .canonical()
+        .external_structure()
+        .into_iter()
+        .map(|slot| cooking.uncook(slot.to_atom().as_view()))
+        .map(|port| output_labels.get(&port).cloned().unwrap_or(port))
+        .collect::<Vec<_>>();
     eyre::ensure!(
         ports.len() == 2,
         "the raw quark fixture has two spinor ports"
@@ -2067,7 +2569,10 @@ fn shared_forest_oracle_preserves_kinematic_parameter_order() -> Result<()> {
 
 #[test]
 fn forest_oracle_amputation_requires_external_spinor_ownership() -> Result<()> {
-    use spenso::structure::slot::IsAbstractSlot;
+    use spenso::{
+        network::tags::SPENSO_TAG,
+        structure::slot::{DummyAind, IsAbstractSlot},
+    };
     test_initialise()?;
     let (graph, _, _) = fixture(false)?;
     for (edge, external) in [(EdgeIndex(0), true), (EdgeIndex(2), false)] {
@@ -2077,18 +2582,255 @@ fn forest_oracle_amputation_requires_external_spinor_ownership() -> Result<()> {
             .next()
             .expect("the chosen quark edge has a spinor port");
         let wavefunction = function!(GS.u, usize::from(edge), port.to_atom());
-        let input = [(crate::cff::CutCFFIndex::new_all_none(), wavefunction)]
-            .into_iter()
-            .collect();
+        // Amputation of a free standalone vector is an identity tensor. Use
+        // an actual contracted coefficient here to test external ownership.
+        let output = idenso::bis!(4, Atom::from(Aind::new_dummy()));
+        let matrix = SPENSO_TAG.tensor_symbol("amputation_owner::matrix");
+        let input = [(
+            crate::cff::CutCFFIndex::new_all_none(),
+            function!(matrix, &output, port.to_atom()) * wavefunction,
+        )]
+        .into_iter()
+        .collect();
         let bound = ForestTensorEvaluator::bind(&graph, &input);
         if external {
-            assert!(bound?.0.iter().all(|(_, atom)| atom.is_one()));
+            let (bound, _, output_labels) = bound?;
+            let actual: Atom = bound.iter().map(|(_, atom)| atom).sum();
+            let expected = function!(matrix, &output, port.to_atom()).replace_multiple(
+                output_labels.iter().map(|(actual, label)| {
+                    symbolica::id::Replacement::new(label.to_pattern(), actual.clone())
+                }),
+            );
+            assert!(
+                NumeratorJetCache::default()
+                    .canonicalize(&(actual - expected))?
+                    .is_zero
+            );
         } else {
             match bound {
                 Err(error) => assert!(error.to_string().contains("external spinor port")),
                 Ok(_) => panic!("an internal propagator cannot be amputated as an external state"),
             }
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn forest_oracle_amputation_keeps_additive_index_scopes() -> Result<()> {
+    use spenso::{
+        network::tags::SPENSO_TAG,
+        structure::slot::{DummyAind, IsAbstractSlot},
+    };
+    test_initialise()?;
+    let (graph, _, _) = fixture(false)?;
+    let ports = [EdgeIndex(0), EdgeIndex(1)].map(|edge| {
+        graph.underlying[graph[&edge].1.any_hedge()]
+            .edge_spin_slots()
+            .next()
+            .expect("one graph-owned spinor port")
+            .to_atom()
+    });
+    let internal = idenso::bis!(4, Atom::from(Aind::new_dummy()));
+    let matrix = SPENSO_TAG.tensor_symbol("amputation_scopes::matrix");
+    let bridge = SPENSO_TAG.tensor_symbol("amputation_scopes::bridge");
+    let other = SPENSO_TAG.tensor_symbol("amputation_scopes::other");
+    let mass = Atom::var(symbol!("amputation_scopes::mass"; Scalar));
+    // `internal` labels a contracted matrix port in the first Add branch,
+    // but the u(0) wavefunction in the second. Globally renaming both it and
+    // ports[0] to one output captures the first branch's private contraction.
+    let scoped = (function!(matrix, &internal, &ports[0]) * function!(GS.u, 0, &ports[0])
+        + &mass * function!(GS.u, 0, &internal))
+        * function!(bridge, &ports[1], &internal)
+        * function!(GS.ubar, 1, &ports[1]);
+    let scoped_expected = function!(matrix, &internal, &ports[0])
+        * function!(bridge, &ports[1], &internal)
+        + &mass * function!(bridge, &ports[1], &ports[0]);
+    // Literal source index names may also belong to different graph-owned
+    // external states in different summands. Each occurrence owns its edge.
+    let swapped = Atom::num(3)
+        * function!(GS.u, 0, &ports[0])
+        * function!(matrix, &ports[0], &ports[1])
+        * function!(GS.ubar, 1, &ports[1])
+        + Atom::num(5)
+            * function!(GS.u, 0, &ports[1])
+            * function!(other, &ports[0], &ports[1])
+            * function!(GS.ubar, 1, &ports[0]);
+    let swapped_expected = Atom::num(3) * function!(matrix, &ports[0], &ports[1])
+        + Atom::num(5) * function!(other, &ports[1], &ports[0]);
+    let contracted_pair = function!(GS.u, 0, &internal) * function!(GS.ubar, 1, &internal);
+    let x = Atom::var(symbol!("amputation_scopes::x"; Scalar));
+    let y = Atom::var(symbol!("amputation_scopes::y"; Scalar));
+    let opaque = symbol!("amputation_scopes::opaque"; Scalar).call((&x + &y).pow(11));
+    let spectator = &opaque / (&x - &y).pow(2);
+    for (label, source, expected) in [
+        ("external versus private slot", scoped, scoped_expected),
+        ("swapped external slots", swapped, swapped_expected),
+        (
+            "contracted abstract states",
+            contracted_pair,
+            spenso::g!(&ports[0], &ports[1]),
+        ),
+    ] {
+        let input = [(crate::cff::CutCFFIndex::new_all_none(), &spectator * source)]
+            .into_iter()
+            .collect();
+        let (bound, _, output_labels) = ForestTensorEvaluator::bind(&graph, &input)?;
+        let actual: Atom = bound.iter().map(|(_, atom)| atom).sum();
+        let expected = (&spectator * expected).replace_multiple(output_labels.iter().map(
+            |(actual, label)| symbolica::id::Replacement::new(label.to_pattern(), actual.clone()),
+        ));
+        assert!(
+            NumeratorJetCache::default()
+                .canonicalize(&(&actual - &expected))?
+                .is_zero,
+            "{label}: exact open-matrix coefficients"
+        );
+        assert!(
+            !NumeratorJetCache::default().canonicalize(&actual)?.is_zero,
+            "{label}: nonzero matrix control"
+        );
+        assert!(
+            actual.contains(opaque.as_view()),
+            "opaque powered spectator stays literal"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn forest_oracle_amputation_opens_native_fixed_spinor_components() -> Result<()> {
+    use spenso::{
+        network::tags::SPENSO_TAG,
+        structure::{
+            representation::LibrarySlot,
+            slot::{DummyAind, IsAbstractSlot},
+        },
+    };
+    test_initialise()?;
+    let (graph, _, _) = fixture(false)?;
+    let ports = [EdgeIndex(0), EdgeIndex(1)].map(|edge| {
+        let pair = &graph[&edge].1;
+        graph.underlying[pair.any_hedge()]
+            .edge_spin_slots()
+            .next()
+            .expect("the external quark has one native spinor port")
+            .to_atom()
+    });
+    let diagonal =
+        Atom::add_many((0..4).map(|index| {
+            function!(GS.u, 0, GS.cind(index)) * function!(GS.ubar, 1, GS.cind(index))
+        }));
+    let identity = spenso::g!(&ports[0], &ports[1]);
+    let off_diagonal = function!(GS.u, 0, GS.cind(1)) * function!(GS.ubar, 1, GS.cind(2));
+    let off_diagonal_expected = function!(GS.delta_vec, GS.cind(1), &ports[0])
+        * function!(GS.delta_vec, GS.cind(2), &ports[1]);
+    let tensor = SPENSO_TAG.tensor_symbol("amputation_exact::matrix");
+    // Include a serialized dummy in the input; fresh output allocation must
+    // reserve it instead of capturing it as a new graph-output index.
+    let right = LibrarySlot::<Aind>::try_from(ports[1].as_view())?
+        .rep()
+        .slot::<Aind, _>(Aind::new_dummy_at(0))
+        .to_atom();
+    let abstract_pair = function!(GS.u, 0, &ports[0])
+        * function!(tensor, &ports[0], &right)
+        * function!(GS.ubar, 1, &right);
+    let mixed_pair = function!(GS.u, 0, GS.cind(1))
+        * function!(tensor, GS.cind(1), &right)
+        * function!(GS.ubar, 1, &right);
+    let mixed_expected =
+        function!(GS.delta_vec, GS.cind(1), &ports[0]) * function!(tensor, GS.cind(1), &ports[1]);
+    let x = Atom::var(symbol!("amputation_exact::x"; Scalar));
+    let y = Atom::var(symbol!("amputation_exact::y"; Scalar));
+    let opaque = symbol!("amputation_exact::opaque"; Scalar).call((&x + &y).pow(11));
+    let spectator = &opaque / (&x - &y).pow(2);
+    for (label, source, expected) in [
+        (
+            "complete component pair",
+            diagonal.clone(),
+            identity.clone(),
+        ),
+        ("off-diagonal pair", off_diagonal, off_diagonal_expected),
+        ("mixed fixed and abstract pair", mixed_pair, mixed_expected),
+        (
+            "mixed additive forms",
+            Atom::num(3) * diagonal + Atom::num(2) * abstract_pair,
+            Atom::num(3) * identity + Atom::num(2) * function!(tensor, &ports[0], &ports[1]),
+        ),
+    ] {
+        for coefficient in [Atom::one(), spectator.clone()] {
+            let input = [(
+                crate::cff::CutCFFIndex::new_all_none(),
+                &coefficient * &source,
+            )]
+            .into_iter()
+            .collect();
+            let (bound, _, output_labels) = ForestTensorEvaluator::bind(&graph, &input)?;
+            let actual: Atom = bound.iter().map(|(_, atom)| atom).sum();
+            let expected = (&coefficient * &expected).replace_multiple(output_labels.iter().map(
+                |(actual, label)| {
+                    symbolica::id::Replacement::new(label.to_pattern(), actual.clone())
+                },
+            ));
+            let certificate = NumeratorJetCache::default().canonicalize(&(&actual - &expected))?;
+            assert!(
+                certificate.is_zero,
+                "{label}: exact native-component opening"
+            );
+            assert!(
+                !NumeratorJetCache::default().canonicalize(&actual)?.is_zero,
+                "{label}: nonzero tensor control"
+            );
+            if !coefficient.is_one() {
+                assert!(
+                    actual.contains(opaque.as_view()),
+                    "opaque powered payload stays literal"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn forest_oracle_amputation_rejects_invalid_fixed_components_and_owners() -> Result<()> {
+    use spenso::structure::slot::DummyAind;
+    test_initialise()?;
+    let (graph, _, _) = fixture(false)?;
+    for (owner, component) in [
+        (Atom::Zero, Atom::num(-1)),
+        (Atom::Zero, Atom::num(4)),
+        (Atom::Zero, Atom::num((1, 2))),
+        (Atom::num(2), Atom::Zero), // paired internal quark
+        (Atom::num(graph.underlying.n_edges()), Atom::Zero),
+        (
+            Atom::var(symbol!("amputation_exact::invalid_owner"; Scalar)),
+            Atom::Zero,
+        ),
+    ] {
+        let wavefunction = function!(GS.u, &owner, function!(AIND_SYMBOLS.cind, &component));
+        let input = [(crate::cff::CutCFFIndex::new_all_none(), wavefunction)]
+            .into_iter()
+            .collect();
+        assert!(
+            ForestTensorEvaluator::bind(&graph, &input).is_err(),
+            "invalid fixed wavefunction owner={owner}, component={component} must be rejected"
+        );
+    }
+    for port in [
+        spenso::mink!(4, Atom::from(Aind::new_dummy())),
+        idenso::bis!(3, Atom::from(Aind::new_dummy())),
+    ] {
+        let input = [(
+            crate::cff::CutCFFIndex::new_all_none(),
+            function!(GS.u, 0, port),
+        )]
+        .into_iter()
+        .collect();
+        assert!(
+            ForestTensorEvaluator::bind(&graph, &input).is_err(),
+            "an abstract external state must match its graph-owned spinor representation"
+        );
     }
     Ok(())
 }
