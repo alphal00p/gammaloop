@@ -32,6 +32,8 @@ struct CertifiedGluonPrefix {
     pub(super) q: Atom,
     pub(super) local: Local4dCts,
     pub(super) integrated: super::super::IntegratedCts,
+    pub(super) completed: Full4dCts,
+    pub(super) settings: UVgenerationSettings,
     pub(super) denominators: Vec<crate::graph::FourDDenominator>,
     pub(super) actual_child: SymbolicTensor<IndexedStructure>,
     pub(super) actual_numerator: Atom,
@@ -436,6 +438,8 @@ impl QcdMassReference {
                     q,
                     local,
                     integrated,
+                    completed,
+                    settings: settings.clone(),
                     denominators,
                     actual_child,
                     actual_numerator,
@@ -551,7 +555,22 @@ impl QcdMassReference {
                     .map(|edge| edge.0)
                     .collect(),
             );
-            let unique_source = transferred.insert(key, integral.clone()).is_none();
+            let unique_source = transferred
+                .insert(
+                    key,
+                    CertifiedMassPrefix {
+                        coefficient: integral.clone(),
+                        diagram: record.diagram.clone(),
+                        graph: record.graph.clone(),
+                        given: OwnedForestNode {
+                            spinney: record.child.spinney.clone(),
+                            topo_order: record.child.topo_order,
+                        },
+                        completed: record.completed.clone(),
+                        settings: record.settings.clone(),
+                    },
+                )
+                .is_none();
             ensure!(unique_source);
             crate::debug_tags!(#uv, #integrated, #summary;
                 stage = "native_fermion_gluon_prefix_certificate", source = %record.diagram.name(), flavour,
@@ -893,7 +912,20 @@ impl QcdMassReference {
                 record.diagram.name().to_owned(),
                 edges.iter().map(|edge| edge.0).collect(),
             );
-            let previous = transferred.insert(key, integral.clone());
+            let previous = transferred.insert(
+                key,
+                CertifiedMassPrefix {
+                    coefficient: integral.clone(),
+                    diagram: record.diagram.clone(),
+                    graph: record.graph.clone(),
+                    given: OwnedForestNode {
+                        spinney: record.child.spinney.clone(),
+                        topo_order: record.child.topo_order,
+                    },
+                    completed: record.completed.clone(),
+                    settings: record.settings.clone(),
+                },
+            );
             ensure!(previous.is_none());
             aligned_poles.push(aligned);
             sum_a += &coefficient_a;
@@ -933,7 +965,11 @@ impl QcdMassReference {
                 + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(4)));
         let expected_integral = super::super::series(&(-Atom::num(5) / &epsilon * f), 0)?.to_atom();
         ensure!(
-            (transferred.values().sum::<Atom>() - &expected_integral)
+            (transferred
+                .values()
+                .map(|record| &record.coefficient)
+                .sum::<Atom>()
+                - &expected_integral)
                 .together()
                 .is_zero()
         );

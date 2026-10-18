@@ -41,11 +41,10 @@ pub(in crate::uv) struct QcdMassReference {
 
 type CertifiedMassPole = (usize, Atom, Atom, Atom);
 
-// Actual source/child incidence mapped to its certified integrated mass coefficient.
-type CertifiedMassPrefixes = BTreeMap<(String, Vec<usize>), Atom>;
+// Actual source/child incidence retains the certified scalar transfer and the
+// same native input consumed by the complete inventory and overall operators.
+type CertifiedMassPrefixes = BTreeMap<(String, Vec<usize>), CertifiedMassPrefix>;
 
-// Same native D09 graph and completed child retained for the first real parent
-// consumer. Other P2 entries remain scalar transfers until their own consumers.
 struct CertifiedMassPrefix {
     coefficient: Atom,
     diagram: FeynmanDiagram,
@@ -1915,7 +1914,22 @@ impl QcdMassReference {
                     .collect(),
             );
             ensure!(
-                prefixes.insert(key, integrated_reference).is_none(),
+                prefixes
+                    .insert(
+                        key,
+                        CertifiedMassPrefix {
+                            coefficient: integrated_reference,
+                            diagram: record.diagram.clone(),
+                            graph: record.graph.clone(),
+                            given: OwnedForestNode {
+                                spinney: child.spinney.clone(),
+                                topo_order: child.topo_order,
+                            },
+                            completed: prefix.clone(),
+                            settings: record.settings.clone(),
+                        }
+                    )
+                    .is_none(),
                 "a native vertex occurrence was counted twice"
             );
             *counts.entry(record.diagram.name().to_owned()).or_default() += 1;
@@ -1934,121 +1948,156 @@ mod native_self_energy_prefix_tests;
 #[test]
 fn native_two_loop_proper_prefix_sum_matches_the_independent_mass_reference() -> Result<()> {
     crate::initialisation::test_initialise()?;
-    let reference = QcdMassReference::new()?;
-    let mut prefixes = CertifiedMassPrefixes::new();
-    for (kind, expected_count, certified) in [
-        (
-            "OS quark",
-            1,
-            reference
-                .certify_os_quark_proper_prefix()?
-                .into_iter()
-                .map(|(key, input)| (key, input.coefficient))
-                .collect::<CertifiedMassPrefixes>(),
-        ),
-        (
-            "QCD vertex",
-            4,
-            reference.certify_qg_vertex_proper_prefixes()?,
-        ),
-        (
-            "fermion bubble",
-            6,
-            reference.certify_fermion_gluon_prefixes()?,
-        ),
-        (
-            "pure gauge",
-            3,
-            reference.certify_pure_gauge_gluon_prefixes()?,
-        ),
-    ] {
-        ensure!(
-            certified.len() == expected_count,
-            "{kind}: proper-child incidence"
-        );
-        for (key, coefficient) in certified {
+    QcdMassReference::new()?.certified_mass_prefixes()?;
+    Ok(())
+}
+
+impl QcdMassReference {
+    fn certified_mass_prefixes(&self) -> Result<CertifiedMassPrefixes> {
+        use crate::uv::{UltravioletGraph, approx::ForestNodeLike};
+        let reference = self;
+        let mut prefixes = CertifiedMassPrefixes::new();
+        for (kind, expected_count, certified) in [
+            ("OS quark", 1, reference.certify_os_quark_proper_prefix()?),
+            (
+                "QCD vertex",
+                4,
+                reference.certify_qg_vertex_proper_prefixes()?,
+            ),
+            (
+                "fermion bubble",
+                6,
+                reference.certify_fermion_gluon_prefixes()?,
+            ),
+            (
+                "pure gauge",
+                3,
+                reference.certify_pure_gauge_gluon_prefixes()?,
+            ),
+        ] {
             ensure!(
-                prefixes.insert(key, coefficient).is_none(),
-                "a proper occurrence was counted twice"
+                certified.len() == expected_count,
+                "{kind}: proper-child incidence"
+            );
+            for (key, coefficient) in certified {
+                ensure!(
+                    prefixes.insert(key, coefficient).is_none(),
+                    "a proper occurrence was counted twice"
+                );
+            }
+        }
+        let expected_keys = BTreeSet::from([
+            ("D00".to_owned(), vec![5, 6]),
+            ("D01".to_owned(), vec![5, 6]),
+            ("D02".to_owned(), vec![2, 4, 5]),
+            ("D02".to_owned(), vec![3, 4, 6]),
+            ("D03".to_owned(), vec![5]),
+            ("D04".to_owned(), vec![5, 6]),
+            ("D05".to_owned(), vec![5, 6]),
+            ("D06".to_owned(), vec![5, 6]),
+            ("D07".to_owned(), vec![5, 6]),
+            ("D08".to_owned(), vec![5, 6]),
+            ("D09".to_owned(), vec![2, 3]),
+            ("D10".to_owned(), vec![2, 3]),
+            ("D11".to_owned(), vec![2, 3, 5]),
+            ("D11".to_owned(), vec![2, 4, 6]),
+        ]);
+        ensure!(prefixes.keys().cloned().collect::<BTreeSet<_>>() == expected_keys);
+        ensure!(
+            prefixes[&("D03".to_owned(), vec![5])].coefficient.is_zero(),
+            "the certified zero tadpole remains in the forest inventory"
+        );
+        let actual = super::series(
+            &prefixes
+                .values()
+                .map(|record| &record.coefficient)
+                .sum::<Atom>(),
+            0,
+        )?
+        .to_atom();
+        let epsilon = Atom::var(crate::utils::GS.dim_epsilon);
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let cf = Atom::num((4, 3));
+        let beta0 = Atom::num(7); // SU(3), five light and one heavy active flavor.
+        let f = &cf
+            * (Atom::num(3) / &epsilon
+                + Atom::num(4)
+                + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(4)));
+        let h = &cf
+            * (Atom::num(6) / &epsilon
+                + Atom::num(2)
+                + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(2)));
+        let z1 = -&f;
+        let w1 = -&cf / &epsilon;
+        // Independent Lagrangian/Slavnov-Taylor combination: quark z1 H-w1 F,
+        // two vertex occurrences 2v1 F, and gluon -a1 F. No actual overall
+        // counterterm or bare two-loop coefficient defines this expected P2.
+        let expected = super::series(&(&z1 * &h - &beta0 * &f / &epsilon + &w1 * &f), 0)?.to_atom();
+        let explicit = -Atom::num((196, 3)) / epsilon.pow(2)
+            - Atom::num((880, 9)) / &epsilon
+            - Atom::num((2080, 9))
+            - Atom::num((73, 9)) * pi.pow(2);
+        ensure!((&expected - &explicit).together().is_zero());
+        ensure!(
+            (&actual - &explicit).together().is_zero(),
+            "the fourteen actual proper insertions differ from independent P2"
+        );
+
+        // Keeping only epsilon^0 in both one-loop reference integrals preserves
+        // the poles but loses a known nonzero finite two-loop coefficient.
+        let f0 = &cf * (Atom::num(3) / &epsilon + Atom::num(4));
+        let h0 = &cf * (Atom::num(6) / &epsilon + Atom::num(2));
+        let prematurely_truncated =
+            super::series(&(-&f0 * &h0 - &beta0 * &f0 / &epsilon + &w1 * &f0), 0)?.to_atom();
+        let lost_finite = -Atom::num((1952, 9)) - Atom::num((73, 9)) * pi.pow(2);
+        ensure!(!lost_finite.is_zero());
+        ensure!(
+            (&actual - &prematurely_truncated - &lost_finite)
+                .together()
+                .is_zero()
+        );
+        let records = prefixes.iter().map(|((source, edges), coefficient)| serde_json::json!({
+        "source": source, "child_edges": edges, "coefficient": coefficient.coefficient.to_canonical_string()
+    })).collect::<Vec<_>>();
+        crate::debug_tags!(#uv, #integrated, #summary;
+            stage = "native_two_loop_complete_proper_prefix_sum", occurrences = prefixes.len(),
+            file.records = %serde_json::to_string(&records)?,
+            file.actual = %actual.to_canonical_string(), file.reference = %explicit.to_canonical_string(),
+            file.lost_finite = %lost_finite.to_canonical_string(),
+            parent_overall_operator_computed = false, public_complete_forest_evaluated = false,
+            emitted_four_d_condition_proved = false,
+            "Actual native child/cograph certificates transfer all fourteen proper insertions to independent P2"
+        );
+        for ((source, edges), record) in &prefixes {
+            ensure!(record.diagram.name() == source && record.graph.name == *source);
+            ensure!(
+                record
+                    .graph
+                    .paired_edges(record.given.subgraph())
+                    .iter()
+                    .map(|edge| edge.0)
+                    .collect::<Vec<_>>()
+                    == *edges
+            );
+            ensure!(record.settings.generate_integrated && record.given.topo_order == 1);
+            let mut active_domains = 0;
+            for sector in record.completed.sectors() {
+                for (owner, scope, lmb) in &sector.active_components {
+                    ensure!(owner == record.given.subgraph() && scope == owner);
+                    ensure!(lmb.loop_edges.len() == record.graph.n_loops(owner));
+                    active_domains += 1;
+                }
+                for frozen in sector.frozen_lmbs() {
+                    ensure!(frozen == record.given.lmb());
+                }
+            }
+            ensure!(
+                active_domains == 1,
+                "retain the actual child integration domain"
             );
         }
+        Ok(prefixes)
     }
-    let expected_keys = BTreeSet::from([
-        ("D00".to_owned(), vec![5, 6]),
-        ("D01".to_owned(), vec![5, 6]),
-        ("D02".to_owned(), vec![2, 4, 5]),
-        ("D02".to_owned(), vec![3, 4, 6]),
-        ("D03".to_owned(), vec![5]),
-        ("D04".to_owned(), vec![5, 6]),
-        ("D05".to_owned(), vec![5, 6]),
-        ("D06".to_owned(), vec![5, 6]),
-        ("D07".to_owned(), vec![5, 6]),
-        ("D08".to_owned(), vec![5, 6]),
-        ("D09".to_owned(), vec![2, 3]),
-        ("D10".to_owned(), vec![2, 3]),
-        ("D11".to_owned(), vec![2, 3, 5]),
-        ("D11".to_owned(), vec![2, 4, 6]),
-    ]);
-    ensure!(prefixes.keys().cloned().collect::<BTreeSet<_>>() == expected_keys);
-    ensure!(
-        prefixes[&("D03".to_owned(), vec![5])].is_zero(),
-        "the certified zero tadpole remains in the forest inventory"
-    );
-    let actual = super::series(&prefixes.values().sum::<Atom>(), 0)?.to_atom();
-    let epsilon = Atom::var(crate::utils::GS.dim_epsilon);
-    let pi = Atom::var(symbolica::atom::Symbol::PI);
-    let cf = Atom::num((4, 3));
-    let beta0 = Atom::num(7); // SU(3), five light and one heavy active flavor.
-    let f = &cf
-        * (Atom::num(3) / &epsilon
-            + Atom::num(4)
-            + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(4)));
-    let h = &cf
-        * (Atom::num(6) / &epsilon
-            + Atom::num(2)
-            + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(2)));
-    let z1 = -&f;
-    let w1 = -&cf / &epsilon;
-    // Independent Lagrangian/Slavnov-Taylor combination: quark z1 H-w1 F,
-    // two vertex occurrences 2v1 F, and gluon -a1 F. No actual overall
-    // counterterm or bare two-loop coefficient defines this expected P2.
-    let expected = super::series(&(&z1 * &h - &beta0 * &f / &epsilon + &w1 * &f), 0)?.to_atom();
-    let explicit = -Atom::num((196, 3)) / epsilon.pow(2)
-        - Atom::num((880, 9)) / &epsilon
-        - Atom::num((2080, 9))
-        - Atom::num((73, 9)) * pi.pow(2);
-    ensure!((&expected - &explicit).together().is_zero());
-    ensure!(
-        (&actual - &explicit).together().is_zero(),
-        "the fourteen actual proper insertions differ from independent P2"
-    );
-
-    // Keeping only epsilon^0 in both one-loop reference integrals preserves
-    // the poles but loses a known nonzero finite two-loop coefficient.
-    let f0 = &cf * (Atom::num(3) / &epsilon + Atom::num(4));
-    let h0 = &cf * (Atom::num(6) / &epsilon + Atom::num(2));
-    let prematurely_truncated =
-        super::series(&(-&f0 * &h0 - &beta0 * &f0 / &epsilon + &w1 * &f0), 0)?.to_atom();
-    let lost_finite = -Atom::num((1952, 9)) - Atom::num((73, 9)) * pi.pow(2);
-    ensure!(!lost_finite.is_zero());
-    ensure!(
-        (&actual - &prematurely_truncated - &lost_finite)
-            .together()
-            .is_zero()
-    );
-    let records = prefixes.iter().map(|((source, edges), coefficient)| serde_json::json!({
-        "source": source, "child_edges": edges, "coefficient": coefficient.to_canonical_string()
-    })).collect::<Vec<_>>();
-    crate::debug_tags!(#uv, #integrated, #summary;
-        stage = "native_two_loop_complete_proper_prefix_sum", occurrences = prefixes.len(),
-        file.records = %serde_json::to_string(&records)?,
-        file.actual = %actual.to_canonical_string(), file.reference = %explicit.to_canonical_string(),
-        file.lost_finite = %lost_finite.to_canonical_string(),
-        parent_overall_operator_computed = false, public_complete_forest_evaluated = false,
-        emitted_four_d_condition_proved = false,
-        "Actual native child/cograph certificates transfer all fourteen proper insertions to independent P2"
-    );
-    Ok(())
 }
 
 // First overall continuation gate: the same retained D09 graph owns both inputs.
@@ -2381,4 +2430,450 @@ impl QcdMassReference {
         );
         Ok(())
     }
+}
+
+// Source/forest coverage prerequisite only. The actual twenty-six parent
+// operators and their finite outputs must pass before the K2 transfer is used.
+#[test]
+fn native_overall_mass_inputs_retain_certified_sources_and_proper_occurrences() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let sources = reference.certified_projections()?;
+    let prefixes = reference.certified_mass_prefixes()?;
+    reference.certify_overall_mass_input_inventory(&sources, &prefixes)?;
+    let _ = QcdMassReference::independent_bare_and_lagrangian_mass_references()?;
+    Ok(())
+}
+
+impl QcdMassReference {
+    fn certify_overall_mass_input_inventory(
+        &self,
+        sources: &[(FeynmanDiagram, MassProjection)],
+        prefixes: &CertifiedMassPrefixes,
+    ) -> Result<()> {
+        use crate::{
+            settings::global::GenerationSettings,
+            utils::GS,
+            uv::{
+                UltravioletGraph,
+                approx::{CutStructure, ForestNodeLike},
+                hedge_poset::Wood,
+            },
+        };
+        use linnet::half_edge::subgraph::SubSetOps;
+        ensure!(sources.len() == 13 && prefixes.len() == 14);
+        let one_loop = sources
+            .iter()
+            .filter(|(d, _)| d.loop_momentum_basis().loop_edges.len() == 1)
+            .count();
+        ensure!(one_loop == 1);
+        let two_loop = sources
+            .iter()
+            .filter(|(d, _)| d.loop_momentum_basis().loop_edges.len() == 2)
+            .collect::<Vec<_>>();
+        ensure!(two_loop.len() == 12);
+        let mut all_inputs = BTreeSet::new();
+        let mut source_keys = BTreeSet::new();
+        let mut node_count = 0;
+        for (diagram, projected) in two_loop {
+            let matching = prefixes
+                .iter()
+                .filter(|((source, _), _)| source == diagram.name())
+                .collect::<Vec<_>>();
+            ensure!(
+                !matching.is_empty(),
+                "every native source retains its proper-child record"
+            );
+            let expected_given = matching
+                .iter()
+                .map(|((_, edges), _)| edges.clone())
+                .chain([Vec::new()])
+                .collect::<BTreeSet<_>>();
+            ensure!(expected_given.len() == matching.len() + 1);
+            ensure!(source_keys.insert(diagram.name().to_owned()));
+            for ((source, edges), record) in &matching {
+                // These checks relate each retained occurrence to the same
+                // native13 source. They never rebuild its runtime graph or
+                // replace the already-completed prefix's index scopes.
+                let actual = &record.diagram;
+                ensure!(actual.name() == diagram.name() && source.as_str() == diagram.name());
+                ensure!(actual.loop_momentum_basis() == diagram.loop_momentum_basis());
+                ensure!(actual.numerator() == diagram.numerator());
+                ensure!(actual.projector() == diagram.projector());
+                ensure!(actual.overall_factor() == diagram.overall_factor());
+                ensure!(actual.numerator_prefactor() == diagram.numerator_prefactor());
+                ensure!(actual.denominator_expression()? == diagram.denominator_expression()?);
+                ensure!(actual.vertices().count() == diagram.vertices().count());
+                for ((id, vertex), (expected_id, expected)) in
+                    actual.vertices().zip(diagram.vertices())
+                {
+                    ensure!(
+                        id == expected_id
+                            && vertex.name == expected.name
+                            && vertex.interaction == expected.interaction
+                            && vertex.numerator == expected.numerator
+                    );
+                }
+                ensure!(actual.edges().count() == diagram.edges().count());
+                for ((id, endpoints, edge), (expected_id, expected_endpoints, expected)) in
+                    actual.edges().zip(diagram.edges())
+                {
+                    ensure!(id == expected_id && endpoints == expected_endpoints);
+                    ensure!(
+                        edge.particle == expected.particle
+                            && edge.external == expected.external
+                            && edge.is_dummy == expected.is_dummy
+                            && edge.directed == expected.directed
+                            && edge.source_slot() == expected.source_slot()
+                            && edge.target_slot() == expected.target_slot()
+                            && edge.numerator == expected.numerator
+                    );
+                }
+                let graph = &record.graph;
+                ensure!(graph.name == diagram.name());
+                ensure!(graph.overall_factor == *diagram.overall_factor());
+                let source_prefactor = diagram.numerator_prefactor().clone().try_into_indexed()?;
+                let source_projector = diagram.projector().clone().try_into_indexed()?;
+                ensure!(graph.global_prefactor.num.same_value(&source_prefactor));
+                ensure!(
+                    graph
+                        .global_prefactor
+                        .projector
+                        .same_value(&source_projector)
+                );
+                let runtime_basis: crate::graph::LoopMomentumBasis = actual
+                    .loop_momentum_basis()
+                    .to_routing(actual.underlying())
+                    .into();
+                ensure!(graph.loop_momentum_basis == runtime_basis);
+                let full = graph.full_filter().subtract(&graph.initial_state_cut.left);
+                let runtime_numerator = graph
+                    .numerator(&full, &graph.empty_subgraph())?
+                    .to_d_dim(GS.dim)?
+                    .state
+                    .expr;
+                let reference_numerator = actual
+                    .numerator()
+                    .map_representation_dimensions(|rep, dimension| {
+                        if rep == (Minkowski {}).into() {
+                            Atom::var(GS.dim)
+                        } else {
+                            dimension.to_owned()
+                        }
+                    })?
+                    .try_into_indexed()?;
+                if !runtime_numerator.same_value(&reference_numerator) {
+                    let cooking = CookSettings::indices()
+                        .with_mode(CookMode::ReversibleEncoding)
+                        .with_representation_payloads(true, true);
+                    crate::debug_tags!(#uv, #integrated, #inspect;
+                        stage = "native_inventory_source_numerator_mismatch",
+                        source = %diagram.name(), file.given_edges = ?edges,
+                        expression_equal = runtime_numerator.expression() == reference_numerator.expression(),
+                        runtime_rank = runtime_numerator.rank(), reference_rank = reference_numerator.rank(),
+                        runtime_contracted = runtime_numerator.contraction_complete(),
+                        reference_contracted = reference_numerator.contraction_complete(),
+                        runtime_reduction = ?runtime_numerator.reduction_status(),
+                        reference_reduction = ?reference_numerator.reduction_status(),
+                        file.runtime = %cooking.uncook(runtime_numerator.expression().as_view()).to_canonical_string(),
+                        file.reference = %cooking.uncook(reference_numerator.expression().as_view()).to_canonical_string(),
+                        file.runtime_canonical_slots = ?runtime_numerator.structure().canonical().external_structure(),
+                        file.reference_canonical_slots = ?reference_numerator.structure().canonical().external_structure(),
+                        file.runtime_logical_slots = ?runtime_numerator.structure().logical_slots(),
+                        file.reference_logical_slots = ?reference_numerator.structure().logical_slots(),
+                        "Retained runtime and independently mapped native sources first differ before pole comparison"
+                    );
+                }
+                ensure!(
+                    runtime_numerator.same_value(&reference_numerator),
+                    "retained runtime source must preserve its native factorized numerator"
+                );
+                ensure!(
+                    graph.denominator(&full, &graph.model, |_| 1)
+                        == actual.denominator_expression()?,
+                    "original full poles, repeated owners and prescriptions must match before projection"
+                );
+                ensure!(
+                    graph
+                        .paired_edges(record.given.subgraph())
+                        .iter()
+                        .map(|edge| edge.0)
+                        .collect::<Vec<_>>()
+                        == *edges
+                );
+                for (name, expression) in &projected.coupling_definitions {
+                    ensure!(
+                        graph.model.coupling(name)?.expression == *expression,
+                        "runtime coupling definition differs from the certified bare reference"
+                    );
+                }
+                // All exact inputs of the existing native13 projection now
+                // agree. Reuse that certified projection instead of tracing
+                // the same source again for each child occurrence.
+            }
+
+            // Construct only the native classified inventory, with the same
+            // original graph/settings as its first retained occurrence. The
+            // guarded public counterterm dispatcher is not invoked or relaxed.
+            let record = matching[0].1;
+            let graph = &record.graph;
+            let settings = GenerationSettings {
+                uv: record.settings.clone(),
+                ..Default::default()
+            };
+            ensure!(!settings.medium.vacuum_subtraction);
+            let forests =
+                Wood::new(CutStructure::empty(graph), graph, &graph.model, &settings)?.unfold();
+            let full_edges = graph
+                .paired_edges(&graph.full_filter())
+                .into_iter()
+                .map(|e| e.0)
+                .collect::<Vec<_>>();
+            let mut found = BTreeSet::new();
+            for (node, _, operation) in forests.graph.iter_nodes() {
+                node_count += 1;
+                let Some(cover) = operation.covers() else {
+                    ensure!(operation.key.op_count() == 0);
+                    continue;
+                };
+                if graph
+                    .paired_edges(&cover)
+                    .into_iter()
+                    .map(|e| e.0)
+                    .collect::<Vec<_>>()
+                    != full_edges
+                {
+                    continue;
+                }
+                ensure!(!forests.graph.is_disjoint_union(node));
+                let (prior, _) = forests
+                    .graph
+                    .unique_parent(node)
+                    .ok_or_else(|| eyre!("overall operation lacks one native given owner"))?;
+                let given = forests.graph[prior]
+                    .covers()
+                    .map(|filter| {
+                        graph
+                            .paired_edges(&filter)
+                            .into_iter()
+                            .map(|e| e.0)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                ensure!(operation.key.op_count() == if given.is_empty() { 1 } else { 2 });
+                ensure!(found.insert(given.clone()));
+                let unique_input = all_inputs.insert((diagram.name().to_owned(), given));
+                ensure!(unique_input);
+            }
+            ensure!(
+                found == expected_given,
+                "actual forest operations differ from retained bare/proper input inventory"
+            );
+        }
+        ensure!(source_keys.len() == 12 && all_inputs.len() == 26 && node_count == 52);
+        ensure!(
+            all_inputs
+                .iter()
+                .filter(|(_, edges)| edges.is_empty())
+                .count()
+                == 12
+        );
+        let proper_keys = all_inputs
+            .iter()
+            .filter(|(_, edges)| !edges.is_empty())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        ensure!(proper_keys == prefixes.keys().cloned().collect());
+        ensure!(
+            all_inputs.contains(&("D03".to_owned(), Vec::new()))
+                && all_inputs.contains(&("D03".to_owned(), vec![5]))
+        );
+
+        // Same serializer and pretty-JSON boundary as the existing numerical
+        // callback. An artifact auditor can compare its exact UTF-8 hash with
+        // the preserved nine-integral input; no task-specific hash is hardcoded.
+        let payload = serde_json::to_vec_pretty(&serde_json::json!({
+            "sources": sources.iter().map(|(diagram, projected)| projected.numeric_input(diagram, &self.model))
+                .collect::<Result<Vec<_>>>()?
+        }))?;
+        crate::debug_tags!(#uv, #integrated, #inspect;
+            stage = "native_overall_mass_source_and_inventory_bridge",
+            native_sources = sources.len(), proper_occurrences = prefixes.len(), overall_inputs = all_inputs.len(),
+            classified_nodes = node_count, file.overall_inputs = ?all_inputs,
+            payload_bytes = payload.len(), file.numeric_payload = %String::from_utf8(payload)?,
+            actual_overall_inputs_evaluated = 0, overall_K2_proved = false,
+            "Exact retained-source/reference bridge and native forest incidence precede actual parent execution"
+        );
+        Ok(())
+    }
+}
+
+impl QcdMassReference {
+    /// Independent full-theory SU(3) references, nl=5, nh=1, mu=m=1,
+    /// through epsilon^0. Neither expression is obtained from produced forests.
+    fn independent_bare_and_lagrangian_mass_references() -> Result<(Atom, Atom)> {
+        let epsilon = Atom::var(crate::utils::GS.dim_epsilon);
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let zeta_three = Atom::var(vakint::vakint_symbol!("z3"));
+        let log_two = function!(symbolica::atom::Symbol::LOG, 2);
+
+        // Direct SU3 specialization of the independently maintained four-color
+        // bare reference. The native13/source-payload bridge must be checked
+        // before this value can be transferred to an actual O sector.
+        let bare = Atom::num(38) / epsilon.pow(2)
+            + Atom::num((289, 3)) / &epsilon
+            + Atom::num((605, 2))
+            + Atom::num((65, 9)) * pi.pow(2)
+            - Atom::num((8, 3)) * &zeta_three
+            + Atom::num((16, 9)) * pi.pow(2) * &log_two;
+
+        // Parameter ZmOS from the primary reference, independently converted
+        // to the same full-theory coupling and external field convention.
+        let z2 =
+            Atom::num(22) / epsilon.pow(2) - Atom::num((17, 3)) / &epsilon - Atom::num((1541, 18))
+                + Atom::num((4, 9)) * pi.pow(2)
+                + Atom::num((8, 3)) * &zeta_three
+                - Atom::num((16, 9)) * pi.pow(2) * &log_two;
+        let field_mass = Atom::num((16, 3)) / epsilon.pow(2)
+            + Atom::num((64, 9)) / &epsilon
+            + Atom::num((128, 9))
+            + Atom::num((4, 9)) * pi.pow(2);
+        let expected_k2 = Atom::num((82, 3)) / epsilon.pow(2) + Atom::num((13, 9)) / &epsilon
+            - Atom::num((1285, 18))
+            + Atom::num((8, 9)) * pi.pow(2)
+            + Atom::num((8, 3)) * zeta_three
+            - Atom::num((16, 9)) * pi.pow(2) * log_two;
+        ensure!((&z2 + &field_mass - &expected_k2).together().is_zero());
+        ensure!(
+            !(&expected_k2 - z2).together().is_zero(),
+            "omitting the field-mass product loses an independently nonzero coefficient"
+        );
+
+        // Reference-only consistency check, deliberately independent of every
+        // actual prefix value and actual overall counterterm.
+        let independent_p2 = -Atom::num((196, 3)) / epsilon.pow(2)
+            - Atom::num((880, 9)) / &epsilon
+            - Atom::num((2080, 9))
+            - Atom::num((73, 9)) * pi.pow(2);
+        ensure!(
+            (&bare + &independent_p2 + &expected_k2)
+                .together()
+                .is_zero()
+        );
+        Ok((bare, expected_k2))
+    }
+}
+
+#[test]
+fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> Result<()> {
+    use crate::uv::{
+        Spinney,
+        approx::{
+            ForestNodeLike, Rooted,
+            local_4d::{Full4dCts, Local4dCts},
+        },
+        hedge_poset::OwnedForestNode,
+    };
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let sources = reference.certified_projections()?;
+    let prefixes = reference.certified_mass_prefixes()?;
+    reference.certify_overall_mass_input_inventory(&sources, &prefixes)?;
+    let mut completed = BTreeSet::new();
+    for (diagram, _) in sources
+        .iter()
+        .filter(|(d, _)| d.loop_momentum_basis().loop_edges.len() == 2)
+    {
+        let matching = prefixes
+            .iter()
+            .filter(|((source, _), _)| source == diagram.name())
+            .collect::<Vec<_>>();
+        ensure!(!matching.is_empty());
+        // Every source has at least one retained proper occurrence. Its first
+        // graph also owns the bare input. Each later proper input uses its OWN
+        // exact retained graph and never borrows another occurrence's dummy frame.
+        for input in 0..=matching.len() {
+            let record = matching[input.saturating_sub(1)].1;
+            let graph = &record.graph;
+            let root = OwnedForestNode {
+                spinney: Spinney::empty(graph),
+                topo_order: 0,
+            };
+            let bare = Full4dCts::from_factorized_local(&Local4dCts::root());
+            let (given, prefix) = if input == 0 {
+                (&root, &bare)
+            } else {
+                (&record.given, &record.completed)
+            };
+            let key = (
+                diagram.name().to_owned(),
+                graph
+                    .paired_edges(given.subgraph())
+                    .into_iter()
+                    .map(|edge| edge.0)
+                    .collect::<Vec<_>>(),
+            );
+            ensure!(!completed.contains(&key));
+            crate::debug_tags!(#uv, #integrated, #summary;
+                stage = "native_overall_mass_input", file.key = ?key,
+                ordinal = completed.len() + 1, source = %record.diagram.name(),
+                given_scheme = %given.renormalization_scheme(),
+                "Starting one retained native bare/proper overall mass input"
+            );
+            let _ = reference.certify_actual_overall_mass_input(record, given, prefix)?;
+            let unique = completed.insert(key.clone());
+            ensure!(unique);
+            crate::debug_tags!(#uv, #integrated, #summary;
+                stage = "native_overall_mass_input_complete", file.key = ?key,
+                completed = completed.len(), native_parent_certificate = true,
+                actual_integrated_finite_mass_projection_zero = true,
+                public_dispatch_admitted = false,
+                "One original native bare/proper input completes both actual parent mass gates"
+            );
+        }
+    }
+    ensure!(completed.len() == 26);
+    ensure!(
+        completed
+            .iter()
+            .filter(|(_, edges)| edges.is_empty())
+            .count()
+            == 12
+    );
+    ensure!(
+        completed
+            .iter()
+            .filter(|(_, edges)| !edges.is_empty())
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            == prefixes.keys().cloned().collect()
+    );
+    ensure!(
+        completed.contains(&("D03".to_owned(), Vec::new()))
+            && completed.contains(&("D03".to_owned(), vec![5]))
+    );
+
+    // The actual operator/source identities above transfer -O to the same
+    // independent bare integrals and actual proper densities. Only this ACTUAL
+    // side is assembled from those inputs. Expected K2 is the independent
+    // source/Lagrangian reference z2+w1*z1, not a definition by subtraction.
+    let (independent_bare, expected_k2) =
+        QcdMassReference::independent_bare_and_lagrangian_mass_references()?;
+    let actual_proper =
+        super::series(&prefixes.values().map(|r| &r.coefficient).sum::<Atom>(), 0)?.to_atom();
+    let actual_transferred_k2 = -&independent_bare - &actual_proper;
+    ensure!((&actual_transferred_k2 - &expected_k2).together().is_zero());
+    crate::debug_tags!(#uv, #integrated, #summary;
+        stage = "native_two_loop_overall_mass_condition_by_transfer",
+        native_sources = sources.len(), proper_occurrences = prefixes.len(), overall_inputs = completed.len(),
+        file.bare_reference = %independent_bare.to_canonical_string(),
+        file.actual_proper = %actual_proper.to_canonical_string(),
+        file.actual_overall = %actual_transferred_k2.to_canonical_string(),
+        file.independent_K2 = %expected_k2.to_canonical_string(),
+        actual_parent_operators_computed = true, actual_finite_outputs_computed = true,
+        bare_numerical_integration_repeated = false, public_complete_forest_evaluated = false,
+        emitted_four_d_condition_proved = false,
+        "All actual parent identities transfer certified native B/P inputs to independent source K2"
+    );
+    Ok(())
 }
