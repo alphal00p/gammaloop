@@ -59,12 +59,18 @@ fn gamma_star_ttx_os_finite_addback_matches_born_densities() -> Result<()> {
     gamma_star_ttx_nlo_matches_reference(GammaStarTtxCase::OsFiniteAddbackDensity)
 }
 
+#[test]
+fn gamma_star_ttx_os_complete_lu_cut_sum_cancels_the_soft_gluon() -> Result<()> {
+    gamma_star_ttx_nlo_matches_reference(GammaStarTtxCase::OsLuSoft)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum GammaStarTtxCase {
     MsbarReference,
     OsInclusive,
     OsSamplingProbe,
     OsFiniteAddbackDensity,
+    OsLuSoft,
 }
 
 // Pole-mass R-ratio, Chetyrkin, Kuehn and Steinhauser, hep-ph/9606230,
@@ -166,6 +172,9 @@ fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
         GammaStarTtxCase::OsSamplingProbe => "gamma_star_ttx_os_sampling_probes_compare_route_maps",
         GammaStarTtxCase::OsFiniteAddbackDensity => {
             "gamma_star_ttx_os_finite_addback_matches_born_densities"
+        }
+        GammaStarTtxCase::OsLuSoft => {
+            "gamma_star_ttx_os_complete_lu_cut_sum_cancels_the_soft_gluon"
         }
     };
     let test_root = get_tests_workspace_path().join(test_name);
@@ -272,7 +281,10 @@ fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
     ));
     // The independent density formulas below are authored in these physical
     // source charts. Select them explicitly before native graph generation.
-    let density_basis = if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+    let density_basis = if matches!(
+        case,
+        GammaStarTtxCase::OsFiniteAddbackDensity | GammaStarTtxCase::OsLuSoft
+    ) {
         "--loop-momentum-bases GL0=1,2 GL1=1,4 GL2=1,4"
     } else {
         ""
@@ -351,7 +363,10 @@ fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
         let mut graph_roles = Vec::new();
         for term in &integrand.data.graph_terms {
             let graph = &term.graph;
-            if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+            if matches!(
+                case,
+                GammaStarTtxCase::OsFiniteAddbackDensity | GammaStarTtxCase::OsLuSoft
+            ) {
                 gammalooprs::debug_tags!(#generation, #uv, #graph, #inspect;
                     stage = "finite_addback_native_input_chart",
                     process,
@@ -488,7 +503,10 @@ fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
                         "NLO has no nested virtual loops"
                     );
                     let identifier = graph.ct_identifier(spinney.filter(), &graph.model);
-                    if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+                    if matches!(
+                        case,
+                        GammaStarTtxCase::OsFiniteAddbackDensity | GammaStarTtxCase::OsLuSoft
+                    ) {
                         // The independent densities below use the source gluon/quark
                         // loop edge 1, and retain both vertex spectator charts.
                         assert_eq!(
@@ -601,7 +619,10 @@ fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
             );
             let master = masters[0];
             let role = graph_roles[master.graph_id];
-            if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+            if matches!(
+                case,
+                GammaStarTtxCase::OsFiniteAddbackDensity | GammaStarTtxCase::OsLuSoft
+            ) {
                 let expected_basis = match master.name.as_str() {
                     "GL0" => vec![1, 2],
                     "GL1" => vec![1, 4],
@@ -665,7 +686,10 @@ fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
         for names in masters_by_role.values_mut() {
             names.sort();
         }
-        if case == GammaStarTtxCase::OsFiniteAddbackDensity {
+        if matches!(
+            case,
+            GammaStarTtxCase::OsFiniteAddbackDensity | GammaStarTtxCase::OsLuSoft
+        ) {
             assert_eq!(integrand.data.graph_terms.len(), 2);
             assert_eq!(
                 masters_by_role,
@@ -691,6 +715,342 @@ fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
         .flatten()
         .cloned()
         .collect::<Vec<_>>();
+
+    if case == GammaStarTtxCase::OsLuSoft {
+        use gammaloop_api::commands::profile::{InfraRedProfile, Profile};
+        use symbolica::prelude::SingleFloat;
+
+        assert_eq!(
+            cli.cli_settings
+                .global
+                .generation
+                .uv
+                .on_shell_subtraction_velocity,
+            ["1", "0", "0", "0"].map(str::to_owned),
+            "moving physical tops must retain the fixed rest subtraction point"
+        );
+        let one = F("1".parse::<ArbPrec>()?);
+        let zero = F("0".parse::<ArbPrec>()?);
+        let mass = F("173".parse::<ArbPrec>()?);
+        let mass_square = &mass * &mass;
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        let mut profiles = Vec::new();
+        let mut cut_inventory = BTreeMap::new();
+        let mut route_values = Vec::new();
+        for (process, _, _) in routes.iter().copied() {
+            let process_id = cli
+                .state
+                .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
+            let self_energies = &role_master_names[process]["self-energy"];
+            assert_eq!(self_energies, &["GL1".to_owned()]);
+            let (gluon, representatives, real_cut) = {
+                let resolved = cli.state.process_list.processes[process_id].get_integrand(NLO)?;
+                let ProcessIntegrand::CrossSection(integrand) = resolved.require_generated()?
+                else {
+                    unreachable!()
+                };
+                let term = integrand
+                    .data
+                    .graph_terms
+                    .iter()
+                    .find(|term| term.graph.name == "GL1")
+                    .expect("the native source inventory retains GL1");
+                let gluons = term
+                    .graph
+                    .iter_edges_of(&term.graph.full_filter())
+                    .filter_map(|(_, edge, data)| {
+                        let particle = match &data.data.particle {
+                            PossibleParticle::Particle(particle)
+                            | PossibleParticle::MassOverriddenParticle { particle, .. } => {
+                                term.graph.model.particle_by_id(*particle).unwrap()
+                            }
+                            PossibleParticle::JustMass { .. } => {
+                                panic!("native QCD particle required")
+                            }
+                        };
+                        (particle.pdg_code.abs() == 21).then_some(edge)
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    gluons.len(),
+                    1,
+                    "exactly one physical gluon defines the soft ray"
+                );
+                let gluon = gluons[0];
+                let mut orders = term
+                    .cut_group_data
+                    .cut_groups
+                    .iter()
+                    .map(|group| group.related_esurface_group.max_occurence)
+                    .collect::<Vec<_>>();
+                orders.sort_unstable();
+                assert_eq!(
+                    orders,
+                    [1, 2],
+                    "retain the ordinary real and raised virtual residues"
+                );
+                let representatives = term
+                    .cut_group_data
+                    .cut_groups
+                    .iter()
+                    .map(|group| group.cuts[0].0)
+                    .collect::<BTreeSet<_>>();
+                let real_cut = term
+                    .cuts
+                    .iter()
+                    .position(|cut| {
+                        term.graph
+                            .iter_edges_of(&cut.cut.as_subgraph())
+                            .any(|(_, edge, _)| edge == gluon)
+                    })
+                    .expect("the physical real cut contains the soft gluon");
+                assert!(representatives.contains(&real_cut));
+                for (group_id, group) in term.cut_group_data.cut_groups.iter_enumerated() {
+                    let orders = term.integrand[group_id]
+                        .keys()
+                        .map(|index| {
+                            assert!(
+                                index.left_threshold_order.is_none()
+                                    && index.right_threshold_order.is_none()
+                            );
+                            index
+                                .lu_cut_order
+                                .expect("a physical residue has an explicit order")
+                        })
+                        .collect::<BTreeSet<_>>();
+                    assert_eq!(
+                        orders,
+                        (1..=group.related_esurface_group.max_occurence).collect()
+                    );
+                }
+                assert_eq!(term.cut_group_data.pass_two_evaluators.len(), 2);
+                assert_eq!(term.cut_group_data.dual_shapes.len(), 1);
+                (gluon, representatives, real_cut)
+            };
+
+            // Qualify the physical event boundary independently of the fit:
+            // generic moving tops, on-shell event momenta, and complete event sum.
+            // These already-used momentum inputs do not assume a soft-edge chart.
+            let points = Array2::from_shape_vec(
+                (2, 6),
+                vec![
+                    17.0, -31.0, 43.0, -29.0, 53.0, 71.0, 71.0, 13.0, -41.0, -29.0, 53.0, 71.0,
+                ],
+            )?;
+            let result = evaluate_samples_precise(
+                &mut cli.state,
+                &EvaluateSamplesPrecise {
+                    process_id: Some(process_id),
+                    integrand_name: Some(NLO.to_owned()),
+                    use_arb_prec: true,
+                    minimal_output: false,
+                    return_generated_events: Some(true),
+                    momentum_space: true,
+                    points: points.view(),
+                    integrator_weights: None,
+                    discrete_dims: None,
+                    graph_names: Some(vec![Some("GL1".to_owned()); 2]),
+                    orientations: Some(vec![None; 2]),
+                },
+            )?;
+            assert_eq!(result.samples.len(), 2);
+            let mut values = Vec::new();
+            for sample in result.samples {
+                let PreciseEvaluationResultOutput::Arb(value) = sample.evaluation else {
+                    return Err(eyre!("the complete LU probe requires Arb output"));
+                };
+                assert!(value.parameterization_jacobian.is_none());
+                assert_eq!(value.integrator_weight, one);
+                assert!(
+                    value.integrand_result.re.is_finite() && value.integrand_result.im.is_finite()
+                );
+                let mut event_sum = Complex::new_re(zero.clone());
+                let mut cut_ids = BTreeSet::new();
+                let mut particle_sets = BTreeSet::new();
+                for event in value.event_groups.iter().flat_map(|group| group.iter()) {
+                    event_sum += &event.weight;
+                    cut_ids.insert(event.cut_info.cut_id);
+                    let mut particles = event
+                        .cut_info
+                        .particle_pdgs
+                        .1
+                        .iter()
+                        .map(|pdg| pdg.abs())
+                        .collect::<Vec<_>>();
+                    particles.sort_unstable();
+                    particle_sets.insert(particles);
+                    assert_eq!(
+                        event.cut_info.particle_pdgs.1.len(),
+                        event.kinematic_configuration.1.len()
+                    );
+                    for (pdg, momentum) in event
+                        .cut_info
+                        .particle_pdgs
+                        .1
+                        .iter()
+                        .zip(&event.kinematic_configuration.1)
+                    {
+                        if pdg.abs() != 6 {
+                            continue;
+                        }
+                        let spatial = &momentum.spatial;
+                        let spatial_square = &spatial.px * &spatial.px
+                            + &spatial.py * &spatial.py
+                            + &spatial.pz * &spatial.pz;
+                        assert!(spatial_square > zero.clone(), "the physical top is moving");
+                        assert!(
+                            spatial.px != zero.clone()
+                                && spatial.py != zero.clone()
+                                && spatial.pz != zero.clone(),
+                            "the event direction is non-axial"
+                        );
+                        let energy_square = &momentum.temporal.value * &momentum.temporal.value;
+                        let error =
+                            Complex::new_re(&energy_square - &spatial_square - &mass_square)
+                                .norm()
+                                .re;
+                        assert!(
+                            error <= &tolerance * (&energy_square + &spatial_square + &mass_square)
+                        );
+                    }
+                }
+                assert_eq!(cut_ids, representatives);
+                assert_eq!(particle_sets, BTreeSet::from([vec![6, 6], vec![6, 6, 21]]));
+                let event_scale = event_sum.clone().norm().re;
+                let integrand_scale = value.integrand_result.clone().norm().re;
+                let scale = if event_scale > integrand_scale {
+                    event_scale
+                } else {
+                    integrand_scale
+                };
+                assert!(scale > zero.clone(), "nonzero complete physical LU control");
+                assert!((event_sum - &value.integrand_result).norm().re <= &tolerance * scale);
+                values.push(value.integrand_result);
+            }
+            route_values.push((process, values));
+            cut_inventory.insert(process, (gluon, representatives, real_cut));
+        }
+        let reference = &route_values
+            .iter()
+            .find(|(process, _)| *process == nlo_process)
+            .unwrap()
+            .1;
+        for (process, values) in &route_values {
+            assert_eq!(values.len(), reference.len());
+            for (point, (actual, expected)) in values.iter().zip(reference).enumerate() {
+                let actual_scale = actual.clone().norm().re;
+                let expected_scale = expected.clone().norm().re;
+                let scale = if actual_scale > expected_scale {
+                    actual_scale
+                } else {
+                    expected_scale
+                };
+                assert!(scale > zero.clone());
+                assert!(
+                    (actual.clone() - expected).norm().re <= &tolerance * scale,
+                    "complete LU point {point}, {process} versus projected reference"
+                );
+            }
+        }
+        let process = nlo_process;
+        let (gluon, representatives, real_cut) = cut_inventory[process].clone();
+        let mut ray_digests = BTreeSet::new();
+        // The existing profiler chooses a compatible soft-edge LMB, routes
+        // the ray back to the native chart, solves every physical LU cut,
+        // retains raised derivatives, and sums orientations and cut groups.
+        for seed in [1337, 4242] {
+            let profile = Profile::InfraRed(InfraRedProfile {
+                process: Some(ProcessRef::Unqualified(process.to_string())),
+                integrand_name: Some(NLO.to_owned()),
+                n_points: 12,
+                min_scale_exponent: -5.0,
+                max_scale_exponent: -7.0,
+                seed: Some(seed),
+                output_file: Some(test_root.join(format!("lu-soft-{seed}.json"))),
+                select: Some(format!("GL1 S({gluon})")),
+                per_orientation: false,
+                show_per_cut_info: true,
+            })
+            .run(&mut cli.state, &cli.cli_settings)?
+            .unwrap_ir();
+            gammalooprs::debug_tags!(#uv, #local, #soft, #summary;
+                stage = "os_nlo_complete_lu_soft_profile", process, seed,
+                file.profile = %profile,
+                "Native full-cut and per-cut fits before physical soft assertions"
+            );
+            assert!(
+                profile.all_passed,
+                "{process}, seed {seed}: native complete-cut IR profile"
+            );
+            assert_eq!(profile.results_per_graph.len(), 1);
+            let graph = &profile.results_per_graph[0];
+            assert_eq!(graph.graph_name, "GL1");
+            assert_eq!(graph.cut_definitions.len(), 3);
+            assert_eq!(graph.single_limit_reports.len(), 1);
+            let report = &graph.single_limit_reports[0];
+            assert!(report.orientation_label.is_none());
+            assert_eq!(report.limit_name, format!("S({gluon})"));
+            assert!(report.scaling.is_finite() && report.power_law_fit.r_squared().is_finite());
+            assert!(report.power_law_fit.r_squared() >= 0.9);
+            // A single soft three-vector gives measure power +3. The
+            // uncancelled integer class is scaling 0; the next is >=1.
+            // The half-integer separator is fixed before observing data.
+            assert!(
+                report.scaling > 0.5,
+                "{process}, seed {seed}: complete-cut leading pole remains"
+            );
+            assert_eq!(
+                report
+                    .per_cut_reports
+                    .iter()
+                    .map(|cut| cut.cut_id)
+                    .collect::<BTreeSet<_>>(),
+                representatives
+            );
+            let real = report
+                .per_cut_reports
+                .iter()
+                .find(|cut| cut.cut_id == real_cut)
+                .unwrap();
+            assert!(
+                real.fit_error.is_none(),
+                "the omitted-virtual-cut control needs a resolved real-cut fit"
+            );
+            let real_fit = real.power_law_fit.as_ref().unwrap();
+            let real_scaling = real.scaling.unwrap();
+            assert!(
+                real_scaling.is_finite()
+                    && real_fit.r_squared().is_finite()
+                    && real_fit.r_squared() >= 0.9
+            );
+            assert!(
+                real_scaling < 0.5,
+                "the real-cut control must retain its eikonal logarithmic class"
+            );
+            let ray = report
+                .ray_fingerprint
+                .as_ref()
+                .expect("native routed ray identity");
+            assert!(!ray.lmb_edges.is_empty() && !ray.digest.is_empty());
+            assert!(
+                ray_digests.insert(ray.digest.clone()),
+                "the two seeds must produce distinct rays"
+            );
+            profiles.push(serde_json::json!({
+                "process": process, "seed": seed, "gluon_edge": usize::from(gluon),
+                "scaling": report.scaling, "r_squared": report.power_law_fit.r_squared(),
+                "real_cut_scaling": real_scaling, "real_cut_r_squared": real_fit.r_squared(),
+                "ray": ray,
+            }));
+        }
+        assert_eq!(profiles.len(), 2);
+        gammalooprs::debug_tags!(#uv, #local, #soft, #summary;
+            stage = "os_nlo_complete_lu_soft_cut_sum", file.profiles = ?profiles, file.route_values = ?route_values,
+            "Complete raised-cut LU soft limits with fixed OS point and moving on-shell tops"
+        );
+        clean_test(&test_root);
+        return Ok(());
+    }
 
     if case == GammaStarTtxCase::OsFiniteAddbackDensity {
         let on_process = OS_ROUTES[0].0;
