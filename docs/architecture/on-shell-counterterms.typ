@@ -976,6 +976,26 @@ is an exact density transfer, not a new two-loop numerical integration or a
 completed parent-operator proof. Evidence is retained under
 `target/os-feynkit/retained-tensor-os-rebase/23-24-vertex-prefix/`.
 
+The private parent-input checkpoint `83fce52c` carries the same four native
+children through ordered OS parent operations at rest and at the fixed
+nonaxial velocity $(5/4,1/4,1/2,1/2)$. Two scalar-certificate controls preserve
+factored cancellation, ranked zeros and nonzero perturbations (`73ec61c0`).
+The rest and nonaxial parent runs pass in `3f3e7a3a` and `135b9a28`
+(24.629 and 90.296 seconds), all within the ordinary 240-second cap.
+
+The proof retains its 144-component physical external-block certificate,
+formal-dimensional internal source, ordered logical ports, complete signed
+parent composition and separate vacuum-remainder input. Actual output sectors
+retain the full frozen child LMB, in addition to the input and sector-count
+checks. Exact common-chart comparisons group complete denominator polynomials
+with their powers and prescriptions; they do not establish a new general
+per-frozen-domain or CFF/localization commutation theorem. All source and binary
+guards remain unchanged. Evidence is retained under
+`target/os-feynkit/retained-tensor-os-rebase/parent-input/`. Parent finite analytic
+integration, the full26 condition and emitted four-dimensional/R2 equivalence
+are not evaluated by these input tests, and public mixed-prescription rejection
+remains an explicit control.
+
 These source and isolated-child certificates neither admit a mixed-prescription
 parent nor prove the full integrated two-loop OS condition. The mandatory
 nonignored numerical bare reference and its pinned backend/Nix qualification
