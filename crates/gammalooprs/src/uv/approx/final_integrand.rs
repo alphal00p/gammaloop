@@ -496,7 +496,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
 
     /// Scalar kinematic substitutions act on dispatch coefficients and typed
     /// bodies alike. They do not claim a tensor interface for opaque family calls.
-    fn scalar_normalizer(graph: &Graph, reduced: &SuBitGraph) -> impl Fn(&Atom) -> Atom {
+    pub(super) fn scalar_normalizer(graph: &Graph, reduced: &SuBitGraph) -> impl Fn(&Atom) -> Atom {
         let energy_replacements = graph
             .as_ref()
             .iter_edges_of(reduced)
@@ -537,7 +537,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
     }
 
     /// Normalize a mapped tensor without splitting its numerator factors.
-    fn final_normalizer(
+    pub(super) fn final_normalizer(
         graph: &Graph,
         reduced: &SuBitGraph,
     ) -> impl Fn(&SymbolicTensor<IndexedStructure>) -> Result<SymbolicTensor<IndexedStructure>>

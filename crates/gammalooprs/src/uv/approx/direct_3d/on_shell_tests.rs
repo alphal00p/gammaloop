@@ -436,6 +436,13 @@ pub(super) enum DirectForestFixture {
     DisjointOsQuarksReversed,
 }
 
+#[derive(Default)]
+struct FiniteRouteParts {
+    local: Vec<crate::uv::Integrands>,
+    finite: Vec<crate::uv::Integrands>,
+    pinched: Option<crate::uv::Integrands>,
+}
+
 impl DirectForestFixture {
     fn materialize_library(network: &mut crate::numerator::ParsingNet) -> Result<()> {
         use crate::utils::TENSORLIB;
@@ -486,6 +493,27 @@ impl DirectForestFixture {
         finite_prefix: bool,
         velocity: [&str; 4],
     ) -> Result<(Graph, Vec<crate::uv::Integrands>)> {
+        self.assemble_with_finite_parts(terms, finite_prefix, velocity, None)
+    }
+
+    fn assemble_with_finite_parts(
+        self,
+        terms: DirectForestTerms,
+        finite_prefix: bool,
+        velocity: [&str; 4],
+        mut parts: Option<&mut FiniteRouteParts>,
+    ) -> Result<(Graph, Vec<crate::uv::Integrands>)> {
+        if parts.is_some() {
+            eyre::ensure!(
+                matches!(terms, DirectForestTerms::ParentOfChild)
+                    && finite_prefix
+                    && matches!(
+                        self,
+                        Self::DisjointOsQuarks | Self::DisjointOsQuarksReversed
+                    ),
+                "finite decomposition requires one disjoint finite prefix"
+            );
+        }
         let complete_forest = matches!(terms, DirectForestTerms::CompleteForest);
         let bare_parent = matches!(terms, DirectForestTerms::BareParent);
         let parent_operation = !matches!(terms, DirectForestTerms::Child);
@@ -499,7 +527,7 @@ impl DirectForestFixture {
                     FIG10_LOGARITHMIC_BOX, disjoint_quark_fixture, nested_gluon_fixture,
                     nested_quark_fixture,
                 },
-                projected_4d::Projected4dApproximation,
+                projected_4d::{Projected4dApproximation, Projected4dCts},
             },
         };
         test_initialise()?;
@@ -668,6 +696,7 @@ impl DirectForestFixture {
             let child_direct = Direct3dApproximation::new(localizer, &mut graph, &settings)
                 .run_local(&source, &child, &root, &child, &root)
                 .wrap_err_with(|| format!("{self:?}: direct child, explicit={explicit}"))?;
+            let mut finite_sources = None;
             let direct = if bare_parent {
                 Direct3dApproximation::new(localizer, &mut graph, &settings)
                     .run_local(&source, &parent, &root, &parent, &root)?
@@ -696,6 +725,25 @@ impl DirectForestFixture {
                         }),
                         "the finite disjoint prefix must retain its nontrivial frozen kernel"
                     );
+                    if parts.is_some() {
+                        let kernel = GS.localizing_integrand(child.lmb());
+                        for sector in replay.sectors()? {
+                            assert_eq!(&sector.active_subgraph, parent.subgraph());
+                            for (_, frozen) in sector.frozen_integrands.iter() {
+                                assert_eq!(
+                                    frozen, &kernel,
+                                    "the finite child kernel remains unmapped"
+                                );
+                            }
+                        }
+                        crate::debug_tags!(#uv,#summary;
+                            stage="finite_prefix_direct_sources", route=usize::from(explicit),
+                            file.frozen_kernel=%kernel.to_canonical_string(),
+                            file.active_sources=?replay.sectors()?.iter().map(|sector| &sector.active).collect::<Vec<_>>(),
+                            "Retained local and finite replays from the same direct source preparation"
+                        );
+                        finite_sources = Some((direct.clone(), replay.clone()));
+                    }
                     let mut sectors = direct.sectors()?.to_vec();
                     sectors.extend(replay.sectors()?.iter().cloned());
                     if complete_forest {
@@ -788,15 +836,32 @@ impl DirectForestFixture {
                 "Completed direct route assembly before diagnostic materialization"
             );
             let selection = std::time::Instant::now();
-            let completed = completed.into_integrands().map(|value| {
-                if explicit {
-                    value.clone()
-                } else {
-                    (0..production.expression.orientations.len())
-                        .map(|selected| OrientationID(selected).select(value))
-                        .sum()
-                }
-            });
+            let select = |integrands: crate::uv::Integrands| {
+                integrands.map(|value| {
+                    if explicit {
+                        value.clone()
+                    } else {
+                        (0..production.expression.orientations.len())
+                            .map(|selected| OrientationID(selected).select(value))
+                            .sum()
+                    }
+                })
+            };
+            let completed = select(completed.into_integrands());
+            if let (Some(parts), Some((local_source, finite_source))) =
+                (parts.as_deref_mut(), finite_sources)
+            {
+                parts.local.push(select(
+                    builder
+                        .build_direct(&mut graph, current, &local_source, &IntegratedCts::root())?
+                        .into_integrands(),
+                ));
+                parts.finite.push(select(
+                    FinalIntegrandBuilder::new(localizer, &settings)
+                        .build_direct(&mut graph, current, &finite_source, &IntegratedCts::root())?
+                        .into_integrands(),
+                ));
+            }
             crate::debug_tags!(#generation, #profile, #uv, #summary;
                 stage = "os_route_oracle_selectors_summed", route = usize::from(explicit),
                 selector_count = production.expression.orientations.len(),
@@ -941,6 +1006,233 @@ impl DirectForestFixture {
             stage = "os_route_oracle_assembly_done", route = 2,
             "Completed projected route assembly before diagnostic materialization"
         );
+        if let Some(parts) = parts {
+            let kernel = GS.localizing_integrand(child.lmb());
+            let mut local_sectors = Vec::new();
+            let mut finite_sectors = Vec::new();
+            for sector in projected.sectors() {
+                if sector.frozen_factor.is_one() {
+                    local_sectors.push(sector.clone());
+                } else {
+                    assert_eq!(
+                        sector.frozen_factor, kernel,
+                        "the projected finite sector carries exactly the same child kernel"
+                    );
+                    finite_sectors.push(sector.clone());
+                }
+            }
+            assert!(!local_sectors.is_empty() && !finite_sectors.is_empty());
+            crate::debug_tags!(#uv,#summary;
+                stage="finite_prefix_projected_sources",
+                file.frozen_kernel=%kernel.to_canonical_string(),
+                file.finite_sectors=?finite_sectors,
+                "Selected unchanged finite sectors after all exact source reconstruction guards"
+            );
+            parts.local.push(
+                builder
+                    .build_projected(
+                        &mut graph,
+                        current,
+                        &Projected4dCts::new(local_sectors),
+                        &IntegratedCts::root(),
+                    )?
+                    .into_integrands(),
+            );
+            parts.finite.push(
+                FinalIntegrandBuilder::new(localizer, &settings)
+                    .build_projected(
+                        &mut graph,
+                        current,
+                        &Projected4dCts::new(finite_sectors),
+                        &IntegratedCts::root(),
+                    )?
+                    .into_integrands(),
+            );
+
+            // Independent completed 4D identity, certified in
+            // disjoint_finite_field_vertices_pinch_the_live_bridge_before_energy_projection:
+            // F = c (p-slash - m), N = i (p-slash + m), hence F N = i c D_phys I.
+            // At the same scalar scales used by bind (mUV=20, mu_r^2=400),
+            // c = i CF GC_11^2/(16 pi^2). This is a numerator identity before
+            // cancelling the real bridge polynomial, not a finite-i0 equality.
+            use linnet::half_edge::involution::Hedge;
+            use spenso::{
+                network::library::symbolic::ETS,
+                structure::{TensorStructure, slot::IsAbstractSlot},
+            };
+            let (bridge_outer, external) = if matches!(self, Self::DisjointOsQuarks) {
+                (7, 0)
+            } else {
+                (6, 1)
+            };
+            let outer = &graph.underlying[Hedge(bridge_outer)];
+            let external_data = &graph.underlying[Hedge(external)];
+            let outer_spin = outer
+                .edge_spin_slots()
+                .next()
+                .expect("one bridge spinor slot")
+                .to_atom();
+            let external_spin = external_data
+                .edge_spin_slots()
+                .next()
+                .expect("one external spinor slot")
+                .to_atom();
+            let outer_color = outer
+                .edge_color_slots()
+                .next()
+                .expect("one bridge color slot")
+                .to_atom();
+            let external_color = external_data
+                .num_indices
+                .color_indices
+                .vertex_indices
+                .external_structure_iter()
+                .next()
+                .expect("one external vertex color slot")
+                .to_atom();
+            let identity = function!(ETS.metric, &outer_spin, &external_spin)
+                * function!(ETS.metric, &outer_color, &external_color);
+            let coefficient = Atom::i()
+                * Atom::num((4, 3))
+                * Atom::from(crate::model::UFOSymbol::from("GC_11")).pow(2)
+                / (Atom::num(16) * Atom::var(symbolica::atom::Symbol::PI).pow(2));
+            let pinched_factor = crate::numerator::AppliedFeynmanRule::new(
+                Atom::i() * coefficient * identity * &kernel,
+            )?
+            .expr
+            .multiply(graph.global_numerator()?)?;
+            let standalone = Projected4dApproximation::new(localizer, &mut graph, &settings)
+                .project_local_4d(
+                    parent_local
+                        .as_ref()
+                        .expect("the actual standalone sibling was prepared once"),
+                    &mut projection_context,
+                )?;
+            let reduced = graph
+                .full_filter()
+                .subtract(current.subgraph())
+                .subtract(&graph.initial_state_cut);
+            let normalize_scalar = FinalIntegrandBuilder::scalar_normalizer(&graph, &reduced);
+            let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+            let family = symbol!("gammalooprs::uv::numerator_family");
+            let linearity =
+                Atom::var(symbol!("gammalooprs::uv::pinched_reference_linearity"; Scalar));
+            let pinched_pieces = standalone
+                .sectors()
+                .iter()
+                .map(|sector| {
+                    assert!(
+                        sector.frozen_factor.is_one(),
+                        "the standalone sibling has no completed child"
+                    );
+                    for (_, root) in sector.coefficient.iter() {
+                        let marked = root.replace_map(|view, _, output| {
+                            if let AtomView::Fun(call) = view
+                                && call.get_symbol() == family
+                            {
+                                **output = &linearity * view.to_owned();
+                            }
+                        });
+                        assert!((marked - &linearity * root).collect_compact_factors().is_zero(),
+                            "the pinched factor is attached once to a linear family root");
+                    }
+                    for entry in sector.coefficient.numerators() {
+                        assert!(!entry.rhs.expression().contains_symbol(family),
+                            "the standalone sibling owns direct tensor bodies, not nested family dependencies");
+                    }
+                    // Keep the external identity and wavefunctions in the
+                    // same body as their spinor coefficient, as the production
+                    // projected builder does. Per-body amputation then sees the
+                    // complete graph-owned public interface.
+                    sector
+                        .coefficient
+                        .resolved_scalars()?
+                        .fallible_map(|atom| {
+                            assert!(!atom.contains_symbol(GS.uv_momentum_provenance),
+                                "the standalone scalar contour weight has no unconsumed provenance");
+                            Ok(normalize_scalar(atom)
+                                .replace(GS.m_uv_expansion)
+                                .with(GS.m_uv_vacuum)
+                                .replace(GS.dim_epsilon)
+                                .with(0))
+                        })?
+                        .map_numerators(|atom| {
+                            // build_projected normally consumes these fixed
+                            // external soft carriers before final normalization.
+                            // The pinched reference bypasses that outer builder,
+                            // so reuse its exact routing owner here. There is no
+                            // active outer contour after the bridge has pinched.
+                            use crate::utils::symbols::UvMomentumProvenanceRole;
+                            let product = atom.clone().multiply(pinched_factor.clone())?;
+                            let mut inventory = std::collections::BTreeSet::new();
+                            product.expression().visitor(&mut |view| {
+                                if let AtomView::Fun(momentum) = view
+                                    && momentum.get_symbol() == GS.emr_mom
+                                    && momentum.get_nargs() == 2
+                                    && GS.uv_momentum_provenance_data(momentum.get(0)).is_some()
+                                {
+                                    inventory.insert(view.to_owned());
+                                }
+                                true
+                            });
+                            let external_owner = EdgeIndex(if matches!(self, Self::DisjointOsQuarks) { 1 } else { 0 });
+                            let mut proof_replacements = Vec::new();
+                            for component in &inventory {
+                                let AtomView::Fun(momentum) = component.as_view() else { unreachable!() };
+                                let (owner, role, payload) = GS.uv_momentum_provenance_data(momentum.get(0)).unwrap();
+                                assert_eq!(owner, external_owner);
+                                assert_eq!(role, UvMomentumProvenanceRole::DenominatorDerivedSoft);
+                                assert_eq!(payload, function!(GS.emr_mom, usize::from(owner)));
+                                assert_eq!(graph.loop_momentum_basis.edge_signatures[owner],
+                                    graph.loop_momentum_basis.edge_signatures[EdgeIndex(0)],
+                                    "the retained soft external carrier has exactly the incoming physical signature");
+                                proof_replacements.push(symbolica::id::Replacement::new(
+                                    component.to_pattern(), GS.erase_uv_momentum_provenance(component)));
+                            }
+                            let routed_expression = graph.optimize_soft_momentum_routing(
+                                product.expression(), std::iter::empty(),
+                            )?;
+                            let routed = product.with_checked_expression(routed_expression)?;
+                            assert!(!routed.expression().contains_symbol(GS.uv_momentum_provenance),
+                                "only the inventoried fixed external soft carriers may remain at this boundary");
+                            // This proof copy unwraps only the inventoried,
+                            // validated carriers, then uses native external
+                            // conservation on both sides. No momentum value or
+                            // on-shell specialization enters the certificate.
+                            let external_routing = graph.normal_emr_replacement(
+                                &graph.full_filter(), &graph.loop_momentum_basis,
+                                &[W_.x___], |pair| !pair.is_paired());
+                            let before = product.expression().replace_multiple(&proof_replacements)
+                                .replace_multiple(&external_routing);
+                            let after = routed.expression().replace_multiple(&external_routing);
+                            assert_eq!(before, after,
+                                "fixed external routing must reconstruct the complete factorized pinched numerator literally");
+                            crate::debug_tags!(#uv,#summary;
+                                stage="finite_prefix_pinched_reference_routing",
+                                file.provenance_inventory=?inventory,
+                                file.before=%NumeratorInterface::export(&product).0.to_canonical_string(),
+                                file.after=%NumeratorInterface::export(&routed).0.to_canonical_string(),
+                                exact_external_routing=true,
+                                "Consumed only certified external soft carriers through the existing production routing owner"
+                            );
+                            normalize(&routed)
+                        })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let mut pieces = pinched_pieces.into_iter();
+            let pinched = pieces
+                .next()
+                .expect("a nonzero standalone sibling has a projected sector")
+                .zip_add(pieces)?;
+            crate::debug_tags!(#uv,#summary;
+                stage="finite_prefix_pinched_reference_source",
+                file.pinched_factor=%NumeratorInterface::export(&pinched_factor).0.to_canonical_string(),
+                file.frozen_kernel=%kernel.to_canonical_string(),
+                file.standalone_sectors=?standalone.sectors(),
+                "Projected the actual standalone sibling with its certified pinched external factor and unchanged child kernel"
+            );
+            parts.pinched = Some(pinched);
+        }
         expressions.push(projected_final.into_integrands());
 
         Ok((graph, expressions))
@@ -3509,5 +3801,177 @@ fn primitive_direct_os_matches_projected_four_d_in_both_orientation_modes() -> R
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn disjoint_finite_prefix_is_linear_and_agrees_across_routes() -> Result<()> {
+    use crate::utils::{ArbPrec, F, FloatLike};
+    use spenso::algebra::complex::Complex;
+    use symbolica::prelude::SingleFloat;
+    let fixture = DirectForestFixture::DisjointOsQuarks;
+    let mut parts = FiniteRouteParts::default();
+    let (graph, full) = fixture.assemble_with_finite_parts(
+        DirectForestTerms::ParentOfChild,
+        true,
+        ["1", "0", "0", "0"],
+        Some(&mut parts),
+    )?;
+    assert_eq!(
+        (full.len(), parts.local.len(), parts.finite.len()),
+        (3, 3, 3)
+    );
+    let external = [7, 1, 2, 3].map(Atom::num);
+    let loops = [[5, 0, 0], [0, 9, 0]].map(|row| row.map(Atom::num));
+    let mut values = Vec::new();
+    for (kind, expressions) in [
+        ("full", &full),
+        ("local", &parts.local),
+        ("finite", &parts.finite),
+    ] {
+        let mut routes = Vec::new();
+        for (route, expression) in expressions.iter().enumerate() {
+            let value = ForestTensorEvaluator::new_shared(fixture, &graph, route, expression)?
+                .evaluate(&external, &loops)?;
+            crate::debug_tags!(#uv,#summary;
+                stage="finite_prefix_decomposition_values",kind,route,
+                file.values=?value,
+                "Evaluated one original finite-prefix contribution with its retained family catalog"
+            );
+            routes.push(value);
+        }
+        values.push(routes);
+    }
+    let pinched = parts
+        .pinched
+        .as_ref()
+        .expect("the independent pinched source was retained");
+    let pinched_value = ForestTensorEvaluator::new_shared(fixture, &graph, 3, pinched)?
+        .evaluate(&external, &loops)?;
+    assert_eq!(
+        pinched_value.len(),
+        16,
+        "the pinched source retains the complete matrix"
+    );
+    assert!(
+        pinched_value
+            .values()
+            .all(|value| value.re.is_finite() && value.im.is_finite()),
+        "the pinched reference has finite components"
+    );
+    crate::debug_tags!(#uv,#summary;
+        stage="finite_prefix_decomposition_values",kind="pinched_reference",route=3,
+        file.values=?pinched_value,
+        "Evaluated the actual standalone sibling with its certified pinched external factor"
+    );
+    values[2].push(pinched_value);
+
+    // Certify linearity in the retained family calls by exact root
+    // recomposition, without inlining or separately evaluating their bodies.
+    for (source, input) in [
+        ("projected_finite", &parts.finite[2]),
+        ("pinched_reference", pinched),
+    ] {
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let mut pieces = Vec::new();
+        for entry in input.numerators() {
+            let Some(tag) = entry.tags.first() else {
+                continue;
+            };
+            let piece = input.map(|atom| {
+                atom.replace_map(|view, _, output| {
+                    if let AtomView::Fun(call) = view
+                        && call.get_symbol() == family
+                        && call.get_nargs() > 0
+                        && call.get(0) != tag.as_view()
+                    {
+                        **output = Atom::Zero;
+                    }
+                })
+            });
+            if piece.iter().all(|(_, atom)| atom.is_zero()) {
+                continue;
+            }
+            pieces.push(piece);
+        }
+        assert!(!pieces.is_empty(), "{source}: nonempty family inventory");
+        let mut pieces = pieces.into_iter();
+        let recomposed = pieces.next().unwrap().zip_add(pieces)?;
+        assert_eq!(input.iter().count(), recomposed.iter().count());
+        for ((key, original), (rebuilt_key, rebuilt)) in input.iter().zip(recomposed.iter()) {
+            assert_eq!(key, rebuilt_key);
+            assert!(
+                (original - rebuilt).collect_compact_factors().is_zero(),
+                "{source}: the family contribution inventory must reconstruct the exact original root"
+            );
+        }
+    }
+    let zero = Complex::new(F(ArbPrec::default()), F(ArbPrec::default()));
+    let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+    let mut failures = Vec::new();
+    for route in 0..3 {
+        let tensor_scale = values
+            .iter()
+            .flat_map(|kind| kind[route].values())
+            .map(|value| value.clone().norm().re)
+            .fold(F(ArbPrec::default()), |left, right| left.max(right));
+        assert!(tensor_scale > F(ArbPrec::default()).zero());
+        let keys = values
+            .iter()
+            .flat_map(|kind| kind[route].keys())
+            .collect::<std::collections::BTreeSet<_>>();
+        for key in keys {
+            let actual = values[0][route].get(key).unwrap_or(&zero);
+            let expected = values[1][route].get(key).unwrap_or(&zero).clone()
+                + values[2][route].get(key).unwrap_or(&zero);
+            let scale = actual.clone().norm().re.max(expected.clone().norm().re);
+            if (actual.clone() - expected).norm().re > &tolerance * (&scale + &tensor_scale) {
+                failures.push(format!("route{route}: full != local + finite at{key:?}"));
+                break;
+            }
+        }
+    }
+    for (kind, routes) in ["full", "local", "finite"].into_iter().zip(&values) {
+        assert!(
+            routes[2]
+                .values()
+                .any(|value| value.clone().norm().re > F(ArbPrec::default()).zero()),
+            "the projected {kind} contribution must be nonzero"
+        );
+        let mut pairs = vec![(0, 1), (0, 2), (1, 2)];
+        if kind == "finite" {
+            pairs.extend([(0, 3), (1, 3), (2, 3)]);
+        }
+        for (left, right) in pairs {
+            let a = &routes[left];
+            let b = &routes[right];
+            let tensor_scale = a
+                .values()
+                .chain(b.values())
+                .map(|value| value.clone().norm().re)
+                .fold(F(ArbPrec::default()), |left, right| left.max(right));
+            for key in a
+                .keys()
+                .chain(b.keys())
+                .collect::<std::collections::BTreeSet<_>>()
+            {
+                let actual = a.get(key).unwrap_or(&zero);
+                let expected = b.get(key).unwrap_or(&zero);
+                let scale = actual.clone().norm().re.max(expected.clone().norm().re);
+                if (actual.clone() - expected).norm().re > &tolerance * (&scale + &tensor_scale) {
+                    failures.push(format!("{kind}: route{left} != route{right} at{key:?}"));
+                    break;
+                }
+            }
+        }
+    }
+    crate::debug_tags!(#uv,#summary;
+        stage="finite_prefix_decomposition_verdict",file.failures=?failures,
+        "Compared within-route linearity and the original local/finite pieces without global family inlining"
+    );
+    assert!(
+        failures.is_empty(),
+        "finite-prefix boundary: {failures:?}; see complete captured matrix"
+    );
     Ok(())
 }
