@@ -20,7 +20,32 @@ six-photon binary64 update checked independently with arbitrary precision.
 A successful build or focused rerun is distinct from a complete runtime or
 performance qualification.
 
-== Current checkpoint, 18 October 2026
+== Latest shared fixes, 18 October 2026
+
+The on-shell agent's two additional named shared fixes are imported separately:
+`aa118f7852cef1ffc67743cc18f91d023c00764a` maps to
+`b3b3d533876c07fe817dbcd6b99e0037c990b556` for native fixed-selector recognition,
+and `3db4014f5fcc23256e427ddf8bf7e112b55bd675` maps to
+`fd9ed3361517fd36bcfc6059eb626122f92924f0` for uniformly reversed contracted
+`gamma0` sandwiches. No on-shell prescription ancestry is imported. The child
+`663ee04900a1ffe358b94630f107a5f3a801335d` only disambiguates a test map's type.
+
+Frozen `663ee049` passes all 1,054 selected Idenso tests: the exact earlier
+1,048-test inventory plus six new controls, with 24 unchanged skips. Strict
+workspace Clippy, formatting and the documentation registry check also pass.
+All 664 selected GammaLoop and tensor consumers also pass in 635.552 seconds,
+with the exact previous inventory retained, no failures or timeouts, and unchanged
+source hashes. The normal Nix CLI and all 105 selected local CI outputs remain
+pending for this newer source. The first CI attempts exposed the test-map type
+ambiguity and a missing compile-time fixture. The map correction above preserves
+the exact assertion; `ea221df3` adds the 819-byte captured temporal chain to
+Idenso's existing compile-time test assets. Receipts are under
+`target/symbolic-tensor-flow/shared-selector-temporal-validation-2`, with import
+mappings in `onshell-api-coordination.json`. The complete workspace and performance
+results below qualify e6, not these later changes; no new performance benefit
+is claimed for them.
+
+== Frozen e6 qualification
 
 `e6a3bb4664d6927c46b0e463eee0850fc6285fa4` passes 1,048 of 1,048 selected Idenso
 tests, with all 24 existing skips preserved. Strict workspace Clippy completed
@@ -94,6 +119,47 @@ The runtime allowance is 15 percent with a 1 µs floor; RSS uses 20 percent and
 This is a robust-noise screen, not a statistical confidence interval. The two
 cases are neither passes nor confirmed regressions; further diagnosis and
 qualification remain pending without relaxing the policy.
+
+Two predeclared fixed-state GL16 ABBA diagnostics retain the original four
+methods, two points and numerical checks: one unbound, then one with both
+binaries pinned to the same singleton CPU 192. All 64 point-result JSONs pass
+and both saved states remain unchanged. Pinning does not remove SingleParametric
+variance: its batch coefficient of variation remains about 2.65--5.96 percent,
+while the other methods remain about 0.25--1.56 percent. This does not isolate an SMT, cache or
+precision-path cause and does not replace either inconclusive gate.
+
+The unbound slow episode stays on one CPU, with negligible observed leader
+run-queue waiting and no cgroup throttle increments. Hardware counters report
+full running coverage, but point-window instruction counts interpolate 100 ms
+intervals; they are not exact per-batch or symbolic-program execution counts.
+`RUSAGE_CHILDREN` under the profiler does not account for the payload here, and
+its zero software migration/context-switch counts contradict `/proc`. Those
+fields are not used to establish absence of work or scheduling effects. The
+observations and limits are recorded in `observed-analysis.json`,
+`singleton192-comparison.json` and `diagnostic-counter-quality.json` under
+`target/symbolic-tensor-flow/gl16-final-variance`.
+
+A separate original thermal-pipeline ABBA diagnostic passes all numerical
+checks. One candidate run exposes a missed generation peak: external observed
+RSS reaches 174,297,088 bytes while the native 100 ms sampler reports
+136,749,056 bytes. The peak lies after normalization and before the tensor
+boundary is finished, before finite component execution. This locates the stage,
+not its internal allocation cause. Some same-process `VmHWM` observations also
+decrease, so the final value is not treated as an exact lifetime bound. The
+native sampling rule and every gate remain unchanged; evidence is in
+`target/symbolic-tensor-flow/thermal-final-variance/observed-analysis.json`.
+
+The scoped `cpe_iterations = 0` policy remains in place. Main lets common-pair
+elimination repeat to a fixed point; on the branch's changed factorized sources,
+sharing across mutually exclusive residue branches can shrink the static program
+while making each selected residue execute more work. The override preserves
+branch-local arithmetic, Horner ordering, ordinary DAG sharing and stack reuse,
+and honors explicit user settings. This predates retained tensor storage: a
+normal-Nix diagnostic at `c0e78d26` measured thermal runtime at 969/974 microseconds
+with default CPE and 732/735 with zero, passing the original corpus comparisons.
+Later scoped production passed its paired runtime gate. These historical timings,
+not synthetic interpreter counts, justify retaining the policy. No current e6
+default-versus-zero comparison or new performance claim is implied.
 
 The separate five-pair topology comparison preserves all 66 inventory entries
 in every pair. Fresh-process medians are 0.910630843 seconds on main and
