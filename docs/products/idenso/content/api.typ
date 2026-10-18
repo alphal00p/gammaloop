@@ -96,7 +96,7 @@ work, with no work limit:
 
 #table(
   columns: (1.4fr, .8fr, 3fr),
-  [Keyword], [Default], [Meaning],
+  table.header([Keyword], [Default], [Meaning]),
   [`representations`], [`None`], [Allowed connecting representation families; `None` permits all and `[]` permits none.],
   [`metrics`], [`True`], [Substitute metric/identity ports and form dimension factors.],
   [`rank_one`], [`True`], [Substitute vectors into compatible tensor or vector ports, including gamma slashes and scalar products.],
@@ -152,7 +152,7 @@ the enabled identities. These are the supported modes:
 
 #table(
   columns: (1fr, 3.5fr),
-  [Mode], [Requested structural work],
+  table.header([Mode], [Requested structural work]),
   [`"fully"`], [Default: all supported contractions, chain collection and trace collection.],
   [`"dots"`], [The same work as `"fully"`, plus canonical index-free dot notation.],
   [`"selected"`], [Additional connections in `representations=[...]`, using the same base-family filter as `contract()`. An empty list allows no additional connections.],
@@ -232,7 +232,7 @@ when supplying a value equal to its default.
 
 #table(
   columns: (2.3fr, 3.8fr),
-  [Keyword], [Default and effect],
+  table.header([Keyword], [Default and effect]),
   [`gamma_output`], [Default `"reduced"` applies Clifford identities; `"chains"` collects Dirac words without Clifford reduction or trace evaluation.],
   [`gamma_ordering`], [Default `"repeated_pairs"` moves repeated gammas toward their partners. `"canonical"` orders open chains through Clifford swaps and may introduce sums.],
   [`gamma_evaluate_traces`], [Default `True`: evaluates supported closed Dirac traces in reduced output; inactive for `"chains"`.],
