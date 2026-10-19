@@ -841,6 +841,52 @@ impl QcdMassReference {
             ctx.settings.on_shell_velocity()? == [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero]
         );
         eyre::ensure!(local.recursive_completion().is_empty());
+        // Integrated::run borrows local immutably. Observe every original
+        // signed analytic sector before any physical diagnostic copy below.
+        // Keep serialization inside the existing filtered debug event.
+        {
+            let raw_cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            for (sector_ordinal, sector) in local.active_sectors().iter().enumerate() {
+                let vacuum = sector.integration_atom();
+                debug_tags!(#uv, #integrated, #inspect;
+                    stage = "native_d09_actual_vacuum_sector_input", source = %diagram.name(),
+                    given = %given.subgraph().string_label(), sector_ordinal,
+                    file.ownership = %serde_json::to_string(&serde_json::json!({
+                        "active_components": &sector.active_components,
+                        "frozen_lmbs": &sector.frozen_lmbs,
+                        "inherited_loop_edges": &sector.inherited_loop_edges,
+                        "component_provenance": &sector.provenance_components,
+                        "branch_provenance": &sector.provenance_branches,
+                        "has_soft_ancestry": sector.has_soft_ancestry,
+                        "has_on_shell_ancestry": sector.has_on_shell_ancestry,
+                        "explicit_scheme_integrand": sector.scheme_integrand.is_some(),
+                        "active_loop_edges": sector.active_components.iter()
+                            .flat_map(|(_, _, frame)| frame.loop_edges.iter().copied())
+                            .collect::<BTreeSet<_>>(),
+                        "logical_slots": vacuum.structure().logical_slots().iter()
+                            .map(|slot| raw_cooking.uncook(slot.to_atom().as_view())
+                                .to_canonical_string())
+                            .collect::<Vec<_>>(),
+                    }))?,
+                    file.integration_atom = %raw_cooking.uncook(vacuum.expression().as_view())
+                        .to_canonical_string(),
+                    integration_atom_bytes = vacuum.expression().as_view().get_byte_size(),
+                    atom_bytes = sector.atom.expression().as_view().get_byte_size(),
+                    integration_atom_same_value_as_atom = vacuum.same_value(&sector.atom),
+                    integration_atom_expression_equals_atom = vacuum.expression() == sector.atom.expression(),
+                    integration_atom_literal_zero = vacuum.is_zero(),
+                    formal_dimension_present = vacuum.expression().contains_symbol(GS.dim),
+                    epsilon_present = vacuum.expression().contains_symbol(GS.dim_epsilon),
+                    vacuum_mass_present = vacuum.expression().contains_symbol(GS.m_uv_vacuum),
+                    expansion_mass_present = vacuum.expression().contains_symbol(GS.m_uv_expansion),
+                    renormalization_scale_present = vacuum.expression().contains_symbol(GS.mu_r_sq),
+                    consumed_loop_scale_present = vacuum.expression().contains_symbol(GS.integrated_loop_scale),
+                    "Retained original signed W sector with complete ownership and symbolic scalings"
+                );
+            }
+        }
         let reduced = graph
             .full_filter()
             .subtract(parent.subgraph())
