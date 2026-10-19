@@ -44,3 +44,4 @@ typst-kit = { version = "=0.15.1", default-features = false, features = [
 ], optional = true }
 typst-pdf = { version = "=0.15.1", optional = true }
 walkdir.workspace = true
+
