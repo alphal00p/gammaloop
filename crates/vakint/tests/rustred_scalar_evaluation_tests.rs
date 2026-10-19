@@ -2,6 +2,7 @@ mod test_utils;
 
 use std::collections::{BTreeSet, HashMap};
 use symbolica::atom::{Atom, AtomCore};
+use symbolica::domains::float::{Float, Real};
 use test_utils::{
     RustRedParityPolicy, TensorPrepass, alphaloop_matad_rustred_lanes,
     analytic_matad_rustred_lanes, compare_evaluations,
@@ -15,7 +16,13 @@ fn rustred_settings(substitute_masters: bool) -> VakintSettings {
     VakintSettings {
         form_exe_path: "/this/path/must/not/be/invoked/by/rustred-scalar".to_owned(),
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions { substitute_masters },
+            RustRedEvaluationOptions {
+                master_mode: if substitute_masters {
+                    vakint::RustRedMasterMode::Numerical
+                } else {
+                    vakint::RustRedMasterMode::Retain
+                },
+            },
         )]),
         run_time_decimal_precision: 32,
         use_dot_product_notation: true,
@@ -84,7 +91,7 @@ fn scalar_rustred_reduces_without_a_form_executable() {
         )
         .unwrap();
 
-    assert!(result.to_canonical_string().contains("Gam(1,1)"));
+    assert!(result.to_canonical_string().contains("RustRedMaster"));
 
     let settings = rustred_settings(false);
     let scalar_identities = [
@@ -143,7 +150,10 @@ fn scalar_rustred_matches_raw_matad_through_two_loops() {
     for input in inputs {
         let rustred_result = vakint.evaluate_integral(&rustred, input.as_view()).unwrap();
         let matad_result = vakint.evaluate_integral(&matad, input.as_view()).unwrap();
-        assert_exactly_equal(rustred_result, matad_result);
+        assert_exactly_equal(
+            test_utils::retained_masters_in_matad_basis(rustred_result, &rustred),
+            matad_result,
+        );
     }
 }
 
@@ -259,6 +269,14 @@ fn scalar_rustred_matches_substituted_matad_through_two_loops() {
     let vakint = Vakint::new().unwrap();
     let rustred = rustred_settings(true);
     let matad = matad_substituted_settings();
+    let symbolic_matad = VakintSettings {
+        evaluation_order: EvaluationOrder::matad_only(Some(MATADOptions {
+            direct_numerical_substition: false,
+            substitute_hpls: false,
+            ..MATADOptions::default()
+        })),
+        ..matad.clone()
+    };
     let parameter_values = HashMap::from([("muvsq".to_owned(), 1.0), ("mursq".to_owned(), 1.0)]);
     let rustred_parameters = vakint.params_from_f64(&rustred, &parameter_values);
     let matad_parameters = vakint.params_from_f64(&matad, &parameter_values);
@@ -271,7 +289,7 @@ fn scalar_rustred_matches_substituted_matad_through_two_loops() {
     for input in inputs {
         let rustred_result = vakint.evaluate_integral(&rustred, input.as_view()).unwrap();
         let matad_result = vakint.evaluate_integral(&matad, input.as_view()).unwrap();
-        let (rustred_numerical, _) = Vakint::full_numerical_evaluation(
+        let (mut rustred_numerical, _) = Vakint::full_numerical_evaluation(
             &rustred,
             rustred_result.as_view(),
             &rustred_parameters,
@@ -279,7 +297,7 @@ fn scalar_rustred_matches_substituted_matad_through_two_loops() {
             None,
         )
         .unwrap();
-        let (matad_numerical, _) = Vakint::full_numerical_evaluation(
+        let (mut matad_numerical, _) = Vakint::full_numerical_evaluation(
             &matad,
             matad_result.as_view(),
             &matad_parameters,
@@ -287,9 +305,48 @@ fn scalar_rustred_matches_substituted_matad_through_two_loops() {
             None,
         )
         .unwrap();
+        let exact_oracle = vakint
+            .evaluate_integral(&symbolic_matad, input.as_view())
+            .unwrap();
+        let epsilon = vakint_parse!(&matad.epsilon_symbol).unwrap();
+        let exact_coefficients =
+            exact_oracle.coefficient_list::<i32>(std::slice::from_ref(&epsilon));
+        let absolute_threshold = Float::with_val(matad.get_binary_precision(), 1.0e-25);
+        let mut proved_zero_poles = BTreeSet::new();
+        for (power, _) in &matad_numerical.0 {
+            if *power >= 0 {
+                continue;
+            }
+            let monomial = epsilon.pow(Atom::num(*power));
+            let exact = exact_coefficients
+                .iter()
+                .find(|(candidate, _)| candidate == &monomial)
+                .map(|(_, coefficient)| coefficient.expand().together())
+                .unwrap_or(Atom::Zero);
+            if exact.is_zero() {
+                // Direct numerical MATAD can leave rounding residuals where
+                // rational pole terms cancel. Prove zero symbolically first;
+                // use the same 1e-25 threshold absolutely only at these poles.
+                for result in [&rustred_numerical, &matad_numerical] {
+                    let value = result.get_epsilon_coefficient(*power);
+                    assert!(
+                        value.re.norm() < absolute_threshold
+                            && value.im.norm() < absolute_threshold,
+                        "{input}: proven-zero epsilon^{power} pole exceeds 1e-25"
+                    );
+                }
+                proved_zero_poles.insert(*power);
+            }
+        }
+        rustred_numerical
+            .0
+            .retain(|(power, _)| !proved_zero_poles.contains(power));
+        matad_numerical
+            .0
+            .retain(|(power, _)| !proved_zero_poles.contains(power));
         let (matches, detail) =
             rustred_numerical.does_approx_match(&matad_numerical, None, 1.0e-25, 0.0);
-        assert!(matches, "{detail}");
+        assert!(matches, "{input}: {detail}");
     }
 }
 
@@ -317,7 +374,7 @@ fn feynkit_tensor_then_rustred_scalar_never_needs_form() {
 
     let rendered = result.to_canonical_string();
     assert!(
-        rendered.contains("Gam(1,1)"),
+        rendered.contains("RustRedMaster"),
         "unexpected result: {rendered}"
     );
     assert!(!rendered.contains("topo("), "unreduced result: {rendered}");
@@ -399,7 +456,10 @@ fn feynkit_tensor_prepass_then_rustred_scalar_matches_matad() {
     for input in inputs {
         let rustred_result = vakint.evaluate(&rustred, input.as_view()).unwrap();
         let matad_result = vakint.evaluate(&matad, input.as_view()).unwrap();
-        assert_exactly_equal(rustred_result, matad_result);
+        assert_exactly_equal(
+            test_utils::retained_masters_in_matad_basis(rustred_result, &rustred),
+            matad_result,
+        );
     }
 }
 

@@ -55,12 +55,12 @@ fn sixteen_inputs_are_expanded_and_have_registered_four_loop_witnesses() {
             let second = retained_parent_descriptor(&pair.pinched);
             assert_eq!(first, parent);
             pair.with_numerator.visitor(&mut |node| {
-                if let AtomView::Fun(fun) = node {
-                    if fun.get_symbol() == vakint::symbols::S.dot {
+                if let AtomView::Fun(fun) = node
+                    && fun.get_symbol() == vakint::symbols::S.dot
+                {
                         for argument in fun.iter() {
                             assert!(matches!(argument, AtomView::Fun(f) if f.get_symbol() == vakint::symbols::S.k), "unexpanded scalar product: {node}");
                         }
-                    }
                 }
                 true
             });

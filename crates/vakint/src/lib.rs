@@ -6,6 +6,7 @@ pub mod diagram_integral;
 pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
+mod hpl;
 mod master_precision;
 pub mod matad;
 pub mod matad_numerics;
@@ -35,7 +36,11 @@ pub use rustred_evaluation::cache::{
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use rustred_evaluation::cache::{RustRedCacheTransferOptions, RustRedCacheTransferReport};
 pub use rustred_evaluation::five_loop::{RustRedSymbolicEvaluation, RustRedWitnessCacheStatistics};
-pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions};
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+pub use rustred_evaluation::{
+    ExternalDataLoadReport, ExternalDataLoopReport, OfficialExternalDataOptions,
+};
+pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
 
 use regex::Regex;
 use rug::float::Constant;
@@ -2340,6 +2345,7 @@ pub struct Vakint {
     rustred_application:
         Arc<std::sync::Mutex<Option<rustred_evaluation::five_loop::LoadedApplication>>>,
     rustred_lower_caches: Arc<std::sync::Mutex<rustred_evaluation::cache::LoadedLowerCaches>>,
+    rustred_data: Option<Arc<rustred_evaluation::data::RustRedData>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2366,12 +2372,34 @@ impl fmt::Display for VakintTerm {
     }
 }
 
+enum IntegralEvaluation {
+    Complete,
+    RustRed {
+        loop_count: usize,
+        mode: RustRedMasterMode,
+    },
+}
+
 impl VakintTerm {
     pub fn evaluate_integral(
         &mut self,
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        if let IntegralEvaluation::RustRed { loop_count, mode } =
+            self.reduce_integral(vakint, settings)?
+        {
+            self.numerator =
+                vakint.finalize_rustred(self.numerator.clone(), settings, loop_count, mode)?;
+        }
+        Ok(())
+    }
+
+    fn reduce_integral(
+        &mut self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+    ) -> Result<IntegralEvaluation, VakintError> {
         let mut integral_specs = if let Some(replacement_rules) =
             vakint.match_topologies_for_settings(settings, self.integral.as_view())?
         {
@@ -2390,7 +2418,7 @@ impl VakintTerm {
                 settings.evaluation_order.0.iter().find(|method| {
                     method.supports(settings, &integral_specs.canonical_topology)
                 }),
-                Some(EvaluationMethod::RustRed(options)) if !options.substitute_masters
+                Some(EvaluationMethod::RustRed(_))
             );
         if scalar_five_loop {
             integral_specs = vakint
@@ -2405,30 +2433,41 @@ impl VakintTerm {
             self.apply_numerator_replacement_rules(&integral_specs, settings)?;
         }
 
-        let mut could_evaluate_integral = false;
-        'eval: for evaluation_approach in settings.evaluation_order.0.iter() {
+        for evaluation_approach in &settings.evaluation_order.0 {
             if evaluation_approach.supports(settings, &integral_specs.canonical_topology) {
-                let evaluated_integral = evaluation_approach.evaluate_integral(
-                    vakint,
-                    settings,
-                    self.numerator.as_atom_view(),
-                    &integral_specs,
-                )?;
+                let (evaluated_integral, stage) = match evaluation_approach {
+                    EvaluationMethod::RustRed(options) => (
+                        vakint.rustred_reduce(
+                            settings,
+                            self.numerator.as_view(),
+                            &integral_specs,
+                        )?,
+                        IntegralEvaluation::RustRed {
+                            loop_count: integral_specs.canonical_topology.get_integral().n_loops,
+                            mode: options.master_mode,
+                        },
+                    ),
+                    _ => (
+                        evaluation_approach.evaluate_integral(
+                            vakint,
+                            settings,
+                            self.numerator.as_view(),
+                            &integral_specs,
+                        )?,
+                        IntegralEvaluation::Complete,
+                    ),
+                };
                 self.numerator = simplify_real(evaluated_integral.as_view());
                 self.integral = Atom::num(1);
-                could_evaluate_integral = true;
-                break 'eval;
+                return Ok(stage);
             }
         }
-        if !could_evaluate_integral {
-            return Err(VakintError::NoEvaluationMethodFound(
-                self.integral.to_string(),
-                settings.number_of_terms_in_epsilon_expansion
-                    - (integral_specs.canonical_topology.get_integral().n_loops as i64)
-                    - 1,
-            ));
-        }
-        Ok(())
+        Err(VakintError::NoEvaluationMethodFound(
+            self.integral.to_string(),
+            settings.number_of_terms_in_epsilon_expansion
+                - integral_specs.canonical_topology.get_integral().n_loops as i64
+                - 1,
+        ))
     }
 
     pub fn apply_numerator_replacement_rules(
@@ -2774,7 +2813,7 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
-        let compact = settings.rustred_artifact_path.is_some()
+        let compact = (settings.rustred_artifact_path.is_some() || vakint.has_rustred_loop(5))
             && matches!(
                 settings.tensor_reduction_method,
                 TensorReductionMethod::FeynKit
@@ -2787,9 +2826,12 @@ impl VakintTerm {
                 )?
                 .is_some_and(|matched| {
                     matches!(matched.canonical_topology, Topology::FiveLoop(_))
-                        && matches!(settings.evaluation_order.0.iter().find(|method| {
-                            method.supports(settings, &matched.canonical_topology)
-                        }), Some(EvaluationMethod::RustRed(options)) if !options.substitute_masters)
+                        && matches!(
+                            settings.evaluation_order.0.iter().find(|method| {
+                                method.supports(settings, &matched.canonical_topology)
+                            }),
+                            Some(EvaluationMethod::RustRed(_))
+                        )
                 });
         if compact {
             let mut scalar_settings = settings.clone();
@@ -3941,9 +3983,39 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
-        for term in self.0.iter_mut() {
-            term.evaluate_integral(vakint, settings)?;
+        let mut complete = Vec::new();
+        let mut reductions = BTreeMap::new();
+        for term in &mut self.0 {
+            match term.reduce_integral(vakint, settings)? {
+                IntegralEvaluation::Complete => complete.push(term.clone()),
+                IntegralEvaluation::RustRed { loop_count, mode } => {
+                    // Preserve the existing loop-count-specific epsilon target,
+                    // but combine every matching contribution before checking
+                    // missing orders, finite precision, or residual masters.
+                    let (raw, vectors) = reductions
+                        .entry((loop_count, mode))
+                        .or_insert_with(|| (Atom::Zero, std::collections::BTreeSet::new()));
+                    *raw += term.numerator.clone();
+                    vectors.extend(term.vectors.iter().cloned());
+                }
+            }
         }
+        for ((loop_count, mode), (raw, vectors)) in reductions {
+            let numerator = vakint.finalize_rustred(
+                rustred_evaluation::combine_exact(raw),
+                settings,
+                loop_count,
+                mode,
+            )?;
+            if !numerator.is_zero() {
+                complete.push(VakintTerm {
+                    integral: Atom::num(1),
+                    numerator,
+                    vectors: vectors.into_iter().collect(),
+                });
+            }
+        }
+        self.0 = complete;
         Ok(())
     }
 
@@ -4299,6 +4371,7 @@ impl Vakint {
             topologies,
             rustred_application: Arc::default(),
             rustred_lower_caches: Arc::default(),
+            rustred_data: None,
         })
     }
 
@@ -4317,7 +4390,8 @@ impl Vakint {
         {
             return Ok(Some(matched));
         }
-        if settings.rustred_artifact_path.is_some() && Topologies::needs_five_loop_catalogue(input)?
+        let needs_five_loop = Topologies::needs_five_loop_catalogue(input)?;
+        if (settings.rustred_artifact_path.is_some() || self.has_rustred_loop(5)) && needs_five_loop
         {
             self.saved_application(settings)?;
             if let Some(matched) = self
@@ -4326,6 +4400,19 @@ impl Vakint {
             {
                 return Ok(Some(matched));
             }
+        }
+        if needs_five_loop
+            && settings.rustred_artifact_path.is_none()
+            && !self.has_rustred_loop(5)
+            && settings
+                .evaluation_order
+                .0
+                .iter()
+                .any(|method| matches!(method, EvaluationMethod::RustRed(_)))
+        {
+            return Err(RustRedEvaluationError::ExternalData {
+                detail: "5L RustRed data is not loaded; call load_official_external_data(5, ...) or provide a local application package".into(),
+            }.into());
         }
         if settings.allow_unknown_integrals {
             self.topologies.match_topologies_to_user_input(input, true)
@@ -4474,9 +4561,10 @@ Evaluated (n_loops=1, mu_r=1) :
         params_complex: &HashMap<String, Complex<Float>, ahash::RandomState>,
         externals: Option<&HashMap<usize, Momentum, ahash::RandomState>>,
     ) -> Result<(NumericalEvaluationResult, Option<NumericalEvaluationResult>), VakintError> {
+        let expression = self.resolve_rustred_numerical(expression.to_owned(), settings)?;
         Vakint::full_numerical_evaluation(
             settings,
-            expression,
+            expression.as_view(),
             params_real,
             params_complex,
             externals,
@@ -4673,6 +4761,23 @@ Evaluated (n_loops=1, mu_r=1) :
         params_complex: &HashMap<String, Complex<Float>, ahash::RandomState>,
         externals: Option<&HashMap<usize, Momentum, ahash::RandomState>>,
     ) -> Result<NumericalEvaluationResult, VakintError> {
+        let mut unresolved = std::collections::BTreeSet::new();
+        integral.visitor(&mut |part| {
+            if let AtomView::Fun(fun) = part
+                && (fun.get_symbol() == vk_symbol!("RustRedMaster")
+                    || fun.get_symbol() == vk_symbol!("RustRedCoefficient"))
+            {
+                unresolved.insert(part.to_canonical_string());
+                return false;
+            }
+            true
+        });
+        if !unresolved.is_empty() {
+            return Err(VakintError::EvaluationError(format!(
+                "Cannot numerically evaluate unresolved RustRed masters or coefficients: {}. Use the Vakint instance with the corresponding external data; parent topology graphs are in each loop pack's graphs directory.",
+                unresolved.into_iter().collect::<Vec<_>>().join(", ")
+            )));
+        }
         let epsilon_coeffs =
             integral.coefficient_list::<i8>(&[Atom::var(vk_symbol!(&settings.epsilon_symbol))]);
         let epsilon_coeffs_vec = epsilon_coeffs
@@ -5713,7 +5818,7 @@ Evaluated (n_loops=1, mu_r=1) :
                 }
                 res
             }));
-            evaluated_integral = r;
+            evaluated_integral = crate::hpl::substitute_numerically(r.as_view(), settings)?;
         }
 
         //*((2*𝜋)^(2*{eps}))\
@@ -6675,11 +6780,11 @@ mod tests {
         let [EvaluationMethod::RustRed(options)] = rustred_order.0.as_slice() else {
             panic!("rustred_only must contain exactly the RustRed scalar evaluator");
         };
-        assert!(options.substitute_masters);
+        assert!((options.master_mode != crate::RustRedMasterMode::Retain));
         assert!(rustred_order.0[0].dependencies().is_empty());
         assert_eq!(
             rustred_order.to_string(),
-            "[RustRed (substitute_masters=true)]"
+            "[RustRed (master_mode=numerical)]"
         );
     }
 
@@ -6764,13 +6869,13 @@ mod tests {
         integral_specs.apply_replacement_rules().unwrap();
         let numerator = Atom::num(1);
         let method = EvaluationMethod::RustRed(RustRedEvaluationOptions {
-            substitute_masters: false,
+            master_mode: crate::RustRedMasterMode::Retain,
         });
 
         let reduced = method
             .evaluate_integral(&vakint, &settings, numerator.as_view(), &integral_specs)
             .unwrap();
-        assert!(reduced.to_canonical_string().contains("Gam(1,1)"));
+        assert!(reduced.to_canonical_string().contains("RustRedMaster"));
     }
 
     #[test]
@@ -6815,14 +6920,13 @@ mod tests {
     }
 
     #[test]
-    fn rustred_support_checks_concrete_mass_power_and_artifact_domain() {
+    fn rustred_support_checks_concrete_mass_and_power_before_coverage() {
         let vakint = Vakint::new().unwrap();
         let settings = VakintSettings::default();
         let rustred = EvaluationMethod::RustRed(RustRedEvaluationOptions::default());
         let inadmissible = [
             vk_parse!("topo(prop(1,edge(1,1),k(1),0,1))").unwrap(),
             vk_parse!("topo(prop(1,edge(1,1),k(1),muvsq,1/2))").unwrap(),
-            vk_parse!("topo(I2L(muvsq,9223372036854775807,1,1))").unwrap(),
         ];
 
         for integral in inadmissible {
@@ -6834,5 +6938,16 @@ mod tests {
             integral_specs.apply_replacement_rules().unwrap();
             assert!(!rustred.supports(&settings, &integral_specs.canonical_topology));
         }
+
+        // Coverage is advisory: a valid concrete integral remains routable even
+        // when its powers lie outside the campaign's certified root domain.
+        let integral = vk_parse!("topo(I2L(muvsq,9223372036854775807,1,1))").unwrap();
+        let mut integral_specs = vakint
+            .topologies
+            .match_topologies_to_user_input(integral.as_view(), false)
+            .unwrap()
+            .unwrap();
+        integral_specs.apply_replacement_rules().unwrap();
+        assert!(rustred.supports(&settings, &integral_specs.canonical_topology));
     }
 }

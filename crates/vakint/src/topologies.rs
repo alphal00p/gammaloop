@@ -419,23 +419,22 @@ impl Topologies {
             .iter()
             .any(|topology| matches!(topology, Topology::FiveLoop(_)))
             && let Some(source) = momentum_mapping::MomentumInput::from_expression(input, 5)?
-        {
-            if let Some(candidate) = source.match_topologies_with_acceptance(
+            && let Some(candidate) = source.match_topologies_with_acceptance(
                 self.iter()
                     .filter(|topology| matches!(topology, Topology::FiveLoop(_))),
                 limits,
                 &mut criterion,
-            )? {
-                return Ok(Some(candidate));
-            }
+            )?
+        {
+            return Ok(Some(candidate));
         }
         let matched = self.match_topologies_to_user_input(input, allow_unknown_integrals)?;
-        if let Some(candidate) = &matched {
-            if matches!(candidate.canonical_topology, Topology::FiveLoop(_)) {
-                // The unchanged parametric/short-form fallback may supply one
-                // extra exact witness, but never suppress a criterion error.
-                let _ = criterion(candidate)?;
-            }
+        if let Some(candidate) = &matched
+            && matches!(candidate.canonical_topology, Topology::FiveLoop(_))
+        {
+            // The unchanged parametric/short-form fallback may supply one
+            // extra exact witness, but never suppress a criterion error.
+            let _ = criterion(candidate)?;
         }
         Ok(matched)
     }

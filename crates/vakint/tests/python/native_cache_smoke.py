@@ -25,7 +25,7 @@ ROOTS = [(0, [power]) for power in range(5)]
 def engine(**overrides):
     options = {
         "evaluation_order": [
-            VakintEvaluationMethod.new_rustred_method(substitute_masters=False)
+            VakintEvaluationMethod.new_rustred_method(master_mode="retain")
         ],
         "form_exe_path": "/native-cache-python-test-must-not-use-form",
         "integral_normalization_factor": "FMFTandMATAD",

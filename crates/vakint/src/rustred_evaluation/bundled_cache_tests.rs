@@ -1,10 +1,9 @@
 //! The shipped packs must bind to the current embedded programs and serve exact results.
 use super::four_loop::cache as four_loop;
 use crate::{
-    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions, Vakint,
+    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions,
     VakintSettings, vakint_parse,
 };
-use std::path::PathBuf;
 use symbolica::atom::AtomCore;
 
 #[test]
@@ -12,7 +11,7 @@ fn bundled_prepared_caches_match_uncached_reductions() {
     let settings = VakintSettings {
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
@@ -21,10 +20,9 @@ fn bundled_prepared_caches_match_uncached_reductions() {
         ..Default::default()
     };
     for loops in 1..=4 {
-        let cached = Vakint::new().unwrap();
-        let ordinary = Vakint::new().unwrap();
-        let path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("artifacts/{loops}L/cache"));
+        let cached = super::cache_tests::external_engine();
+        let ordinary = super::cache_tests::external_engine();
+        let path = super::cache_tests::external_path().join(format!("{loops}L/cache"));
         cached
             .load_cache(loops, &path, &Default::default())
             .unwrap();
@@ -44,7 +42,7 @@ fn bundled_prepared_caches_match_uncached_reductions() {
                     );
                 }
                 4 => {
-                    for (namespace, mask) in four_loop::parent_masks().unwrap() {
+                    for (namespace, mask) in four_loop::parent_masks(&cached).unwrap() {
                         let mut powers = mask.into_iter().map(i64::from).collect::<Vec<_>>();
                         powers[0] = 2;
                         inputs.push(four_loop::test_input(namespace, &powers, mass));
@@ -85,7 +83,7 @@ fn bundled_prepared_caches_match_uncached_reductions() {
 #[test]
 fn bundled_five_loop_application_loads_from_its_portable_directory() {
     use sha2::{Digest, Sha256};
-    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("artifacts/5L/ibps");
+    let directory = super::cache_tests::external_path().join("5L/ibps");
     let bytes = std::fs::read(directory.join("application.json")).unwrap();
     assert_eq!(
         format!("{:x}", Sha256::digest(&bytes)),
@@ -96,8 +94,7 @@ fn bundled_five_loop_application_loads_from_its_portable_directory() {
     assert_eq!(document["metadata"]["source_generation"], 54);
     let mut settings = VakintSettings::default();
     assert!(settings.rustred_artifact_path.is_none());
-    let engine = Vakint::new()
-        .unwrap()
+    let engine = super::cache_tests::external_engine()
         .with_rustred_application(&mut settings, &directory)
         .unwrap();
     assert_eq!(

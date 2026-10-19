@@ -39,7 +39,7 @@ def main():
     integral = integral_from_diagram(diagram, family, E("1"), powers=powers)
     engine = Vakint(
         evaluation_order=[
-            VakintEvaluationMethod.new_rustred_method(substitute_masters=False)
+            VakintEvaluationMethod.new_rustred_method(master_mode="retain")
         ],
         form_exe_path="/five-loop-example-must-not-use-form",
         integral_normalization_factor="1",

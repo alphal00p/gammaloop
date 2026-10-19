@@ -97,13 +97,14 @@ fn registered_four_loop_census_validates_typed_parent_witnesses_without_admissio
         nonidentity += usize::from(coordinates.as_ref() != identity.as_slice());
         classes += 1;
 
-        // A validated witness is not a closing artifact. Even with master
-        // substitution disabled, no four-loop RustRed backend is available.
+        // These templates have a verified parent witness, but still contain
+        // symbolic propagator powers. Backend admission requires concrete
+        // integer powers independently of candidate reduction coverage.
         assert!(!crate::rustred_evaluation::supports(
             &settings,
             &topology,
             &RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         ));
     }

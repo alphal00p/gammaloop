@@ -39,19 +39,56 @@
 
   cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
 
+  lockedCargo = builtins.fromTOML (builtins.readFile (workspaceRoot + "/Cargo.lock"));
+  # Cargo resolves optional path packages from an entire pinned Git workspace,
+  # even when the ordinary lock omits them. Crane links only lock-listed crates,
+  # so make the private feature-unification package available to the offline
+  # resolver too. This supplements vendor metadata, not the runtime lock or its
+  # feature selection; all package contents come from the existing locked commit.
+  gitWorkspaceVendorPackages = map (source: let
+    checkout = builtins.fetchTree {
+      type = "github";
+      owner = "alphal00p";
+      repo = "gammaloop";
+      rev = lib.last (lib.splitString "#" source);
+    };
+    manifest = builtins.fromTOML (builtins.readFile (checkout.outPath + "/crates/${workspaceHackPackage}/Cargo.toml"));
+  in {
+    inherit source;
+    inherit (manifest.package) name version;
+  }) (lib.unique (map (package: package.source) (lib.filter
+    (package: lib.hasPrefix "git+https://github.com/alphal00p/gammaloop?" (package.source or ""))
+    lockedCargo.package)));
+
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
-    overrideVendorGitCheckout = packages: drv:
-      if lib.any (package: package.name == "symbolica-typst-atom-payload") packages
+    cargoLockParsed = lockedCargo // {
+      package = lockedCargo.package ++ lib.filter (extra:
+        !lib.any (package:
+          package.name == extra.name
+          && package.version == extra.version
+          && (package.source or "") == extra.source)
+        lockedCargo.package)
+      gitWorkspaceVendorPackages;
+    };
+    overrideVendorGitCheckout = packages: drv: let
+      source = (builtins.head packages).source;
+      github = "git+https://github.com/";
+      repository = lib.splitString "/" (lib.removePrefix github (builtins.head (lib.splitString "?" (builtins.head (lib.splitString "#" source)))));
+    in
+      if lib.hasPrefix github source && lib.any (package: builtins.elem package.name [
+        "symbolica-typst-atom-payload" "symbolica" "numerica" "graphica"
+        "rustred" "rustred-app" "rustred-order"
+      ]) packages
       then
         drv.overrideAttrs (_: {
           # Fetch the exact Cargo.lock revision even if upstream branches move;
           # the archive has the same contents as the Git checkout.
           src = builtins.fetchTree {
             type = "github";
-            owner = "symbolica-dev";
-            repo = "symbolica-typst-plugin";
-            rev = lib.last (lib.splitString "#" (builtins.head packages).source);
+            owner = builtins.elemAt repository 0;
+            repo = lib.removeSuffix ".git" (builtins.elemAt repository 1);
+            rev = lib.last (lib.splitString "#" source);
           };
         })
       else drv;
@@ -86,10 +123,7 @@
     (workspaceRoot + "/crates/spynso3/typst")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
-    (workspaceRoot + "/crates/vakint/artifacts/1L/ibps")
-    (workspaceRoot + "/crates/vakint/artifacts/2L/ibps")
-    (workspaceRoot + "/crates/vakint/artifacts/3L/ibps")
-    (workspaceRoot + "/crates/vakint/artifacts/4L/ibps")
+    (workspaceRoot + "/crates/vakint/data")
   ];
 
   snapshotSources = lib.fileset.unions [
@@ -400,6 +434,12 @@
     gammalooprs = [
       "assets/models/json"
     ];
+    "feynkit-py" = [
+      "crates/kurvst/typst/kurvst.wasm"
+      "crates/kurvst/typst/src"
+      "crates/linnest/typst/linnest.wasm"
+      "crates/linnest/typst/src"
+    ];
     "gammaloop-integration-tests" = [
       "tests/resources/fjcore"
     ];
@@ -429,16 +469,27 @@
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"
-      "crates/vakint/artifacts/1L/ibps"
-      "crates/vakint/artifacts/2L/ibps"
-      "crates/vakint/artifacts/3L/ibps"
-      "crates/vakint/artifacts/4L/ibps"
+      "crates/vakint/data"
     ];
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet_py.pyi" "docs/api/python"];
+    "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-py" = [
+      "crates/feynkit-model/tests/fixtures"
+      "crates/feynkit-py/tests/fixtures"
+      "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
+    ];
+    "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
+    vakint = [
+      "crates/vakint/tests/inputs"
+      "crates/vakint/tests/resources"
+      "crates/vakint/tests/fixtures"
+    ];
     clinnet = [
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
       "assets/embedded/drawing/templates/layout-core.typ"
@@ -454,11 +505,7 @@
 
   workspacePackageExtraSourceRoots.runtimeTest = {
     vakint = [
-      "crates/vakint/artifacts/1L/cache"
-      "crates/vakint/artifacts/2L/cache"
-      "crates/vakint/artifacts/3L/cache"
-      "crates/vakint/artifacts/4L/cache"
-      "crates/vakint/artifacts/5L/ibps"
+      "crates/vakint/data"
     ];
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"
@@ -2579,6 +2626,15 @@
     })
     checkedNextestPackageGroups);
 
+  # Explicit test fixture only: normal construction embeds cache-free 1L–3L.
+  # Pin the source snapshot so native cache and reduction tests stay reproducible.
+  vakintExternalTestData = builtins.fetchTree {
+    type = "github";
+    owner = "alphal00p";
+    repo = "vakint-external-data";
+    rev = "fced6061d2037272bc76c15bd0396b9ac7287bf7";
+  };
+
   nextestCheckFor = target:
     pkgs.runCommand "gammaloop-nextest-${target.name}" {
       nativeBuildInputs = [
@@ -2598,6 +2654,10 @@
       RUST_BACKTRACE = "1";
       RUST_LIB_BACKTRACE = "1";
       SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+      VAKINT_TEST_EXTERNAL_DATA =
+        if builtins.elem "vakint" target.packages
+        then vakintExternalTestData.outPath
+        else "";
     } (''
       if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
         echo "Missing SYMBOLICA_LICENSE environment variable" >&2

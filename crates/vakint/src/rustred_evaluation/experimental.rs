@@ -221,6 +221,75 @@ pub struct ExperimentalRustRed {
 }
 
 impl ExperimentalRustRed {
+    pub(super) fn evaluate_catalog(
+        &self,
+        settings: &VakintSettings,
+        numerator: AtomView,
+        matched: &ReplacementRules,
+        family_fingerprint: &str,
+        catalog: &super::masters::MasterCatalog,
+        mut cached: impl FnMut(&IntegralKey) -> Result<Option<CandidateReduction>, VakintError>,
+    ) -> Result<Atom, VakintError> {
+        let terms = prepare_matched_candidate_integral(
+            numerator,
+            matched,
+            self.reducer.as_ref(),
+            settings,
+        )?;
+        let mut contributions = BTreeMap::<Atom, Atom>::new();
+        for term in terms {
+            let reduction = match cached(&term.target)? {
+                Some(value) => value,
+                None => self
+                    .reducer
+                    .reduce_unit_mass(&term.target)
+                    .map_err(candidate_error)?,
+            };
+            let raw = reduction
+                .terms
+                .into_iter()
+                .map(|(master, coefficient)| {
+                    coefficient * catalog.symbol(family_fingerprint, master.powers())
+                })
+                .sum::<Atom>();
+            let dimension = vk_parse!("4-2*ep").unwrap();
+            let raw = raw
+                .replace(self.reducer.dimension().to_pattern())
+                .with(dimension.to_pattern());
+            let exponent = term
+                .target
+                .powers()
+                .iter()
+                .try_fold(8i128, |sum, &power| sum.checked_sub(i128::from(power)))
+                .and_then(|sum| sum.checked_add(i128::from(term.common_mass_squared_power)))
+                .and_then(|sum| i64::try_from(sum).ok())
+                .ok_or_else(|| candidate_error("mass exponent overflow"))?;
+            let raw = raw
+                * term.mass_squared.clone().pow(Atom::num(exponent))
+                * term.coefficient
+                * term.scalar_numerator;
+            *contributions.entry(term.mass_squared).or_insert(Atom::Zero) += raw;
+        }
+        let mut value = Atom::Zero;
+        for (mass, raw) in contributions {
+            let normalized = crate::matad::MATAD::with_settings(settings.clone())
+                .finalize_reduced_masters(
+                    super::combine_exact(raw),
+                    4,
+                    None,
+                    &mass,
+                    &crate::MATADOptions {
+                        expand_masters: false,
+                        susbstitute_masters: false,
+                        substitute_hpls: false,
+                        direct_numerical_substition: false,
+                    },
+                )?;
+            value += normalized;
+        }
+        Ok(value)
+    }
+
     pub fn new(
         reducer: Arc<dyn CandidateScalarReduction>,
         terminals: BTreeMap<IntegralKey, Atom>,
@@ -281,31 +350,6 @@ impl ExperimentalRustRed {
         self.evaluate_prepared(settings, &terms, &self.master_options, |_| Ok(None))
     }
 
-    pub(super) fn evaluate_matched(
-        &self,
-        settings: &VakintSettings,
-        numerator: AtomView,
-        matched: &ReplacementRules,
-        substitute_masters: bool,
-        cached: impl FnMut(&IntegralKey) -> Result<Option<CandidateReduction>, VakintError>,
-    ) -> Result<CandidateEvaluation, VakintError> {
-        let terms = prepare_matched_candidate_integral(
-            numerator,
-            matched,
-            self.reducer.as_ref(),
-            settings,
-        )?;
-        self.evaluate_prepared(
-            settings,
-            &terms,
-            &FMFTOptions {
-                expand_masters: substitute_masters,
-                susbstitute_masters: substitute_masters,
-            },
-            cached,
-        )
-    }
-
     fn evaluate_prepared(
         &self,
         settings: &VakintSettings,
@@ -346,14 +390,13 @@ impl ExperimentalRustRed {
                 .and_then(|sum| i64::try_from(sum).ok())
                 .ok_or_else(|| candidate_error("candidate mass exponent overflow"))?;
             let dimension = vk_parse!("4-2*ep").expect("fixed dimension parses");
-            raw = raw
-                .replace(self.reducer.dimension().to_pattern())
-                .with(dimension.to_pattern())
-                // Different declared residuals may project onto the same PR
-                // master. Combine its exact rational coefficient before any
-                // Laurent truncation, so intermediate poles cannot request
-                // unknown master orders that cancel in the complete sum.
-                .together();
+            // Different declared residuals may project onto the same PR
+            // master. Combine exact rational coefficients before truncation,
+            // while preserving any finite numerical terminal values.
+            raw = super::combine_exact(
+                raw.replace(self.reducer.dimension().to_pattern())
+                    .with(dimension.to_pattern()),
+            );
             let exponent = exponent
                 .checked_add(i64::from(term.common_mass_squared_power))
                 .ok_or_else(|| candidate_error("lowered mass exponent overflow"))?;
@@ -387,7 +430,8 @@ fn finalize_candidate_contributions(
     contributions
         .into_iter()
         .try_fold(Atom::Zero, |mut value, (mass, raw)| {
-            value += fmft.finalize_native_reduced_masters(raw.together(), &mass, options)?;
+            value +=
+                fmft.finalize_native_reduced_masters(super::combine_exact(raw), &mass, options)?;
             Ok(value)
         })
 }
@@ -401,6 +445,35 @@ fn candidate_error(detail: impl Into<String>) -> VakintError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn candidate_finalization_preserves_floating_scalar_prefactors() {
+        Vakint::initialize_vakint_symbols();
+        let settings = VakintSettings {
+            integral_normalization_factor: crate::LoopNormalizationFactor::FMFTandMATAD,
+            use_dot_product_notation: true,
+            ..Default::default()
+        };
+        let options = FMFTOptions {
+            expand_masters: false,
+            susbstitute_masters: false,
+        };
+        let base = vk_parse!("PR1").unwrap();
+        let factor = vk_parse!("1/𝜋^2+0.125`80/𝜋^4").unwrap();
+        let finalize = |value| {
+            finalize_candidate_contributions(
+                &settings,
+                BTreeMap::from([(Atom::num(1), value)]),
+                &options,
+            )
+            .unwrap()
+        };
+        assert!(
+            (finalize(&base * &factor) - finalize(base) * factor)
+                .expand()
+                .is_zero()
+        );
+    }
 
     #[test]
     fn candidate_finalization_cancels_unknown_orders_before_expansion() {

@@ -447,7 +447,7 @@
       system = "x86_64-linux";
     };
   };
-  enable = false;
+  enable = true;
   fail-fast = false;
   fail-on-dangling-dependencies = true;
   onlyBuild = [

@@ -1,0 +1,17 @@
+{
+  "schema": "vakint.external-data.coverage.v1",
+  "loop_count": 1,
+  "complete_family_claim": false,
+  "cache_completion_is_coverage_certificate": false,
+  "kind": "native-closed",
+  "authority": "Native ClosedArtifact replay certificate, restricted to its supported root domain",
+  "certificate": {
+    "path": "ibps/rules.rrbin",
+    "predicate": "ClosedUnitMassProgram::validate_entry",
+    "conjuncts": [
+      "supported_root_power_bounds",
+      "total_excess_scope"
+    ],
+    "schema": "rustred-artifact-v6"
+  }
+}

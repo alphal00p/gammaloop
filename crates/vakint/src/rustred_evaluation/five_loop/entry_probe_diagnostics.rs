@@ -18,7 +18,7 @@ fn coherent_transport_profile_checks_two_cases_without_reduction() {
     let mut settings = VakintSettings {
         evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
             crate::RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/entry-resource-profile-must-not-use-form".into(),
@@ -140,7 +140,7 @@ fn coalesced_rank_zero_endpoint_rejects_expensive_bad_witnesses() {
     let mut settings = VakintSettings {
         evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
             crate::RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/entry-probe-diagnostic-must-not-use-form".into(),

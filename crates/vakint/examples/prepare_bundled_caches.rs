@@ -1,5 +1,5 @@
 //! Explicit offline preparation; ordinary Vakint evaluation never writes these packs.
-//! cargo run --release -p vakint --example prepare_bundled_caches -- LOOP OUTPUT
+//! cargo run --release -p vakint --example prepare_bundled_caches -- LOOP OUTPUT [DATA_CHECKOUT]
 use rustred_app::CachePreparationStatus;
 use std::{path::PathBuf, sync::atomic::AtomicBool};
 use vakint::{RustRedCachePreparationOptions, Vakint};
@@ -13,13 +13,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("invalid loop count")?
         .parse()?;
     let output = PathBuf::from(args.next().ok_or("missing output directory")?);
+    let data = args.next().map(PathBuf::from);
     if args.next().is_some() || !(1..=4).contains(&loops) {
-        return Err("usage: prepare_bundled_caches LOOP(1..4) NEW_OUTPUT_DIRECTORY".into());
+        return Err(
+            "usage: prepare_bundled_caches LOOP(1..4) NEW_OUTPUT_DIRECTORY [DATA_CHECKOUT]".into(),
+        );
     }
     if output.exists() {
         return Err("output directory must be new; preserve existing packs".into());
     }
-    let engine = Vakint::new()?;
+    let mut engine = Vakint::new()?;
+    if let Some(data) = data {
+        engine.load_external_data(data, loops)?;
+    } else if loops == 4 {
+        return Err(
+            "four-loop preparation requires the local external-data checkout argument".into(),
+        );
+    }
     let options = RustRedCachePreparationOptions::default();
     let report =
         engine.prepare_cache(

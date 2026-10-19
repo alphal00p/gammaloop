@@ -8,7 +8,7 @@
 use std::{collections::VecDeque, sync::Arc};
 
 use rustred::{family::IntegralKey, scalar_numerator::ScalarNumeratorLimits};
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomView};
 
 use crate::{
     ReplacementRules, TensorReductionMethod, VakintSettings,

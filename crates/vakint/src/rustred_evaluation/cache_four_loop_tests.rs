@@ -1,9 +1,6 @@
 //! Explicit first-stage four-parent cache acceptance, not a large primer or
 //! a matched performance benchmark. No FORM/FMFT or new master computation.
-use super::{
-    cache::*,
-    four_loop::{self, cache as shipped},
-};
+use super::{cache::*, four_loop::cache as shipped};
 use crate::{
     EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions, Vakint,
     VakintSettings,
@@ -29,7 +26,13 @@ fn settings(substitute_masters: bool) -> VakintSettings {
         form_exe_path: "/four-cache-acceptance-must-not-invoke-form".into(),
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions { substitute_masters },
+            RustRedEvaluationOptions {
+                master_mode: if substitute_masters {
+                    crate::RustRedMasterMode::Numerical
+                } else {
+                    crate::RustRedMasterMode::Retain
+                },
+            },
         )]),
         number_of_terms_in_epsilon_expansion: 5,
         run_time_decimal_precision: 32,
@@ -39,7 +42,7 @@ fn settings(substitute_masters: bool) -> VakintSettings {
 }
 
 fn parent_powers() -> Vec<[i64; 10]> {
-    let masks = shipped::parent_masks().unwrap();
+    let masks = shipped::parent_masks(&super::cache_tests::external_engine()).unwrap();
     assert_eq!(masks.len(), 4);
     assert_eq!(
         masks
@@ -179,14 +182,14 @@ fn numerical_parity(
 
 fn fresh_reader(path: &Path) {
     let started = Instant::now();
-    let engine = Vakint::new().unwrap();
+    let engine = super::cache_tests::external_engine();
     println!(
         "CACHE_4L stage=fresh_engine_new seconds={:.9}",
         started.elapsed().as_secs_f64()
     );
     assert!(!engine.cache_statistics(4).unwrap().attached);
     let started = Instant::now();
-    let programs = shipped::programs().unwrap();
+    let programs = shipped::programs(&engine).unwrap();
     println!(
         "CACHE_4L stage=fresh_program_load seconds={:.9}",
         started.elapsed().as_secs_f64()
@@ -213,7 +216,7 @@ fn fresh_reader(path: &Path) {
             .iter()
             .all(|ns| ns.disk.as_ref().is_some_and(|io| io.chunks_read == 0))
     );
-    let reference = Vakint::new().unwrap();
+    let reference = super::cache_tests::external_engine();
     assert!(!reference.cache_statistics(4).unwrap().attached);
     let raw = settings(false);
     for root in &roots {
@@ -298,7 +301,14 @@ fn fresh_reader(path: &Path) {
                 .iter()
                 .any(|root| root.namespace == namespace && root.integral == target)
         );
-        let (native, _) = four_loop::native_program(namespace).unwrap().unwrap();
+        let (native, _) = engine
+            .four_loop_data()
+            .unwrap()
+            .four_loop
+            .as_ref()
+            .unwrap()
+            .native_program(namespace)
+            .unwrap();
         assert!(!native.terminals().contains(&target));
         let input = shipped::test_input(namespace, &powers, 4);
         let before = engine.cache_statistics(4).unwrap();
@@ -359,13 +369,13 @@ fn four_loop_first38_fresh_cache_preserves_public_values_guards_and_limits() {
         return;
     }
     let started = Instant::now();
-    let engine = Vakint::new().unwrap();
+    let engine = super::cache_tests::external_engine();
     println!(
         "CACHE_4L stage=engine_new seconds={:.9}",
         started.elapsed().as_secs_f64()
     );
     let started = Instant::now();
-    let programs = shipped::programs().unwrap();
+    let programs = shipped::programs(&engine).unwrap();
     println!(
         "CACHE_4L stage=program_load seconds={:.9}",
         started.elapsed().as_secs_f64()
@@ -431,12 +441,19 @@ fn four_loop_first38_fresh_cache_preserves_public_values_guards_and_limits() {
         SavedApplicationCacheBundle::open_generated(&output, &bindings, resolved.storage_limits)
             .unwrap();
     for (namespace, program) in programs.iter().enumerate() {
-        let (native, _) = four_loop::native_program(namespace).unwrap().unwrap();
+        let (native, _) = engine
+            .four_loop_data()
+            .unwrap()
+            .four_loop
+            .as_ref()
+            .unwrap()
+            .native_program(namespace)
+            .unwrap();
         let selected = roots
             .iter()
             .find(|root| {
                 root.namespace == namespace
-                    && root.integral.powers().iter().any(|&n| n == 2)
+                    && root.integral.powers().contains(&2)
                     && !native.terminals().contains(&root.integral)
             })
             .expect("each family needs a nonterminal dotted control");

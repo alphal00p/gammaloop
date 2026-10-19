@@ -143,7 +143,10 @@ fn three_loop_provider_refuses_missing_mass_map_and_recovers_after_limit_error()
     let missing = provider
         .reduce(foreign, &key([1; 6]), Default::default())
         .unwrap_err();
-    assert!(missing.contains("no exact momentum map"), "{missing}");
+    assert!(
+        matches!(&missing, FactorProviderError::Invalid(detail) if detail.contains("no exact momentum map")),
+        "{missing}"
+    );
     assert!(
         provider
             .reduce(family.clone(), &key([1]), Default::default())
@@ -226,7 +229,9 @@ fn four_loop_provider_matches_h_positive_corner_and_dotted_reductions() {
     crate::Vakint::initialize_vakint_symbols();
     // H is deliberately the first installed descriptor. Full physical support
     // exercises the exact mapper without an unrelated failed parent search.
-    let (native, physical) = four_loop::native_program(0).unwrap().unwrap();
+    let engine = crate::rustred_evaluation::cache_tests::external_engine();
+    let data = engine.four_loop_data().unwrap();
+    let (native, physical) = data.four_loop.as_ref().unwrap().native_program(0).unwrap();
     let family = native.family_shared();
     assert_eq!(physical, 9);
     let corner = key((0..10).map(|axis| i64::from(axis < physical)));
@@ -242,7 +247,7 @@ fn four_loop_provider_matches_h_positive_corner_and_dotted_reductions() {
         })
         .find(|target| !native.terminals().contains(target))
         .expect("an admitted one-dot fixture must apply a saved formula");
-    let mut provider = ShippedFactorProvider::default();
+    let mut provider = ShippedFactorProvider::with_data(data);
     for target in [&corner, &dotted] {
         let direct = native
             .reduce_unit_mass_guarded(target, Default::default())

@@ -1,0 +1,513 @@
+{
+  "schema": "vakint.external-data.loop.v1",
+  "version": "v0.1.0",
+  "loop_count": 2,
+  "dimension": "4-2*epsilon",
+  "normalization": "FMFTandMATAD",
+  "unit_mass_squared": true,
+  "families": [
+    {
+      "coordinates": [
+        {
+          "kind": "loop_loop",
+          "left": 0,
+          "right": 0
+        },
+        {
+          "kind": "loop_loop",
+          "left": 0,
+          "right": 1
+        },
+        {
+          "kind": "loop_loop",
+          "left": 1,
+          "right": 1
+        }
+      ],
+      "denominators": [
+        {
+          "coefficients": [
+            "1",
+            "0",
+            "0"
+          ],
+          "constant": "-1"
+        },
+        {
+          "coefficients": [
+            "0",
+            "0",
+            "1"
+          ],
+          "constant": "-1"
+        },
+        {
+          "coefficients": [
+            "1",
+            "2",
+            "1"
+          ],
+          "constant": "-1"
+        }
+      ],
+      "dimension": "rustred::{}::d",
+      "external_momenta": [],
+      "fingerprint": "rustred-integral-family-v2;N36:rustred-two-loop-unit-mass-sunset-v1;L2;2:k1;2:k2;E0;P1;1:d;Q2,0,3;M;RY1,1;I+1;X1;Y1,1;I+1;X0;D3;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I+2;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;G0;U3;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;",
+      "loop_momenta": [
+        "k1",
+        "k2"
+      ],
+      "power_shifts": [
+        "0",
+        "0",
+        "0"
+      ],
+      "sha256": "ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1",
+      "coordinate_index_base": 0,
+      "denominator_convention": "constant + sum_j coefficients[j] * coordinates[j]",
+      "graph": "graphs/ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1.dot",
+      "aliases": [
+        "K3"
+      ]
+    }
+  ],
+  "masters": [
+    {
+      "alias": "K3",
+      "epsilon_range": [
+        -2,
+        3
+      ],
+      "exact_basis_expression": "(Gam(1,1)/(ep*(ep-1)))^2",
+      "family_sha256": "ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1",
+      "loop_count": 2,
+      "master_id": "L2_ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1_p0_p1_p1",
+      "powers": [
+        0,
+        1,
+        1
+      ],
+      "basis_expression_namespace": "vakint",
+      "basis_expression_convention": "internal pre-normalization Minkowski MATAD at unit mass squared",
+      "exact_mapping_source": "src/rustred_evaluation/artifact.rs",
+      "name": "P1",
+      "directory": "masters/P1",
+      "status": "accepted",
+      "significant_digits": 20000,
+      "symbolic_powers": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3
+      ],
+      "graph_definition": {
+        "dimension": "4-2*epsilon",
+        "denominators": [
+          "-1*UFO::{}::mUV^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor}::K(0,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)),gammalooprs::{spenso::rank1,spenso::tensor}::K(0,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)))",
+          "-1*UFO::{}::mUV^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor}::K(1,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)),gammalooprs::{spenso::rank1,spenso::tensor}::K(1,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)))"
+        ],
+        "edge_powers": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        "family_powers": [
+          0,
+          1,
+          1
+        ],
+        "graph_edge_to_family_slot": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "numerator": "1",
+        "overall_factor": "1",
+        "symmetry_factor": "1",
+        "mass_parameter": {
+          "UFO::mUV": "1"
+        },
+        "model_mass": "UFO::{}::mUV",
+        "expected_ordered_defining_edge_ids": [
+          0,
+          1
+        ],
+        "normalization": "(i*pi^(d/2)*exp(-EulerGamma*epsilon))^(-2)",
+        "negative_index_factors": [],
+        "original_loop_momentum_images": [
+          [
+            "vakint::{spenso::tensor,spenso::rank1}::k(1)",
+            "-1*gammalooprs::{spenso::rank1,spenso::tensor}::K(0)+gammalooprs::{spenso::rank1,spenso::tensor}::K(1)"
+          ],
+          [
+            "vakint::{spenso::tensor,spenso::rank1}::k(2)",
+            "gammalooprs::{spenso::rank1,spenso::tensor}::K(0)"
+          ]
+        ],
+        "graph_scalar_product_dimension": "feynkit_graph::D; FastSecDec binds D=4-2*epsilon",
+        "source_scalar_product_label": "feynkit_graph::D"
+      },
+      "fastsecdec_configuration": {
+        "input": {
+          "graph": "masters/P1/graph.dot",
+          "model": "model.json"
+        },
+        "parameters": {
+          "UFO::mUV": "1"
+        },
+        "integral": {
+          "dimension": "4-2*eps",
+          "regulator": "eps",
+          "measure_multiplier": "exp(2*symbolica::{}::γ*eps)",
+          "powers": {
+            "0": 1,
+            "1": 1
+          }
+        },
+        "generation": {
+          "order": 3,
+          "contraction_mode": "dots"
+        }
+      },
+      "model": "model.json",
+      "files": {
+        "numerical.json": {
+          "path": "masters/P1/numerical.json",
+          "sha256": "8529e9e8135248da69f542acd65026b3fe5cf3bf33bcfab33faffd57e9749c0a"
+        },
+        "symbolic.json": {
+          "path": "masters/P1/symbolic.json",
+          "sha256": "8ccd6def581567d7a52516ceecc556883b8bbaae0937914af06406fe89e46da8"
+        },
+        "graph.dot": {
+          "path": "masters/P1/graph.dot",
+          "sha256": "977c5622a208cce9269d665165911d1a6ed3fe7cedc47c8d8fb05dbdde46ec5b"
+        }
+      },
+      "acceptance_sha256": {
+        "validation": "daac179733afde2eca04c11ab41ef40dff0a2c08a4171d16bd0a43a80d8bc7c6",
+        "symbolic_evidence": "48578983e2b55b062bc157899e0b49d8e52b06ae481ce1853fce324eae52e6bd",
+        "graph_evidence": "b7cd9568eed5ad2b922e9f6bb89ebffbc8d1250561fddfb5d7d4740e7e5924c5"
+      },
+      "kind": "known-master",
+      "parent_graph": "graphs/ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1.dot",
+      "available_epsilon_powers": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3
+      ],
+      "coefficients": [
+        {
+          "epsilon_power": -2,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": -1,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 0,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 1,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 2,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        }
+      ]
+    },
+    {
+      "alias": "K3",
+      "epsilon_range": [
+        -2,
+        4
+      ],
+      "exact_basis_expression": "-miT111",
+      "family_sha256": "ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1",
+      "loop_count": 2,
+      "master_id": "L2_ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1_p1_p1_p1",
+      "powers": [
+        1,
+        1,
+        1
+      ],
+      "basis_expression_namespace": "vakint",
+      "basis_expression_convention": "internal pre-normalization Minkowski MATAD at unit mass squared",
+      "exact_mapping_source": "src/rustred_evaluation/artifact.rs",
+      "name": "P2",
+      "directory": "masters/P2",
+      "status": "accepted",
+      "significant_digits": 20000,
+      "symbolic_powers": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "graph_definition": {
+        "dimension": "4-2*epsilon",
+        "denominators": [
+          "-1*UFO::{}::mUV^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor}::K(0,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)),gammalooprs::{spenso::rank1,spenso::tensor}::K(0,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)))",
+          "-1*UFO::{}::mUV^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor}::K(1,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)),gammalooprs::{spenso::rank1,spenso::tensor}::K(1,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)))",
+          "-1*UFO::{}::mUV^2+2*spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor}::K(0,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)),gammalooprs::{spenso::rank1,spenso::tensor}::K(1,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)))+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor}::K(0,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)),gammalooprs::{spenso::rank1,spenso::tensor}::K(0,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)))+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor}::K(1,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)),gammalooprs::{spenso::rank1,spenso::tensor}::K(1,spenso::{spenso::representation,spenso::self_dual}::mink(feynkit_graph::{}::D)))"
+        ],
+        "edge_powers": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            1
+          ]
+        ],
+        "family_powers": [
+          1,
+          1,
+          1
+        ],
+        "graph_edge_to_family_slot": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        "numerator": "1",
+        "overall_factor": "1",
+        "symmetry_factor": "1",
+        "mass_parameter": {
+          "UFO::mUV": "1"
+        },
+        "model_mass": "UFO::{}::mUV",
+        "expected_ordered_defining_edge_ids": [
+          0,
+          1
+        ],
+        "normalization": "(i*pi^(d/2)*exp(-EulerGamma*epsilon))^(-2)",
+        "negative_index_factors": [],
+        "original_loop_momentum_images": [
+          [
+            "vakint::{spenso::tensor,spenso::rank1}::k(1)",
+            "gammalooprs::{spenso::rank1,spenso::tensor}::K(0)"
+          ],
+          [
+            "vakint::{spenso::tensor,spenso::rank1}::k(2)",
+            "gammalooprs::{spenso::rank1,spenso::tensor}::K(1)"
+          ]
+        ],
+        "graph_scalar_product_dimension": "feynkit_graph::D; FastSecDec binds D=4-2*epsilon",
+        "source_scalar_product_label": "feynkit_graph::D"
+      },
+      "fastsecdec_configuration": {
+        "input": {
+          "graph": "masters/P2/graph.dot",
+          "model": "model.json"
+        },
+        "parameters": {
+          "UFO::mUV": "1"
+        },
+        "integral": {
+          "dimension": "4-2*eps",
+          "regulator": "eps",
+          "measure_multiplier": "exp(2*symbolica::{}::γ*eps)",
+          "powers": {
+            "0": 1,
+            "1": 1,
+            "2": 1
+          }
+        },
+        "generation": {
+          "order": 4,
+          "contraction_mode": "dots"
+        }
+      },
+      "model": "model.json",
+      "files": {
+        "numerical.json": {
+          "path": "masters/P2/numerical.json",
+          "sha256": "bff9cfe1d0b73ba99b152ac7062651914fb09b62965ef9eb108e6e60893c9823"
+        },
+        "symbolic.json": {
+          "path": "masters/P2/symbolic.json",
+          "sha256": "141b9f78676e63b4aeaf6bf5b09bdffc66109f5fd4f64cb875069924a627f0cd"
+        },
+        "graph.dot": {
+          "path": "masters/P2/graph.dot",
+          "sha256": "fb5c18447c9c6778a76131876ccfacc7ffc06f7708b230b2709e28d062f51ce2"
+        }
+      },
+      "acceptance_sha256": {
+        "validation": "c398560f382f33c4cf2036efe61946dc34e5231fdd42e53920747212d597314b",
+        "symbolic_evidence": "39919558aafe308f189e9b5ad89b8ff7cb30d7912a3465f517882543170d9c63",
+        "graph_evidence": "79ec0d7e254b4d76606e3236fb2e73cb8584c0456a7e4d2a9a1f439761f866c1"
+      },
+      "kind": "known-master",
+      "parent_graph": "graphs/ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1.dot",
+      "available_epsilon_powers": [
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "coefficients": [
+        {
+          "epsilon_power": -2,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": -1,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 0,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 1,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 2,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 4,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        }
+      ],
+      "coefficient_supplement": "coefficient-supplement.json"
+    }
+  ],
+  "ibps": {
+    "kind": "closed",
+    "path": "ibps",
+    "files": [
+      "ibps/rules.rrbin"
+    ]
+  },
+  "cache": {
+    "available": false
+  },
+  "coverage": "coverage.json",
+  "provenance": {
+    "master_producer_rustred_revision": "1fca5bd0ae11b8d25c89658a9c78a476a2b76048",
+    "vakint_reference_revision": "43efced0151f00e297af4e0abb06a2115d66f61a",
+    "native_cache_rustred_revision": "74a83e94f9f841ae113f3d151cd80567dbc9805d"
+  },
+  "files": {
+    "coefficient-supplement.json": {
+      "sha256": "f453b06442500395c34043e237771b7ad02584aa2c57cd35a91236ff5cc629b8",
+      "bytes": 1615
+    },
+    "coverage.json": {
+      "sha256": "b4c0d1b616d59fda6496ae99ea91b2ec555d2f12d6ee95e98d89060476dbb246",
+      "bytes": 524
+    },
+    "graphs/ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1.dot": {
+      "sha256": "fb5c18447c9c6778a76131876ccfacc7ffc06f7708b230b2709e28d062f51ce2",
+      "bytes": 1507
+    },
+    "ibps/rules.rrbin": {
+      "sha256": "778ab2e6ef9f4934cf8fd4e6aa45486bac21f8c508c0b21d1a00fdec3b532ac5",
+      "bytes": 36692
+    },
+    "masters/P1/graph.dot": {
+      "sha256": "977c5622a208cce9269d665165911d1a6ed3fe7cedc47c8d8fb05dbdde46ec5b",
+      "bytes": 1135
+    },
+    "masters/P1/numerical.json": {
+      "sha256": "8529e9e8135248da69f542acd65026b3fe5cf3bf33bcfab33faffd57e9749c0a",
+      "bytes": 120167
+    },
+    "masters/P1/symbolic.json": {
+      "sha256": "8ccd6def581567d7a52516ceecc556883b8bbaae0937914af06406fe89e46da8",
+      "bytes": 344
+    },
+    "masters/P2/graph.dot": {
+      "sha256": "fb5c18447c9c6778a76131876ccfacc7ffc06f7708b230b2709e28d062f51ce2",
+      "bytes": 1507
+    },
+    "masters/P2/numerical.json": {
+      "sha256": "bff9cfe1d0b73ba99b152ac7062651914fb09b62965ef9eb108e6e60893c9823",
+      "bytes": 140203
+    },
+    "masters/P2/symbolic.json": {
+      "sha256": "141b9f78676e63b4aeaf6bf5b09bdffc66109f5fd4f64cb875069924a627f0cd",
+      "bytes": 20596
+    },
+    "model.json": {
+      "sha256": "0819ce358fdba9d9e388bee2865fa607b7d271f81f43414463215f7679a5713d",
+      "bytes": 6981
+    }
+  }
+}

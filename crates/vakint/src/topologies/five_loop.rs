@@ -3,7 +3,7 @@
 //! parent's simultaneous routing and explicit common-basis physical slots.
 
 #[path = "five_loop_data.rs"]
-mod data;
+pub(crate) mod data;
 
 #[cfg(all(test, feature = "feynkit-ingress"))]
 #[path = "five_loop_census_tests.rs"]

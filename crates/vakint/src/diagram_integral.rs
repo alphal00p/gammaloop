@@ -254,7 +254,7 @@ impl VakintExpression {
             }
         }
         for ((_, endpoints, _), slot) in edges.iter().zip(physical_slots) {
-            if powers[*slot] > Integer::from(0) {
+            if powers[*slot] > 0 {
                 continue;
             }
             let source = vertices[&endpoints.source.unwrap().0];

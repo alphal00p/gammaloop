@@ -6,11 +6,10 @@ mod finalize;
 #[cfg(test)]
 mod routing_tests;
 
-use crate::fmft_numerics::ADDITIONAL_CONSTANTS;
 use crate::fmft_numerics::{MASTERS_EXPANSION, MASTERS_NUMERIC_SUBSTITUTIONS};
+use crate::utils::get_full_name;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::utils::{self, set_precision_in_polynomial_atom, undress_vakint_symbols};
-use crate::utils::{get_full_name, set_precision_in_float_atom};
 use colored::Colorize;
 use log::debug;
 use regex::Regex;
@@ -150,25 +149,7 @@ impl FMFT {
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Fmft);
-        let processed_constants = ADDITIONAL_CONSTANTS
-            .iter()
-            .map(|(src, trgt)| {
-                (
-                    src,
-                    set_precision_in_float_atom(trgt.as_view(), &self.settings),
-                )
-            })
-            .collect::<Vec<_>>();
-        let mut r = result.to_owned();
-        r.repeat_map(Box::new(move |av: AtomView| {
-            let mut res = av.to_owned();
-            for (src, trgt) in processed_constants.iter() {
-                res = res.replace(src.to_pattern()).with(trgt.to_pattern());
-            }
-            res
-        }));
-
-        Ok(r)
+        crate::hpl::substitute_numerically(result, &self.settings)
     }
 }
 

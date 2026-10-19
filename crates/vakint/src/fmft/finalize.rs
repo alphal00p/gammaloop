@@ -9,7 +9,7 @@ use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::domains::rational::Rational;
 use symbolica::function;
 
-use crate::fmft_numerics::{ADDITIONAL_CONSTANTS, MASTERS_NUMERIC_SUBSTITUTIONS};
+use crate::fmft_numerics::MASTERS_NUMERIC_SUBSTITUTIONS;
 use crate::master_precision::MasterPrecisionWarnings;
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
@@ -157,12 +157,7 @@ impl FMFT {
     fn warn_constant_precision(&self, expression: &Atom) {
         let substitutions = MASTERS_NUMERIC_SUBSTITUTIONS
             .iter()
-            .map(|(source, (target, condition))| (source, target, Some(condition)))
-            .chain(
-                ADDITIONAL_CONSTANTS
-                    .iter()
-                    .map(|(source, target)| (source, target, None)),
-            );
+            .map(|(source, (target, condition))| (source, target, Some(condition)));
         MasterPrecisionWarnings::new(&self.settings)
             .check_substitutions(expression.as_view(), substitutions);
     }

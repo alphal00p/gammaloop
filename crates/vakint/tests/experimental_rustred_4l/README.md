@@ -1,11 +1,18 @@
 # Four-loop RustRed acceptance and candidate diagnostics
 
-The public `EvaluationMethod::RustRed` now loads the shipped four-loop candidate
-programs and terminal catalogs under `artifacts/4L/ibps/`. Ordinary
+The public `EvaluationMethod::RustRed` uses four-loop candidate programs and
+terminal catalogs from the explicitly loaded
+[external-data repository](https://github.com/alphal00p/vakint-external-data/tree/main/4L/ibps).
+Vakint vendors only 1L–3L data. Set `VAKINT_TEST_EXTERNAL_DATA` to a validated
+external-data checkout or installed release root for the tests in this document;
+their engine fixture calls `load_external_data(path, 4)`. Ordinary
 evaluation does not regenerate parametric IBPs or invoke FORM. The programs
 retain candidate status: loading and pointwise rule checks do not establish
 arbitrary-index closure or constitute a sealed completeness certificate.
-Vakint's defaults and existing FORM-backed methods remain unchanged.
+Vakint's defaults and existing FORM-backed methods remain unchanged. See
+[data loading](../../external_data.typ) and [master capabilities](../../masters.typ)
+for the current data contract. The dated results below describe their recorded
+revisions and finite target sets, not a fresh acceptance run of the current tree.
 
 Two ignored numerical suites exercise this actual public backend through
 `EvaluationOrder::rustred_only()`: the fifteen original numerical references
@@ -31,6 +38,7 @@ tests separately check inventory and literal-input agreement with the originals.
 
 ```sh
 export SYMBOLICA_LICENSE="<your current Symbolica license>"
+export VAKINT_TEST_EXTERNAL_DATA=/absolute/path/to/vakint-external-data
 export VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH=/absolute/path/to/form
 cargo test -p vakint --release --locked \
   --test rustred_four_loop_tests \
@@ -139,9 +147,9 @@ for those finite probes only; it does not certify arbitrary-index closure. It
 does not exercise loading through the public method; use the public suites
 above and below for that acceptance boundary.
 
-The harness ships complete finite catalogs for the four checked-in parent
-descriptors under `artifacts/4L/ibps/`; these are
-loaded by default and are bound to each RustRed family fingerprint and arity.
+The external repository supplies finite catalogs for the four checked-in parent
+descriptors under `4L/ibps/`; these are loaded from the explicit fixture root
+and are bound to each RustRed family fingerprint and arity.
 Set `VAKINT_4L_CANDIDATE_CATALOG_DIR` to override that bundle and persist a
 fresh exact offline value set. The harness writes `h.rrcat.bin`, `fg.rrcat.bin`,
 `bmw.rrcat.bin`, or `x.rrcat.bin` atomically after the FMFT phase; each file contains
@@ -155,8 +163,9 @@ Catalogs produced by the earlier probe-only harness are marked partial and
 are intentionally rejected by this strict complete-terminal reload path.
 The native catalog codec lives in RustRed and uses Symbolica's Atom/state
 serialization; the former line-oriented schema is no longer a runtime input.
-The four shipped files preserve all 1,155 exact values and keys and total
-30,307 bytes. Loading accepts trusted generated native data, not hostile files.
+The historical full-raw-catalog files preserved all 1,155 exact values and keys
+and totaled 30,307 bytes. The later output-only catalogs are described below.
+Loading accepts trusted generated native data, not hostile files.
 The `d51721b6` native-catalog runtime gate passes the fifteen-reference and
 sixteen-pinch public suites with the existing tolerances and forbidden FORM
 paths in the native stages. Retained evidence is under
@@ -174,7 +183,7 @@ in the native stages, at 24.71/47.88 s whole-process wall time. Nine focused
 checks include both constructor conventions, and the unchanged 83-test lower-
 loop selection also passes. The same nine-input public timing test passes all
 54 numerical comparisons; its full table and first-use/warm-cache boundaries
-are in the [asset README](../../artifacts/4L/ibps/README.md#public-scalar-timing-probe).
+are in the [asset README](https://github.com/alphal00p/vakint-external-data/blob/main/4L/ibps/README.md#public-scalar-timing-probe).
 Evidence, exact binary hashes, commands and independent audit are retained at
 `TMP/gamma-terminal-alias-rollout.4Zi7ej/` in the RustRed workspace.
 
@@ -193,7 +202,7 @@ commands, logs, hashes and audit are under
 `TMP/gamma-terminal-u-rollout.oFoQwr/` in the RustRed workspace. No rules or
 catalog values were regenerated.
 
-The current `8ad62b96` pin loads four additional `.rrnorm.bin` sidecars through
+The historical `8ad62b96` pin loaded four additional `.rrnorm.bin` sidecars through
 the explicit `from_reducer_with_terminal_normalization` constructor. The core
 rebuilds the exact finite proof on cold loading and installs weighted terminal
 rows before memoization; Vakint implements no new reduction arithmetic. The
@@ -211,7 +220,7 @@ each pass all 54 comparisons in the same nine-input benchmark. Whole-process
 wall times are 97.22/89.82 s and include both backends; the asset README retains
 every first/warm observation, regressions and shared-host caveats. Evidence is retained at
 `TMP/gamma-terminal-normalization-rollout.GN7v1b/` in the RustRed workspace;
-the [asset README](../../artifacts/4L/ibps/README.md#weighted-vacuum-terminal-normalization)
+the [asset README](https://github.com/alphal00p/vakint-external-data/blob/main/4L/ibps/README.md#weighted-vacuum-terminal-normalization)
 describes the native proof and unchanged raw-catalog boundary.
 
 The existing FMFT finalizer expands exact Laurent coefficients before
@@ -313,6 +322,7 @@ Run the numerical matrix explicitly:
 
 ```sh
 export SYMBOLICA_LICENSE="<your current Symbolica license>"
+export VAKINT_TEST_EXTERNAL_DATA=/absolute/path/to/vakint-external-data
 export VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH=/absolute/path/to/form
 cargo test -p vakint --release --locked \
   --test rustred_four_loop_tests \
@@ -367,7 +377,8 @@ data README for storage, loading measurements and current receipt locations.
 
 `catalog_validation::shipped_terminal_projections_match_fmft` evaluates only
 the 74 normalized output keys in the shipped value catalogs with FMFT and compares
-their exact master projections with `artifacts/4L/ibps/*.rrcat.bin.gz`.
+their exact master projections with `4L/ibps/*.rrcat.bin.gz` under the selected
+external-data root.
 The programs and separate normalization sidecars retain all 1,155 raw declarations
 and their exact projection relations. The audit does not solve IBPs or
 declare additional terminals. With the license and explicit oracle environment
@@ -390,7 +401,8 @@ was regenerated for this catalog correction.
 Without `VAKINT_4L_CATALOG_AUDIT_OUTPUT`, every projection difference fails the
 audit. Supplying that variable requests an explicit offline refresh into the
 chosen directory instead; such a refresh is not a passing validation of the
-previous catalogs. Review updated values, rebuild embedded assets, and rerun
+previous catalogs. Review updated values, regenerate the external package
+manifests and checksums, load that validated package explicitly, and rerun
 the public numerical suites before reporting parity.
 
 Historical diagnostics and the new public tests have finite target scope.

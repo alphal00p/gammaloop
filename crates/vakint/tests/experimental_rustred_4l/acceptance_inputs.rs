@@ -458,11 +458,18 @@ pub(crate) mod fixture_checks {
         actual: &LoopNormalizationFactor,
         expected: &LoopNormalizationFactor,
     ) -> bool {
-        match (actual, expected) {
-            (LoopNormalizationFactor::MSbar, LoopNormalizationFactor::MSbar)
-            | (LoopNormalizationFactor::FMFTandMATAD, LoopNormalizationFactor::FMFTandMATAD)
-            | (LoopNormalizationFactor::pySecDec, LoopNormalizationFactor::pySecDec) => true,
-            _ => false,
-        }
+        matches!(
+            (actual, expected),
+            (
+                LoopNormalizationFactor::MSbar,
+                LoopNormalizationFactor::MSbar
+            ) | (
+                LoopNormalizationFactor::FMFTandMATAD,
+                LoopNormalizationFactor::FMFTandMATAD
+            ) | (
+                LoopNormalizationFactor::pySecDec,
+                LoopNormalizationFactor::pySecDec
+            )
+        )
     }
 }

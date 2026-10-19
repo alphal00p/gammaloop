@@ -1,6 +1,10 @@
 //! Apply an externally hosted package to a native five-loop DOT fixture.
 //! The package's exact entry union decides whether this example is admitted.
 
+#[allow(dead_code)] // The example needs parent definitions, not the full matcher census.
+#[path = "../src/topologies/five_loop_data.rs"]
+mod five_loop_data;
+
 #[path = "five_loop_cancellation_fixtures/mod.rs"]
 mod cancellation_fixtures;
 #[path = "saved_application/dot.rs"]
@@ -177,7 +181,7 @@ fn guard_domain(
                 }
             }
             AtomView::Pow(power) if Integer::try_from(power.get_exp()).is_ok() => {
-                if Integer::try_from(power.get_exp())? != Integer::from(0) {
+                if Integer::try_from(power.get_exp())? != 0 {
                     collect(power.get_base(), out)?;
                 }
             }
@@ -255,8 +259,7 @@ fn check_independent_tadpoles(
         foundry::artifact::ClosedArtifact,
         reduction::{Reducer, ReductionLimits},
     };
-    let artifact =
-        ClosedArtifact::decode_durable(include_bytes!("../artifacts/1L/ibps/rules.rrbin"))?;
+    let artifact = ClosedArtifact::decode_durable(include_bytes!("../data/1L/ibps/rules.rrbin"))?;
     let label = result
         .families
         .iter()
@@ -308,8 +311,9 @@ fn check_independent_tadpoles(
 
 /// Native five-tadpole chain, with four zero-flow bridges authenticated from
 /// its stored routing. Only one bridge is restored in the second input.
-fn massive_bridge_fixtures() -> Result<Vec<(String, Atom, Atom, Atom)>, Box<dyn std::error::Error>>
-{
+type MassiveBridgeFixture = (String, Atom, Atom, Atom);
+
+fn massive_bridge_fixtures() -> Result<Vec<MassiveBridgeFixture>, Box<dyn std::error::Error>> {
     let diagram = FeynmanDiagram::from_dot(
         Model::phi_3_4(),
         "digraph five_tadpoles {\
@@ -414,7 +418,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         epsilon_symbol: "eps".into(),
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: vakint::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/five-loop-example-must-not-use-form".into(),
@@ -810,22 +814,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // This particular scalar twelve-line corner (D=12) is outside the
         // pinned generation-54 entry union; this is not a global D cutoff.
-        // neither a loaded owner nor cached terminal values grant admission.
+        // Loading owners or cached terminals does not upgrade that coverage.
+        // Vakint now warns and preserves any residual exact integrals.
         let unsupported = vakint_parse!("topo(I5L_32745(1,1,1,1,1,1,1,1,1,1,1,1,1))")?;
-        match vakint.evaluate_rustred_symbolic(&settings, unsupported.as_view()) {
-            Err(vakint::VakintError::RustRedEvaluation(
-                vakint::RustRedEvaluationError::SavedApplicationEntryNotAdmitted { .. },
-            )) => {}
-            Err(error) => {
-                return Err(
-                    format!("D=12 control failed for an unexpected reason: {error}").into(),
-                );
-            }
-            Ok(_) => {
-                return Err("the scalar D=12 corner escaped the generation-54 entry union".into());
-            }
+        let partial = vakint.evaluate_rustred_symbolic(&settings, unsupported.as_view())?;
+        if partial.value.is_zero() || partial.families.is_empty() {
+            return Err("the out-of-coverage D=12 control lost its integral identity".into());
         }
-        println!("unsupported_entry_after_cache_reuse=refused");
+        println!("unsupported_entry_after_cache_reuse=retained_or_safely_reduced");
         println!("phase=homogeneous_degree10_tadpole_control");
         let homogeneous = homogeneous_tadpole_control(&vakint, &settings)?;
         let first = vakint.evaluate_rustred_symbolic(&settings, homogeneous.as_view())?;

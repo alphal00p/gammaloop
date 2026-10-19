@@ -13,13 +13,35 @@ use std::{
 };
 use symbolica::atom::AtomCore;
 
+/// External-data tests select their fixture explicitly; ordinary construction
+/// remains offline and contains only vendored 1L–3L programs.
+pub(super) fn external_path() -> PathBuf {
+    std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+        .map(PathBuf::from)
+        .expect("set VAKINT_TEST_EXTERNAL_DATA to a validated external-data checkout for this test")
+}
+
+/// Share immutable program ownership while giving each test a fresh cache
+/// attachment. Loading the distributed prepared caches is a separate assertion.
+pub(super) fn external_engine() -> Vakint {
+    static DATA: std::sync::OnceLock<std::sync::Arc<super::data::RustRedData>> =
+        std::sync::OnceLock::new();
+    let data = DATA.get_or_init(|| {
+        super::data::RustRedData::from_directory(&external_path(), "latest", 4)
+            .expect("external test data must validate and load")
+    });
+    let mut engine = Vakint::new().unwrap();
+    engine.rustred_data = Some(std::sync::Arc::clone(data));
+    engine
+}
+
 fn settings() -> VakintSettings {
     VakintSettings {
         form_exe_path: "/native-cache-test-must-not-use-form".into(),
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         use_dot_product_notation: true,
@@ -119,8 +141,10 @@ fn fresh_reader(path: &Path) {
     assert_eq!(engine.cache_statistics(1).unwrap().native.backing_hits, 2);
     // Loading without an explicit override retains the active native RAM cap.
     let mut strict = RustRedCacheLoadOptions::default();
-    let mut native = rustred::reduction::ReductionLimits::default();
-    native.max_cached_coefficient_bytes = 1;
+    let native = rustred::reduction::ReductionLimits {
+        max_cached_coefficient_bytes: 1,
+        ..Default::default()
+    };
     strict.native = Some(native);
     engine.load_cache(1, path, &strict).unwrap();
     engine.load_cache(1, path, &Default::default()).unwrap();

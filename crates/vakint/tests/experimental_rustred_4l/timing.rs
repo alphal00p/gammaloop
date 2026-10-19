@@ -14,6 +14,7 @@ use vakint::{
 };
 
 #[path = "timing_metrics.rs"]
+#[allow(dead_code)] // The public timing suite also uses Observation from this shared module.
 mod metrics;
 use metrics::{clock_ticks_per_second, cpu_ticks, resident_kib};
 

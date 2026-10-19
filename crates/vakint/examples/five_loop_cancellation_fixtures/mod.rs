@@ -1,7 +1,6 @@
 //! Independent positive-line cancellation controls. No saved artifact is needed
 //! to prove the numerator/power transport or the structural lowering equality.
-#[path = "../../src/topologies/five_loop_data.rs"]
-mod data;
+use super::five_loop_data as data;
 
 use feynkit_graph::{
     DiagramEdge, DiagramVertex, EdgeId, FeynmanDiagram, IntegralFamily as NativeFamily,
@@ -30,6 +29,7 @@ pub struct CancellationFixture {
     pub mass_squared: Atom,
     pub positive_cancellations: Vec<(usize, i64)>,
     /// A separately constructed and reparsed native effective-vertex DOT.
+    #[allow(dead_code)] // Used by the executable DOT controls, not every unit-test consumer.
     pub pinched_dot: String,
 }
 
@@ -220,7 +220,8 @@ pub fn fixtures(_initialized_vakint: &Vakint) -> Result<Vec<CancellationFixture>
         loop_labels.clone(),
         Default::default(),
     )?;
-    let cases: [(&str, &[(usize, i64)], i64); 6] = [
+    type CancellationCase<'a> = (&'a str, &'a [(usize, i64)], i64);
+    let cases: [CancellationCase<'_>; 6] = [
         ("single_positive_line", &[(0, 1)], 1),
         ("dotted_positive_line", &[(3, 2)], 1),
         ("two_positive_lines", &[(0, 1), (5, 1)], 1),

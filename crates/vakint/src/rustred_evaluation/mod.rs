@@ -5,6 +5,13 @@
 //! successful evaluation is not an unrestricted family-closure claim.
 
 mod artifact;
+pub(crate) mod data;
+mod masters;
+pub(crate) use masters::combine_exact;
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+mod official;
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+pub use official::{ExternalDataLoadReport, ExternalDataLoopReport, OfficialExternalDataOptions};
 pub mod cache;
 #[cfg(test)]
 mod cache_four_loop_tests;
@@ -19,11 +26,15 @@ mod four_loop;
 mod matching;
 mod materialize;
 mod numerator;
+#[cfg(test)]
 mod terminal;
 
 #[cfg(feature = "experimental-rustred")]
 pub mod experimental;
 #[cfg(not(feature = "experimental-rustred"))]
+// Ordinary 4L evaluation shares the implementation; optional public diagnostics
+// and offline preparation APIs remain unused when this module is private.
+#[allow(dead_code)]
 mod experimental;
 
 use std::fmt;
@@ -35,24 +46,42 @@ use crate::{ReplacementRules, Topology, Vakint, VakintError, VakintSettings};
 
 use matching::MatchedScalarFamily;
 
+/// How the final RustRed masters are represented.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RustRedMasterMode {
+    Retain,
+    Symbolic,
+    #[default]
+    Numerical,
+}
+
+impl fmt::Display for RustRedMasterMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Retain => "retain",
+            Self::Symbolic => "symbolic",
+            Self::Numerical => "numerical",
+        })
+    }
+}
+
 /// Options for the FORM-independent RustRed scalar-integral evaluator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RustRedEvaluationOptions {
-    /// Replace RustRed's terminal master integrals by Vakint's known evaluations.
-    pub substitute_masters: bool,
+    pub master_mode: RustRedMasterMode,
 }
 
 impl Default for RustRedEvaluationOptions {
     fn default() -> Self {
         Self {
-            substitute_masters: true,
+            master_mode: RustRedMasterMode::Numerical,
         }
     }
 }
 
 impl fmt::Display for RustRedEvaluationOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "substitute_masters={}", self.substitute_masters)
+        write!(f, "master_mode={}", self.master_mode)
     }
 }
 
@@ -60,6 +89,10 @@ impl fmt::Display for RustRedEvaluationOptions {
 #[derive(Debug, Error, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RustRedEvaluationError {
+    #[error("RustRed external data: {detail}")]
+    ExternalData { detail: String },
+    #[error("RustRed master data capability: {detail}")]
+    MasterCapability { detail: String },
     #[error("RustRed cache backend is unavailable for {loop_count} loops")]
     CacheBackendUnavailable { loop_count: usize },
     #[error("RustRed lower-loop cache lock is poisoned")]
@@ -82,10 +115,6 @@ pub enum RustRedEvaluationError {
     FourLoopArtifactUnavailable { loop_count: usize, detail: String },
     #[error("five-loop RustRed evaluation requires a loaded saved application package")]
     SavedApplicationUnavailable,
-    #[error("five-loop numerical master substitution is unsupported; set substitute_masters=false")]
-    FiveLoopNumericalMastersUnsupported,
-    #[error("five-loop saved application does not admit routed entry {powers:?}")]
-    SavedApplicationEntryNotAdmitted { powers: Vec<i64> },
     #[error("RustRed could not read propagator {propagator} power as an integer: {power}")]
     InvalidPower { propagator: usize, power: String },
     #[error("RustRed rejected the matched single-scale vacuum family: {detail}")]
@@ -120,12 +149,10 @@ pub(crate) fn supports(
     topology: &Topology,
     options: &RustRedEvaluationOptions,
 ) -> bool {
-    (settings.rustred_artifact_path.is_some()
-        && matches!(topology, Topology::FiveLoop(_))
-        && five_loop::supports(topology))
-        || (!options.substitute_masters || settings.number_of_terms_in_epsilon_expansion <= 5)
-            && (MatchedScalarFamily::try_from_topology(topology).is_ok()
-                || four_loop::supports(topology))
+    let _ = (settings, options);
+    MatchedScalarFamily::try_from_topology(topology).is_ok()
+        || four_loop::supports(topology)
+        || five_loop::supports(topology)
 }
 
 impl Vakint {
@@ -140,11 +167,40 @@ impl Vakint {
         integral_specs: &ReplacementRules,
         options: &RustRedEvaluationOptions,
     ) -> Result<Atom, VakintError> {
+        let raw = self.rustred_reduce(settings, numerator, integral_specs)?;
+        self.finalize_rustred(
+            raw,
+            settings,
+            integral_specs.canonical_topology.get_integral().n_loops,
+            options.master_mode,
+        )
+    }
+
+    pub(crate) fn finalize_rustred(
+        &self,
+        raw: Atom,
+        settings: &VakintSettings,
+        loop_count: usize,
+        mode: RustRedMasterMode,
+    ) -> Result<Atom, VakintError> {
+        self.rustred_data()?
+            .masters
+            .finalize(raw, settings, loop_count, mode)
+    }
+
+    /// Reduce and normalize without inspecting coefficient availability. The
+    /// expression owner combines all contributions before materializing masters.
+    pub(crate) fn rustred_reduce(
+        &self,
+        settings: &VakintSettings,
+        numerator: AtomView,
+        integral_specs: &ReplacementRules,
+    ) -> Result<Atom, VakintError> {
+        let options = &RustRedEvaluationOptions {
+            master_mode: RustRedMasterMode::Retain,
+        };
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::RustRed);
         if integral_specs.canonical_topology.get_integral().n_loops == 5 {
-            if options.substitute_masters {
-                return Err(RustRedEvaluationError::FiveLoopNumericalMastersUnsupported.into());
-            }
             return self
                 .saved_application(settings)?
                 .evaluate(settings, numerator, integral_specs);

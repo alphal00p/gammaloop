@@ -73,7 +73,8 @@ impl Vakint {
         output: impl AsRef<Path>,
         options: &RustRedCacheTransferOptions,
     ) -> Result<RustRedCacheTransferReport, VakintError> {
-        let transfer = Transfer::new(loop_count, output.as_ref(), options).map_err(operation)?;
+        let transfer =
+            Transfer::new(self, loop_count, output.as_ref(), options).map_err(operation)?;
         let input = File::open(archive)
             .map_err(input_error)
             .map_err(operation)?;
@@ -93,7 +94,8 @@ impl Vakint {
         output: impl AsRef<Path>,
         options: &RustRedCacheTransferOptions,
     ) -> Result<RustRedCacheTransferReport, VakintError> {
-        let transfer = Transfer::new(loop_count, output.as_ref(), options).map_err(operation)?;
+        let transfer =
+            Transfer::new(self, loop_count, output.as_ref(), options).map_err(operation)?;
         if !url.starts_with("https://") && !url.starts_with("http://") {
             return Err(operation(input_error("cache URL must use HTTP or HTTPS")).into());
         }
@@ -132,6 +134,7 @@ impl Vakint {
 }
 
 struct Transfer<'a> {
+    engine: &'a Vakint,
     loop_count: usize,
     output: &'a Path,
     parent: &'a Path,
@@ -140,6 +143,7 @@ struct Transfer<'a> {
 
 impl<'a> Transfer<'a> {
     fn new(
+        engine: &'a Vakint,
         loop_count: usize,
         output: &'a Path,
         options: &'a RustRedCacheTransferOptions,
@@ -175,6 +179,7 @@ impl<'a> Transfer<'a> {
             .filter(|path| !path.as_os_str().is_empty())
             .unwrap_or(Path::new("."));
         Ok(Self {
+            engine,
             loop_count,
             output,
             parent,
@@ -207,12 +212,12 @@ impl<'a> Transfer<'a> {
             .extract(archive, &extracted, archive_bytes)
             .map_err(operation)?;
         let bindings = if self.loop_count == 4 {
-            super::super::four_loop::cache::programs()?
+            super::super::four_loop::cache::programs(self.engine)?
                 .iter()
                 .map(|program| program.binding().clone())
                 .collect::<Vec<_>>()
         } else {
-            vec![program(self.loop_count)?.1.binding().clone()]
+            vec![program(self.engine, self.loop_count)?.1.binding().clone()]
         };
         let bundle = SavedApplicationCacheBundle::open_generated(
             &extracted.join("cache"),
@@ -295,60 +300,61 @@ impl<'a> Transfer<'a> {
                 .checked_add(1)
                 .ok_or_else(|| limit_error("tar allowance overflow"))?,
         );
-        let mut tar = tar::Archive::new(&mut decoded);
         let mut seen = BTreeSet::new();
         let mut bytes = 0u64;
-        for entry in tar.entries().map_err(input_error)?.raw(true) {
-            let mut entry = entry.map_err(input_error)?;
-            if seen.len() >= self.options.max_entries {
-                return Err(limit_error("archive entry count exceeds allowance"));
-            }
-            let kind = entry.header().entry_type();
-            if !kind.is_file() && !kind.is_dir() {
-                return Err(input_error(
-                    "cache archive permits only regular files and directories",
-                ));
-            }
-            let path = entry.path().map_err(input_error)?.into_owned();
-            let mut components = path.components();
-            if components.next() != Some(Component::Normal("cache".as_ref()))
-                || components.any(|component| !matches!(component, Component::Normal(_)))
-                || !seen.insert(path.clone())
-            {
-                return Err(input_error("invalid or duplicate cache archive path"));
-            }
-            let size = entry.size();
-            if kind.is_dir() && size != 0 {
-                return Err(input_error("archive directory contains data"));
-            }
-            bytes = bytes
-                .checked_add(size)
-                .ok_or_else(|| limit_error("extracted byte count overflow"))?;
-            if bytes > allowance {
-                return Err(limit_error("extracted cache exceeds transfer allowance"));
-            }
-            let destination = output.join(path);
-            if kind.is_dir() {
-                fs::create_dir_all(&destination).map_err(input_error)?;
-            } else {
-                fs::create_dir_all(
-                    destination
-                        .parent()
-                        .ok_or_else(|| input_error("invalid file path"))?,
-                )
-                .map_err(input_error)?;
-                let mut file = OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(destination)
+        {
+            let mut tar = tar::Archive::new(&mut decoded);
+            for entry in tar.entries().map_err(input_error)?.raw(true) {
+                let mut entry = entry.map_err(input_error)?;
+                if seen.len() >= self.options.max_entries {
+                    return Err(limit_error("archive entry count exceeds allowance"));
+                }
+                let kind = entry.header().entry_type();
+                if !kind.is_file() && !kind.is_dir() {
+                    return Err(input_error(
+                        "cache archive permits only regular files and directories",
+                    ));
+                }
+                let path = entry.path().map_err(input_error)?.into_owned();
+                let mut components = path.components();
+                if components.next() != Some(Component::Normal("cache".as_ref()))
+                    || components.any(|component| !matches!(component, Component::Normal(_)))
+                    || !seen.insert(path.clone())
+                {
+                    return Err(input_error("invalid or duplicate cache archive path"));
+                }
+                let size = entry.size();
+                if kind.is_dir() && size != 0 {
+                    return Err(input_error("archive directory contains data"));
+                }
+                bytes = bytes
+                    .checked_add(size)
+                    .ok_or_else(|| limit_error("extracted byte count overflow"))?;
+                if bytes > allowance {
+                    return Err(limit_error("extracted cache exceeds transfer allowance"));
+                }
+                let destination = output.join(path);
+                if kind.is_dir() {
+                    fs::create_dir_all(&destination).map_err(input_error)?;
+                } else {
+                    fs::create_dir_all(
+                        destination
+                            .parent()
+                            .ok_or_else(|| input_error("invalid file path"))?,
+                    )
                     .map_err(input_error)?;
-                let copied = std::io::copy(&mut entry, &mut file).map_err(input_error)?;
-                if copied != size {
-                    return Err(input_error("truncated cache archive file"));
+                    let mut file = OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(destination)
+                        .map_err(input_error)?;
+                    let copied = std::io::copy(&mut entry, &mut file).map_err(input_error)?;
+                    if copied != size {
+                        return Err(input_error("truncated cache archive file"));
+                    }
                 }
             }
         }
-        drop(tar);
         // Consume the gzip trailer to verify its CRC and reject data hidden
         // beyond the tar terminator. Padding is bounded just like tar headers.
         let mut buffer = [0u8; BUFFER_BYTES];

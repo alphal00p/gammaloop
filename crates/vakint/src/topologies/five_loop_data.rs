@@ -3,7 +3,7 @@
 //! tables A.1 and B.2. These 67 classes specify matching, not rule coverage.
 //! Rows are common-basis momenta; physical slots are explicitly zero-based.
 
-pub(super) const MOMENTA: [[i64; 5]; 15] = [
+pub(crate) const MOMENTA: [[i64; 5]; 15] = [
     [1, 0, 0, 0, 0],
     [0, 1, 0, 0, 0],
     [0, 0, 1, 0, 0],
@@ -21,13 +21,13 @@ pub(super) const MOMENTA: [[i64; 5]; 15] = [
     [0, 0, 1, -1, 0],
 ];
 
-pub(super) struct Parent {
+pub(crate) struct Parent {
     pub sector: u32,
     pub vertices: [[i64; 3]; 8],
     pub physical_slots: [usize; 12],
 }
 
-pub(super) const PARENTS: [Parent; 4] = [
+pub(crate) const PARENTS: [Parent; 4] = [
     Parent {
         sector: 32745,
         vertices: [
@@ -87,7 +87,7 @@ pub(super) const PARENTS: [Parent; 4] = [
 ];
 
 #[cfg_attr(not(test), allow(dead_code))]
-pub(super) struct Witness {
+pub(crate) struct Witness {
     pub sector: u32,
     pub parent: usize,
     pub factorized: bool,
@@ -98,7 +98,7 @@ pub(super) struct Witness {
     pub routing: [[i64; 5]; 5],
 }
 
-pub(super) const CENSUS: [Witness; 67] = [
+pub(crate) static CENSUS: [Witness; 67] = [
     Witness {
         sector: 31744,
         parent: 0,

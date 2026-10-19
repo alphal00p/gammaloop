@@ -113,13 +113,75 @@ pub fn get_vakint(mut vakint_settings: VakintSettings) -> TestVakint {
             .retain(|method| !matches!(method, EvaluationMethod::PySecDec(_)));
     }
     static VAKINT_INSTANCE: OnceLock<Vakint> = OnceLock::new();
-    let vakint = VAKINT_INSTANCE
+    let mut vakint = VAKINT_INSTANCE
         .get_or_init(|| Vakint::new().expect("Failed to initialize vakint"))
         .clone();
+    if std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").is_some() {
+        vakint = external_vakint();
+    }
     TestVakint {
         vakint,
         settings: vakint_settings,
     }
+}
+
+#[allow(dead_code)]
+pub fn external_data_path() -> std::path::PathBuf {
+    std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+        .map(std::path::PathBuf::from)
+        .expect("set VAKINT_TEST_EXTERNAL_DATA to a validated external-data checkout for this test")
+}
+
+#[allow(dead_code)]
+pub fn external_vakint() -> Vakint {
+    static EXTERNAL: OnceLock<Vakint> = OnceLock::new();
+    EXTERNAL
+        .get_or_init(|| {
+            let mut engine = Vakint::new().unwrap();
+            engine.load_external_data(external_data_path(), 4).unwrap();
+            engine
+        })
+        .clone()
+}
+
+/// The public retained result now uses family-qualified integral identities.
+/// Project through the archived exact map only for the MATAD coefficient oracle.
+#[allow(dead_code)]
+pub fn retained_masters_in_matad_basis(mut expression: Atom, settings: &VakintSettings) -> Atom {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data");
+    for loops in 1..=3 {
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(root.join(format!("{loops}L/manifest.json"))).unwrap(),
+        )
+        .unwrap();
+        for master in manifest["masters"].as_array().unwrap() {
+            let Some(mapping) = master["exact_basis_expression"].as_str() else {
+                continue;
+            };
+            let powers = master["powers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|power| power.as_i64().unwrap().to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let original = vakint::vakint_parse!(format!(
+                "RustRedMaster(rustred_family_{},{powers})",
+                master["family_sha256"].as_str().unwrap()
+            ))
+            .unwrap();
+            let mapped = vakint::vakint_parse!(mapping)
+                .unwrap()
+                .replace(vakint::vakint_parse!("ep").unwrap().to_pattern())
+                .with(vakint::vakint_parse!(&settings.epsilon_symbol).unwrap());
+            expression = expression.replace(original.to_pattern()).with(mapped);
+        }
+    }
+    assert!(
+        !expression.contains_symbol(vakint::vakint_symbol!("RustRedMaster")),
+        "missing exact MATAD projection for retained master"
+    );
+    expression
 }
 
 #[allow(dead_code)]
@@ -504,7 +566,7 @@ fn assert_exact_raw_rustred_matad_peer(
     let rustred = EvaluationTestLane {
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: vakint::RustRedMasterMode::Retain,
             },
         )]),
         input: rustred_input,
@@ -527,6 +589,7 @@ fn assert_exact_raw_rustred_matad_peer(
         tensor_reduced,
         original_form_path,
     );
+    let rustred_result = retained_masters_in_matad_basis(rustred_result, &vakint.settings);
     let difference = (rustred_result - matad_result).together().expand();
     assert!(
         difference.is_zero(),
@@ -738,6 +801,7 @@ pub fn compare_evaluations(
 /// corresponding peer inside every lane (including the FORM-free RustRed
 /// scalar lane).
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)] // Shared fixture module: only pair-comparison suites use this helper.
 pub fn compare_input_pair(
     vakint_default_settings: VakintSettings,
     lanes: &[(EvaluationTestLane, EvaluationTestLane)],

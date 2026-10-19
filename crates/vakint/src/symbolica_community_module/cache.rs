@@ -211,27 +211,24 @@ impl PythonProgress {
         }
         let result = Python::attach(|py| -> PyResult<bool> {
             py.check_signals()?;
-            if report.status == CachePreparationStatus::Running {
-                if let Some(callback) = self.cancel.as_ref() {
-                    if callback.bind(py).call0()?.extract::<bool>()? {
-                        return Ok(true);
-                    }
-                }
+            if report.status == CachePreparationStatus::Running
+                && let Some(callback) = self.cancel.as_ref()
+                && callback.bind(py).call0()?.extract::<bool>()?
+            {
+                return Ok(true);
             }
             let due = report.status != CachePreparationStatus::Running
                 || self.last.is_none_or(|last| last.elapsed() >= self.interval);
-            if due {
-                if let Some(callback) = self.progress.as_ref() {
-                    let value = callback
-                        .bind(py)
-                        .call1((json_report(py, &report.to_document().to_string())?,))?;
-                    self.last = Some(Instant::now());
-                    if !value.is_none()
-                        && !value.extract::<bool>()?
-                        && report.status == CachePreparationStatus::Running
-                    {
-                        return Ok(true);
-                    }
+            if due && let Some(callback) = self.progress.as_ref() {
+                let value = callback
+                    .bind(py)
+                    .call1((json_report(py, &report.to_document().to_string())?,))?;
+                self.last = Some(Instant::now());
+                if !value.is_none()
+                    && !value.extract::<bool>()?
+                    && report.status == CachePreparationStatus::Running
+                {
+                    return Ok(true);
                 }
             }
             Ok(false)
@@ -298,13 +295,13 @@ pub(super) fn prepare(
         })
     };
     if let Some(error) = observer.exception.take() {
-        if let Ok(report) = &result {
-            if let Ok(document) = json_report(py, &report.to_document().to_string()) {
-                // Preserve the original exception even if a custom exception
-                // class refuses an added attribute. The report records any
-                // checkpoint failure; only prior successful writes are durable.
-                let _ = error.value(py).setattr("cache_report", document);
-            }
+        if let Ok(report) = &result
+            && let Ok(document) = json_report(py, &report.to_document().to_string())
+        {
+            // Preserve the original exception even if a custom exception
+            // class refuses an added attribute. The report records any
+            // checkpoint failure; only prior successful writes are durable.
+            let _ = error.value(py).setattr("cache_report", document);
         }
         return Err(error);
     }

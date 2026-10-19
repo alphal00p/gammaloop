@@ -16,7 +16,7 @@ The main Rust types make the workflow state explicit:
 - `VakintSettings` owns symbols, precision, normalization, tool paths, validation, and backend
   order;
 - `VakintExpression` and `VakintTerm` separate numerators from topology atoms;
-- `EvaluationOrder` and `EvaluationMethod` select AlphaLoop, MATAD, FMFT, or pySecDec;
+- `EvaluationOrder` and `EvaluationMethod` select RustRed, AlphaLoop, MATAD, FMFT, or pySecDec;
 - `NumericalEvaluationResult` stores Laurent coefficients in the dimensional regulator.
 
 For a dependency-free canonicalization setup, select an empty backend order before validating:
@@ -34,6 +34,24 @@ engine.validate_settings(&settings)?;
 
 `vakint_parse!` and the related helpers parse Symbolica expressions in Vakint's namespace. Handle
 parse failures before passing a user-supplied expression to matching or evaluation.
+
+== External RustRed data
+
+`Vakint::load_official_external_data(max_loop_count, &options)` installs and loads
+all loop packs from one through the requested maximum. `OfficialExternalDataOptions`
+defaults to version `latest`, the current working directory, and no refresh.
+The matching Python method accepts `max_loop_count`, `version`,
+`local_artifacts_path`, and `refresh`. A path containing a checked-out external-data
+manifest is validated and loaded without network access or checkout modification.
+Installed releases are reused offline; explicit refresh checks for updates.
+
+`RustRedMasterMode` chooses `Retain`, `Symbolic`, or `Numerical` (default). Python
+selects the same behavior with `new_rustred_method(master_mode="symbolic")`.
+Symbolic mode leaves numerical-only Laurent coefficients as named symbols, which
+the same engine can resolve later. Numerical mode rejects insufficient precision,
+missing epsilon coefficients, and unresolved masters with their exact identities.
+Use #source-link("crates/vakint/external_data.typ", label: "the external-data guide")
+for campaign coverage, cache bindings, and release conventions.
 
 The #link("reference/rust/")[Rust orientation] identifies the compiled crates, versions, and
 feature matrix and links directly to native Rustdoc. The generated

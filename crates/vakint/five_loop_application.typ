@@ -37,14 +37,17 @@ native spanning forests, including all disconnected components.
 
 == Selecting an external package
 
-No five-loop application artifact is embedded or downloaded. Set
-`VakintSettings::rustred_artifact_path` to a locally hosted exported package,
-or preload it with `Vakint::with_rustred_application(&mut settings, path)`,
-which also sets that settings path. An instance authenticates the selected package
-once and reuses its owned memoization; clones share the synchronized cache.
-Changing the selected path loads another immutable application. Removing the
-settings path disables five-loop application even if a package is cached.
-One-through-four-loop behavior does not require this setting.
+No five-loop application is embedded. The explicit official-data loader installs
+and loads 1L through 5L, including the lower programs needed by factor reductions.
+It also accepts a local external-data checkout without network access. See
+#link("external_data.typ")[external-data loading and master capabilities].
+The existing `VakintSettings::rustred_artifact_path` and
+`Vakint::with_rustred_application(&mut settings, path)` interfaces still accept a
+local saved application; load its required lower-loop data separately when using
+that bare-package interface. The settings path takes precedence over an official
+snapshot's application. Removing that path returns to the active snapshot.
+Each successful load authenticates the selected package and reuses its owned
+memoization; replacing data installs fresh sessions with matching identities.
 Matching an existing lower-loop or custom topology does not load a configured
 artifact merely because its path is present. A cold five-loop matching request
 loads the selected artifact before attaching the immutable five-loop catalogue.
@@ -113,17 +116,19 @@ The existing four-loop native program also retains its own operational policy;
 raising the outer product allowance does not relax that inner session's cache
 or per-root limits.
 
-Select `EvaluationMethod::RustRed` with `substitute_masters: false`. Numerical
-five-loop master substitution is unsupported and returns an error. There is
-no FORM fallback. In Python the constructor takes `rustred_artifact_path`,
-and `load_rustred_application(path)` explicitly preloads the same package.
+Select `EvaluationMethod::RustRed` with `master_mode: RustRedMasterMode::Retain`
+for exact reductions, `Symbolic` for available Laurent formulas, or `Numerical`
+for data-aware numerical coefficients. Missing 5L values produce an explicit
+terminal list; an expression reduced entirely to known lower-loop products can
+be evaluated. There is no FORM fallback. Python exposes the same modes and
+retains `rustred_artifact_path` and `load_rustred_application(path)`.
 
 The standard expression contains exact coefficients of
 `RustRedMaster(rustred_family_HASH, powers...)`. HASH is SHA-256 of the full
-authenticated semantic family fingerprint. These masters denote unit-mass
-Minkowski vacuum integrals with unnormalized loop measures. The expression
-includes the common-mass factor and the selected Vakint loop normalization.
-No epsilon expansion or numerical master values are inserted. Coefficients
+authenticated semantic family fingerprint. These symbols uniformly denote
+unit-mass integrals in the external data's FMFT/MATAD normalization. The bridge
+converts the common mass and user-selected loop measure exactly once. Retain
+mode leaves their epsilon dependence unexpanded. Coefficients
 hold in generic dimension `d = 4 - 2 epsilon`, subject to the saved nonzero
 conditions. Unexpected parameter-dependent saved-program conditions are rejected;
 conditions inherited from caller-owned scalar spectators and the common mass
@@ -192,7 +197,13 @@ follows the package's authenticated route to its declared owner and must belong
 to the recorded entry union. A numerator's total momentum degree does not
 establish this. A squared momentum can leave both a denominator term and a mass
 term, which may occupy different entry domains.
-Missing rules, unsupported entries and unresolved terminals remain errors.
+Campaign coverage is advisory in Vakint's partial-reduction mode: outside the
+recorded union, emit a warning and apply only individually justified rules.
+Missing rules leave exact residual integrals. Final undeclared masters are listed
+with parent DOT references, and numerical evaluation reports unavailable values.
+Invalid guards, transports, malformed input and resource exhaustion remain errors.
+Strict product caches accept only complete lower-factor reductions; a typed
+missing-coverage result retains the exact parent terminal instead.
 There is no adapter-wide cutoff at a particular numerator degree or total
 denominator power. Native scalar-algebra, tensor-projector and verified-matching
 work limits are operational bounds, separate from the authenticated entry union.
@@ -278,7 +289,7 @@ The same example accepts a generated DOT path in place of `--admitted-suite`.
 That mode builds the homogeneous degree-ten numerator `(D1-D2)^5` (GeV^10)
 with two dotted propagators, and succeeds
 only if all surviving endpoints lie in the selected package's actual union.
-Failure of admission is a reported unsupported input, not a successful reduction.
+Failure of the coverage probe remains observable; evaluation now warns and retains unresolved terms when necessary.
 For the pinned generation-54 package, the full parent-32745 two-dot control is
 outside the recorded union: one surviving key is
 `[-3,1,1,1,2,1,1,1,1,1,0,1,0,0,1]`. The separate homogeneous degree-ten control

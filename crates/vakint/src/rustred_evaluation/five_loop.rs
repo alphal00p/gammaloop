@@ -151,9 +151,9 @@ impl Vakint {
     ) -> Result<Option<ReplacementRules>, VakintError> {
         // Select and validate the active immutable package before any memo hit.
         // The ordinary no-package matching path retains its previous behavior.
-        let Some(_) = settings.rustred_artifact_path else {
+        if settings.rustred_artifact_path.is_none() && !self.has_rustred_loop(5) {
             return self.match_rustred_input_uncached(settings, integral, numerator);
-        };
+        }
         let application = self.saved_application(settings)?;
         // Loading also installs the catalogue in a clone created before load.
         let registry = self.topologies.registry_identity();
@@ -182,14 +182,12 @@ impl Vakint {
         if let Some(witness) = &matched {
             // The unchanged matcher may return a non-admitted fallback to
             // preserve its precise error. Such a fallback is never memoized.
-            if matches!(witness.canonical_topology, Topology::FiveLoop(_)) {
-                if let Some(accepted) =
+            if matches!(witness.canonical_topology, Topology::FiveLoop(_))
+                && let Some(accepted) =
                     self.rustred_matched_input_key(settings, numerator, witness)?
-                {
-                    if let Ok(mut cache) = application.witnesses.lock() {
-                        cache.insert(registry, policy, integral, numerator, witness, accepted);
-                    }
-                }
+                && let Ok(mut cache) = application.witnesses.lock()
+            {
+                cache.insert(registry, policy, integral, numerator, witness, accepted);
             }
         }
         Ok(matched)
@@ -286,7 +284,7 @@ impl Vakint {
             .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
             .map_err(failure)?;
         let mut key = Vec::with_capacity(lowered.terms().len());
-        for (_term_index, term) in lowered.terms().iter().enumerate() {
+        for term in lowered.terms() {
             if !prepared
                 .routed_entry_is_admitted(term.integral())
                 .map_err(failure)?
@@ -301,7 +299,7 @@ impl Vakint {
                     diagnostic_original,
                     &input,
                     &lowered,
-                    Some(_term_index),
+                    Some(key.len()),
                     None,
                     diagnostic_before,
                 )?;
@@ -309,7 +307,7 @@ impl Vakint {
             }
             key.push((
                 term.integral().clone(),
-                (term.coefficient().to_expression() * term.scalar_spectator()).together(),
+                super::combine_exact(term.coefficient().to_expression() * term.scalar_spectator()),
             ));
         }
         key.sort();
@@ -331,7 +329,8 @@ impl Vakint {
 
     /// Load one authenticated application package and reuse its owned memoization.
     ///
-    /// The five-loop backend is symbolic only (`substitute_masters=false`).
+    /// Master substitution uses the active external-data catalog. Uncomputed
+    /// terminals remain symbolic or produce an explicit numerical-data error.
     /// Clones share this immutable package and synchronized application cache.
     /// Only successful loading prepares and publishes the five-loop catalogue;
     /// `Vakint::new` prepares just the ordinary lower-loop registry.
@@ -351,12 +350,21 @@ impl Vakint {
         &self,
         settings: &VakintSettings,
     ) -> Result<Arc<SavedApplication>, VakintError> {
+        let data = self.rustred_data()?;
+        let official_path = data
+            .loops
+            .get(&5)
+            .map(|pack| pack.path("ibps"))
+            .transpose()?
+            .flatten();
         let path = settings
             .rustred_artifact_path
             .as_ref()
+            .or(official_path.as_ref())
             .ok_or(RustRedEvaluationError::SavedApplicationUnavailable)?;
         let path = path.canonicalize().map_err(failure)?;
-        let options = settings.rustred_application_options;
+        let mut options = settings.rustred_application_options;
+        options.unresolved_policy = rustred::solver::UnresolvedPolicy::Preserve;
         let mut loaded = self.rustred_application.lock().map_err(failure)?;
         if loaded.as_ref().is_none_or(|current| {
             current.path != path
@@ -370,6 +378,7 @@ impl Vakint {
             let application = Arc::new(SavedApplication::new(
                 prepared,
                 settings.rustred_product_limits,
+                Arc::clone(&data),
             )?);
             // Only a fully authenticated, prepared publication can activate
             // the optional catalogue. Cache/options reloads reuse its Arc.
@@ -545,6 +554,12 @@ impl Vakint {
             conditions.extend(result.nonzero_conditions);
             families.extend(result.families);
         }
+        let value = self.finalize_rustred(
+            super::combine_exact(value),
+            settings,
+            5,
+            super::RustRedMasterMode::Retain,
+        )?;
         Ok(RustRedSymbolicEvaluation {
             value,
             nonzero_conditions: conditions.into_iter().collect(),
@@ -557,6 +572,7 @@ impl SavedApplication {
     fn new(
         mut prepared: PreparedSavedApplication<15>,
         product_limits: VacuumProductReductionLimits,
+        data: Arc<super::data::RustRedData>,
     ) -> Result<Self, RustRedEvaluationError> {
         let started = std::time::Instant::now();
         // Compile the same complete common basis through RustRed's existing
@@ -614,9 +630,12 @@ impl SavedApplication {
         let anchor = prepared
             .output_family_shared(prepared.family().fingerprint())
             .ok_or_else(|| failure("saved application does not expose its authenticated family"))?;
-        let product_reducer =
-            VacuumProductReducer::try_new(ShippedFactorProvider::default(), anchor, product_limits)
-                .map_err(failure)?;
+        let product_reducer = VacuumProductReducer::try_new(
+            ShippedFactorProvider::with_data(data),
+            anchor,
+            product_limits,
+        )
+        .map_err(failure)?;
         Ok(Self {
             fingerprint: prepared.family().fingerprint().to_owned(),
             prepared: Mutex::new(prepared),
@@ -695,10 +714,10 @@ impl SavedApplication {
                 .routed_entry_is_admitted(term.integral())
                 .map_err(failure)?
             {
-                return Err(RustRedEvaluationError::SavedApplicationEntryNotAdmitted {
-                    powers: term.integral().powers().to_vec(),
-                }
-                .into());
+                log::warn!(
+                    "RustRed 5L input {:?} is outside the recorded campaign coverage; there is no guarantee of a complete reduction to the known masters",
+                    term.integral().powers()
+                );
             }
             // Unit-mass output masters include their full integration measure.
             // RustRed has already combined numerator mass factors and scalar
@@ -824,8 +843,30 @@ impl SavedApplication {
                 .product_reducer
                 .lock()
                 .map_err(failure)?
-                .reduce_products(products, product_conditions)
-                .map_err(failure)?;
+                .reduce_products(products, product_conditions);
+            let normalized = match normalized {
+                Ok(normalized) => normalized,
+                Err(rustred::reduction::terminal_normalization::VacuumProductReductionError::UnresolvedFactor { family, target }) => {
+                    log::warn!("RustRed lower-factor coverage is incomplete for {family} {:?}; retaining the exact parent terminals", target.powers());
+                    // Preserve the original reduced sum and its complete guards;
+                    // no failed or partially normalized product enters a cache.
+                    let original = reduced.terms().iter().map(|(terminal, coefficient)| {
+                        coefficient.to_expression().replace(dimension.to_pattern()).with(physical_dimension.to_pattern())
+                            * Self::symbolic_integral(terminal.family_fingerprint(), terminal.integral(), vk_symbol!("RustRedMaster"), &mut families)
+                    }).sum::<Atom>();
+                    for condition in reduced.nonzero_conditions() {
+                        let condition = condition.to_expression();
+                        if condition.is_zero() || condition.get_all_symbols(true).iter().any(|symbol| !dimension.get_all_symbols(true).contains(symbol)) {
+                            return Err(failure("saved application has an invalid non-generic-d guard").into());
+                        }
+                        conditions.insert(condition.replace(dimension.to_pattern()).with(physical_dimension.to_pattern()));
+                    }
+                    let mass_power = Atom::num((loop_count as i64, 2)) * &physical_dimension + Atom::num(exponent);
+                    value += original * spectator * input.mass_squared.clone().pow(mass_power);
+                    continue;
+                }
+                Err(error) => return Err(failure(error).into()),
+            };
             log::debug!(target: "vakint::saved_application", "phase=terminal_geometry_and_lower_factors elapsed_seconds={:.6}", products_started.elapsed().as_secs_f64());
             for condition in normalized.nonzero_conditions() {
                 let condition = condition.to_expression();
@@ -880,7 +921,15 @@ impl SavedApplication {
         if !matches!(input.mass_squared.as_view(), AtomView::Num(_)) {
             conditions.insert(input.mass_squared);
         }
-        let value = value * normalization;
+        // Public RustRedMaster symbols uniformly denote the unit-mass
+        // FMFT/MATAD-normalized integral, including lower-loop product factors.
+        let measure = crate::utils::vakint_macros::vk_parse!(format!(
+            "(𝑖*𝜋^(2-({eps}))*exp(-EulerGamma*({eps})))^{loop_count}",
+            eps = settings.epsilon_symbol
+        ))
+        .map_err(failure)?;
+        let measure = Vakint::normalize_gamma_functions(measure.as_view());
+        let value = value * normalization * measure;
         let value = if settings.use_dot_product_notation {
             value
         } else {
@@ -942,7 +991,7 @@ mod tests {
             form_exe_path: "/five-loop-must-not-use-form".into(),
             evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
                 RustRedEvaluationOptions {
-                    substitute_masters: false,
+                    master_mode: crate::RustRedMasterMode::Retain,
                 },
             )]),
             ..Default::default()
@@ -956,10 +1005,10 @@ mod tests {
         settings.allow_unknown_integrals = false;
         assert!(settings.rustred_artifact_path.is_none());
         assert!(vakint.topologies.five_loop_catalogue_statistics().is_none());
-        assert!(matches!(
-            vakint.evaluate_integral(&settings, root().as_view()),
-            Err(VakintError::UnreckognizedIntegral(..))
-        ));
+        let error = vakint
+            .evaluate_integral(&settings, root().as_view())
+            .unwrap_err();
+        assert!(error.to_string().contains("5L RustRed data is not loaded"));
         assert!(matches!(
             vakint.evaluate_rustred_symbolic(&settings, root().as_view()),
             Err(VakintError::RustRedEvaluation(
@@ -969,7 +1018,7 @@ mod tests {
     }
 
     #[test]
-    fn wrong_artifact_path_and_numerical_substitution_fail_without_form() {
+    fn wrong_artifact_path_fails_before_evaluation_without_form() {
         let vakint = Vakint::new().unwrap();
         let mut settings = settings();
         settings.rustred_artifact_path =
@@ -982,22 +1031,17 @@ mod tests {
             VakintError::RustRedEvaluation(RustRedEvaluationError::Reduction { .. })
         ));
         assert!(vakint.topologies.five_loop_catalogue_statistics().is_none());
-        // Independently exercise numerical-master rejection after explicit
-        // test-only matching activation; no failed load publishes a catalogue.
-        vakint
-            .topologies
-            .prepare_five_loop_catalogue_for_tests()
-            .unwrap();
+        // A numerical request must still authenticate its data; it no longer
+        // fails early merely because the matched input has five loops.
         settings.evaluation_order = EvaluationOrder::rustred_only();
         let error = vakint
             .evaluate_integral(&settings, root().as_view())
             .unwrap_err();
         assert!(matches!(
             error,
-            VakintError::RustRedEvaluation(
-                RustRedEvaluationError::FiveLoopNumericalMastersUnsupported
-            )
+            VakintError::RustRedEvaluation(RustRedEvaluationError::Reduction { .. })
         ));
+        assert!(vakint.topologies.five_loop_catalogue_statistics().is_none());
     }
 
     #[test_log::test]

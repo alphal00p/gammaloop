@@ -18,11 +18,13 @@ impl Fixture {
         let scratch = tempfile::tempdir().unwrap();
         let engine = Vakint::new().unwrap();
         let source = scratch.path().join("source");
-        let mut options = RustRedCachePreparationOptions::default();
-        options.workload = RustRedCacheWorkload::Explicit(vec![RustRedCacheRoot {
-            namespace: 0,
-            integral: IntegralKey::try_new([4]).unwrap(),
-        }]);
+        let options = RustRedCachePreparationOptions {
+            workload: RustRedCacheWorkload::Explicit(vec![RustRedCacheRoot {
+                namespace: 0,
+                integral: IntegralKey::try_new([4]).unwrap(),
+            }]),
+            ..Default::default()
+        };
         let report = engine
             .prepare_cache(1, &source, &options, &AtomicBool::new(false), |_| Ok(()))
             .unwrap();
@@ -123,7 +125,7 @@ fn import_verifies_native_snapshot_and_does_not_attach_or_copy_preparation_check
         .load_cache(1, fixture.output(), &Default::default())
         .unwrap();
     assert!(fixture.engine.cache_statistics(1).unwrap().attached);
-    let (_, program) = program(1).unwrap();
+    let (_, program) = program(&fixture.engine, 1).unwrap();
     let bundle = SavedApplicationCacheBundle::open_generated(
         &fixture.output(),
         &[program.binding().clone()],
@@ -238,7 +240,7 @@ fn exact_entry_and_payload_limits_allow_standard_ustar_record_padding() {
     options.max_entries = sizes.len();
     options.max_extracted_bytes = sizes.iter().sum();
     let output = fixture.output();
-    let report = Transfer::new(1, &output, &options)
+    let report = Transfer::new(&fixture.engine, 1, &output, &options)
         .unwrap()
         .receive(Cursor::new(bytes))
         .unwrap();
@@ -263,7 +265,7 @@ fn existing_destination_and_racing_publication_are_never_overwritten() {
     // Exercise the final atomic boundary separately: a destination can appear
     // after initial admission while the download and verification are running.
     let race_output = fixture.scratch.path().join("race");
-    let transfer = Transfer::new(1, &race_output, &fixture.options).unwrap();
+    let transfer = Transfer::new(&fixture.engine, 1, &race_output, &fixture.options).unwrap();
     let staged = fixture.scratch.path().join("staged");
     fs::create_dir(&staged).unwrap();
     fs::create_dir(&race_output).unwrap();
@@ -313,7 +315,7 @@ fn traversal_links_sparse_extensions_duplicates_and_padding_bombs_are_rejected()
         options.expected_sha256 = Sha256::digest(&bytes).into();
         let output = fixture.output();
         assert!(
-            Transfer::new(1, &output, &options)
+            Transfer::new(&fixture.engine, 1, &output, &options)
                 .unwrap()
                 .receive(Cursor::new(bytes))
                 .is_err()
@@ -328,7 +330,7 @@ fn traversal_links_sparse_extensions_duplicates_and_padding_bombs_are_rejected()
     options.max_extracted_bytes = 1;
     let output = fixture.output();
     assert!(
-        Transfer::new(1, &output, &options)
+        Transfer::new(&fixture.engine, 1, &output, &options)
             .unwrap()
             .receive(Cursor::new(bytes))
             .is_err()
@@ -345,7 +347,7 @@ fn truncated_gzip_with_matching_transport_checksum_is_rejected() {
     options.expected_sha256 = Sha256::digest(&bytes).into();
     let output = fixture.output();
     assert!(
-        Transfer::new(1, &output, &options)
+        Transfer::new(&fixture.engine, 1, &output, &options)
             .unwrap()
             .receive(Cursor::new(bytes))
             .is_err()

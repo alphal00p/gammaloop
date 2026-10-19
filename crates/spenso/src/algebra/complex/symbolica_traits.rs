@@ -241,6 +241,12 @@ where
         self.im.set_from(&other.im);
     }
 
+    #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.re.set_precision(precision);
+        self.im.set_precision(precision);
+    }
+
     #[inline(always)]
     fn is_fully_zero(&self) -> bool {
         self.re.is_fully_zero() && self.im.is_fully_zero()
@@ -551,5 +557,33 @@ impl CompiledNumber for Complex<f64> {
         settings: ExportSettings,
     ) -> Result<String, String> {
         SymComplex::<f64>::export_cpp(eval, function_name, settings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn complex_precision_updates_both_components_and_preserves_exact_values() {
+        // The native complex wrapper supplies the reference arithmetic required
+        // by this adapter while retaining adjustable component precision.
+        let component = |precision, value| {
+            SymComplex::new(Float::with_val(precision, value), Float::new(precision))
+        };
+        let mut value = Complex::new(component(160, 1.25), component(96, -0.375));
+        for precision in [48, 192] {
+            FloatLike::set_precision(&mut value, precision);
+            assert_eq!(value.get_precision(), precision);
+            assert_eq!(value.re.get_precision(), precision);
+            assert_eq!(value.im.get_precision(), precision);
+            assert_eq!(value.re, component(precision, 1.25));
+            assert_eq!(value.im, component(precision, -0.375));
+        }
+
+        let mut fixed = Complex::new(1.25_f64, -0.375_f64);
+        FloatLike::set_precision(&mut fixed, 192);
+        assert_eq!(fixed.get_precision(), 53);
+        assert_eq!(fixed, Complex::new(1.25, -0.375));
     }
 }

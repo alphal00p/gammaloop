@@ -1,20 +1,31 @@
+use std::sync::Arc;
+#[cfg(test)]
 use std::sync::LazyLock;
 
-use rustred::foundry::artifact::{ArtifactPersistenceError, ArtifactSchemaVersion, ClosedArtifact};
+#[cfg(test)]
+use rustred::foundry::artifact::ArtifactSchemaVersion;
+use rustred::foundry::artifact::{ArtifactPersistenceError, ClosedArtifact};
 use sha2::{Digest, Sha256};
 
 use super::RustRedEvaluationError;
+#[cfg(test)]
 use super::terminal::{TerminalCatalog, TerminalManifest, TerminalSource};
 
-const K1_BYTES: &[u8] = include_bytes!("../../artifacts/1L/ibps/rules.rrbin");
-const K3_BYTES: &[u8] = include_bytes!("../../artifacts/2L/ibps/rules.rrbin");
-const K6_BYTES: &[u8] = include_bytes!("../../artifacts/3L/ibps/rules.rrbin");
+#[cfg(test)]
+const K1_BYTES: &[u8] = include_bytes!("../../data/1L/ibps/rules.rrbin");
+#[cfg(test)]
+const K3_BYTES: &[u8] = include_bytes!("../../data/2L/ibps/rules.rrbin");
+#[cfg(test)]
+const K6_BYTES: &[u8] = include_bytes!("../../data/3L/ibps/rules.rrbin");
 
+#[cfg(test)]
 const K1_ALGORITHM_ID: &str = "rustred.generated.one-loop-unit-mass-tadpole.v1";
 const K1_FAMILY_FINGERPRINT: &str = "rustred-integral-family-v2;N37:rustred-one-loop-unit-mass-tadpole-v1;L1;1:k;E0;P1;1:d;Q1,0,1;M;RY1,1;I+1;X1;Y1,1;I+1;X0;D1;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;G0;U1;RY1,0;Y1,1;I+1;X0;";
+#[cfg(test)]
 const K3_ALGORITHM_ID: &str = "rustred.generated.two-loop-unit-mass-sunset.v1";
 const K3_FAMILY_FINGERPRINT: &str = "rustred-integral-family-v2;N36:rustred-two-loop-unit-mass-sunset-v1;L2;2:k1;2:k2;E0;P1;1:d;Q2,0,3;M;RY1,1;I+1;X1;Y1,1;I+1;X0;D3;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I+2;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;G0;U3;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;";
 
+#[cfg(test)]
 const K6_ALGORITHM_ID: &str = "rustred.source-port-original-domain.v1";
 const K6_FAMILY_FINGERPRINT: &str = "rustred-integral-family-v2;N41:rustred_three_loop_unit_mass_vacuum_k6_v1;L3;2:k1;2:k2;2:k3;E0;P1;1:d;Q3,0,6;M;RY1,1;I+1;X1;Y1,1;I+1;X0;D6;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;G0;U6;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;";
 
@@ -26,43 +37,52 @@ fn decode_current_artifact(bytes: &[u8]) -> Result<ClosedArtifact, ArtifactPersi
 // contract. These are trusted generated native Symbolica payloads, not arbitrary
 // user files. Decode and replay only the current RustRed schema: obsolete schemas
 // intentionally have no Vakint migration, compatibility reader, or fallback.
+#[cfg(test)]
 struct FamilyAssets {
-    artifact: ClosedArtifact,
+    artifact: Arc<ClosedArtifact>,
     source_digest: [u8; 32],
-    terminals: TerminalCatalog,
 }
 
 /// The digest and artifact originate from the same authenticated immutable
 /// byte buffer. Cache identity never rereads a path or reencodes Symbolica state.
-#[derive(Clone, Copy)]
-pub(super) struct ArtifactSnapshot<'a> {
-    artifact: &'a ClosedArtifact,
+#[derive(Clone)]
+pub(super) struct ArtifactSnapshot {
+    artifact: Arc<ClosedArtifact>,
     source_digest: [u8; 32],
 }
 
-impl<'a> ArtifactSnapshot<'a> {
-    pub(super) fn artifact(self) -> &'a ClosedArtifact {
-        self.artifact
+impl ArtifactSnapshot {
+    pub(super) fn program(&self) -> rustred::reduction::ClosedUnitMassProgram<'static> {
+        rustred::reduction::ClosedUnitMassProgram::from_shared(
+            Arc::clone(&self.artifact),
+            self.source_digest,
+        )
     }
 
-    pub(super) fn source_digest(self) -> [u8; 32] {
+    pub(super) fn artifact(&self) -> &ClosedArtifact {
+        &self.artifact
+    }
+
+    #[cfg(test)]
+    pub(super) fn source_digest(&self) -> [u8; 32] {
         self.source_digest
     }
 }
 
+#[cfg(test)]
 fn load_assets(
     bytes: &[u8],
     terminal_manifest: &TerminalManifest<'_>,
 ) -> Result<FamilyAssets, String> {
     let artifact = decode_current_artifact(bytes).map_err(|error| error.to_string())?;
-    let terminals = TerminalCatalog::compile(&artifact, terminal_manifest)?;
+    TerminalCatalog::compile(&artifact, terminal_manifest)?;
     Ok(FamilyAssets {
-        artifact,
+        artifact: Arc::new(artifact),
         source_digest: Sha256::digest(bytes).into(),
-        terminals,
     })
 }
 
+#[cfg(test)]
 static K1_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
     let sources = [TerminalSource::exact_matad_basis(
         &[1],
@@ -78,6 +98,7 @@ static K1_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
         ),
     )
 });
+#[cfg(test)]
 static K3_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
     let sources = [
         TerminalSource::exact_matad_basis(&[0, 1, 1], "(Gam(1,1)/(ep*(ep-1)))^2"),
@@ -94,6 +115,7 @@ static K3_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
     )
 });
 
+#[cfg(test)]
 static K6_ASSETS: LazyLock<Result<FamilyAssets, String>> = LazyLock::new(|| {
     load_assets(
         K6_BYTES,
@@ -131,6 +153,7 @@ pub(super) const fn shipped_family_for_loop_count(loop_count: usize) -> Option<A
 }
 
 impl ArtifactFamily {
+    #[cfg(test)]
     pub(super) const fn name(self) -> &'static str {
         match self {
             Self::UnitMassVacuumK1 => "unit-mass-vacuum-k1",
@@ -139,6 +162,7 @@ impl ArtifactFamily {
         }
     }
 
+    #[cfg(test)]
     fn assets(self) -> Result<&'static FamilyAssets, RustRedEvaluationError> {
         let loaded = match self {
             Self::UnitMassVacuumK1 => &*K1_ASSETS,
@@ -153,51 +177,48 @@ impl ArtifactFamily {
             })
     }
 
+    #[cfg(test)]
     pub(super) fn artifact(self) -> Result<&'static ClosedArtifact, RustRedEvaluationError> {
         Ok(&self.assets()?.artifact)
     }
 
-    pub(super) fn snapshot(self) -> Result<ArtifactSnapshot<'static>, RustRedEvaluationError> {
+    #[cfg(test)]
+    pub(super) fn snapshot(self) -> Result<ArtifactSnapshot, RustRedEvaluationError> {
         let assets = self.assets()?;
         Ok(ArtifactSnapshot {
-            artifact: &assets.artifact,
+            artifact: Arc::clone(&assets.artifact),
             source_digest: assets.source_digest,
         })
     }
 
-    pub(super) fn terminals(self) -> Result<&'static TerminalCatalog, RustRedEvaluationError> {
-        Ok(&self.assets()?.terminals)
+    pub(super) fn loop_count(self) -> usize {
+        match self {
+            Self::UnitMassVacuumK1 => 1,
+            Self::UnitMassVacuumK3 => 2,
+            Self::UnitMassVacuumK6 => 3,
+        }
     }
 
-    pub(super) fn validate_root_powers(self, powers: &[i64]) -> Result<(), RustRedEvaluationError> {
-        let artifact = self.artifact()?;
-        if powers.len() != artifact.arity() {
-            return Err(RustRedEvaluationError::InvalidMatchedFamily {
-                detail: format!(
-                    "matched family has {} powers but artifact {} requires {}",
-                    powers.len(),
-                    self.name(),
-                    artifact.arity()
-                ),
-            });
-        }
-        for (position, (&value, bounds)) in powers
-            .iter()
-            .zip(artifact.supported_root_power_bounds())
-            .enumerate()
+    pub(super) fn load_snapshot(
+        self,
+        bytes: &[u8],
+    ) -> Result<ArtifactSnapshot, RustRedEvaluationError> {
+        let artifact = decode_current_artifact(bytes).map_err(super::data::failure)?;
+        let expected = match self {
+            Self::UnitMassVacuumK1 => K1_FAMILY_FINGERPRINT,
+            Self::UnitMassVacuumK3 => K3_FAMILY_FINGERPRINT,
+            Self::UnitMassVacuumK6 => K6_FAMILY_FINGERPRINT,
+        };
+        if artifact.family_fingerprint() != expected || artifact.common_mass_homogeneity().is_none()
         {
-            if !bounds.contains(value) {
-                return Err(RustRedEvaluationError::InvalidMatchedFamily {
-                    detail: format!(
-                        "power {value} at position {position} is outside artifact {} root domain [{}, {}]",
-                        self.name(),
-                        bounds.lower(),
-                        bounds.upper()
-                    ),
-                });
-            }
+            return Err(super::data::failure(
+                "external closed program has an incompatible family or capability",
+            ));
         }
-        Ok(())
+        Ok(ArtifactSnapshot {
+            artifact: Arc::new(artifact),
+            source_digest: Sha256::digest(bytes).into(),
+        })
     }
 }
 

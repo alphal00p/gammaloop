@@ -7,7 +7,7 @@
 //! Native Symbolica programs are trusted, build-time embedded data from the
 //! pinned RustRed/Symbolica stack, not a public untrusted-file input boundary.
 
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 pub(super) mod cache;
 
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
@@ -47,45 +47,16 @@ fn catalog_limits() -> BinaryIoLimits {
 
 struct Input {
     label: &'static str,
-    csv: &'static str,
-    program: &'static [u8],
-    catalog: &'static [u8],
-    normalization: &'static [u8],
+    csv: String,
+    program: Vec<u8>,
+    catalog: Vec<u8>,
+    normalization: Vec<u8>,
 }
-
-macro_rules! input {
-    ($name:literal) => {
-        Input {
-            label: concat!("four-loop-", $name),
-            csv: include_str!(concat!("../../artifacts/4L/ibps/", $name, ".csv")),
-            program: include_bytes!(concat!(
-                "../../artifacts/4L/ibps/",
-                $name,
-                ".candidates.rrbin.gz"
-            )),
-            catalog: include_bytes!(concat!("../../artifacts/4L/ibps/", $name, ".rrcat.bin.gz")),
-            normalization: include_bytes!(concat!(
-                "../../artifacts/4L/ibps/",
-                $name,
-                ".rrnorm.bin"
-            )),
-        }
-    };
-}
-
-// Labels are asset identifiers only. Selection below uses the retained
-// simultaneous momentum witness, never a topology/integral name.
-const INPUTS: [Input; 4] = [input!("h"), input!("fg"), input!("bmw"), input!("x")];
 
 struct Descriptor {
     physical_momenta: Vec<Atom>,
     family_fingerprint: String,
 }
-
-static DESCRIPTORS: LazyLock<Result<Vec<Descriptor>, String>> = LazyLock::new(|| {
-    Vakint::initialize_vakint_symbols();
-    INPUTS.iter().map(|input| descriptor(input.csv)).collect()
-});
 
 // Independent lazy cells avoid loading all large programs when a calculation
 // only visits one parent. NativeCandidate owns one shared memoized applier.
@@ -95,10 +66,80 @@ struct LoadedProgram {
     cache_program: rustred::solver::CandidateUnitMassProgram<10>,
 }
 
-static H: LazyLock<Result<LoadedProgram, String>> = LazyLock::new(|| load(0));
-static FG: LazyLock<Result<LoadedProgram, String>> = LazyLock::new(|| load(1));
-static BMW: LazyLock<Result<LoadedProgram, String>> = LazyLock::new(|| load(2));
-static X: LazyLock<Result<LoadedProgram, String>> = LazyLock::new(|| load(3));
+pub(super) struct FourLoopPrograms {
+    #[cfg(test)]
+    inputs: Vec<Input>,
+    descriptors: Vec<Descriptor>,
+    programs: Vec<LoadedProgram>,
+}
+
+impl FourLoopPrograms {
+    pub(super) fn load(data: &super::data::LoopData) -> Result<Self, RustRedEvaluationError> {
+        Vakint::initialize_vakint_symbols();
+        let mut inputs = Vec::new();
+        for (name, label) in [
+            ("h", "four-loop-h"),
+            ("fg", "four-loop-fg"),
+            ("bmw", "four-loop-bmw"),
+            ("x", "four-loop-x"),
+        ] {
+            inputs.push(Input {
+                label,
+                csv: String::from_utf8(data.read(&format!("ibps/{name}.csv"))?)
+                    .map_err(super::data::failure)?,
+                program: data.read(&format!("ibps/{name}.candidates.rrbin.gz"))?,
+                catalog: data.read(&format!("ibps/{name}.rrcat.bin.gz"))?,
+                normalization: data.read(&format!("ibps/{name}.rrnorm.bin"))?,
+            });
+        }
+        let descriptors = inputs
+            .iter()
+            .map(|input| descriptor(&input.csv))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(super::data::failure)?;
+        let programs = inputs
+            .iter()
+            .zip(&descriptors)
+            .map(|(input, descriptor)| load(input, descriptor))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(super::data::failure)?;
+        Ok(Self {
+            #[cfg(test)]
+            inputs,
+            descriptors,
+            programs,
+        })
+    }
+
+    pub(super) fn native_program(&self, index: usize) -> Option<(Arc<NativeCandidate<10>>, usize)> {
+        self.programs.get(index).map(|program| {
+            (
+                Arc::clone(&program.native),
+                self.descriptors[index].physical_momenta.len(),
+            )
+        })
+    }
+
+    pub(super) fn physical_momenta(&self, index: usize) -> Option<&[Atom]> {
+        self.descriptors
+            .get(index)
+            .map(|descriptor| descriptor.physical_momenta.as_slice())
+    }
+}
+
+impl Vakint {
+    pub(super) fn four_loop_data(
+        &self,
+    ) -> Result<Arc<super::data::RustRedData>, RustRedEvaluationError> {
+        let data = self.rustred_data()?;
+        if data.four_loop.is_none() {
+            return Err(super::data::failure(
+                "4L RustRed data is not loaded; call load_official_external_data(4, ...) or load_external_data(path, 4)",
+            ));
+        }
+        Ok(data)
+    }
+}
 
 fn descriptor(source: &str) -> Result<Descriptor, String> {
     let mut physical_momenta = Vec::new();
@@ -172,10 +213,8 @@ fn descriptor(source: &str) -> Result<Descriptor, String> {
     })
 }
 
-fn load(index: usize) -> Result<LoadedProgram, String> {
-    let input = &INPUTS[index];
-    let descriptor = &DESCRIPTORS.as_ref().map_err(Clone::clone)?[index];
-    let bytes = super::experimental::compressed::decode(input.program, MAX_PROGRAM_BYTES)
+fn load(input: &Input, descriptor: &Descriptor) -> Result<LoadedProgram, String> {
+    let bytes = super::experimental::compressed::decode(&input.program, MAX_PROGRAM_BYTES)
         .map_err(|error| format!("decompress {}: {error}", input.label))?;
     let limits = CandidateBundleLimits {
         max_bundle_bytes: MAX_PROGRAM_BYTES,
@@ -190,20 +229,22 @@ fn load(index: usize) -> Result<LoadedProgram, String> {
         return Err("shipped program differs from its physical/auxiliary descriptor".into());
     }
     let catalog = OfflineTerminalCatalog::decode_generated_compressed(
-        input.catalog,
+        &input.catalog,
         family.fingerprint(),
         family.denominator_count(),
         catalog_limits(),
     )?;
-    let native = NativeCandidate::from_reducer_with_terminal_normalization(
+    let mut native = NativeCandidate::from_reducer_with_terminal_normalization(
         Arc::new(family),
         descriptor.physical_momenta.clone(),
         reducer,
-        input.normalization,
+        &input.normalization,
     )?;
-    let cache_program = native.cache_program(cache::source_digest(&bytes, input.normalization)?)?;
+    let cache_program =
+        native.cache_program(cache::source_digest(&bytes, &input.normalization)?)?;
     catalog.require_complete()?;
     catalog.require_exact_keys(native.output_terminals())?;
+    native.preserve_unresolved()?;
     let native = Arc::new(native);
     let evaluator = ExperimentalRustRed::new(native.clone(), catalog.into_terms())
         .map_err(|error| error.to_string())?;
@@ -214,14 +255,15 @@ fn load(index: usize) -> Result<LoadedProgram, String> {
     })
 }
 
-fn select(topology: &Topology) -> Result<usize, RustRedEvaluationError> {
+fn select(
+    programs: &FourLoopPrograms,
+    topology: &Topology,
+) -> Result<usize, RustRedEvaluationError> {
     let integral = topology.get_integral();
     if !matches!(topology, Topology::FourLoop(_)) || integral.n_loops != 4 {
         return Err(invalid("not a matched four-loop family"));
     }
-    let descriptors = DESCRIPTORS
-        .as_ref()
-        .map_err(|detail| invalid(detail.clone()))?;
+    let descriptors = &programs.descriptors;
     let index = descriptors
         .iter()
         .position(|descriptor| {
@@ -230,6 +272,30 @@ fn select(topology: &Topology) -> Result<usize, RustRedEvaluationError> {
                 .is_ok()
         })
         .ok_or_else(|| invalid("no shipped program matches the retained parent witness"))?;
+    validate_concrete(topology)?;
+    Ok(index)
+}
+
+fn validate_concrete(topology: &Topology) -> Result<(), RustRedEvaluationError> {
+    let integral = topology.get_integral();
+    if !matches!(topology, Topology::FourLoop(_)) || integral.n_loops != 4 {
+        return Err(invalid("not a matched four-loop family"));
+    }
+    let (parent, coordinates) = integral
+        .parent_routing
+        .as_ref()
+        .ok_or_else(|| invalid("missing parent routing"))?;
+    if coordinates.len() != 4 {
+        return Err(invalid("invalid four-loop routing dimension"));
+    }
+    let momenta = (1..=integral.n_props)
+        .map(|slot| {
+            get_prop_with_id(parent.as_view(), slot)
+                .and_then(|row| row.get(&vk_symbol!("q_")).cloned())
+                .ok_or_else(|| invalid("missing defining-parent propagator"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    integral.validate_parent_routing(&momenta)?;
     let expression = integral
         .canonical_expression
         .as_ref()
@@ -261,7 +327,7 @@ fn select(topology: &Topology) -> Result<usize, RustRedEvaluationError> {
     if mass.is_none() {
         return Err(invalid("matched family has no physical mass"));
     }
-    Ok(index)
+    Ok(())
 }
 
 fn invalid(detail: impl Into<String>) -> RustRedEvaluationError {
@@ -271,7 +337,7 @@ fn invalid(detail: impl Into<String>) -> RustRedEvaluationError {
 }
 
 pub(super) fn supports(topology: &Topology) -> bool {
-    select(topology).is_ok()
+    validate_concrete(topology).is_ok()
 }
 
 pub(super) fn evaluate(
@@ -279,59 +345,23 @@ pub(super) fn evaluate(
     settings: &VakintSettings,
     numerator: AtomView,
     matched: &ReplacementRules,
-    options: &RustRedEvaluationOptions,
+    _options: &RustRedEvaluationOptions,
 ) -> Result<Atom, VakintError> {
-    let index = select(&matched.canonical_topology)?;
-    let program =
-        loaded(index)
-            .as_ref()
-            .map_err(|detail| RustRedEvaluationError::ArtifactLoad {
-                family: INPUTS[index].label,
-                detail: detail.clone(),
-            })?;
-    program
-        .evaluator
-        .evaluate_matched(
-            settings,
-            numerator,
-            matched,
-            options.substitute_masters,
-            |target| vakint.cached_candidate_reduction(index, target),
-        )
-        .map(|result| result.value)
-}
-
-fn loaded(index: usize) -> &'static Result<LoadedProgram, String> {
-    match index {
-        0 => &*H,
-        1 => &*FG,
-        2 => &*BMW,
-        3 => &*X,
-        _ => unreachable!(),
-    }
-}
-
-/// Existing native applier and its declared physical prefix, without evaluating
-/// any terminal catalog values. Selection is by exact denominator mapping.
-pub(super) fn native_program(
-    index: usize,
-) -> Result<Option<(Arc<NativeCandidate<10>>, usize)>, String> {
-    if index >= INPUTS.len() {
-        return Ok(None);
-    }
-    let loaded = loaded(index).as_ref().map_err(Clone::clone)?;
-    let physical = DESCRIPTORS.as_ref().map_err(Clone::clone)?[index]
-        .physical_momenta
-        .len();
-    Ok(Some((Arc::clone(&loaded.native), physical)))
-}
-
-pub(super) fn physical_momenta(index: usize) -> Result<Option<&'static [Atom]>, String> {
-    Ok(DESCRIPTORS
-        .as_ref()
-        .map_err(Clone::clone)?
-        .get(index)
-        .map(|descriptor| descriptor.physical_momenta.as_slice()))
+    let data = vakint.four_loop_data()?;
+    let programs = data.four_loop.as_ref().unwrap();
+    let index = select(programs, &matched.canonical_topology)?;
+    let program = &programs.programs[index];
+    log::warn!(
+        "RustRed 4L uses finite-tested candidate rules; there is no guarantee of a complete reduction to the known masters outside the documented validation workload"
+    );
+    program.evaluator.evaluate_catalog(
+        settings,
+        numerator,
+        matched,
+        &programs.descriptors[index].family_fingerprint,
+        &data.masters,
+        |target| vakint.cached_candidate_reduction(index, target),
+    )
 }
 
 #[cfg(test)]
@@ -341,7 +371,9 @@ mod tests {
 
     #[test]
     fn shipped_descriptors_have_distinct_family_bindings() {
-        let descriptors = DESCRIPTORS.as_ref().unwrap();
+        let engine = super::super::cache_tests::external_engine();
+        let data = engine.four_loop_data().unwrap();
+        let descriptors = &data.four_loop.as_ref().unwrap().descriptors;
         assert_eq!(
             descriptors
                 .iter()
@@ -359,11 +391,13 @@ mod tests {
 
     #[test]
     fn shipped_programs_cold_load_with_exact_terminal_catalogs() {
-        for index in 0..INPUTS.len() {
-            let first = loaded(index)
-                .as_ref()
-                .unwrap_or_else(|error| panic!("{}: {error}", INPUTS[index].label));
-            assert!(std::ptr::eq(first, loaded(index).as_ref().unwrap()));
+        let engine = super::super::cache_tests::external_engine();
+        let first_data = engine.four_loop_data().unwrap();
+        let second_data = engine.clone().four_loop_data().unwrap();
+        for index in 0..4 {
+            let first = &first_data.four_loop.as_ref().unwrap().programs[index];
+            let second = &second_data.four_loop.as_ref().unwrap().programs[index];
+            assert!(std::ptr::eq(first, second));
         }
     }
 
@@ -377,13 +411,18 @@ mod tests {
         // These are expectations for vendored input data, not engine limits or
         // a dispatch based on a topology name. Original rules stay raw; catalog
         // values cover only the exact output convention installed by RustRed.
-        for (input, (raw_count, output_count)) in
-            INPUTS
-                .iter()
-                .zip([(386, 22), (145, 16), (179, 17), (445, 19)])
+        let engine = super::super::cache_tests::external_engine();
+        let data = engine.four_loop_data().unwrap();
+        for (input, (raw_count, output_count)) in data
+            .four_loop
+            .as_ref()
+            .unwrap()
+            .inputs
+            .iter()
+            .zip([(386, 22), (145, 16), (179, 17), (445, 19)])
         {
             let bytes =
-                super::super::experimental::compressed::decode(input.program, MAX_PROGRAM_BYTES)
+                super::super::experimental::compressed::decode(&input.program, MAX_PROGRAM_BYTES)
                     .unwrap();
             let (family, reducer) = load_generated_candidate_bundle::<10>(
                 &bytes,
@@ -397,7 +436,7 @@ mod tests {
             )
             .unwrap();
             let plan = TerminalNormalizationPlan::decode_generated(
-                input.normalization,
+                &input.normalization,
                 &family,
                 reducer.terminals(),
                 reducer.ordering(),
@@ -420,7 +459,7 @@ mod tests {
             );
             assert!(plan.canonical_terminals().is_subset(plan.raw_terminals()));
             let catalog = OfflineTerminalCatalog::decode_generated_compressed(
-                input.catalog,
+                &input.catalog,
                 family.fingerprint(),
                 family.denominator_count(),
                 catalog_limits(),
@@ -437,7 +476,7 @@ mod tests {
         use crate::utils::vakint_macros::vk_parse;
         use crate::{EvaluationMethod, EvaluationOrder, LoopNormalizationFactor};
 
-        let vakint = Vakint::new().unwrap();
+        let vakint = super::super::cache_tests::external_engine();
         let input = cache::test_input_mass(
             1,
             &[1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
@@ -449,7 +488,7 @@ mod tests {
             integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
             evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
                 RustRedEvaluationOptions {
-                    substitute_masters: false,
+                    master_mode: crate::RustRedMasterMode::Retain,
                 },
             )]),
             ..VakintSettings::default()
@@ -459,8 +498,8 @@ mod tests {
             .unwrap();
         let text = result.to_canonical_string();
         assert!(
-            text.contains("PR"),
-            "raw FMFT master basis expected: {text}"
+            text.contains("RustRedMaster"),
+            "raw family-qualified master basis expected: {text}"
         );
         assert!(
             !text.contains("Oep") && !text.contains("PRep"),

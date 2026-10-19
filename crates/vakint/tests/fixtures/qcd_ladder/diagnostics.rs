@@ -176,7 +176,7 @@ fn inspect_weighted_ladder_resource_failure() -> Result<()> {
     let mut settings = VakintSettings {
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/diagnostic-must-not-use-form".into(),
@@ -337,7 +337,7 @@ fn prepared_ladder_weighted_preflight_without_ibps() -> Result<()> {
     let mut settings = VakintSettings {
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/diagnostic-must-not-use-form".into(),

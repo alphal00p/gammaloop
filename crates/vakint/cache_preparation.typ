@@ -6,9 +6,24 @@ automatically. Cached payloads are exact, unit-mass, unnormalized reductions and
 their complete native nonzero conditions. They are not numerical master values,
 epsilon expansions, or a claim of additional reduction coverage.
 
-== Current integration status
+== External-data distribution
 
-The current dependency is RustRed
+The official prepared packs now live in the separate `vakint-external-data`
+repository. `load_official_external_data(N, ...)` explicitly loads the programs,
+master data and available caches for every loop count from one through N.
+Pointing its local path at a checked-out data repository performs no download.
+Ordinary construction still uses only vendored 1L–3L programs and master data,
+without prepared caches. See #link("external_data.typ")[external-data loading].
+
+Cache preparation, attachment and snapshots bind to the engine's active program
+snapshot. Replacing external data invalidates incompatible cache sessions.
+Partial reductions never become complete cache records. The finite primer and
+its intermediate-capture limits are independent of IBP certification coverage.
+The timing receipts below document the revisions on which they were measured.
+
+== Recorded cache preparation and validation
+
+The preparation measurements below used RustRed
 `78cbc5c1c6e98d057a20390534cae25184e7ab99`. Preparation now captures newly
 computed admitted intermediate reductions as well as selected roots. Each
 intermediate carries its own exact nonzero conditions, derived from bounded

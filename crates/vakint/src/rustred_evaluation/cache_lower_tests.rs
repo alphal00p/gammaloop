@@ -31,7 +31,7 @@ fn settings() -> VakintSettings {
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         use_dot_product_notation: true,

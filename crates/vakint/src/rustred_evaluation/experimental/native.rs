@@ -7,7 +7,8 @@ use rustred::family::{IntegralFamily, IntegralKey};
 use rustred::persistence::BinaryIoLimits;
 use rustred::reduction::terminal_normalization::{
     TerminalAliasPlan, TerminalNormalizationLimits, TerminalNormalizationPlan,
-    VacuumFactorReduction, VacuumParametricLimits, reduce_transported_candidate_factor,
+    VacuumFactorReduction, VacuumParametricLimits, VacuumProductReductionError,
+    reduce_transported_candidate_factor,
 };
 use rustred::reduction::{ReductionLimits, ReductionStatistics};
 use rustred::sector::{CoordinatePriority, CoordinatePriorityLimits, Mask, OrderingPolicy, zero};
@@ -33,6 +34,13 @@ pub struct NativeCandidate<const N: usize> {
 }
 
 impl<const N: usize> NativeCandidate<N> {
+    pub(crate) fn preserve_unresolved(&mut self) -> Result<(), String> {
+        self.reducer
+            .get_mut()
+            .map_err(|_| "candidate reducer lock poisoned")?
+            .set_unresolved_policy(rustred::solver::UnresolvedPolicy::Preserve)
+            .map_err(|error| error.to_string())
+    }
     #[cfg(test)]
     pub(crate) fn cache_test_statistics(&self) -> rustred::solver::CandidateStatistics {
         self.reducer.lock().unwrap().statistics()
@@ -63,11 +71,15 @@ impl<const N: usize> NativeCandidate<N> {
         transport: &rustred::sector::symmetry::integral_transport::Prepared,
         target: &IntegralKey,
         limits: ReductionLimits,
-    ) -> Result<VacuumFactorReduction, String> {
-        let mut reducer = self
-            .reducer
-            .lock()
-            .map_err(|_| "candidate reducer lock poisoned")?;
+    ) -> Result<VacuumFactorReduction, VacuumProductReductionError> {
+        let mut reducer =
+            self.reducer
+                .lock()
+                .map_err(|_| VacuumProductReductionError::Provider {
+                    family: self.family.fingerprint().into(),
+                    target: target.clone(),
+                    message: "candidate reducer lock poisoned".into(),
+                })?;
         reduce_transported_candidate_factor(
             &mut reducer,
             transport,
@@ -76,11 +88,8 @@ impl<const N: usize> NativeCandidate<N> {
             Default::default(),
             limits,
         )
-        .map_err(|error| error.to_string())
     }
 
-    /// A scoped native call for the core-owned sum-of-products session.
-    /// Its remaining cache allowance must not hide a persistent native cache.
     pub(crate) fn reduce_unit_mass_guarded(
         &self,
         target: &IntegralKey,
@@ -91,19 +100,55 @@ impl<const N: usize> NativeCandidate<N> {
             Vec<rustred::algebra::Coefficient>,
             ReductionStatistics,
         ),
-        String,
+        VacuumProductReductionError,
     > {
-        let mut reducer = self
-            .reducer
-            .lock()
-            .map_err(|_| "candidate reducer lock poisoned")?;
-        reducer.clear_cache().map_err(|error| error.to_string())?;
-        let result = reducer
-            .reduce_unit_mass_guarded(target, remaining)
-            .map_err(|error| error.to_string());
-        let cleared = reducer.clear_cache().map_err(|error| error.to_string());
-        cleared?;
-        result
+        let mut reducer =
+            self.reducer
+                .lock()
+                .map_err(|_| VacuumProductReductionError::Provider {
+                    family: self.family.fingerprint().into(),
+                    target: target.clone(),
+                    message: "candidate reducer lock poisoned".into(),
+                })?;
+        reducer
+            .clear_cache()
+            .map_err(|error| VacuumProductReductionError::Provider {
+                family: self.family.fingerprint().into(),
+                target: target.clone(),
+                message: error.to_string(),
+            })?;
+        let result =
+            reducer
+                .reduce_unit_mass_guarded(target, remaining)
+                .map_err(|error| match error {
+                    rustred::solver::CandidateReductionError::Uncovered { .. }
+                    | rustred::solver::CandidateReductionError::OutsideNumeratorRank { .. } => {
+                        VacuumProductReductionError::UnresolvedFactor {
+                            family: self.family.fingerprint().into(),
+                            target: target.clone(),
+                        }
+                    }
+                    error => VacuumProductReductionError::Provider {
+                        family: self.family.fingerprint().into(),
+                        target: target.clone(),
+                        message: error.to_string(),
+                    },
+                });
+        reducer
+            .clear_cache()
+            .map_err(|error| VacuumProductReductionError::Provider {
+                family: self.family.fingerprint().into(),
+                target: target.clone(),
+                message: error.to_string(),
+            })?;
+        let result = result?;
+        if !result.0.unresolved().is_empty() {
+            return Err(VacuumProductReductionError::UnresolvedFactor {
+                family: self.family.fingerprint().into(),
+                target: target.clone(),
+            });
+        }
+        Ok(result)
     }
 
     /// Steer an existing RustRed candidate applier without running discovery.
@@ -330,6 +375,77 @@ fn candidate_ordering<const N: usize>(
             .map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())
+}
+
+impl<const N: usize> CandidateScalarReduction for NativeCandidate<N> {
+    fn index_count(&self) -> usize {
+        N
+    }
+    fn parent_momenta(&self) -> &[Atom] {
+        &self.parent_momenta
+    }
+    fn dimension(&self) -> &Atom {
+        &self.dimension
+    }
+    fn reduce_unit_mass(&self, target: &IntegralKey) -> Result<CandidateReduction, String> {
+        let mut reducer = self
+            .reducer
+            .lock()
+            .map_err(|_| "candidate reducer lock poisoned")?;
+        let before = reducer.statistics().rule_applications();
+        let decomposition = reducer
+            .reduce_unit_mass(target)
+            .map_err(|e| e.to_string())?;
+        let applied_rules = reducer
+            .statistics()
+            .rule_applications()
+            .checked_sub(before)
+            .ok_or("candidate rule counter decreased")?;
+        Ok(CandidateReduction {
+            terms: decomposition
+                .terms()
+                .iter()
+                .map(|(key, coefficient)| (key.clone(), coefficient.to_expression()))
+                .collect(),
+            applied_rules,
+        })
+    }
+
+    fn lower_scalar_numerator(
+        &self,
+        numerator: &Atom,
+        base: &IntegralKey,
+    ) -> Result<Vec<super::CandidateLoweredTerm>, String> {
+        let loop_momenta = self
+            .family
+            .loop_momenta()
+            .iter()
+            .map(|label| {
+                vakint_parse!(label.as_str())
+                    .map_err(|error| format!("parse family loop momentum {label}: {error}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let service = rustred::scalar_numerator::FamilyScalarNumeratorService::try_new(
+            &self.family,
+            S.dot,
+            loop_momenta,
+            rustred::scalar_numerator::ScalarNumeratorLimits::default(),
+        )
+        .map_err(|error| error.to_string())?;
+        let lowering = service
+            .lower(numerator, base)
+            .map_err(|error| error.to_string())?;
+        Ok(lowering
+            .terms()
+            .iter()
+            .map(|term| super::CandidateLoweredTerm {
+                target: term.integral().clone(),
+                coefficient: term.coefficient().to_expression(),
+                scalar_spectator: term.scalar_spectator().clone(),
+                common_mass_squared_power: term.common_mass_squared_power(),
+            })
+            .collect())
+    }
 }
 
 #[cfg(test)]
@@ -618,76 +734,5 @@ mod tests {
         );
         assert!(candidate_ordering(Some([0, 0, 2])).is_err());
         assert!(candidate_ordering(Some([0, 1, 3])).is_err());
-    }
-}
-
-impl<const N: usize> CandidateScalarReduction for NativeCandidate<N> {
-    fn index_count(&self) -> usize {
-        N
-    }
-    fn parent_momenta(&self) -> &[Atom] {
-        &self.parent_momenta
-    }
-    fn dimension(&self) -> &Atom {
-        &self.dimension
-    }
-    fn reduce_unit_mass(&self, target: &IntegralKey) -> Result<CandidateReduction, String> {
-        let mut reducer = self
-            .reducer
-            .lock()
-            .map_err(|_| "candidate reducer lock poisoned")?;
-        let before = reducer.statistics().rule_applications();
-        let decomposition = reducer
-            .reduce_unit_mass(target)
-            .map_err(|e| e.to_string())?;
-        let applied_rules = reducer
-            .statistics()
-            .rule_applications()
-            .checked_sub(before)
-            .ok_or("candidate rule counter decreased")?;
-        Ok(CandidateReduction {
-            terms: decomposition
-                .terms()
-                .iter()
-                .map(|(key, coefficient)| (key.clone(), coefficient.to_expression()))
-                .collect(),
-            applied_rules,
-        })
-    }
-
-    fn lower_scalar_numerator(
-        &self,
-        numerator: &Atom,
-        base: &IntegralKey,
-    ) -> Result<Vec<super::CandidateLoweredTerm>, String> {
-        let loop_momenta = self
-            .family
-            .loop_momenta()
-            .iter()
-            .map(|label| {
-                vakint_parse!(label.as_str())
-                    .map_err(|error| format!("parse family loop momentum {label}: {error}"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let service = rustred::scalar_numerator::FamilyScalarNumeratorService::try_new(
-            &self.family,
-            S.dot,
-            loop_momenta,
-            rustred::scalar_numerator::ScalarNumeratorLimits::default(),
-        )
-        .map_err(|error| error.to_string())?;
-        let lowering = service
-            .lower(numerator, base)
-            .map_err(|error| error.to_string())?;
-        Ok(lowering
-            .terms()
-            .iter()
-            .map(|term| super::CandidateLoweredTerm {
-                target: term.integral().clone(),
-                coefficient: term.coefficient().to_expression(),
-                scalar_spectator: term.scalar_spectator().clone(),
-                common_mass_squared_power: term.common_mass_squared_power(),
-            })
-            .collect())
     }
 }

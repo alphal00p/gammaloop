@@ -215,7 +215,7 @@ impl MatchedScalarFamily {
                 detail: "the common mass squared is exactly zero".to_owned(),
             });
         }
-        family.validate_root_powers(&powers)?;
+        // Campaign coverage is checked against the active program at reduction time.
 
         Ok(Self {
             family,

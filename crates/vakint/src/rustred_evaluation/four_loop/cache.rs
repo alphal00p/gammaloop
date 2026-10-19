@@ -22,26 +22,28 @@ pub(super) fn source_digest(program: &[u8], normalization: &[u8]) -> Result<[u8;
 
 /// This is an explicit prepare/load boundary, not an ordinary statistics or
 /// clear-cache helper: authenticating the exact bundle may load all programs.
-pub(in crate::rustred_evaluation) fn programs()
--> Result<Vec<CandidateUnitMassProgram<10>>, RustRedEvaluationError> {
-    (0..INPUTS.len())
-        .map(|index| {
-            loaded(index)
-                .as_ref()
-                .map(|loaded| loaded.cache_program.clone())
-                .map_err(|detail| RustRedEvaluationError::ArtifactLoad {
-                    family: INPUTS[index].label,
-                    detail: detail.clone(),
-                })
-        })
-        .collect()
+pub(in crate::rustred_evaluation) fn programs(
+    engine: &Vakint,
+) -> Result<Vec<CandidateUnitMassProgram<10>>, RustRedEvaluationError> {
+    let data = engine.four_loop_data()?;
+    Ok(data
+        .four_loop
+        .as_ref()
+        .unwrap()
+        .programs
+        .iter()
+        .map(|program| program.cache_program.clone())
+        .collect())
 }
 
-pub(in crate::rustred_evaluation) fn parent_masks()
--> Result<Vec<(usize, Vec<bool>)>, RustRedEvaluationError> {
-    DESCRIPTORS
+pub(in crate::rustred_evaluation) fn parent_masks(
+    engine: &Vakint,
+) -> Result<Vec<(usize, Vec<bool>)>, RustRedEvaluationError> {
+    let data = engine.four_loop_data()?;
+    data.four_loop
         .as_ref()
-        .map_err(|detail| invalid(detail.clone()))?
+        .unwrap()
+        .descriptors
         .iter()
         .enumerate()
         .map(|(index, descriptor)| {
@@ -74,9 +76,12 @@ pub(in crate::rustred_evaluation) fn test_input_mass(
     use crate::utils::vakint_macros::vk_parse;
     assert_eq!(powers.len(), 10);
     Vakint::initialize_vakint_symbols();
-    let descriptors = DESCRIPTORS.as_ref().unwrap();
+    let engine = crate::rustred_evaluation::cache_tests::external_engine();
+    let data = engine.four_loop_data().unwrap();
+    let programs = data.four_loop.as_ref().unwrap();
+    let descriptors = &programs.descriptors;
     let mut propagators = Atom::num(1);
-    for (slot, line) in INPUTS[namespace]
+    for (slot, line) in programs.inputs[namespace]
         .csv
         .lines()
         .map(str::trim)
@@ -111,26 +116,19 @@ pub(in crate::rustred_evaluation) fn test_denominator(
     slot: usize,
     mass: i64,
 ) -> Atom {
-    let q = &DESCRIPTORS.as_ref().unwrap()[namespace].physical_momenta[slot];
+    let engine = crate::rustred_evaluation::cache_tests::external_engine();
+    let data = engine.four_loop_data().unwrap();
+    let q = &data.four_loop.as_ref().unwrap().descriptors[namespace].physical_momenta[slot];
     function!(S.dot, q, q) - Atom::num(mass)
 }
 
 #[cfg(test)]
-pub(in crate::rustred_evaluation) fn ordinary_rule_applications(namespace: usize) -> usize {
-    loaded(namespace)
-        .as_ref()
-        .unwrap()
-        .native
-        .rule_applications()
-        .unwrap()
-}
-#[cfg(test)]
 pub(in crate::rustred_evaluation) fn ordinary_statistics(
     namespace: usize,
 ) -> rustred::solver::CandidateStatistics {
-    loaded(namespace)
-        .as_ref()
-        .unwrap()
+    let engine = crate::rustred_evaluation::cache_tests::external_engine();
+    let data = engine.four_loop_data().unwrap();
+    data.four_loop.as_ref().unwrap().programs[namespace]
         .native
         .cache_test_statistics()
 }
@@ -142,12 +140,13 @@ mod tests {
 
     #[test]
     fn actual_four_parent_primer_fits_default_but_refuses_explicit_smaller_cap() {
-        let bindings = programs()
+        let engine = crate::rustred_evaluation::cache_tests::external_engine();
+        let bindings = programs(&engine)
             .unwrap()
             .iter()
             .map(|p| p.binding().clone())
             .collect::<Vec<_>>();
-        let masks = parent_masks().unwrap();
+        let masks = parent_masks(&engine).unwrap();
         assert_eq!(
             masks
                 .iter()

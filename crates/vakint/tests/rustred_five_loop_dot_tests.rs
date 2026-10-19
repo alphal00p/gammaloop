@@ -1,5 +1,6 @@
 #![cfg(feature = "feynkit-ingress")]
 
+#[allow(dead_code)] // Shared CLI helpers also support file-based input outside this suite.
 #[path = "../examples/saved_application/dot.rs"]
 mod saved_application_dot;
 
@@ -151,7 +152,7 @@ fn external_r0_connected_dot_matches_known_admitted_key_and_warm_repeat() -> Res
         epsilon_symbol: "eps".into(),
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: vakint::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/native-dot-test-must-not-use-form".into(),

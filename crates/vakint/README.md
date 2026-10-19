@@ -24,324 +24,36 @@ The community-module feature enables this automatically and exports the same
 operation as `integral_from_diagram`; no Python-side graph or algebra adapter is
 involved. Neither entry point rematches the graph or changes evaluation defaults.
 
-Five-loop symbolic reduction is available with an explicitly selected external
-saved-application package and `substitute_masters=false`. The package is not
-embedded or downloaded, and only its recorded input domains are accepted. See
-[the five-loop workflow](five_loop_application.typ) and the Rust/Python examples
-under `examples/` for DOT input, cache settings, exact family-qualified outputs,
-and retained nonzero conditions. Numerical five-loop master substitution is
-unsupported.
-
-Explicit lower-loop exact-cache preparation and read-only attachment are under
-development; the one-loop fresh-process gate passes. See the
-[cache interface, limits and remaining scope](cache_preparation.typ).
-
-For supported one-, two- and three-loop equal-mass vacuum families, the opt-in
-`EvaluationOrder::rustred_only()` scalar backend instead applies closing IBP
-artifacts shipped with Vakint and reuses Vakint's pure-Rust master
-substitutions. This scalar tail neither invokes nor falls back to FORM. The
-default evaluation order is unchanged; tensor-bearing inputs continue to use
-Vakint's existing tensor prepass before scalar evaluation.
-
-The same opt-in backend also has a four-loop candidate-program lane for the
-H, FG, BMW and X parents and their matched contractions. Its
-[bundled programs and offline master catalogs](artifacts/4L/ibps/README.md)
-are loaded lazily once; ordinary evaluation never regenerates IBPs or invokes
-FORM. RustRed applies the rules and checks applicability, descent and known
-terminal leaves at each requested integer target. These programs are explicitly
-**not** unrestricted closing artifacts: unresolved targets produce an error,
-and passing a numerical test is not a proof of arbitrary-rank coverage. The
-four-loop public-backend gates passed on 2026-09-19: all fifteen original
-numerical references and sixteen expanded-numerator/pinch comparisons against
-FMFT, with invalid FORM paths for both FeynKit and the RustRed scalar tail.
-The [test instructions and evidence](tests/experimental_rustred_4l/README.md)
-record the original precision/tolerances and corrected offline catalog audit.
-The measured 34.42 s and 104.55 s are full comparison-process times, not
-RustRed scalar-only performance. This finite acceptance does not establish
-unrestricted family closure or arbitrary-rank coverage.
-
-The embedded artifacts and Vakint's pinned RustRed revision form one atomic
-build-time contract and must use RustRed's current artifact schema. Vakint does
-not migrate or decode obsolete RustRed artifact schemas. This is separate from
-Vakint's backward-compatibility contract for its public API, defaults, and
-existing FORM-backed evaluation methods.
-
-The one-, two- and three-loop certified programs now use the same native binary
-envelope as the four-loop candidate programs, with separate certified/candidate
-payload kinds. Certified schema V6 stores Symbolica's native coefficients and
-shared symbol state and still replays the proof on cold loading. The embedded
-files are trusted generated data, not an arbitrary-file import interface.
-The K1/K3/K6 migration re-encoded the existing saved rules without a new search;
-the exact families, guards, source traces and terminal sets remain unchanged.
-Their native files are 2,790, 36,692 and 3,725,739 bytes respectively. That migration
-did not change terminal catalogs or the scalar application algorithm.
-
-The four-loop terminal-value catalogs now also use RustRed's native Atom/state
-codec, under a separate value-only envelope kind. All 1,155 exact PR expressions,
-typed keys, family identities and coverage declarations were compared unchanged
-in fresh processes; dictionary encoding reduces their total from 83,020 to
-30,307 bytes. This is storage deduplication, not a claim of fewer physical masters
-or stronger closure. Vakint only steers the RustRed loader and retains the exact
-raw terminal-set check. No FORM invocation or IBP generation occurs during
-catalog loading. See the [catalog migration details](artifacts/4L/ibps/README.md).
-On RustRed `d51721b6`, the unchanged 83-test selection through three loops and
-all fifteen four-loop references plus sixteen expanded-numerator/pinch pairs
-pass again, with invalid FORM paths in the native lanes. Seven catalog/loader
-checks and three fixture checks also pass. That I/O-only milestone did not
-enable terminal aliases.
-
-The preceding `2b50267c` pin prepared RustRed's verified U-polynomial terminal
-equivalences once per loaded four-loop parent. The 1,155 raw catalog declarations
-remain unchanged; the applier coalesces them onto 179 family-local representatives
-before memoizing coefficients, compared with 505 for the prior `f91c47ab`
-momentum-routing plan. These are not a minimal master basis or a new closure
-claim; all 105 negative-index terminals retain their original keys. Vakint
-delegates preparation and application entirely to RustRed; options, defaults
-and existing FORM-backed modes stay unchanged. All 83 lower-loop cases, all
-31 four-loop comparisons, nine focused checks and three fixtures pass again.
-In a fresh matched nine-input benchmark, first H/X cubed-line calls decrease
-from 7.18/31.27 s to 6.26/29.45 s. Warm calls remain faster than FMFT on this
-matrix, but initial cubed-parent reductions are still slower than FMFT and the
-smaller terminal set does not imply a proportional speedup. See the
-[complete timings and boundaries](artifacts/4L/ibps/README.md#public-scalar-timing-probe).
-
-The previous `8ad62b96` pin added four native weighted-normalization sidecars.
-RustRed combines its exact U equivalences with authenticated support-symmetry
-projections of all 105 remaining quadratic numerators, producing 74 family-local
-positive outputs while preserving every raw candidate/catalog declaration.
-Fresh-process native replay and exact comparison of all 1,155 expansions pass.
-The thin Vakint adapter delegates all proof, arithmetic and memoization to
-RustRed; default methods and existing constructors remain unchanged. These
-outputs are not a minimal-master or family-closure claim. The unchanged 83
-lower-loop cases, all 31 four-loop reference/pinch comparisons, eleven focused
-checks and three fixtures pass on this pin. The same nine-input benchmark also
-passes all 54 numerical comparisons. First H/X cubed-parent calls change from
-6.231/30.811 s to 5.587/21.411 s; FG's first call and some warm controls regress,
-so this is not a uniform speedup. Both process totals include FMFT as well as
-RustRed, and first cubed-parent calls remain slower than FMFT. See the
-[weighted sidecar contract](artifacts/4L/ibps/README.md#weighted-vacuum-terminal-normalization).
-
-The `7b22f5bd` runtime pin supports the producer-aligned, unrestricted one-
-through four-loop packages, freshly generated from native IBPs rather than
-substituting bounded walker-control inputs. See the
-[refresh procedure and measured gates](rustred_package_refresh.typ).
-
-The [historical RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps
-all existing single-common-mass inputs through three loops to native peers.
-Its unchanged 83-test selection passes again after the V6 migration on
-2026-09-19, with Symbolica 3 and RustRed `d6718733`, including the offline MATAD
-check of all 38 K6 terminals. Native FeynKit/RustRed stages use an invalid FORM
-path; separate legacy oracles use FORM. The full 16-test K6 pipeline, 26 focused
-native library checks and three four-loop fixture checks also pass; these
-overlap the selection rather than adding distinct numerical inputs. The
-historical inventory distinguishes the 83-test matrix from the 40-entry/46-input
-legacy census; the four-loop acceptance results are recorded separately above.
-
-The migration gate used release builds and the actual public backend, with no
-regeneration of shipped artifacts or changed tolerances. Both RustRed dependencies are pinned to
-the published revision together with the embedded native assets. Workspace
-dependency verification and CI metadata regeneration pass; this focused gate
-does not claim a complete GammaLoop workspace CI run.
-
-The shared parent-routing validator is also tested against all 19 registered
-four-loop classes and their 123 surviving propagator slots. It reuses the
-matcher's signed simultaneous witness, without graph rematching or topology-name
-dispatch. The new four-loop candidate-program lane uses this same witness.
-The earlier routing-only follow-up passes 39
-focused tests, including the existing 16-test K6 pipeline; it is not a fresh
-rerun of the complete 83-test selection or a four-loop numerical-parity claim.
-
-`run_time_decimal_precision` controls arithmetic precision, not the accuracy of
-stored master data. If a required numerical master or period constant carries
-less precision, Vakint emits a `WARNING` through its usual Rust logger and
-continues at the requested working precision. Configure the application's
-logger to display warnings (for example, `RUST_LOG=warn` with an env logger).
-Resizing a stored number does not supply additional accurate digits; in
-particular, requesting 20,000 digits does not establish a 20,000-digit result.
-FMFT checks constants surviving Laurent truncation; direct MATAD/AlphaLoop
-substitution and numerical RustRed catalogs conservatively check each active
-source record before resizing or materialization. Unsupported Laurent orders
-and missing master data remain errors.
-
-```rust
-use vakint::{EvaluationOrder, Vakint, VakintSettings, vakint_parse};
-
-let vakint = Vakint::new()?;
-let settings = VakintSettings {
-    evaluation_order: EvaluationOrder::rustred_only(),
-    ..VakintSettings::default()
-};
-let result = vakint.evaluate_integral(
-    &settings,
-    vakint_parse!("topo(I2L(1,2,1,1))")?.as_view(),
-)?;
-# Ok::<(), Box<dyn std::error::Error>>(())
-```
-
-## Python usage
-
-`Vakint` is also part of the [`symbolica-community`](https://github.com/benruijl/symbolica-community) `Python` module where vaccuum graphs can be evaluated directly using the `Python` API exposed in that module.
-
-Numerator tensor reduction has two backends. `"feynkit"` is the default: it uses
-the native FeynKit projector, supports ranks through 20, and does not need FORM
-for the tensor-reduction step. `"alphaloop"` explicitly selects the historical
-FORM implementation, whose bundled projector tables cover ranks through 10:
+RustRed provides FORM-independent scalar reduction. Its 1L–3L programs and master
+coefficients are available offline. Additional data and prepared caches live in
+[vakint-external-data](https://github.com/alphal00p/vakint-external-data).
+Explicitly loading a maximum loop count installs every lower loop count as well:
 
 ```python
-from symbolica import E
-from symbolica.community.vakint import Vakint
-
-vakint = Vakint()
-integral = E(
-    "k(1,mu)*k(1,nu)*p(1,mu)*p(1,nu)"
-    "*topo(prop(1,edge(1,1),k(1),muvsq,1))",
-    default_namespace="vakint",
-)
-reduced = vakint.tensor_reduce(integral)
+engine.load_official_external_data(4, local_artifacts_path="./data")
 ```
 
-The Rust API uses the same default through `VakintSettings`. Set
-`TensorReductionMethod::AlphaLoop` explicitly to request the legacy FORM
-projector:
+A local external-data checkout can be passed as the same path; it is validated
+and loaded without downloading or changing its contents. Installed releases are
+reused offline until an explicit refresh. See [external-data loading and master
+capabilities](external_data.typ) for the Rust API, release selection, and errors.
+[Master definitions and capabilities](masters.typ) records the normalization,
+finite coefficient ranges, and distinction between terminals and computed masters.
 
-```rust
-use vakint::{TensorReductionMethod, VakintSettings};
+RustRed's `master_mode` selects `retain`, `symbolic`, or `numerical` (default).
+Symbolic expansion retains labeled coefficients when only numerical data exists.
+Numerical evaluation rejects insufficient coefficient precision or Laurent depth,
+and lists unresolved integrals explicitly. Candidate campaigns can return partial
+reductions with warnings; their terminal inventories are not complete-basis proofs.
 
-let settings = VakintSettings {
-    tensor_reduction_method: TensorReductionMethod::AlphaLoop,
-    ..VakintSettings::default()
-};
-```
+FORM reductions and their master formulas remain available. HPL numerical
+substitution uses Symbolica's arbitrary-precision sixth-root algorithms in both
+FORM and RustRed paths. Other finite FORM tables retain their existing precision
+warnings. Working precision alone does not certify the accuracy of a final result.
 
-## Rust usage
+Prepared caches are optional and read-only during evaluation. See [cache
+preparation](cache_preparation.typ), [the cache example](examples/native_cache.rs),
+and the [historical program refresh record](rustred_package_refresh.typ).
 
-Checkout the examples directory for a few examples of how to use this library.
-For example:
-
-```rust
-use vakint::{vakint_parse, Vakint, VakintExpression, VakintSettings};
-
-fn main() {
-    let settings = VakintSettings {
-        allow_unknown_integrals: false,
-        ..VakintSettings::default()
-    };
-    let vakint = Vakint::new().unwrap();
-    vakint.validate_settings(&settings).unwrap();
-
-    //println!("Supported topologies:\n{}", vakint.topologies);
-
-    let input = vakint_parse!(
-        "(k(11,2)*k(11,2)+k(11,77)*k(22,77)+k(22,33)*p(42,33))*topo(\
-                    prop(9,edge(7,10),k(11),mUVsqA,1)*\
-                    prop(33,edge(7,10),k(22),mUVsqA,2)*\
-                    prop(55,edge(7,10),k(11)+k(22),mUVsqA,1)\
-                )+\
-                (2*k(33,2)*k(33,2)+17*k(44,33)*p(17,33))*topo(\
-                    prop(7,edge(9,21),k(33),mUVsqB,1)*\
-                    prop(13,edge(9,21),k(44),mUVsqB,2)*\
-                    prop(17,edge(9,21),k(33)+k(44),mUVsqB,1)\
-                )"
-    )
-    .unwrap();
-
-    let output = vakint
-        .to_canonical(&settings, input.as_view(), true)
-        .unwrap();
-
-    println!(
-        "\nInput:\n\n{}\n\nhas been matched to\n\n{}\n",
-        VakintExpression::try_from(input).unwrap(),
-        VakintExpression::try_from(output).unwrap()
-    );
-}
-```
-
-yields:
-
-![result_matching](result_readme.png)
-
-When carrying a complete evaluation, the workflow is as follows:
-
-```rust
-use ahash::HashMap;
-use vakint::{vakint_parse, Vakint, VakintExpression, VakintSettings};
-
-fn main() {
-    let settings = VakintSettings {
-        allow_unknown_integrals: false,
-        use_dot_product_notation: true,
-        integral_normalization_factor: vakint::LoopNormalizationFactor::Custom("1".into()),
-        run_time_decimal_precision: 16,
-        ..VakintSettings::default()
-    };
-    let vakint = Vakint::new().unwrap();
-    vakint.validate_settings(&settings).unwrap();
-
-    let mut integral = vakint_parse!(
-        "(k(3,11)*k(3,22)+k(3,77)*p(8,77))*topo(\
-        prop(9,edge(66,66),k(3),MUVsq,1)\
-    )"
-    )
-    .unwrap();
-    println!(
-        "\nInput integral:\n{}\n",
-        VakintExpression::try_from(integral.clone()).unwrap()
-    );
-
-    integral = vakint
-        .to_canonical(&settings, integral.as_view(), true)
-        .unwrap();
-    println!(
-        "Matched integral:\n{}\n",
-        VakintExpression::try_from(integral.clone()).unwrap()
-    );
-
-    integral = vakint.tensor_reduce(&settings, integral.as_view()).unwrap();
-    println!(
-        "Tensor reduced integral:\n{}\n",
-        VakintExpression::try_from(integral.clone()).unwrap()
-    );
-
-    integral = vakint
-        .evaluate_integral(&settings, integral.as_view())
-        .unwrap();
-    println!("Evaluated integral:\n{}\n", integral);
-
-    let mut params = HashMap::default();
-    params.insert("MUVsq".into(), settings.real_to_prec("1.0"));
-    params.insert("mursq".into(), settings.real_to_prec("1.0"));
-
-    let numerical_partial_eval = Vakint::partial_numerical_evaluation(
-        &settings,
-        integral.as_view(),
-        &params,
-        &HashMap::default(),
-        None,
-    );
-    println!("Partial eval:\n{}\n", numerical_partial_eval);
-
-    params.insert("g(11,22)".into(), settings.real_to_prec("1.0"));
-    let numerical_full_eval = Vakint::full_numerical_evaluation_without_error(
-        &settings,
-        integral.as_view(),
-        &params,
-        &HashMap::default(),
-        None,
-    )
-    .unwrap();
-    println!(
-        "Full eval (metric substituted with 1):\n{}\n",
-        numerical_full_eval
-    );
-}
-```
-
-yielding:
-
-![result_evaluation](result_2_readme.png)
-
-## Symbolica license
-
-This library uses `Symbolica` for some of its computations.
-`Symbolica` is licensed under a commercial license, *however* its usage is free for Hobbyist and also free under single-core restriction for Academic use.
+Licensed Symbolica execution uses `SYMBOLICA_LICENSE` in the environment. Neither
+building nor running Vakint requires Mathematica.

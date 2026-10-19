@@ -8,21 +8,31 @@ use feynkit_kinematics::Kinematics;
 use rustred::family::{IntegralFamily, IntegralFamilyLimits, IntegralKey, ScalarProductCoordinate};
 use rustred::reduction::terminal_normalization::{
     VacuumFactorProvider, VacuumFactorReduction, VacuumFactorTerm, VacuumFactorWork,
-    reduce_transported_vacuum_factor,
+    VacuumProductReductionError, reduce_transported_vacuum_factor,
 };
 use rustred::reduction::{Reducer, ReductionLimits, ReductionStatistics};
 use rustred::sector::{Mask, symmetry};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::prelude::{Q, Z};
 
-use super::{artifact::shipped_family_for_loop_count, four_loop};
+use super::{artifact::shipped_family_for_loop_count, data::RustRedData};
 use crate::symbols::S;
 
 /// Only immutable family preparation is retained here. Scoped native caches are
 /// cleared at both call boundaries; the enclosing RustRed session owns reuse.
 #[derive(Default)]
 pub(super) struct ShippedFactorProvider {
+    data: Option<Arc<RustRedData>>,
     closed_families: BTreeMap<usize, Arc<IntegralFamily>>,
+}
+
+impl ShippedFactorProvider {
+    pub(super) fn with_data(data: Arc<RustRedData>) -> Self {
+        Self {
+            data: Some(data),
+            closed_families: BTreeMap::new(),
+        }
+    }
 }
 
 fn error(value: impl std::fmt::Display) -> String {
@@ -201,15 +211,50 @@ fn result(
     }
 }
 
+#[derive(Debug)]
+pub(super) enum FactorProviderError {
+    Invalid(String),
+    Native(VacuumProductReductionError),
+}
+impl std::fmt::Display for FactorProviderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Invalid(error) => f.write_str(error),
+            Self::Native(error) => error.fmt(f),
+        }
+    }
+}
+impl From<String> for FactorProviderError {
+    fn from(error: String) -> Self {
+        Self::Invalid(error)
+    }
+}
+impl From<&str> for FactorProviderError {
+    fn from(error: &str) -> Self {
+        Self::Invalid(error.into())
+    }
+}
+impl From<VacuumProductReductionError> for FactorProviderError {
+    fn from(error: VacuumProductReductionError) -> Self {
+        Self::Native(error)
+    }
+}
+
 impl VacuumFactorProvider for ShippedFactorProvider {
-    type Error = String;
+    type Error = FactorProviderError;
+    fn error_is_missing_coverage(error: &Self::Error) -> bool {
+        matches!(
+            error,
+            FactorProviderError::Native(VacuumProductReductionError::UnresolvedFactor { .. })
+        )
+    }
 
     fn reduce(
         &mut self,
         family: Arc<IntegralFamily>,
         target: &IntegralKey,
         limits: ReductionLimits,
-    ) -> Result<VacuumFactorReduction, String> {
+    ) -> Result<VacuumFactorReduction, FactorProviderError> {
         if target.powers().len() != family.denominator_count() {
             return Err("the lower-factor provider received a foreign-arity integral".into());
         }
@@ -221,8 +266,15 @@ impl VacuumFactorProvider for ShippedFactorProvider {
             .filter_map(|(slot, power)| (*power > 0).then_some(slot))
             .collect::<Vec<_>>();
         let source = momentum_family(&family, &slots)?;
+        let data = self
+            .data
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(RustRedData::vendored)
+            .map_err(error)?;
         if let Some(shipped) = shipped_family_for_loop_count(family.loop_count()) {
-            let artifact = shipped.artifact().map_err(error)?;
+            let snapshot = data.artifact(shipped).map_err(error)?;
+            let artifact = snapshot.artifact();
             let shared = match self.closed_families.get(&family.loop_count()) {
                 Some(shared) => Arc::clone(shared),
                 None => {
@@ -244,6 +296,23 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                 shared.denominator_count(),
             )?
             .ok_or_else(|| "no exact momentum map to the shipped lower-loop program".to_owned())?;
+            match snapshot.program().validate_entry(&mapped) {
+                Ok(()) => {}
+                Err(
+                    rustred::reduction::ReductionError::OutsideCertifiedRootDomain { .. }
+                    | rustred::reduction::ReductionError::OutsideCertifiedTotalExcessDomain {
+                        ..
+                    },
+                ) => {
+                    return Err(FactorProviderError::Native(
+                        VacuumProductReductionError::UnresolvedFactor {
+                            family: family.fingerprint().into(),
+                            target: target.clone(),
+                        },
+                    ));
+                }
+                Err(error) => return Err(FactorProviderError::Invalid(error.to_string())),
+            }
             if has_numerator {
                 let transport = signed_transport(
                     &family,
@@ -253,13 +322,28 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                     &mapping,
                     limits,
                 )?;
-                return reduce_transported_vacuum_factor(
+                let mut outside_endpoint = None;
+                let reduction = reduce_transported_vacuum_factor(
                     &transport,
                     target,
                     Arc::clone(&shared),
                     Default::default(),
                     limits,
                     |key, remaining| {
+                        // Numerator transport can leave the certified entry
+                        // domain even when its positive denominator map fits.
+                        // Record only native scope refusals; the generic factor
+                        // callback deliberately erases other error types.
+                        if let Err(refusal) = snapshot.program().validate_entry(key) {
+                            if matches!(
+                                refusal,
+                                rustred::reduction::ReductionError::OutsideCertifiedRootDomain { .. }
+                                    | rustred::reduction::ReductionError::OutsideCertifiedTotalExcessDomain { .. }
+                            ) {
+                                outside_endpoint = Some(key.clone());
+                            }
+                            return Err(refusal.to_string());
+                        }
                         let (reduced, conditions, work) =
                             Reducer::reduce_artifact_unit_mass_guarded(artifact, key, remaining)
                                 .map_err(error)?;
@@ -270,24 +354,43 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                             work,
                         ))
                     },
-                )
-                .map_err(error);
+                );
+                return match (reduction, outside_endpoint) {
+                    (Err(VacuumProductReductionError::Provider { .. }), Some(target)) => {
+                        Err(FactorProviderError::Native(
+                            VacuumProductReductionError::UnresolvedFactor {
+                                family: shared.fingerprint().into(),
+                                target,
+                            },
+                        ))
+                    }
+                    (result, _) => result.map_err(FactorProviderError::from),
+                };
             }
             let (reduced, conditions, work) =
                 Reducer::reduce_artifact_unit_mass_guarded(artifact, &mapped, limits)
                     .map_err(error)?;
             return Ok(result(shared, reduced.terms(), conditions, work));
         }
+        let Some(programs) = data.four_loop.as_ref() else {
+            return Err(FactorProviderError::Native(
+                VacuumProductReductionError::UnresolvedFactor {
+                    family: family.fingerprint().into(),
+                    target: target.clone(),
+                },
+            ));
+        };
         let mut index = 0;
-        while let Some(momenta) = four_loop::physical_momenta(index)? {
+        while let Some(momenta) = programs.physical_momenta(index) {
             if family.loop_count() != 4 {
                 break;
             }
             let destination = physical_family(momenta, family.loop_count())?;
             if let Some((mapped, mapping)) = mapped_key(&source, &destination, &slots, target, 10)?
             {
-                let (native, _) =
-                    four_loop::native_program(index)?.ok_or("missing shipped candidate program")?;
+                let (native, _) = programs
+                    .native_program(index)
+                    .ok_or("missing shipped candidate program")?;
                 if has_numerator {
                     let shared = native.family_shared();
                     let transport = signed_transport(
@@ -298,7 +401,9 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                         &mapping,
                         limits,
                     )?;
-                    return native.reduce_transported_unit_mass_guarded(&transport, target, limits);
+                    return native
+                        .reduce_transported_unit_mass_guarded(&transport, target, limits)
+                        .map_err(FactorProviderError::from);
                 }
                 let (reduced, conditions, work) =
                     native.reduce_unit_mass_guarded(&mapped, limits)?;
@@ -311,9 +416,11 @@ impl VacuumFactorProvider for ShippedFactorProvider {
             }
             index += 1;
         }
-        Err(format!(
-            "no shipped program matches the exact {}-loop factor",
-            family.loop_count()
+        Err(FactorProviderError::Native(
+            VacuumProductReductionError::UnresolvedFactor {
+                family: family.fingerprint().into(),
+                target: target.clone(),
+            },
         ))
     }
 }

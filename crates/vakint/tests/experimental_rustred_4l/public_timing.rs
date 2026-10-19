@@ -84,22 +84,20 @@ impl Workload {
             .collect::<Vec<_>>();
         signature[0] = 3;
         signature.sort_unstable();
-        let bytes = match self.parent {
-            ParentDescriptor::H => {
-                include_bytes!("../../artifacts/4L/ibps/h.candidates.rrbin.gz").as_slice()
-            }
-            ParentDescriptor::Fg => {
-                include_bytes!("../../artifacts/4L/ibps/fg.candidates.rrbin.gz").as_slice()
-            }
-            ParentDescriptor::Bmw => {
-                include_bytes!("../../artifacts/4L/ibps/bmw.candidates.rrbin.gz").as_slice()
-            }
-            ParentDescriptor::X => {
-                include_bytes!("../../artifacts/4L/ibps/x.candidates.rrbin.gz").as_slice()
-            }
+        let name = match self.parent {
+            ParentDescriptor::H => "h",
+            ParentDescriptor::Fg => "fg",
+            ParentDescriptor::Bmw => "bmw",
+            ParentDescriptor::X => "x",
         };
+        let bytes = std::fs::read(
+            test_utils::external_data_path().join(format!("4L/ibps/{name}.candidates.rrbin.gz")),
+        )
+        .unwrap();
         let mut native = Vec::new();
-        GzDecoder::new(bytes).read_to_end(&mut native).unwrap();
+        GzDecoder::new(bytes.as_slice())
+            .read_to_end(&mut native)
+            .unwrap();
         let (family, reducer) = load_generated_candidate_bundle::<10>(
             &native,
             CandidateBundleLimits {
@@ -146,7 +144,7 @@ fn representative_public_scalar_timings() {
         fmft.form_exe_path = oracle;
         fmft.evaluation_order =
             EvaluationOrder(vec![EvaluationMethod::FMFT(FMFTOptions::default())]);
-        let vakint = Vakint::new().unwrap();
+        let vakint = test_utils::external_vakint();
         let masses = vakint.params_from_f64(
             &settings,
             &HashMap::from([("muvsq".into(), 1.0), ("mursq".into(), 1.0)]),

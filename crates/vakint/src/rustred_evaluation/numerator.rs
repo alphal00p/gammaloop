@@ -120,19 +120,20 @@ pub(super) fn route_to_parent(
             detail: error.to_string(),
         }
     })?;
-    let Some(coordinates) = coordinates else {
-        return Ok(scalar);
-    };
     // Restore native closed-contraction scope before expanding. Opening a
     // scalar power first can incorrectly pair repeated dummy indices, changing
     // (k1.k2)^2 to k1²*k2². Symmetric linear dot heads permit direct simultaneous
     // loop substitution without opening indices at all.
-    let routing = loop_momenta
-        .iter()
-        .zip(coordinates)
-        .map(|(source, target)| Replacement::new(source.clone(), target.clone()))
-        .collect::<Vec<_>>();
-    let routed = scalar.replace_multiple(&routing);
+    let routed = if let Some(coordinates) = coordinates {
+        let routing = loop_momenta
+            .iter()
+            .zip(coordinates)
+            .map(|(source, target)| Replacement::new(source.clone(), target.clone()))
+            .collect::<Vec<_>>();
+        scalar.replace_multiple(&routing)
+    } else {
+        scalar
+    };
     Ok(match form {
         ScalarNumeratorForm::ExpandedPolynomial => routed.expand(),
         ScalarNumeratorForm::PreserveProducts => routed,
@@ -183,17 +184,30 @@ mod tests {
         assert!(matches!(expanded.as_view(), AtomView::Add(_)));
         assert_ne!(preserved, expanded);
         assert_eq!(preserved.expand(), expanded);
-        // Keep the pre-existing no-routing behavior exactly: legacy callers
-        // did not expand when no retained parent coordinates were supplied.
-        for form in [
-            ScalarNumeratorForm::ExpandedPolynomial,
-            ScalarNumeratorForm::PreserveProducts,
-        ] {
-            assert_eq!(
-                route_to_parent(input.as_view(), &momenta, None, &settings, form).unwrap(),
-                input
-            );
-        }
+        // Even an identity route must provide expanded syntax to the
+        // unweighted scalar service. Weighted lowering keeps its products.
+        assert_eq!(
+            route_to_parent(
+                input.as_view(),
+                &momenta,
+                None,
+                &settings,
+                ScalarNumeratorForm::ExpandedPolynomial,
+            )
+            .unwrap(),
+            input.expand()
+        );
+        assert_eq!(
+            route_to_parent(
+                input.as_view(),
+                &momenta,
+                None,
+                &settings,
+                ScalarNumeratorForm::PreserveProducts,
+            )
+            .unwrap(),
+            input
+        );
     }
 
     #[test]
@@ -251,7 +265,7 @@ mod tests {
             use_dot_product_notation: false,
             evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
                 crate::RustRedEvaluationOptions {
-                    substitute_masters: false,
+                    master_mode: crate::RustRedMasterMode::Retain,
                 },
             )]),
             ..Default::default()
@@ -312,15 +326,17 @@ mod tests {
     fn matcher_scalar_substitution_seals_scope_before_changing_loop_basis() {
         Vakint::initialize_vakint_symbols();
         let settings = VakintSettings::default();
-        let mut matched = ReplacementRules::default();
-        matched.numerator_substitutions = [
-            ("k(1,idx___)", "k(1,idx___)-k(3,idx___)"),
-            ("k(2,idx___)", "k(2,idx___)-k(3,idx___)"),
-            ("k(3,idx___)", "-k(3,idx___)"),
-        ]
-        .into_iter()
-        .map(|(source, target)| (vk_parse!(source).unwrap(), vk_parse!(target).unwrap()))
-        .collect();
+        let matched = ReplacementRules {
+            numerator_substitutions: [
+                ("k(1,idx___)", "k(1,idx___)-k(3,idx___)"),
+                ("k(2,idx___)", "k(2,idx___)-k(3,idx___)"),
+                ("k(3,idx___)", "-k(3,idx___)"),
+            ]
+            .into_iter()
+            .map(|(source, target)| (vk_parse!(source).unwrap(), vk_parse!(target).unwrap()))
+            .collect(),
+            ..Default::default()
+        };
         for expression in [
             "(dot(k(1),k(1))-1)^5",
             "(dot(k(1),k(1))-1)^11",

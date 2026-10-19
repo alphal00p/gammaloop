@@ -15,6 +15,8 @@ use crate::{
     diagram_integral::DiagramIntegralOptions, symbols::S, vakint_parse, vakint_symbol,
 };
 
+use crate::topologies::five_loop::data as five_loop_data;
+
 #[path = "../../../examples/five_loop_cancellation_fixtures/mod.rs"]
 pub(super) mod cancellation_fixtures;
 #[path = "r2_fixtures.rs"]
@@ -130,7 +132,7 @@ pub(super) fn engine() -> Result<(Vakint, VakintSettings)> {
         epsilon_symbol: "eps".into(),
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/r2-physical-control-must-not-use-form".into(),
@@ -245,7 +247,7 @@ fn evaluate(
 
 fn one_loop(power: i64, result: &RustRedSymbolicEvaluation) -> Result<Atom> {
     let artifact =
-        ClosedArtifact::decode_durable(include_bytes!("../../../artifacts/1L/ibps/rules.rrbin"))?;
+        ClosedArtifact::decode_durable(include_bytes!("../../../data/1L/ibps/rules.rrbin"))?;
     let label = result.families.iter().find_map(|(label,fingerprint)|
         (fingerprint == artifact.family_fingerprint()).then_some(label))
         .ok_or("factorized result has not been normalized to the independently shipped one-loop family")?;

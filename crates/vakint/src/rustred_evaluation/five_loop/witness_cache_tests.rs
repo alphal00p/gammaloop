@@ -221,7 +221,7 @@ fn external_package_witness_memo_preserves_native_minimum_and_policy() {
     let mut settings = VakintSettings {
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/witness-memo-test-must-not-use-form".into(),

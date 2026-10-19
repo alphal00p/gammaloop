@@ -21,6 +21,7 @@ use crate::{
     TensorReductionMethod, Vakint, VakintError, VakintExpression, VakintSettings, vakint_symbol,
 };
 
+use pyo3::types::PyListMethods;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::*;
 
@@ -471,7 +472,7 @@ impl VakintEvaluationMethodWrapper {
         })
     }
 
-    #[pyo3(signature = (substitute_masters = None))]
+    #[pyo3(signature = (master_mode = "numerical"))]
     #[classmethod]
     /// Create the opt-in FORM-independent RustRed scalar-integral evaluation method.
     ///
@@ -485,22 +486,31 @@ impl VakintEvaluationMethodWrapper {
     /// ## Examples
     /// ```python
     /// rustred_method = VakintEvaluationMethod.new_rustred_method(
-    ///     substitute_masters=True
+    ///     master_mode="numerical"
     /// )
     /// ```
     ///
     /// Parameters
     /// ----------
     ///
-    /// substitute_masters : Optional[bool]
-    ///    Whether to substitute Vakint's known master evaluations. Default is True.
+    /// master_mode : str
+    ///    "retain", "symbolic", or "numerical" (default).
     pub fn new_rustred_method(
         _cls: &Bound<'_, PyType>,
-        substitute_masters: Option<bool>,
+        master_mode: &str,
     ) -> PyResult<VakintEvaluationMethodWrapper> {
         Ok(VakintEvaluationMethodWrapper {
             method: EvaluationMethod::RustRed(RustRedEvaluationOptions {
-                substitute_masters: substitute_masters.unwrap_or(true),
+                master_mode: match master_mode {
+                    "retain" => crate::RustRedMasterMode::Retain,
+                    "symbolic" => crate::RustRedMasterMode::Symbolic,
+                    "numerical" => crate::RustRedMasterMode::Numerical,
+                    _ => {
+                        return Err(pyo3::exceptions::PyValueError::new_err(
+                            "master_mode must be retain, symbolic, or numerical",
+                        ));
+                    }
+                },
             }),
         })
     }
@@ -674,6 +684,69 @@ impl VakintEvaluationMethodWrapper {
 #[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl VakintWrapper {
+    /// Load a local external-data checkout without network access.
+    #[pyo3(signature = (path, max_loop_count))]
+    pub fn load_external_data(
+        &mut self,
+        path: std::path::PathBuf,
+        max_loop_count: usize,
+    ) -> PyResult<()> {
+        self.vakint
+            .load_external_data(path, max_loop_count)
+            .map_err(vakint_to_python_error)
+    }
+
+    /// Load a local loop pack, or a sealed lower-loop native rules file.
+    pub fn load_rustred_artifacts(
+        &mut self,
+        loop_count: usize,
+        path: std::path::PathBuf,
+    ) -> PyResult<()> {
+        self.vakint
+            .load_rustred_artifacts(loop_count, path)
+            .map_err(vakint_to_python_error)
+    }
+
+    /// Install all official loop packs through the requested maximum, or load a
+    /// supplied checkout directly. Existing validated installations work offline.
+    #[cfg(all(unix, not(target_arch = "wasm32")))]
+    #[pyo3(signature = (max_loop_count, version="latest", local_artifacts_path=None, refresh=false))]
+    pub fn load_official_external_data<'py>(
+        &mut self,
+        py: Python<'py>,
+        max_loop_count: usize,
+        version: &str,
+        local_artifacts_path: Option<std::path::PathBuf>,
+        refresh: bool,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let report = self
+            .vakint
+            .load_official_external_data(
+                max_loop_count,
+                &crate::OfficialExternalDataOptions {
+                    version: version.to_owned(),
+                    local_artifacts_path,
+                    refresh,
+                    ..Default::default()
+                },
+            )
+            .map_err(vakint_to_python_error)?;
+        let result = PyDict::new(py);
+        result.set_item("version", report.version)?;
+        result.set_item("path", report.path)?;
+        let loops = pyo3::types::PyList::empty(py);
+        for item in report.loops {
+            let record = PyDict::new(py);
+            record.set_item("loop_count", item.loop_count)?;
+            record.set_item("path", item.path)?;
+            record.set_item("cache_available", item.cache_available)?;
+            record.set_item("source", item.source)?;
+            loops.append(record)?;
+        }
+        result.set_item("loops", loops)?;
+        Ok(result)
+    }
+
     #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_cache_policy = "evict-lru", rustred_scalar_max_work = None))]
     #[allow(clippy::too_many_arguments)]
     #[new]
@@ -743,7 +816,7 @@ impl VakintWrapper {
     ///     The path to the temporary directory to be used. Default is None, in which case a system temporary directory will be used.
     /// rustred_artifact_path : Optional[str]
     ///     Saved application package for exact symbolic five-loop RustRed reduction.
-    ///     Requires a RustRed evaluation method with substitute_masters=False.
+    ///     Use master_mode="retain" for reduction without coefficient evaluation.
     /// rustred_cache_bytes : Optional[int]
     ///     Saved-application coefficient-cache byte budget. Setting it selects
     ///     byte-governed caching unless rustred_cache_terms is also supplied.
@@ -786,9 +859,11 @@ impl VakintWrapper {
         rustred_cache_policy: &str,
         rustred_scalar_max_work: Option<usize>,
     ) -> PyResult<VakintWrapper> {
-        let mut rustred_application_options = rustred_app::SavedApplicationOptions::default();
-        rustred_application_options.cache_policy = self::rustred_cache_policy(rustred_cache_policy)
-            .map_err(exceptions::PyValueError::new_err)?;
+        let mut rustred_application_options = rustred_app::SavedApplicationOptions {
+            cache_policy: self::rustred_cache_policy(rustred_cache_policy)
+                .map_err(exceptions::PyValueError::new_err)?,
+            ..Default::default()
+        };
         let mut rustred_scalar_numerator_limits = crate::RustRedScalarNumeratorLimits::default();
         if let Some(work) = rustred_scalar_max_work {
             rustred_scalar_numerator_limits
@@ -1497,6 +1572,10 @@ impl VakintWrapper {
     }
 }
 
+fn record_usage() {
+    crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Vakint);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1563,19 +1642,19 @@ mod tests {
             let class = py.get_type::<VakintEvaluationMethodWrapper>();
 
             let default_method =
-                VakintEvaluationMethodWrapper::new_rustred_method(&class, None).unwrap();
+                VakintEvaluationMethodWrapper::new_rustred_method(&class, "numerical").unwrap();
             let EvaluationMethod::RustRed(default_options) = default_method.method else {
                 panic!("constructor returned a non-RustRed evaluation method");
             };
-            assert!(default_options.substitute_masters);
+            assert!(default_options.master_mode == crate::RustRedMasterMode::Numerical);
 
             let unsubstituted_method =
-                VakintEvaluationMethodWrapper::new_rustred_method(&class, Some(false)).unwrap();
+                VakintEvaluationMethodWrapper::new_rustred_method(&class, "retain").unwrap();
             let EvaluationMethod::RustRed(unsubstituted_options) = unsubstituted_method.method
             else {
                 panic!("constructor returned a non-RustRed evaluation method");
             };
-            assert!(!unsubstituted_options.substitute_masters);
+            assert!(unsubstituted_options.master_mode == crate::RustRedMasterMode::Retain);
         });
     }
 
@@ -1596,8 +1675,4 @@ mod tests {
         );
         assert!(rustred_cache_policy("unbounded").is_err());
     }
-}
-
-fn record_usage() {
-    crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Vakint);
 }

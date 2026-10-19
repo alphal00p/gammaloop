@@ -103,15 +103,13 @@ fn operation(error: rustred_app::AppError) -> RustRedEvaluationError {
     RustRedEvaluationError::CacheOperation { source: error }
 }
 fn program(
+    engine: &Vakint,
     loop_count: usize,
 ) -> Result<(ArtifactFamily, ClosedUnitMassProgram<'static>), RustRedEvaluationError> {
     let family = shipped_family_for_loop_count(loop_count)
         .ok_or(RustRedEvaluationError::CacheBackendUnavailable { loop_count })?;
-    let snapshot = family.snapshot()?;
-    Ok((
-        family,
-        ClosedUnitMassProgram::new(snapshot.artifact(), snapshot.source_digest()),
-    ))
+    let snapshot = engine.rustred_data()?.artifact(family)?;
+    Ok((family, snapshot.program()))
 }
 
 impl RustRedCacheWorkload {
@@ -189,13 +187,13 @@ impl Vakint {
             .map_err(operation)?;
         if loop_count == 4 {
             let mut backend = CandidateCachePreparationBackend::new(
-                super::four_loop::cache::programs()?,
+                super::four_loop::cache::programs(self)?,
                 options.native,
             )
             .map_err(operation)?;
             let workload = options.workload.plan(
                 &backend,
-                &super::four_loop::cache::parent_masks()?,
+                &super::four_loop::cache::parent_masks(self)?,
                 resolved.max_roots,
             )?;
             return prepare_application_cache(
@@ -209,7 +207,7 @@ impl Vakint {
             .map_err(operation)
             .map_err(Into::into);
         }
-        let (_, program) = program(loop_count)?;
+        let (_, program) = program(self, loop_count)?;
         let mut backend =
             ClosedCachePreparationBackend::new(vec![program], options.native).map_err(operation)?;
         // Physical-slot membership is shipped data. Native RustRed owns every
@@ -245,7 +243,7 @@ impl Vakint {
         options: &RustRedCacheLoadOptions,
     ) -> Result<(), VakintError> {
         if loop_count == 4 {
-            let programs = super::four_loop::cache::programs()?;
+            let programs = super::four_loop::cache::programs(self)?;
             let mut caches = self
                 .rustred_lower_caches
                 .lock()
@@ -274,7 +272,7 @@ impl Vakint {
             caches.candidate = Some(loaded);
             return Ok(());
         }
-        let (family, program) = program(loop_count)?;
+        let (family, program) = program(self, loop_count)?;
         let mut caches = self
             .rustred_lower_caches
             .lock()
@@ -434,11 +432,23 @@ impl Vakint {
         let Some(backend) = caches.candidate.as_mut() else {
             return Ok(None);
         };
-        let (result, decomposition) = backend
+        let reduction = backend
             .session_mut(namespace)
             .map_err(operation)?
-            .reduce_guarded_root_with_decomposition(target)
-            .map_err(operation)?;
+            .reduce_guarded_root_with_decomposition(target);
+        let (result, decomposition) = match reduction {
+            Ok(value) => value,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    rustred_app::AppErrorKind::UnresolvedReduction
+                        | rustred_app::AppErrorKind::OutsideReductionScope
+                ) =>
+            {
+                return Ok(None);
+            }
+            Err(error) => return Err(operation(error).into()),
+        };
         Ok(Some(super::experimental::CandidateReduction {
             terms: decomposition
                 .terms()

@@ -74,7 +74,7 @@ fn default_registry_and_lower_entrypoints_do_not_prepare_saved_catalogue() {
         rustred_artifact_path: Some("/nonexistent-unused-five-loop-application".into()),
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/lower-native-test-must-not-use-form".into(),

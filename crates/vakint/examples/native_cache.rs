@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: vakint::RustRedMasterMode::Retain,
             },
         )]),
         use_dot_product_notation: true,

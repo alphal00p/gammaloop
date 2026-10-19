@@ -26,7 +26,7 @@ fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture
     let mut settings = VakintSettings {
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: vakint::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/qcd-ladder-must-not-use-form".into(),

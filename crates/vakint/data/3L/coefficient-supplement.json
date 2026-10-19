@@ -1,0 +1,271 @@
+{
+  "schema": "vakint.external-data.coefficient-supplement.v1",
+  "provenance": {
+    "method": "Existing MATAD exact master expansions and master substitutions, including rational prefactors; independent DIRECT_SUBSTITUTIONS verification",
+    "source_sha256": {
+      "matad.rs": "4ce33a9f6c3a48b2255de820d7d3fe51eaa9c1f1ef05a86a29f0656229775f33",
+      "matad_numerics.rs": "4ce90fa0f55bf581a8ee5c714f52739736fccfc39b246cac9bcd912bd918ef57"
+    },
+    "hpl_reference_sha256": "d720fde95d5de1bce3b5a9a4d3510fcf36e0ed895ffcc155e6202c6042f2141e",
+    "hpl_native_values_sha256": "1f6faa919eda72fbeebe50677c0efe77ca6b685d73c49c39113bc1c593c0b35c",
+    "precision_validation": "Native-HPL symbolic evaluation, higher-precision legacy-HPL evaluation, and existing direct MATAD numerical coefficients agree at every stated precision",
+    "normalization_validation": "All existing numerical prefix coefficients checked before appending; original JSON payloads archived separately",
+    "closed_form_gamma_policy": "No Gamma-only master coefficients exported; auxiliary exp(sum((-1)^n*zeta(n)*epsilon^n/n,n=2..7)) suffices for known epsilon^4 combined with pole order3",
+    "exporter_sha256": "9f3fadaa1eed0b90398d3af895e0560adf924e4a7b1d16f93ead14df5571b2b5",
+    "loop_counts": [
+      2,
+      3
+    ]
+  },
+  "masters": [
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        },
+        {
+          "epsilon_power": 4,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        },
+        {
+          "epsilon_power": 4,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        },
+        {
+          "epsilon_power": 4,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    },
+    {
+      "master_id": "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0",
+      "coefficients": [
+        {
+          "epsilon_power": 3,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 200
+        }
+      ]
+    }
+  ]
+}

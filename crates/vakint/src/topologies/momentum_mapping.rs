@@ -93,11 +93,7 @@ impl MomentumInput {
             return Err(invalid("duplicate propagator IDs"));
         }
         let mass = &propagators[0].mass;
-        if mass.is_zero()
-            || propagators
-                .iter()
-                .any(|propagator| &propagator.mass != mass)
-        {
+        if mass.is_zero() || propagators.iter().any(|propagator| propagator.mass != mass) {
             return Ok(None);
         }
         let mut balances = BTreeMap::<i64, Atom>::new();

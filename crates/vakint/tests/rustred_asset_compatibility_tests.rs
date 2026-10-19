@@ -7,9 +7,15 @@ use rustred::reduction::{ReductionLimits, terminal_normalization::TerminalNormal
 use rustred_app::{CandidateBundleLimits, load_generated_candidate_bundle};
 
 fn asset(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("artifacts")
-        .join(name)
+    let directory = if name.starts_with("1L/") || name.starts_with("2L/") || name.starts_with("3L/")
+    {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data")
+    } else {
+        std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+            .map(PathBuf::from)
+            .expect("set VAKINT_TEST_EXTERNAL_DATA for external native asset replay")
+    };
+    directory.join(name)
 }
 
 fn compressed(name: &str, limit: usize) -> Vec<u8> {

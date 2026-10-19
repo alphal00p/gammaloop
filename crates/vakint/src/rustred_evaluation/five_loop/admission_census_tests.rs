@@ -4,9 +4,7 @@ use super::*;
 use serde_json::{Value, json};
 use std::time::Instant;
 
-#[path = "../../topologies/five_loop_data.rs"]
-#[allow(dead_code)]
-mod census;
+use crate::topologies::five_loop::data as census;
 
 pub(super) struct ReconstructedInput {
     pub(super) parent_sector: u32,
@@ -227,7 +225,7 @@ fn external_package_all_813_witnesses_pass_native_frontend_admission_without_red
     let mut settings = VakintSettings {
         evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
             crate::RustRedEvaluationOptions {
-                substitute_masters: false,
+                master_mode: crate::RustRedMasterMode::Retain,
             },
         )]),
         form_exe_path: "/admission-census-must-not-use-form".into(),

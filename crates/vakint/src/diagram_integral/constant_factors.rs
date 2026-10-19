@@ -20,7 +20,7 @@ pub(super) fn extract(
     let mut coefficient = Atom::one();
     let mut remaining = powers.to_vec();
     for &slot in constant_slots {
-        if powers[slot] > Integer::from(0) {
+        if powers[slot] > 0 {
             let denominator = family.denominators()[slot].expand();
             // Check before multiplication or repeated-denominator coalescing:
             // a numerator cannot legitimize an originally undefined pole.
@@ -32,7 +32,7 @@ pub(super) fn extract(
             // Atom::pow may materialize numeric factors even in a symbolic
             // denominator, e.g. the minus sign in -m^2. Numerica::Integer::pow
             // otherwise panics here instead of returning a recoverable error.
-            if powers[slot] > Integer::from(u32::MAX) {
+            if powers[slot] > u32::MAX {
                 return Err(invalid(format!(
                     "positive zero-flow power {} exceeds the native scalar exponent representation limit {}",
                     powers[slot],

@@ -170,10 +170,10 @@ impl MomentumInput {
                     if verified <= 8 {
                         log::debug!(target: "vakint::five_loop_match", "phase=alternative_admission ordinal={verified} admitted={}",accepted.is_some());
                     }
-                    if let Some(key) = accepted {
-                        if best.as_ref().is_none_or(|(old, _)| key < *old) {
-                            best = Some((key, candidate));
-                        }
+                    if let Some(key) = accepted
+                        && best.as_ref().is_none_or(|(old, _)| key < *old)
+                    {
+                        best = Some((key, candidate));
                     }
                 }
                 Ok(())

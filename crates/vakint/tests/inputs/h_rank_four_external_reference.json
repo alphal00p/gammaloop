@@ -1,0 +1,50 @@
+{
+  "schema": "vakint.external-master-form-reference.v1",
+  "case": "test_integrate_4l_h_rank_4",
+  "source": "Exact retained FORM reduction, evaluated independently with released external master coefficients",
+  "release": "v0.1.0",
+  "data_commit": "fced6061d2037272bc76c15bd0396b9ac7287bf7",
+  "loop_manifest_sha256": "e1db78c09931670f02a4f4c7fecf535000ac1aac7534cb69ac212c149c2b33a1",
+  "raw_form_sha256": "297ce304c77a5235792cb4ab84931014b0953278f9f3d0cb6d4136f0716cb2e9",
+  "working_decimal_precision": 80,
+  "asserted_relative_threshold": "1e-30",
+  "coefficients": [
+    [
+      -4,
+      [
+        "1.809145974886785501452557650621587342771e-9",
+        "0"
+      ]
+    ],
+    [
+      -3,
+      [
+        "1.862208677723707446525921998108647961948e-8",
+        "0"
+      ]
+    ],
+    [
+      -2,
+      [
+        "8.865577059648962609058045604434129517102e-8",
+        "0"
+      ]
+    ],
+    [
+      -1,
+      [
+        "4.064224364096375531168559391726011844697e-7",
+        "0"
+      ]
+    ],
+    [
+      0,
+      [
+        "1.849727263972748627996238788187829600708e-6",
+        "0"
+      ]
+    ]
+  ],
+  "serialized_decimal_digits": 40,
+  "hpl_native_values_sha256": "85862c462d3e74b63c0753a1ddda52d8ad16166e098fd20c73c3652862211893"
+}

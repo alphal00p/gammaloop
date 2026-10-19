@@ -7,10 +7,12 @@
 #![cfg(feature = "experimental-rustred")]
 
 #[path = "experimental_rustred_4l/acceptance_inputs.rs"]
+#[allow(dead_code)] // Shared with the broader public acceptance binary.
 mod acceptance_inputs;
 #[path = "experimental_rustred_4l/catalog_validation.rs"]
 mod catalog_validation;
 #[path = "experimental_rustred_4l/input.rs"]
+#[allow(dead_code)] // Public pinch tests use the additional input projections.
 mod input;
 #[path = "experimental_rustred_4l/numerator.rs"]
 mod numerator;
@@ -416,17 +418,21 @@ fn candidate_all_four_loop_analytic_acceptance_cases_match_fmft() {
     );
 }
 
+type ExternalMomentumValues = Vec<(usize, (f64, f64, f64, f64))>;
+type ExpectedLaurentCoefficients = Vec<(i64, (String, String))>;
+
+#[allow(clippy::too_many_arguments)] // Independent controls of the finite test campaign.
 fn run_candidate_finite_family(
     family_name: &'static str,
     source: String,
     forced_dot_power: Option<i64>,
     extra_inputs: Vec<(&'static str, Atom)>,
-    external_values: Vec<(usize, (f64, f64, f64, f64))>,
+    external_values: ExternalMomentumValues,
     mass_values: Vec<(&'static str, f64)>,
     case_mass_values: BTreeMap<&'static str, Vec<(&'static str, f64)>>,
-    case_external_values: BTreeMap<&'static str, Vec<(usize, (f64, f64, f64, f64))>>,
+    case_external_values: BTreeMap<&'static str, ExternalMomentumValues>,
     case_settings: BTreeMap<&'static str, VakintSettings>,
-    case_expected: BTreeMap<&'static str, Vec<(i64, (String, String))>>,
+    case_expected: BTreeMap<&'static str, ExpectedLaurentCoefficients>,
     require_application: bool,
 ) {
     test_utils::run_multi_lane_acceptance(move || {
@@ -437,7 +443,7 @@ fn run_candidate_finite_family(
         // deliberately outside the production artifact registry.
         let catalog_directory = std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_DIR")
             .map(PathBuf::from)
-            .or_else(|| Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("artifacts/4L/ibps")));
+            .or_else(|| Some(test_utils::external_data_path().join("4L/ibps")));
         let catalog_only = std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_ONLY").is_some();
         let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH").unwrap_or_else(|_| {
             assert!(
@@ -730,7 +736,7 @@ fn run_candidate_finite_family(
                 let native_exact = unit_mass(&native_symbolic.value);
                 let epsilon = vk_parse!(native_settings.epsilon_symbol.as_str()).unwrap();
                 for (lane, value) in [("FMFT", &oracle_exact), ("native", &native_exact)] {
-                    let coefficients = value.coefficient_list::<i8>(&[epsilon.clone()]);
+                    let coefficients = value.coefficient_list::<i8>(std::slice::from_ref(&epsilon));
                     for exponent in -4..0 {
                         let monomial = epsilon.clone().pow(Atom::num(exponent));
                         let coefficient = coefficients

@@ -57,8 +57,8 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { git = "https://github.com/alphal00p/rustred", rev = "74a83e94f9f841ae113f3d151cd80567dbc9805d", default-features = false }
-rustred-app = { git = "https://github.com/alphal00p/rustred", rev = "74a83e94f9f841ae113f3d151cd80567dbc9805d", default-features = false }
+rustred = { git = "https://github.com/alphal00p/rustred", rev = "a666e705a92b06ae640a0d9e69b2dfe5bbe748ef", default-features = false }
+rustred-app = { git = "https://github.com/alphal00p/rustred", rev = "a666e705a92b06ae640a0d9e69b2dfe5bbe748ef", default-features = false }
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"
@@ -92,9 +92,9 @@ which = "8.0.0"
 typst-library = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733" }
 typst-svg = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "400a53c4ec96e1fce1108b2b3df125020b3f90e2" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "400a53c4ec96e1fce1108b2b3df125020b3f90e2" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "400a53c4ec96e1fce1108b2b3df125020b3f90e2" }
+graphica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "b6cca776f9dce9128fcf10a724228c9445d34070" }
+numerica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "b6cca776f9dce9128fcf10a724228c9445d34070" }
+symbolica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "b6cca776f9dce9128fcf10a724228c9445d34070" }
 
 [profile.bench]
 opt-level = 3

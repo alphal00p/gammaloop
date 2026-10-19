@@ -27,6 +27,8 @@ flate2 = "1.1.9"
 log = "0.4.29"
 regex = "1.12.2"
 rug = "1.28.0"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 rustred.workspace = true
 rustred-app.workspace = true
 sha2 = "0.10.9"
@@ -52,7 +54,6 @@ default-features = false
 features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
-serde_json.workspace = true
 idenso = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
 feynkit-generator = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
 feynkit-model = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }

@@ -3,10 +3,9 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use crate::master_precision::MasterPrecisionWarnings;
 use crate::matad_numerics::DIRECT_SUBSTITUTIONS;
-use crate::matad_numerics::{ADDITIONAL_CONSTANTS, HPL_SUBSTITUTIONS};
+use crate::utils::get_full_name;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::utils::{self, set_precision_in_polynomial_atom, undress_vakint_symbols};
-use crate::utils::{get_full_name, set_precision_in_float_atom};
 use colored::Colorize;
 use log::debug;
 use regex::Regex;
@@ -229,61 +228,12 @@ impl MATAD {
     }
 
     pub fn substitute_hpls(&self, result: AtomView) -> Result<Atom, VakintError> {
-        MasterPrecisionWarnings::new(&self.settings).check_substitutions(
-            result,
-            HPL_SUBSTITUTIONS
-                .iter()
-                .map(|(source, target)| (source, target, None)),
-        );
-        let processed_constants = HPL_SUBSTITUTIONS
-            .iter()
-            .map(|(src, trgt)| {
-                (
-                    src,
-                    set_precision_in_float_atom(trgt.as_view(), &self.settings),
-                )
-            })
-            .collect::<Vec<_>>();
-        let mut r = result.to_owned();
-
-        r.repeat_map(Box::new(move |av: AtomView| {
-            let mut res = av.to_owned();
-            for (src, trgt) in processed_constants.iter() {
-                res = res.replace(src.to_pattern()).with(trgt.to_pattern());
-            }
-            res
-        }));
-
-        Ok(r)
+        crate::hpl::substitute_numerically(result, &self.settings)
     }
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Matad);
-        MasterPrecisionWarnings::new(&self.settings).check_substitutions(
-            result,
-            ADDITIONAL_CONSTANTS
-                .iter()
-                .map(|(source, target)| (source, target, None)),
-        );
-        let processed_constants = ADDITIONAL_CONSTANTS
-            .iter()
-            .map(|(src, trgt)| {
-                (
-                    src,
-                    set_precision_in_float_atom(trgt.as_view(), &self.settings),
-                )
-            })
-            .collect::<Vec<_>>();
-        let mut r = result.to_owned();
-        r.repeat_map(Box::new(move |av: AtomView| {
-            let mut res = av.to_owned();
-            for (src, trgt) in processed_constants.iter() {
-                res = res.replace(src.to_pattern()).with(trgt.to_pattern());
-            }
-            res
-        }));
-
-        Ok(r)
+        crate::hpl::substitute_numerically(result, &self.settings)
     }
 
     /// Materialize an exact expression already reduced to MATAD's master basis.
