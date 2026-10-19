@@ -759,8 +759,13 @@ mod tests {
     };
 
     use super::*;
+    use static_dual::Dual;
 
-    numerica::create_hyperdual_single_derivative!(Dual, 2);
+    // Numerica implements static Dual division through inversion and multiplication.
+    #[allow(clippy::suspicious_arithmetic_impl, clippy::suspicious_op_assign_impl)]
+    mod static_dual {
+        numerica::create_hyperdual_single_derivative!(Dual, 2);
+    }
 
     fn assert_close(lhs: f64, rhs: f64) {
         assert!((lhs - rhs).abs() < 1.0e-12, "{lhs} != {rhs}");
