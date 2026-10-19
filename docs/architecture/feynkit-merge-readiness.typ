@@ -71,6 +71,50 @@ Before/after source guards match all 3,504 entries. This is a source-specific
 native gate; complete canonical CI, documentation publication, upload and
 paired performance remain separate qualification steps.
 
+=== Exact grouping normalization before index labeling
+
+The first full NinjaRS candidate `7c3272ef` passes 5,747 of 5,748 selected
+runtime tests; its only failure is the existing Standard Model photon-to-down
+cross-section generation assertion, which expects ten groups and observes
+eleven. The effective test setting is ten workers. Both the actual CLI and the
+native generator reproduce eleven groups with one, two and ten workers, so the
+new caller-thread path does not explain this failure. Imported model bytes,
+native process definition and all fifteen raw diagrams agree with qualified
+base `2bbb8746`, including local factors, momentum routing and weights.
+
+An extra raw generation and DOT export reverses the outcome on both versions:
+the new candidate then produces ten groups, while the base produces eleven.
+This exposes an existing dependence on prior state. Only the GL09/GL10 pair
+changes membership. These are reversed down-quark circuits with two identical
+chiral Z currents and two photon currents. Under the certified momentum map
+and requested symmetric polarizations, trace cyclicity and exchanging the two
+Z indices prove their equality without expanding the numerator or discarding
+vector/axial terms. Four independent exact component checks agree. A second
+native canonicalization also makes their prepared tensors exactly identical.
+
+The first unequal preparation places the scalar color trace `Nc` inside
+different chiral sums. Exact preparation previously substituted concrete color,
+labeled dummy indices, then collected numerical content and common factors.
+Those last operations can change the factorization that determined the index
+frame. Preparation now performs both existing scalar normalizations before its
+single canonicalization. Private production-path controls retain the original
+ten groups, ratio one and weight minus two for the pair in all four cold,
+raw-generation, DOT and JSON/DOT variants. An added native chiral-cycle regression
+fails on the unchanged owner and passes after the reorder. It checks four
+index/order variants, the exact group ratio and weight, preservation of the
+original numerator and spectator, and a distinct-matrix negative control.
+No numerical reference, sample budget or existing assertion is changed.
+Full qualification of the repair remains separate.
+
+This reorders existing work; it adds no canonicalization pass, graph expansion
+or tensor admission. Common-factor collection moves from the serial comparison
+loop into the existing numerator preparation, which is parallel for multiple
+workers and stays on the caller for an explicit single worker.
+`with_algebra_result` preserves the typed carrier around
+the existing Atom coefficient operations; a direct retained-tensor numerical
+content API is still absent. The private controls establish correctness, not a
+measured speedup. Final-source paired performance remains required.
+
 === Current owned-product checkpoint 2f556851
 
 Frozen source `2f556851` passes all 5,690 tests selected by the recorded Cargo
