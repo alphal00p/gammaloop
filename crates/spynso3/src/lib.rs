@@ -2322,6 +2322,8 @@ mod tests {
     #[cfg(feature = "python_stubgen")]
     #[test]
     fn tensor_indexing_stubs_document_logical_order() {
+        const COORDINATE_VIEW: &str = "Coordinates follow axes, the current component view; \
+                                       structure.axes is a canonical signature.";
         let methods = pyo3_stub_gen::inventory::iter::<PyMethodsInfo>
             .into_iter()
             .filter(|info| (info.struct_id)() == std::any::TypeId::of::<Spensor>())
@@ -2332,10 +2334,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(getitem.len(), 2);
         assert!(getitem.iter().all(|method| {
-            method.doc.contains("logical row-major")
-                && method
-                    .doc
-                    .contains("canonical storage-axis order is not exposed")
+            method.doc.contains("logical row-major") && method.doc.contains(COORDINATE_VIEW)
         }));
 
         let setitem = methods
@@ -2343,11 +2342,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(setitem.len(), 1);
         assert!(setitem[0].doc.contains("logical row-major"));
-        assert!(
-            setitem[0]
-                .doc
-                .contains("canonical storage-axis order is not exposed")
-        );
+        assert!(setitem[0].doc.contains(COORDINATE_VIEW));
         assert!(setitem[0].doc.contains("complex for complex storage"));
     }
 }

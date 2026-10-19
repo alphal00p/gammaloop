@@ -493,154 +493,146 @@ pub(crate) fn group_diagrams(
         NumeratorGrouping::None => false,
     };
     let progress = Mutex::new((0, 0));
-    #[cfg(target_arch = "wasm32")]
-    let diagrams = diagrams.into_iter();
-    #[cfg(not(target_arch = "wasm32"))]
-    let diagrams = diagrams.into_par_iter();
-    let preparations = diagrams
-        .enumerate()
-        .map(|(source_diagram, diagram)| {
-            if generation_options.cancellation_requested() {
-                // Keep unchecked inputs on cancellation. Their preparation is
-                // unused: the incomplete result below contains singleton groups.
-                return Ok(Some((
-                    diagram,
-                    source_diagram,
-                    PreparedNumerator {
-                        exact: SymbolicTensor::infer(Atom::one()).expect("literal scalar one"),
-                        sample_source: SymbolicTensor::infer(Atom::one())
-                            .expect("literal scalar one"),
-                        samples: Vec::new(),
-                    },
-                )));
-            }
-            let color_error = |error: TensorInferenceError| GroupingError::ColorSimplification {
-                diagram: diagram.name().to_owned(),
-                message: error.to_string(),
-            };
-            let complete = diagram
-                .numerator()
-                .multiply(diagram.numerator_prefactor())
-                .map_err(|error| color_error(error.into()))?
-                .multiply(diagram.projector())
-                .map_err(|error| color_error(error.into()))?;
-            let complete = complete
-                .with_checked_expression(model.expand_couplings(complete.expression()))
-                .map_err(&color_error)?;
-            let color_reps = [
-                ColorAdjoint {}.into(),
-                ColorFundamental {}.into(),
-                ColorSextet {}.into(),
-            ];
-            let complete = if compares_numerators {
-                complete
-                    .map_representation_dimensions(|rep, dimension| {
-                        if rep.base() == (ColorAdjoint {}).into() {
-                            Atom::var(CS.nc).pow(2) - 1
-                        } else if rep.base() == (ColorFundamental {}).into() {
-                            Atom::var(CS.nc)
-                        } else {
-                            dimension.to_owned()
-                        }
-                    })
-                    .map_err(&color_error)?
-            } else {
-                complete
-            };
-            let simplified = complete
-                .simplify_algebra(&AlgebraSettings {
-                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
-                    contract: if compares_canonical_numerators {
-                        AlgebraContraction::Fully
-                    } else if compares_numerators {
-                        // Numerical Lorentz contraction belongs after momentum sampling.
-                        AlgebraContraction::Selected(color_reps.to_vec())
-                    } else {
-                        AlgebraContraction::None
-                    },
-                    ..Default::default()
-                })
-                .map_err(&color_error)?;
-            let is_zero = if compares_numerators {
-                simplified
-                    .coefficients_are_zero(TensorCollectFilter::Reps(color_reps))
-                    .map_err(&color_error)?
-                    .is_true()
-            } else {
-                // Retain the existing conservative exact-zero policy. Color-only
-                // algebra keeps unselected tensor factors in their native owner.
-                simplified
-                    .expression()
-                    .collect_factors()
-                    .check_zero_with(
-                        &symbolica::atom::ZeroTestSettings::default()
-                            .finite_field_samples(0)
-                            .numerical_samples(0)
-                            .exact_fallback(false),
-                    )
-                    .is_true()
-            };
-            if is_zero {
-                return Ok(None);
-            }
-            let sample_source = if compares_numerators {
-                normalize_momentum_routing(&diagram, &simplified).map_err(&color_error)?
-            } else {
-                SymbolicTensor::infer(Atom::one()).expect("literal scalar one")
-            };
-            // Canonical comparison and numerical sampling retain separate typed
-            // values, preserving the existing optional canonicalization policy.
-            let exact = if compares_canonical_numerators {
-                let exact_source = if symmetric_polarizations {
-                    normalize_symmetric_polarizations(&sample_source).map_err(&color_error)?
-                } else {
-                    sample_source.clone()
-                };
-                let exact_source = if concrete_canonical_color {
-                    let concrete = exact_source
-                        .map_representation_dimensions(|_, dimension| {
-                            dimension.replace(CS.nc).with(3)
-                        })
-                        .map_err(&color_error)?;
-                    concrete
-                        .with_checked_expression(
-                            concrete
-                                .expression()
-                                .replace(CS.nc)
-                                .with(3)
-                                .replace(color_idx!(2, cof!(RS.d_)))
-                                .with(Atom::num(1) / Atom::num(2)),
-                        )
-                        .map_err(&color_error)?
-                } else {
-                    exact_source
-                };
-                let canonical = exact_source.canonize().map_err(|error| {
-                    tensor_evaluation_error(&diagram, 0, format!("exact canonicalization: {error}"))
-                })?;
-                canonical
-                    .with_algebra_result(canonical.expression().replace_map_bottom_up(
-                        |value, _, out| {
-                            if matches!(value, AtomView::Add(_)) {
-                                **out = value.collect_numeric_content();
-                            }
-                        },
-                    ))
-                    .map_err(&color_error)?
-            } else {
-                SymbolicTensor::infer(Atom::one()).expect("literal scalar one")
-            };
-            Ok(Some((
+    let prepare = |(source_diagram, diagram): (usize, FeynmanDiagram)| {
+        if generation_options.cancellation_requested() {
+            // Keep unchecked inputs on cancellation. Their preparation is
+            // unused: the incomplete result below contains singleton groups.
+            return Ok(Some((
                 diagram,
                 source_diagram,
                 PreparedNumerator {
-                    exact,
-                    sample_source,
+                    exact: SymbolicTensor::infer(Atom::one()).expect("literal scalar one"),
+                    sample_source: SymbolicTensor::infer(Atom::one()).expect("literal scalar one"),
                     samples: Vec::new(),
                 },
-            )))
-        })
-        .inspect(|result| {
+            )));
+        }
+        let color_error = |error: TensorInferenceError| GroupingError::ColorSimplification {
+            diagram: diagram.name().to_owned(),
+            message: error.to_string(),
+        };
+        let complete = diagram
+            .numerator()
+            .multiply(diagram.numerator_prefactor())
+            .map_err(|error| color_error(error.into()))?
+            .multiply(diagram.projector())
+            .map_err(|error| color_error(error.into()))?;
+        let complete = complete
+            .with_checked_expression(model.expand_couplings(complete.expression()))
+            .map_err(&color_error)?;
+        let color_reps = [
+            ColorAdjoint {}.into(),
+            ColorFundamental {}.into(),
+            ColorSextet {}.into(),
+        ];
+        let complete = if compares_numerators {
+            complete
+                .map_representation_dimensions(|rep, dimension| {
+                    if rep.base() == (ColorAdjoint {}).into() {
+                        Atom::var(CS.nc).pow(2) - 1
+                    } else if rep.base() == (ColorFundamental {}).into() {
+                        Atom::var(CS.nc)
+                    } else {
+                        dimension.to_owned()
+                    }
+                })
+                .map_err(&color_error)?
+        } else {
+            complete
+        };
+        let simplified = complete
+            .simplify_algebra(&AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                contract: if compares_canonical_numerators {
+                    AlgebraContraction::Fully
+                } else if compares_numerators {
+                    // Numerical Lorentz contraction belongs after momentum sampling.
+                    AlgebraContraction::Selected(color_reps.to_vec())
+                } else {
+                    AlgebraContraction::None
+                },
+                ..Default::default()
+            })
+            .map_err(&color_error)?;
+        let is_zero = if compares_numerators {
+            simplified
+                .coefficients_are_zero(TensorCollectFilter::Reps(color_reps))
+                .map_err(&color_error)?
+                .is_true()
+        } else {
+            // Retain the existing conservative exact-zero policy. Color-only
+            // algebra keeps unselected tensor factors in their native owner.
+            simplified
+                .expression()
+                .collect_factors()
+                .check_zero_with(
+                    &symbolica::atom::ZeroTestSettings::default()
+                        .finite_field_samples(0)
+                        .numerical_samples(0)
+                        .exact_fallback(false),
+                )
+                .is_true()
+        };
+        if is_zero {
+            return Ok(None);
+        }
+        let sample_source = if compares_numerators {
+            normalize_momentum_routing(&diagram, &simplified).map_err(&color_error)?
+        } else {
+            SymbolicTensor::infer(Atom::one()).expect("literal scalar one")
+        };
+        // Canonical comparison and numerical sampling retain separate typed
+        // values, preserving the existing optional canonicalization policy.
+        let exact = if compares_canonical_numerators {
+            let exact_source = if symmetric_polarizations {
+                normalize_symmetric_polarizations(&sample_source).map_err(&color_error)?
+            } else {
+                sample_source.clone()
+            };
+            let exact_source = if concrete_canonical_color {
+                let concrete = exact_source
+                    .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))
+                    .map_err(&color_error)?;
+                concrete
+                    .with_checked_expression(
+                        concrete
+                            .expression()
+                            .replace(CS.nc)
+                            .with(3)
+                            .replace(color_idx!(2, cof!(RS.d_)))
+                            .with(Atom::num(1) / Atom::num(2)),
+                    )
+                    .map_err(&color_error)?
+            } else {
+                exact_source
+            };
+            let canonical = exact_source.canonize().map_err(|error| {
+                tensor_evaluation_error(&diagram, 0, format!("exact canonicalization: {error}"))
+            })?;
+            canonical
+                .with_algebra_result(canonical.expression().replace_map_bottom_up(
+                    |value, _, out| {
+                        if matches!(value, AtomView::Add(_)) {
+                            **out = value.collect_numeric_content();
+                        }
+                    },
+                ))
+                .map_err(&color_error)?
+        } else {
+            SymbolicTensor::infer(Atom::one()).expect("literal scalar one")
+        };
+        Ok(Some((
+            diagram,
+            source_diagram,
+            PreparedNumerator {
+                exact,
+                sample_source,
+                samples: Vec::new(),
+            },
+        )))
+    };
+    let report =
+        |result: &Result<Option<(FeynmanDiagram, usize, PreparedNumerator)>, GroupingError>| {
             // Serialize progress callbacks while preserving input order in the
             // indexed collection, independently of worker completion order.
             let mut progress = progress.lock().unwrap();
@@ -652,8 +644,31 @@ pub(crate) fn group_diagrams(
                 Some(total),
                 progress.1,
             );
-        })
-        .collect::<Result<Vec<_>, GroupingError>>()?;
+        };
+    #[cfg(target_arch = "wasm32")]
+    let preparations = diagrams
+        .into_iter()
+        .enumerate()
+        .map(prepare)
+        .inspect(report)
+        .collect::<Result<Vec<_>, _>>()?;
+    // An explicit single-thread request runs on the caller, matching generation.
+    #[cfg(not(target_arch = "wasm32"))]
+    let preparations = if generation_options.threads == Some(1) {
+        diagrams
+            .into_iter()
+            .enumerate()
+            .map(prepare)
+            .inspect(report)
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        diagrams
+            .into_par_iter()
+            .enumerate()
+            .map(prepare)
+            .inspect(report)
+            .collect::<Result<Vec<_>, _>>()?
+    };
     let mut retained = Vec::with_capacity(total);
     let mut source_diagrams = Vec::with_capacity(total);
     let mut prepared = Vec::with_capacity(total);

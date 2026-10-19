@@ -1506,51 +1506,65 @@ impl Generator {
 
         let assignments = Mutex::new(0);
         options.report_progress("interactions", 0, Some(topology_count));
-        let color_graphs = || {
-            #[cfg(target_arch = "wasm32")]
-            let graphs = raw_graphs.iter();
-            #[cfg(not(target_arch = "wasm32"))]
-            let graphs = raw_graphs.par_iter();
-            graphs
-                .filter_map(|(graph, symmetry)| {
-                    if options.cancellation_requested() {
-                        return None;
-                    }
-                    let symmetry = match u64::try_from(symmetry.clone()) {
-                        Ok(symmetry) => symmetry,
-                        Err(error) => {
-                            return Some(Err(GenerationError::SymmetryFactor(error.to_string())));
-                        }
-                    };
-                    let result = self
-                        .assign_interactions(graph, &signatures)
-                        .map(|graphs| (graphs, symmetry));
-                    let mut count = assignments.lock().unwrap();
-                    *count += 1;
-                    options.report_progress("interactions", *count, Some(topology_count));
-                    Some(result)
-                })
-                .collect::<Result<Vec<_>, GenerationError>>()
+        let color_graph = |(graph, symmetry): &(
+            Graph<NodeColor, EdgeColor>,
+            symbolica::domains::integer::Integer,
+        )| {
+            if options.cancellation_requested() {
+                return Ok(None);
+            }
+            let symmetry = match u64::try_from(symmetry.clone()) {
+                Ok(symmetry) => symmetry,
+                Err(error) => {
+                    return Err(GenerationError::SymmetryFactor(error.to_string()));
+                }
+            };
+            let result = self
+                .assign_interactions(graph, &signatures)
+                .map(|graphs| (graphs, symmetry));
+            let mut count = assignments.lock().unwrap();
+            *count += 1;
+            options.report_progress("interactions", *count, Some(topology_count));
+            result.map(Some)
         };
-        #[cfg(target_arch = "wasm32")]
-        let colored = color_graphs()?;
+        // An explicit single thread runs every stage on the caller without a
+        // Rayon pool. Otherwise respect an explicit thread count, or Rayon's
+        // default logical-CPU count. Browser kernels process the same graphs serially.
         #[cfg(not(target_arch = "wasm32"))]
-        let pool = {
+        let pool = if options.threads == Some(1) {
+            None
+        } else {
             let mut pool = ThreadPoolBuilder::new();
-            // Respect an explicit thread count; otherwise Rayon uses its default
-            // logical-CPU count. Browser kernels process the same graphs serially.
             if let Some(threads) = options.threads {
                 pool = pool.num_threads(threads);
             }
-            pool.build()?
+            Some(pool.build()?)
         };
+        #[cfg(target_arch = "wasm32")]
+        let colored = raw_graphs
+            .iter()
+            .map(color_graph)
+            .collect::<Result<Vec<_>, _>>()?;
         #[cfg(not(target_arch = "wasm32"))]
-        let colored = pool.install(color_graphs)?;
+        let colored = if let Some(pool) = &pool {
+            pool.install(|| {
+                raw_graphs
+                    .par_iter()
+                    .map(color_graph)
+                    .collect::<Result<Vec<_>, _>>()
+            })?
+        } else {
+            raw_graphs
+                .iter()
+                .map(color_graph)
+                .collect::<Result<Vec<_>, _>>()?
+        };
         if options.cancellation_requested() {
             completed = false;
         }
         let mut colored: Vec<_> = colored
             .into_iter()
+            .flatten()
             .flat_map(|(graphs, symmetry)| {
                 graphs
                     .into_iter()
@@ -1649,80 +1663,91 @@ impl Generator {
         options.report_progress("numerators", 0, Some(total));
         let width = diagram_inputs.len().saturating_sub(1).to_string().len();
         let constructed = Mutex::new(0);
-        let construct = || {
-            #[cfg(target_arch = "wasm32")]
-            let inputs = diagram_inputs.into_iter();
-            #[cfg(not(target_arch = "wasm32"))]
-            let inputs = diagram_inputs.into_par_iter();
-            inputs
+        let construct = |(
+            index,
+            (comparison, representative, grassmann_loop_count, signs, reversed_edges),
+        ): (
+            usize,
+            (
+                ColoredTopology,
+                ColoredTopology,
+                usize,
+                FermionSigns,
+                BTreeSet<EdgeId>,
+            ),
+        )| {
+            if options.cancellation_requested() {
+                return Ok::<_, GenerationError>(None);
+            }
+            let name = format!("{}{index:0width$}", options.graph_prefix);
+            let identical = comparison == representative;
+            let signs = FermionSigns {
+                internal_loop_negative: grassmann_loop_count % 2 == 1,
+                ..signs
+            };
+            let internal_reversals = comparison
+                .graph
+                .edges()
+                .iter()
                 .enumerate()
-                .map(
-                    |(
-                        index,
-                        (comparison, representative, grassmann_loop_count, signs, reversed_edges),
-                    )| {
-                        if options.cancellation_requested() {
-                            return Ok::<_, GenerationError>(None);
-                        }
-                        let name = format!("{}{index:0width$}", options.graph_prefix);
-                        let identical = comparison == representative;
-                        let signs = FermionSigns {
-                            internal_loop_negative: grassmann_loop_count % 2 == 1,
-                            ..signs
-                        };
-                        let internal_reversals = comparison
-                            .graph
-                            .edges()
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, edge)| {
-                                [edge.vertices.0, edge.vertices.1].iter().all(|vertex| {
-                                    matches!(
-                                        comparison.graph.nodes()[*vertex].data,
-                                        ColoredNode::Interaction(_)
-                                    )
-                                })
-                            })
-                            .map(|(edge, _)| reversed_edges.contains(&EdgeId(edge)))
-                            .collect::<Vec<_>>();
-                        let comparison = self.to_diagram(
-                            name.clone(),
-                            generation_type,
-                            comparison,
-                            signs,
-                            options,
-                        )?;
-                        let representative = if identical {
-                            comparison.clone()
-                        } else {
-                            self.to_diagram(name, generation_type, representative, signs, options)?
-                        };
-                        // Finalization orders external carriers before the internal edges.
-                        // Transport the comparison-to-representative reversals into that
-                        // finalized edge frame; process flow fixes all external carriers.
-                        let reversed_edges = comparison
-                            .edges()
-                            .filter(|(_, _, edge)| edge.external.is_none())
-                            .zip(internal_reversals)
-                            .filter_map(|((edge, _, _), reversed)| reversed.then_some(edge))
-                            .collect();
-                        let pair = DiagramPair {
-                            comparison,
-                            representative,
-                            reversed_edges,
-                        };
-                        let mut count = constructed.lock().unwrap();
-                        *count += 1;
-                        options.report_progress("numerators", *count, Some(total));
-                        Ok(Some(pair))
-                    },
-                )
-                .collect::<Result<Vec<_>, _>>()
+                .filter(|(_, edge)| {
+                    [edge.vertices.0, edge.vertices.1].iter().all(|vertex| {
+                        matches!(
+                            comparison.graph.nodes()[*vertex].data,
+                            ColoredNode::Interaction(_)
+                        )
+                    })
+                })
+                .map(|(edge, _)| reversed_edges.contains(&EdgeId(edge)))
+                .collect::<Vec<_>>();
+            let comparison =
+                self.to_diagram(name.clone(), generation_type, comparison, signs, options)?;
+            let representative = if identical {
+                comparison.clone()
+            } else {
+                self.to_diagram(name, generation_type, representative, signs, options)?
+            };
+            // Finalization orders external carriers before the internal edges.
+            // Transport the comparison-to-representative reversals into that
+            // finalized edge frame; process flow fixes all external carriers.
+            let reversed_edges = comparison
+                .edges()
+                .filter(|(_, _, edge)| edge.external.is_none())
+                .zip(internal_reversals)
+                .filter_map(|((edge, _, _), reversed)| reversed.then_some(edge))
+                .collect();
+            let pair = DiagramPair {
+                comparison,
+                representative,
+                reversed_edges,
+            };
+            let mut count = constructed.lock().unwrap();
+            *count += 1;
+            options.report_progress("numerators", *count, Some(total));
+            Ok(Some(pair))
         };
         #[cfg(target_arch = "wasm32")]
-        let diagram_pairs = construct()?;
+        let diagram_pairs = diagram_inputs
+            .into_iter()
+            .enumerate()
+            .map(construct)
+            .collect::<Result<Vec<_>, _>>()?;
         #[cfg(not(target_arch = "wasm32"))]
-        let diagram_pairs = pool.install(construct)?;
+        let diagram_pairs = if let Some(pool) = &pool {
+            pool.install(|| {
+                diagram_inputs
+                    .into_par_iter()
+                    .enumerate()
+                    .map(construct)
+                    .collect::<Result<Vec<_>, _>>()
+            })?
+        } else {
+            diagram_inputs
+                .into_iter()
+                .enumerate()
+                .map(construct)
+                .collect::<Result<Vec<_>, _>>()?
+        };
         let mut diagram_pairs = diagram_pairs.into_iter().flatten().collect::<Vec<_>>();
         if options.cancellation_requested() {
             completed = false;
@@ -1848,7 +1873,11 @@ impl Generator {
         #[cfg(target_arch = "wasm32")]
         let grouped = group()?;
         #[cfg(not(target_arch = "wasm32"))]
-        let grouped = pool.install(group)?;
+        let grouped = if let Some(pool) = &pool {
+            pool.install(group)?
+        } else {
+            group()?
+        };
         if options.cancellation_requested() {
             completed = false;
         }
@@ -6115,10 +6144,54 @@ mod tests {
         result.validate_groups().unwrap();
     }
 
+    #[test]
+    fn single_thread_generation_stays_on_the_caller() {
+        let caller = std::thread::current().id();
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let sink = observed.clone();
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1)
+            .filter_zero_color(true)
+            .progress(move |progress| {
+                if progress.completed > 0 {
+                    sink.lock()
+                        .unwrap()
+                        .push((progress.stage.to_owned(), std::thread::current().id()));
+                }
+                crate::GenerationControl::Continue
+            });
+        let generator = Generator::new(Model::yang_mills());
+        let process = Process::new(["g"], ["g"]);
+        let first = generator
+            .generate(&process, &options, GenerationType::Amplitude)
+            .unwrap();
+        let second = generator
+            .generate(&process, &options, GenerationType::Amplitude)
+            .unwrap();
+        assert!(first.report.completed && second.report.completed);
+        first.validate_groups().unwrap();
+        second.validate_groups().unwrap();
+        assert!(!first.diagrams.is_empty());
+        assert_eq!(first.diagrams.len(), second.diagrams.len());
+        for (left, right) in first.diagrams.iter().zip(&second.diagrams) {
+            assert_eq!(left.to_dot().unwrap(), right.to_dot().unwrap());
+        }
+        let observed = observed.lock().unwrap();
+        for stage in ["interactions", "numerators", "filter_zero_color"] {
+            assert!(
+                observed.iter().any(|(actual, _)| actual == stage),
+                "missing {stage}"
+            );
+        }
+        assert!(observed.iter().all(|(_, thread)| *thread == caller));
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn color_filter_uses_the_requested_generation_pool() {
-        for threads in [1, 4] {
+        for threads in [2, 4] {
             let observed = Arc::new(Mutex::new(Vec::new()));
             let sink = observed.clone();
             let options = GenerationOptions::default()
