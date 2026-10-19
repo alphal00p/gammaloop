@@ -17,7 +17,6 @@ use spenso::{
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
-        HasName, TensorStructure,
         representation::{Euclidean, Lorentz, Minkowski, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
@@ -25,7 +24,7 @@ use spenso::{
     symbolica_init::in_symbolica_initializer,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, Symbol},
     function,
     id::{AliasedAtom, Pattern, Replacement},
     initialize,
@@ -364,45 +363,6 @@ impl IndexTooling for AtomView<'_> {
 
         net.remove_antisymmetric_zero_terms();
 
-        let mut redual_reps = vec![];
-
-        for t in net.store.tensors.iter_mut() {
-            if t.expression.is_zero() {
-                continue;
-            }
-            let mut reps = vec![];
-
-            let name = t.name().ok_or_else(|| CanonicalizationError::Prepare {
-                reason: format!("tensor `{}` has no function name", t.expression),
-            })?;
-            let mut pat = FunctionBuilder::new(name);
-            let mut rhs = pat.clone();
-            for (i, s) in t.structure.external_structure_iter().enumerate() {
-                if !s.rep_name().is_self_dual() && s.rep_name().is_dual() {
-                    pat = pat.add_arg(
-                        s.rep()
-                            .dual()
-                            .to_symbolic([Atom::var(symbol!(format!("a{i}_",)))]),
-                    );
-
-                    reps.push(Replacement::new(
-                        s.rep().to_symbolic([Atom::var(RS.a_)]).to_pattern(),
-                        s.rep().dual().to_symbolic([Atom::var(RS.a_)]),
-                    ));
-                } else {
-                    pat = pat.add_arg(s.rep().to_symbolic([Atom::var(symbol!(format!("a{i}_",)))]));
-                }
-                rhs = rhs.add_arg(s.rep().to_symbolic([Atom::var(symbol!(format!("a{i}_",)))]));
-            }
-            if !reps.is_empty() {
-                let rep = Replacement::new(pat.finish().to_pattern(), rhs.finish());
-                // println!("{}", rep);
-                redual_reps.push(rep);
-                t.invalidate_proofs();
-                t.expression = t.expression.replace_multiple(&reps);
-            }
-        }
-
         let mut dummies = BTreeMap::new();
         for (p, _, d) in net.graph.graph.iter_edges() {
             if p.is_paired()
@@ -478,8 +438,9 @@ impl IndexTooling for AtomView<'_> {
             scalar_definitions.register_alias(alias, original);
         }
         // Spenso supplies validated incidence and external slots. Symbolica
-        // canonizes the reconstructed expression, including dummy pairs inside
-        // nested sums, without distributing any products of sums.
+        // follows the underlying index inside dind(...), retaining each endpoint's
+        // duality. Stripping and restoring it by tensor head would lose the slot
+        // orientation of symmetric metrics. Nested sums remain factorized.
         let canonical =
             expr.canonize_tensors(dummies)
                 .map_err(|error| CanonicalizationError::Indices {
@@ -524,12 +485,7 @@ impl IndexTooling for AtomView<'_> {
         }
 
         Ok(scalar_definitions
-            .map_root(|_| {
-                canonical
-                    .canonical_form
-                    .replace_multiple(&reps)
-                    .replace_multiple(&redual_reps)
-            })
+            .map_root(|_| canonical.canonical_form.replace_multiple(&reps))
             .into_inner())
     }
     fn spenso_conj(&self) -> Atom {
@@ -1079,7 +1035,7 @@ pub mod test {
             .expect("test expression should canonicalize");
 
         assert_snapshot!(
-            can.to_bare_ordered_string(),@"-1*f(coad(8,d_0),coad(8,d_1),coad(8,d_2))*t(coad(8,d_0),cof(3,d_3),dind(cof(3,d_4)))*t(coad(8,d_1),cof(3,d_5),dind(cof(3,d_3)))*t(coad(8,d_2),cof(3,d_4),dind(cof(3,d_5)))"
+            can.to_bare_ordered_string(),@"-1*f(coad(8,d_0),coad(8,d_1),coad(8,d_2))*t(coad(8,d_0),cof(3,d_4),dind(cof(3,d_3)))*t(coad(8,d_1),cof(3,d_5),dind(cof(3,d_4)))*t(coad(8,d_2),cof(3,d_3),dind(cof(3,d_5)))"
         );
 
         //  gives
