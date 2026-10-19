@@ -150,6 +150,13 @@ threads-required = 10
 filter = "test(heavy) or test(memory) or test(large)"
 test-group = "memory-intensive"
 
+# Nextest runs each test in its own process, so the Linnest public-behaviour
+# probes cannot share their cached fixture render. Each Typst compile of that
+# fixture peaks near 8 GiB RSS; unbounded, they exhaust NixCI runner memory.
+[[profile.default.overrides]]
+filter = "package(clinnet) and binary(=public_typst_behavior) and test(/^public_linnest_/)"
+test-group = "memory-intensive"
+
 [[profile.default.overrides]]
 filter = "package(vakint)"
 test-group = "symbolica-singleton"
