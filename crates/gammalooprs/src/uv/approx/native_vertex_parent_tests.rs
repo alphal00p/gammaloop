@@ -130,15 +130,26 @@ fn native_parent_external_frame_retains_homogeneous_lorentz_dimensions() -> Resu
     for dimension in [Atom::var(GS.dim), Atom::num(4)] {
         let rep = Minkowski {}.to_symbolic([&dimension]);
         let time = function!(ETS.delta, function!(AIND_SYMBOLS.cind, 0), &rep);
-        let difference = (function!(AGS.gamma, &left, &right, time)
-            - function!(AGS.gamma0, &left, &right))
-            * momentum_square(&dimension);
-        let source = AppliedFeynmanRule::new(difference)?.expr;
+        let source = AppliedFeynmanRule::new(
+            function!(AGS.gamma, &left, &right, time) * momentum_square(&dimension),
+        )?
+        .expr;
         let reduced = QcdMassReference::reduce_parent_external_frame(
             "homogeneous external frame with a retained hard-momentum spectator",
             &source,
         )?;
-        QcdMassReference::certify_parent_tensor_zero("fixed time slash equals gamma0", &reduced)?;
+        let temporal = AppliedFeynmanRule::new(
+            function!(AGS.gamma0, &left, &right) * momentum_square(&dimension),
+        )?
+        .expr;
+        let temporal = QcdMassReference::reduce_parent_external_frame(
+            "native temporal word with the same retained hard-momentum spectator",
+            &temporal,
+        )?;
+        QcdMassReference::certify_parent_tensor_zero(
+            "fixed time slash equals gamma0",
+            &reduced.try_sub(&temporal)?,
+        )?;
     }
     let mixed = AppliedFeynmanRule::new(
         momentum_square(&Atom::var(GS.dim)) + momentum_square(&Atom::num(4)),
@@ -4859,7 +4870,15 @@ impl QcdMassReference {
                     let closed = integrated::simplify(&dual.clone().multiply(numerator)?)?;
                     eyre::ensure!(closed.is_scalar());
                     let closed = if physical_four {
-                        closed.expand_dots()?
+                        // Only this declared finite numerator enters the existing
+                        // component oracle. It also contracts symmetric powered
+                        // temporal chains; negative denominator shells stay out.
+                        let source = cooking.uncook(closed.expression().as_view());
+                        let components = on_shell_tests::scalar_component(&source)?;
+                        let explicit =
+                            SymbolicTensor::infer_indexed(cooking.try_cook(components.as_view())?)?;
+                        eyre::ensure!(explicit.is_scalar());
+                        explicit
                     } else {
                         closed
                     };
