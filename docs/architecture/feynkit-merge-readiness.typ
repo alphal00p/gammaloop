@@ -293,6 +293,35 @@ remain unchanged. This verifies staging only. The actual wheel build, installed
 imports and full latest/snapshot publication checks still require their
 canonical Nix run.
 
+
+At `51bf741f`, all 5,720 selected cases in the nine Nix runtime groups pass,
+including the original 5,129 identities, 225 documentation controls, the new
+Python-overload heading regression, and all 365 integration controls. All ten
+runtime outputs and 38 JUnit reports are retained. The 105 compiled/static CI
+outputs are also valid and retained locally; that result is not an upload.
+The full snapshot passes native Rustdoc, link validation and all 572 HTML shell
+pages. The notebook wheel builds and installs; its installed suite runs 106
+cases with six existing skips. The latest-site check still fails its exact
+34-asset comparison, so this checkpoint is not qualified as complete CI.
+
+The first differing boundary is the portal illustration input. Its shared DOT
+fixture changed from explicit external legs to a canonical sewn graph. The raw
+Typst renderer does not decode the latter's external-state or cut metadata.
+With identical pinned tools, fonts and drawing dependencies, the historical DOT
+reproduces both checked themes exactly; the current DOT reproduces the two
+changed drawings exactly. The other 32 assets match. This excludes a renderer,
+font or drawing-package change as the cause.
+
+The decorative portal illustration now owns its historical raw DOT under
+`docs/assets/typst/portal-graphs/fixtures`, with exact provenance in the wrapper.
+Its comment describes external legs and no longer claims that a final-state
+physical cut is applied. This is illustration data, not a numerical oracle or a
+second canonical-state decoder. The native split-DOT exporter remains the owner
+for drawing current graph state; its two initial-state seams are distinct from
+the five physical cut edges. All 34 checked SVGs, their IDs and exact comparison
+budget remain unchanged. The prepared two-theme control reproduces both
+checked assets; applied-source and complete Nix qualification must still pass.
+
 These repairs change no source-level numerical algorithm, indexed API or
 state format 21. They establish no performance improvement or executable
 equality, and do not resolve any historical inconclusive gate. The successful
