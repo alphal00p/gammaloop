@@ -28,7 +28,7 @@ owner = "unassigned"
 # source attestations remain historical where their contents are unchanged; this
 # metadata review claims no new runtime or performance validation.
 reviewed_at = "2026-10-19"
-review_ref = "working-tree:ltd-shared-factorization-split"
+review_ref = "8985077ade84860d6ba002a6ee9ba84fc262e039"
 products = ["gammaloop"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
 review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
