@@ -2971,3 +2971,38 @@ exchange condition is also required. Neither the emitted mass zero nor the
 formal spin companion establishes general off-shell HV/CDR equivalence.
 Public complete-forest admission and the larger scaling/performance matrices
 remain separate. Shared-host case times are correctness records, not rankings.
+
+=== Actual vacuum ranks and sixth-order angular checks
+
+The retained source-28 inputs also pass a factorization-preserving rank
+inventory through the original rational-shell parser and their complete frame
+maps. It retains eight numerator terms and 42 denominator occurrences. The
+largest simultaneous active-degree bounds are four for the bare input, six
+for the proper-local input, and four for the proper-finite input. The one
+degree-six bound has separate loop bounds two and four; a conservative bound
+does not prove a nonzero leading coefficient. The finite child's frozen
+coordinate remains outside the active numerator rank.
+
+The bare denominators include the coupled channel $(l-k)^2-m_"UV"^2$. The
+proper-local denominators instead depend separately on k and l, with effective
+powers $(3,3)$, $(3,4)$, $(2,3)$ and $(2,4)$. The finite input has one active
+channel with powers three and four. An independent proper-local reference can
+therefore use sequential Wick averages and one-loop tadpoles; the raw total
+degree bound alone does not require an irreducible joint sixth moment.
+For the dimensional comparison, physical-four projection must act on the
+separated numerator. The negative
+denominator shells retain their original dimensional momenta and prescriptions;
+a physical-four numerator norm cannot be pinched as a full-dimensional norm.
+
+Source `3f0be4d6` additionally passes the extended angular mechanism and the
+fixed-component Wick case in 0.895 seconds of JUnit suite time, with strict
+Clippy passing. The same native coupled-vacuum tensor projector now checks
+$K L^2$ and $M^2 L$, where $K=k_4^2$, $L=l_4^2$ and $M=k_4 dot l_4$.
+For a rank-r projector, the independent moments
+$E_2=r(r+2)/(d(d+2))$ and $E_3=r(r+2)(r+4)/(d(d+2)(d+4))$ give
+$B=(r E_2-E_3)/(d-1)$ and $C=(E_2-E_3)/(d-1)$ through its trace and
+idempotence. Their r=4 contractions agree exactly with the native reduction.
+The single-pole and double-pole controls retain the independent epsilon-one
+and epsilon-two coefficients, with the original factorized spectator intact.
+These are additional angular checks. They establish neither the complete
+actual D09 angular lift nor its open R2 residual or UV/IR limit exchange.
