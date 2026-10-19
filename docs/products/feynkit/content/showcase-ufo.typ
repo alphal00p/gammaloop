@@ -27,14 +27,13 @@ Symbolica, the notebook runtime, and this example's data.
   to run it locally.]
 }
 
-The checkout and notebook pin the Symbolica 3-compatible UFO loader revision
-#link("https://github.com/alphal00p/ufo_model_loader/tree/70ddee6b416f8c8b340e0d087646d77095c5d24b")[`70ddee6b`]
-(version 0.1.8). Its square-root parsing and index-wrapping rules match the current Symbolica
-API. The browser uses a wheel built from the same source revision.
+The checkout and notebook pin the released
+#link("https://pypi.org/project/ufo-model-loader/1.0.1/")[`ufo-model-loader==1.0.1`].
+Native and browser execution use the same release; the browser installs its pure Python wheel.
 
 == What to explore
 
-Inspect the normalization counts, numerical parameter card, and tree-diagram generation report. Native execution needs Python 3.11 or newer and `ufo-model-loader`; the browser notebook installs the matching dependency.
+Inspect the normalization counts, numerical parameter card, and tree-diagram generation report. Native execution needs Python 3.11 or newer and `ufo-model-loader==1.0.1`; the browser notebook installs the matching dependency.
 
 == Run locally
 
