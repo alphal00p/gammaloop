@@ -1201,6 +1201,16 @@ impl FeynmanDiagram {
         self.with_numerator_fragments(vertices, edges)
     }
 
+    /// Replace the global numerator multiplier in the finalized index frame.
+    ///
+    /// Local numerator fragments, their aggregate, topology and routing remain
+    /// unchanged. This replaces the previous multiplier without multiplying it
+    /// into the local fragments or re-inferring its logical ports and proofs.
+    pub fn with_numerator_prefactor(mut self, prefactor: SymbolicTensor<PartialStructure>) -> Self {
+        self.numerator_prefactor = prefactor;
+        self
+    }
+
     /// Return this diagram with a replacement external-state projector.
     ///
     /// The projector is numerator payload and therefore does not alter the
@@ -4162,6 +4172,102 @@ mod tests {
         ));
         updated.validate().unwrap();
         original.validate().unwrap();
+    }
+
+    #[test]
+    fn numerator_prefactor_replacement_preserves_native_diagram() {
+        let original = one_loop()
+            .with_numerator(SymbolicTensor::infer(Atom::num(7)).unwrap())
+            .unwrap()
+            .with_projector(SymbolicTensor::infer(Atom::num(11)).unwrap())
+            .with_overall_factor(Atom::num(13));
+        original.validate().unwrap();
+        let prefactor = SymbolicTensor::infer(
+            Atom::parse("g*(a+b)", "prefactor_test", ParseSettings::default()).unwrap(),
+        )
+        .unwrap();
+        let replacement = original
+            .clone()
+            .with_numerator_prefactor(SymbolicTensor::infer(Atom::num(3)).unwrap())
+            .with_numerator_prefactor(prefactor.clone());
+        replacement.validate().unwrap();
+        assert!(replacement.numerator_prefactor().same_value(&prefactor));
+        assert!(
+            replacement
+                .numerator_prefactor()
+                .same_reduction_state(&prefactor)
+        );
+        assert_eq!(original.numerator_prefactor().expression(), &Atom::one());
+        assert!(Arc::ptr_eq(&replacement.model_arc(), &original.model_arc()));
+        assert_eq!(
+            replacement.loop_momentum_basis(),
+            original.loop_momentum_basis()
+        );
+        // Native serialization inventories fragments, aggregate, global weights,
+        // stable IDs and physical cuts. Only the requested field may change.
+        let mut expected = original.serde_view();
+        let (expression, interface) = NumeratorInterface::export(&prefactor);
+        expected.numerator_prefactor = expression.to_canonical_string();
+        expected.numerator_prefactor_interface = interface;
+        assert_eq!(
+            replacement.to_json().unwrap(),
+            serde_json::to_string_pretty(&expected).unwrap()
+        );
+        let restored =
+            FeynmanDiagram::from_json(original.model_arc(), &replacement.to_json().unwrap())
+                .unwrap();
+        assert!(restored.numerator_prefactor().same_value(&prefactor));
+    }
+
+    #[test]
+    fn numerator_prefactor_keeps_zero_and_native_precision() {
+        let original = one_loop();
+        let high = SymbolicTensor::infer(Atom::num(
+            symbolica::domains::float::Float::parse(
+                "0.1000000000000000000000000000000000000001",
+                Some(192),
+            )
+            .unwrap(),
+        ))
+        .unwrap();
+        let replacement = original.clone().with_numerator_prefactor(high.clone());
+        assert!(replacement.numerator_prefactor().same_value(&high));
+        let zero = SymbolicTensor::infer(Atom::zero()).unwrap();
+        let replacement = replacement.with_numerator_prefactor(zero.clone());
+        assert!(replacement.numerator_prefactor().same_value(&zero));
+        assert!(replacement.numerator().same_value(original.numerator()));
+        replacement.validate().unwrap();
+    }
+
+    #[test]
+    fn numerator_prefactor_preserves_ranked_zero_and_logical_ports() {
+        let matrix = NumeratorInterface::admit(
+            symbolica::function!(
+                spenso::tensor_symbol!("feynkit_graph::prefactor_matrix"),
+                Minkowski {}.new_rep(4).to_symbolic([]),
+                spenso::structure::representation::Euclidean {}
+                    .new_rep(2)
+                    .to_symbolic([])
+            ),
+            None,
+        )
+        .unwrap();
+        let zero = matrix.with_checked_expression(Atom::zero()).unwrap();
+        assert_eq!(zero.rank(), 2);
+        let diagram = one_loop().with_numerator_prefactor(zero.clone());
+        assert!(diagram.numerator_prefactor().same_value(&zero));
+        assert!(diagram.numerator_prefactor().same_reduction_state(&zero));
+        for restored in [
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap(),
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+        ] {
+            assert!(restored.numerator_prefactor().same_value(&zero));
+            assert_eq!(
+                restored.numerator_prefactor().structure().logical_slots(),
+                zero.structure().logical_slots()
+            );
+            restored.validate().unwrap();
+        }
     }
 
     #[test]
