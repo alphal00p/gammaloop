@@ -38,6 +38,14 @@ use symbolica::{
     symbol,
 };
 use three_dimensional_reps::CffGenerationContext;
+#[cfg(test)]
+#[path = "projected_assembly_certificate.rs"]
+pub(super) mod projected_assembly_certificate;
+#[cfg(test)]
+use projected_assembly_certificate::{
+    ProjectedAssemblyCertificate, ProjectedAssemblyEmission, ProjectedAssemblySkip,
+    ProjectedAssemblySource, ProjectedLocalAssembly,
+};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FinalIntegrands(Integrands);
 
@@ -96,6 +104,8 @@ impl FinalIntegrands {
 pub(crate) struct FinalIntegrandBuilder<'a> {
     localizer: Localizer<'a>,
     marker: UvMarker,
+    #[cfg(test)]
+    assembly_certificate: Option<&'a std::sync::Mutex<ProjectedAssemblyCertificate>>,
 }
 
 impl<'a> FinalIntegrandBuilder<'a> {
@@ -103,7 +113,18 @@ impl<'a> FinalIntegrandBuilder<'a> {
         Self {
             localizer,
             marker: UvMarker::new(settings),
+            #[cfg(test)]
+            assembly_certificate: None,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_projected_assembly_certificate(
+        mut self,
+        certificate: &'a std::sync::Mutex<ProjectedAssemblyCertificate>,
+    ) -> Self {
+        self.assembly_certificate = Some(certificate);
+        self
     }
 
     #[debug_instrument(
@@ -243,6 +264,22 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // cograph; choose its outer CFF per independent sector here, converting
         // only the selected raw routing proposal into physical surfaces.
         let active_sectors = local_terms.sectors();
+        #[cfg(test)]
+        if let Some(certificate) = self.assembly_certificate {
+            let mut certificate = certificate
+                .lock()
+                .map_err(|_| eyre::eyre!("projected assembly certificate was poisoned"))?;
+            eyre::ensure!(
+                certificate.emissions.is_empty()
+                    && certificate.visited_families.is_empty()
+                    && certificate.local_key_domains.is_empty()
+                    && certificate.integrated_key_domain.is_empty()
+                    && certificate.integrated_is_zero.is_none()
+                    && certificate.skips.is_empty(),
+                "each projected assembly certificate belongs to one actual builder call"
+            );
+            certificate.sector_count = active_sectors.len();
+        }
         if active_sectors.is_empty() {
             return Err(eyre::eyre!(
                 "factorized local term has no active UV sectors"
@@ -275,7 +312,24 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .collect::<Vec<_>>();
         let mut selector_free: Option<Vec<Integrands>> = None;
         for sector in active_sectors {
+            #[cfg(test)]
+            let sector_ordinal = self.assembly_certificate.map_or(0, |_| {
+                active_sectors
+                    .iter()
+                    .position(|candidate| std::ptr::eq(candidate, sector))
+                    .expect("the actual sector belongs to this projected input")
+            });
             if sector.coefficient.iter().all(|(_, atom)| atom.is_zero()) {
+                #[cfg(test)]
+                if let Some(certificate) = self.assembly_certificate {
+                    certificate
+                        .lock()
+                        .map_err(|_| eyre::eyre!("projected assembly certificate was poisoned"))?
+                        .skips
+                        .push(ProjectedAssemblySkip::ZeroSector {
+                            sector: sector_ordinal,
+                        });
+                }
                 // A disabled integrated prefix can deliberately retain a
                 // typed zero sector for later forest replay. Preserve all
                 // allowed cut orders without asking the outer CFF to resolve
@@ -295,6 +349,14 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 ));
             }
             for entry in sector.coefficient.numerators() {
+                #[cfg(test)]
+                if let Some(certificate) = self.assembly_certificate {
+                    certificate
+                        .lock()
+                        .map_err(|_| eyre::eyre!("projected assembly certificate was poisoned"))?
+                        .visited_families
+                        .push((sector_ordinal, Arc::clone(entry)));
+                }
                 let weight_scope = DirectResidueBranches::numerator_scope().1;
                 let mut weights = BTreeMap::<Atom, Atom>::new();
                 let carrier =
@@ -332,6 +394,19 @@ impl<'a> FinalIntegrandBuilder<'a> {
                             Ok(sum + carrier)
                         })?;
                 if carrier.is_zero() {
+                    #[cfg(test)]
+                    if let Some(certificate) = self.assembly_certificate {
+                        certificate
+                            .lock()
+                            .map_err(|_| {
+                                eyre::eyre!("projected assembly certificate was poisoned")
+                            })?
+                            .skips
+                            .push(ProjectedAssemblySkip::ZeroCarrier {
+                                sector: sector_ordinal,
+                                child: entry.lhs.clone(),
+                            });
+                    }
                     continue;
                 }
                 // Plan one product while retaining its two ordinary factors.
@@ -356,12 +431,37 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 // when the child coefficient is nonzero. Its contribution
                 // keeps the allowed cut zeros without inventing a residue map.
                 if localized.iter_orientations().next().is_none() {
+                    #[cfg(test)]
+                    if let Some(certificate) = self.assembly_certificate {
+                        certificate
+                            .lock()
+                            .map_err(|_| {
+                                eyre::eyre!("projected assembly certificate was poisoned")
+                            })?
+                            .skips
+                            .push(ProjectedAssemblySkip::EmptyOuter {
+                                sector: sector_ordinal,
+                                child: entry.lhs.clone(),
+                            });
+                    }
                     selector_free.get_or_insert_with(Vec::new);
                     continue;
                 }
                 let localized = DirectResidueBranches::from_transient(
                     &localized.map(|atom| atom * &fourddenoms),
                 )?;
+                #[cfg(test)]
+                if let Some(certificate) = self.assembly_certificate {
+                    certificate
+                        .lock()
+                        .map_err(|_| eyre::eyre!("projected assembly certificate was poisoned"))?
+                        .local_key_domains
+                        .push((
+                            sector_ordinal,
+                            entry.lhs.clone(),
+                            localized.iter_keys().map(|(key, _)| key.clone()).collect(),
+                        ));
+                }
                 let scope = DirectResidueBranches::numerator_scope();
                 let (rhs, outer_parameters, rows) = localized.prepare_numerator(
                     localizer.orientation,
@@ -402,6 +502,8 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     localized.iter_keys().zip(rows)
                 {
                     eyre::ensure!(*key == row_key, "prepared outer residue order changed");
+                    #[cfg(test)]
+                    let mut prepared_calls = self.assembly_certificate.map(|_| BTreeMap::new());
                     let replacements = weights
                         .iter()
                         .map(|(call, weight)| {
@@ -418,6 +520,10 @@ impl<'a> FinalIntegrandBuilder<'a> {
                                     Replacement::new(parameter.to_pattern(), value)
                                 }),
                             );
+                            #[cfg(test)]
+                            if let Some(calls) = &mut prepared_calls {
+                                calls.insert(weight.clone(), call.clone());
+                            }
                             Replacement::new(weight.to_pattern(), call)
                         })
                         .collect::<Vec<_>>();
@@ -439,6 +545,37 @@ impl<'a> FinalIntegrandBuilder<'a> {
                                 .cloned()
                                 .chain([Arc::clone(&prepared)]),
                         )?;
+                    #[cfg(test)]
+                    if let Some(certificate) = self.assembly_certificate {
+                        certificate
+                            .lock()
+                            .map_err(|_| {
+                                eyre::eyre!("projected assembly certificate was poisoned")
+                            })?
+                            .emissions
+                            .push(ProjectedAssemblyEmission {
+                                source: ProjectedAssemblySource::Local(Box::new(
+                                    ProjectedLocalAssembly {
+                                        sector: sector_ordinal,
+                                        child: Arc::clone(entry),
+                                        prepared: Arc::clone(&prepared),
+                                        routed_numerator: numerator.clone(),
+                                        routed_carrier: carrier.clone(),
+                                        call_weights: weights.clone(),
+                                        prepared_calls: prepared_calls.expect(
+                                            "an enabled certificate retains actual prepared calls",
+                                        ),
+                                        outer_arguments,
+                                        frozen_factor: sector.frozen_factor.clone(),
+                                        outer: integrands.clone(),
+                                        mapped_carrier,
+                                    },
+                                )),
+                                key: key.clone(),
+                                tree_factor: fourddenoms.clone(),
+                                mapped: mapped.clone(),
+                            });
+                    }
                     selector_free.get_or_insert_with(Vec::new).push(mapped);
                 }
             }
@@ -447,10 +584,20 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // The integrated addback is shared with the direct route. Its localizer
         // hosts the independent cograph sum in both routes, retaining every
         // source map even when no compatible physical-prefix host survives.
-        let localized_integrated = self
-            .localizer
-            .localize(&integrated.physical_finite_counterterm()?, graph, current)?
-            .combine()?;
+        let physical_finite = integrated.physical_finite_counterterm()?;
+        #[cfg(test)]
+        if let Some(certificate) = self.assembly_certificate {
+            certificate
+                .lock()
+                .map_err(|_| eyre::eyre!("projected assembly certificate was poisoned"))?
+                .integrated_is_zero = Some(physical_finite.is_zero());
+        }
+        let localized_integrated = self.localizer.localize(&physical_finite, graph, current)?;
+        #[cfg(test)]
+        let frozen_integrands = self
+            .assembly_certificate
+            .map(|_| localized_integrated.frozen_integrands.clone());
+        let localized_integrated = localized_integrated.combine()?;
         // An empty integrated zero contributes no source map. The typed local
         // zero above already retains the allowed cut shape; do not invent an
         // energy map merely to pass it through the nonempty branch owner.
@@ -464,14 +611,53 @@ impl<'a> FinalIntegrandBuilder<'a> {
                         DirectResidueBranches::numerator_scope(),
                     )?
                     .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
+            #[cfg(test)]
+            if let Some(certificate) = self.assembly_certificate {
+                certificate
+                    .lock()
+                    .map_err(|_| eyre::eyre!("projected assembly certificate was poisoned"))?
+                    .integrated_key_domain = localized_integrated
+                    .iter_keys()
+                    .map(|(key, _)| key.clone())
+                    .collect();
+            }
             // Both legitimate projected maps have now consumed every still-unmapped
             // numerator factor. Production hosts are mapping metadata only in this
             // lane: sum them explicitly without ever materializing a selector or
             // traversing another numerator map.
-            for (_, integrands) in localized_integrated.iter_keys() {
+            for (_key, integrands) in localized_integrated.iter_keys() {
+                #[cfg(test)]
+                if let Some(certificate) = self.assembly_certificate {
+                    certificate
+                        .lock()
+                        .map_err(|_| eyre::eyre!("projected assembly certificate was poisoned"))?
+                        .emissions
+                        .push(ProjectedAssemblyEmission {
+                            source: ProjectedAssemblySource::Integrated {
+                                frozen_integrands: frozen_integrands
+                                    .as_ref()
+                                    .expect(
+                                        "an enabled certificate retains its actual frozen kernel",
+                                    )
+                                    .clone(),
+                            },
+                            key: _key.clone(),
+                            tree_factor: fourddenoms.clone(),
+                            mapped: integrands.clone(),
+                        });
+                }
                 selector_free
                     .get_or_insert_with(Vec::new)
                     .push(integrands.clone());
+            }
+        } else {
+            #[cfg(test)]
+            if let Some(certificate) = self.assembly_certificate {
+                certificate
+                    .lock()
+                    .map_err(|_| eyre::eyre!("projected assembly certificate was poisoned"))?
+                    .skips
+                    .push(ProjectedAssemblySkip::EmptyIntegrated);
             }
         }
         let selector_free = selector_free.ok_or_else(|| {
