@@ -1,0 +1,234 @@
+# Figure 15 tensor projections at T=1, Nc=3, e=g=1, Qd=-1/3.
+# See comparison.typ for normalization, rest treatment, and generation commands.
+commands = []
+
+[cli_settings.state]
+folder = "/tmp/gammaloop-qcd-figure15-state"
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[cli_settings.global.generation]
+explicit_orientation_sum_only = true
+vector_polarization_sum_gauge = "Feynman"
+
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+vacuum_subtraction = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+compile = false
+store_atom = true
+iterative_orientation_optimization = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = true
+generate_integrated = true
+softct = false
+final_integrand = "ThreeD"
+local_uv_cts_from_expanded_4d_integrands = false
+inner_products = true
+
+[cli_settings.global.generation.uv.renormalization_prescription]
+log_divergent = "MUV"
+massive_power_divergent = "MUV"
+massless_power_divergent = "MUV"
+
+[cli_settings.global.generation.uv.vakint]
+normalization = "MSbar"
+additional_normalization = "1"
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[default_runtime_settings.general]
+inverse_temperature = 1.0
+m_uv = 4.0
+mu_r = 4.0
+renormalization_localization_scale = 4.0
+integral_unit = "none"
+evaluator_method = "SummedFunctionMap"
+
+[default_runtime_settings.kinematics]
+e_cm = 3.872983346207417
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[4.0, 0.0, 0.0, 1.0]]
+helicities = ["summed"]
+
+[default_runtime_settings.sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
+sampling_channel_weight = "ose"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.h_function]
+function = "poly_exponential"
+sigma = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.integrator]
+n_start = 10000
+n_increase = 0
+n_max = 1000000
+seed = 191007552
+integrated_phase = "real"
+target_relative_accuracy = 0.005
+
+[[command_blocks]]
+name = "model"
+commands = [
+  "import model sm-default.json",
+  "set model aEWM1=12.566370614359172 aS=0.07957747154594767",
+]
+
+[[command_blocks]]
+name = "LO_T"
+commands = [
+  "generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==0 QED^2==2 [{{1}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p vector_T -i LO --global-prefactor-num 1 --global-prefactor-projector '1/2*(-spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(5)))+spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(0)))*spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(5)))+gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(0)))*gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(5)))/(gammalooprs::Q3(0,spenso::mink(4,100))*gammalooprs::Q3(0,spenso::mink(4,100))))' --only-diagrams",
+  "generate existing -p vector_T -i LO",
+]
+
+[[command_blocks]]
+name = "LO_L"
+commands = [
+  "generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==0 QED^2==2 [{{1}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p vector_L -i LO --global-prefactor-num 1 --global-prefactor-projector '-spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(0)))*spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(5)))-gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(0)))*gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(5)))/(gammalooprs::Q3(0,spenso::mink(4,100))*gammalooprs::Q3(0,spenso::mink(4,100)))' --only-diagrams",
+  "generate existing -p vector_L -i LO",
+]
+
+[[command_blocks]]
+name = "LO_00"
+commands = [
+  "generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==0 QED^2==2 [{{1}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p vector_00 -i LO --global-prefactor-num 1 --global-prefactor-projector 'spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(0)))*spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(5)))' --only-diagrams",
+  "generate existing -p vector_00 -i LO",
+]
+
+[[command_blocks]]
+name = "LO_V"
+commands = [
+  "generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==0 QED^2==2 [{{1}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p vector_V -i LO --global-prefactor-num 1 --global-prefactor-projector '-spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(5)))' --only-diagrams",
+  "generate existing -p vector_V -i LO",
+]
+
+[[command_blocks]]
+name = "NLO_T"
+commands = [
+  "generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==2 QED^2==2 [{{2}} QCD=1] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p vector_T_nlo -i NLO --global-prefactor-num 1 --global-prefactor-projector '1/2*(-spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(11)))+spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(0)))*spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(11)))+gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(0)))*gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(11)))/(gammalooprs::Q3(0,spenso::mink(4,100))*gammalooprs::Q3(0,spenso::mink(4,100))))' --only-diagrams",
+  "generate existing -p vector_T_nlo -i NLO",
+]
+
+[[command_blocks]]
+name = "NLO_L"
+commands = [
+  "generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==2 QED^2==2 [{{2}} QCD=1] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p vector_L_nlo -i NLO --global-prefactor-num 1 --global-prefactor-projector '-spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(0)))*spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(11)))-gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(0)))*gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(11)))/(gammalooprs::Q3(0,spenso::mink(4,100))*gammalooprs::Q3(0,spenso::mink(4,100)))' --only-diagrams",
+  "generate existing -p vector_L_nlo -i NLO",
+]
+
+[[command_blocks]]
+name = "NLO_00"
+commands = [
+  "generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==2 QED^2==2 [{{2}} QCD=1] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p vector_00_nlo -i NLO --global-prefactor-num 1 --global-prefactor-projector 'spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(0)))*spenso::δ(spenso::cind(0),spenso::mink(4,gammalooprs::hedge(11)))' --only-diagrams",
+  "generate existing -p vector_00_nlo -i NLO",
+]
+
+[[command_blocks]]
+name = "NLO_V"
+commands = [
+  "generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==2 QED^2==2 [{{2}} QCD=1] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p vector_V_nlo -i NLO --global-prefactor-num 1 --global-prefactor-projector '-spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(11)))' --only-diagrams",
+  "generate existing -p vector_V_nlo -i NLO",
+]
+
+[[command_blocks]]
+name = "save"
+commands = [
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "export"
+commands = [
+  "save dot $(output:/tmp/gammaloop-qcd-figure15)-dot --include-autogenerated-fields true",
+]
+
+[[command_blocks]]
+name = "point"
+commands = [
+  "set process -p $(process:vector_T_nlo) -i $(order:NLO) kv kinematics.externals.data.momenta=[[$(energy:4.0),0.0,0.0,$(momentum:1.0)]] kinematics.e_cm=$(e_cm:3.872983346207417)",
+]
+
+[[command_blocks]]
+name = "validate_anchor"
+commands = [
+  "set process -p vector_T -i LO kv kinematics.externals.data.momenta=[[4,0.0,0.0,1]] kinematics.e_cm=3.872983346207417 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "set process -p vector_L -i LO kv kinematics.externals.data.momenta=[[4,0.0,0.0,1]] kinematics.e_cm=3.872983346207417 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "set process -p vector_00 -i LO kv kinematics.externals.data.momenta=[[4,0.0,0.0,1]] kinematics.e_cm=3.872983346207417 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "set process -p vector_V -i LO kv kinematics.externals.data.momenta=[[4,0.0,0.0,1]] kinematics.e_cm=3.872983346207417 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "integrate -p vector_T -i LO -p vector_L -i LO -p vector_00 -i LO -p vector_V -i LO --n-cores $(cores:8) --workspace-path $(output:/tmp/gammaloop-qcd-figure15)-lo-anchor --restart --renderer tabled --no-stream-iterations --no-stream-updates",
+  "inspect -p vector_T -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-anchor-T.json",
+  "inspect -p vector_L -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-anchor-L.json",
+  "inspect -p vector_00 -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-anchor-00.json",
+  "inspect -p vector_V -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-anchor-V.json",
+]
+
+[[command_blocks]]
+name = "validate_timelike"
+commands = [
+  "set process -p vector_T -i LO kv kinematics.externals.data.momenta=[[1,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "set process -p vector_L -i LO kv kinematics.externals.data.momenta=[[1,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "set process -p vector_00 -i LO kv kinematics.externals.data.momenta=[[1,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "set process -p vector_V -i LO kv kinematics.externals.data.momenta=[[1,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "integrate -p vector_T -i LO -p vector_L -i LO -p vector_00 -i LO -p vector_V -i LO --n-cores $(cores:8) --workspace-path $(output:/tmp/gammaloop-qcd-figure15)-lo-timelike --restart --renderer tabled --no-stream-iterations --no-stream-updates",
+  "inspect -p vector_T -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-timelike-T.json",
+  "inspect -p vector_L -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-timelike-L.json",
+  "inspect -p vector_00 -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-timelike-00.json",
+  "inspect -p vector_V -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-timelike-V.json",
+]
+
+[[command_blocks]]
+name = "validate_spacelike"
+commands = [
+  "set process -p vector_T -i LO kv kinematics.externals.data.momenta=[[0.5,0.0,0.0,1]] kinematics.e_cm=0.8660254037844386 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "set process -p vector_L -i LO kv kinematics.externals.data.momenta=[[0.5,0.0,0.0,1]] kinematics.e_cm=0.8660254037844386 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "set process -p vector_00 -i LO kv kinematics.externals.data.momenta=[[0.5,0.0,0.0,1]] kinematics.e_cm=0.8660254037844386 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "set process -p vector_V -i LO kv kinematics.externals.data.momenta=[[0.5,0.0,0.0,1]] kinematics.e_cm=0.8660254037844386 sampling.sampling_multichanneling=false integrator.n_max=20000 integrator.n_start=10000 integrator.target_relative_accuracy=0.0",
+  "integrate -p vector_T -i LO -p vector_L -i LO -p vector_00 -i LO -p vector_V -i LO --n-cores $(cores:8) --workspace-path $(output:/tmp/gammaloop-qcd-figure15)-lo-spacelike --restart --renderer tabled --no-stream-iterations --no-stream-updates",
+  "inspect -p vector_T -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-spacelike-T.json",
+  "inspect -p vector_L -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-spacelike-L.json",
+  "inspect -p vector_00 -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-spacelike-00.json",
+  "inspect -p vector_V -i LO -m -x 0.6 0.0 0.8 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-spacelike-V.json",
+]
+
+[[command_blocks]]
+name = "inspect_nlo"
+commands = [
+  "inspect -p vector_T_nlo -i NLO -m -x 0.17 -0.31 0.43 -0.29 0.53 0.71 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-nlo-T.json",
+  "inspect -p vector_L_nlo -i NLO -m -x 0.17 -0.31 0.43 -0.29 0.53 0.71 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-nlo-L.json",
+  "inspect -p vector_00_nlo -i NLO -m -x 0.17 -0.31 0.43 -0.29 0.53 0.71 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-nlo-00.json",
+  "inspect -p vector_V_nlo -i NLO -m -x 0.17 -0.31 0.43 -0.29 0.53 0.71 --json-output $(output:/tmp/gammaloop-qcd-figure15)-point-nlo-V.json",
+]
+
+[[command_blocks]]
+name = "pilot"
+commands = [
+  "set process -p vector_T_nlo -i NLO kv integrator.n_start=$(batch:10000) integrator.n_increase=0 integrator.n_max=$(samples:10000) integrator.seed=$(seed:191007552) integrator.target_relative_accuracy=0.005",
+  "set process -p vector_L_nlo -i NLO kv integrator.n_start=$(batch:10000) integrator.n_increase=0 integrator.n_max=$(samples:10000) integrator.seed=$(seed:191007552) integrator.target_relative_accuracy=0.005",
+  "set process -p vector_V_nlo -i NLO kv integrator.n_start=$(batch:10000) integrator.n_increase=0 integrator.n_max=$(samples:10000) integrator.seed=$(seed:191007552) integrator.target_relative_accuracy=0.005",
+  "integrate -p vector_T_nlo -i NLO -p vector_L_nlo -i NLO -p vector_V_nlo -i NLO --n-cores $(cores:8) --workspace-path $(output:/tmp/gammaloop-qcd-figure15)-pilot --restart --renderer tabled --no-stream-iterations --no-stream-updates --write-results-for-each-iteration",
+]
