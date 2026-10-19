@@ -174,7 +174,7 @@ Under `shadowing`, selected types also decode through Symbolica's state map. The
 encodings, not a versioned checkpoint protocol: Spenso provides no state directory, database,
 schema migration, or cross-version compatibility promise. The optional `portable-payload`
 module carries representation and math-display declarations beside native Atom bytes through
-`symbolica-typst-atom-payload`; Spenso-aware consumers validate and register these before Atom import.
+`symbolica_typst_plugin::payload`; Spenso-aware consumers validate and register these before Atom import.
 The caller still owns byte storage, format versioning, Symbolica-state availability, and
 library-key reconstruction.
 

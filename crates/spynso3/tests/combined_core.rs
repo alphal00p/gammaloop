@@ -19,7 +19,9 @@ use symbolica::{
     atom::{Atom, FunctionBuilder, NamespacedSymbol, SymbolBuilder},
     parse,
 };
-use symbolica_typst_atom_payload::{encode_atom_from_set, parse_payload};
+use symbolica_typst_plugin::payload::{
+    AttachmentSet, PayloadError, encode_atom_from_set, parse_payload,
+};
 
 const SPENSO_WRAPPER: &str = r#"
 from ..spenso_native import *
@@ -278,4 +280,23 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
     let imported = parsed.import_atom().unwrap();
     assert_eq!(imported, atom);
     assert_eq!(attachments_for_atom(&imported).unwrap(), attachments);
+}
+
+#[test]
+fn native_payload_rejects_a_different_symbolica_export_version() {
+    let mut payload = encode_atom_from_set(&Atom::num(1), &AttachmentSet::new()).unwrap();
+    let native = parse_payload(&payload).unwrap().atom_bytes().to_vec();
+    let offset = payload
+        .windows(native.len())
+        .position(|bytes| bytes == native)
+        .unwrap();
+    // The native header is a four-byte magic followed by a little-endian u16.
+    // Alter its version without changing any envelope bounds or attachments.
+    payload[offset + 4] ^= 1;
+    assert!(matches!(
+        parse_payload(&payload),
+        Err(PayloadError::InvalidEnvelope(
+            "Atom export uses an unsupported Symbolica format version"
+        ))
+    ));
 }

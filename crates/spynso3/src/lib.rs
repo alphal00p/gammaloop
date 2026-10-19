@@ -758,7 +758,7 @@ impl Spensor {
     }
 
     fn _repr_latex_(&self) -> Option<String> {
-        display::format_concrete_tensor_output(self, false).latex
+        Some(display::concrete_tensor_to_latex(self, false))
     }
 
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {

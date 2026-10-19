@@ -704,9 +704,8 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afa7211a7cfdba21893f634868e19459e5d1882e5957f98d7c084875a6e70ab6"
+version = "3.0.1"
+source = "git+https://github.com/ValentinHirschi/symbolica?rev=b6cca776f9dce9128fcf10a724228c9445d34070#b6cca776f9dce9128fcf10a724228c9445d34070"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -1067,9 +1066,8 @@ dependencies = [
 
 [[package]]
 name = "numerica"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd28aae6e022a7b5846a8ae40b2d41104f8d8cba38adbb02c0f7933f3ed7bb02"
+version = "3.0.1"
+source = "git+https://github.com/ValentinHirschi/symbolica?rev=b6cca776f9dce9128fcf10a724228c9445d34070#b6cca776f9dce9128fcf10a724228c9445d34070"
 dependencies = [
  "ahash",
  "astro-float",
@@ -1609,7 +1607,7 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
  "thiserror",
@@ -1633,9 +1631,8 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "symbolica"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c060dc0a9613c88aadee7095109bf350e549067c9ecf7ea217064cdf3d439721"
+version = "3.0.1"
+source = "git+https://github.com/ValentinHirschi/symbolica?rev=b6cca776f9dce9128fcf10a724228c9445d34070#b6cca776f9dce9128fcf10a724228c9445d34070"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -1667,10 +1664,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "symbolica-typst-atom-payload"
+name = "symbolica-typst-plugin"
 version = "0.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=18e0491628f9eac5c788659cabfcdb7575f6986d#18e0491628f9eac5c788659cabfcdb7575f6986d"
+source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=57b7455b37c30f4f87353c0073e49f5225e937ab#57b7455b37c30f4f87353c0073e49f5225e937ab"
 dependencies = [
+ "blake3",
  "ciborium",
  "symbolica",
 ]
@@ -1881,7 +1879,7 @@ dependencies = [
  "idenso",
  "spenso",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-typst-plugin",
  "wasm-minimal-protocol",
 ]
 

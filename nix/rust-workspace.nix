@@ -77,7 +77,7 @@
       repository = lib.splitString "/" (lib.removePrefix github (builtins.head (lib.splitString "?" (builtins.head (lib.splitString "#" source)))));
     in
       if lib.hasPrefix github source && lib.any (package: builtins.elem package.name [
-        "symbolica-typst-atom-payload" "symbolica" "numerica" "graphica"
+        "symbolica-typst-plugin" "symbolica" "numerica" "graphica"
         "rustred" "rustred-app" "rustred-order"
       ]) packages
       then

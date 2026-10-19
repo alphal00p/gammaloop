@@ -13,13 +13,13 @@ use idenso::{
     IndexTooling,
     color::{CS, ColorSimplifier, ColorSimplifySettings},
     dirac::{AGS, PS},
-    representations::Bispinor,
+    rep_symbols::RS,
+    representations::{Bispinor, ColorAdjoint, ColorFundamental},
 };
 use spenso::{
     network::{
         MinResultRank, Network, Sequential,
         library::{
-            LibraryTensor,
             function_lib::{INBUILTS, Panic},
             symbolic::{ExplicitKey, TensorLibrary},
         },
@@ -27,7 +27,6 @@ use spenso::{
         store::NetworkStore,
     },
     structure::{
-        PermutedStructure,
         representation::{LibraryRep, Minkowski, RepName},
         slot::{AbsInd, DummyAind, ParseableAind, SlotError},
     },
@@ -56,6 +55,8 @@ use crate::{DiagramGroup, GraphGroupingOptions, GroupMember, NumeratorGrouping};
 pub enum GroupingError {
     #[error(transparent)]
     Model(#[from] ModelError),
+    #[error("failed to canonicalize numerator indices for diagram '{diagram}': {message}")]
+    Canonicalization { diagram: String, message: String },
     #[error("failed to construct a topology grouping key: {0}")]
     TopologyConstruction(String),
     #[error("source diagram index {0} does not fit in a symbolic integer")]
@@ -359,12 +360,10 @@ pub(crate) fn group_diagrams(
         // raw product of color tensors can encounter the same concrete base
         // slot more than once, while the projector closes precisely those
         // external slots.
-        let complete = model
-            .expand_couplings(
-                &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
-            )
-            .to_parametric_color()
-            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());
+        let complete = parametric_grouping_color(model.expand_couplings(
+            &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
+        ))
+        .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());
         let zero_check = complete
             .expand_color()
             .into_iter()
@@ -394,7 +393,12 @@ pub(crate) fn group_diagrams(
             } else {
                 sample_source.clone()
             };
-            exact_source.canonize(GroupingIndex::Dummy)
+            exact_source
+                .canonize(GroupingIndex::Dummy)
+                .map_err(|error| GroupingError::Canonicalization {
+                    diagram: diagram.name().to_owned(),
+                    message: error.to_string(),
+                })?
         } else {
             Atom::one()
         };
@@ -980,7 +984,9 @@ fn evaluate_tensor_sample(
                 .result_scalar()
                 .map_err(|error| tensor_evaluation_error(diagram, sample, error))?
                 .into();
-            let color = color.canonize(GroupingIndex::Dummy);
+            let color = color
+                .canonize(GroupingIndex::Dummy)
+                .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
             Ok(sum + (color * scalar).replace_multiple(&color_replacements))
         })
         .map(|evaluated| evaluated.expand())
@@ -1067,43 +1073,65 @@ fn tensor_sample_library(
     Ok(library)
 }
 
+// Preserve the generator's former parametric-color boundary explicitly.
+// Only dimensions change; endpoint and dummy-index identities stay intact.
+fn parametric_grouping_color(expression: Atom) -> Atom {
+    let nc = Atom::var(CS.nc);
+    expression
+        .replace(ColorAdjoint {}.to_symbolic([RS.d_, RS.a_]))
+        .with(
+            ColorAdjoint {}
+                .to_symbolic([nc.clone().pow(Atom::num(2)) - Atom::one(), Atom::var(RS.a_)]),
+        )
+        .replace(ColorFundamental {}.to_symbolic([RS.d_, RS.a_]))
+        .with(ColorFundamental {}.to_symbolic([nc, Atom::var(RS.a_)]))
+}
+
 fn insert_dirac_tensors(library: &mut GroupingTensorLibrary) {
     let gamma = gamma_data_weyl(
         AGS.gamma_strct::<GroupingIndex>(4),
         Atom::num(1),
         Atom::num(0),
     )
-    .map_data(|value| value.re + Atom::i() * value.im);
-    library.insert_explicit(PermutedStructure::identity(ParamTensor::composite(
-        DataTensor::Sparse(gamma),
-    )));
+    .map_canonical(|tensor| {
+        ParamTensor::composite(DataTensor::Sparse(
+            tensor.map_data(|value| value.re + Atom::i() * value.im),
+        ))
+    });
+    library.insert_explicit(gamma);
     let gamma5 = gamma5_weyl_data(
         AGS.gamma5_strct::<GroupingIndex>(4),
         Atom::num(1),
         Atom::num(0),
     )
-    .map_data(|value| value.re + Atom::i() * value.im);
-    library.insert_explicit(PermutedStructure::identity(ParamTensor::composite(
-        DataTensor::Sparse(gamma5),
-    )));
+    .map_canonical(|tensor| {
+        ParamTensor::composite(DataTensor::Sparse(
+            tensor.map_data(|value| value.re + Atom::i() * value.im),
+        ))
+    });
+    library.insert_explicit(gamma5);
     let projm = proj_m_data_weyl(
         AGS.projm_strct::<GroupingIndex>(4),
         Atom::num(1),
         Atom::num(0),
     )
-    .map_data(|value| value.re + Atom::i() * value.im);
-    library.insert_explicit(PermutedStructure::identity(ParamTensor::composite(
-        DataTensor::Sparse(projm),
-    )));
+    .map_canonical(|tensor| {
+        ParamTensor::composite(DataTensor::Sparse(
+            tensor.map_data(|value| value.re + Atom::i() * value.im),
+        ))
+    });
+    library.insert_explicit(projm);
     let projp = proj_p_data_weyl(
         AGS.projp_strct::<GroupingIndex>(4),
         Atom::num(1),
         Atom::num(0),
     )
-    .map_data(|value| value.re + Atom::i() * value.im);
-    library.insert_explicit(PermutedStructure::identity(ParamTensor::composite(
-        DataTensor::Sparse(projp),
-    )));
+    .map_canonical(|tensor| {
+        ParamTensor::composite(DataTensor::Sparse(
+            tensor.map_data(|value| value.re + Atom::i() * value.im),
+        ))
+    });
+    library.insert_explicit(projp);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1131,14 +1159,13 @@ fn insert_sample_vector(
             }
         })
         .collect();
-    let tensor = ParamTensor::from_dense(key.structure, data).map_err(|error| {
-        GroupingError::TensorEvaluation {
+    library
+        .insert_explicit_dense(key, data)
+        .map_err(|error| GroupingError::TensorEvaluation {
             diagram: "sample library".to_owned(),
             sample,
             message: error.to_string(),
-        }
-    })?;
-    library.insert_explicit(PermutedStructure::identity(tensor));
+        })?;
     Ok(())
 }
 
@@ -1167,14 +1194,13 @@ fn insert_sample_wavefunction(
             )
         })
         .collect();
-    let tensor = ParamTensor::from_dense(key.structure, data).map_err(|error| {
-        GroupingError::TensorEvaluation {
+    library
+        .insert_explicit_dense(key, data)
+        .map_err(|error| GroupingError::TensorEvaluation {
             diagram: "sample library".to_owned(),
             sample,
             message: error.to_string(),
-        }
-    })?;
-    library.insert_explicit(PermutedStructure::identity(tensor));
+        })?;
     Ok(())
 }
 
@@ -1276,7 +1302,16 @@ fn expressions_equal(left: &Atom, right: &Atom) -> bool {
 }
 
 fn expression_is_scalar(expression: &Atom, scalar_names: &BTreeSet<String>) -> bool {
-    let color_scalars = [CS.na, CS.nc, CS.ca, CS.cf, CS.tr, CS.cas, CS.idx, CS.gram];
+    let color_scalars = [
+        symbol!("spenso::NA"),
+        CS.nc,
+        CS.ca,
+        CS.cf,
+        CS.tr,
+        CS.cas,
+        CS.idx,
+        CS.gram,
+    ];
     expression.get_all_symbols(true).iter().all(|symbol| {
         symbol.is_scalar()
             || color_scalars.contains(symbol)
@@ -1946,6 +1981,18 @@ mod tests {
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
         assert_eq!(grouped.groups[0].members[1].ratio, test_atom("2"));
+    }
+
+    #[test]
+    fn parametric_color_preserves_endpoint_indices() {
+        let source = symbol!("FeynKit::SourceIndex").call((7, 1));
+        let sink = symbol!("FeynKit::SinkIndex").call((9, 2));
+        let input = ColorFundamental {}.to_symbolic([Atom::num(3), source.clone()])
+            * ColorAdjoint {}.to_symbolic([Atom::num(8), sink.clone()]);
+        let nc = Atom::var(CS.nc);
+        let expected = ColorFundamental {}.to_symbolic([nc.clone(), source])
+            * ColorAdjoint {}.to_symbolic([nc.pow(Atom::num(2)) - Atom::one(), sink]);
+        assert_eq!(parametric_grouping_color(input), expected);
     }
 
     #[test]

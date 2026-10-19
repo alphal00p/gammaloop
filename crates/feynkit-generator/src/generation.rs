@@ -22,7 +22,7 @@ use idenso::{
 };
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
-use linnet::half_edge::{HedgeGraph, NodeIndex};
+use linnet::half_edge::{HedgeGraph, NodeIndex, TadpoleError};
 use rayon::{ThreadPoolBuildError, ThreadPoolBuilder, prelude::*};
 use serde::{Deserialize, Serialize};
 use spenso::{
@@ -54,6 +54,8 @@ pub enum GenerationError {
     Selector(#[from] SelectorError),
     #[error(transparent)]
     Diagram(#[from] DiagramError),
+    #[error("cannot evaluate the sewn tadpole filter: {0}")]
+    SewnTadpoles(#[from] TadpoleError),
     #[error("failed to build generation thread pool: {0}")]
     ThreadPool(#[from] ThreadPoolBuildError),
     #[error("graph automorphism factor cannot be represented by u64: {0}")]
@@ -1364,7 +1366,7 @@ impl Generator {
                 topology.topology_threshold_candidates = inventory.topology_threshold_candidates;
                 if topology.cut_partitions.is_empty()
                     || !self.retain_cut_amplitude_partitions(&mut topology, options)?
-                    || !resolved.passes_sewn_filter(&topology.graph, options)
+                    || !resolved.passes_sewn_filter(&topology.graph, options)?
                 {
                     continue;
                 }
@@ -4350,7 +4352,7 @@ impl ResolvedProcess {
         &self,
         graph: &Graph<ColoredNode, EdgeColor>,
         options: &GenerationOptions,
-    ) -> bool {
+    ) -> Result<bool, GenerationError> {
         let Some(SewnFilterOptions {
             filter_tadpoles: true,
         }) = options
@@ -4361,7 +4363,7 @@ impl ResolvedProcess {
                 _ => None,
             })
         else {
-            return true;
+            return Ok(true);
         };
 
         let mut graph: HedgeGraph<EdgeColor, ColoredNode, ()> = graph.clone().into();
@@ -4374,9 +4376,9 @@ impl ResolvedProcess {
             .collect();
         let externals: Vec<_> = external_nodes.iter().map(|(_, node, _)| *node).collect();
         if externals.is_empty() {
-            return true;
+            return Ok(true);
         }
-        let connected_components_before = graph.tadpoles(&externals).len() + 1;
+        let connected_components_before = graph.tadpoles(&externals)?.len() + 1;
         let by_index: BTreeMap<usize, (NodeIndex, ColoredNode)> = external_nodes
             .into_iter()
             .map(|(index, node, color)| (index, (node, color)))
@@ -4394,7 +4396,7 @@ impl ResolvedProcess {
         // run on the sewn quotient graph, without those historical crowns.
         graph.forget_identification_history();
         let non_bridges = graph.non_bridges();
-        graph.count_connected_components(&non_bridges) == connected_components_before
+        Ok(graph.count_connected_components(&non_bridges) == connected_components_before)
     }
 }
 
@@ -6383,7 +6385,7 @@ mod tests {
 
         let options = GenerationOptions::default()
             .with_graph_filter(GenerationFilter::Sewn(SewnFilterOptions::default()));
-        assert!(process.passes_sewn_filter(&graph, &options));
+        assert!(process.passes_sewn_filter(&graph, &options).unwrap());
 
         let mut factorized = Graph::new();
         let externals: Vec<_> = (0..4)
@@ -6408,15 +6410,46 @@ mod tests {
             factorized.add_edge(external, right, false, photon).unwrap();
         }
         factorized.add_edge(left, right, false, photon).unwrap();
-        assert!(!process.passes_sewn_filter(&factorized, &options));
-        assert!(process.passes_sewn_filter(
-            &factorized,
-            &GenerationOptions::default().with_graph_filter(GenerationFilter::Sewn(
-                SewnFilterOptions {
-                    filter_tadpoles: false,
-                }
+        assert!(!process.passes_sewn_filter(&factorized, &options).unwrap());
+        assert!(
+            process
+                .passes_sewn_filter(
+                    &factorized,
+                    &GenerationOptions::default().with_graph_filter(GenerationFilter::Sewn(
+                        SewnFilterOptions {
+                            filter_tadpoles: false,
+                        }
+                    ))
+                )
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn sewn_filter_reports_external_terminals_without_incident_edges() {
+        let model = fermion_model();
+        let process =
+            ResolvedProcess::new(&model, &Process::cross_section([22_i64], [22_i64])).unwrap();
+        let mut graph = Graph::new();
+        graph.add_node(ColoredNode::External(ExternalNode {
+            index: 0,
+            state: ExternalState::Incoming,
+            particle: particle(&model, 22),
+        }));
+        let enabled = GenerationOptions::default()
+            .with_graph_filter(GenerationFilter::Sewn(SewnFilterOptions::default()));
+        assert!(matches!(
+            process.passes_sewn_filter(&graph, &enabled),
+            Err(GenerationError::SewnTadpoles(
+                TadpoleError::TerminalWithoutIncidentHalfEdge(_)
             ))
         ));
+        let disabled = GenerationOptions::default().with_graph_filter(GenerationFilter::Sewn(
+            SewnFilterOptions {
+                filter_tadpoles: false,
+            },
+        ));
+        assert!(process.passes_sewn_filter(&graph, &disabled).unwrap());
     }
 
     #[test]

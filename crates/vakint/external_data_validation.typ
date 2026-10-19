@@ -36,8 +36,8 @@ Outstanding end-to-end and repository-CI checks are listed separately below.
   #link("https://github.com/alphal00p/rustred/commit/62886f036eef01cba7d4236b6575faf50417e200")[62886f036eef01cba7d4236b6575faf50417e200].
   Saved-cache codecs and authenticated program-binding schemas are unchanged.
 
-Both upstream PRs were open at this snapshot. Symbolica's human CLA remains
-pending. Its fork coverage job lacked the license secret and aborted; the
+Both upstream PRs were open at this snapshot. Symbolica's fork coverage job
+lacked the license secret and aborted; the
 licensed local library run passed 834 tests, with one ignored. This does not
 turn the failed hosted check into a pass. RustRed's hosted NixCI check was pending.
 
@@ -171,10 +171,15 @@ IBP coverage. Cached/uncached 1L–4L parity passed with the final native bindin
 The recorded local all-targets Clippy pass completed with `-D warnings` on the
 Float, alias and loader-bound changes. The repository Nix/upload gate remains
 pending below.
-Offline locked resolution against the actual Nix vendor output matched all
-709 Git dependency/feature nodes, with exactly one Symbolica, Numerica and
-Graphica package at the pinned revision. The lockfile and runtime selection
-were unchanged.
+The initial offline locked-resolution proof matched all 709 Git dependency/
+feature nodes against the Nix vendor output. The later payload-adapter migration
+removed the obsolete separate payload package and reused the already-pinned
+unified plugin; the coordinated Symbolica/Numerica/Graphica revision is unchanged.
+Its 14 display tests and three integration tests passed, including native Atom
+round-trip and rejection of another embedded export version. The standalone
+Tydenso Wasm-target source check and native-feature exclusion check also passed.
+Existing compressed Wasm assets were not regenerated, and no rebuilt-asset
+interoperability result is claimed.
 
 The Cargo package inventory check passed: 309 files, with no removed `artifacts/`
 tree, prepared caches or 4L/5L runtime packs. Building the crate archive with

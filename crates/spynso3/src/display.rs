@@ -28,7 +28,7 @@ use symbolica::{
     domains::SelfRing,
     printer::{AnsiHtmlFormatter, PrintOptions, PrintState},
 };
-use symbolica_typst_atom_payload::{AttachmentSet, encode_atom_render_tree};
+use symbolica_typst_plugin::payload::{AttachmentSet, encode_atom_render_tree};
 use tabled::{
     builder::Builder,
     settings::{Alignment, Style},
@@ -346,14 +346,14 @@ pub(crate) fn format_atom_output_rich(
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PythonFormattedOutput {
-    PythonFormattedOutput {
-        text: format_atom_with_settings(atom, TensorDisplayMode::Plain, settings),
-        html: atom_to_html(py, atom, settings, notation_source).ok(),
-        latex: Some({
+    PythonFormattedOutput::new(
+        format_atom_with_settings(atom, TensorDisplayMode::Plain, settings),
+        atom_to_html(py, atom, settings, notation_source).ok(),
+        Some({
             let body = format_atom_with_settings(atom, TensorDisplayMode::Latex, settings);
             format!("$${body}$$")
         }),
-    }
+    )
 }
 
 pub(crate) fn format_structured_output_rich(
@@ -1440,20 +1440,9 @@ pub(crate) fn concrete_tensor_to_svg(
         .map_err(|error| PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}")))
 }
 
-pub(crate) fn format_concrete_tensor_output(
-    tensor: &Spensor,
-    show_dimensions: bool,
-) -> PythonFormattedOutput {
+pub(crate) fn concrete_tensor_to_latex(tensor: &Spensor, show_dimensions: bool) -> String {
     let settings = resolved_settings(Some(show_dimensions), None);
-    PythonFormattedOutput {
-        text: format_concrete_with_settings(tensor, TensorDisplayMode::Plain, &settings),
-        html: None,
-        latex: Some(format_concrete_with_settings(
-            tensor,
-            TensorDisplayMode::Latex,
-            &settings,
-        )),
-    }
+    format_concrete_with_settings(tensor, TensorDisplayMode::Latex, &settings)
 }
 
 pub(crate) fn format_concrete_tensor_output_rich(
@@ -1462,15 +1451,15 @@ pub(crate) fn format_concrete_tensor_output_rich(
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PythonFormattedOutput {
-    PythonFormattedOutput {
-        text: format_concrete_with_settings(tensor, TensorDisplayMode::Plain, settings),
-        html: concrete_tensor_to_html(py, tensor, settings, notation_source).ok(),
-        latex: Some(format_concrete_with_settings(
+    PythonFormattedOutput::new(
+        format_concrete_with_settings(tensor, TensorDisplayMode::Plain, settings),
+        concrete_tensor_to_html(py, tensor, settings, notation_source).ok(),
+        Some(format_concrete_with_settings(
             tensor,
             TensorDisplayMode::Latex,
             settings,
         )),
-    }
+    )
 }
 
 /// Format a tensor expression using compact Spenso notation.
