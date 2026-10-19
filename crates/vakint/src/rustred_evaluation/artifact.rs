@@ -6,9 +6,9 @@ use sha2::{Digest, Sha256};
 use super::RustRedEvaluationError;
 use super::terminal::{TerminalCatalog, TerminalManifest, TerminalSource};
 
-const K1_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k1.rrbin");
-const K3_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k3.rrbin");
-const K6_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k6.rrbin");
+const K1_BYTES: &[u8] = include_bytes!("../../artifacts/1L/ibps/rules.rrbin");
+const K3_BYTES: &[u8] = include_bytes!("../../artifacts/2L/ibps/rules.rrbin");
+const K6_BYTES: &[u8] = include_bytes!("../../artifacts/3L/ibps/rules.rrbin");
 
 const K1_ALGORITHM_ID: &str = "rustred.generated.one-loop-unit-mass-tadpole.v1";
 const K1_FAMILY_FINGERPRINT: &str = "rustred-integral-family-v2;N37:rustred-one-loop-unit-mass-tadpole-v1;L1;1:k;E0;P1;1:d;Q1,0,1;M;RY1,1;I+1;X1;Y1,1;I+1;X0;D1;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;G0;U1;RY1,0;Y1,1;I+1;X0;";

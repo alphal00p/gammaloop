@@ -90,13 +90,19 @@ cargo build --release --locked -p rustred-app --bin rustred \
   --example normalize_candidate_terminals -j6
 python examples/python/generate_vakint_artifacts.py \
   --loops 1 2 3 4 --workers 6 --output-directory "$TMPDIR/vakint-new" \
-  --catalog-directory /path/to/vakint/data/rustred/four_loop \
-  --reference-directory /path/to/vakint/data/rustred --execute
+  --catalog-directory /path/to/vakint/artifacts/4L/ibps \
+  --execute
 ```
 
 Use a new output directory under an existing workspace parent. Omit `--execute`
 for a plan only. The optional reference must be the matching producer version;
 an older different rule program is expected to fail its strict comparison.
+The producer uses its original flat staging layout. The consolidated consumer
+stores the three sealed programs in `artifacts/1L/ibps/rules.rrbin` through
+`artifacts/3L/ibps/rules.rrbin`; its four-loop candidate programs and sidecars
+are in `artifacts/4L/ibps`. Use a separate original-layout staging directory
+when requesting the producer's optional `--reference-directory` comparison.
+
 The producer never installs artifacts. Publishing requires the separate cold,
 numerical and performance gates described below.
 

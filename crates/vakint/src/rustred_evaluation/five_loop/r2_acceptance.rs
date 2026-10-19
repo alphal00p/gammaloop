@@ -244,9 +244,8 @@ fn evaluate(
 }
 
 fn one_loop(power: i64, result: &RustRedSymbolicEvaluation) -> Result<Atom> {
-    let artifact = ClosedArtifact::decode_durable(include_bytes!(
-        "../../../data/rustred/unit_mass_vacuum_k1.rrbin"
-    ))?;
+    let artifact =
+        ClosedArtifact::decode_durable(include_bytes!("../../../artifacts/1L/ibps/rules.rrbin"))?;
     let label = result.families.iter().find_map(|(label,fingerprint)|
         (fingerprint == artifact.family_fingerprint()).then_some(label))
         .ok_or("factorized result has not been normalized to the independently shipped one-loop family")?;

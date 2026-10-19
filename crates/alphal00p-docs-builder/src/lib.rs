@@ -1760,6 +1760,10 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
+            if source == Path::new("crates/vakint/artifacts/masters_summary.md") {
+                self.check_generated_master_summary(&source)?;
+                continue;
+            }
             if !matches!(
                 source.file_name().and_then(|name| name.to_str()),
                 Some("AGENTS.md" | "README.md")
@@ -1772,6 +1776,53 @@ impl SiteBuilder {
             "Markdown/HTML sources differ from the shrinking legacy inventory; new: {:?}; migrated or removed: {:?}",
             actual.difference(&declared).collect::<Vec<_>>(),
             declared.difference(&actual).collect::<Vec<_>>()
+        );
+        Ok(())
+    }
+
+    // This requested generated data table is an artifact, never an authored prose source.
+    fn check_generated_master_summary(&self, source: &Path) -> Result<()> {
+        let summary = fs::read_to_string(self.root.join(source))?;
+        let lines = summary
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>();
+        ensure!(
+            lines.len() >= 3
+                && lines
+                    .iter()
+                    .all(|line| line.len() > 1 && line.starts_with('|') && line.ends_with('|')),
+            "{} must contain only a generated Markdown table",
+            source.display()
+        );
+        let rows = lines
+            .iter()
+            .map(|line| {
+                line[1..line.len() - 1]
+                    .split('|')
+                    .map(str::trim)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let columns = rows[0].len();
+        ensure!(
+            columns >= 2
+                && rows
+                    .iter()
+                    .all(|row| row.len() == columns && row.iter().all(|cell| !cell.is_empty())),
+            "{} has inconsistent or empty table cells",
+            source.display()
+        );
+        ensure!(
+            rows[0][0] == "Loop"
+                && rows[1].iter().all(|cell| {
+                    let dashes = cell.strip_prefix(':').unwrap_or(cell);
+                    let dashes = dashes.strip_suffix(':').unwrap_or(dashes);
+                    dashes.len() >= 3 && dashes.bytes().all(|byte| byte == b'-')
+                }),
+            "{} requires its master-summary header and Markdown separator",
+            source.display()
         );
         Ok(())
     }
@@ -10375,6 +10426,37 @@ mod tests {
         assert!(builder.check_prose_sources().is_err());
         builder.legacy_prose.source.clear();
         fs::write(temporary.path().join("new-note.typ"), "= New prose").unwrap();
+        assert!(builder.check_prose_sources().is_err());
+    }
+
+    #[test]
+    fn prose_source_gate_allows_only_the_generated_master_table() {
+        let temporary = tempfile::tempdir().unwrap();
+        let directory = temporary.path().join("crates/vakint/artifacts");
+        fs::create_dir_all(&directory).unwrap();
+        let summary = directory.join("masters_summary.md");
+        let table = "| Loop | Masters | Symbolic coefficients / available |\n|---|---:|---:|\n| 1L | 1 | 6 / 6 |\n";
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = temporary.path().to_path_buf();
+        builder.legacy_prose = LegacyProseConfig {
+            schema: LEGACY_PROSE_SCHEMA_VERSION,
+            source: Vec::new(),
+        };
+        fs::write(&summary, table).unwrap();
+        builder.check_prose_sources().unwrap();
+        for invalid in [
+            format!("{table}An authored note.\n"),
+            format!("{table}|\n"),
+            format!("{table}```text\nprose\n```\n"),
+            table.replace("|---|---:|---:|", "|heading|---:|---:|"),
+            table.replace("| 1L | 1 | 6 / 6 |", "| 1L | 1 |"),
+            table.replace("| Loop |", "| Note |"),
+        ] {
+            fs::write(&summary, invalid).unwrap();
+            assert!(builder.check_prose_sources().is_err());
+        }
+        fs::write(&summary, table).unwrap();
+        fs::write(directory.join("other_summary.md"), table).unwrap();
         assert!(builder.check_prose_sources().is_err());
     }
 

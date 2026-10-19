@@ -255,9 +255,8 @@ fn check_independent_tadpoles(
         foundry::artifact::ClosedArtifact,
         reduction::{Reducer, ReductionLimits},
     };
-    let artifact = ClosedArtifact::decode_durable(include_bytes!(
-        "../data/rustred/unit_mass_vacuum_k1.rrbin"
-    ))?;
+    let artifact =
+        ClosedArtifact::decode_durable(include_bytes!("../artifacts/1L/ibps/rules.rrbin"))?;
     let label = result
         .families
         .iter()

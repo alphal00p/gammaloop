@@ -1,0 +1,5 @@
+digraph feynkit {
+  graph [feynkit_name="tadpole", model_fingerprint="5d203858c037b0d68a9835edfb9db5a9b2e3a2a717f8cb7b24c8ba1ed8dcb401", symmetry_factor=1, overall_factor="1", numerator="1", numerator_prefactor="1", projector="1", loop_momentum_edges="0", loop_momentum_basis="{\"tree_edges\":[],\"loop_edges\":[0],\"external_edges\":[],\"dependent_externals\":[],\"edge_signatures\":{\"0\":{\"loops\":[1],\"external\":[]}}}", half_edge_order="[{\"edge\":0,\"endpoint\":\"source\"},{\"edge\":0,\"endpoint\":\"target\"}]", cuts="[]", topology_threshold_candidates="[]"];
+  v0 [id=0, feynkit_name="v0", interaction_id=2, interaction="V_SCALAR2", numerator="1"];
+  v0 -> v0 [id=0, lmb_id=0, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=0, target_slot=1, dir=none, external="null", is_dummy=false, numerator="1"];
+}

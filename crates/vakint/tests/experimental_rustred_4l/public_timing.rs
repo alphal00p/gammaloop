@@ -86,16 +86,16 @@ impl Workload {
         signature.sort_unstable();
         let bytes = match self.parent {
             ParentDescriptor::H => {
-                include_bytes!("../../data/rustred/four_loop/h.candidates.rrbin.gz").as_slice()
+                include_bytes!("../../artifacts/4L/ibps/h.candidates.rrbin.gz").as_slice()
             }
             ParentDescriptor::Fg => {
-                include_bytes!("../../data/rustred/four_loop/fg.candidates.rrbin.gz").as_slice()
+                include_bytes!("../../artifacts/4L/ibps/fg.candidates.rrbin.gz").as_slice()
             }
             ParentDescriptor::Bmw => {
-                include_bytes!("../../data/rustred/four_loop/bmw.candidates.rrbin.gz").as_slice()
+                include_bytes!("../../artifacts/4L/ibps/bmw.candidates.rrbin.gz").as_slice()
             }
             ParentDescriptor::X => {
-                include_bytes!("../../data/rustred/four_loop/x.candidates.rrbin.gz").as_slice()
+                include_bytes!("../../artifacts/4L/ibps/x.candidates.rrbin.gz").as_slice()
             }
         };
         let mut native = Vec::new();

@@ -62,7 +62,7 @@ Its 38 terminals form six sector orbits but five distinct mapped expressions;
 that is not 38 independent masters. In particular, **retain the full five-line
 mapping and its outer minus sign**; it is not simply `miD5`.
 
-The shipped binaries are `data/rustred/unit_mass_vacuum_k{1,3,6}.rrbin`.
+The shipped binaries are `artifacts/{1L,2L,3L}/ibps/rules.rrbin`.
 The integers K=1,3,6 count basis denominators, not loops.
 
 The main value entry points are:
@@ -95,7 +95,7 @@ dependent constant rather than assuming all paths have the same accuracy.
 ## 4. Four loops: evaluate the PR basis, not 1,155 terminals independently
 
 The four installed parents are H, X, BMW and FG. In
-[`data/rustred/four_loop/`](data/rustred/four_loop/):
+[`artifacts/4L/ibps/`](artifacts/4L/ibps/):
 
 - `*.toml` and `*.csv` define the actual denominator/momentum ordering.
 - `*.candidates.rrbin.gz` contain the saved rules and raw terminal sets.

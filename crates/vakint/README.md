@@ -45,7 +45,7 @@ Vakint's existing tensor prepass before scalar evaluation.
 
 The same opt-in backend also has a four-loop candidate-program lane for the
 H, FG, BMW and X parents and their matched contractions. Its
-[bundled programs and offline master catalogs](data/rustred/four_loop/README.md)
+[bundled programs and offline master catalogs](artifacts/4L/ibps/README.md)
 are loaded lazily once; ordinary evaluation never regenerates IBPs or invokes
 FORM. RustRed applies the rules and checks applicability, descent and known
 terminal leaves at each requested integer target. These programs are explicitly
@@ -83,7 +83,7 @@ in fresh processes; dictionary encoding reduces their total from 83,020 to
 30,307 bytes. This is storage deduplication, not a claim of fewer physical masters
 or stronger closure. Vakint only steers the RustRed loader and retains the exact
 raw terminal-set check. No FORM invocation or IBP generation occurs during
-catalog loading. See the [catalog migration details](data/rustred/four_loop/README.md).
+catalog loading. See the [catalog migration details](artifacts/4L/ibps/README.md).
 On RustRed `d51721b6`, the unchanged 83-test selection through three loops and
 all fifteen four-loop references plus sixteen expanded-numerator/pinch pairs
 pass again, with invalid FORM paths in the native lanes. Seven catalog/loader
@@ -103,7 +103,7 @@ In a fresh matched nine-input benchmark, first H/X cubed-line calls decrease
 from 7.18/31.27 s to 6.26/29.45 s. Warm calls remain faster than FMFT on this
 matrix, but initial cubed-parent reductions are still slower than FMFT and the
 smaller terminal set does not imply a proportional speedup. See the
-[complete timings and boundaries](data/rustred/four_loop/README.md#public-scalar-timing-probe).
+[complete timings and boundaries](artifacts/4L/ibps/README.md#public-scalar-timing-probe).
 
 The previous `8ad62b96` pin added four native weighted-normalization sidecars.
 RustRed combines its exact U equivalences with authenticated support-symmetry
@@ -119,7 +119,7 @@ passes all 54 numerical comparisons. First H/X cubed-parent calls change from
 6.231/30.811 s to 5.587/21.411 s; FG's first call and some warm controls regress,
 so this is not a uniform speedup. Both process totals include FMFT as well as
 RustRed, and first cubed-parent calls remain slower than FMFT. See the
-[weighted sidecar contract](data/rustred/four_loop/README.md#weighted-vacuum-terminal-normalization).
+[weighted sidecar contract](artifacts/4L/ibps/README.md#weighted-vacuum-terminal-normalization).
 
 The `7b22f5bd` runtime pin supports the producer-aligned, unrestricted one-
 through four-loop packages, freshly generated from native IBPs rather than

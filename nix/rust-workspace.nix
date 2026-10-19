@@ -86,6 +86,10 @@
     (workspaceRoot + "/crates/spynso3/typst")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
+    (workspaceRoot + "/crates/vakint/artifacts/1L/ibps")
+    (workspaceRoot + "/crates/vakint/artifacts/2L/ibps")
+    (workspaceRoot + "/crates/vakint/artifacts/3L/ibps")
+    (workspaceRoot + "/crates/vakint/artifacts/4L/ibps")
   ];
 
   snapshotSources = lib.fileset.unions [
@@ -425,6 +429,10 @@
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"
+      "crates/vakint/artifacts/1L/ibps"
+      "crates/vakint/artifacts/2L/ibps"
+      "crates/vakint/artifacts/3L/ibps"
+      "crates/vakint/artifacts/4L/ibps"
     ];
   };
 
@@ -445,6 +453,13 @@
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
+    vakint = [
+      "crates/vakint/artifacts/1L/cache"
+      "crates/vakint/artifacts/2L/cache"
+      "crates/vakint/artifacts/3L/cache"
+      "crates/vakint/artifacts/4L/cache"
+      "crates/vakint/artifacts/5L/ibps"
+    ];
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"
       "assets/gammalooplogo-dark.svg"

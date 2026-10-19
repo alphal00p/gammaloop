@@ -8,7 +8,7 @@ use rustred_app::{CandidateBundleLimits, load_generated_candidate_bundle};
 
 fn asset(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("data/rustred")
+        .join("artifacts")
         .join(name)
 }
 
@@ -33,8 +33,8 @@ fn sealed_assets_cold_replay_and_roundtrip_with_current_native_codec() {
         "asset_codec_noise::f(a,b)",
         default_namespace = "asset_codec_noise"
     );
-    for arity in [1, 3, 6] {
-        let bytes = fs::read(asset(&format!("unit_mass_vacuum_k{arity}.rrbin"))).unwrap();
+    for (loop_count, arity) in [(1, 1), (2, 3), (3, 6)] {
+        let bytes = fs::read(asset(&format!("{loop_count}L/ibps/rules.rrbin"))).unwrap();
         let loaded = ClosedArtifact::decode_durable(&bytes).unwrap();
         assert_eq!(loaded.arity(), arity);
         let encoded = loaded.encode_durable().unwrap();
@@ -64,7 +64,7 @@ fn four_loop_assets_replay_normalizers_and_exact_catalog_output_sets() {
         ("fg", 145, 16),
     ] {
         let bytes = compressed(
-            &format!("four_loop/{name}.candidates.rrbin.gz"),
+            &format!("4L/ibps/{name}.candidates.rrbin.gz"),
             512 * 1024 * 1024,
         );
         let (family, mut reducer) = load_generated_candidate_bundle::<10>(
@@ -78,7 +78,7 @@ fn four_loop_assets_replay_normalizers_and_exact_catalog_output_sets() {
         )
         .unwrap();
         let plan = TerminalNormalizationPlan::decode_generated(
-            &fs::read(asset(&format!("four_loop/{name}.rrnorm.bin"))).unwrap(),
+            &fs::read(asset(&format!("4L/ibps/{name}.rrnorm.bin"))).unwrap(),
             &family,
             reducer.terminals(),
             reducer.ordering(),
@@ -90,7 +90,7 @@ fn four_loop_assets_replay_normalizers_and_exact_catalog_output_sets() {
         assert_eq!(plan.raw_terminals().len(), raw_count);
         assert_eq!(plan.canonical_terminals().len(), output_count);
         let catalog = ExactTerminalCatalog::decode_generated(
-            &compressed(&format!("four_loop/{name}.rrcat.bin.gz"), 64 * 1024),
+            &compressed(&format!("4L/ibps/{name}.rrcat.bin.gz"), 64 * 1024),
             family.fingerprint(),
             10,
             Default::default(),

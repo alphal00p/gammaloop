@@ -1,0 +1,197 @@
+{
+  "schema": "vakint.artifacts.ibp-manifest.v1",
+  "source_revision": "e98b51c489ab9a35d01f30aa865ad79c48372624",
+  "relocations": [
+    {
+      "previous_path": "data/rustred/unit_mass_vacuum_k1.rrbin",
+      "path": "1L/ibps/rules.rrbin",
+      "previous_sha256": "f8a740e9707e4560b9c0ffdf7f2adba5220d3e21054c11ac0f0a4aab3031dc88",
+      "sha256": "f8a740e9707e4560b9c0ffdf7f2adba5220d3e21054c11ac0f0a4aab3031dc88",
+      "bytes": 2790
+    },
+    {
+      "previous_path": "data/rustred/unit_mass_vacuum_k3.rrbin",
+      "path": "2L/ibps/rules.rrbin",
+      "previous_sha256": "778ab2e6ef9f4934cf8fd4e6aa45486bac21f8c508c0b21d1a00fdec3b532ac5",
+      "sha256": "778ab2e6ef9f4934cf8fd4e6aa45486bac21f8c508c0b21d1a00fdec3b532ac5",
+      "bytes": 36692
+    },
+    {
+      "previous_path": "data/rustred/unit_mass_vacuum_k6.rrbin",
+      "path": "3L/ibps/rules.rrbin",
+      "previous_sha256": "383b2ebbc1124bef251f88df9c1c0d80cb180a14fe12cb5d5928933d926b8006",
+      "sha256": "383b2ebbc1124bef251f88df9c1c0d80cb180a14fe12cb5d5928933d926b8006",
+      "bytes": 3731581
+    },
+    {
+      "previous_path": "data/rustred/four_loop/README.md",
+      "path": "4L/ibps/README.md",
+      "previous_sha256": "fbb8e680520475de0475643adc85c0b44f806054bc561298e22b42717fd2871d",
+      "sha256": "eb0f41682315ce05d9c7ceb28035c673d1073558014a58e83a77f8032f496f68",
+      "bytes": 34978
+    },
+    {
+      "previous_path": "data/rustred/four_loop/bmw.candidates.rrbin.gz",
+      "path": "4L/ibps/bmw.candidates.rrbin.gz",
+      "previous_sha256": "96cdadf960adc3726a3eb984ab70f0fe0e514e47eb1aa7ccc8fc8b1192c1aca2",
+      "sha256": "96cdadf960adc3726a3eb984ab70f0fe0e514e47eb1aa7ccc8fc8b1192c1aca2",
+      "bytes": 3606624
+    },
+    {
+      "previous_path": "data/rustred/four_loop/bmw.csv",
+      "path": "4L/ibps/bmw.csv",
+      "previous_sha256": "a10b917df78d353031f85df83ba9a8debfa571de0cf890e35324fcfd83c561f6",
+      "sha256": "a10b917df78d353031f85df83ba9a8debfa571de0cf890e35324fcfd83c561f6",
+      "bytes": 205
+    },
+    {
+      "previous_path": "data/rustred/four_loop/bmw.rrcat.bin.gz",
+      "path": "4L/ibps/bmw.rrcat.bin.gz",
+      "previous_sha256": "43c5dc43e608e0a92d8fffa143e9ad174a8d7841c4603ad4889bdaffa1d63a70",
+      "sha256": "43c5dc43e608e0a92d8fffa143e9ad174a8d7841c4603ad4889bdaffa1d63a70",
+      "bytes": 704
+    },
+    {
+      "previous_path": "data/rustred/four_loop/bmw.rrnorm.bin",
+      "path": "4L/ibps/bmw.rrnorm.bin",
+      "previous_sha256": "2e7bf7c72f1db4cb1ba62e827ce133422901f5ab1322b23c5d3c5bcb0db9d4e0",
+      "sha256": "2e7bf7c72f1db4cb1ba62e827ce133422901f5ab1322b23c5d3c5bcb0db9d4e0",
+      "bytes": 6291
+    },
+    {
+      "previous_path": "data/rustred/four_loop/bmw.toml",
+      "path": "4L/ibps/bmw.toml",
+      "previous_sha256": "0531f8f9ff229a76c65342434d875ffffe4d70381e7a02404d18fe52493fb8a7",
+      "sha256": "0531f8f9ff229a76c65342434d875ffffe4d70381e7a02404d18fe52493fb8a7",
+      "bytes": 651
+    },
+    {
+      "previous_path": "data/rustred/four_loop/fg.candidates.rrbin.gz",
+      "path": "4L/ibps/fg.candidates.rrbin.gz",
+      "previous_sha256": "758875729ac5e8b73b3427451f3159b3a36b1c57264ad1829941b17051a996f1",
+      "sha256": "758875729ac5e8b73b3427451f3159b3a36b1c57264ad1829941b17051a996f1",
+      "bytes": 1938863
+    },
+    {
+      "previous_path": "data/rustred/four_loop/fg.csv",
+      "path": "4L/ibps/fg.csv",
+      "previous_sha256": "451d36f075a0fb19119675123bda1908e8db10ecfe45fa85ae65623066c583e7",
+      "sha256": "451d36f075a0fb19119675123bda1908e8db10ecfe45fa85ae65623066c583e7",
+      "bytes": 204
+    },
+    {
+      "previous_path": "data/rustred/four_loop/fg.rrcat.bin.gz",
+      "path": "4L/ibps/fg.rrcat.bin.gz",
+      "previous_sha256": "f4684aa6cd59203cc554863e324b0f5d9464099526043b0fee81c0b85d6ce58d",
+      "sha256": "f4684aa6cd59203cc554863e324b0f5d9464099526043b0fee81c0b85d6ce58d",
+      "bytes": 667
+    },
+    {
+      "previous_path": "data/rustred/four_loop/fg.rrnorm.bin",
+      "path": "4L/ibps/fg.rrnorm.bin",
+      "previous_sha256": "5c99b4814c8f22ac0e8b1288196fa7721f43739f2d94a36cc83e47c7c33fdf0e",
+      "sha256": "5c99b4814c8f22ac0e8b1288196fa7721f43739f2d94a36cc83e47c7c33fdf0e",
+      "bytes": 5759
+    },
+    {
+      "previous_path": "data/rustred/four_loop/fg.toml",
+      "path": "4L/ibps/fg.toml",
+      "previous_sha256": "c18fda77b4fc8f266c88a4a99b703143d8f1ca17c88d37e3d3e4915ca672523f",
+      "sha256": "c18fda77b4fc8f266c88a4a99b703143d8f1ca17c88d37e3d3e4915ca672523f",
+      "bytes": 647
+    },
+    {
+      "previous_path": "data/rustred/four_loop/h.candidates.rrbin.gz",
+      "path": "4L/ibps/h.candidates.rrbin.gz",
+      "previous_sha256": "06e68b685bef4449980b67995fc30e68dbc765cd8356eb21e7fadc9dcdbdaab8",
+      "sha256": "06e68b685bef4449980b67995fc30e68dbc765cd8356eb21e7fadc9dcdbdaab8",
+      "bytes": 4657362
+    },
+    {
+      "previous_path": "data/rustred/four_loop/h.csv",
+      "path": "4L/ibps/h.csv",
+      "previous_sha256": "88384c963e304dd4896dcba719ce10a0b1d0e4a8764f5cc3b314b61d06887ab8",
+      "sha256": "88384c963e304dd4896dcba719ce10a0b1d0e4a8764f5cc3b314b61d06887ab8",
+      "bytes": 307
+    },
+    {
+      "previous_path": "data/rustred/four_loop/h.rrcat.bin.gz",
+      "path": "4L/ibps/h.rrcat.bin.gz",
+      "previous_sha256": "c6a9486f2b4fcd37eb6fcc3b0550b652b016143e6c8bd546a596bbf3d2e42f4a",
+      "sha256": "c6a9486f2b4fcd37eb6fcc3b0550b652b016143e6c8bd546a596bbf3d2e42f4a",
+      "bytes": 770
+    },
+    {
+      "previous_path": "data/rustred/four_loop/h.rrnorm.bin",
+      "path": "4L/ibps/h.rrnorm.bin",
+      "previous_sha256": "917c8ec7b4e229423ae6cbf9da2eb9aa80df68362669ee9012d852dff047b97a",
+      "sha256": "917c8ec7b4e229423ae6cbf9da2eb9aa80df68362669ee9012d852dff047b97a",
+      "bytes": 8934
+    },
+    {
+      "previous_path": "data/rustred/four_loop/h.toml",
+      "path": "4L/ibps/h.toml",
+      "previous_sha256": "882cb76722cb8d88c2053a97d3ca2e709630d4a18a73af28578f027f9d532895",
+      "sha256": "882cb76722cb8d88c2053a97d3ca2e709630d4a18a73af28578f027f9d532895",
+      "bytes": 650
+    },
+    {
+      "previous_path": "data/rustred/four_loop/x.candidates.rrbin.gz",
+      "path": "4L/ibps/x.candidates.rrbin.gz",
+      "previous_sha256": "bff541dd563d9902a5fcdbef727ea8732647856f2b90772e30d5f4ac0e6395c5",
+      "sha256": "bff541dd563d9902a5fcdbef727ea8732647856f2b90772e30d5f4ac0e6395c5",
+      "bytes": 10175690
+    },
+    {
+      "previous_path": "data/rustred/four_loop/x.csv",
+      "path": "4L/ibps/x.csv",
+      "previous_sha256": "74ccfe948e0ff747945cf742544eea7729722662fc0b96a42d1a22c128fd9dd6",
+      "sha256": "74ccfe948e0ff747945cf742544eea7729722662fc0b96a42d1a22c128fd9dd6",
+      "bytes": 198
+    },
+    {
+      "previous_path": "data/rustred/four_loop/x.rrcat.bin.gz",
+      "path": "4L/ibps/x.rrcat.bin.gz",
+      "previous_sha256": "f028c6015af4eb0ea2912b73f8fe69b5c2caebf97ec68ad0c86c64a65d9d5bb2",
+      "sha256": "f028c6015af4eb0ea2912b73f8fe69b5c2caebf97ec68ad0c86c64a65d9d5bb2",
+      "bytes": 739
+    },
+    {
+      "previous_path": "data/rustred/four_loop/x.rrnorm.bin",
+      "path": "4L/ibps/x.rrnorm.bin",
+      "previous_sha256": "14c8b6f27cc6c9a0147c815ef367a4dca4915a757cbc388e3a71603468866481",
+      "sha256": "14c8b6f27cc6c9a0147c815ef367a4dca4915a757cbc388e3a71603468866481",
+      "bytes": 9811
+    },
+    {
+      "previous_path": "data/rustred/four_loop/x.toml",
+      "path": "4L/ibps/x.toml",
+      "previous_sha256": "79388dc9e3ef358b64d72dd3a7448ac047d8a6b2e381854540a001a2dc8b10f1",
+      "sha256": "79388dc9e3ef358b64d72dd3a7448ac047d8a6b2e381854540a001a2dc8b10f1",
+      "bytes": 654
+    },
+    {
+      "previous_path": "data/rustred/codec-migration-2026-10-05.json",
+      "path": "codec-migration-2026-10-05.json",
+      "previous_sha256": "0723b3b6a0f9e5cbb559768f74dc8065e2760de227e512e6ee664cdf724047e8",
+      "sha256": "0723b3b6a0f9e5cbb559768f74dc8065e2760de227e512e6ee664cdf724047e8",
+      "bytes": 12249
+    }
+  ],
+  "lower_loop_programs": {
+    "1L": "1L/ibps/rules.rrbin",
+    "2L": "2L/ibps/rules.rrbin",
+    "3L": "3L/ibps/rules.rrbin"
+  },
+  "four_loop_directory": "4L/ibps",
+  "four_loop_parents": [
+    "h",
+    "fg",
+    "bmw",
+    "x"
+  ],
+  "five_loop_package": "5L/ibps",
+  "five_loop_package_manifest": "5L/package.json",
+  "five_loop_activation": "explicit_existing_API",
+  "numerical_master_json_runtime_loading": false
+}

@@ -1,7 +1,7 @@
 # Four-loop RustRed acceptance and candidate diagnostics
 
 The public `EvaluationMethod::RustRed` now loads the shipped four-loop candidate
-programs and terminal catalogs under `data/rustred/four_loop/`. Ordinary
+programs and terminal catalogs under `artifacts/4L/ibps/`. Ordinary
 evaluation does not regenerate parametric IBPs or invoke FORM. The programs
 retain candidate status: loading and pointwise rule checks do not establish
 arbitrary-index closure or constitute a sealed completeness certificate.
@@ -140,7 +140,7 @@ does not exercise loading through the public method; use the public suites
 above and below for that acceptance boundary.
 
 The harness ships complete finite catalogs for the four checked-in parent
-descriptors under `data/rustred/four_loop/`; these are
+descriptors under `artifacts/4L/ibps/`; these are
 loaded by default and are bound to each RustRed family fingerprint and arity.
 Set `VAKINT_4L_CANDIDATE_CATALOG_DIR` to override that bundle and persist a
 fresh exact offline value set. The harness writes `h.rrcat.bin`, `fg.rrcat.bin`,
@@ -174,7 +174,7 @@ in the native stages, at 24.71/47.88 s whole-process wall time. Nine focused
 checks include both constructor conventions, and the unchanged 83-test lower-
 loop selection also passes. The same nine-input public timing test passes all
 54 numerical comparisons; its full table and first-use/warm-cache boundaries
-are in the [asset README](../../data/rustred/four_loop/README.md#public-scalar-timing-probe).
+are in the [asset README](../../artifacts/4L/ibps/README.md#public-scalar-timing-probe).
 Evidence, exact binary hashes, commands and independent audit are retained at
 `TMP/gamma-terminal-alias-rollout.4Zi7ej/` in the RustRed workspace.
 
@@ -211,7 +211,7 @@ each pass all 54 comparisons in the same nine-input benchmark. Whole-process
 wall times are 97.22/89.82 s and include both backends; the asset README retains
 every first/warm observation, regressions and shared-host caveats. Evidence is retained at
 `TMP/gamma-terminal-normalization-rollout.GN7v1b/` in the RustRed workspace;
-the [asset README](../../data/rustred/four_loop/README.md#weighted-vacuum-terminal-normalization)
+the [asset README](../../artifacts/4L/ibps/README.md#weighted-vacuum-terminal-normalization)
 describes the native proof and unchanged raw-catalog boundary.
 
 The existing FMFT finalizer expands exact Laurent coefficients before
@@ -367,7 +367,7 @@ data README for storage, loading measurements and current receipt locations.
 
 `catalog_validation::shipped_terminal_projections_match_fmft` evaluates only
 the 74 normalized output keys in the shipped value catalogs with FMFT and compares
-their exact master projections with `data/rustred/four_loop/*.rrcat.bin.gz`.
+their exact master projections with `artifacts/4L/ibps/*.rrcat.bin.gz`.
 The programs and separate normalization sidecars retain all 1,155 raw declarations
 and their exact projection relations. The audit does not solve IBPs or
 declare additional terminals. With the license and explicit oracle environment

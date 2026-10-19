@@ -157,3 +157,6 @@ impl Vakint {
             .map_err(Into::into)
     }
 }
+
+#[cfg(test)]
+mod bundled_cache_tests;

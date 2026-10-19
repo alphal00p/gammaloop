@@ -57,19 +57,15 @@ macro_rules! input {
     ($name:literal) => {
         Input {
             label: concat!("four-loop-", $name),
-            csv: include_str!(concat!("../../data/rustred/four_loop/", $name, ".csv")),
+            csv: include_str!(concat!("../../artifacts/4L/ibps/", $name, ".csv")),
             program: include_bytes!(concat!(
-                "../../data/rustred/four_loop/",
+                "../../artifacts/4L/ibps/",
                 $name,
                 ".candidates.rrbin.gz"
             )),
-            catalog: include_bytes!(concat!(
-                "../../data/rustred/four_loop/",
-                $name,
-                ".rrcat.bin.gz"
-            )),
+            catalog: include_bytes!(concat!("../../artifacts/4L/ibps/", $name, ".rrcat.bin.gz")),
             normalization: include_bytes!(concat!(
-                "../../data/rustred/four_loop/",
+                "../../artifacts/4L/ibps/",
                 $name,
                 ".rrnorm.bin"
             )),

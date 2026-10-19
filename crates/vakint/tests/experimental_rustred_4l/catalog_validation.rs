@@ -25,7 +25,7 @@ fn shipped_terminal_projections_match_fmft() {
             ..VakintSettings::default()
         };
         let vakint = Vakint::new().unwrap();
-        let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/rustred/four_loop");
+        let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("artifacts/4L/ibps");
         let output = std::env::var_os("VAKINT_4L_CATALOG_AUDIT_OUTPUT").map(PathBuf::from);
         let filter = std::env::var("VAKINT_4L_CANDIDATE_FAMILY_FILTER").ok();
         let mut checked = 0;

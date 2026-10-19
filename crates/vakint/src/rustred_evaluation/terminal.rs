@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn generic_complete_vacuum_catalog_admission_is_arity_independent() {
-        let bytes = include_bytes!("../../data/rustred/unit_mass_vacuum_k6.rrbin");
+        let bytes = include_bytes!("../../artifacts/3L/ibps/rules.rrbin");
         let artifact = rustred::foundry::artifact::ClosedArtifact::decode_durable(bytes).unwrap();
         let sources = super::k6::SOURCES;
         let catalog = TerminalCatalog::compile_for_complete_unit_mass_vacuum(&artifact, &sources)

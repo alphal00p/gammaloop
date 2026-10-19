@@ -437,9 +437,7 @@ fn run_candidate_finite_family(
         // deliberately outside the production artifact registry.
         let catalog_directory = std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_DIR")
             .map(PathBuf::from)
-            .or_else(|| {
-                Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/rustred/four_loop"))
-            });
+            .or_else(|| Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("artifacts/4L/ibps")));
         let catalog_only = std::env::var_os("VAKINT_4L_CANDIDATE_CATALOG_ONLY").is_some();
         let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH").unwrap_or_else(|_| {
             assert!(
