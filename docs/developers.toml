@@ -1670,7 +1670,10 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # Reviewed 2026-10-15: Declared notes and native product assets remain explicit
 # documentation inputs. Current producer/runtime separation and all six products match
 # the maintained note.
-digest = "d25b60f920d763e030505a5d7a2bc100566936e9"
+# Reviewed 2026-10-19: linked FeynKit installed tests and the notebook host's
+# Linnet Python shim are staged with existing terminal documentation sources.
+# Source-link and wheel validation stay strict; reusable compiler ownership is unchanged.
+digest = "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

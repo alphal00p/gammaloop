@@ -273,6 +273,19 @@ span, row order and numeric token in the 24 repaired tables. All source and lock
 guards remain unchanged. These local authored-site results do not replace
 native Rustdoc, notebook-wheel or full Nix publication qualification.
 
+The full Nix check at `78af15ce` passes native documentation preparation,
+all 88 generated Rust examples, all five exact Python stub checks and the
+existing GammaLoop/Linnet exporter tests. Notebook-host Rust compilation also
+finishes. Two terminal source omissions still stop qualification: four linked
+FeynKit Python smoke scripts are absent from the filtered documentation tree,
+and the host's graph-module symlink points to a Linnet Python shim omitted from
+that same tree. The snapshot therefore fails source-link validation; the latest
+build fails while adding Python files to the wheel. The repair extends the
+existing documentation fileset with those sources. It changes neither the
+linked scripts nor the shim, preserves validation, and leaves compiler-artifact
+ownership separate. Successful Rust compilation is not treated as a successful
+wheel or publication check.
+
 These repairs change no source-level numerical algorithm, indexed API or
 state format 21. They establish no performance improvement or executable
 equality, and do not resolve any historical inconclusive gate. The successful
