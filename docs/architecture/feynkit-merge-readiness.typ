@@ -2,6 +2,75 @@
 
 == Fully indexed GammaLoop continuation
 
+=== NinjaRS integration review, 19 October 2026
+
+The reviewed NinjaRS changes are composed locally above the complete CI repair
+checkpoint `2bbb8746`. The composition preserves the original PR heads and all
+current indexed-tensor, model, numerical-reference and documentation repairs.
+This records a local integration candidate; publication and remote PR merges
+remain separate operations, with their own exact source and CI evidence.
+
+The core stack exposes existing ordered propagators and precision-generic
+component evaluation (PR 142), adds exact complex-null Weyl charts on
+`FourMomentum<Atom>` (143), and executes an explicit `threads(1)` generation
+request on the caller without constructing a Rayon worker pool (144).
+Real-only kinematics retain their existing scalar bound. Weyl charts use
+caller-selected nonzero pivots and rational arithmetic, without selecting a
+square-root branch or asserting symbolic on-shell assumptions.
+
+PR 149 makes the existing axial-trace epsilon convention explicit and evaluates
+four-dimensional components through its existing determinant owner. PR 150
+converts UFO's real epsilon at import by multiplying Idenso epsilon by `-i`
+and requires exactly four arguments. This changes epsilon-containing imported
+models deliberately; native gamma matrices and gamma-zero rules are unchanged.
+An independent exact calculation checks all 256 ALOHA axial-trace components.
+PR 151 extends the existing literal contraction to a partner sum only when
+explicit distribution is permitted and every term has one compatible port.
+Unrelated numerator factors remain factorized. Its two completion fixtures
+retain every assertion and use generic tensor terms to keep the originally
+intended deferred frontier; the former all-vector frontier can now contract.
+The stronger component, odd-permutation and idempotence regression from the
+older overlapping PR 146 is retained in addition to PR 150's controls.
+
+The older shared fixes exclude scalar metadata from matrix chainification
+(PR 147), materialize normalized projector permutations before assigning
+matrix endpoints (145), and reduce closed quartic color-invariant pairs (148).
+An independent exact SU(2) matrix calculation verifies the quartic coefficient
+and both signs for fundamental/adjoint representation pairs. The existing
+projector expander retains factorial cost for explicit symmetric and
+antisymmetric words; the checked denominator bound does not promise practical
+memory use at high rank. The quartic matcher scans candidate invariant/chain
+pairs and removes a matched closed subnetwork without expanding spectators.
+Both are costs to measure on affected workloads, not a demonstrated runtime
+improvement of the final branch.
+
+PR 131 exposes borrowed momentum/scalar-assumption views and maps each distinct
+original scalar value once, simultaneously, while preserving its keys,
+dimension, declared momenta and dot/metric aliases. PR 132's old `Atom` setter
+is adapted to consume the current `SymbolicTensor<PartialStructure>` directly.
+This preserves ranked zero, logical ports, precision and proof cells; it does
+not reconstruct a tensor from its expression. Only the two unique API changes
+are taken from their obsolete branch histories. GammaLoop's retained tensors
+remain fully indexed. No dependency, feature, numerical tolerance, saved-state schema or full-state version change is introduced.
+
+The combined implementation needs fresh full CI and paired performance
+qualification. In particular, caller-thread generation changes scheduling and
+Symbolica license acquisition; its numerical regression compares exact graph
+output, while its speed and peak memory still require measurement. None of the
+historical GL1 timings is relabeled as a result of these changes. Failed remote
+checks on the earlier core PR heads concern unchanged Clinnet Typst subprocesses;
+other jobs canceled by fail-fast provide no algebra qualification. Local
+composition retains the already-qualified scheduling and diagnostic repair and
+must rerun the combined suites. The separate CI repair PR 152 is superseded by
+that broader repair rather than importing its duplicate internal stub helper.
+
+The frozen native composition `56db0acc` passes all 1,928 selected tests across
+seven affected crates and 25 binaries, with 26 existing skips and no failures.
+Strict all-target Clippy with warnings denied also passes for those same crates.
+Before/after source guards match all 3,504 entries. This is a source-specific
+native gate; complete canonical CI, documentation publication, upload and
+paired performance remain separate qualification steps.
+
 === Current owned-product checkpoint 2f556851
 
 Frozen source `2f556851` passes all 5,690 tests selected by the recorded Cargo
