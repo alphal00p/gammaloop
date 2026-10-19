@@ -77,6 +77,57 @@ struct MassProjection {
     scaleless: bool,
 }
 
+#[test]
+fn native_finite_scalar_certificate_preserves_captured_d09_laurent_recomposition() -> Result<()> {
+    use crate::numerator::AppliedFeynmanRule;
+    use spenso::network::library::symbolic::ETS;
+
+    crate::initialisation::test_initialise()?;
+    let scalar = Atom::parse(
+        include_str!("../../../tests/resources/uv_fixed_basis/d09_open_scalar_recomposition.sym"),
+        "gammalooprs",
+        Default::default(),
+    )
+    .map_err(|error| eyre!(error))?;
+    ensure!(
+        !scalar.is_zero(),
+        "the captured factorized Laurent row must reach the finite certificate"
+    );
+    let metric = function!(
+        ETS.metric,
+        idenso::bis!(
+            4,
+            Atom::var(symbol!("native_finite_laurent_regression::row"))
+        ),
+        idenso::bis!(
+            4,
+            Atom::var(symbol!("native_finite_laurent_regression::column"))
+        )
+    );
+    let word = AppliedFeynmanRule::new(metric.clone())?.expr;
+    ensure!(word.rank() == 2);
+    let trace = super::simplify(&word.clone().multiply(word)?)?;
+    ensure!(trace.is_scalar());
+    ensure!((trace.expression() - Atom::num(4)).is_zero());
+
+    let captured = AppliedFeynmanRule::new(&scalar * &metric)?.expr;
+    ensure!(captured.rank() == 2);
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "captured D09 open scalar Laurent recomposition on a nonzero native metric",
+        captured,
+    )?;
+    let shifted = AppliedFeynmanRule::new((&scalar + Atom::one()) * &metric)?.expr;
+    ensure!(
+        QcdMassReference::certify_finite_tagged_rows_zero(
+            "unit perturbation of the captured D09 finite scalar",
+            shifted,
+        )
+        .is_err(),
+        "the finite certificate must reject the same metric with a unit scalar shift"
+    );
+    Ok(())
+}
+
 impl QcdMassReference {
     /// Certify only the finite scalar rows of a completed, preprocessed tensor.
     /// Callers retain their distinct Dirac/color preprocessing contracts.
@@ -109,9 +160,36 @@ impl QcdMassReference {
             // Only finite scalar moment/epsilon weights may need rational
             // cancellation. Physical pole owners remain separate, and the
             // shared preflight bounds work before polynomial conversion.
-            let in_scope = !scalar.contains_symbol(GS.den)
-                && ScalarRationalSize::estimate(scalar.as_view()).is_some();
-            let is_zero = in_scope && scalar.together().is_zero();
+            ensure!(
+                !scalar.contains_symbol(GS.den),
+                "{label}: physical poles are outside the finite scalar certificate"
+            );
+            // Exact finite Laurent regrouping needs no common denominator.
+            // In particular, repeated epsilon/pi monomials can make a rational
+            // size estimate pessimistic even when their complete sum is zero.
+            let mut variables = BTreeSet::new();
+            let mut exact = true;
+            scalar.visitor(&mut |view| {
+                if let AtomView::Num(number) = view {
+                    exact &= matches!(
+                        number.get_coeff_view(),
+                        symbolica::coefficient::CoefficientView::Natural(..)
+                            | symbolica::coefficient::CoefficientView::Large(..)
+                    );
+                } else if matches!(view, AtomView::Var(_)) {
+                    variables.insert(view.to_owned());
+                }
+                true
+            });
+            let laurent = exact
+                .then(|| scalar.coefficient_list_exact(&variables.into_iter().collect::<Vec<_>>()))
+                .flatten();
+            let exact_laurent_zero = laurent
+                .as_ref()
+                .is_some_and(|rows| rows.iter().all(|(_, coefficient)| coefficient.is_zero()));
+            let rational_in_scope = ScalarRationalSize::estimate(scalar.as_view()).is_some();
+            let in_scope = exact_laurent_zero || rational_in_scope;
+            let is_zero = exact_laurent_zero || (rational_in_scope && scalar.together().is_zero());
             if !is_zero {
                 crate::debug_tags!(#uv, #integrated, #inspect;
                     stage = "native_proper_prefix_scalar_certificate_rejected", label, in_scope,
