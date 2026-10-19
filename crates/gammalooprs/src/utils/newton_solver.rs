@@ -356,6 +356,22 @@ impl RadialRootDiagnostics {
         self.current_occurrences.clear();
     }
 
+    /// Recorded observations of one root, and its solves in the current
+    /// precision pass.
+    #[cfg(test)]
+    pub(crate) fn solve_counts(&self, identity: &RadialRootIdentity) -> (usize, usize) {
+        (
+            self.observations
+                .keys()
+                .filter(|(recorded, ..)| recorded == identity)
+                .count(),
+            self.current_occurrences
+                .get(identity)
+                .copied()
+                .unwrap_or_default(),
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn solve<T: FloatLike>(
         &mut self,
@@ -652,6 +668,78 @@ fn is_finite<T: FloatLike>(value: &F<T>) -> bool {
     !value.is_nan() && !value.is_infinite()
 }
 
+/// The start bracket of [`safeguarded_newton_iteration_and_derivative`].
+pub(crate) struct SafeguardedNewtonBracket<T: FloatLike> {
+    lower_bound: F<T>,
+    upper_bound: F<T>,
+    maximum_residual: F<T>,
+}
+
+impl<T: FloatLike> SafeguardedNewtonBracket<T> {
+    /// The inside value must lie below minus the residual margin, and the
+    /// outside value must be positive after at most `max_bracket_expansions`
+    /// doublings of the outside radius.
+    pub(crate) fn new(
+        inside_radius: &F<T>,
+        outside_radius_guess: &F<T>,
+        f_x_and_df_x: impl Fn(&F<T>) -> (F<T>, F<T>),
+        tolerance: &F<T>,
+        max_bracket_expansions: usize,
+        e_cm: &F<T>,
+    ) -> Result<Self, SafeguardedNewtonError<T>> {
+        let zero = inside_radius.zero();
+        let two = inside_radius.from_i64(2);
+        let maximum_residual = inside_radius.epsilon() * tolerance * e_cm;
+        let (inside_value, _) = f_x_and_df_x(inside_radius);
+        if !is_finite(&inside_value) || inside_value >= -maximum_residual.clone() {
+            return Err(SafeguardedNewtonError::InvalidInside {
+                radius: inside_radius.clone(),
+                value: inside_value,
+            });
+        }
+
+        let lower_bound = inside_radius.clone();
+        let mut upper_bound = outside_radius_guess.clone();
+        if !is_finite(&upper_bound) || upper_bound <= lower_bound {
+            let upper_value = if is_finite(&upper_bound) {
+                f_x_and_df_x(&upper_bound).0
+            } else {
+                upper_bound.clone()
+            };
+            return Err(SafeguardedNewtonError::InvalidOutside {
+                radius: upper_bound,
+                value: upper_value,
+                bracket_expansions: 0,
+            });
+        }
+
+        let (mut upper_value, _) = f_x_and_df_x(&upper_bound);
+        let mut bracket_expansions = 0;
+        while is_finite(&upper_value)
+            && upper_value <= zero
+            && bracket_expansions < max_bracket_expansions
+        {
+            upper_bound *= &two;
+            (upper_value, _) = f_x_and_df_x(&upper_bound);
+            bracket_expansions += 1;
+        }
+
+        if !is_finite(&upper_bound) || !is_finite(&upper_value) || upper_value <= zero {
+            return Err(SafeguardedNewtonError::InvalidOutside {
+                radius: upper_bound,
+                value: upper_value,
+                bracket_expansions,
+            });
+        }
+
+        Ok(Self {
+            lower_bound,
+            upper_bound,
+            maximum_residual,
+        })
+    }
+}
+
 /// Find a radial root while preserving a finite negative/positive bracket.
 ///
 /// Newton steps are used only when their derivative and proposed radius are
@@ -668,48 +756,18 @@ pub(crate) fn safeguarded_newton_iteration_and_derivative<T: FloatLike>(
 ) -> Result<NewtonIterationResult<T>, SafeguardedNewtonError<T>> {
     let zero = inside_radius.zero();
     let two = inside_radius.from_i64(2);
-    let maximum_residual = inside_radius.epsilon() * tolerance * e_cm;
-    let (inside_value, _) = f_x_and_df_x(inside_radius);
-    if !is_finite(&inside_value) || inside_value >= -maximum_residual.clone() {
-        return Err(SafeguardedNewtonError::InvalidInside {
-            radius: inside_radius.clone(),
-            value: inside_value,
-        });
-    }
-
-    let mut lower_bound = inside_radius.clone();
-    let mut upper_bound = outside_radius_guess.clone();
-    if !is_finite(&upper_bound) || upper_bound <= lower_bound {
-        let upper_value = if is_finite(&upper_bound) {
-            f_x_and_df_x(&upper_bound).0
-        } else {
-            upper_bound.clone()
-        };
-        return Err(SafeguardedNewtonError::InvalidOutside {
-            radius: upper_bound,
-            value: upper_value,
-            bracket_expansions: 0,
-        });
-    }
-
-    let (mut upper_value, _) = f_x_and_df_x(&upper_bound);
-    let mut bracket_expansions = 0;
-    while is_finite(&upper_value)
-        && upper_value <= zero
-        && bracket_expansions < max_bracket_expansions
-    {
-        upper_bound *= &two;
-        (upper_value, _) = f_x_and_df_x(&upper_bound);
-        bracket_expansions += 1;
-    }
-
-    if !is_finite(&upper_bound) || !is_finite(&upper_value) || upper_value <= zero {
-        return Err(SafeguardedNewtonError::InvalidOutside {
-            radius: upper_bound,
-            value: upper_value,
-            bracket_expansions,
-        });
-    }
+    let SafeguardedNewtonBracket {
+        mut lower_bound,
+        mut upper_bound,
+        maximum_residual,
+    } = SafeguardedNewtonBracket::new(
+        inside_radius,
+        outside_radius_guess,
+        &f_x_and_df_x,
+        tolerance,
+        max_bracket_expansions,
+        e_cm,
+    )?;
 
     let mut solution = upper_bound.clone();
     let (mut value, mut derivative) = f_x_and_df_x(&solution);

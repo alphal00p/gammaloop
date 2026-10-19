@@ -232,15 +232,56 @@ mod tests {
     use symbolica::parse;
 
     use crate::cff::{VertexSet, esurface::Esurface};
+    use crate::utils::{ArbPrec, FloatLike, QuadFloat, newton_solver::NewtonIterationResult};
 
     use super::Hsurface;
 
     type RadialTestEnergy = (i64, [f64; 3], [f64; 3], f64);
 
+    /// The signed radial roots in the Double lane. The Quad and Arb lanes must
+    /// reach the same outcome, with the same crossings and radii within 1e-12
+    /// relative of Double.
     fn radial_roots(
         energies: &[RadialTestEnergy],
         incoming_energy: f64,
-    ) -> eyre::Result<Vec<crate::utils::newton_solver::NewtonIterationResult<f64>>> {
+    ) -> eyre::Result<Vec<NewtonIterationResult<f64>>> {
+        fn agrees<T: FloatLike>(
+            energies: &[RadialTestEnergy],
+            incoming_energy: f64,
+            double: &eyre::Result<Vec<NewtonIterationResult<f64>>>,
+        ) {
+            match (double, lane_radial_roots::<T>(energies, incoming_energy)) {
+                (Ok(double), Ok(roots)) => {
+                    assert_eq!(roots.len(), double.len(), "{energies:?}");
+                    for (root, expected) in roots.iter().zip(double) {
+                        assert_eq!(
+                            root.derivative_at_solution > root.solution.zero(),
+                            expected.derivative_at_solution.0 > 0.0,
+                            "{energies:?}"
+                        );
+                        let (radius, expected) = (root.solution.into_f64(), expected.solution.0);
+                        assert!(
+                            (radius - expected).abs() <= 1.0e-12 * expected.abs().max(1.0),
+                            "{energies:?}: {radius} against {expected}"
+                        );
+                    }
+                }
+                (Err(_), Err(_)) => {}
+                (double, roots) => panic!("{energies:?}: Double {double:?}, lane {roots:?}"),
+            }
+        }
+        let roots = lane_radial_roots::<f64>(energies, incoming_energy);
+        agrees::<QuadFloat>(energies, incoming_energy, &roots);
+        agrees::<ArbPrec>(energies, incoming_energy, &roots);
+        roots
+    }
+
+    /// The signed radial roots in lane T, with residuals within 64 ulps of the
+    /// energy scale.
+    fn lane_radial_roots<T: FloatLike>(
+        energies: &[RadialTestEnergy],
+        incoming_energy: f64,
+    ) -> eyre::Result<Vec<NewtonIterationResult<T>>> {
         use crate::{
             graph::LoopMomentumBasis,
             momentum::{FourMomentum, ThreeMomentum, signature::LoopExtSignature},
@@ -252,6 +293,7 @@ mod tests {
         };
         use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 
+        let native = |x: f64| F(T::from_f64_exact_binary(x));
         let count = energies.len();
         let graph = dummy_hedge_graph(2 * count + 1);
         let signatures = (0..2 * count + 1).map(|edge| {
@@ -273,21 +315,24 @@ mod tests {
         };
         let loop_momenta = energies
             .iter()
-            .map(|(_, v, _, _)| ThreeMomentum::new(F(v[0]), F(v[1]), F(v[2])))
+            .map(|(_, v, _, _)| ThreeMomentum::new(native(v[0]), native(v[1]), native(v[2])))
             .collect();
         let external_momenta = energies
             .iter()
-            .map(|(_, _, b, _)| FourMomentum::from_args(F(0.0), F(b[0]), F(b[1]), F(b[2])))
+            .map(|(_, _, b, _)| {
+                FourMomentum::from_args(native(0.0), native(b[0]), native(b[1]), native(b[2]))
+            })
             .chain(std::iter::once(FourMomentum::from_args(
-                F(incoming_energy),
-                F(0.0),
-                F(0.0),
-                F(0.0),
+                native(incoming_energy),
+                native(0.0),
+                native(0.0),
+                native(0.0),
             )))
             .collect();
         let masses = graph
             .new_edgevec_from_iter(
-                (0..2 * count + 1).map(|edge| F(energies.get(edge).map_or(0.0, |energy| energy.3))),
+                (0..2 * count + 1)
+                    .map(|edge| native(energies.get(edge).map_or(0.0, |energy| energy.3))),
             )
             .unwrap();
         let surface = Hsurface {
@@ -308,17 +353,27 @@ mod tests {
             external_shift: vec![(EdgeIndex(2 * count), -1)],
             vertex_set: VertexSet::dummy(),
         };
+        let e_cm = native(2.0);
         surface
             .positive_radius_roots(
                 &loop_momenta,
                 &external_momenta,
                 &masses,
                 &lmb,
-                &F(2.0),
+                &e_cm,
                 &mut RadialRootDiagnostics::default(),
                 &RadialRootIdentity::new("signed radial test".to_string()),
             )
-            .map(|(_, roots)| roots)
+            .map(|(ray, roots)| {
+                for root in &roots {
+                    let residual = ray.evaluate(&root.solution).0;
+                    assert!(
+                        residual.abs() <= root.solution.epsilon() * native(64.0) * &e_cm,
+                        "{energies:?}: residual {residual}"
+                    );
+                }
+                roots
+            })
     }
 
     #[test]

@@ -383,7 +383,15 @@ use adaptive interval isolation over the compactified positive half-line. For
 $r=u/(1-u)$, each rescaled energy is a convex norm of an affine four-vector. Directed
 endpoint derivatives bound each norm throughout a cell, including its one-sided cusp
 limits; signed sums of those bounds certify monotonicity or exclude roots by a mean-value
-bound. Every retained finite crossing is refined in the original radial equation with
+bound. At $u=1$, energies whose native velocities agree up to sign share one radical, so
+their far limits cancel exactly. Origin checks, isolation and bracket sign certificates run
+first with binary64 bounds, each rounded result stepped one ulp outward unless exact. An
+origin check or bracket sign that binary64 leaves unresolved is decided again with 2048-bit
+MPFR bounds. If binary64 isolation, a bracket's materialization or sign certificate, or the
+solver's start check fails, the complete 2048-bit isolation reruns. The two passes need not
+place brackets or share radicals alike, so a lane can return certified binary64 roots where
+the 2048-bit pass would fail and escalate precision.
+Every retained finite crossing is refined in the original radial equation with
 the common native solver. Endpoint and interval data are local to the solve; original
 occurrences remain intact for residue jets. There is no bound on the number of energies
 and no polynomial elimination. Unresolved tangencies, nonisolated roots and exhausted

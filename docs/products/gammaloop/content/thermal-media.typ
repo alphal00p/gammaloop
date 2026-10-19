@@ -29,7 +29,9 @@ singular cut integrable.
 
 The radial solver retains the inexpensive positive-energy interior chart. General signed
 or exterior charts use directed value and derivative enclosures over the compactified
-positive ray, without a fixed energy-count cap. A certified closed channel contributes zero;
+positive ray, without a fixed energy-count cap. They run in binary64 first and again at
+2048 bits whenever binary64 cannot decide, so binary64 uncertainty never closes a channel.
+A certified closed channel contributes zero;
 unresolved tangencies, cusps, and exhausted work or precision budgets are reported explicitly.
 Original affine routing is retained throughout. Positive-energy surface sampling is available
 when its host is strictly interior; the complete signed rate is evaluated at the mapped point.

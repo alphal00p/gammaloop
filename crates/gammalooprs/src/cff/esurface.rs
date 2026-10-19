@@ -48,7 +48,7 @@ use crate::uv::uv_graph::UVE;
 use color_eyre::Result;
 
 use super::generation::ShiftRewrite;
-use super::radial::EnergySurfaceRay;
+use super::radial::{DirectedBound, EnergySurfaceRay};
 
 /// Core esurface struct
 #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, bincode::Decode)]
@@ -1563,9 +1563,8 @@ impl Esurface {
             SignOrZero::Minus => -1,
             SignOrZero::Zero => 0,
         };
-        let spatial = |p: &ThreeMomentum<F<T>>, axis| {
-            EnergySurfaceRay::<T>::enclosed_native([&p.px, &p.py, &p.pz][axis])
-        };
+        let spatial =
+            |p: &ThreeMomentum<F<T>>, axis| Float::enclose_native([&p.px, &p.py, &p.pz][axis]);
         let mut energies = Vec::with_capacity(self.energies.len());
         for &edge in &self.energies {
             let mass = masses
@@ -1580,7 +1579,7 @@ impl Esurface {
             }
             let signature = &lmb.edge_signatures[edge];
             let velocity = std::array::from_fn(|axis| {
-                EnergySurfaceRay::<T>::enclosed_sum(
+                Float::enclosed_sum(
                     signature
                         .internal
                         .iter()
@@ -1589,7 +1588,7 @@ impl Esurface {
                 )
             });
             let offset = std::array::from_fn(|axis| {
-                EnergySurfaceRay::<T>::enclosed_sum(
+                Float::enclosed_sum(
                     signature
                         .external
                         .iter()
@@ -1597,33 +1596,22 @@ impl Esurface {
                         .map(|(sign, p)| (coefficient(sign), spatial(&p.spatial, axis))),
                 )
             });
-            energies.push((
-                1,
-                velocity,
-                offset,
-                EnergySurfaceRay::<T>::enclosed_native(mass),
-            ));
+            energies.push((1, velocity, offset, Float::enclose_native(mass)));
         }
-        let shift =
-            EnergySurfaceRay::<T>::enclosed_sum(self.external_shift.iter().map(|(edge, scale)| {
-                let temporal = EnergySurfaceRay::<T>::enclosed_sum(
-                    lmb.edge_signatures[*edge]
-                        .external
-                        .iter()
-                        .zip(external_momenta.iter())
-                        .map(|(sign, p)| {
-                            (
-                                coefficient(sign),
-                                EnergySurfaceRay::<T>::enclosed_native(&p.temporal.value),
-                            )
-                        }),
-                );
-                (*scale, temporal)
-            }));
+        let shift = Float::enclosed_sum(self.external_shift.iter().map(|(edge, scale)| {
+            let temporal = Float::enclosed_sum(
+                lmb.edge_signatures[*edge]
+                    .external
+                    .iter()
+                    .zip(external_momenta.iter())
+                    .map(|(sign, p)| (coefficient(sign), Float::enclose_native(&p.temporal.value))),
+            );
+            (*scale, temporal)
+        }));
         Ok(EnergySurfaceRay::<T>::evaluate_enclosed(
             energies.into_iter(),
             shift,
-            &EnergySurfaceRay::<T>::enclosed_native(radius),
+            &Float::enclose_native(radius),
             false,
         )?
         .0)
@@ -2476,7 +2464,7 @@ mod tests {
 
     #[test]
     fn routed_enclosure_preserves_original_terms_and_native_rescale() {
-        use super::{EnergySurfaceRay, SamplingEvaluationError};
+        use super::{DirectedBound, SamplingEvaluationError};
         use crate::momentum::sample::LoopIndex;
         use rug::Float;
 
@@ -2576,7 +2564,7 @@ mod tests {
                 mathematical[0] > actual[1],
                 "the omitted epsilon^2 term must be resolved"
             );
-            let actual_native = EnergySurfaceRay::<T>::enclosed_native(&completed[LoopIndex(0)].px);
+            let actual_native = Float::enclose_native(&completed[LoopIndex(0)].px);
             assert!(actual[0] <= actual_native[0] && actual[1] >= actual_native[1]);
 
             let missing = LoopMomenta::from_iter(loops.iter().take(4).cloned());

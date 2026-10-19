@@ -6,7 +6,11 @@ use rug::Float;
 use symbolica::domains::float::SingleFloat;
 
 use crate::{
-    cff::{esurface::ExternalShift, radial::EnergySurfaceRay, surface::HybridSurfaceRef},
+    cff::{
+        esurface::ExternalShift,
+        radial::{DirectedBound, ENCLOSURE_PRECISION, EnergySurfaceRay},
+        surface::HybridSurfaceRef,
+    },
     graph::Graph,
     integrands::process::sampling::maps::SamplingEvaluationError,
     momentum::{
@@ -156,18 +160,18 @@ impl FermiSurfaceProduct {
             }
             .into());
         }
-        let native = EnergySurfaceRay::<T>::enclosed_native;
-        let square = EnergySurfaceRay::<T>::enclosed_square;
-        let multiply = EnergySurfaceRay::<T>::enclosed_mul;
-        let radial_squared = EnergySurfaceRay::<T>::enclosed_sum(
+        let native = Float::enclose_native;
+        let square = Float::enclosed_square;
+        let multiply = Float::enclosed_mul;
+        let radial_squared = Float::enclosed_sum(
             [(1, square(&native(nu))), (-1, square(&native(&mass)))].into_iter(),
         );
-        let offset_squared = EnergySurfaceRay::<T>::enclosed_sum(
+        let offset_squared = Float::enclosed_sum(
             [&offset.px, &offset.py, &offset.pz]
                 .into_iter()
                 .map(|value| (1, square(&native(value)))),
         );
-        let energy = EnergySurfaceRay::<T>::enclosed_sum(
+        let energy = Float::enclosed_sum(
             [
                 (-other_sign, native(&shift_value)),
                 (-shell_sign * other_sign, native(nu)),
@@ -183,7 +187,7 @@ impl FermiSurfaceProduct {
         if energy[0] <= 0 || radial_squared[0] <= 0 {
             return Err(uncertain("unresolved positive energy or regular shell radius").into());
         }
-        let numerator = EnergySurfaceRay::<T>::enclosed_sum(
+        let numerator = Float::enclosed_sum(
             [
                 (1, square(&energy)),
                 (-1, square(&native(&other_mass))),
@@ -196,9 +200,8 @@ impl FermiSurfaceProduct {
             &native(&nu.from_i64(4)),
             &multiply(&radial_squared, &offset_squared),
         );
-        let domain = EnergySurfaceRay::<T>::enclosed_sum(
-            [(1, square(&numerator)), (-1, denominator_squared)].into_iter(),
-        );
+        let domain =
+            Float::enclosed_sum([(1, square(&numerator)), (-1, denominator_squared)].into_iter());
         if domain[0] > 0 {
             return Ok(false);
         }
@@ -262,7 +265,7 @@ impl FermiSurfaceProduct {
             masses,
             &self.lmb,
         );
-        let unit = Float::with_val(EnergySurfaceRay::<T>::ENCLOSURE_PRECISION, 1);
+        let unit = Float::with_val(ENCLOSURE_PRECISION, 1);
         let unit_range = [unit.clone(), unit];
         let (residual, _) = source.evaluate_interval(&unit_range, false)?;
         ensure!(
