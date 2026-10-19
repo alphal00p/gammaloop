@@ -319,8 +319,12 @@ physical cut is applied. This is illustration data, not a numerical oracle or a
 second canonical-state decoder. The native split-DOT exporter remains the owner
 for drawing current graph state; its two initial-state seams are distinct from
 the five physical cut edges. All 34 checked SVGs, their IDs and exact comparison
-budget remain unchanged. The prepared two-theme control reproduces both
-checked assets; applied-source and complete Nix qualification must still pass.
+budget remain unchanged. At `3ad8661a`, the applied generator reproduces all
+34 checked SVGs byte-for-byte. Selective Nix evaluation admits the exact drawing
+input and wrapper, alongside all 18 host payloads and 251 audited repository
+paths. Both focused checks retain identical 3,503-entry source manifests. They
+build no Rust package and do not replace complete Nix runtime, site or
+publication qualification of the final CI-enabled source.
 
 These repairs change no source-level numerical algorithm, indexed API or
 state format 21. They establish no performance improvement or executable
