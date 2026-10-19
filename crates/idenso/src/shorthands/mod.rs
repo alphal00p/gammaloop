@@ -253,37 +253,76 @@ impl<'a> UndoShorthands for AtomView<'a> {
             },
         };
         use symbolica::atom::FunctionBuilder;
-        let state = ParseState::<Aind>::default();
-        state.reserve_indices(*self);
-        let mut error = None;
-        let expression = self.replace_map(|value, _, output| {
-            let AtomView::Fun(trace) = value else { return };
-            if trace.get_symbol() != SPENSO_TAG.trace {
-                return;
-            }
-            let mut arguments = trace.iter();
-            let Some(representation) = arguments.next() else {
-                error = Some("trace requires a representation".to_owned());
-                return;
-            };
-            let representation = match Representation::<LibraryRep>::try_from(representation) {
-                Ok(rep) => rep,
-                Err(err) => {
-                    error = Some(err.to_string());
+        fn unfold<Aind: AbsInd + DummyAind + ParseableAind>(
+            input: AtomView<'_>,
+            state: &ParseState<Aind>,
+        ) -> Result<Atom, NetworkToolingError> {
+            let mut error = None;
+            let expression = input.replace_map(|value, _, output| {
+                if let AtomView::Pow(power) = value {
+                    let (base, exponent) = power.get_base_exp();
+                    if base.contains_symbol(SPENSO_TAG.trace)
+                        && let Ok(repetitions) =
+                            symbolica::domains::integer::Integer::try_from(exponent)
+                        && repetitions > 1
+                    {
+                        let repetitions = match usize::try_from(repetitions) {
+                            Ok(repetitions) => repetitions,
+                            Err(_) => {
+                                error = Some(
+                                    "trace power exponent is too large to materialize".to_owned(),
+                                );
+                                return;
+                            }
+                        };
+                        // Opening the base once would duplicate its newly explicit
+                        // closure index. Keep each copy's closure independent while
+                        // reserving all names at the complete operation boundary.
+                        let mut product = Atom::one();
+                        for _ in 0..repetitions {
+                            match unfold::<Aind>(base, state) {
+                                Ok(factor) => product *= factor,
+                                Err(reason) => {
+                                    error = Some(reason.to_string());
+                                    return;
+                                }
+                            }
+                        }
+                        **output = product;
+                        return;
+                    }
+                }
+                let AtomView::Fun(trace) = value else { return };
+                if trace.get_symbol() != SPENSO_TAG.trace {
                     return;
                 }
-            };
-            let start = representation.slot::<Aind, _>(state.fresh_index());
-            let arguments = arguments.collect::<Vec<_>>();
-            **output = FunctionBuilder::new(SPENSO_TAG.chain)
-                .add_arg(start.to_atom())
-                .add_arg(start.dual().to_atom())
-                .add_args(shadowing::trace_factor_views(&arguments))
-                .finish();
-        });
-        error.map_or(Ok(expression), |reason| {
-            Err(NetworkToolingError::Parse { reason })
-        })
+                let mut arguments = trace.iter();
+                let Some(representation) = arguments.next() else {
+                    error = Some("trace requires a representation".to_owned());
+                    return;
+                };
+                let representation = match Representation::<LibraryRep>::try_from(representation) {
+                    Ok(rep) => rep,
+                    Err(err) => {
+                        error = Some(err.to_string());
+                        return;
+                    }
+                };
+                let start = representation.slot::<Aind, _>(state.fresh_index());
+                let arguments = arguments.collect::<Vec<_>>();
+                **output = FunctionBuilder::new(SPENSO_TAG.chain)
+                    .add_arg(start.to_atom())
+                    .add_arg(start.dual().to_atom())
+                    .add_args(shadowing::trace_factor_views(&arguments))
+                    .finish();
+            });
+            error.map_or(Ok(expression), |reason| {
+                Err(NetworkToolingError::Parse { reason })
+            })
+        }
+        let state = ParseState::<Aind>::default();
+        state.reserve_indices(*self);
+        unfold(*self, &state)
     }
 }
 
@@ -640,6 +679,99 @@ mod typed_dot_tests {
             .unwrap();
         assert!(empty.expression().contains_symbol(SPENSO_TAG.chain));
         assert_ne!(empty.expression(), &Atom::num(4));
+    }
+
+    #[test]
+    fn trace_power_unfolding_keeps_independent_closure_indices() {
+        use crate::color_t;
+        use symbolica::symbol;
+
+        let reps = crate::test_support::test_initialize();
+        let indices = ["a", "b", "c", "d", "e"].map(|name| {
+            reps.coad_da
+                .to_symbolic([Atom::var(symbol!(format!("trace_power::{name}")))])
+        });
+        let word = trace!(&reps.cof_nc; indices.iter().map(|index| color_t!(index)));
+        let coefficient = (Atom::var(symbol!("trace_power_weight")) + Atom::one()).pow(40);
+        let source = SymbolicTensor::infer(&coefficient * word.pow(2)).unwrap();
+        let opened = source.undo_trace().unwrap();
+        assert!(opened.is_scalar());
+        assert!(!opened.expression().contains_symbol(SPENSO_TAG.trace));
+        assert!(
+            matches!(opened.expression().as_view(), AtomView::Mul(product)
+            if product.iter().any(|factor| factor == coefficient.as_view()))
+        );
+
+        let word = SymbolicTensor::infer(word).unwrap();
+        let first = word.undo_trace().unwrap();
+        let second = word.undo_trace().unwrap();
+        let independently_opened =
+            SymbolicTensor::infer(&coefficient * first.expression() * second.expression()).unwrap();
+        for explicit in [false, true] {
+            let (actual, expected) = if explicit {
+                (
+                    opened.undo_chain().unwrap(),
+                    independently_opened.undo_chain().unwrap(),
+                )
+            } else {
+                (opened.clone(), independently_opened.clone())
+            };
+            assert_eq!(
+                actual.canonize().unwrap().expression(),
+                expected.canonize().unwrap().expression(),
+                "explicit chains: {explicit}"
+            );
+        }
+    }
+
+    #[test]
+    fn trace_power_unfolding_preserves_factorized_sums() {
+        crate::test_support::test_initialize();
+        let word = trace!(mink!(4), chain_factor!(trace_sum_A, in, out));
+        let source = SymbolicTensor::infer((word + Atom::one()).pow(3)).unwrap();
+        let opened = source.undo_trace().unwrap();
+        let AtomView::Mul(factors) = opened.expression().as_view() else {
+            panic!("the sum must remain factorized: {}", opened.expression());
+        };
+        assert_eq!(factors.iter().count(), 3);
+        assert!(
+            factors
+                .iter()
+                .all(|factor| matches!(factor, AtomView::Add(_)))
+        );
+        opened.canonize().unwrap();
+        assert_eq!(
+            opened.contract(Default::default()).unwrap().expression(),
+            source.expression()
+        );
+    }
+
+    #[test]
+    fn trace_power_unfolding_preserves_external_fundamental_dummy() {
+        let reps = crate::test_support::test_initialize();
+        let word = trace!(&reps.cof_nc, chain_factor!(trace_reserved_A, in, out));
+        let AbstractIndex::Dummy(previous) = AbstractIndex::new_dummy() else {
+            unreachable!()
+        };
+        // Reserve the next fresh spelling outside the selected power. With
+        // nextest's process isolation this exercises an actual collision.
+        let spectator = vector!(
+            trace_reserved_vector,
+            reps.cof_nc
+                .to_symbolic([AbstractIndex::new_dummy_at(previous + 1).to_atom()])
+        );
+        let expression = spectator * word.pow(3);
+        let opened =
+            SymbolicTensor::infer(expression.undo_trace::<AbstractIndex>().unwrap()).unwrap();
+        let source = SymbolicTensor::infer(expression).unwrap();
+        assert_eq!(opened.structure(), source.structure());
+        let explicit = opened.undo_chain().unwrap();
+        assert_eq!(explicit.structure(), source.structure());
+        explicit.canonize().unwrap();
+        assert_eq!(
+            opened.contract(Default::default()).unwrap().expression(),
+            source.expression()
+        );
     }
 
     #[test]
