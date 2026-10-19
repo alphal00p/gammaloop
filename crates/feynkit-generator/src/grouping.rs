@@ -606,18 +606,27 @@ pub(crate) fn group_diagrams(
             } else {
                 exact_source
             };
-            let canonical = exact_source.canonize().map_err(|error| {
-                tensor_evaluation_error(&diagram, 0, format!("exact canonicalization: {error}"))
-            })?;
-            canonical
-                .with_algebra_result(canonical.expression().replace_map_bottom_up(
+            // Factoring can change which tensor sum anchors the dummy frame.
+            // Finish scalar normalization before assigning canonical indices.
+            let exact_source = exact_source
+                .with_algebra_result(exact_source.expression().replace_map_bottom_up(
                     |value, _, out| {
                         if matches!(value, AtomView::Add(_)) {
                             **out = value.collect_numeric_content();
                         }
                     },
                 ))
-                .map_err(&color_error)?
+                .map_err(&color_error)?;
+            let exact_source = if matches!(grouping, NumeratorGrouping::UpToScalar(_)) {
+                exact_source
+                    .with_algebra_result(exact_source.expression().collect_factors())
+                    .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
+            } else {
+                exact_source
+            };
+            exact_source.canonize().map_err(|error| {
+                tensor_evaluation_error(&diagram, 0, format!("exact canonicalization: {error}"))
+            })?
         } else {
             SymbolicTensor::infer(Atom::one()).expect("literal scalar one")
         };
@@ -707,12 +716,6 @@ pub(crate) fn group_diagrams(
     let mut buckets = BTreeMap::<TopologyKey, Vec<usize>>::new();
     let mut canonical_frames = Vec::with_capacity(retained.len());
     for (index, (diagram, numerator)) in retained.iter().zip(&mut prepared).enumerate() {
-        if matches!(mode, ComparisonMode::UpToScalar) {
-            numerator.exact = numerator
-                .exact
-                .with_algebra_result(numerator.exact.expression().collect_factors())
-                .map_err(|error| tensor_evaluation_error(diagram, 0, error))?;
-        }
         let canonical = canonical_topology(diagram, model, options, symmetrize_left_right)?;
         let key = canonical.key.clone();
         canonical_frames.push(canonical);
@@ -2435,6 +2438,120 @@ mod tests {
             check_canonical_numerator: true,
             ..GraphGroupingOptions::default()
         }
+    }
+
+    #[test]
+    fn canonical_grouping_ignores_numeric_content_placement_in_chiral_cycles() {
+        let model = Arc::new(model());
+        let bridge_x = spenso::tensor_symbol!("feynkit_grouping_test::chiral_bridge_x");
+        let bridge_y = spenso::tensor_symbol!("feynkit_grouping_test::chiral_bridge_y");
+        let different_bridge = spenso::tensor_symbol!("feynkit_grouping_test::different_bridge");
+        let spectator = test_atom("(M+N)^7");
+        let closed_cycle = |indices: [usize; 7], scaled_left: bool, bridge| {
+            let [a, b, c, d, x, y, mu] = indices;
+            let spinor = |index: usize| Bispinor {}.to_symbolic([Atom::num(4), Atom::num(index)]);
+            let lorentz = Minkowski {}.to_symbolic([Atom::num(4), Atom::num(mu)]);
+            let vector = |left, right| function!(AGS.gamma, spinor(left), spinor(right), &lorentz);
+            let axial = |left, right, internal| {
+                vector(left, internal) * function!(AGS.gamma5, spinor(internal), spinor(right))
+            };
+            let scales = if scaled_left { [3, 1] } else { [1, 3] };
+            // Put the number inside one chiral sum. Equality follows by moving a
+            // scalar across a product, without distributing either matrix sum.
+            let left = scales[0] * test_atom("M") * vector(a, b)
+                + scales[0] * test_atom("N") * axial(a, b, x);
+            let right = scales[1] * test_atom("M") * vector(c, d)
+                + scales[1] * test_atom("N") * axial(c, d, y);
+            left * right
+                * function!(bridge, spinor(b), spinor(c))
+                * function!(bridge_y, spinor(d), spinor(a))
+                * &spectator
+        };
+        let grouping = NumeratorGrouping::UpToScalar(GraphGroupingOptions {
+            number_of_numerical_samples: 0,
+            fully_numerical_substitution: true,
+            ..exact_options()
+        });
+        for indices in [
+            [701, 703, 702, 707, 704, 706, 705],
+            [19, 13, 17, 11, 23, 29, 31],
+        ] {
+            for reversed in [false, true] {
+                let mut sources: [Atom; 2] = [
+                    closed_cycle([101, 102, 103, 104, 105, 106, 107], true, bridge_x),
+                    closed_cycle(indices, false, bridge_x),
+                ];
+                if reversed {
+                    sources.reverse();
+                }
+                let diagrams = sources
+                    .iter()
+                    .enumerate()
+                    .map(|(index, source)| {
+                        diagram_with_atoms(
+                            &model,
+                            &format!("cycle{index}"),
+                            source.clone(),
+                            Atom::one(),
+                            25,
+                            25,
+                        )
+                        .with_overall_factor(Atom::num(-1))
+                    })
+                    .collect();
+                let grouped = group_diagrams(
+                    diagrams,
+                    &model,
+                    &grouping,
+                    false,
+                    &GenerationOptions::default().threads(1),
+                )
+                .unwrap();
+                assert_eq!(
+                    grouped.groups.len(),
+                    1,
+                    "indices={indices:?}, reversed={reversed}"
+                );
+                assert_eq!(grouped.groups[0].members.len(), 2);
+                assert_eq!(grouped.groups[0].members[1].ratio, Atom::one());
+                assert_eq!(grouped.diagrams.len(), 1);
+                assert_eq!(grouped.diagrams[0].numerator().expression(), &sources[0]);
+                assert!(
+                    grouped.diagrams[0]
+                        .numerator()
+                        .expression()
+                        .contains(&spectator)
+                );
+                assert_eq!(
+                    evaluate_overall_factor(grouped.diagrams[0].overall_factor().as_view()),
+                    Atom::num(-2),
+                );
+            }
+        }
+
+        // A distinct matrix factor is not an overall scalar rescaling.
+        let grouped = group_diagrams(
+            [bridge_x, different_bridge]
+                .into_iter()
+                .enumerate()
+                .map(|(index, bridge)| {
+                    diagram_with_atoms(
+                        &model,
+                        &format!("control{index}"),
+                        closed_cycle([41, 42, 43, 44, 45, 46, 47], index == 0, bridge),
+                        Atom::one(),
+                        25,
+                        25,
+                    )
+                })
+                .collect(),
+            &model,
+            &grouping,
+            false,
+            &GenerationOptions::default().threads(1),
+        )
+        .unwrap();
+        assert_eq!(grouped.groups.len(), 2);
     }
 
     #[test]

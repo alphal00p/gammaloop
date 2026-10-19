@@ -1576,7 +1576,8 @@ anchor = "pub(crate) fn group_diagrams("
 # Reviewed 2026-10-17: Grouping retains exact, sampling-source and color-valued sampled tensors; finite Lorentz component values and certified ratios remain scalar. Historical timing identities are unchanged.
 # Reviewed 2026-10-17: Exact scalar ratios decode dimension metadata before the unchanged scalar predicate and respect formal versus concrete color choice; tensor bodies and numerical fallback policy remain unchanged.
 # Reviewed 2026-10-19: the same typed preparation body now uses caller iterators for explicit threads(1); parallel defaults, logical ordering and progress/cancellation remain. The readiness note records the scheduling change without claiming a speedup.
-digest = "2e4272c0a995909e91500a1a08f66e4154b770ba"
+# Reviewed 2026-10-19: exact preparation collects existing numerical content and scalar factors before its single index canonicalization. The added chiral-cycle control is red before this reorder and green afterward, preserves dummy/order variants and rejects a distinct matrix; no graph expansion or reference change.
+digest = "fc33f3fc768c2d69937c7c65535713b2f90df5de"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

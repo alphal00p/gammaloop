@@ -373,6 +373,11 @@ tensor. Canonicalization, coefficient comparison and dimension transport use
 the shared native owners. Dimension transport covers indexed and compact
 representations, including ports carried only by zero. Numerical sample
 budgets, seeds and scalar-ratio certification remain separate grouping policy.
+Exact comparison finishes numerical-content and common-factor normalization
+before labeling dummy indices. Factoring afterward can change the index frame
+and make equivalent chiral matrix products appear different. The scalar
+normalizations and the single native canonicalization retain their typed inputs;
+no graph-numerator expansion or extra canonicalization pass is introduced.
 
 A finalized diagram's `with_numerator_prefactor` consumes a retained
 `SymbolicTensor<PartialStructure>` in that diagram's existing index frame.
