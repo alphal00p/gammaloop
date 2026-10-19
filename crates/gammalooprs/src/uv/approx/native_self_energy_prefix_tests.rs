@@ -21,7 +21,11 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Flow},
     subgraph::{SubSetLike, SubSetOps},
 };
-use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
+use spenso::{
+    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+    structure::slot::IsAbstractSlot,
+};
+use std::collections::HashMap;
 
 #[test]
 fn native_os_quark_proper_prefix_matches_mass_and_field_insertions() -> Result<()> {
@@ -540,7 +544,7 @@ impl QcdMassReference {
                 ensure!(basis.route_expression(&function!(GS.emr_mom, 0)) == *p_native);
                 let gluon = basis.route_expression(&function!(GS.emr_mom, 6));
                 ensure!(gluon == k_native - p_native || gluon == p_native - k_native);
-                let (projector, _) = reference.mass_projector(&diagram, &d)?;
+                let (projector, reference_p) = reference.mass_projector(&diagram, &d)?;
                 let projector = projector.map_representation_dimensions(|_, dimension| {
                     dimension.replace(CS.nc).with(3)
                 })?;
@@ -550,12 +554,163 @@ impl QcdMassReference {
                 let pk = Atom::var(symbol!("native_os_prefix::pk"));
                 let kk = Atom::var(symbol!("native_os_prefix::kk"));
                 let external = function!(GS.emr_mom, 0);
+                ensure!(reference_p == external);
+                // The independent source projector supplies I and pslash, not a
+                // produced child coefficient. Reverse each typed endpoint pair
+                // to obtain the OPEN native interface, retaining an inverse.
+                let zero_projector = evaluate_vector(&projector, EdgeIndex(0), &Atom::Zero)?;
+                let closing_identity = zero_projector
+                    .with_checked_expression(Atom::num(12) * zero_projector.expression())?;
+                let closing_kinetic = projector.try_sub(&zero_projector)?;
+                let closing_kinetic = closing_kinetic
+                    .with_checked_expression(Atom::num(12) * closing_kinetic.expression())?;
+                let transpose = |tensor: &SymbolicTensor<IndexedStructure>| -> Result<SymbolicTensor<IndexedStructure>> {
+                    let slots = tensor.structure().logical_slots();
+                    ensure!(slots.len() == 4);
+                    let mut map = HashMap::new();
+                    let mut inverse = HashMap::new();
+                    for (position, slot) in slots.iter().enumerate() {
+                        let opposite = slots.iter().filter(|other|
+                                slot.rep().matches(&other.rep()) && other.aind() != slot.aind()
+                        ).collect::<Vec<_>>();
+                        ensure!(opposite.len() == 1, "open prefix needs one named opposite spin/color endpoint");
+                        map.insert(position, opposite[0].aind());
+                        inverse.insert(position, slot.aind());
+                    }
+                    let open = tensor.reindex_interface_ports(&map)?;
+                    ensure!(open.reindex_interface_ports(&inverse)?.same_value(tensor));
+                    ensure!(open.structure().canonical().external_structure()
+                        == full.structure().canonical().external_structure());
+                    let zero = tensor.with_checked_expression(Atom::Zero)?;
+                    let moved_zero = zero.reindex_interface_ports(&map)?;
+                    ensure!(moved_zero.rank() == 4
+                        && moved_zero.reindex_interface_ports(&inverse)?.same_value(&zero));
+                    Ok(open)
+                };
+                let open_identity = transpose(&closing_identity)?;
+                let open_kinetic = transpose(&closing_kinetic)?;
+                let open_loop = evaluate_vector(&open_kinetic, EdgeIndex(0), &parent_vector)?;
+                // The normalized mass trace calibrates both independently
+                // constructed matrices, but is not used to infer their equality.
+                for matrix in [&open_identity, &open_kinetic] {
+                    let trace =
+                        super::super::simplify(&projector.clone().multiply(matrix.clone())?)?;
+                    ensure!(trace.is_scalar());
+                    let trace = Kinematics::in_dimension(&d)?
+                        .with_mass_squared(&external, Atom::one())?
+                        .apply(&cooking.uncook(trace.expression().as_view()));
+                    ensure!((&trace - Atom::one()).together().is_zero());
+                }
                 let four = Atom::num(4);
                 let finite_without_epsilon = finite
                     .with_checked_expression(finite.expression().replace(GS.dim_epsilon).with(0))?;
-                let mut projected_inputs = std::array::from_fn::<_, 5, _>(|_| Atom::Zero);
-                for ((child_value, spin_dimension), projected_numerator) in [
+                // A complete open word keeps its formal representation. Only
+                // its finite scalar coefficient participates in epsilon series.
+                let truncate_open = |input: &SymbolicTensor<IndexedStructure>,
+                                     spin_dimension: &Atom|
+                 -> Result<SymbolicTensor<IndexedStructure>> {
+                    use crate::numerator::symbolica_ext::ScalarRationalSize;
+                    use spenso::structure::partial::PartialStructure;
+                    let kin = Kinematics::in_dimension(spin_dimension)?
+                        .with_mass_squared(&external, Atom::one())?
+                        .with_scalar_product(&external, &parent_vector, pk.clone())?
+                        .with_scalar_product(&parent_vector, &parent_vector, kk.clone())?;
+                    let partial: SymbolicTensor<PartialStructure> = input.clone().into();
+                    let rows = partial.coefficient_list(
+                        spenso::shadowing::TensorCollectFilter::<0>::TaggedTensors,
+                    )?;
+                    let recomposed =
+                        input.with_checked_expression(Atom::add_many(rows.iter().map(
+                            |(word, coefficient)| word.expression() * coefficient.expression(),
+                        )))?;
+                    Self::certify_finite_tagged_rows_zero(
+                        "D09 open coefficient decomposition retains the exact native carrier",
+                        input.try_sub(&recomposed)?,
+                    )?;
+                    let mut contracted = input.with_checked_expression(Atom::Zero)?;
+                    for (word, coefficient) in rows {
+                        if word.expression().is_zero() || coefficient.expression().is_zero() {
+                            continue;
+                        }
+                        ensure!(coefficient.is_scalar());
+                        ensure!(
+                            word.expression().as_view().get_byte_size() <= 8192,
+                            "D09 complete open word exceeds the bounded native contraction scope"
+                        );
+                        let word = word
+                            .simplify_algebra(&AlgebraSettings {
+                                gamma: Some(GammaSimplifySettings::canonical()),
+                                color: Some(
+                                    ColorSimplifySettings::default()
+                                        .with_cof_dimension_invariants(),
+                                ),
+                                ..Default::default()
+                            })?
+                            .contract(ContractSettings::default())?;
+                        ensure!(
+                            word.contraction_complete(),
+                            "D09 bounded complete open word did not finish native contraction"
+                        );
+                        let word = word.to_dots()?.try_into_indexed()?;
+                        ensure!(
+                            word.structure().canonical().external_structure()
+                                == input.structure().canonical().external_structure(),
+                            "D09 complete word changed the native open interface"
+                        );
+                        let expression = kin.apply(
+                            &cooking
+                                .uncook(word.expression().as_view())
+                                .to_cof_dimension_invariants(),
+                        );
+                        let word = input
+                            .with_checked_expression(cooking.try_cook(expression.as_view())?)?;
+                        contracted = contracted.try_add(&word.with_checked_expression(
+                            word.expression() * coefficient.expression(),
+                        )?)?;
+                    }
+                    let partial: SymbolicTensor<PartialStructure> = contracted.into();
+                    let mut result = input.with_checked_expression(Atom::Zero)?;
+                    for (word, coefficient) in partial.coefficient_list(
+                        spenso::shadowing::TensorCollectFilter::<0>::TaggedTensors,
+                    )? {
+                        if word.expression().is_zero() || coefficient.expression().is_zero() {
+                            continue;
+                        }
+                        ensure!(coefficient.is_scalar());
+                        let scalar = coefficient.expression();
+                        let rows = scalar.coefficient_list_exact(&[
+                            d.clone(), kk.clone(), pk.clone(),
+                            Atom::var(GS.dim_epsilon), Atom::var(symbolica::atom::Symbol::PI),
+                        ]).ok_or_else(|| eyre!("D09 finite open coefficient exceeds the unchanged Laurent scope"))?;
+                        let scalar = Atom::add_many(
+                            rows.into_iter()
+                                .map(|(monomial, coefficient)| monomial * coefficient),
+                        );
+                        ensure!(
+                            !scalar.contains_symbol(GS.den)
+                                && ScalarRationalSize::estimate(scalar.as_view()).is_some(),
+                            "D09 open epsilon truncation requires a bounded finite scalar coefficient"
+                        );
+                        let scalar = super::super::series(
+                            &super::super::Integrated::dimensionally_regularized(&scalar),
+                            1,
+                        )?
+                        .to_atom();
+                        // The complete word, including mink(D), is never fed to
+                        // dimensional replacement or the scalar Laurent engine.
+                        result = result
+                            .try_add(&input.with_checked_expression(word.expression() * scalar)?)?;
+                    }
+                    ensure!(
+                        result.structure().logical_slots() == input.structure().logical_slots()
+                    );
+                    Ok(result)
+                };
+                let mut projected_inputs = std::array::from_fn::<_, 6, _>(|_| Atom::Zero);
+                let mut actual_open_inputs = Vec::new();
+                for (input_index, ((child_value, spin_dimension), projected_numerator)) in [
                     (&actual, &d),
+                    (&actual, &four),
                     (&finite, &d),
                     (&finite, &four),
                     (&finite_without_epsilon, &d),
@@ -563,18 +718,89 @@ impl QcdMassReference {
                 ]
                 .into_iter()
                 .zip(&mut projected_inputs)
+                .enumerate()
                 {
                     // Only the already integrated child's scalar epsilon series is
                     // changed in the omission controls. Spin-four changes the outer
                     // contraction metadata after child integration; the remaining
                     // scalar momentum polynomials still use the same D-dimensional
                     // Feynman-parameter integration below.
-                    let closed = specialize(
-                        &child_value
-                            .clone()
-                            .multiply(cograph.clone())?
-                            .multiply(projector.clone())?,
-                    )?;
+                    // This defines a formal spin-coefficient companion in the
+                    // fixed kk/pk family. It does not certify the dimensional
+                    // angular lift of physical-four loop momenta: that lift
+                    // must separately retain projected 4/D and mixed moments.
+                    let attached = specialize(&child_value.clone().multiply(cograph.clone())?)?;
+                    if input_index < 2 {
+                        let open = if spin_dimension == &four {
+                            attached.map_representation_dimensions(|rep, dimension| {
+                                if rep == (Minkowski {}).into() {
+                                    Atom::num(4)
+                                } else {
+                                    dimension.to_owned()
+                                }
+                            })?
+                        } else {
+                            attached.clone()
+                        };
+                        // The certified doubled quark has Q5=Q4. Identify its
+                        // vector before Gamma reduction can create scalar dots.
+                        let open = open.with_checked_expression(
+                            open.expression()
+                                .replace(function!(GS.emr_mom, 5, W_.x___))
+                                .with(function!(GS.emr_mom, 4, W_.x___)),
+                        )?;
+                        let open = open
+                            .simplify_algebra(&AlgebraSettings {
+                                gamma: Some(GammaSimplifySettings::canonical()),
+                                color: Some(
+                                    ColorSimplifySettings::default()
+                                        .with_cof_dimension_invariants(),
+                                ),
+                                ..Default::default()
+                            })?
+                            .contract(ContractSettings::default())?;
+                        ensure!(
+                            open.rank() == 4
+                                && open.structure().canonical().external_structure()
+                                    == full.structure().canonical().external_structure(),
+                            "actual D09 attachment must retain its four native spin/color ports: rank={}, status={:?}, ports={:?}",
+                            open.rank(),
+                            open.reduction_status(),
+                            open.structure().logical_slots()
+                        );
+                        // Deferred retains an exact tensor. The independent
+                        // complete density equality below must still prove zero;
+                        // a cached planner status is not that equality oracle.
+                        crate::debug_tags!(#uv, #integrated, #inspect;
+                            stage = "native_d09_open_density_before_reference", input_index,
+                            contraction_complete = open.contraction_complete(),
+                            reduction_status = ?open.reduction_status(),
+                            file.open_expression = %cooking.uncook(open.expression().as_view()).to_canonical_string(),
+                            "Retained exact native open tensor before its independent density comparison"
+                        );
+                        let dotted = open.to_dots()?;
+                        ensure!(
+                            dotted.structure().logical_slots() == open.structure().logical_slots()
+                        );
+                        let open = dotted;
+                        let expression = cooking
+                            .uncook(open.expression().as_view())
+                            .to_cof_dimension_invariants();
+                        let kin = Kinematics::in_dimension(spin_dimension)?
+                            .with_mass_squared(&external, Atom::one())?
+                            .with_scalar_product(&external, &parent_vector, pk.clone())?
+                            .with_scalar_product(&parent_vector, &parent_vector, kk.clone())?;
+                        let expression = Atom::i()
+                            * &measure
+                            * &rainbow.kernel_weight
+                            * diagram.numerator_prefactor().expression()
+                            * kin.apply(&expression)
+                            / a.pow(2);
+                        let normalized =
+                            open.with_checked_expression(cooking.try_cook(expression.as_view())?)?;
+                        actual_open_inputs.push(truncate_open(&normalized, spin_dimension)?);
+                    }
+                    let closed = attached.multiply(projector.clone())?;
                     let tensor = if spin_dimension == &four {
                         closed.map_representation_dimensions(|rep, dimension| {
                             if rep == (Minkowski {}).into() {
@@ -630,6 +856,7 @@ impl QcdMassReference {
                 }
                 let [
                     actual_numerator,
+                    actual_outer_four_numerator,
                     finite_d_numerator,
                     finite_four_numerator,
                     truncated_d_numerator,
@@ -637,6 +864,7 @@ impl QcdMassReference {
                 ] = projected_inputs;
                 let dk = &kk - Atom::one();
                 let n = (Atom::num(2) - &d) * &pk + &d;
+                let n_four = -Atom::num(2) * &pk + Atom::num(4);
                 let expected_numerator = super::super::Integrated::dimensionally_regularized(
                     &(&cf * (&z1 * (&d * &dk + Atom::num(2) * &n) - &w1 * &n * &dk)),
                 );
@@ -649,12 +877,60 @@ impl QcdMassReference {
                         .is_zero(),
                     "actual D09 attachment differs from fixed-external mass/field insertion density"
                 );
+                // Keep the already integrated D-dimensional child scalar series.
+                // Only the outer native gamma contraction is four-dimensional;
+                // its independent moments below still use D-dimensional measure.
+                let expected_outer_four_numerator =
+                    super::super::Integrated::dimensionally_regularized(
+                        &(&cf
+                            * (&z1 * (Atom::num(4) * &dk + Atom::num(2) * &n_four)
+                                - &w1 * &n_four * &dk)),
+                    );
+                ensure!(
+                    super::super::series(
+                        &(&actual_outer_four_numerator - &expected_outer_four_numerator),
+                        1,
+                    )?
+                    .to_atom()
+                    .together()
+                    .is_zero(),
+                    "actual completed D09 child with outer spin four differs from the independent insertion density"
+                );
+                // These complete native OPEN equalities independently retain
+                // the scalar and kslash coefficients. A single mass trace would
+                // collapse them and miss field-like residuals.
+                ensure!(actual_open_inputs.len() == 2);
+                for (actual_open, spin_dimension) in actual_open_inputs.iter().zip([&d, &four]) {
+                    let identity_coefficient = &cf
+                        * (spin_dimension * &z1 * (&kk + Atom::one()) - spin_dimension * &w1 * &dk);
+                    let kinetic_coefficient =
+                        &cf * ((Atom::num(2) - spin_dimension) * (Atom::num(2) * &z1 - &w1 * &dk));
+                    let reference = open_identity.with_checked_expression(
+                        identity_coefficient * open_identity.expression()
+                            + kinetic_coefficient * open_loop.expression(),
+                    )?;
+                    let reference = if spin_dimension == &four {
+                        reference.map_representation_dimensions(|rep, dimension| {
+                            if rep == (Minkowski {}).into() {
+                                Atom::num(4)
+                            } else {
+                                dimension.to_owned()
+                            }
+                        })?
+                    } else {
+                        reference
+                    };
+                    let reference = truncate_open(&reference, spin_dimension)?;
+                    Self::certify_finite_tagged_rows_zero(
+                        "actual complete D09 open density has independent mass and kinetic coefficients",
+                        super::super::simplify(&actual_open.try_sub(&reference)?)?,
+                    )?;
+                }
                 // The same native D09 child/cograph/source and complete pole
                 // certificates above apply to every entry. In particular this
                 // is the real Dk^2 Dg cograph, not a synthetic enclosing pole.
                 let unit = Atom::one();
                 let child_factor = &unit - pi.pow(2) * &epsilon / Atom::num(12);
-                let n_four = -Atom::num(2) * &pk + Atom::num(4);
                 for (label, observed, child_weight, spin_numerator) in [
                     (
                         "finite child, D spin",
@@ -751,11 +1027,172 @@ impl QcdMassReference {
                         .together()
                         .is_zero()
                 );
+                // Differentiating only the certified outer spin coefficient
+                // in H_s gives Dg/(Dk^2 Dg). At the analytic Feynman boundary
+                // its tadpole moment is the SAME master, not a D=4 average.
+                // Thus H_D-H_4=-2*epsilon*M. Do not cancel a retained i0.
+                let h_four =
+                    super::super::series(&(&h + Atom::num(2) * &epsilon * &physical_master), 1)?
+                        .to_atom();
+                let expected_h_four = Atom::num(6) / &epsilon
+                    + Atom::num(4)
+                    + &epsilon * (Atom::num(8) + pi.pow(2) / Atom::num(2));
+                ensure!((&h_four - &expected_h_four).together().is_zero());
+                let proper_outer_four =
+                    super::super::series(&(&cf * (&z1 * &h_four - &w1 * &f_four)), 0)?.to_atom();
+                let expected_proper_outer_four = -cf.pow(2)
+                    * (Atom::num(15) / epsilon.pow(2)
+                        + Atom::num(31) / &epsilon
+                        + Atom::num(79)
+                        + Atom::num(11) * pi.pow(2) / Atom::num(4));
+                ensure!(
+                    (&proper_outer_four - &expected_proper_outer_four)
+                        .together()
+                        .is_zero()
+                );
+                let proper_d = super::super::series(&(&cf * (&z1 * &h - &w1 * &f)), 0)?.to_atom();
+                let proper_difference = cf.pow(2) * (Atom::num(5) / &epsilon + Atom::num(7));
+                ensure!(
+                    (&proper_d - &proper_outer_four - &proper_difference)
+                        .together()
+                        .is_zero()
+                );
+                // Analytic moments act on the now-certified entire open
+                // density. They retain D-dimensional integration for either
+                // outer spin choice and the actual D-dimensional child series.
+                let mut open_transfers = Vec::new();
+                for spin_dimension in [&d, &four] {
+                    let f_open = [
+                        &physical_master * (Atom::num(2) - spin_dimension) * &j1,
+                        &physical_master * spin_dimension * &j0,
+                    ];
+                    let h_open = [
+                        &physical_master * (Atom::num(2) - spin_dimension) * &j0,
+                        &physical_master * spin_dimension * (&j0 + Atom::one()),
+                    ];
+                    let mut coefficients = Vec::new();
+                    for (f_coefficient, h_coefficient) in f_open.into_iter().zip(h_open) {
+                        coefficients.push(
+                            super::super::series(
+                                &super::super::Integrated::dimensionally_regularized(
+                                    &(&cf * (&z1 * h_coefficient - &w1 * f_coefficient)),
+                                ),
+                                0,
+                            )?
+                            .to_atom(),
+                        );
+                    }
+                    open_transfers.push(coefficients);
+                }
+                let expected_open_d = [
+                    cf.pow(2)
+                        * (Atom::num(5) / epsilon.pow(2)
+                            + Atom::num(12) / &epsilon
+                            + Atom::num(32)
+                            + Atom::num(11) * pi.pow(2) / Atom::num(12)),
+                    -cf.pow(2)
+                        * (Atom::num(20) / epsilon.pow(2)
+                            + Atom::num(38) / &epsilon
+                            + Atom::num(104)
+                            + Atom::num(11) * pi.pow(2) / Atom::num(3)),
+                ];
+                let expected_open_four = [
+                    cf.pow(2)
+                        * (Atom::num(5) / epsilon.pow(2)
+                            + Atom::num(17) / &epsilon
+                            + Atom::num(49)
+                            + Atom::num(11) * pi.pow(2) / Atom::num(12)),
+                    -cf.pow(2)
+                        * (Atom::num(20) / epsilon.pow(2)
+                            + Atom::num(48) / &epsilon
+                            + Atom::num(128)
+                            + Atom::num(11) * pi.pow(2) / Atom::num(3)),
+                ];
+                let expected_open_difference = [
+                    -cf.pow(2) * (Atom::num(5) / &epsilon + Atom::num(17)),
+                    cf.pow(2) * (Atom::num(10) / &epsilon + Atom::num(24)),
+                ];
+                for component in 0..2 {
+                    ensure!(
+                        (&open_transfers[0][component] - &expected_open_d[component])
+                            .together()
+                            .is_zero()
+                    );
+                    ensure!(
+                        (&open_transfers[1][component] - &expected_open_four[component])
+                            .together()
+                            .is_zero()
+                    );
+                    ensure!(
+                        (&open_transfers[0][component]
+                            - &open_transfers[1][component]
+                            - &expected_open_difference[component])
+                            .together()
+                            .is_zero()
+                    );
+                }
+                ensure!(
+                    (Atom::add_many(expected_open_difference.iter()) - &proper_difference)
+                        .together()
+                        .is_zero()
+                );
+                let invisible_control =
+                    super::super::simplify(&open_kinetic.try_sub(&open_identity)?)?;
+                ensure!(!invisible_control.is_zero());
+                ensure!(Self::certify_finite_tagged_rows_zero(
+                    "open kinetic-minus-mass control must be rejected independently of its zero mass trace",
+                    invisible_control.clone(),
+                ).is_err());
+                // A rejected zero certificate alone is not a nonzero proof.
+                // This independently constructed closing dual sees the field-like
+                // direction even though the normalized mass projector cannot.
+                let control_dual = closing_identity.try_sub(&closing_kinetic)?;
+                let dual_trace =
+                    super::super::simplify(&control_dual.multiply(invisible_control.clone())?)?;
+                ensure!(dual_trace.is_scalar());
+                let dual_trace = Kinematics::in_dimension(&d)?
+                    .with_mass_squared(&external, Atom::one())?
+                    .apply(&cooking.uncook(dual_trace.expression().as_view()));
+                ensure!(
+                    (&dual_trace + Atom::num(24)).together().is_zero(),
+                    "the independent open-control dual trace must equal -24"
+                );
+                ensure!(
+                    (&dual_trace / Atom::num(12) + Atom::num(2))
+                        .together()
+                        .is_zero(),
+                    "the normalized independent open-control dual trace must equal -2"
+                );
+                let invisible_trace = super::super::simplify(
+                    &projector.clone().multiply(invisible_control.clone())?,
+                )?;
+                let invisible_trace = Kinematics::in_dimension(&d)?
+                    .with_mass_squared(&external, Atom::one())?
+                    .apply(&cooking.uncook(invisible_trace.expression().as_view()));
+                ensure!(invisible_trace.together().is_zero());
+                crate::debug_tags!(#uv, #integrated, #summary;
+                    stage = "native_d09_actual_open_dimensional_bridge", source = %diagram.name(),
+                    file.actual_open_D = %cooking.uncook(actual_open_inputs[0].expression().as_view()).to_canonical_string(),
+                    file.actual_open_outer_four = %cooking.uncook(actual_open_inputs[1].expression().as_view()).to_canonical_string(),
+                    file.open_D_transfers = ?open_transfers[0],
+                    file.open_outer_four_transfers = ?open_transfers[1],
+                    file.open_D_minus_outer_four = ?expected_open_difference,
+                    both_open_coefficients_certified = true,
+                    field_like_mass_invisible_control_rejected = true,
+                    file.field_like_control_dual_trace = %dual_trace.to_canonical_string(),
+                    field_like_control_nonzero_dual_witness = true,
+                    full_d09_emitted_R2_condition_proved = false,
+                    "Actual native D09 open attachment retains the independent dimensional mass and kinetic transfers"
+                );
                 crate::debug_tags!(#uv, #integrated, #summary;
                     stage = "native_d09_finite_child_dimensional_bridge",
                     source = %diagram.name(),
                     file.child_edges = ?child_edges, file.cograph_edges = ?outside,
                     file.finite_child = %cooking.uncook(finite.expression().as_view()).to_canonical_string(),
+                    file.actual_outer_four_numerator = %actual_outer_four_numerator.to_canonical_string(),
+                    file.proper_outer_four_transfer = %proper_outer_four.to_canonical_string(),
+                    file.proper_D_minus_outer_four = %proper_difference.to_canonical_string(),
+                    actual_completed_prefix_outer_spin_four = true,
                     file.finite_d_numerator = %finite_d_numerator.to_canonical_string(),
                     file.finite_four_numerator = %finite_four_numerator.to_canonical_string(),
                     file.finite_d_transfer = %finite_d_transfer.to_canonical_string(),
