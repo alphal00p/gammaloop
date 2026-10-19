@@ -737,3 +737,314 @@ fn generator_is_odd<Aind: AbsInd>(graph: &TensorGraph<Aind>, cycles: &[Vec<usize
     }
     odd
 }
+
+#[cfg(test)]
+mod typed_tests {
+    use super::*;
+    use crate::tensor::SymbolicNetParse;
+    use crate::test_support;
+    use spenso::network::parsing::ParseSettings;
+    use spenso::structure::partial::{PartialIndex, PartialStructureExt};
+    use spenso::structure::representation::Minkowski;
+    use spenso::{tensor_symbol, vector_symbol};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use symbolica::atom::{AtomCore, FunctionBuilder};
+    use symbolica::{function, symbol};
+
+    #[test]
+    fn signed_zero_projection_visits_only_incident_slots() {
+        crate::test_support::test_initialize();
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let [a, b, c] = [86401, 86402, 86403].map(|index| {
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let cycle = spenso::antisym!(a.clone(), b.clone())
+            * spenso::antisym!(b, c.clone())
+            * spenso::antisym!(c, a);
+
+        for size in [0, 128] {
+            let spectator = if size == 0 {
+                Atom::one()
+            } else {
+                Atom::add_many((0..size).map(|i| {
+                    let slot = rep
+                        .slot::<AbstractIndex, _>(AbstractIndex::Normal(86500 + i))
+                        .to_atom();
+                    spenso::tensor!(signed_projection_spectator_left, slot.clone())
+                        * spenso::tensor!(signed_projection_spectator_right, slot)
+                }))
+            };
+            let expression = &cycle * spectator;
+            let network = expression
+                .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            if size != 0 {
+                assert!(network.graph.graph.iter_edges().count() > 2 * size);
+            }
+            let tree = network.graph.expr_tree().cast();
+            let root = network.graph.graph.node_id(network.graph.head());
+            PROJECTED_SLOT_VISITS.with(|visits| visits.set(0));
+            assert!(has_odd_automorphism(&network, &tree, root));
+            // The closed three-cycle has six tensor ports. None of the
+            // hundreds of edges inside the opaque spectator is revisited.
+            assert_eq!(PROJECTED_SLOT_VISITS.with(|visits| visits.get()), 6);
+        }
+    }
+
+    #[test]
+    fn projection_without_antisymmetric_tensors_skips_slot_connections() {
+        crate::test_support::test_initialize();
+        let a = spenso::mink!(4, signed_projection_plain_a);
+        let b = spenso::mink!(4, signed_projection_plain_b);
+        let expression =
+            spenso::sym!(a.clone(), b.clone()) * spenso::tensor!(signed_projection_plain, a, b);
+        let network = expression
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        let tree = network.graph.expr_tree().cast();
+        let root = network.graph.graph.node_id(network.graph.head());
+        PROJECTED_SLOT_VISITS.with(|visits| visits.set(0));
+        assert!(!has_odd_automorphism(&network, &tree, root));
+        assert_eq!(PROJECTED_SLOT_VISITS.with(|visits| visits.get()), 0);
+    }
+
+    #[test]
+    fn incident_slot_projection_keeps_opaque_sum_endpoints_external() {
+        crate::test_support::test_initialize();
+        let a = spenso::lor!(4, signed_projection_opaque_a);
+        let b = spenso::lor!(4, signed_projection_opaque_b);
+        let sum = spenso::sym!(spenso::dind!(a.clone()), spenso::dind!(b.clone()))
+            + spenso::tensor!(
+                signed_projection_opaque_ordered,
+                spenso::dind!(a.clone()),
+                spenso::dind!(b.clone())
+            );
+        let expression = spenso::antisym!(a, b) * &sum;
+        let mut network = expression
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        // The symmetric arm would vanish after distribution, but the ordered
+        // arm can have a nonzero antisymmetric part. An opaque sum must not
+        // identify its parent's distinct boundary ports with internal slots.
+        assert!(!remove_antisymmetric_zero_terms(&mut network));
+        let canonical = expression
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .unwrap();
+        assert!(!canonical.is_zero());
+        assert!(matches!(canonical.as_view(), AtomView::Mul(product)
+            if product.iter().any(|factor| matches!(factor, AtomView::Add(_)))));
+        assert!(
+            canonical
+                .list_dangling::<AbstractIndex>()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn typed_canonize_preserves_open_color_duality() {
+        crate::test_support::test_initialize();
+        let rep = LibraryRep::from(crate::representations::ColorFundamental {}).new_rep(3);
+        let slots = [87001, 87002, 87003, 87004]
+            .map(|index| rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index)));
+        let direct = SymbolicTensor::infer(
+            spenso::g!(slots[0].to_atom(), slots[1].dual().to_atom())
+                * spenso::g!(slots[2].to_atom(), slots[3].dual().to_atom()),
+        )
+        .unwrap();
+        let crossed = SymbolicTensor::infer(
+            spenso::g!(slots[0].to_atom(), slots[3].dual().to_atom())
+                * spenso::g!(slots[2].to_atom(), slots[1].dual().to_atom()),
+        )
+        .unwrap();
+        for source in [&direct, &crossed] {
+            let result = source.canonize().unwrap();
+            assert_eq!(result.structure(), source.structure());
+            assert_eq!(result.expression(), source.expression());
+            assert_eq!(result.canonize().unwrap(), result);
+        }
+        assert_ne!(
+            direct.canonize().unwrap().expression(),
+            crossed.canonize().unwrap().expression()
+        );
+    }
+
+    #[test]
+    fn typed_canonize_keeps_dual_endpoints_when_relabeling_color_dummies() {
+        crate::test_support::test_initialize();
+        let fundamental = LibraryRep::from(crate::representations::ColorFundamental {}).new_rep(3);
+        let adjoint = LibraryRep::from(crate::representations::ColorAdjoint {}).new_rep(8);
+        let left = fundamental.slot::<AbstractIndex, _>(AbstractIndex::Normal(87101));
+        let right = fundamental
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(87102))
+            .dual();
+        let mut canonical = None;
+        for label in [87103, 87104] {
+            let a = adjoint.slot::<AbstractIndex, _>(AbstractIndex::Normal(label));
+            let internal = fundamental.slot::<AbstractIndex, _>(AbstractIndex::Normal(label));
+            let source = SymbolicTensor::infer(
+                crate::color_t!(a.to_atom(), left.to_atom(), internal.dual().to_atom())
+                    * crate::color_t!(a.to_atom(), internal.to_atom(), right.to_atom()),
+            )
+            .unwrap();
+            let result = source.canonize().unwrap();
+            assert_eq!(result.structure(), source.structure());
+            assert_eq!(result.canonize().unwrap(), result);
+            if let Some(expected) = &canonical {
+                assert_eq!(result.expression(), expected);
+            }
+            canonical = Some(result.expression().clone());
+        }
+    }
+
+    #[test]
+    fn typed_canonize_preserves_declared_order_and_factorized_spectators() {
+        crate::test_support::test_initialize();
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let slots = [86101, 86102, 86103]
+            .map(|index| rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index)));
+        let t = function!(
+            spenso::tensor_symbol!("typed_canonize_T"),
+            slots[0].to_atom(),
+            slots[1].to_atom()
+        );
+        let p = function!(
+            spenso::vector_symbol!("typed_canonize_p"),
+            slots[2].to_atom()
+        );
+        let q = function!(
+            spenso::vector_symbol!("typed_canonize_q"),
+            slots[2].to_atom()
+        );
+        let spectator = (Atom::var(symbol!("typed_canonize_x")) + Atom::one()).pow(7);
+        let expression = t * p * q * &spectator;
+        let layout = PartialStructure::from_logical_slots(
+            [slots[1], slots[0]].map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind))),
+        );
+        let source = SymbolicTensor::from_produced_parts(expression.clone(), layout).unwrap();
+        let result = source.canonize().unwrap();
+        assert_eq!(
+            result.expression(),
+            &expression
+                .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                .unwrap()
+        );
+        assert_eq!(result.structure(), source.structure());
+        assert!(result.expression().contains(&spectator));
+        assert_eq!(result.canonize().unwrap(), result);
+    }
+
+    #[test]
+    fn typed_canonize_preserves_auto_component_assignment_and_typed_zero() {
+        crate::test_support::test_initialize();
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let head = spenso::tensor_symbol!("typed_canonize_auto_T");
+        let source =
+            SymbolicTensor::infer(function!(head, rep.to_symbolic([]), rep.to_symbolic([])))
+                .unwrap();
+        let result = source.canonize().unwrap();
+        let bindings = HashMap::from([
+            (0, AbstractIndex::Normal(86201)),
+            (1, AbstractIndex::Normal(86202)),
+        ]);
+        assert_eq!(result.structure(), source.structure());
+        assert_eq!(
+            result.materialize_interface_ports(&bindings).unwrap(),
+            source.materialize_interface_ports(&bindings).unwrap()
+        );
+        let zero = source.with_rewritten_expression(Atom::Zero).unwrap();
+        assert_eq!(zero.canonize().unwrap(), zero);
+    }
+
+    #[test]
+    fn typed_canonize_preserves_compliant_callback_interface() {
+        test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        // Dummy indices serialize as ordinary named symbols; parsing that atom
+        // yields Symbol, not the in-memory Dummy enum variant.
+        let canonical_slot = LibraryRep::from(Minkowski {})
+            .new_rep(4)
+            .slot::<AbstractIndex, _>(AbstractIndex::Dummy(0))
+            .to_atom();
+        let head = tensor_symbol!(
+            "typed_canonize_callback_T",
+            norm = move |view, out| {
+                if let AtomView::Fun(function) = view
+                    && function.iter().any(|arg| arg == canonical_slot.as_view())
+                {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                    **out = Atom::num(2)
+                        * FunctionBuilder::new(tensor_symbol!("canonize_compliant_result"))
+                            .add_args(function.iter())
+                            .finish();
+                }
+            }
+        );
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let a = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(86301))
+            .to_atom();
+        let b = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(86302))
+            .to_atom();
+        let expression = FunctionBuilder::new(head).add_arg(&a).add_arg(&b).finish()
+            * function!(vector_symbol!("typed_canonize_callback_p"), a);
+        let source = SymbolicTensor::infer(expression).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        let canonical = source.canonize().unwrap();
+        assert_eq!(canonical.structure(), source.structure());
+        assert!(
+            source
+                .with_checked_expression(canonical.expression().clone())
+                .is_ok()
+        );
+        assert_eq!(
+            SymbolicTensor::infer(canonical.expression().clone())
+                .unwrap()
+                .structure(),
+            canonical.structure()
+        );
+        assert!(calls.load(Ordering::SeqCst) > 0);
+    }
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "normalization callback contract violated in canonize")]
+    fn canonize_checks_callback_contract() {
+        test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        // Dummy indices serialize as ordinary named symbols; parsing that atom
+        // yields Symbol, not the in-memory Dummy enum variant.
+        let canonical_slot = LibraryRep::from(Minkowski {})
+            .new_rep(4)
+            .slot::<AbstractIndex, _>(AbstractIndex::Dummy(0))
+            .to_atom();
+        let head = tensor_symbol!(
+            "typed_canonize_callback_T_violation",
+            norm = move |view, out| {
+                if let AtomView::Fun(function) = view
+                    && function.iter().any(|arg| arg == canonical_slot.as_view())
+                {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                    **out = Atom::one();
+                }
+            }
+        );
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let a = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(86301))
+            .to_atom();
+        let b = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(86302))
+            .to_atom();
+        let expression = FunctionBuilder::new(head).add_arg(&a).add_arg(&b).finish()
+            * function!(vector_symbol!("typed_canonize_callback_p_violation"), a);
+        let source = SymbolicTensor::infer(expression).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        source.canonize().unwrap();
+    }
+}
