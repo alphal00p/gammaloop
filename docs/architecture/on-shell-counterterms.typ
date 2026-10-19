@@ -2956,8 +2956,9 @@ The separate observation child `28bdf6aa` passes the same mass case in
 exactly three original signed analytic inputs: the bare two-loop sector, the
 proper-local two-loop sector, and a one-loop proper-finite sector with the
 child frame frozen. Their complete active/frozen frames and provenance remain
-beside their factorized numerators. Only the finite sector carries epsilon,
-the renormalization scale and the consumed-loop marker. All three analytic
+beside their factorized numerators. All three retain formal $d$; only the finite
+sector contains explicit epsilon, the renormalization scale and the
+consumed-loop marker. All three analytic
 payloads differ from their physical local expressions. This records the actual
 integration policy without introducing another integration path.
 
