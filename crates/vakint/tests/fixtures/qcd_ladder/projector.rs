@@ -16,9 +16,15 @@ pub(super) fn scalar(mut expression: Atom) -> Result<Atom> {
     // The local Idenso APIs expose the same identity kernels separately.
     // Repeat until stable because gamma/color identities can create new metric contractions.
     loop {
+        // Gamma and color identities can return sums inside tensor products.
+        // Expose each monomial before the next contraction stage so its dummy
+        // indices are contracted within that term.
         let next = expression
+            .expand()
             .simplify_gamma()
+            .expand()
             .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants())
+            .expand()
             .to_dots();
         if next == expression {
             break;
@@ -166,5 +172,28 @@ fn local_projector_preserves_exact_angular_dirac_and_color_controls() -> Result<
         Default::default(),
     )?;
     assert!((scalar(expression)? - Atom::num(4)).expand().is_zero());
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn scalar_contracts_metric_sums_created_by_six_gamma_trace() -> Result<()> {
+    let word = [0, 1, 2, 0, 1, 2];
+    let factors = word
+        .iter()
+        .enumerate()
+        .map(|(position, index)| {
+            format!(
+                "spenso::gamma(spenso::bis(4,s{position}),spenso::bis(4,s{}),spenso::mink(d,mu{index}))",
+                (position + 1) % word.len()
+            )
+        })
+        .collect::<Vec<_>>();
+    let trace = Atom::parse(factors.join("*"), "qcd_ladder_control", Default::default())?;
+    let d = Atom::var(symbol!("qcd_ladder_control::d"));
+    // Independent Clifford pairing recurrence gives tr(1)=4 and
+    // tr(gamma_mu gamma_nu gamma_rho gamma_mu gamma_nu gamma_rho).
+    let expected = Atom::num(4) * &d * (-d.clone().pow(2) + Atom::num(6) * d - Atom::num(4));
+    assert!((scalar(trace)? - expected).expand().together().is_zero());
     Ok(())
 }
