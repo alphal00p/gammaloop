@@ -119,6 +119,8 @@ fn native_parent_scalar_certificate_accepts_ranked_zero() -> Result<()> {
 
 #[test]
 fn native_parent_external_frame_retains_homogeneous_lorentz_dimensions() -> Result<()> {
+    use color_eyre::eyre::ensure;
+
     test_initialise()?;
     let [left, right] = ["left", "right"]
         .map(|name| idenso::bis!(4, symbol!(&format!("native_parent_frame_test::{name}"))));
@@ -127,28 +129,45 @@ fn native_parent_external_frame_retains_homogeneous_lorentz_dimensions() -> Resu
         let momentum = function!(GS.emr_mom, 2, &rep);
         function!(SPENSO_TAG.dot, &momentum, &momentum)
     };
+    let temporal = function!(AGS.gamma0, &left, &right);
+    let AtomView::Fun(temporal_ports) = temporal.as_view() else {
+        unreachable!()
+    };
+    let frame = symbol!(
+        "native_vertex_parent::frame",
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
+    );
     for dimension in [Atom::var(GS.dim), Atom::num(4)] {
         let rep = Minkowski {}.to_symbolic([&dimension]);
-        let time = function!(ETS.delta, function!(AIND_SYMBOLS.cind, 0), &rep);
-        let source = AppliedFeynmanRule::new(
-            function!(AGS.gamma, &left, &right, time) * momentum_square(&dimension),
-        )?
-        .expr;
+        let square = momentum_square(&dimension);
+        // This is the admitted reversible spelling: the complete nonzero
+        // temporal word retains an actual hard-momentum spectator.
+        let source = AppliedFeynmanRule::new(&temporal * &square)?.expr;
+        let retained = source.clone();
         let reduced = QcdMassReference::reduce_parent_external_frame(
-            "homogeneous external frame with a retained hard-momentum spectator",
+            "homogeneous temporal word with a retained hard-momentum spectator",
             &source,
         )?;
-        let temporal = AppliedFeynmanRule::new(
-            function!(AGS.gamma0, &left, &right) * momentum_square(&dimension),
+        // Author the expected frame embedding independently; do not reduce
+        // a second source through the owner under test.
+        let expected = AppliedFeynmanRule::new(
+            function!(
+                AGS.gamma,
+                temporal_ports.get(0),
+                temporal_ports.get(1),
+                function!(frame, 0, &rep)
+            ) * &square,
         )?
         .expr;
-        let temporal = QcdMassReference::reduce_parent_external_frame(
-            "native temporal word with the same retained hard-momentum spectator",
-            &temporal,
-        )?;
+        ensure!(!source.expression().is_zero() && !reduced.expression().is_zero());
+        ensure!(source == retained);
+        ensure!(
+            reduced.structure().canonical().external_structure()
+                == expected.structure().canonical().external_structure()
+        );
         QcdMassReference::certify_parent_tensor_zero(
-            "fixed time slash equals gamma0",
-            &reduced.try_sub(&temporal)?,
+            "native temporal word has the independently authored homogeneous frame",
+            &reduced.try_sub(&expected)?,
         )?;
     }
     let mixed = AppliedFeynmanRule::new(
@@ -4309,8 +4328,6 @@ impl QcdMassReference {
             use idenso::{CookMode, CookSettings};
             use spenso::network::library::symbolic::ETS;
             use spenso::structure::representation::LibraryRep;
-            use spenso::structure::slot::IsAbstractSlot;
-            use std::collections::HashMap;
             use symbolica::atom::{Atom, AtomCore, AtomView};
 
             ensure!(diagram.name() == "D09");
@@ -4422,34 +4439,10 @@ impl QcdMassReference {
                 &rest_difference,
             )?;
 
-            // Reverse each actual endpoint pair, retaining the literal inverse and
-            // zero interface, exactly as in the native proper-prefix dual owner.
-            let transpose = |word: &SymbolicTensor<IndexedStructure>|
-     -> color_eyre::Result<SymbolicTensor<IndexedStructure>> {
-        let slots = word.structure().logical_slots();
-        ensure!(slots.len() == 4);
-        let mut map = HashMap::new();
-        let mut inverse = HashMap::new();
-        for (position, slot) in slots.iter().enumerate() {
-            let opposite = slots.iter().filter(|other|
-                slot.rep().matches(&other.rep()) && other.aind() != slot.aind()
-            ).collect::<Vec<_>>();
-            ensure!(opposite.len() == 1,
-                "D09 dual requires one actual opposite spin/color port");
-            map.insert(position, opposite[0].aind());
-            inverse.insert(position, slot.aind());
-        }
-        let open = word.reindex_interface_ports(&map)?;
-        ensure!(open.reindex_interface_ports(&inverse)?.same_value(word));
-        ensure!(open.structure().canonical().external_structure()
-            == actual_open.structure().canonical().external_structure());
-        let zero = word.with_checked_expression(Atom::Zero)?;
-        let open_zero = zero.reindex_interface_ports(&map)?;
-        ensure!(open_zero.rank() == 4);
-        ensure!(open_zero.reindex_interface_ports(&inverse)?.same_value(&zero));
-        Ok(open)
-    };
-            let open_basis = [transpose(&closing_identity)?, transpose(&closing_temporal)?];
+            let open_basis = [
+                Self::open_native_quark_dual(&closing_identity, actual_open)?,
+                Self::open_native_quark_dual(&closing_temporal, actual_open)?,
+            ];
             let closing_duals = [
                 closing_identity
                     .with_checked_expression(closing_identity.expression() / Atom::num(12))?,
