@@ -118,6 +118,41 @@ fn native_parent_scalar_certificate_accepts_ranked_zero() -> Result<()> {
 }
 
 #[test]
+fn native_parent_external_frame_retains_homogeneous_lorentz_dimensions() -> Result<()> {
+    test_initialise()?;
+    let [left, right] = ["left", "right"]
+        .map(|name| idenso::bis!(4, symbol!(&format!("native_parent_frame_test::{name}"))));
+    let momentum_square = |dimension: &Atom| {
+        let rep = Minkowski {}.to_symbolic([dimension]);
+        let momentum = function!(GS.emr_mom, 2, &rep);
+        function!(SPENSO_TAG.dot, &momentum, &momentum)
+    };
+    for dimension in [Atom::var(GS.dim), Atom::num(4)] {
+        let rep = Minkowski {}.to_symbolic([&dimension]);
+        let time = function!(ETS.delta, function!(AIND_SYMBOLS.cind, 0), &rep);
+        let difference = (function!(AGS.gamma, &left, &right, time)
+            - function!(AGS.gamma0, &left, &right))
+            * momentum_square(&dimension);
+        let source = AppliedFeynmanRule::new(difference)?.expr;
+        let reduced = QcdMassReference::reduce_parent_external_frame(
+            "homogeneous external frame with a retained hard-momentum spectator",
+            &source,
+        )?;
+        QcdMassReference::certify_parent_tensor_zero("fixed time slash equals gamma0", &reduced)?;
+    }
+    let mixed = AppliedFeynmanRule::new(
+        momentum_square(&Atom::var(GS.dim)) + momentum_square(&Atom::num(4)),
+    )?
+    .expr;
+    assert!(QcdMassReference::reduce_parent_external_frame("mixed frames", &mixed).is_err());
+    let unsupported = AppliedFeynmanRule::new(momentum_square(&Atom::num(6)))?.expr;
+    assert!(
+        QcdMassReference::reduce_parent_external_frame("unsupported frame", &unsupported).is_err()
+    );
+    Ok(())
+}
+
+#[test]
 fn native_d09_laurent_grid_preserves_factors_and_rejects_unsupported_domains() -> Result<()> {
     test_initialise()?;
     let variables =
@@ -214,7 +249,7 @@ impl QcdMassReference {
         Ok(())
     }
 
-    /// Reversible external-frame certificate only: no internal-d completeness.
+    /// Reversible external-frame certificate only: no internal completeness.
     pub(in crate::uv) fn reduce_parent_external_frame(
         label: &str,
         difference: &SymbolicTensor<IndexedStructure>,
@@ -226,9 +261,31 @@ impl QcdMassReference {
         let source_expression = cooking.uncook(source_tensor.expression().as_view());
         let difference = &source_expression;
         // Only the certified component OS operators introduce this fixed frame.
-        // Embed its four Gram relations into formal d, without assuming that
-        // these four vectors span the internal Lorentz space.
-        let d = Atom::var(GS.dim);
+        // Use the homogeneous dimension already retained by this numerator.
+        // Formal-d inputs keep d; the explicit physical-four companion keeps
+        // four. This admits neither a dimension replacement nor a mixed frame.
+        let mut dimensions = BTreeSet::new();
+        difference.visitor(&mut |view| {
+            if let AtomView::Fun(port) = view
+                && port.get_symbol() == LibraryRep::from(Minkowski {}).symbol()
+            {
+                dimensions.insert(port.get(0).to_owned());
+            }
+            true
+        });
+        eyre::ensure!(
+            dimensions.len() <= 1,
+            "{label}: mixed Lorentz frame dimensions"
+        );
+        let d = dimensions
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| Atom::var(GS.dim));
+        eyre::ensure!(
+            d == Atom::var(GS.dim) || d == Atom::num(4),
+            "{label}: unsupported Lorentz frame dimension"
+        );
+        // Four fixed vectors need not span the retained internal space.
         let rep = Minkowski {}.to_symbolic([&d]);
         let frame = symbol!(
             "native_vertex_parent::frame",
@@ -330,7 +387,7 @@ impl QcdMassReference {
         assert_eq!(
             reverse(&embedded),
             *difference,
-            "literal source reconstruction precedes all formal-d Clifford algebra"
+            "literal source reconstruction precedes all Clifford algebra"
         );
         let embedded_tensor =
             source_tensor.with_checked_expression(cooking.try_cook(embedded.as_view())?)?;
@@ -388,7 +445,7 @@ impl QcdMassReference {
             file.embedded = %embedded.to_canonical_string(),
             file.constrained = %constrained.to_canonical_string(),
             unchanged_momentum_leaves = momenta.len(), temporal_transposes,
-            "Reversible external frame, native temporal symmetry and Gram relations retain internal d"
+            "Reversible external frame, native temporal symmetry and Gram relations retain the input dimension"
         );
         Ok(completed_tensor.with_checked_expression(cooking.try_cook(constrained.as_view())?)?)
     }
