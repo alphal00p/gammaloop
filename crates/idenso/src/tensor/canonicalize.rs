@@ -861,6 +861,62 @@ mod typed_tests {
     }
 
     #[test]
+    fn typed_canonize_preserves_open_color_duality() {
+        crate::test_support::test_initialize();
+        let rep = LibraryRep::from(crate::representations::ColorFundamental {}).new_rep(3);
+        let slots = [87001, 87002, 87003, 87004]
+            .map(|index| rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index)));
+        let direct = SymbolicTensor::infer(
+            spenso::g!(slots[0].to_atom(), slots[1].dual().to_atom())
+                * spenso::g!(slots[2].to_atom(), slots[3].dual().to_atom()),
+        )
+        .unwrap();
+        let crossed = SymbolicTensor::infer(
+            spenso::g!(slots[0].to_atom(), slots[3].dual().to_atom())
+                * spenso::g!(slots[2].to_atom(), slots[1].dual().to_atom()),
+        )
+        .unwrap();
+        for source in [&direct, &crossed] {
+            let result = source.canonize().unwrap();
+            assert_eq!(result.structure(), source.structure());
+            assert_eq!(result.expression(), source.expression());
+            assert_eq!(result.canonize().unwrap(), result);
+        }
+        assert_ne!(
+            direct.canonize().unwrap().expression(),
+            crossed.canonize().unwrap().expression()
+        );
+    }
+
+    #[test]
+    fn typed_canonize_keeps_dual_endpoints_when_relabeling_color_dummies() {
+        crate::test_support::test_initialize();
+        let fundamental = LibraryRep::from(crate::representations::ColorFundamental {}).new_rep(3);
+        let adjoint = LibraryRep::from(crate::representations::ColorAdjoint {}).new_rep(8);
+        let left = fundamental.slot::<AbstractIndex, _>(AbstractIndex::Normal(87101));
+        let right = fundamental
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(87102))
+            .dual();
+        let mut canonical = None;
+        for label in [87103, 87104] {
+            let a = adjoint.slot::<AbstractIndex, _>(AbstractIndex::Normal(label));
+            let internal = fundamental.slot::<AbstractIndex, _>(AbstractIndex::Normal(label));
+            let source = SymbolicTensor::infer(
+                crate::color_t!(a.to_atom(), left.to_atom(), internal.dual().to_atom())
+                    * crate::color_t!(a.to_atom(), internal.to_atom(), right.to_atom()),
+            )
+            .unwrap();
+            let result = source.canonize().unwrap();
+            assert_eq!(result.structure(), source.structure());
+            assert_eq!(result.canonize().unwrap(), result);
+            if let Some(expected) = &canonical {
+                assert_eq!(result.expression(), expected);
+            }
+            canonical = Some(result.expression().clone());
+        }
+    }
+
+    #[test]
     fn typed_canonize_preserves_declared_order_and_factorized_spectators() {
         crate::test_support::test_initialize();
         let rep = LibraryRep::from(Minkowski {}).new_rep(4);
