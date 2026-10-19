@@ -200,7 +200,7 @@ fn render(
         #[cfg(feature = "feynkit")]
         "feynkit-community" => Ok(feynkit_py::FeynkitModule::stub_source(module)),
         #[cfg(feature = "linnet")]
-        "linnet-graph" => Ok(linnet_py::canonical_stub()?),
+        "linnet-graph" => Ok(linnet_py::canonical_stub_from_module(module)?),
         _ => Ok(module.to_string()),
     }
 }
@@ -336,6 +336,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
     };
     let (module_name, stub_info) = gathered?;
     #[cfg(any(
+        feature = "gammaloop",
         feature = "linnet",
         feature = "spenso",
         feature = "feynkit",
@@ -346,6 +347,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
 }
 
 #[cfg(any(
+    feature = "gammaloop",
     feature = "linnet",
     feature = "spenso",
     feature = "feynkit",
@@ -357,7 +359,6 @@ fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_g
 
     // Numerica leaves these two classes unscoped in its stub inventory.
     // They belong to Symbolica, even when another product gathers first.
-    // GammaLoop's standalone f64 API does not enable these Python classes.
     let float_types = [
         TypeId::of::<PythonFloat>(),
         TypeId::of::<PythonComplexFloat>(),
@@ -626,7 +627,7 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_stub_keeps_aliases_before_import_like_docstrings() {
-        let (module_name, mut stub_info) = super::gather("linnet-py").unwrap();
+        let (module_name, mut stub_info) = super::gather("linnet-graph").unwrap();
         let module = stub_info.modules.get_mut(module_name).unwrap();
         module
             .class
@@ -635,7 +636,7 @@ def validate(runtime_module, stub_source):
             .unwrap()
             .doc = "Construct a graph\nfrom its nodes and edges.\nimport drawing data as needed.";
 
-        let canonical = super::render("linnet-py", module).unwrap();
+        let canonical = super::render("linnet-graph", module).unwrap();
         let graph = canonical.find("class Graph:").unwrap();
         assert!(canonical.find("\n__all__ = [\n").unwrap() < graph);
         assert!(canonical.find("\n_NativeValue: typing.TypeAlias").unwrap() < graph);

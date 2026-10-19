@@ -5029,25 +5029,25 @@ class TensorExpression(Expression):
             reduction do not implicitly enable this option. Intrinsic antisymmetry
             normalization during construction is independent of this setting.
         contract : {"fully", "dots", "minimal", "selected", "none"}, default "fully"
-            Structural work in addition to enabled identities and their prerequisites:
+          Structural work in addition to enabled identities and their prerequisites:
 
-            - "fully": contract compatible metrics/identities and vectors, collect
-              matrix chains, and close compatible chains into trace notation.
-            - "dots": the same work, plus canonical dot notation for scalar products.
-            - "minimal": perform structural contractions that do not multiply out
-              independent sum alternatives. Boundary substitutions through existing
-              sums and contractions within their branches are allowed. Products of
-              sums stay factored when contracting them would require distribution.
-            - "selected": the same structural operations, restricted to connections
-              in representations. This does not restrict identity prerequisites.
-            - "none": no additional structural pass. Enabled identities still get
-              their prerequisite contractions; this does not disable all contraction.
+          - "fully": contract compatible metrics/identities and vectors, collect
+            matrix chains, and close compatible chains into trace notation.
+          - "dots": the same work, plus canonical dot notation for scalar products.
+          - "minimal": perform structural contractions that do not multiply out
+            independent sum alternatives. Boundary substitutions through existing
+            sums and contractions within their branches are allowed. Products of
+            sums stay factored when contracting them would require distribution.
+          - "selected": the same structural operations, restricted to connections
+            in representations. This does not restrict identity prerequisites.
+          - "none": no additional structural pass. Enabled identities still get
+            their prerequisite contractions; this does not disable all contraction.
 
-            These modes do not enable identity families. In particular, collecting
-            a trace does not evaluate it, and contracting a color delta does not
-            apply a generator or Fierz identity. "minimal" restricts additional
-            structural work; enabled algebra identities retain their prerequisites
-            and can still introduce sums. It is not a global ban on expansion.
+          These modes do not enable identity families. In particular, collecting
+          a trace does not evaluate it, and contracting a color delta does not
+          apply a generator or Fierz identity. "minimal" restricts additional
+          structural work; enabled algebra identities retain their prerequisites
+          and can still introduce sums. It is not a global ban on expansion.
         representations : sequence of Representation or RepresentationName, optional
             Required with contract="selected" and rejected with the other modes.
             Select connecting representation families, including their duals, rather
