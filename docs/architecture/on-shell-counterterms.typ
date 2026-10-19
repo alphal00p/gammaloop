@@ -3006,3 +3006,74 @@ The single-pole and double-pole controls retain the independent epsilon-one
 and epsilon-two coefficients, with the original factorized spectator intact.
 These are additional angular checks. They establish neither the complete
 actual D09 angular lift nor its open R2 residual or UV/IR limit exchange.
+
+=== Actual proper-local D09 vacuum scalar reference
+
+Source `d52a04b9` passes the original proper-local D09 vacuum comparison in
+48.380 seconds of JUnit suite time, run
+`d0d1f020-b783-4fb5-a2f1-eca80f03c756`. Six supporting cases pass in 1.851
+seconds: the homogeneous external frame, native child mass/field insertion,
+factored Laurent grid, captured finite coefficient and both angular cases.
+The frame test admits its retained formal-d or physical-four representation
+and rejects mixed or unsupported dimensions. The emitted bare/completed-child mass proof also passes freshly on this source
+in 112.074 seconds, run `a29efe15-6d66-4af5-a714-93460f12fdbf`.
+The earlier full26 result remains
+bound to its source-65 executable; it is not a fresh run of this extended frame
+owner.
+
+The input is the ORIGINAL signed analytic W with two active components and no
+frozen child. Exact native comparisons establish parent-U absorption of the
+child O-minus-UO terms, UO=OU, and direct equality of W with the absorbed-child
+construction. These are separate certificates on complete numerator words and
+full denominator polynomials. The four source-edge power inventories remain
+$(1,2,1,1,1)$, $(1,2,1,1,2)$, $(1,1,1,1,1)$ and $(1,1,1,1,2)$ on edges two
+through six. Independent zero-momentum source algebra checks
+$i G^4 C_F^2 d^2$ before the new scalar integrals. Neither the graph phase nor
+its source weight is fitted to their outputs.
+
+The source-derived identity and independently authored gamma-zero dual share
+the actual named spin/color ports. Their complete two-by-two Gram matrix is
+exactly the identity, including both zero cross traces. One shared endpoint
+owner preserves the inverse map, original interface and ranked zeros in both
+this test and the earlier generic-p child test. The existing finite component
+oracle closes the finite Gram and the physical-four numerator; negative
+propagator shells never enter it. No scalar d or epsilon coefficient is frozen.
+
+Write $T_2=exp(gamma_E epsilon)op("Gamma")(epsilon)$ at unit scales.
+Independent radial recurrences give
+$I[k^2/(k^2-1)^3]=d T_2/4$ and
+$I[k^4/(k^2-1)^4]=d(d+2)T_2/24$.
+Keeping the child sign and ordered Clifford product gives
+$c_d=(d-2)^2(d+2)/24$ for the proper-local W. For the physical-four numerator,
+the rank-four Wick factor $6/(d(d+2))$ instead gives $c_4=1$; the angular
+integration dimension remains d. This is not obtained by setting d to four in
+an already integrated scalar coefficient.
+
+With $a=G^2/(16 pi^2)$ and the independently retained source weight $omega$,
+put $Omega=-i a^2 C_F^2 omega$. At the unit rest point, the independent reference matrices are
+$Omega c_d T_2^2(gamma^0-I)$ and $Omega T_2^2(gamma^0-I)$. This gate compares
+only their TWO scalar duals: the identity dual gives minus each scalar factor
+and the temporal dual gives plus it.
+The absolute references, including finite terms, are
+$c_d T_2^2=epsilon^(-2)-7/(3epsilon)+5/3+pi^2/6+O(epsilon)$ and
+$T_2^2=epsilon^(-2)+pi^2/6+O(epsilon)$.
+All four exact Laurent differences vanish, and four additional checks retain
+the independently nonzero double-pole coefficients. Native SU(3) invariants
+are reduced by their existing owner before comparison to numerical
+$C_F=4/3$. The finite scalar certificate has no color or Clifford fallback.
+
+Only separated numerator representations are projected. All negative
+propagator polynomials, masses, powers, prescriptions and active frames stay
+dimensional. The physical mass and its linked subtraction point are fixed
+only after the actual parent operators. The existing Integrated owner receives
+signed W once; its pole minus finite-counterterm payload reconstructs I(W).
+Original local and analytic inputs remain unchanged. This establishes the
+proper-local scalar channels, not completeness of an open two-word basis.
+
+The bare connected vacuum input and the frozen finite-child input still need
+their own native angular/reference admissions. In particular, the frozen
+child's epsilon-one term can multiply the outer pole, and its consumed-loop
+marker and vacuum mass must undergo the parent's hard scaling before any unit
+specialization. A complete open reconstruction and the three shifted soft
+surfaces remain separate gates. No full emitted R2 or general HV/CDR claim
+follows from these scalar comparisons or from the matched mass identity.
