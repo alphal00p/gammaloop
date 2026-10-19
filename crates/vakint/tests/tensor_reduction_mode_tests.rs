@@ -153,6 +153,23 @@ fn tensor_reduction_defaults_to_formless_feynkit() {
     );
 }
 
+#[test]
+fn factored_closed_contractions_preserve_repeated_selected_vectors() {
+    let vakint = feynkit_without_form();
+    let input = vakint_parse!(
+        "p(1,11)*p(2,11)*(k(2,22)+k(1,22))*k(2,22)*topo(factored_closed_contractions)"
+    )
+    .unwrap();
+    let expected = vakint_parse!(
+        "dot(p(1),p(2))*(dot(k(2),k(2))+dot(k(1),k(2)))*topo(factored_closed_contractions)"
+    )
+    .unwrap();
+    for numerator in [input.clone(), input.expand()] {
+        let output = vakint.tensor_reduce(numerator.as_view()).unwrap();
+        assert!((output - &expected).expand().together().is_zero());
+    }
+}
+
 fn projected_input(fixture: ProjectedFixture) -> Atom {
     assert_eq!(fixture.loop_ids.len(), fixture.projector_ids.len());
     let numerator = fixture

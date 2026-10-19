@@ -10,6 +10,7 @@ use crate::{
 use ::symbolica_utils::ReplaceBuilderExt;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
+    coefficient::CoefficientView,
     function,
     id::Context,
     symbol,
@@ -70,9 +71,61 @@ impl Collectable for Atom {
 }
 impl Collectable for AtomView<'_> {
     fn collect_collects(self) -> Atom {
-        self.replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
-            .repeat()
-            .with(COLLECT.call(W_.a_ * W_.b_))
+        // A repeated tensor belongs to the complete collected monomial. Keep
+        // its power compressed while exposing all copies to mapping callbacks.
+        let mut current = self.replace_map(|arg, _context, out| {
+            let AtomView::Pow(power) = arg else { return };
+            let (AtomView::Fun(base), AtomView::Num(exponent)) = power.get_base_exp() else {
+                return;
+            };
+            let coefficient = exponent.get_coeff_view();
+            if base.get_symbol() != *COLLECT
+                || base.get_nargs() != 1
+                || !matches!(
+                    coefficient,
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                )
+                || !coefficient.is_integer()
+                || coefficient.to_owned().is_negative()
+                || coefficient.to_owned().is_zero()
+            {
+                return;
+            }
+            **out = base
+                .iter()
+                .next()
+                .unwrap()
+                .pow(AtomView::Num(exponent))
+                .wrap_in_collect();
+        });
+        // Fold all selected factors in one pass. Pairwise commutative matching
+        // repeatedly searches the same product as the collected term grows.
+        loop {
+            let mut changed = false;
+            let next = current.replace_map(|arg, _, out| {
+                let AtomView::Mul(product) = arg else { return };
+                let mut selected = Vec::new();
+                let mut spectators = Vec::new();
+                for factor in product.iter() {
+                    if let AtomView::Fun(function) = factor
+                        && function.get_symbol() == *COLLECT
+                        && function.get_nargs() == 1
+                    {
+                        selected.push(function.iter().next().unwrap());
+                    } else {
+                        spectators.push(factor);
+                    }
+                }
+                if selected.len() > 1 {
+                    changed = true;
+                    **out = Atom::mul_many(selected).wrap_in_collect() * Atom::mul_many(spectators);
+                }
+            });
+            if !changed {
+                return next;
+            }
+            current = next;
+        }
     }
 
     fn map_collects<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
@@ -112,11 +165,7 @@ impl Collectable for AtomView<'_> {
         if !hit {
             return self.to_owned();
         }
-        wrapped
-            .collect_symbol::<i16>(*COLLECT)
-            .replace(COLLECT.call(W_.a_) * COLLECT.call(W_.b_))
-            .repeat()
-            .with(COLLECT.call(W_.a_ * W_.b_))
+        wrapped.collect_symbol::<i16>(*COLLECT).collect_collects()
     }
 
     fn unwrap_collect(self) -> Atom {
@@ -425,5 +474,34 @@ impl TensorCollectExt for AtomView<'_> {
 
     fn expand_metrics(&self) -> Atom {
         TensorCollectFilter::<0>::Metrics.expand(*self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selected_powers_are_mapped_as_complete_monomials() {
+        let x = Atom::var(symbol!("spenso_collect_regression::x"));
+        let y = Atom::var(symbol!("spenso_collect_regression::y"));
+        let input = &x * (&x + &y);
+        let square = x.clone().pow(2);
+        let mixed = &x * &y;
+        let mut seen = Vec::new();
+        let output = input
+            .as_view()
+            .collect_with_map(|value| value == x.as_view() || value == y.as_view())
+            .map_collects(|value, _, out| {
+                let AtomView::Fun(function) = value else {
+                    unreachable!()
+                };
+                let monomial = function.iter().next().unwrap().to_owned();
+                assert!(monomial == square || monomial == mixed);
+                seen.push(monomial.clone());
+                **out = monomial;
+            });
+        assert_eq!(seen.len(), 2);
+        assert_eq!(output.expand(), input.expand());
     }
 }
