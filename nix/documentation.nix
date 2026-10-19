@@ -128,6 +128,7 @@ let
         (workspaceRoot + "/tests/resources/graphs/epemttbar.dot")
         (workspaceRoot + "/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.pyi")
+        (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.py")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.py")
         (
@@ -139,6 +140,7 @@ let
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
         (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
         (workspaceRoot + "/crates/linnet-py/tests")
+        (workspaceRoot + "/crates/feynkit-py/tests")
       ]
     );
   };
