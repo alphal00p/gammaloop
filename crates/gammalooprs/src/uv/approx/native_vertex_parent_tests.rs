@@ -4389,20 +4389,26 @@ impl QcdMassReference {
                     .with_checked_expression(closing_temporal.expression() / Atom::num(12))?,
             ];
 
-            // Full native 2x2 Gram calibration, not the degenerate matched mass trace.
-            // Tr_spin,color(I)=4*3; gamma0^2=I; both cross traces vanish.
+            // Full finite 2x2 Gram calibration: Tr_spin,color(I)=4*3,
+            // gamma0^2=I, and both cross traces vanish. Use the existing native
+            // component oracle on this closed bis4/cof3 product only. Symmetric
+            // gamma0 endpoints can compress its self-pair to a squared chain;
+            // this calibration does not require symbolic power contraction or
+            // replace any active-D momentum, denominator or vacuum numerator.
             for (row, dual) in closing_duals.iter().enumerate() {
                 for (column, basis) in open_basis.iter().enumerate() {
-                    let trace = integrated::simplify(&dual.clone().multiply(basis.clone())?)?;
+                    let trace = dual.clone().multiply(basis.clone())?;
                     ensure!(
                         trace.is_scalar(),
                         "D09 calibrated dual left native ports open"
                     );
                     let expected = Atom::num(if row == column { 1 } else { 0 });
-                    Self::certify_parent_tensor_zero(
-                        "D09 unit-rest identity/temporal dual pairing matrix",
-                        &trace.with_checked_expression(trace.expression() - expected)?,
-                    )?;
+                    let trace = cooking.uncook(trace.expression().as_view());
+                    let component = on_shell_tests::scalar_component(&trace)?;
+                    ensure!(
+                        (component - expected).collect_compact_factors().is_zero(),
+                        "D09 unit-rest identity/temporal dual pairing ({row}, {column})"
+                    );
                 }
             }
             (closing_duals, open_basis)
