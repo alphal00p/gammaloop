@@ -117,6 +117,45 @@ fn native_parent_scalar_certificate_accepts_ranked_zero() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn native_d09_laurent_grid_preserves_factors_and_rejects_unsupported_domains() -> Result<()> {
+    test_initialise()?;
+    let variables =
+        ["A", "H", "G", "t"].map(|name| symbol!(&format!("native_d09_grid_test::{name}")));
+    let [a, h, coupling, t] = variables.map(Atom::var);
+    let b = (&t - t.pow(-1)) / Atom::num(2);
+    let c = (&t + t.pow(-1)) / Atom::num(2);
+    let hyperbola = c.pow(2) - b.pow(2) - Atom::one();
+    let spectator = (&a + &h).pow(3) * coupling.pow(4);
+    let original = &spectator * &hyperbola;
+    let retained = original.clone();
+    assert_eq!(
+        QcdMassReference::certify_d09_phi_laurent_grid(&original, variables)?,
+        400
+    );
+    assert_eq!(original, retained);
+    assert!(
+        QcdMassReference::certify_d09_phi_laurent_grid(&(&original + Atom::one()), variables)
+            .is_err()
+    );
+    for unsupported in [
+        function!(symbol!("native_d09_grid_test::opaque"), &a),
+        (&t + Atom::one()).pow(-1),
+        a.pow(-1),
+        a.pow((1, 2)),
+        Atom::num(0.125f64),
+    ] {
+        assert!(
+            QcdMassReference::certify_d09_phi_laurent_grid(&(&unsupported * &hyperbola), variables)
+                .is_err(),
+            "unsupported chart factor was accepted: {unsupported}"
+        );
+    }
+    let too_large = (&a + &h).pow(16) * coupling.pow(4) * hyperbola;
+    assert!(QcdMassReference::certify_d09_phi_laurent_grid(&too_large, variables).is_err());
+    Ok(())
+}
+
 impl QcdMassReference {
     fn certify_parent_tensor_zero(
         label: &str,
@@ -352,6 +391,233 @@ impl QcdMassReference {
             "Reversible external frame, native temporal symmetry and Gram relations retain internal d"
         );
         Ok(completed_tensor.with_checked_expression(cooking.try_cook(constrained.as_view())?)?)
+    }
+
+    /// Prove a factorized D09 chart identity by a full exact unisolvent grid.
+    /// The caller retains its actual-row, energy-chart and unit witnesses.
+    fn certify_d09_phi_laurent_grid(
+        expression: &Atom,
+        variables: [symbolica::atom::Symbol; 4],
+    ) -> Result<usize> {
+        use symbolica::coefficient::CoefficientView;
+
+        #[derive(Clone, Copy)]
+        struct Bounds {
+            lower: [i32; 4],
+            upper: [i32; 4],
+        }
+        fn bounds(
+            atom: AtomView<'_>,
+            variables: &[symbolica::atom::Symbol; 4],
+            depth: usize,
+            nodes: &mut usize,
+        ) -> Result<Bounds> {
+            *nodes += 1;
+            eyre::ensure!(
+                depth <= 64 && *nodes <= 16384,
+                "D09 Laurent syntax budget exhausted"
+            );
+            let zero = Bounds {
+                lower: [0; 4],
+                upper: [0; 4],
+            };
+            let result = match atom {
+                AtomView::Num(number) => {
+                    eyre::ensure!(
+                        matches!(
+                            number.get_coeff_view(),
+                            CoefficientView::Natural(..) | CoefficientView::Large(..)
+                        ),
+                        "D09 Laurent coefficients must be exact QQ(i)"
+                    );
+                    zero
+                }
+                AtomView::Var(variable) => {
+                    let index = variables
+                        .iter()
+                        .position(|symbol| *symbol == variable.get_symbol())
+                        .ok_or_else(|| eyre!("D09 Laurent chart contains an unbound variable"))?;
+                    let mut result = zero;
+                    result.lower[index] = 1;
+                    result.upper[index] = 1;
+                    result
+                }
+                AtomView::Fun(_) => return Err(eyre!("D09 Laurent chart refuses functions")),
+                AtomView::Add(sum) => {
+                    let mut result = None::<Bounds>;
+                    for term in sum {
+                        let next = bounds(term, variables, depth + 1, nodes)?;
+                        result = Some(match result {
+                            None => next,
+                            Some(previous) => Bounds {
+                                lower: std::array::from_fn(|i| {
+                                    previous.lower[i].min(next.lower[i])
+                                }),
+                                upper: std::array::from_fn(|i| {
+                                    previous.upper[i].max(next.upper[i])
+                                }),
+                            },
+                        });
+                    }
+                    result.unwrap_or(zero)
+                }
+                AtomView::Mul(product) => {
+                    let mut result = zero;
+                    for factor in product {
+                        let next = bounds(factor, variables, depth + 1, nodes)?;
+                        for i in 0..4 {
+                            result.lower[i] = result.lower[i]
+                                .checked_add(next.lower[i])
+                                .ok_or_else(|| eyre!("D09 Laurent exponent overflow"))?;
+                            result.upper[i] = result.upper[i]
+                                .checked_add(next.upper[i])
+                                .ok_or_else(|| eyre!("D09 Laurent exponent overflow"))?;
+                        }
+                    }
+                    result
+                }
+                AtomView::Pow(power) => {
+                    let exponent = i64::try_from(power.get_exp())
+                        .map_err(|_| eyre!("D09 Laurent chart refuses fractional powers"))?;
+                    eyre::ensure!(
+                        exponent.unsigned_abs() <= 32,
+                        "D09 Laurent power budget exhausted"
+                    );
+                    if exponent < 0 {
+                        eyre::ensure!(
+                            matches!(power.get_base(), AtomView::Var(variable) if variable.get_symbol() == variables[3]),
+                            "D09 Laurent inverse must be a monomial in t"
+                        );
+                        let mut result = zero;
+                        result.lower[3] = exponent as i32;
+                        result.upper[3] = exponent as i32;
+                        result
+                    } else {
+                        let mut result = bounds(power.get_base(), variables, depth + 1, nodes)?;
+                        for i in 0..4 {
+                            result.lower[i] = result.lower[i]
+                                .checked_mul(exponent as i32)
+                                .ok_or_else(|| eyre!("D09 Laurent exponent overflow"))?;
+                            result.upper[i] = result.upper[i]
+                                .checked_mul(exponent as i32)
+                                .ok_or_else(|| eyre!("D09 Laurent exponent overflow"))?;
+                        }
+                        result
+                    }
+                }
+            };
+            Ok(result)
+        }
+        fn value(
+            atom: AtomView<'_>,
+            variables: &[symbolica::atom::Symbol; 4],
+            point: &[i64; 4],
+        ) -> Result<Atom> {
+            let result = match atom {
+                AtomView::Num(_) => atom.to_owned(),
+                AtomView::Var(variable) => {
+                    let index = variables
+                        .iter()
+                        .position(|symbol| *symbol == variable.get_symbol())
+                        .ok_or_else(|| eyre!("D09 exact grid variable is unbound"))?;
+                    Atom::num(point[index])
+                }
+                AtomView::Add(sum) => Atom::add_many(
+                    sum.iter()
+                        .map(|term| value(term, variables, point))
+                        .collect::<Result<Vec<_>>>()?,
+                ),
+                AtomView::Mul(product) => Atom::mul_many(
+                    product
+                        .iter()
+                        .map(|factor| value(factor, variables, point))
+                        .collect::<Result<Vec<_>>>()?,
+                ),
+                AtomView::Pow(power) => value(power.get_base(), variables, point)?.pow(
+                    i64::try_from(power.get_exp())
+                        .map_err(|_| eyre!("D09 exact grid exponent is not integral"))?,
+                ),
+                AtomView::Fun(_) => return Err(eyre!("D09 exact grid encountered a function")),
+            };
+            eyre::ensure!(
+                matches!(result.as_view(), AtomView::Num(number) if matches!(number.get_coeff_view(), CoefficientView::Natural(..) | CoefficientView::Large(..))),
+                "D09 exact grid arithmetic left QQ(i)"
+            );
+            eyre::ensure!(
+                result.as_view().get_byte_size() <= 65536,
+                "D09 exact grid rational size exhausted"
+            );
+            Ok(result)
+        }
+        eyre::ensure!(
+            variables.into_iter().collect::<BTreeSet<_>>().len() == 4,
+            "D09 Laurent chart variables must be distinct"
+        );
+        eyre::ensure!(
+            expression.as_view().get_byte_size() <= 32768,
+            "D09 factorized Laurent input exceeds 32KiB"
+        );
+        let mut nodes = 0;
+        let degree = bounds(expression.as_view(), &variables, 0, &mut nodes)?;
+        eyre::ensure!(
+            (0..3).all(|i| degree.lower[i] >= 0),
+            "D09 Laurent chart has a non-t inverse"
+        );
+        eyre::ensure!(
+            (0..4)
+                .all(|i| degree.lower[i].unsigned_abs() <= 64
+                    && degree.upper[i].unsigned_abs() <= 64),
+            "D09 Laurent exponent range exceeds 64"
+        );
+        // Include exponent zero in EVERY axis, so this same full box also
+        // certifies the independently evaluated original input plus one.
+        let lower = degree.lower.map(|n| n.min(0));
+        let upper = degree.upper.map(|n| n.max(0));
+        let counts: [usize; 4] = std::array::from_fn(|i| (upper[i] - lower[i] + 1) as usize);
+        let grid_nodes = counts
+            .iter()
+            .try_fold(1usize, |n, count| n.checked_mul(*count))
+            .ok_or_else(|| eyre!("D09 exact grid size overflow"))?;
+        eyre::ensure!(grid_nodes <= 4096, "D09 exact grid exceeds 4096 nodes");
+        let wrong = expression + Atom::one();
+        let wrong_degree = bounds(wrong.as_view(), &variables, 0, &mut 0)?;
+        eyre::ensure!(
+            (0..4).all(|i| wrong_degree.lower[i] >= lower[i] && wrong_degree.upper[i] <= upper[i]),
+            "D09 original +1 control escaped its degree box"
+        );
+        let mut visited = 0;
+        for a in 1..=counts[0] {
+            for h in 1..=counts[1] {
+                for coupling in 1..=counts[2] {
+                    for t in 2..=counts[3] + 1 {
+                        let point = [a as i64, h as i64, coupling as i64, t as i64];
+                        eyre::ensure!(
+                            value(expression.as_view(), &variables, &point)?.is_zero(),
+                            "D09 factorized Laurent identity failed at exact point {point:?}"
+                        );
+                        eyre::ensure!(
+                            value(wrong.as_view(), &variables, &point)?.is_one(),
+                            "D09 original +1 control is not exactly one at {point:?}"
+                        );
+                        visited += 1;
+                    }
+                }
+            }
+        }
+        eyre::ensure!(visited == grid_nodes);
+        // Multiplying only conceptually by t^(-lower[3]) gives an ordinary
+        // polynomial. Its full distinct-node tensor grid is unisolvent.
+        debug_tags!(#uv, #local, #four_d, #cff, #summary;
+            stage = "native_d09_phi_exact_laurent_grid",
+            file.variables = ?variables, file.lower_exponents = ?degree.lower,
+            file.upper_exponents = ?degree.upper, file.padded_lower = ?lower,
+            file.padded_upper = ?upper, file.grid_counts = ?counts,
+            grid_nodes, syntax_nodes = nodes, exact_QQ_i = true,
+            original_zero_at_every_node = true, original_plus_one_exact_one = true,
+            direct_phi_polynomial_conversion = false, factorized_input_preserved = true,
+            "A complete exact grid proves the factorized chart identity"
+        );
+        Ok(grid_nodes)
     }
 
     /// Diagnostic copies of CFF scalar weights only. Phi bodies never enter
