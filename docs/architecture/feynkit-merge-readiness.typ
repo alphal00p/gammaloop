@@ -61,8 +61,9 @@ historical GL1 timings is relabeled as a result of these changes. Failed remote
 checks on the earlier core PR heads concern unchanged Clinnet Typst subprocesses;
 other jobs canceled by fail-fast provide no algebra qualification. Local
 composition retains the already-qualified scheduling and diagnostic repair and
-must rerun the combined suites. The separate CI repair PR 152 is superseded by
-that broader repair rather than importing its duplicate internal stub helper.
+must rerun the combined suites. The subsequently merged CI repair PR 152
+overlaps those repairs. Reconciliation keeps the existing stub and cache owners
+and adopts its portal rendering changes as one complete unit, as recorded below.
 
 The frozen native composition `56db0acc` passes all 1,928 selected tests across
 seven affected crates and 25 binaries, with 26 existing skips and no failures.
@@ -105,7 +106,8 @@ fails on the unchanged owner and passes after the reorder. It checks four
 index/order variants, the exact group ratio and weight, preservation of the
 original numerator and spectator, and a distinct-matrix negative control.
 No numerical reference, sample budget or existing assertion is changed.
-Full qualification of the repair remains separate.
+The frozen repair `4c40d40a` subsequently passes the complete qualification
+recorded below; paired performance remains separate.
 
 This reorders existing work; it adds no canonicalization pass, graph expansion
 or tensor admission. Common-factor collection moves from the serial comparison
@@ -115,6 +117,69 @@ workers and stays on the caller for an explicit single worker.
 the existing Atom coefficient operations; a direct retained-tensor numerical
 content API is still absent. The private controls establish correctness, not a
 measured speedup. Final-source paired performance remains required.
+
+=== Latest remote reconciliation and UFO source metadata
+
+Frozen `4c40d40a` passes the full canonical CI command: all 5,749 selected runtime
+tests, all 5,748 preceding test identities plus the new grouping control, and all
+13 original Standard Model generation assertions. The latter completes in
+35.617 seconds. All 29 new native controls and 21 existing feature controls are
+present. Doctests pass 65 with 19 existing ignored. Full six-product documentation
+and publication checks pass for both channels. The canonical upload and independent
+verifier bind all 105 outputs to this exact source and retain their closures;
+all 3,504 source entries remain unchanged throughout qualification.
+
+During that run, remote `feynkit` advanced to `d1904bf2`. Six NinjaRS PRs were
+merged there with feature patches equivalent to the reviewed originals. The
+additional changes are the UFO-loader 1.0.1 dependency update and PR 152. The new
+reconciliation retains both histories and the existing algebra, reference,
+stub, notebook, hermetic input and exact grouping repairs. The portal renderer,
+its two changed SVGs and its current native DOT input are kept together; opening
+the sewn initial-state edges is a drawing projection, not a physical final-state
+cut. The obsolete historical illustration fixture is removed. All 34 exact SVG
+comparisons remain enforced. Automatic merging would instead duplicate notebook
+Cargo declarations and mix the new renderer with the historical wrapper.
+
+UFO-loader 1.0.1 isolates Python imports and preserves additional raw source
+information. This exposes a metadata boundary error in the previous adapter:
+when two source directories share a module name, normalization can correctly
+load model B while labels and the later `sys.modules` lookup still describe A.
+A real two-source reproducer obtains right hypercharge 222 from B, then the old
+adapter would overwrite it with A's 111, together with stale labels and covariant
+cut declarations.
+
+The existing Python metadata helper now uses the upstream public
+`imported_ufo_module` scope and returns the labels plus a strong reference to the
+requested source module. Rust registers parameter printers before symbolic
+normalization and reads supplementary metadata from that retained module.
+JSON inputs return labels without a source module. There is no custom import
+isolation, production context guard or later lookup by module name. The helper
+is renamed `model_metadata.py`, and both explicit Nix source owners follow the
+rename. GammaLoop requires loader 1.0.1 for this API, preserving its old-version
+rejections and adding the now-unsupported 1.0.0 case.
+
+The existing canonical fresh-SM test retains every gauge and cut assertion and
+adds actual compiled-loader imports from two temporary directories with the same
+basename. It checks exact hypercharge, particle and parameter labels, covariant
+cut declarations, and restoration of cached-module identity, path, profiler and
+bytecode settings after success and an import failure. Independent real-package
+controls also check a label-reading failure. These are additional assertions;
+no numerical expectation, tolerance, sample budget or timeout is relaxed.
+
+This boundary has an API cost: labels must be registered before normalization,
+but the loader does not return its source module or offer a pre-parse metadata
+hook. The helper therefore captures a separately scoped import while the loader
+performs its own import. The strong reference lasts through model construction;
+it does not leave the requested module in the global import cache. The additional
+source observation, imports and retained lifetime need measurement on fresh UFO
+loads. They do not explain the earlier GL1 generation result without measurements
+at the actual timed boundary. No tensor API, saved-state schema or full-state
+version changes here; GammaLoop remains fully indexed at version 21.
+
+The earlier successful qualification belongs to `4c40d40a` and its loader 1.0.0
+closure. It does not qualify this new dependency or reconciled source. Fresh
+canonical checks, documentation, cache upload and paired performance remain
+required before the new source is ready to merge.
 
 === Current owned-product checkpoint 2f556851
 

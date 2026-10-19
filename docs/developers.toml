@@ -1740,7 +1740,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # No-impact attestation 2026-10-18: documentation unit tests retain their existing
 # STIX font and license in the filtered runtime closure. Producer partitioning,
 # rendering behavior and assertions remain unchanged.
-digest = "c7078ea21e69aef27edf1ed24a9a7478300b1ff8"
+# Reviewed 2026-10-19: the UFO adapter retains requested-source metadata under the
+# loader public import scope; its renamed embedded Python helper stays owned by
+# feynkit-ufo in both explicit source lists. Producer and runtime boundaries stay fixed.
+digest = "9ed8dd0ee840c3876b4c7a341bbd6a433d55ad0d"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

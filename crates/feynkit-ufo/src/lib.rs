@@ -160,19 +160,20 @@ fn load_model(
     })?;
     // The Python loader creates symbols while parsing parameter expressions.
     // Declare their printers first, before even a forward reference can do so.
-    let label_source = CString::new(include_str!("parameter_labels.py")).unwrap();
-    let labels = (|| -> Result<Vec<(String, DisplayNames)>, PyErr> {
-        PyModule::from_code(
-            py,
-            &label_source,
-            c"parameter_labels.py",
-            c"_parameter_labels",
-        )?
-        .getattr("parameter_labels")?
-        .call1((input_model_path,))?
-        .extract()
-    })()
-    .map_err(|source| UfoLoadError::Load { source })?;
+    let metadata_source = CString::new(include_str!("model_metadata.py")).unwrap();
+    let (labels, source_model) =
+        (|| -> Result<(Vec<(String, DisplayNames)>, Option<Py<PyAny>>), PyErr> {
+            PyModule::from_code(
+                py,
+                &metadata_source,
+                c"model_metadata.py",
+                c"_model_metadata",
+            )?
+            .getattr("model_metadata")?
+            .call1((input_model_path,))?
+            .extract()
+        })()
+        .map_err(|source| UfoLoadError::Load { source })?;
     let labels: BTreeMap<_, _> = labels.into_iter().collect();
     for (name, (texname, typstname)) in &labels {
         Model::register_parameter_symbol(name, texname.as_deref(), typstname.as_deref())
@@ -215,18 +216,14 @@ fn load_model(
     let mut model_json = to_json(py, &py_model)?;
     let card_json = to_json(py, &py_card)?;
 
-    // Preserve metadata that the upstream loader does not serialize. Read from
-    // the imported UFO module, retaining unknown hypercharge as null, not zero.
+    // Preserve metadata from the captured source module. The loader restores
+    // Python's import cache, which may contain another UFO with the same name.
+    // Keep unknown hypercharge as null rather than inventing a zero.
     let metadata = (|| -> Result<Option<String>, PyErr> {
-        let module_name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("invalid UFO module path"))?;
-        let modules = py.import("sys")?.getattr("modules")?;
-        let modules = modules.cast::<PyDict>()?;
-        let Some(module) = modules.get_item(module_name)? else {
+        let Some(module) = source_model.as_ref() else {
             return Ok(None);
         };
+        let module = module.bind(py);
         let metadata = PyDict::new(py);
         if module.hasattr("covariant_cut_multiplets")? {
             metadata.set_item(
@@ -413,6 +410,7 @@ mod tests {
             std::fs::write(&model_path, MODEL_JSON).unwrap();
             let code = format!(
                 r#"
+import contextlib
 import sys
 import types
 
@@ -435,14 +433,23 @@ package = types.ModuleType("ufo_model_loader")
 package.__path__ = []
 common = types.ModuleType("ufo_model_loader.common")
 common.DATA_PATH = ""
+raw = types.ModuleType("ufo_model_loader.raw")
+
+@contextlib.contextmanager
+def imported_ufo_module(source):
+    yield sys.modules[source.name]
+
+raw.imported_ufo_module = imported_ufo_module
 commands = types.ModuleType("ufo_model_loader.commands")
 commands.load_model = load_model
 commands.seen = seen
 package.commands = commands
 package.common = common
+package.raw = raw
 sys.modules["ufo_model_loader"] = package
 sys.modules["ufo_model_loader.commands"] = commands
 sys.modules["ufo_model_loader.common"] = common
+sys.modules["ufo_model_loader.raw"] = raw
 "#
             );
             PyModule::from_code(
@@ -565,6 +572,7 @@ sys.modules["ufo_model_loader.common"] = common
             );
             modules.del_item("scalar").unwrap();
             modules.del_item("ufo_model_loader.commands").unwrap();
+            modules.del_item("ufo_model_loader.raw").unwrap();
             modules.del_item("ufo_model_loader.common").unwrap();
             modules.del_item("ufo_model_loader").unwrap();
             temporary.call_method0("cleanup").unwrap();
