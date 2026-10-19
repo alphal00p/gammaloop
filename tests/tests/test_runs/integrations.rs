@@ -260,10 +260,11 @@ fn scalar_bubble() -> Result<()> {
 
 #[test]
 fn vakint_compare_scalar_bubble() -> Result<()> {
+    let name = "vakint_compare_scalar_bubble";
     let mut cli = get_test_cli(
         Some("scalar_bubble.toml".into()),
-        get_tests_workspace_path().join("scalar_bubble"),
-        Some("scalar_bubble".to_string()),
+        get_tests_workspace_path().join(name),
+        Some(name.to_string()),
         false,
     )?;
 
@@ -278,7 +279,7 @@ fn vakint_compare_scalar_bubble() -> Result<()> {
     cli.run_command("generate")?;
 
     let integrate_command = Integrate {
-        ..default_integrate_for("scalar_bubble")
+        ..default_integrate_for(name)
     };
 
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {

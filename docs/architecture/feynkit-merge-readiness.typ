@@ -177,9 +177,48 @@ at the actual timed boundary. No tensor API, saved-state schema or full-state
 version changes here; GammaLoop remains fully indexed at version 21.
 
 The earlier successful qualification belongs to `4c40d40a` and its loader 1.0.0
-closure. It does not qualify this new dependency or reconciled source. Fresh
-canonical checks, documentation, cache upload and paired performance remain
-required before the new source is ready to merge.
+closure. It does not qualify the new dependency or reconciled source; subsequent
+attempts retain their own source identities below. Fresh final-source checks,
+documentation, cache verification and paired performance remain separate gates.
+
+=== Scalar-bubble isolation and deferred trace-power audit
+
+Frozen `af446e51` completes all 5,749 runtime cases with 5,748 passes and one
+failure. Its integration group passes 364 of 365; the other eight groups pass
+all 5,384 cases. The sole failure occurs before a numerical comparison:
+`vakint_compare_scalar_bubble` reads an existing integration state but cannot
+open the workspace manifest. It overlaps the successful `scalar_bubble` case;
+both use the same state/workspace paths, restart and cleanup helpers, run card
+and seed 42. The shared-path hazard is established, while the exact deletion or
+write interleaving is not observed. The repair gives the Vakint case its own
+state, trace-log and workspace names. Numerical targets, statistics, seed,
+assertions, sample budgets, scheduling and serialization remain unchanged.
+
+That source also passes 65 doctests with 19 existing ignored examples, all
+six-product documentation/publication checks for latest and snapshot, and the
+105-output upload plus independent verifier. These completed receipts belong
+to `af446e51`; its failed runtime attempt is not a full CI pass. The isolated
+pair and final source still require their own canonical qualification.
+
+PR 155's production correction is already in `af446e51` through `65351460`.
+Only its two typed regressions are added: they check free color-slot duality,
+distinct external wiring, dummy relabeling and idempotence. The safe continuation
+restores `af446e51` production and adds those tests, the test-path isolation and
+this audit record. These additions change no production tensor API, saved-state
+format or performance algorithm; the full-state version remains 21.
+
+PR 154 is deferred. Its exact production hunk was tested with the prerequisite
+scope fixes at `bb0b64ae`, retained as
+`feynkit-original-trace-power-qualification-20261019`. Eight of nine controls
+pass, including the original upstream cases and the shared-index SU(3) values
+2 and -10/27. The internally contracted trace square has exact raw value 16,
+and the independent alpha-renamed oracle also passes. After `undo_trace`,
+canonicalization instead rejects a repeated `coad(8,a)` binding. The later
+component comparison is not reached; no wrong numerical result is claimed.
+The tested implementation remains incomplete on that boundary. Its source,
+receipts and private parser, chain-admission and generic-emission experiments
+are retained separately and are excluded from the safe merge candidate. None
+of their test or performance results qualifies the restored production source.
 
 === Current owned-product checkpoint 2f556851
 
