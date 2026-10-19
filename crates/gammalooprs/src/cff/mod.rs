@@ -21,9 +21,9 @@ use crate::{
     cff::{
         expression::{
             GammaLoopOrientationExpression, OrientationExpression, OrientationID,
-            OrientationSelector, ThreeDExpression,
-            normalize_cut_edge_support_with_raised_edge_groups,
+            OrientationSelector, normalize_cut_edge_support_with_raised_edge_groups,
             normalize_three_d_expression_cut_support_with_raised_edge_groups,
+            select_indexed_cff_residues,
         },
         generation::{ExactCffPreparationKey, PreparationKey, PreparationValue},
         orientations::GraphOrientation,
@@ -36,7 +36,9 @@ use crate::{
         get_cff_inverse_energy_product_impl,
         three_d_source::{ExactSourceEnergyMapper, ExactSourceMappingContext},
     },
-    numerator::energy_degree::{EnergyPowerAssignmentPlan, PlannedEnergyExpression},
+    numerator::energy_degree::{
+        EnergyPowerAnalyzer, EnergyPowerAssignmentPlan, PlannedEnergyExpression,
+    },
     settings::global::OrientationPattern,
     utils::GS,
     uv::{
@@ -140,6 +142,39 @@ pub(crate) struct PlannedExactSourceNumerator {
 }
 
 impl PlannedExactSourceNumerator {
+    /// Localization can merge simple LTD factors into a raised pole. Bound the
+    /// immutable assigned template only then, including fixed affine carriers
+    /// which depend directly on source-loop energies rather than occurrences.
+    fn residue_energy_degree_bounds(
+        &self,
+        loop_count: usize,
+        edge_count: usize,
+    ) -> Result<Vec<(usize, usize)>> {
+        if self.parameters.len() < loop_count || self.parameters.len() - loop_count > edge_count {
+            return Err(eyre::eyre!(
+                "exact numerator template samples do not fit the residue energy maps"
+            ));
+        }
+        let analyzer =
+            EnergyPowerAnalyzer::for_scalar_parameters(self.parameters.iter().enumerate().map(
+                |(index, parameter)| {
+                    // Laurent selection appends loop slots after the unchanged
+                    // occurrence namespace. Template preparation uses loops first.
+                    let slot = if index < loop_count {
+                        edge_count + index
+                    } else {
+                        index - loop_count
+                    };
+                    (parameter.clone(), EdgeIndex(slot))
+                },
+            ));
+        let numerator = self
+            .template
+            .map(&mut |_, factor, _| Ok::<_, std::convert::Infallible>(factor.clone()))
+            .unwrap();
+        Ok(analyzer.analyze_atom(&numerator)?.into_generation_bounds())
+    }
+
     /// Keep the certified ordinary numerator once and describe every residue
     /// through scalar coefficients of its full affine energy maps. In
     /// particular, sampling nodes multiply M rather than replacing it, and
@@ -772,6 +807,12 @@ impl CutCFF {
     fn gamma_loop_prefactor_conversion<E, H>(
         generated: &GeneratedThreeDExpression<E, H>,
     ) -> CffGlobalPrefactorSign {
+        // LTD already carries the signed dq0/(2*pi*i) contour, including its
+        // basis-local positive energy factors. Only CFF needs the source-frame
+        // bridge below; the physical i-per-loop normalization is shared.
+        if generated.representation == three_dimensional_reps::RepresentationMode::Ltd {
+            return CffGlobalPrefactorSign::default();
+        }
         let retained_positive_energy_factors =
             generated.energy_factor_ownership == CffEnergyFactorOwnership::VariantLocal;
         generated.energy_factor_components.iter().fold(
@@ -805,125 +846,6 @@ impl CutCFF {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum CutCffResidueAxis {
-    RightThreshold,
-    LeftThreshold,
-    LuCut,
-}
-
-impl CutCffResidueAxis {
-    fn set_order(self, index: &mut CutCFFIndex, order: usize) {
-        match self {
-            Self::RightThreshold => index.right_threshold_order = Some(order),
-            Self::LeftThreshold => index.left_threshold_order = Some(order),
-            Self::LuCut => index.lu_cut_order = Some(order),
-        }
-    }
-}
-
-fn apply_indexed_residue_selection<F>(
-    residues: Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>,
-    axis: CutCffResidueAxis,
-    mut select: F,
-) -> Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>
-where
-    F: FnMut(ThreeDExpression<OrientationID>) -> Vec<ThreeDExpression<OrientationID>>,
-{
-    residues
-        .into_iter()
-        .flat_map(|(index, expression)| {
-            select(expression)
-                .into_iter()
-                .enumerate()
-                .map(move |(i, residue)| {
-                    let mut new_index = index;
-                    axis.set_order(&mut new_index, i + 1);
-                    // One causal coordinate has been consumed regardless of
-                    // which raised-order branch `i` labels. Its energy-factor,
-                    // contact, and residue signs remain owned by the selected
-                    // CFF variant; the index records only the residue order.
-                    (new_index, residue)
-                })
-        })
-        .collect()
-}
-
-fn select_indexed_cff_residues(
-    cff: ThreeDExpression<OrientationID>,
-    cutset: &CutSet,
-) -> Result<Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>> {
-    if let Some(lu) = cutset.residue_selector.lu.as_ref()
-        && (lu.cut_edge_alternatives.is_empty()
-            || lu.cut_edge_alternatives.iter().any(Vec::is_empty))
-    {
-        return Err(eyre::eyre!(
-            "LU residue selection requires at least one non-empty physical cut alternative"
-        ));
-    }
-    for group in cutset
-        .residue_selector
-        .right_th_cut
-        .iter()
-        .chain(&cutset.residue_selector.left_th_cut)
-        .chain(cutset.residue_selector.lu.iter().map(|lu| &lu.raised_group))
-    {
-        if group.esurface_ids.is_empty() || group.max_occurence == 0 {
-            return Err(eyre::eyre!(
-                "CFF residue selection requires a nonempty surface group and a positive residue order"
-            ));
-        }
-        if let Some(id) = group
-            .esurface_ids
-            .iter()
-            .find(|id| cff.surfaces.esurface_cache.get(**id).is_none())
-        {
-            return Err(eyre::eyre!(
-                "CFF residue selection references missing E-surface {id:?}"
-            ));
-        }
-    }
-    // Carry selected causal coordinates through the operation pipeline rather
-    // than reconstructing them later from raised-order labels in
-    // `CutCFFIndex`. Energy-factor ownership stays with the generated CFF
-    // variants and is deliberately independent of this indexing operation.
-    let mut residues = vec![(CutCFFIndex::new_all_none(), cff)];
-
-    if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
-        residues = apply_indexed_residue_selection(
-            residues,
-            CutCffResidueAxis::RightThreshold,
-            |expression| expression.select_esurface_residue(right_threshold),
-        );
-    }
-
-    if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
-        residues = apply_indexed_residue_selection(
-            residues,
-            CutCffResidueAxis::LeftThreshold,
-            // Powered poles are completed in the canonical causal basis, so
-            // left- and right-threshold selections use the same positive-
-            // energy Cutkosky convention as ordinary CFF terms.
-            |expression| expression.select_esurface_residue(left_threshold),
-        );
-    }
-
-    if let Some(lu) = cutset.residue_selector.lu.as_ref() {
-        residues =
-            apply_indexed_residue_selection(residues, CutCffResidueAxis::LuCut, |expression| {
-                // Physical support selection is independent of the 3D
-                // representation. CFF then consumes the selected surface in
-                // GammaLoop's positive-energy Cutkosky convention; future LTD
-                // signs and local-series coordinates remain LTD-owned.
-                expression
-                    .restrict_to_cut_alternatives(&lu.cut_edge_alternatives)
-                    .select_esurface_residue(&lu.raised_group)
-            });
-    }
-
-    Ok(residues)
-}
-
 impl Graph {
     pub(crate) fn cff_from_production_expression(
         &self,
@@ -932,17 +854,39 @@ impl Graph {
         orientation_pattern: &OrientationPattern,
     ) -> Result<CutCFF> {
         let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(production);
-        let mut cff = production.expression.clone();
-        normalize_three_d_expression_cut_support_with_raised_edge_groups(
-            &mut cff,
-            &self.get_raised_edge_groups(),
-        );
-        let residues = select_indexed_cff_residues(cff, cutset)?;
         let contract_subgraph = self.tree_edges.subtract(&self.initial_state_cut);
         let contract_edges = self
             .iter_edges_of(&contract_subgraph)
             .filter_map(|(pair, edge_id, _)| pair.is_paired().then_some(edge_id))
             .collect::<Vec<_>>();
+        let mut cff = production.expression.clone();
+        normalize_three_d_expression_cut_support_with_raised_edge_groups(
+            &mut cff,
+            &self.get_raised_edge_groups(),
+        );
+        let residues = select_indexed_cff_residues(
+            cff,
+            cutset,
+            production.representation,
+            &self.get_raised_edge_groups(),
+            || {
+                if !production.source_energy_degree_bounds.is_empty() {
+                    return Ok(production.source_energy_degree_bounds.clone());
+                }
+                // Simple LTD generation needs no degree information. Localizing
+                // several physical surfaces can merge its remaining factors into
+                // a raised pole, whose numerator jet needs bounds only now.
+                let numerator = self.production_numerator_atom_for_full_3d_expression();
+                Ok(self
+                    .automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+                        [&numerator],
+                        self.iter_edges_of(&self.initial_state_cut)
+                            .chain(self.iter_edges_of(&self.tree_edges))
+                            .map(|(_, edge, _)| edge),
+                        1,
+                    )?)
+            },
+        )?;
         let graph_without_is_cut = self
             .underlying
             .full_filter()
@@ -984,7 +928,9 @@ impl Graph {
                 cff_term.orientations.push(CFFOrientationTerm {
                     expression,
                     orientation,
-                    production_orientation_id: Some(OrientationID(orientation_index)),
+                    production_orientation_id: (production.representation
+                        == three_dimensional_reps::RepresentationMode::Cff)
+                        .then_some(OrientationID(orientation_index)),
                 });
             }
             terms.insert(cut_cff_index, cff_term);
@@ -1114,6 +1060,7 @@ impl Graph {
             generated,
             physical_surfaces,
             physical_energy_edges,
+            physical_ose_coordinates,
             exact_source_numerator,
             inverse_energy_product,
             cff_loop_number,
@@ -1176,6 +1123,11 @@ impl Graph {
                     )?
                 };
                 source_build_time = reconstruction_started.elapsed();
+                if let Some(context) = context.as_deref_mut() {
+                    context.shared_preparation_time += source_build_time;
+                }
+                // Capacity analysis and certified assignment planning below
+                // depend on the requested representation and keep its timing.
                 let preparation_started = Instant::now();
                 let preparation = Arc::new(self.prepare_3d_expression_for_4d_term(
                     &source,
@@ -1247,11 +1199,25 @@ impl Graph {
                 })
                 .collect::<Vec<_>>();
             let physical_energy_edges = preparation.physical_energy_edges.clone();
+            let physical_ose_coordinates =
+                if options.representation == three_dimensional_reps::RepresentationMode::Ltd {
+                    physical_energy_edges
+                        .internal
+                        .iter()
+                        .filter(|(occurrence, _)| {
+                            preparation.physical_surface_edges.contains(occurrence)
+                        })
+                        .map(|(&occurrence, &physical)| (occurrence, physical))
+                        .collect::<BTreeMap<_, _>>()
+                } else {
+                    BTreeMap::new()
+                };
             let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(&generated);
             (
                 generated,
                 physical_surfaces,
                 physical_energy_edges,
+                physical_ose_coordinates,
                 exact_source_numerator,
                 preparation.inverse_energy_product.clone(),
                 preparation.active_loop_count,
@@ -1282,10 +1248,23 @@ impl Graph {
             physical_energy_edges,
         );
         let mut cff = generated.expression;
-        // Residue support belongs to physical Cutkosky alternatives even
-        // though exact numerator maps and half-edge energies remain
-        // occurrence-local. Project only that neutral provenance across the
-        // dual-ID boundary.
+        if options.representation == three_dimensional_reps::RepresentationMode::Ltd {
+            // The Laurent chart uses physical OSEs. Carry precisely the
+            // certified physical occurrence coordinates into every value it
+            // differentiates, retaining independent numerator argument slots
+            // and nonphysical UV energies in their exact-source namespace.
+            for orientation in &mut cff.orientations {
+                orientation.remap_on_shell_energy_values(&physical_ose_coordinates);
+            }
+            for surface in &mut cff.surfaces.linear_surface_cache {
+                surface.expression =
+                    std::mem::replace(&mut surface.expression, LinearEnergyExpr::zero())
+                        .remap_internal_edges(&physical_ose_coordinates);
+            }
+        }
+        // Residue support belongs to physical Cutkosky alternatives. Its
+        // provenance projection is separate from energy-coordinate transport:
+        // numerator argument slots remain occurrence-local in both modes.
         let physical_edges = |edge: linnet::half_edge::involution::EdgeIndex| {
             let edge_id = usize::from(edge);
             if edge_id < physical_energy_edges.orientation_edge_count {
@@ -1338,7 +1317,23 @@ impl Graph {
                         })?;
             }
         }
-        let residues = select_indexed_cff_residues(cff, cutset)?;
+        let (loop_count, edge_count) = cff
+            .orientations
+            .first()
+            .map(|orientation| {
+                (
+                    orientation.loop_energy_map.len(),
+                    orientation.edge_energy_map.len(),
+                )
+            })
+            .unwrap_or_default();
+        let residues = select_indexed_cff_residues(
+            cff,
+            cutset,
+            options.representation,
+            &self.get_raised_edge_groups(),
+            || exact_source_numerator.residue_energy_degree_bounds(loop_count, edge_count),
+        )?;
         let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let mut terms = BTreeMap::new();
@@ -1411,10 +1406,8 @@ impl Graph {
 
         let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
 
-        // Reduced UV graphs use the same CFF dispatcher and representation family as the
-        // production graph. Switching only this side to a residue coordinate would make its
-        // surviving edge-energy maps different numerator samples rather than exact restrictions
-        // of production maps. Proper LTD remains a separate deferred representation.
+        // Reduced UV graphs use the production representation while retaining
+        // their own affine numerator maps and independent residue sums.
         let generated = self.generate_3d_expression_for_integrand(
             &contract_edges,
             &canonize_esurface,
@@ -1427,6 +1420,7 @@ impl Graph {
             cutset,
             orientation_pattern,
             options,
+            analysis_numerator,
         )
     }
 
@@ -1437,6 +1431,7 @@ impl Graph {
         cutset: &CutSet,
         orientation_pattern: &OrientationPattern,
         options: &Generate3DExpressionOptions,
+        analysis_numerator: Option<&Atom>,
     ) -> Result<CutCFF> {
         let mut contract_edges = self
             .iter_edges_of(contract_subgraph)
@@ -1453,9 +1448,29 @@ impl Graph {
             &self.get_raised_edge_groups(),
         );
 
-        let residues = select_indexed_cff_residues(cff, cutset)?;
-
-        // println!("residue orders: {}", residue.len());
+        let residues = select_indexed_cff_residues(
+            cff,
+            cutset,
+            options.representation,
+            &self.get_raised_edge_groups(),
+            || {
+                if options.energy_degree_bounds.is_some() || !source_energy_degree_bounds.is_empty()
+                {
+                    return Ok(source_energy_degree_bounds.clone());
+                }
+                let numerator = analysis_numerator.ok_or(
+                three_dimensional_reps::generation::GenerationError::LtdResidueRequiresEnergyBounds,
+            )?;
+                Ok(self
+                    .automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
+                        [numerator],
+                        self.iter_edges_of(&self.initial_state_cut)
+                            .chain(self.iter_edges_of(&self.tree_edges))
+                            .map(|(_, edge, _)| edge),
+                        1,
+                    )?)
+            },
+        )?;
 
         let graph_without_is_cut = self
             .underlying
@@ -1544,6 +1559,7 @@ impl Graph {
 mod tests {
     use std::{collections::BTreeSet, fmt::Write};
 
+    use super::expression::{CutCffResidueAxis, ThreeDExpression};
     use super::*;
     use crate::{
         dot,
@@ -1918,7 +1934,16 @@ mod tests {
             cut_edge_alternatives: Vec::new(),
         });
 
-        assert!(select_indexed_cff_residues(ThreeDExpression::new_empty(), &cutset).is_err());
+        assert!(
+            select_indexed_cff_residues(
+                ThreeDExpression::new_empty(),
+                &cutset,
+                three_dimensional_reps::RepresentationMode::Cff,
+                &[],
+                || Ok(Vec::new()),
+            )
+            .is_err()
+        );
 
         let mut expression = ThreeDExpression::new_empty();
         expression.surfaces.esurface_cache.push(esurface::Esurface {
@@ -1956,7 +1981,14 @@ mod tests {
                     }
                 }
                 assert!(
-                    select_indexed_cff_residues(expression.clone(), &cutset).is_err(),
+                    select_indexed_cff_residues(
+                        expression.clone(),
+                        &cutset,
+                        three_dimensional_reps::RepresentationMode::Cff,
+                        &[],
+                        || Ok(Vec::new()),
+                    )
+                    .is_err(),
                     "malformed residue group must return an error for {axis:?}"
                 );
             }
@@ -2327,23 +2359,23 @@ mod tests {
                 let (child, _, _, _) =
                     graph.generate_3d_expression_for_4d_term(&preparation, None)?;
                 child
-                    .expression
-                    .orientations
-                    .iter()
-                    .map(|child_orientation| {
-                        let candidates = localizer.source_selector_representatives(
-                            &graph,
-                            child_orientation,
-                            &source.contract_subgraph(),
-                        )?;
-                        assert!(
-                            !candidates.is_empty(),
-                            "every exact child residue must extend to a production map using only its physical graph-edge prefix; denominators={denominators:?}, child={:?}",
-                            child_orientation.data,
-                        );
-                        Ok(candidates)
-                    })
-                    .collect()
+                        .expression
+                        .orientations
+                        .iter()
+                        .map(|child_orientation| {
+                            let candidates = localizer.source_selector_representatives(
+                                &graph,
+                                child_orientation,
+                                &source.contract_subgraph(),
+                            )?;
+                            assert!(
+                                !candidates.is_empty(),
+                                "every exact child residue must extend to a production map using only its physical graph-edge prefix; denominators={denominators:?}, child={:?}",
+                                child_orientation.data,
+                            );
+                            Ok(candidates)
+                        })
+                        .collect()
             };
 
         let ordinary_hosts = physical_host_classes(&denominators)?;
@@ -2795,6 +2827,855 @@ mod tests {
     }
 
     #[test]
+    fn cff_raised_coefficients_retain_formal_energy_routing_dependence() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph ltd_dotted_connected_threshold {
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+                incoming -> v1 [id=0]
+                v1 -> v2 [id=1 lmb_id=0]
+                v1 -> v3 [id=2]
+                v2 -> v3 [id=3]
+                v2 -> v4 [id=4]
+                v4 -> v5 [id=5]
+                v3 -> v5 [id=6 lmb_id=1]
+                v5 -> outgoing [id=7]
+            }, "scalars")?;
+
+        let q4 = GS.emr_mom(EdgeIndex(4), GS.cind(0));
+        let q6 = GS.emr_mom(EdgeIndex(6), GS.cind(0));
+        let p = crate::utils::external_energy_atom_from_index(EdgeIndex(0));
+        let sum = q4 + q6;
+        let zero = &sum - &p;
+        let mut coefficients = BTreeMap::new();
+        for (name, numerator, analysis) in [
+            ("routing_zero_auto", &zero, &zero),
+            ("sum_auto", &sum, &sum),
+            ("external_auto", &p, &p),
+            ("external_shared_bounds", &p, &sum),
+        ] {
+            let mut graph = graph.clone();
+            let options = graph.denominator_only_cff_3d_expression_options();
+            let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+            let production = graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonization,
+                &options,
+                Some(analysis),
+            )?;
+            let mut cutset = CutSet::empty(graph.n_hedges());
+            let full = graph.cff_from_production_expression(
+                &production,
+                &cutset,
+                &OrientationPattern::default(),
+            )?;
+            let mapped_value = |cff: &CutCFF, term: &CFFTerm| {
+                term.orientations.iter().fold(Atom::Zero, |value, term| {
+                    value
+                        + &term.expression
+                            * numerator
+                                .replace_multiple(term.orientation.energy_replacements_gs(&graph))
+                }) * Atom::num(cff.production_prefactor_factor())
+            };
+            if name == "routing_zero_auto" {
+                let value = full
+                    .terms
+                    .values()
+                    .fold(Atom::Zero, |value, term| value + mapped_value(&full, term))
+                    .together();
+                assert!(value.is_zero(), "full routing-zero CFF = {value}");
+            }
+            for (pair, order, threshold) in [([1, 2], 1, true), ([4, 6], 2, false)] {
+                let energies = pair.map(EdgeIndex).to_vec();
+                let ids = production
+                    .expression
+                    .surfaces
+                    .esurface_cache
+                    .iter_enumerated()
+                    .filter_map(|(id, surface)| {
+                        let normalized = Graph::normalize_esurface_with_raised_edge_groups(
+                            surface,
+                            &graph.get_raised_edge_groups(),
+                        );
+                        (normalized.energies == energies
+                            && normalized
+                                .external_shift
+                                .first()
+                                .is_some_and(|(_, sign)| *sign < 0))
+                        .then_some(id)
+                    })
+                    .collect::<Vec<_>>();
+                assert!(!ids.is_empty());
+                let group = esurface::RaisedEsurfaceGroup {
+                    esurface_ids: ids,
+                    max_occurence: order,
+                };
+                if threshold {
+                    cutset.residue_selector.right_th_cut = Some(group);
+                } else {
+                    cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                        raised_group: group,
+                        cut_edge_alternatives: vec![energies],
+                    });
+                }
+            }
+            let cff = graph.cff_from_production_expression(
+                &production,
+                &cutset,
+                &OrientationPattern::default(),
+            )?;
+            let mut orders = BTreeMap::new();
+            for (index, term) in &cff.terms {
+                let coefficient = mapped_value(&cff, term)
+                    .replace(GS.ose(EdgeIndex(5)))
+                    .with(GS.ose(EdgeIndex(4)))
+                    .replace(GS.ose(EdgeIndex(1)))
+                    .with(&p - GS.ose(EdgeIndex(2)))
+                    .together();
+                crate::debug_tags!(#generation, #subtraction, #cut, #dump;
+                    stage = "cff_signed_routing_coefficient",
+                    source = name,
+                    bounds = ?production.source_energy_degree_bounds,
+                    cut_index = ?index,
+                    log.coefficient = coefficient,
+                    "CFF coefficient of a physically signed numerator source"
+                );
+                orders.insert(index.lu_cut_order.unwrap(), coefficient);
+            }
+            assert_eq!(orders.keys().copied().collect::<Vec<_>>(), [1, 2]);
+            coefficients.insert(name, orders);
+        }
+
+        // The signed routing gives Q4 + Q6 = p, but CFF retains the formal
+        // numerator's off-shell extension in separate raised-pole coefficients.
+        // Their complete residue still vanishes: the simple-pole coefficient
+        // cancels the derivative of the double-pole coefficient exactly.
+        let e4 = GS.ose(EdgeIndex(4));
+        let e6 = GS.ose(EdgeIndex(6));
+        let at_lu_cut =
+            |coefficient: &Atom| coefficient.replace(p.clone()).with(&e4 + &e6).together();
+        let routing_zero = &coefficients["routing_zero_auto"];
+        let lower = at_lu_cut(&routing_zero[&1]);
+        assert!(!lower.is_zero());
+        assert!(at_lu_cut(&routing_zero[&2]).is_zero());
+        let coordinate = symbolica::symbol!("cff_test::lu_energy");
+        let derivative = routing_zero[&2]
+            .replace(e6.clone())
+            .with(Atom::var(coordinate))
+            .derivative(coordinate)
+            .replace(Atom::var(coordinate))
+            .with(e6.clone());
+        assert!((lower + at_lu_cut(&derivative)).together().is_zero());
+
+        for order in [1, 2] {
+            // Extra interpolation capacity alone does not change this split.
+            assert!(
+                (&coefficients["external_auto"][&order]
+                    - &coefficients["external_shared_bounds"][&order])
+                    .together()
+                    .is_zero()
+            );
+            assert!(
+                (&coefficients["sum_auto"][&order]
+                    - &coefficients["external_auto"][&order]
+                    - &routing_zero[&order])
+                    .together()
+                    .is_zero()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ltd_dotted_connected_threshold_residue_matches_cff() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph ltd_dotted_connected_threshold {
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+                incoming -> v1 [id=0]
+                v1 -> v2 [id=1 lmb_id=0]
+                v1 -> v3 [id=2]
+                v2 -> v3 [id=3]
+                v2 -> v4 [id=4]
+                v4 -> v5 [id=5]
+                v3 -> v5 [id=6 lmb_id=1]
+                v5 -> outgoing [id=7]
+            }, "scalars")?;
+        let q1 = GS.emr_mom(EdgeIndex(1), GS.cind(0));
+        let q4 = GS.emr_mom(EdgeIndex(4), GS.cind(0));
+        let q6 = GS.emr_mom(EdgeIndex(6), GS.cind(0));
+        let p = crate::utils::external_energy_atom_from_index(EdgeIndex(0));
+        let a = symbolica::symbol!("ltd_cut_test::threshold_surface");
+        let b = symbolica::symbol!("ltd_cut_test::lu_surface");
+        for numerator in [
+            Atom::one(),
+            q1.clone().pow(2),
+            q6.clone().pow(2),
+            q1 * &q6,
+            &q4 * &q6,
+            q4 + q6 - &p,
+        ] {
+            let mut values = Vec::new();
+            for (representation, excluded_support) in [
+                (three_dimensional_reps::RepresentationMode::Cff, false),
+                (three_dimensional_reps::RepresentationMode::Ltd, false),
+                (three_dimensional_reps::RepresentationMode::Ltd, true),
+            ] {
+                let mut graph = graph.clone();
+                let mut options = graph.denominator_only_cff_3d_expression_options();
+                options.representation = representation;
+                let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+                let mut production = graph.generate_3d_expression_for_integrand(
+                    &[],
+                    &canonization,
+                    &options,
+                    Some(&numerator),
+                )?;
+                if excluded_support {
+                    // Coincident affine surfaces do not establish Cutkosky support.
+                    // These rows have identical pole formulas but belong to a
+                    // source without either requested LU cut propagator.
+                    let mut excluded = production.expression.orientations.clone();
+                    for orientation in &mut excluded {
+                        for variant in &mut orientation.variants {
+                            variant.prefactor *= Rational::from(7);
+                            variant.denominator_edges =
+                                vec![EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)];
+                            variant.denominator_edge_support_signs.clear();
+                        }
+                    }
+                    production.expression.orientations.extend(excluded);
+                }
+                let raised_edges = graph.get_raised_edge_groups();
+                let mut cutset = CutSet::empty(graph.n_hedges());
+                for (pair, order, threshold) in [([1, 2], 1, true), ([4, 6], 2, false)] {
+                    let energies = pair.map(EdgeIndex).to_vec();
+                    let ids = production
+                        .expression
+                        .surfaces
+                        .esurface_cache
+                        .iter_enumerated()
+                        .filter_map(|(id, surface)| {
+                            let normalized = Graph::normalize_esurface_with_raised_edge_groups(
+                                surface,
+                                &raised_edges,
+                            );
+                            (normalized.energies == energies
+                                && normalized
+                                    .external_shift
+                                    .first()
+                                    .is_some_and(|(_, sign)| *sign < 0))
+                            .then_some(id)
+                        })
+                        .collect::<Vec<_>>();
+                    assert!(
+                        !ids.is_empty(),
+                        "missing physical surface {pair:?} in {representation:?}"
+                    );
+                    let group = crate::cff::esurface::RaisedEsurfaceGroup {
+                        esurface_ids: ids,
+                        max_occurence: order,
+                    };
+                    if threshold {
+                        cutset.residue_selector.right_th_cut = Some(group);
+                    } else {
+                        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                            raised_group: group,
+                            cut_edge_alternatives: vec![energies],
+                        });
+                    }
+                }
+                let cff = graph.cff_from_production_expression(
+                    &production,
+                    &cutset,
+                    &OrientationPattern::default(),
+                )?;
+                assert!(!cff.terms.is_empty());
+                let mut residues = [Atom::Zero, Atom::Zero];
+                for (index, term) in &cff.terms {
+                    assert_eq!(index.right_threshold_order, Some(1));
+                    assert_eq!(index.left_threshold_order, None);
+                    let coefficient = term.orientations.iter().fold(Atom::Zero, |sum, term| {
+                        sum + &term.expression
+                            * numerator
+                                .replace_multiple(term.orientation.energy_replacements_gs(&graph))
+                    }) * Atom::num(cff.production_prefactor_factor());
+                    crate::debug_tags!(#cff, #trace;
+                        stage = "dotted_connected_threshold_coefficient",
+                        representation = ?representation,
+                        log.numerator = numerator,
+                        cut_index = ?index,
+                        log.coefficient = coefficient,
+                        "Connected raised scalar threshold coefficient"
+                    );
+                    let coefficient = coefficient
+                        .replace(GS.ose(EdgeIndex(5)))
+                        .with(GS.ose(EdgeIndex(4)))
+                        .replace(p.clone())
+                        .with(GS.ose(EdgeIndex(4)) + GS.ose(EdgeIndex(6)) - Atom::var(b))
+                        .replace(GS.ose(EdgeIndex(1)))
+                        .with(
+                            GS.ose(EdgeIndex(4)) + GS.ose(EdgeIndex(6)) - GS.ose(EdgeIndex(2))
+                                + Atom::var(a)
+                                - Atom::var(b),
+                        )
+                        .together();
+                    // The two probes are observable factors for this ONE
+                    // physical residue. Raised-order partial weights may move
+                    // between representations, but their differentiated sum
+                    // must agree for each probe independently.
+                    for (residue, observable) in residues
+                        .iter_mut()
+                        .zip([Atom::one(), Atom::one() + Atom::var(b)])
+                    {
+                        let mut contribution = &coefficient * observable;
+                        for order in 1..index.lu_cut_order.unwrap() {
+                            contribution = contribution.derivative(b) / Atom::num(order);
+                        }
+                        *residue += contribution
+                            .together()
+                            .replace(Atom::var(a))
+                            .with(Atom::Zero)
+                            .together()
+                            .replace(Atom::var(b))
+                            .with(Atom::Zero)
+                            .together();
+                    }
+                }
+                values.push(residues);
+            }
+            for (route, residues) in values.iter().enumerate().skip(1) {
+                for (observable, (cff, ltd)) in values[0].iter().zip(residues).enumerate() {
+                    let difference = (cff - ltd).together();
+                    assert!(
+                        difference.is_zero(),
+                        "numerator {numerator}, route {route}, observable {observable}: CFF={cff}; LTD={ltd}; difference={difference}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ltd_physical_bubble_cut_matches_cff_with_energy_numerator() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph ltd_physical_bubble_cut {
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+                incoming -> a [id=0]
+                a -> b [id=1 lmb_id=0]
+                a -> b [id=2 particle="scalar_2"]
+                b -> outgoing [id=3]
+            }, "scalars")?;
+        for numerator in [Atom::one(), GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(2)] {
+            let mut generated = Vec::new();
+            for representation in [
+                three_dimensional_reps::RepresentationMode::Cff,
+                three_dimensional_reps::RepresentationMode::Ltd,
+            ] {
+                let mut graph = graph.clone();
+                let mut options = graph.denominator_only_cff_3d_expression_options();
+                options.representation = representation;
+                let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+                generated.push(graph.generate_3d_expression_for_integrand(
+                    &[],
+                    &canonization,
+                    &options,
+                    Some(&numerator),
+                )?);
+            }
+            assert!(!generated[0].expression.surfaces.esurface_cache.is_empty());
+            let mut compared_poles = 0;
+            for (physical_id, physical) in generated[0]
+                .expression
+                .surfaces
+                .esurface_cache
+                .iter_enumerated()
+            {
+                if physical.external_shift.is_empty()
+                    || !generated[0]
+                        .expression
+                        .orientations
+                        .iter()
+                        .any(|orientation| {
+                            orientation.max_effective_denominator_value_count_on_branch(
+                                &surface::HybridSurfaceID::Esurface(physical_id),
+                            ) > 0
+                        })
+                {
+                    continue;
+                }
+                compared_poles += 1;
+                let mut values = Vec::new();
+                for production in &generated {
+                    let surface = production
+                            .expression
+                            .surfaces
+                            .esurface_cache
+                            .iter_enumerated()
+                            .find_map(|(id, candidate)| (candidate == physical).then_some(id))
+                            .unwrap_or_else(|| panic!("{:?} is missing physical CFF pole {physical:?} for numerator {numerator}; generated E surfaces: {:?}", production.representation, production.expression.surfaces.esurface_cache));
+                    for lu_cut in [false, true] {
+                        let mut cutset = CutSet::empty(graph.n_hedges());
+                        let group = crate::cff::esurface::RaisedEsurfaceGroup {
+                            esurface_ids: vec![surface],
+                            max_occurence: 1,
+                        };
+                        if lu_cut {
+                            cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                                raised_group: group,
+                                cut_edge_alternatives: vec![physical.energies.clone()],
+                            });
+                        } else {
+                            cutset.residue_selector.right_th_cut = Some(group);
+                        }
+                        let cff = graph.cff_from_production_expression(
+                            production,
+                            &cutset,
+                            &OrientationPattern::default(),
+                        )?;
+                        let mut value =
+                            cff.terms.values().flat_map(|term| &term.orientations).fold(
+                                Atom::Zero,
+                                |sum, term| {
+                                    sum + &term.expression
+                                        * numerator.replace_multiple(
+                                            term.orientation.energy_replacements_gs(&graph),
+                                        )
+                                },
+                            ) * Atom::num(cff.production_prefactor_factor());
+                        let (external, sign) = physical.external_shift[0];
+                        let remaining = physical
+                            .energies
+                            .iter()
+                            .map(|edge| GS.ose(*edge))
+                            .chain(physical.external_shift.iter().skip(1).map(|(edge, sign)| {
+                                Atom::num(*sign)
+                                    * crate::utils::external_energy_atom_from_index(*edge)
+                            }))
+                            .fold(Atom::Zero, |sum, term| sum + term);
+                        value = value
+                            .replace(crate::utils::external_energy_atom_from_index(external))
+                            .with(-remaining / Atom::num(sign));
+                        values.push(value);
+                    }
+                }
+                assert!(!values[0].together().is_zero());
+                for value in &values[1..] {
+                    assert!(
+                        (value - &values[0]).together().is_zero(),
+                        "physical surface {physical:?}, numerator {numerator}: {} != {value}",
+                        values[0]
+                    );
+                }
+            }
+            assert_eq!(
+                compared_poles, 2,
+                "a bubble has both signed two-particle poles"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ltd_nested_physical_threshold_and_lu_cuts_match_cff() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph ltd_nested_physical_cuts {
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+                incoming -> a [id=0]
+                a -> b [id=1 lmb_id=0]
+                a -> b [id=2 particle="scalar_2"]
+                b -> c [id=3 lmb_id=1]
+                b -> c [id=4 particle="scalar_2"]
+                c -> d [id=5 lmb_id=2]
+                c -> d [id=6 particle="scalar_2"]
+                d -> outgoing [id=7]
+            }, "scalars")?;
+        let numerator = [1, 3, 5].into_iter().fold(Atom::one(), |sum, edge| {
+            sum + GS.emr_mom(EdgeIndex(edge), GS.cind(0)).pow(2)
+        });
+        let mut values = Vec::new();
+        for (representation, exact_source) in [
+            (three_dimensional_reps::RepresentationMode::Cff, false),
+            (three_dimensional_reps::RepresentationMode::Ltd, false),
+            (three_dimensional_reps::RepresentationMode::Cff, true),
+            (three_dimensional_reps::RepresentationMode::Ltd, true),
+        ] {
+            let mut graph = graph.clone();
+            let mut options = graph.denominator_only_cff_3d_expression_options();
+            options.representation = representation;
+            let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+            let production = graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonization,
+                &options,
+                Some(&numerator),
+            )?;
+            let mut cutset = CutSet::empty(graph.n_hedges());
+            let mut physical_axes = Vec::new();
+            for (index, pair) in [[1, 2], [3, 4], [5, 6]].into_iter().enumerate() {
+                let energies = pair.map(EdgeIndex).to_vec();
+                let (id, physical) = production
+                    .expression
+                    .surfaces
+                    .esurface_cache
+                    .iter_enumerated()
+                    .find(|(_, surface)| {
+                        surface.energies == energies
+                            && surface
+                                .external_shift
+                                .first()
+                                .is_some_and(|(_, sign)| *sign < 0)
+                    })
+                    .expect("both representations retain each bubble's physical energy surface");
+                physical_axes.push(physical.clone());
+                let group = crate::cff::esurface::RaisedEsurfaceGroup {
+                    esurface_ids: vec![id],
+                    max_occurence: 1,
+                };
+                match index {
+                    0 => cutset.residue_selector.right_th_cut = Some(group),
+                    1 => cutset.residue_selector.left_th_cut = Some(group),
+                    _ => {
+                        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                            raised_group: group,
+                            cut_edge_alternatives: vec![energies],
+                        })
+                    }
+                }
+            }
+            let cff = if exact_source {
+                let denominators = (1..=6)
+                    .map(|edge| {
+                        let edge = EdgeIndex(edge);
+                        FourDDenominator {
+                            source_edge: edge,
+                            momentum: FunctionBuilder::new(GS.emr_mom)
+                                .add_arg(usize::from(edge))
+                                .finish(),
+                            mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+                            full_expr: Atom::one(),
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                graph
+                    .cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?
+                    .0
+            } else {
+                graph.cff_from_production_expression(
+                    &production,
+                    &cutset,
+                    &OrientationPattern::default(),
+                )?
+            };
+            assert!(cff.terms.keys().all(|index| *index
+                == CutCFFIndex {
+                    left_threshold_order: Some(1),
+                    right_threshold_order: Some(1),
+                    lu_cut_order: Some(1)
+                }));
+            let mut value = Atom::Zero;
+            for term in cff.terms.values() {
+                for orientation in &term.orientations {
+                    if exact_source
+                        && representation == three_dimensional_reps::RepresentationMode::Ltd
+                    {
+                        // All six exact denominators are physical here. Their
+                        // argument slots stay source-local, but the Laurent
+                        // chart must already see physical OSE coordinates,
+                        // before the final atom replacements below.
+                        assert!(orientation.orientation.edge_energy_map.len() >= 8);
+                        assert!(
+                            orientation
+                                .orientation
+                                .edge_energy_map
+                                .iter()
+                                .chain(&orientation.orientation.loop_energy_map)
+                                .flat_map(|energy| &energy.internal_terms)
+                                .all(|(edge, _)| edge.0 < 8)
+                        );
+                        assert!(
+                            orientation
+                                .orientation
+                                .variants
+                                .iter()
+                                .flat_map(|variant| &variant.half_edges)
+                                .all(|edge| edge.0 < 8)
+                        );
+                    }
+                    let mapped = if exact_source {
+                        term.map_exact_source_numerator(&orientation.orientation, None)?
+                    } else {
+                        numerator.replace_multiple(
+                            orientation.orientation.energy_replacements_gs(&graph),
+                        )
+                    };
+                    value += &orientation.expression * mapped;
+                }
+            }
+            value *= Atom::num(cff.production_prefactor_factor());
+            for physical in physical_axes {
+                let remaining = physical.energies[..1]
+                    .iter()
+                    .map(|edge| GS.ose(*edge))
+                    .chain(physical.external_shift.iter().map(|(edge, sign)| {
+                        Atom::num(*sign) * crate::utils::external_energy_atom_from_index(*edge)
+                    }))
+                    .fold(Atom::Zero, |sum, term| sum + term);
+                value = value.replace(GS.ose(physical.energies[1])).with(-remaining);
+            }
+            values.push(value);
+        }
+        assert!(!values[0].together().is_zero());
+        for (route, value) in values.iter().enumerate().skip(1) {
+            assert!(
+                (&values[0] - value).together().is_zero(),
+                "nested physical cut mismatch for route {route}: {} != {value}",
+                values[0],
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ltd_overlapping_physical_cuts_cancel_merged_hsurface_poles() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph ltd_overlapping_physical_cuts {
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+                incoming -> a [id=0]
+                a -> b [id=1 lmb_id=0]
+                a -> b [id=2 particle="scalar_2"]
+                b -> c [id=3]
+                a -> c [id=4 lmb_id=1 particle="scalar_2"]
+                c -> outgoing [id=5]
+            }, "scalars")?;
+        let numerator = Atom::one()
+            + GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(2)
+            + GS.emr_mom(EdgeIndex(3), GS.cind(0)).pow(2);
+        let mut values = Vec::new();
+        let mut residue_orders = Vec::new();
+        for representation in [
+            three_dimensional_reps::RepresentationMode::Cff,
+            three_dimensional_reps::RepresentationMode::Ltd,
+        ] {
+            let mut graph = graph.clone();
+            let mut options = graph.denominator_only_cff_3d_expression_options();
+            options.representation = representation;
+            let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+            let production = graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonization,
+                &options,
+                Some(&numerator),
+            )?;
+            let mut cutset = CutSet::empty(graph.n_hedges());
+            let mut physical_axes = Vec::new();
+            for (index, energies) in [vec![1, 2, 4], vec![3, 4]].into_iter().enumerate() {
+                let energies = energies.into_iter().map(EdgeIndex).collect::<Vec<_>>();
+                let (id, physical) = production
+                    .expression
+                    .surfaces
+                    .esurface_cache
+                    .iter_enumerated()
+                    .find(|(_, surface)| {
+                        surface.energies == energies
+                            && surface
+                                .external_shift
+                                .first()
+                                .is_some_and(|(_, sign)| *sign < 0)
+                    })
+                    .expect("both representations retain the nested physical cuts");
+                physical_axes.push(physical.clone());
+                let group = esurface::RaisedEsurfaceGroup {
+                    esurface_ids: vec![id],
+                    max_occurence: 1,
+                };
+                if index == 0 {
+                    cutset.residue_selector.right_th_cut = Some(group);
+                } else {
+                    cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                        raised_group: group,
+                        cut_edge_alternatives: vec![energies],
+                    });
+                }
+            }
+            let cff = graph.cff_from_production_expression(
+                &production,
+                &cutset,
+                &OrientationPattern::default(),
+            )?;
+            residue_orders.push(cff.terms.keys().copied().collect::<Vec<_>>());
+            let mut simple_value = Atom::Zero;
+            for (index, term) in &cff.terms {
+                let mut value = term.orientations.iter().fold(Atom::Zero, |sum, term| {
+                    sum + &term.expression
+                        * numerator
+                            .replace_multiple(term.orientation.energy_replacements_gs(&graph))
+                }) * Atom::num(cff.production_prefactor_factor());
+                // B=E3+E4-p and A-B=E1+E2-E3. The common internal
+                // edge makes H denominators coalesce under the first cut.
+                let (external, sign) = physical_axes[1].external_shift[0];
+                value = value
+                    .replace(crate::utils::external_energy_atom_from_index(external))
+                    .with(-(GS.ose(EdgeIndex(3)) + GS.ose(EdgeIndex(4))) / Atom::num(sign))
+                    .replace(GS.ose(EdgeIndex(3)))
+                    .with(GS.ose(EdgeIndex(1)) + GS.ose(EdgeIndex(2)))
+                    .together();
+                if index.right_threshold_order == Some(1) && index.lu_cut_order == Some(1) {
+                    simple_value += value;
+                } else {
+                    assert!(
+                        value.is_zero(),
+                        "unphysical raised residue {index}: {value}"
+                    );
+                }
+            }
+            values.push(simple_value);
+        }
+        assert_eq!(
+            residue_orders[0], residue_orders[1],
+            "cancelled H-surface poles must not introduce threshold occurrences"
+        );
+        assert!(!values[0].together().is_zero());
+        assert!(
+            (&values[0] - &values[1]).together().is_zero(),
+            "overlapping physical cuts differ: {} != {}",
+            values[0],
+            values[1]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ltd_raised_surface_aliases_preserve_numerator_slots_and_energy_multiplicities() -> Result<()>
+    {
+        test_initialise()?;
+        let mut source = ThreeDExpression::new_empty();
+        for edge in [1, 2] {
+            source.surfaces.esurface_cache.push(esurface::Esurface {
+                energies: vec![EdgeIndex(edge), EdgeIndex(3)],
+                external_shift: vec![(EdgeIndex(0), -1)],
+                vertex_set: VertexSet::dummy(),
+            });
+        }
+        let pole = surface::HybridSurfaceID::Esurface(esurface::EsurfaceID(0));
+        let mut denominator = tree::Tree::from_root(pole);
+        denominator.insert_node(tree::NodeId(0), pole);
+        source.orientations.push(OrientationExpression {
+            data: OrientationData::new(EdgeVec::from_iter([Orientation::Default; 4])),
+            edge_energy_map: vec![
+                LinearEnergyExpr::zero(),
+                LinearEnergyExpr::ose(EdgeIndex(1), 1),
+                LinearEnergyExpr::ose(EdgeIndex(2), -1),
+                LinearEnergyExpr::ose(EdgeIndex(3), 1) + LinearEnergyExpr::ose(EdgeIndex(100), 1),
+            ],
+            loop_energy_map: vec![LinearEnergyExpr::ose(EdgeIndex(2), 1)],
+            variants: vec![expression::CFFVariant {
+                thermal_weight: Default::default(),
+                origin: None,
+                prefactor: Rational::one(),
+                half_edges: vec![EdgeIndex(2), EdgeIndex(2), EdgeIndex(3)],
+                denominator_edges: vec![EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)],
+                denominator_surface_signs: BTreeMap::new(),
+                denominator_edge_support_signs: BTreeMap::new(),
+                uniform_scale_power: 0,
+                numerator_surfaces: Vec::new(),
+                denominator,
+            }],
+        });
+        // A numerator pole cancels one of the three denominator occurrences.
+        // Effective source order must still be two on every retained branch.
+        let mut canceled = source.orientations[OrientationID(0)].variants[0].clone();
+        canceled.denominator.insert_node(tree::NodeId(1), pole);
+        canceled.numerator_surfaces.push(pole);
+        source.orientations[OrientationID(0)]
+            .variants
+            .push(canceled);
+        let mut values = Vec::new();
+        for (ids, parent_maximum) in [[0, 1], [1, 0]].into_iter().cartesian_product([1, 2]) {
+            let group = esurface::RaisedEsurfaceGroup {
+                esurface_ids: ids.map(esurface::EsurfaceID).to_vec(),
+                max_occurence: parent_maximum,
+            };
+            let mut cutset = CutSet::empty(4);
+            cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                raised_group: group.clone(),
+                cut_edge_alternatives: vec![vec![EdgeIndex(2), EdgeIndex(3)]],
+            });
+            let residues = select_indexed_cff_residues(
+                source.clone(),
+                &cutset,
+                three_dimensional_reps::RepresentationMode::Ltd,
+                &[vec![EdgeIndex(1), EdgeIndex(2)]],
+                || panic!("this residue has no numerator derivatives"),
+            )?;
+            assert_eq!(
+                residues.len(),
+                2,
+                "the exact source overrides an underestimated parent maximum"
+            );
+            let (_, coefficient) = residues
+                .iter()
+                .find(|(index, _)| index.lu_cut_order == Some(2))
+                .unwrap();
+            assert!(!coefficient.orientations.is_empty());
+            let mut value = Atom::Zero;
+            for orientation in &coefficient.orientations {
+                assert_eq!(orientation.edge_energy_map.len(), 4);
+                assert_eq!(
+                    orientation.edge_energy_map[1],
+                    LinearEnergyExpr::ose(EdgeIndex(1), 1)
+                );
+                assert_eq!(
+                    orientation.edge_energy_map[2],
+                    LinearEnergyExpr::ose(EdgeIndex(1), -1)
+                );
+                assert_eq!(
+                    orientation.edge_energy_map[3],
+                    LinearEnergyExpr::ose(EdgeIndex(3), 1)
+                        + LinearEnergyExpr::ose(EdgeIndex(100), 1),
+                    "an unrelated UV OSE retains its source coordinate"
+                );
+                assert_eq!(
+                    orientation.loop_energy_map,
+                    vec![LinearEnergyExpr::ose(EdgeIndex(1), 1)]
+                );
+                assert!(orientation.variants.iter().all(
+                    |variant| variant.half_edges == [EdgeIndex(1), EdgeIndex(1), EdgeIndex(3)]
+                ));
+                value += orientation.to_atom_gs();
+            }
+            let mut reference_group = group;
+            reference_group.max_occurence = 2;
+            let cff = source.clone().select_esurface_residue(
+                &reference_group,
+                three_dimensional_reps::RepresentationMode::Cff,
+            );
+            let reference = cff[1].orientations[OrientationID(0)]
+                .to_atom_gs()
+                .replace(GS.ose(EdgeIndex(2)))
+                .with(GS.ose(EdgeIndex(1)));
+            assert!((&value - reference).together().is_zero());
+            values.push(value);
+        }
+        assert!(values.iter().all(|value| *value == values[0]));
+        Ok(())
+    }
+
+    #[test]
     fn indexed_residue_selection_tracks_axes_independent_of_raised_order() -> Result<()> {
         let raised_group = crate::cff::esurface::RaisedEsurfaceGroup {
             esurface_ids: vec![crate::cff::esurface::EsurfaceID::from(0)],
@@ -2821,7 +3702,13 @@ mod tests {
                 external_shift: Vec::new(),
                 vertex_set: VertexSet::dummy(),
             });
-            let residues = select_indexed_cff_residues(expression, &cutset)?;
+            let residues = select_indexed_cff_residues(
+                expression,
+                &cutset,
+                three_dimensional_reps::RepresentationMode::Cff,
+                &[],
+                || Ok(Vec::new()),
+            )?;
             assert_eq!(residues.len(), 1usize << selected_axis_count);
             assert!(residues.iter().all(|(index, _)| {
                 let present_axes = [
@@ -4766,19 +5653,19 @@ mod tests {
     fn selected_highest_pole_commutes_with_factorized_cubic_numerator() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(digraph selected_cubic_repeated_channel {
-            num = 1
-            edge [particle="scalar_1" num=1]
-            node [num=1]
+                num = 1
+                edge [particle="scalar_1" num=1]
+                node [num=1]
 
-            ext0 [style=invis is_cut=0]
-            v2 -> ext0 [id=0]
-            ext0 -> v3
-            v0 -> v1 [id=1 lmb_id=0]
-            v0 -> v1 [id=2]
-            v3 -> v0 [id=3 lmb_id=1]
-            v1 -> v2 [id=4]
-            v2 -> v3 [id=5]
-        }, "scalars")?;
+                ext0 [style=invis is_cut=0]
+                v2 -> ext0 [id=0]
+                ext0 -> v3
+                v0 -> v1 [id=1 lmb_id=0]
+                v0 -> v1 [id=2]
+                v3 -> v0 [id=3 lmb_id=1]
+                v1 -> v2 [id=4]
+                v2 -> v3 [id=5]
+            }, "scalars")?;
         let options = graph.denominator_only_cff_3d_expression_options();
         // Keep the three temporal factors separate. Edges 3 and 4 are the
         // repeated outer channel, so this supplies aggregate degree three
@@ -4871,19 +5758,19 @@ mod tests {
     fn selected_lower_pole_obeys_repeated_channel_polynomial_division() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(digraph selected_cubic_repeated_channel_contact {
-            num = 1
-            edge [particle="scalar_1" num=1]
-            node [num=1]
+                num = 1
+                edge [particle="scalar_1" num=1]
+                node [num=1]
 
-            ext0 [style=invis is_cut=0]
-            v2 -> ext0 [id=0]
-            ext0 -> v3
-            v0 -> v1 [id=1 lmb_id=0]
-            v0 -> v1 [id=2]
-            v3 -> v0 [id=3 lmb_id=1]
-            v1 -> v2 [id=4]
-            v2 -> v3 [id=5]
-        }, "scalars")?;
+                ext0 [style=invis is_cut=0]
+                v2 -> ext0 [id=0]
+                ext0 -> v3
+                v0 -> v1 [id=1 lmb_id=0]
+                v0 -> v1 [id=2]
+                v3 -> v0 [id=3 lmb_id=1]
+                v1 -> v2 [id=4]
+                v2 -> v3 [id=5]
+            }, "scalars")?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let repeated_energy = GS.emr_mom(EdgeIndex(3), GS.cind(0));
         let alias_energy = GS.emr_mom(EdgeIndex(4), GS.cind(0));
@@ -5315,8 +6202,8 @@ mod tests {
                     && relative_distance <= tolerance)
                 {
                     failures.push(format!(
-                        "raised LU residue {index} {jet_component} does not factorize from its quadratic cubic UV spectator: combined={combined_value:e}, factorized={factorized_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
-                    ));
+                            "raised LU residue {index} {jet_component} does not factorize from its quadratic cubic UV spectator: combined={combined_value:e}, factorized={factorized_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                        ));
                 }
             }
         }
@@ -5417,8 +6304,8 @@ mod tests {
                     && relative_distance <= tolerance)
                 {
                     failures.push(format!(
-                        "raised alias residue {index} {jet_component} differs between exact and ordinary cograph CFF: exact={exact_value:e}, ordinary={ordinary_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
-                    ));
+                            "raised alias residue {index} {jet_component} differs between exact and ordinary cograph CFF: exact={exact_value:e}, ordinary={ordinary_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                        ));
                 }
             }
         }
@@ -5540,8 +6427,8 @@ mod tests {
                             && relative_distance <= tolerance)
                         {
                             failures.push(format!(
-                                "raised LU residue {index} {jet_component} differs from its {reference} odd-UV-{uv_component} source: combined={combined_value:e}, reference={reference_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
-                            ));
+                                    "raised LU residue {index} {jet_component} differs from its {reference} odd-UV-{uv_component} source: combined={combined_value:e}, reference={reference_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                                ));
                         }
                     }
                 }
@@ -5616,8 +6503,8 @@ mod tests {
                     && relative_distance <= tolerance)
                 {
                     failures.push(format!(
-                        "raised LU residue {index} {jet_component} differs between D_UV*F/D_UV^3 and F/D_UV^2: dotted={dotted_value:e}, lower={retained_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
-                    ));
+                            "raised LU residue {index} {jet_component} differs between D_UV*F/D_UV^3 and F/D_UV^2: dotted={dotted_value:e}, lower={retained_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                        ));
                 }
             }
         }
@@ -5725,8 +6612,8 @@ mod tests {
                     && relative_distance <= tolerance)
                 {
                     failures.push(format!(
-                        "raised LU residue {index} {jet_component} does not factorize for Q_UV^0 (Q_UV^0 Q_outer^0-Q_UV^1 Q_outer^1): combined={combined_value:e}, factorized={factorized_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
-                    ));
+                            "raised LU residue {index} {jet_component} does not factorize for Q_UV^0 (Q_UV^0 Q_outer^0-Q_UV^1 Q_outer^1): combined={combined_value:e}, factorized={factorized_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                        ));
                 }
             }
         }
@@ -6049,20 +6936,21 @@ mod tests {
                 }
                 values
             };
-            let evaluate_arb =
-                |expression: Atom, values: &[Complex<F<ArbPrec>>]| -> Result<Complex<F<ArbPrec>>> {
-                    let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+            let evaluate_arb = |expression: Atom,
+                                values: &[Complex<F<ArbPrec>>]|
+             -> Result<Complex<F<ArbPrec>>> {
+                let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
                     expression.evaluator(&parameters).build().map_err(|error| {
                         eyre::eyre!(
                             "failed to build {label} connected-parent UV-bridge evaluator: {error}"
                         )
                     })?;
-                    let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
-                        rational.map_coeff(&|coefficient| {
-                            Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
-                        });
-                    Ok(arb.evaluate_single(values))
-                };
+                let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                    rational.map_coeff(&|coefficient| {
+                        Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                    });
+                Ok(arb.evaluate_single(values))
+            };
             let scale = F::<ArbPrec>::from(&Rational::from(10).pow(45));
             let uv_values = values_at(&scale);
             let measure = &scale * &scale * &scale;
@@ -7227,9 +8115,9 @@ mod tests {
                     && relative_distance <= tolerance)
                 {
                     failures.push(format!(
-                        "D(Q)^{power}/D(Q)^3 differs from 1/D(Q)^{} for {comparison}: powered={powered_value:e}, lower={lower_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}",
-                        3 - power
-                    ));
+                            "D(Q)^{power}/D(Q)^3 differs from 1/D(Q)^{} for {comparison}: powered={powered_value:e}, lower={lower_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}",
+                            3 - power
+                        ));
                 }
             }
         }
@@ -7272,10 +8160,10 @@ mod tests {
         for (loops, unit_phase) in unit_phases.into_iter().enumerate() {
             let mut dot = format!(
                 "digraph scalar_phase_{loops} {{ edge [particle=scalar_1]; \
-                 incoming0 [style=invis]; incoming1 [style=invis]; \
-                 outgoing0 [style=invis]; outgoing1 [style=invis]; \
-                 incoming0 -> a0 [id={}]; incoming1 -> a0 [id={}]; \
-                 a{loops} -> outgoing0 [id={}]; a{loops} -> outgoing1 [id={}];",
+                     incoming0 [style=invis]; incoming1 [style=invis]; \
+                     outgoing0 [style=invis]; outgoing1 [style=invis]; \
+                     incoming0 -> a0 [id={}]; incoming1 -> a0 [id={}]; \
+                     a{loops} -> outgoing0 [id={}]; a{loops} -> outgoing1 [id={}];",
                 2 * loops,
                 2 * loops + 1,
                 2 * loops + 2,
@@ -7285,7 +8173,7 @@ mod tests {
                 write!(
                     dot,
                     "a{bubble} -> a{} [id={} lmb_id={bubble}]; \
-                     a{bubble} -> a{} [id={} particle=scalar_2];",
+                         a{bubble} -> a{} [id={} particle=scalar_2];",
                     bubble + 1,
                     2 * bubble,
                     bubble + 1,
@@ -7573,25 +8461,25 @@ mod tests {
     fn ordinary_terminal_sources_match_signed_contours() -> Result<()> {
         test_initialise()?;
         let tadpole: Graph = dot!(digraph ordinary_unit_tadpole {
-                edge [particle="scalar_1" num=1]
-                node [num=1]
-                incoming [style=invis]
-                outgoing [style=invis]
-                a -> a [id=0 lmb_id=0]
-                incoming -> a [id=1]
-                a -> outgoing [id=2]
-            }, "scalars")?;
+                    edge [particle="scalar_1" num=1]
+                    node [num=1]
+                    incoming [style=invis]
+                    outgoing [style=invis]
+                    a -> a [id=0 lmb_id=0]
+                    incoming -> a [id=1]
+                    a -> outgoing [id=2]
+                }, "scalars")?;
         let attached: Graph = dot!(digraph ordinary_attached_tadpole_bubble {
-                edge [particle="scalar_1" num=1]
-                node [num=1]
-                incoming [style=invis]
-                outgoing [style=invis]
-                a -> a [id=0 lmb_id=0]
-                a -> b [id=1 lmb_id=1]
-                a -> b [id=2 particle="scalar_2"]
-                incoming -> a [id=3]
-                a -> outgoing [id=4]
-            }, "scalars")?;
+                    edge [particle="scalar_1" num=1]
+                    node [num=1]
+                    incoming [style=invis]
+                    outgoing [style=invis]
+                    a -> a [id=0 lmb_id=0]
+                    a -> b [id=1 lmb_id=1]
+                    a -> b [id=2 particle="scalar_2"]
+                    incoming -> a [id=3]
+                    a -> outgoing [id=4]
+                }, "scalars")?;
         let mut failures = Vec::new();
         for (label, mut graph, energies) in [
             ("unit tadpole", tadpole, vec![2_i64]),

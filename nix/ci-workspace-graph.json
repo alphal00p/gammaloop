@@ -158,6 +158,7 @@
         "symbolica"
       ],
       "three-dimensional-reps": [
+        "cli",
         "display"
       ]
     },
@@ -171,7 +172,8 @@
         "symbolica"
       ],
       "three-dimensional-reps": [
-        "eval"
+        "eval",
+        "generation-audit"
       ],
       "vakint": []
     },
@@ -815,6 +817,7 @@
         "symbolica"
       ],
       "three-dimensional-reps": [
+        "cli",
         "display"
       ]
     },
@@ -828,7 +831,8 @@
         "symbolica"
       ],
       "three-dimensional-reps": [
-        "eval"
+        "eval",
+        "generation-audit"
       ],
       "vakint": []
     },

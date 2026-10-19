@@ -58,11 +58,11 @@ retry; the compact-energy validation record retains that memory-limited baseline
 
 Generated scalar numerator components and coefficient functions use Symbolica's
 `InliningPolicy::Always` by default. Setting `inline_numerator_functions = false`
-uses `Never` for ordinary evaluators: distinct argument tuples call one retained
-evaluator body. Hyperdual builds always use `Always`: the pinned Symbolica
-implementation cannot vectorize retained sub-evaluators. This choice is made
-after Taylor operations, so it does not change symbolic momentum dependence or
-the Taylor algebra.
+uses `Never`: distinct argument tuples call one retained evaluator body.
+Symbolica also vectorizes retained bodies for hyperdual evaluation, preserving
+this choice and the structural zero derivative seeds. The inlining choice is
+made after Taylor operations, so it does not change symbolic momentum dependence
+or the Taylor algebra.
 
 Function metadata records both inlining policy and caller-scope alias identity.
 Rebuilds and standalone archives preserve both; algebraic function-map

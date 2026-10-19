@@ -93,8 +93,8 @@ The shared Nextest configuration owns test selection. Ordinary local test
 recipes and NixCI use `ci_gammaloop`: each test has a four-minute execution
 limit, and a timeout fails. Compilation is outside that limit. Tests are
 classified by measured duration, rather than excluding every `slow` module.
-The measured extended scalar matrix contributes 139 cases to this fast lane;
-the GL16 quartic case belongs to the long lane. A fast suite can still take
+Other scalar cross-section tests remain eligible despite their `slow` module
+names; the GL16 quartic case belongs to the long lane. A fast suite can still take
 longer than four minutes because the limit applies to each test.
 
 Every main push runs the supported full suite through `hydraJobsMain`.
@@ -175,13 +175,14 @@ is removed on success or failure. Compiler products are cached; measurements
 always run afresh.
 
 The single manifest in `benchmarks/performance/suite.toml` defines thirteen
-comparisons: the existing physical workload and nine scalar route cases, plus
-two cases that build and benchmark every evaluator method and one thermal
-case. Scalar route cases
-share their point corpus and settings. The runner renders `scalar.toml` with
-each workload's graph and route settings; the other cases use fixed cards.
-The exact rendered card and declared inputs, including DOT graphs and shared
-scalar model and restriction files, are hashed before measurement. Both
+CFF revision comparisons: the physical workload, nine scalar route cases,
+two evaluator-layout cases and one thermal case. A fourteenth fast comparison
+runs LTD and CFF on the same candidate; the slow Arb comparison requires
+explicit selection. Scalar route cases share their point corpus and settings.
+The runner renders `scalar.toml` with each workload's graph and route settings;
+the other cases use fixed cards. The exact rendered card and declared inputs,
+including DOT graphs and shared model and restriction files, are hashed before
+measurement. Both
 revisions receive those same bytes.
 
 #table(
@@ -219,6 +220,35 @@ outside the measured path. Both probes build SingleParametric, Iterative,
 SummedFunctionMap and Summed, then check all four at the same two fixed points.
 They pin graph and LMB selectors and sum their retained orientations, with
 stability rotations disabled.
+The additional `gl04-q1-squared-ltd-vs-cff-4d` case uses the same scalar card,
+four points, local 4D UV counterterms and threshold subtraction. It generates
+CFF and LTD separately with the same candidate executable, and selects each
+representation explicitly at a single Double stability level. Every timed
+sample must report exactly one successful two-probe attempt in that representation.
+After each timed batch, displayed real and imaginary extrema are collected using
+the same per-sample Jacobian normalization as the warmup. The LTD/CFF case rejects
+invalid values or extrema outside the existing component-wise correctness
+tolerance; this check adds no work to the measured interval.
+Native residue-map sizes are recorded separately; physical cut and threshold
+edge identities must match. This is a same-revision comparison, not a historical
+LTD measurement on a baseline that does not support LTD. Its two rendered-card
+hashes differ, while the shared physical settings, corpus, binary and commit
+identities must agree. Both generation and warmed runtime use a 50% relative
+ceiling, retaining the 0.5-second and one-microsecond absolute floors and the
+same paired-noise and independent-confirmation rules. The thirteen CFF revision
+comparisons keep their original policies.
+
+Only this frozen GL04 q1² comparison has an imaginary-zero certificate. The
+unique simple massless edge 1 is canceled by its numerator; both cuts carrying
+threshold counterterms contain that edge. The surviving cut `[3,4]` has no
+thresholds and a real scalar phase, preserved by the MUV/MSbar integrated UV
+normalization and real sampling/flux factors. The producer checks frozen source,
+model, card and corpus identities, saved phase-relevant defaults, and the actual
+simple-cut/threshold catalogue. Each of the four imaginary remainders must
+independently satisfy `abs(Im) ≤ sqrt(2⁻⁵²) E_cm³` at the fixed `E_cm = 1`, using
+the existing dimensioned scalar zero policy. Real components retain the 10⁻⁹
+relative check with no absolute allowance. Raw outputs and strict mismatch counts
+remain recorded; timed extrema retain their strict per-point warmup comparison.
 
 The thermal probe generates the same GL1 graph, without its orientation
 pattern, in thermodynamic equilibrium at inverse temperature one and muB = 3,
@@ -285,13 +315,101 @@ Noise can make a comparison inconclusive only when the paired absolute delta
 plus its noise margin also exceeds the absolute budget. Large relative noise
 on a tiny operation does not by itself block the gate.
 This is a noise-screening policy, not a statistical confidence interval.
-Every physical result must be finite, nonzero and agree between revisions.
+Every physical result must be finite, nonzero and agree between the paired
+revisions or representations.
 Scalar results use relative tolerance 10⁻⁹ with no absolute allowance, because
 an absolute floor suitable for GL15 could mask changes to their smaller values.
 Each topology/route comparison, including any confirmation run, has a
 four-minute budget. The collection can take longer than four minutes.
 Building the two CLI binaries is outside that budget. Exceeding it yields
 an inconclusive failure rather than a claimed performance regression.
+
+The explicit `paper-massless-soft-cff4d-arb` case uses the existing paper B.1
+massless soft-counterterm graph and its complete CFF/from4D sum. It retains
+the original IR prescriptions, external momenta and masses; that fixture
+disables integrated UV and threshold counterterms. The stored binary64
+momentum bits come from the original full-subset UV-profile ray with seed
+1342 and scale 10¹². Complete signed edge routing certifies each revision's
+positive-unit permutation into the canonical physical loop-edge basis.
+Catalogue ordering, internal tree serialization and historical timing values
+are not part of this certificate.
+
+Numerator inlining is explicitly enabled, matching the production default.
+The benchmark sets `store_atom = false` to avoid retaining symbolic expressions
+that are unnecessary for numerical evaluation.
+
+This slow gate generates one fresh state per revision, then runs five AB/BA
+runtime pairs through the same shared `precise_sample.rs` producer, compiled
+independently against each revision's normal API through its existing Crane
+crate-build owner. Each trial starts a fresh process, resolves the integrand's
+model, calls public runtime warmup, performs one numerical warmup and measures
+one forced 1000-bit Arb call with point caching disabled. Both calls must have
+one stable Arb attempt with the original two probes. The gate checks both native
+`evaluator_evaluation_time` and the complete warmed physical call, so moving work
+outside the evaluator timer cannot hide a regression. State loading and model
+warmup are recorded separately. Generation is a single preparation observation,
+not a paired generation verdict. The thirteen CFF revision cases' generation policy is
+unchanged. A declared two-hour budget includes preparation and any independent
+timing confirmation. The same 15% plus one-microsecond runtime policy applies.
+
+The slow gate preserves both native decimal components and the strict 10⁻⁵
+relative comparison as diagnostic evidence. The fixture-specific source predicate
+certifies only the real component as analytically zero;
+when both producers pass that predicate, each real remainder must independently
+satisfy `abs(Re) ≤ sqrt(2⁻⁹⁹⁹) E_cm⁻⁷`, following the existing dimensioned scalar
+zero policy. The imaginary comparison retains the original relative tolerance
+with no absolute allowance. No binary64 conversion or other component's scale
+enters these comparisons. Raw strict mismatch counts remain in the report.
+A numerical mismatch remains a failure while timing measurements and required
+confirmation continue; a timeout remains incomplete evidence. Only this precise
+case sets `confirm_on_correctness_failure = true`; the fast cases retain the
+framework's default confirmation behavior.
+
+These two certified-zero cases use gammabench's explicit `certified_zero`
+contract: a certificate with an `id` and `sha256`, and component-specific
+`index` and `absolute_bound` entries. Each adapter result must carry the exact
+declared certificate. GammaLoop's `GLFixture` owns the physical proof and
+dimensioned bounds; the framework verifies certificate identity and applies
+only the declared component allowances. It retains raw values and strict
+mismatch diagnostics alongside the qualified result. The slow case selects
+`correctness_format = "decimal"` so this comparison never rounds through
+binary64, and `budget_class = "slow"` for its 7200-second deadline. Ordinary
+cases retain the 240-second default. Each role prepares its state once inside
+its first trial, sharing that deadline with all paired samples and any
+confirmation. This preparation is not a paired generation metric.
+
+Use an adequately provisioned host such as `itphlies`: exact-main generation
+has exceeded 21 GB, whereas the
+#link("https://docs.github.com/en/actions/reference/runners/github-hosted-runners")[standard hosted Ubuntu runner]
+provides 16 GB.
+The existing Actions job explicitly selects `--lane fast`; it does not claim
+coverage of the slow gate. No larger paid or self-hosted runner is configured
+by this change. To run the slow gate locally, build the normal CLI packages and
+the two shared precise producers at the actual baseline and candidate commits:
+
+```sh
+ulimit -s 65536
+export RUST_MIN_STACK=67108864
+nix build --impure --file benchmarks/performance/precise_sample.nix \
+  --argstr revisionRoot /path/to/baseline --argstr revision "$BASELINE" \
+  --out-link /tmp/precise-baseline
+nix build --impure --file benchmarks/performance/precise_sample.nix \
+  --argstr revisionRoot /path/to/candidate --argstr revision "$CANDIDATE" \
+  --out-link /tmp/precise-candidate
+python3 .github/scripts/run_performance.py \
+  --case paper-massless-soft-cff4d-arb --input-root "$PWD" \
+  --baseline-commit "$BASELINE" --candidate-commit "$CANDIDATE" \
+  --baseline-binary "$BASELINE_CLI" --candidate-binary "$CANDIDATE_CLI" \
+  --baseline-precise-producer /tmp/precise-baseline/bin/precise_sample \
+  --candidate-precise-producer /tmp/precise-candidate/bin/precise_sample \
+  --work-dir /fresh/private/paper-arb --output-dir /fresh/public/paper-arb
+```
+
+Both producers receive identical source and fixture bytes. The manifest hashes
+the physical certificate, graph, model, prescriptions and producer source;
+measurement metadata also records the actual executable hashes. Run with the
+usual licensed environment and memory watchdog. `--lane all` includes this
+slow case together with the fourteen fast comparisons.
 
 The comparator exits zero for a clean comparison, one for a confirmed
 regression or changed result, and two for invalid, incomplete or inconclusive
@@ -316,7 +434,7 @@ do not trigger this workflow. Manual benchmark dispatch remains available.
 A relevant new commit while `final-review` remains set must rerun the gate.
 Returning to development means removing that label; PR-number concurrency
 cancels superseded work. Compiled CLI packages are reused from Nix caches, but
-the benchmark always measures fresh states. All thirteen cases run sequentially on
+the benchmark always measures fresh states. All fourteen fast cases run sequentially on
 one worker in a single runner invocation and pinned runtime shell, to avoid timing
 interference and reuse the two CLI packages built once before measurement.
 The runner gives each case separate work and output subdirectories. Every case

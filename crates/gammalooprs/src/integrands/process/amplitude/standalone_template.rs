@@ -6,11 +6,7 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "70375b9ef06411d8bac3e14d1f57382384547eef", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
-//! # Match the generator's Symbolica workspace, including its numeric APIs.
-//! [patch.crates-io]
-//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "70375b9ef06411d8bac3e14d1f57382384547eef" }
-//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "70375b9ef06411d8bac3e14d1f57382384547eef" }
+//! symbolica = { version = "=3.0.1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 //! ```
 
 #![allow(dead_code)]
@@ -23,15 +19,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::integrands::process::standalone;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
-use symbolica::evaluate::{FunctionRegistrationOptions, InliningPolicy};
 use symbolica::{
-    domains::rational::Fraction, evaluate::JITCompiledEvaluator, prelude::*, state::StateMap,
+    evaluate::{FunctionRegistrationOptions, InliningPolicy, JITCompiledEvaluator},
+    prelude::*,
+    state::StateMap,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 12;
+const STANDALONE_EVALUATORS_VERSION: u32 = 17;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -60,6 +58,7 @@ impl StandaloneComplexInput {
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 struct StandaloneEvaluatorArchive<S = Vec<u8>, T = Vec<u8>> {
     version: u32,
+    three_d_representations: Vec<String>,
     numeric_target: StandaloneNumericTarget,
     symbolica_state: S,
     graph_terms: Vec<StandaloneGraphTermArchive<T>>,
@@ -71,8 +70,8 @@ struct StandaloneGraphTermArchive<A = Vec<u8>> {
     orientations: Vec<Vec<i8>>,
     param_builder_params: Vec<A>,
     fn_map_entries: Vec<SerializedFnMapEntry<A>>,
-    original_integrand: StandaloneEvaluatorStackArchive<A>,
-    threshold_counterterms: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+    original_integrand: BTreeMap<String, StandaloneEvaluatorStackArchive<A>>,
+    threshold_counterterms: Vec<BTreeMap<String, Vec<StandaloneIndexedEvaluatorStackArchive<A>>>>,
     threshold_counterterms_are_variants: bool,
     threshold_variants: Vec<StandaloneAmplitudeThresholdVariant>,
     threshold_multipliers: Option<StandaloneThresholdMultiplierCollectionArchive<A>>,
@@ -98,6 +97,7 @@ struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
 struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     explicit_orientation_sum_only: bool,
     production_orientation_ids: Vec<usize>,
+
     single_parametric: StandaloneGenericEvaluatorArchive<A>,
     iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
@@ -429,6 +429,7 @@ struct StandaloneCliOptions {
     input_json: Option<PathBuf>,
     graph_index: usize,
     graph_name: Option<String>,
+    representation: Option<String>,
     stack: StandaloneStackSelection,
     method: StandaloneMethod,
     orientation_index: Option<usize>,
@@ -445,6 +446,7 @@ impl Default for StandaloneCliOptions {
             input_json: None,
             graph_index: 0,
             graph_name: None,
+            representation: None,
             stack: StandaloneStackSelection::Original,
             method: StandaloneMethod::SingleParametric,
             orientation_index: None,
@@ -459,7 +461,7 @@ impl Default for StandaloneCliOptions {
 enum StandaloneRuntimeEvaluator<'a> {
     Eager(&'a mut ExpressionEvaluator<Complex<f64>>),
     Compiled(CompiledComplexEvaluator),
-    Symjit(JITCompiledEvaluator<Complex<f64>>),
+    Symjit(Box<JITCompiledEvaluator<Complex<f64>>>),
 }
 
 impl<'a> StandaloneRuntimeEvaluator<'a> {
@@ -496,7 +498,7 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                     .map_err(|error| eyre!(error))?;
                 Ok(Self::Compiled(compiled))
             }
-            StandaloneBackend::Symjit => Ok(Self::Symjit(
+            StandaloneBackend::Symjit => Ok(Self::Symjit(Box::new(
                 evaluator
                     // Standalone backend selection uses O2 by default. Keep compaction
                     // disabled because some complex temporary layouts were incompatible with it.
@@ -507,7 +509,7 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                             .with_option("compact", "false"),
                     )
                     .map_err(|error| eyre!(error))?,
-            )),
+            ))),
         }
     }
 
@@ -696,9 +698,11 @@ fn apply_fn_map_entries(
     Ok((replacements, fn_map))
 }
 
+// Backend dispatch consumes the body/output size and optional native plan/prelude.
+#[allow(clippy::type_complexity)]
 fn build_evaluator<T: StandaloneNumber, A: ImportWithMap>(
     payload: &StandaloneGenericEvaluatorArchive<A>,
-    params: &[Atom],
+    graph_params: &[Atom],
     mut fn_map_entries: Vec<ParsedFnMapEntry>,
     state_map: &StateMap,
     iterate: bool,
@@ -710,81 +714,72 @@ where
         .horner_iterations(10)
         .cores(1)
         .abort_check(None);
-    let cpe_iterations = None;
     let exprs = payload
         .exprs
         .iter()
         .map(|expr| expr.import_with_map(state_map))
         .collect::<Result<Vec<_>>>()?;
+    let params = graph_params;
 
-    let additional_fn_map_entries =
-        parse_fn_map_entries(&payload.additional_fn_map_entries, state_map)?;
-    fn_map_entries.extend(additional_fn_map_entries);
+    if params.iter().collect::<HashSet<_>>().len() != params.len() {
+        return Err(eyre!("Standalone evaluator parameters must be distinct"));
+    }
 
-    let (replacements, fn_map) = apply_fn_map_entries(fn_map_entries)?;
-
-    if iterate {
-        let mut tree: Option<ExpressionEvaluator<Complex<Fraction<IntegerRing>>>> = None;
-
-        for expr in &exprs {
-            let eval = expr
-                .replace_multiple(&replacements)
-                .evaluator(params)
-                .function_map(fn_map.clone())
-                .optimization_settings(optimization_settings.clone())
-                .build()
-                .map_err(|error| {
-                    eyre!(
-                        "{error} while building iterative evaluator for {}",
-                        expr.replace_multiple(&replacements)
-                    )
-                })?;
-
-            tree = Some(if let Some(mut merged) = tree {
-                merged
-                    .merge(eval, cpe_iterations)
-                    .map_err(|error| eyre!(error))?;
-                merged
-            } else {
-                eval
-            });
+    fn_map_entries.extend(parse_fn_map_entries(
+        &payload.additional_fn_map_entries,
+        state_map,
+    )?);
+    if payload.dual_shape.is_some() {
+        // Match native construction: stock Symbolica vectorizes inlined functions.
+        for entry in &mut fn_map_entries {
+            if !entry.5 {
+                entry.4 = InliningPolicy::Always;
+            }
         }
-
-        tree.map(|eval| {
-            (
-                eval.map_coeff(&|value| {
-                    Complex::new(
-                        T::exact_from_rational(&value.re),
-                        T::exact_from_rational(&value.im),
-                    )
-                }),
-                exprs.len(),
-            )
-        })
-        .ok_or_else(|| eyre!("No expressions in evaluator payload"))
-    } else {
-        let replaced_exprs = exprs
+    }
+    let (replacements, fn_map) = apply_fn_map_entries(fn_map_entries)?;
+    let build = |expressions: &[Atom]| {
+        let expressions = expressions
             .iter()
             .map(|expr| expr.replace_multiple(&replacements))
             .collect::<Vec<_>>();
-
-        Atom::evaluator_multiple(&replaced_exprs, params)
-            .function_map(fn_map)
-            .optimization_settings(optimization_settings)
+        Atom::evaluator_multiple(&expressions, params)
+            .function_map(fn_map.clone())
+            .optimization_settings(optimization_settings.clone())
             .build()
-            .map(|eval| {
-                (
-                    eval.map_coeff(&|value| {
-                        Complex::new(
-                            T::exact_from_rational(&value.re),
-                            T::exact_from_rational(&value.im),
-                        )
-                    }),
-                    exprs.len(),
-                )
-            })
-            .map_err(|error| eyre!("{error}"))
+            .map_err(|error| eyre!(error))
+    };
+    let mut evaluator = if iterate {
+        let mut evaluator: Option<ExpressionEvaluator<Complex<Rational>>> = None;
+        for expr in &exprs {
+            let next = build(std::slice::from_ref(expr))?;
+            evaluator = Some(if let Some(mut evaluator) = evaluator {
+                evaluator.merge(next, None).map_err(|error| eyre!(error))?;
+                evaluator
+            } else {
+                next
+            });
+        }
+        evaluator.ok_or_else(|| eyre!("No expressions in evaluator payload"))?
+    } else {
+        build(&exprs)?
+    };
+    if let Some(shape) = &payload.dual_shape {
+        evaluator = evaluator
+            .vectorize(&Dualizer::new(
+                HyperDual::<Complex<Rational>>::new(shape.clone()),
+                Vec::new(),
+            ))
+            .map_err(|error| eyre!(error))?;
     }
+    let output_len = evaluator.get_output_len();
+    let evaluator = evaluator.map_coeff(&|value| {
+        Complex::new(
+            T::exact_from_rational(&value.re),
+            T::exact_from_rational(&value.im),
+        )
+    });
+    Ok((evaluator, output_len))
 }
 
 fn set_orientation_values_impl<A: Clone + Neg<Output = A>>(
@@ -1435,8 +1430,50 @@ impl<S, A: PartialEq> StandaloneEvaluatorArchive<S, A> {
                 STANDALONE_EVALUATORS_VERSION,
             ));
         }
+        let representations = self.three_d_representations.iter().collect::<BTreeSet<_>>();
+        if representations.is_empty()
+            || representations.len() != self.three_d_representations.len()
+            || representations
+                .iter()
+                .any(|representation| !matches!(representation.as_str(), "cff" | "ltd"))
+        {
+            return Err(eyre!(
+                "Standalone archive has an invalid generated representation list"
+            ));
+        }
         for graph in &self.graph_terms {
+            if graph.original_integrand.keys().collect::<BTreeSet<_>>() != representations
+                || graph
+                    .threshold_counterterms
+                    .iter()
+                    .any(|slot| slot.keys().collect::<BTreeSet<_>>() != representations)
+            {
+                return Err(eyre!(
+                    "Standalone graph '{}' has evaluator representations inconsistent with its generated list",
+                    graph.graph_name
+                ));
+            }
             graph.validate_threshold_payload()?;
+            for stack in graph.original_integrand.values().chain(
+                graph
+                    .threshold_counterterms
+                    .iter()
+                    .flat_map(|slot| slot.values())
+                    .flatten()
+                    .map(|entry| &entry.evaluator_stack),
+            ) {
+                standalone::validate_standalone_input_layout(
+                    graph.param_builder_params.len(),
+                    Some(stack.representative_input.len()),
+                    stack.mult_offset,
+                    [stack.start, stack.residue_map_id_start],
+                    std::iter::once(&stack.single_parametric)
+                        .chain(stack.iterative.as_ref())
+                        .chain(stack.summed_function_map.as_ref())
+                        .chain(stack.summed.as_ref())
+                        .map(|payload| payload.dual_shape.as_deref()),
+                )?;
+            }
         }
         Ok(())
     }
@@ -1447,6 +1484,15 @@ impl<A> StandaloneEvaluatorStackArchive<A> {
         &self,
         method: StandaloneMethod,
     ) -> Result<(&StandaloneGenericEvaluatorArchive<A>, bool)> {
+        let available = match method {
+            StandaloneMethod::SingleParametric => true,
+            StandaloneMethod::Iterative => self.iterative.is_some(),
+            StandaloneMethod::SummedFunctionMap => self.summed_function_map.is_some(),
+            StandaloneMethod::Summed => self.summed.is_some(),
+        };
+        if self.explicit_orientation_sum_only && !available {
+            return Ok((&self.single_parametric, false));
+        }
         match method {
             StandaloneMethod::SingleParametric => Ok((&self.single_parametric, false)),
             StandaloneMethod::Iterative => self
@@ -1512,13 +1558,18 @@ impl<A> StandaloneEvaluatorStackArchive<A> {
 impl<A> StandaloneGraphTermArchive<A> {
     fn stack(
         &self,
+        representation: &str,
         selection: &StandaloneStackSelection,
     ) -> Result<&StandaloneEvaluatorStackArchive<A>> {
         match selection {
-            StandaloneStackSelection::Original => Ok(&self.original_integrand),
+            StandaloneStackSelection::Original => self
+                .original_integrand
+                .get(representation)
+                .ok_or_else(|| eyre!("Representation {representation} was not generated")),
             StandaloneStackSelection::ThresholdCounterterm((first, second)) => self
                 .threshold_counterterms
                 .get(*first)
+                .and_then(|representations| representations.get(representation))
                 .and_then(|orders| orders.get(*second))
                 .map(|entry| &entry.evaluator_stack)
                 .ok_or_else(|| {
@@ -1632,6 +1683,7 @@ fn print_usage(program: &str) {
            --input-json <path>\n\
            --graph-index <usize>\n\
            --graph-name <name>\n\
+           --three-dimensional-representation <cff|ltd>\n\
            --stack <original|ct:N,M>\n\
            --method <single_parametric|iterative|summed_function_map|summed>\n\
            --orientation-index <usize> (single_parametric only)\n\
@@ -1679,6 +1731,11 @@ fn parse_cli_options() -> Result<StandaloneCliOptions> {
                     .next()
                     .ok_or_else(|| eyre!("Missing value for --graph-index"))?
                     .parse()?;
+            }
+            "--three-dimensional-representation" => {
+                options.representation = Some(args.next().ok_or_else(|| {
+                    eyre!("Missing value for --three-dimensional-representation")
+                })?);
             }
             "--graph-name" => {
                 options.graph_name = Some(
@@ -1761,7 +1818,7 @@ fn load_custom_input(path: impl AsRef<Path>) -> Result<Vec<StandaloneComplexInpu
     Ok(raw.into_iter().map(StandaloneComplexInput::from).collect())
 }
 
-fn load_bin(path: impl AsRef<Path>) -> Result<StandaloneEvaluatorArchive> {
+fn load_bin(path: impl AsRef<Path>) -> Result<(StandaloneEvaluatorArchive, StateMap)> {
     let binary =
         fs::read(&path).with_context(|| format!("Cannot read {}", path.as_ref().display()))?;
     let (version, _): (u32, _) = bincode::decode_from_slice(&binary, bincode::config::standard())?;
@@ -1774,7 +1831,9 @@ fn load_bin(path: impl AsRef<Path>) -> Result<StandaloneEvaluatorArchive> {
     let (archive, _): (StandaloneEvaluatorArchive, _) =
         bincode::decode_from_slice(&binary, bincode::config::standard())?;
     archive.validate()?;
-    Ok(archive)
+    let state_map = State::import(&mut Cursor::new(&archive.symbolica_state), None)
+        .map_err(|error| eyre!(error))?;
+    Ok((archive, state_map))
 }
 
 fn load_json(path: impl AsRef<Path>) -> Result<StandaloneEvaluatorArchive<(), String>> {
@@ -1851,14 +1910,16 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
     };
     validate_backends(StandaloneNumericTarget::Double, &compare_backends)?;
 
+    let representation = options
+        .representation
+        .as_ref()
+        .or_else(|| archive.three_d_representations.first())
+        .ok_or_else(|| eyre!("No generated 3D representation"))?;
     let graph = archive.graph_term(options.graph_index, options.graph_name.as_deref())?;
-    let stack = graph.stack(&options.stack)?;
+    let stack = graph.stack(representation, &options.stack)?;
     let (payload, iterate) = stack.selected_payload(options.method)?;
 
-    if stack.explicit_orientation_sum_only
-        && options.method == StandaloneMethod::SingleParametric
-        && options.orientation_index.is_some()
-    {
+    if stack.explicit_orientation_sum_only && options.orientation_index.is_some() {
         return Err(eyre!(
             "`--orientation-index` is invalid for an explicit orientation-sum evaluator because its single-parametric expression already contains the complete orientation sum"
         ));
@@ -1874,6 +1935,11 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
         build_evaluator::<f64, _>(payload, &params, fn_map_entries, state_map, iterate)?;
 
     let inputs = if let Some(custom_input) = custom_input {
+        if custom_input.len() != stack.representative_input.len() {
+            return Err(eyre!(
+                "Custom input length differs from the physical parameter count"
+            ));
+        }
         vec![
             custom_input
                 .iter()
@@ -1946,7 +2012,12 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
             output_len,
             &inputs,
             &artifact_root.join(sanitize_label(&graph.graph_name)),
-            &format!("{}_{}", graph.graph_name, options.stack.label()),
+            &format!(
+                "{}_{representation}_{}_{}",
+                graph.graph_name,
+                options.stack.label(),
+                options.method.as_str(),
+            ),
         )?;
         println!("backend={}", backend.as_str());
         for (index, value) in values.iter().enumerate() {
@@ -1993,14 +2064,16 @@ where
     };
     validate_backends(numeric_target, &compare_backends)?;
 
+    let representation = options
+        .representation
+        .as_ref()
+        .or_else(|| archive.three_d_representations.first())
+        .ok_or_else(|| eyre!("No generated 3D representation"))?;
     let graph = archive.graph_term(options.graph_index, options.graph_name.as_deref())?;
-    let stack = graph.stack(&options.stack)?;
+    let stack = graph.stack(representation, &options.stack)?;
     let (payload, iterate) = stack.selected_payload(options.method)?;
 
-    if stack.explicit_orientation_sum_only
-        && options.method == StandaloneMethod::SingleParametric
-        && options.orientation_index.is_some()
-    {
+    if stack.explicit_orientation_sum_only && options.orientation_index.is_some() {
         return Err(eyre!(
             "`--orientation-index` is invalid for an explicit orientation-sum evaluator because its single-parametric expression already contains the complete orientation sum"
         ));
@@ -2015,6 +2088,11 @@ where
         build_evaluator::<T, _>(payload, &params, fn_map_entries, state_map, iterate)?;
 
     let inputs = if let Some(custom_input) = custom_input {
+        if custom_input.len() != stack.representative_input.len() {
+            return Err(eyre!(
+                "Custom input length differs from the physical parameter count"
+            ));
+        }
         vec![
             custom_input
                 .iter()
@@ -2084,7 +2162,6 @@ fn main() -> Result<()> {
     let Some(extension) = input.extension() else {
         return Err(eyre!("No extension, expected .bin or .json"));
     };
-    let state_map = current_state_map()?;
     let custom_input = options
         .input_json
         .as_ref()
@@ -2093,7 +2170,7 @@ fn main() -> Result<()> {
 
     match extension.to_string_lossy().as_ref() {
         "bin" => {
-            let archive = load_bin(&input)?;
+            let (archive, state_map) = load_bin(&input)?;
             match archive.numeric_target {
                 StandaloneNumericTarget::Double => {
                     evaluate_double_archive(archive, &state_map, &options, custom_input.as_deref())
@@ -2120,6 +2197,7 @@ fn main() -> Result<()> {
         }
         "json" => {
             let archive = load_json(&input)?;
+            let state_map = current_state_map()?;
             match archive.numeric_target {
                 StandaloneNumericTarget::Double => {
                     evaluate_double_archive(archive, &state_map, &options, custom_input.as_deref())
@@ -2223,6 +2301,258 @@ mod tests {
                 );
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_template_compiled_artifacts_keep_representation_and_method() -> Result<()> {
+        let stack = |value: i64| {
+            let payload = StandaloneGenericEvaluatorArchive {
+                exprs: vec![format!(
+                    "{value}*y^2*(standalone_template_joint_numerator(x+1)+standalone_template_joint_numerator(x+3))"
+                )],
+                additional_fn_map_entries: vec![(
+                    "standalone_template_joint_numerator(u)".to_owned(),
+                    "u^2".to_owned(),
+                    Vec::new(),
+                    vec!["u".to_owned()],
+                    InliningPolicy::Never,
+                    false,
+                )],
+                dual_shape: Some(vec![vec![0], vec![1]]),
+            };
+            let mut summed = payload.clone();
+            summed.exprs = vec![format!(
+                "{value}*y^2*(standalone_template_joint_numerator(x+1)+standalone_template_joint_numerator(x+3))"
+            )];
+            StandaloneEvaluatorStackArchive {
+                explicit_orientation_sum_only: true,
+                production_orientation_ids: vec![0],
+                single_parametric: payload,
+                iterative: None,
+                summed_function_map: Some(summed.clone()),
+                summed: Some(summed),
+                representative_input: vec![
+                    StandaloneComplexInput {
+                        re: "2".to_owned(),
+                        im: "0".to_owned(),
+                    },
+                    StandaloneComplexInput {
+                        re: "1".to_owned(),
+                        im: "0".to_owned(),
+                    },
+                    StandaloneComplexInput {
+                        re: "1".to_owned(),
+                        im: "0".to_owned(),
+                    },
+                    StandaloneComplexInput {
+                        re: "0".to_owned(),
+                        im: "0".to_owned(),
+                    },
+                ],
+                start: 0,
+                residue_map_id_start: 0,
+                mult_offset: 2,
+            }
+        };
+        let archive = StandaloneEvaluatorArchive {
+            version: STANDALONE_EVALUATORS_VERSION,
+            three_d_representations: vec!["cff".to_owned(), "ltd".to_owned()],
+            numeric_target: StandaloneNumericTarget::Double,
+            symbolica_state: (),
+            graph_terms: vec![StandaloneGraphTermArchive {
+                graph_name: "artifact_dispatch".to_owned(),
+                orientations: Vec::new(),
+                param_builder_params: vec!["x".to_owned(), "y".to_owned()],
+                fn_map_entries: Vec::new(),
+                original_integrand: BTreeMap::from([
+                    ("cff".to_owned(), stack(3)),
+                    ("ltd".to_owned(), stack(7)),
+                ]),
+                threshold_counterterms: Vec::new(),
+                threshold_counterterms_are_variants: false,
+                threshold_variants: Vec::new(),
+                threshold_multipliers: None,
+                metadata_registry: None,
+            }],
+        };
+        archive.validate()?;
+        for corruption in 0..6 {
+            let mut malformed = archive.clone();
+            let stack = malformed.graph_terms[0]
+                .original_integrand
+                .get_mut("cff")
+                .unwrap();
+            match corruption {
+                0 => stack.mult_offset = 1,
+                1 => {
+                    stack.representative_input.pop();
+                }
+                2 => stack.summed_function_map.as_mut().unwrap().dual_shape = None,
+                3 => stack.residue_map_id_start = 3,
+                4 => stack.summed.as_mut().unwrap().dual_shape = None,
+                5 => stack.single_parametric.dual_shape = Some(Vec::new()),
+                _ => unreachable!(),
+            }
+            let bytes = bincode::encode_to_vec(&malformed, bincode::config::standard())?;
+            let (binary, _): (StandaloneEvaluatorArchive<(), String>, _) =
+                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+            let json: StandaloneEvaluatorArchive<(), String> =
+                serde_json::from_slice(&serde_json::to_vec(&malformed)?)?;
+            for restored in [binary, json] {
+                assert!(
+                    restored
+                        .validate()
+                        .unwrap_err()
+                        .to_string()
+                        .contains("physical input or dual layout")
+                );
+            }
+        }
+        let artifact_dir = std::env::temp_dir().join(format!(
+            "gammaloop-standalone-artifact-dispatch-{}",
+            std::process::id()
+        ));
+        let state_map = current_state_map()?;
+        for (representation, coefficient) in [("cff", 3.0), ("ltd", 7.0)] {
+            let stack = &archive.graph_terms[0].original_integrand[representation];
+            for method in [
+                StandaloneMethod::SingleParametric,
+                StandaloneMethod::SummedFunctionMap,
+            ] {
+                let (payload, iterate) = stack.selected_payload(method)?;
+                let duplicate_error = build_evaluator::<f64, _>(
+                    payload,
+                    &[parse_lit!(x), parse_lit!(x)],
+                    Vec::new(),
+                    &state_map,
+                    iterate,
+                )
+                .unwrap_err();
+                assert!(
+                    duplicate_error
+                        .to_string()
+                        .contains("parameters must be distinct")
+                );
+                let params = vec![parse_lit!(x), parse_lit!(y)];
+                let (mut evaluator, output_len) =
+                    build_evaluator::<f64, _>(payload, &params, Vec::new(), &state_map, iterate)?;
+                for (x, expected) in [(2.0, [34.0, 16.0]), (3.0, [52.0, 20.0])] {
+                    let inputs = vec![vec![
+                        Complex::new(x, 0.0),
+                        Complex::new(1.0, 0.0),
+                        Complex::new(1.0, 0.0),
+                        Complex::new(0.0, 0.0),
+                    ]];
+                    for backend in [
+                        StandaloneBackend::Eager,
+                        StandaloneBackend::Symjit,
+                        StandaloneBackend::Cpp,
+                        StandaloneBackend::Assembly,
+                    ] {
+                        assert_eq!(
+                            evaluate_with_backend_f64(
+                                &mut evaluator,
+                                backend,
+                                output_len,
+                                &inputs,
+                                &artifact_dir,
+                                &format!("row_values_{representation}_{}_{x}", method.as_str())
+                            )?,
+                            expected.map(|value| Complex::new(coefficient * value, 0.0))
+                        );
+                    }
+                }
+            }
+        }
+
+        for representation in [None, Some("ltd".to_owned())] {
+            for method in [StandaloneMethod::SingleParametric, StandaloneMethod::Summed] {
+                evaluate_double_archive(
+                    archive.clone(),
+                    &state_map,
+                    &StandaloneCliOptions {
+                        representation: representation.clone(),
+                        method,
+                        compare_backends: vec![StandaloneBackend::Cpp, StandaloneBackend::Assembly],
+                        artifact_dir: Some(artifact_dir.clone()),
+                        ..Default::default()
+                    },
+                    None,
+                )?;
+            }
+        }
+        // All files must coexist after both representations and methods have
+        // run: a shared basename would silently overwrite an earlier program.
+        let artifacts = artifact_dir.join("artifact_dispatch");
+        assert_eq!(fs::read_dir(&artifacts)?.count(), 16);
+        for representation in ["cff", "ltd"] {
+            for method in ["single_parametric", "summed"] {
+                for backend in ["c__", "assembly"] {
+                    for extension in ["cpp", "so"] {
+                        assert!(artifacts.join(format!(
+                            "standalone_artifact_dispatch_{representation}_original_{method}_{backend}.{extension}"
+                        )).is_file());
+                    }
+                }
+            }
+        }
+        fs::remove_dir_all(artifact_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_template_deduplicates_shared_function_definitions() -> Result<()> {
+        let x = parse_lit!(standalone_template_duplicate::x);
+        let call = function!(symbol!("standalone_template_duplicate::f"), &x);
+        let entry = (
+            call.clone(),
+            x.clone().pow(2),
+            Vec::new(),
+            vec![Indeterminate::try_from(x.clone()).unwrap()],
+            InliningPolicy::Never,
+            false,
+        );
+        let (_, function_map) = apply_fn_map_entries(vec![entry.clone(), entry])?;
+        let mut evaluator = call
+            .evaluator(&[x])
+            .function_map(function_map)
+            .optimization_settings(OptimizationSettings::new().cores(1))
+            .build()
+            .map_err(|error| eyre!(error))?
+            .map_coeff(&|coefficient| coefficient.re.to_f64());
+        let mut result = [0.0];
+        evaluator.evaluate(&[3.0], &mut result);
+        assert_eq!(result, [9.0]);
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_template_binary_load_restores_archived_symbol_map() -> Result<()> {
+        let atom = parse_lit!(standalone_template_binary::archived_parameter);
+        let mut encoded_atom = Vec::new();
+        atom.as_view().write(&mut encoded_atom)?;
+        let mut symbolica_state = Vec::new();
+        State::export(&mut symbolica_state)?;
+        let archive = StandaloneEvaluatorArchive::<Vec<u8>, Vec<u8>> {
+            version: STANDALONE_EVALUATORS_VERSION,
+            three_d_representations: vec!["cff".to_owned(), "ltd".to_owned()],
+            numeric_target: StandaloneNumericTarget::Quad,
+            symbolica_state,
+            graph_terms: Vec::new(),
+        };
+        let path = std::env::temp_dir().join(format!(
+            "gammaloop-amplitude-template-symbol-map-{}.bin",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            bincode::encode_to_vec(&archive, bincode::config::standard())?,
+        )?;
+        let (loaded, state_map) = load_bin(&path)?;
+        assert_eq!(loaded.three_d_representations, ["cff", "ltd"]);
+        assert_eq!(encoded_atom.import_with_map(&state_map)?, atom);
+        fs::remove_file(path)?;
         Ok(())
     }
 }

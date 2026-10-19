@@ -374,6 +374,15 @@ impl GammaLoopSample<ArbPrec> {
         if settings.subtraction.disable_threshold_subtraction {
             return Ok(());
         }
+        // Geometry is shared by all representations; bind its context to the
+        // configured first attempt without changing the canonical proposal.
+        let representation = settings
+            .stability
+            .levels
+            .first()
+            .copied()
+            .unwrap_or_else(crate::settings::runtime::StabilityLevelSetting::default_double)
+            .resolved_representation(integrand.generated_representations())?;
         let rotation = Rotation::new(crate::momentum::RotationMethod::Identity);
         let mut runtime = integrand.take_event_processing_runtime();
         let history = std::mem::take(&mut metadata.radial_root_diagnostics);
@@ -385,6 +394,7 @@ impl GammaLoopSample<ArbPrec> {
                     .prepare_physical_overlaps(
                         &row.sample,
                         super::GraphTermEvaluationContext {
+                            representation,
                             model,
                             settings: &settings,
                             event_processing_runtime: runtime.as_mut(),

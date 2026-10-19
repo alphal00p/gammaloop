@@ -6,11 +6,7 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "70375b9ef06411d8bac3e14d1f57382384547eef", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
-//! # Match the generator's Symbolica workspace, including its numeric APIs.
-//! [patch.crates-io]
-//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "70375b9ef06411d8bac3e14d1f57382384547eef" }
-//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "70375b9ef06411d8bac3e14d1f57382384547eef" }
+//! symbolica = { version = "=3.0.1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 //! ```
 
 #![allow(dead_code)]
@@ -23,19 +19,16 @@ use std::{
     time::Instant,
 };
 
+use crate::integrands::process::standalone;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use symbolica::evaluate::{FunctionRegistrationOptions, InliningPolicy};
-use symbolica::{domains::rational::Fraction, prelude::*, state::StateMap};
+use symbolica::{prelude::*, state::StateMap};
 
-type RationalExpressionTree = (
-    Vec<Atom>,
-    ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
-);
-
-// Reject archives predating the OnShellEnergy/Esurface naming split.
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 15;
+// Reject archives from the combined row-program format before importing symbols.
+// This format stores independent native CFF and LTD evaluator payloads.
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 20;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -49,6 +42,7 @@ pub struct StandaloneCutCFFIndex {
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneCrossSectionArchive<S = Vec<u8>, T = Vec<u8>> {
     pub(crate) version: u32,
+    pub(crate) three_d_representations: Vec<String>,
     pub(crate) symbolica_state: S,
     pub(crate) graph_terms: Vec<StandaloneCrossSectionGraphTermArchive<T>>,
 }
@@ -59,7 +53,8 @@ pub struct StandaloneCrossSectionGraphTermArchive<A = Vec<u8>> {
     pub(crate) orientations: Vec<Vec<i8>>,
     pub(crate) param_builder_params: Vec<A>,
     pub(crate) fn_map_entries: Vec<SerializedFnMapEntry<A>>,
-    pub(crate) cut_group_integrands: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+    pub(crate) cut_group_integrands:
+        BTreeMap<String, Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>>,
     pub(crate) counterterms: Vec<StandaloneCountertermArchive<A>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) threshold_counterterm_metadata:
@@ -172,11 +167,16 @@ pub struct StandaloneThresholdCountertermMetadataRegistry {
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
-pub struct StandaloneCountertermArchive<A = Vec<u8>> {
+pub struct StandaloneCountertermIntegrandsArchive<A = Vec<u8>> {
     pub(crate) left_thresholds_evaluator: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
     pub(crate) right_thresholds_evaluator: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
     pub(crate) iterated_evaluator:
         StandaloneIteratedCollectionArchive<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+}
+
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct StandaloneCountertermArchive<A = Vec<u8>> {
+    pub(crate) integrands: BTreeMap<String, StandaloneCountertermIntegrandsArchive<A>>,
     pub(crate) left_threshold_helpers: Vec<Vec<StandaloneIndexedGenericEvaluatorArchive<A>>>,
     pub(crate) right_threshold_helpers: Vec<Vec<StandaloneIndexedGenericEvaluatorArchive<A>>>,
     pub(crate) iterated_helpers:
@@ -273,6 +273,7 @@ pub struct StandaloneIndexedGenericEvaluatorArchive<A = Vec<u8>> {
 pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) production_orientation_ids: Vec<usize>,
+
     pub(crate) single_parametric: StandaloneGenericEvaluatorArchive<A>,
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
@@ -428,6 +429,10 @@ fn apply_fn_map_entries(
     Ok((replacements, all_replacements, fn_map))
 }
 
+#[allow(
+    clippy::type_complexity,
+    reason = "Reconstruction returns the existing expression, replacement, program and output tuple."
+)]
 fn build_evaluator<A: ImportWithMap>(
     payload: StandaloneGenericEvaluatorArchive<A>,
     graph_params: &[Atom],
@@ -439,7 +444,6 @@ fn build_evaluator<A: ImportWithMap>(
         .horner_iterations(10)
         .cores(10)
         .abort_check(None);
-    let cpe_iterations = None;
     let exprs = payload
         .exprs
         .iter()
@@ -448,76 +452,75 @@ fn build_evaluator<A: ImportWithMap>(
     let parameter_override = payload
         .parameter_override
         .as_ref()
-        .map(|params| {
-            params
+        .map(|parameters| {
+            parameters
                 .iter()
-                .map(|param| param.import_with_map(state_map))
+                .map(|parameter| parameter.import_with_map(state_map))
                 .collect::<Result<Vec<_>>>()
         })
         .transpose()?;
     let params = parameter_override.as_deref().unwrap_or(graph_params);
 
-    let additional_reps = parse_fn_map_entries(&payload.additional_fn_map_entries, state_map)?;
-    fn_map_entries.extend(additional_reps);
+    if params.iter().collect::<HashSet<_>>().len() != params.len() {
+        return Err(eyre!("Standalone evaluator parameters must be distinct"));
+    }
 
-    let result = vec![Complex::new(0.0, 0.0); exprs.len()];
-    let (replacements, all_replacements, fn_map) = apply_fn_map_entries(fn_map_entries)?;
-
-    if iterate {
-        let mut tree: Option<RationalExpressionTree> = None;
-
-        for expr in &exprs {
-            let eval = expr
-                .replace_multiple(&replacements)
-                .evaluator(params)
-                .function_map(fn_map.clone())
-                .optimization_settings(optimization_settings.clone())
-                .build()
-                .map_err(|e| eyre!("{e} for {expr}:{}", expr.replace_multiple(&replacements)))?;
-
-            tree = Some(if let Some((atoms, mut existing)) = tree {
-                existing.merge(eval, cpe_iterations).map_err(|e| eyre!(e))?;
-                (atoms, existing)
-            } else {
-                (exprs.clone(), eval)
-            });
+    fn_map_entries.extend(parse_fn_map_entries(
+        &payload.additional_fn_map_entries,
+        state_map,
+    )?);
+    if payload.dual_shape.is_some() {
+        // Match native construction: stock Symbolica vectorizes inlined functions.
+        for entry in &mut fn_map_entries {
+            if !entry.5 {
+                entry.4 = InliningPolicy::Always;
+            }
         }
-
-        tree.map(|(atoms, eval)| {
-            (
-                atoms,
-                all_replacements,
-                eval.map_coeff(&|r| Complex {
-                    re: r.re.to_f64(),
-                    im: r.im.to_f64(),
-                }),
-                result,
-            )
-        })
-        .ok_or_else(|| eyre!("No expressions in evaluator payload"))
-    } else {
-        let replaced_exprs = exprs
+    }
+    let (replacements, all_replacements, fn_map) = apply_fn_map_entries(fn_map_entries)?;
+    let build = |expressions: &[Atom]| {
+        let expressions = expressions
             .iter()
             .map(|expr| expr.replace_multiple(&replacements))
             .collect::<Vec<_>>();
-
-        Atom::evaluator_multiple(&replaced_exprs, params)
-            .function_map(fn_map)
-            .optimization_settings(optimization_settings)
+        Atom::evaluator_multiple(&expressions, params)
+            .function_map(fn_map.clone())
+            .optimization_settings(optimization_settings.clone())
             .build()
-            .map(|eval| {
-                (
-                    exprs,
-                    all_replacements,
-                    eval.map_coeff(&|r| Complex {
-                        re: r.re.to_f64(),
-                        im: r.im.to_f64(),
-                    }),
-                    result,
-                )
-            })
-            .map_err(|e| eyre!("{e}"))
+            .map_err(|error| eyre!(error))
+    };
+    let mut evaluator = if iterate {
+        let mut evaluator: Option<ExpressionEvaluator<Complex<Rational>>> = None;
+        for expr in &exprs {
+            let next = build(std::slice::from_ref(expr))?;
+            evaluator = Some(if let Some(mut evaluator) = evaluator {
+                evaluator.merge(next, None).map_err(|error| eyre!(error))?;
+                evaluator
+            } else {
+                next
+            });
+        }
+        evaluator.ok_or_else(|| eyre!("No expressions in evaluator payload"))?
+    } else {
+        build(&exprs)?
+    };
+    if let Some(shape) = &payload.dual_shape {
+        evaluator = evaluator
+            .vectorize(&Dualizer::new(
+                HyperDual::<Complex<Rational>>::new(shape.clone()),
+                Vec::new(),
+            ))
+            .map_err(|error| eyre!(error))?;
     }
+    let output_len = evaluator.get_output_len();
+    let evaluator =
+        evaluator.map_coeff(&|value| Complex::new(value.re.to_f64(), value.im.to_f64()));
+    Ok((
+        exprs,
+        all_replacements,
+        evaluator,
+        vec![Complex::new(0.0, 0.0); output_len],
+    ))
 }
 
 fn build_stack<A: ImportWithMap>(
@@ -528,15 +531,27 @@ fn build_stack<A: ImportWithMap>(
     graph_name: &str,
     label: &str,
 ) -> Result<LoadedStandaloneEvaluatorStack> {
+    standalone::validate_standalone_input_layout(
+        params.len(),
+        (!stack.representative_input.is_empty()).then_some(stack.representative_input.len()),
+        stack.mult_offset,
+        [stack.start, stack.residue_map_id_start],
+        std::iter::once(&stack.single_parametric)
+            .chain(stack.iterative.as_ref())
+            .chain(stack.summed_function_map.as_ref())
+            .chain(stack.summed.as_ref())
+            .map(|payload| payload.dual_shape.as_deref()),
+    )?;
     let parsed_fn_map_entries = parse_fn_map_entries(fn_map_entries, state_map)?;
     let timed_build = |payload: StandaloneGenericEvaluatorArchive<A>,
                        iterate: bool,
-                       component: &str|
+                       component: &str,
+                       parameters: &[Atom]|
      -> Result<LoadedGenericEvaluator> {
         let started = Instant::now();
         let evaluator = build_evaluator(
             payload,
-            params,
+            parameters,
             parsed_fn_map_entries.clone(),
             state_map,
             iterate,
@@ -547,7 +562,8 @@ fn build_stack<A: ImportWithMap>(
         );
         Ok(evaluator)
     };
-
+    let single_parametric =
+        timed_build(stack.single_parametric, false, "single_parametric", params)?;
     Ok(LoadedStandaloneEvaluatorStack {
         explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
         production_orientation_ids: stack.production_orientation_ids,
@@ -555,18 +571,18 @@ fn build_stack<A: ImportWithMap>(
         orientation_start: stack.start,
         residue_map_id_start: stack.residue_map_id_start,
         mult_offset: stack.mult_offset,
-        single_parametric: timed_build(stack.single_parametric, false, "single_parametric")?,
+        single_parametric,
         iterative: stack
             .iterative
-            .map(|payload| timed_build(payload, true, "iterative"))
+            .map(|payload| timed_build(payload, true, "iterative", params))
             .transpose()?,
         summed_function_map: stack
             .summed_function_map
-            .map(|payload| timed_build(payload, false, "summed_function_map"))
+            .map(|payload| timed_build(payload, false, "summed_function_map", params))
             .transpose()?,
         summed: stack
             .summed
-            .map(|payload| timed_build(payload, false, "summed"))
+            .map(|payload| timed_build(payload, false, "summed", params))
             .transpose()?,
     })
 }
@@ -793,16 +809,16 @@ pub(crate) fn validate_threshold_counterterm_metadata_archive<A>(
                     && variant.side == StandaloneThresholdCountertermSide::Right
             })
             .count();
-        if left_count != counterterm.left_thresholds_evaluator.len()
-            || right_count != counterterm.right_thresholds_evaluator.len()
+        if left_count != counterterm.left_threshold_helpers.len()
+            || right_count != counterterm.right_threshold_helpers.len()
         {
             return Err(eyre!(
                 "threshold-counterterm metadata cut group {} has dimensions {}x{}, archive has {}x{}",
                 cut_group_id,
                 left_count,
                 right_count,
-                counterterm.left_thresholds_evaluator.len(),
-                counterterm.right_thresholds_evaluator.len(),
+                counterterm.left_threshold_helpers.len(),
+                counterterm.right_threshold_helpers.len(),
             ));
         }
     }
@@ -1089,6 +1105,7 @@ pub(crate) fn build_threshold_multiplier_collection<A: ImportWithMap + Clone + P
 
 #[derive(Default)]
 pub struct LoadedStandaloneCrossSection {
+    pub three_d_representations: Vec<String>,
     pub graph_terms: Vec<LoadedStandaloneCrossSectionGraphTerm>,
 }
 
@@ -1096,12 +1113,13 @@ pub struct LoadedStandaloneCrossSectionGraphTerm {
     pub graph_name: String,
     pub orientations: Vec<Vec<i8>>,
     pub param_builder_params: Vec<Atom>,
-    pub cut_group_integrands: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
+    pub cut_group_integrands:
+        BTreeMap<String, Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>>,
     pub counterterms: Vec<LoadedStandaloneCounterterm>,
     pub threshold_counterterm_metadata: Option<StandaloneThresholdCountertermMetadataRegistry>,
 }
 
-pub struct LoadedStandaloneCounterterm {
+pub struct LoadedStandaloneCountertermIntegrands {
     pub left_thresholds_evaluator:
         Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
     pub right_thresholds_evaluator:
@@ -1109,6 +1127,10 @@ pub struct LoadedStandaloneCounterterm {
     pub iterated_evaluator: LoadedStandaloneIteratedCollection<
         BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>,
     >,
+}
+
+pub struct LoadedStandaloneCounterterm {
+    pub integrands: BTreeMap<String, LoadedStandaloneCountertermIntegrands>,
     pub left_threshold_helpers: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedGenericEvaluator>>,
     pub right_threshold_helpers: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedGenericEvaluator>>,
     pub iterated_helpers:
@@ -1152,6 +1174,25 @@ pub struct LoadedStandaloneEvaluatorStack {
     pub summed: Option<LoadedGenericEvaluator>,
 }
 
+impl LoadedStandaloneEvaluatorStack {
+    /// Evaluate the selected native program at physical inputs. CFF orientation
+    /// selection, where supported, remains encoded in those physical inputs.
+    pub fn evaluate_single_parametric(
+        &mut self,
+        physical_input: &[Complex<f64>],
+    ) -> Result<Vec<Complex<f64>>> {
+        let evaluator = &mut self.single_parametric.2;
+        if physical_input.len() != evaluator.get_input_len() {
+            return Err(eyre!(
+                "Physical input length does not match standalone evaluator"
+            ));
+        }
+        let mut result = vec![Complex::new(0.0, 0.0); evaluator.get_output_len()];
+        evaluator.evaluate(physical_input, &mut result);
+        Ok(result)
+    }
+}
+
 impl StandaloneCrossSectionArchive<(), String> {
     pub fn load(self) -> Result<LoadedStandaloneCrossSection> {
         if self.version != STANDALONE_EVALUATORS_VERSION {
@@ -1190,6 +1231,29 @@ impl StandaloneCrossSectionArchive {
 
 impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A> {
     pub fn load_impl(self, state_map: &StateMap) -> Result<LoadedStandaloneCrossSection> {
+        let representations = self.three_d_representations.iter().collect::<BTreeSet<_>>();
+        if representations.is_empty()
+            || representations.len() != self.three_d_representations.len()
+            || representations
+                .iter()
+                .any(|mode| !matches!(mode.as_str(), "cff" | "ltd"))
+        {
+            return Err(eyre!(
+                "Archive must specify a nonempty, unique list of cff/ltd representations"
+            ));
+        }
+        for graph in &self.graph_terms {
+            if graph.cut_group_integrands.keys().collect::<BTreeSet<_>>() != representations
+                || graph.counterterms.iter().any(|counterterm| {
+                    counterterm.integrands.keys().collect::<BTreeSet<_>>() != representations
+                })
+            {
+                return Err(eyre!(
+                    "Graph '{}' has inconsistent representation payloads",
+                    graph.graph_name
+                ));
+            }
+        }
         let mut graph_terms = Vec::new();
 
         for graph in self.graph_terms {
@@ -1268,14 +1332,20 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
             let cut_group_integrands = graph
                 .cut_group_integrands
                 .into_iter()
-                .enumerate()
-                .map(|(cut_group_id, derivative_stacks)| {
-                    build_indexed_stack_collection(
-                        derivative_stacks,
-                        &format!("cut_group[{cut_group_id}]"),
-                    )
+                .map(|(representation, cuts)| {
+                    let cuts = cuts
+                        .into_iter()
+                        .enumerate()
+                        .map(|(cut_group_id, stacks)| {
+                            build_indexed_stack_collection(
+                                stacks,
+                                &format!("{representation}::cut_group[{cut_group_id}]"),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok((representation, cuts))
                 })
-                .collect::<Result<Vec<_>>>()?;
+                .collect::<Result<BTreeMap<_, _>>>()?;
 
             let counterterms = graph
                 .counterterms
@@ -1385,7 +1455,7 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
                                 parse_fn_map_entries(&graph.fn_map_entries, state_map)?,
                                 state_map,
                                 false,
-                            )?;
+                        )?;
                             println!(
                                 "[timing] build_evaluator {}::counterterm[{cut_id}]::pass_two_evaluator[{order}] took {:?}",
                                 graph.graph_name,
@@ -1395,7 +1465,8 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
                         })
                         .collect::<Result<Vec<_>>>()?;
 
-                    let left_thresholds_evaluator = counterterm
+                    let integrands = counterterm.integrands.into_iter().map(|(representation, payload)| {
+                    let left_thresholds_evaluator = payload
                         .left_thresholds_evaluator
                         .into_iter()
                         .enumerate()
@@ -1406,7 +1477,7 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
                             )
                         })
                         .collect::<Result<Vec<_>>>()?;
-                    let right_thresholds_evaluator = counterterm
+                    let right_thresholds_evaluator = payload
                         .right_thresholds_evaluator
                         .into_iter()
                         .enumerate()
@@ -1417,6 +1488,12 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
                             )
                         })
                         .collect::<Result<Vec<_>>>()?;
+                        if left_thresholds_evaluator.len() != counterterm.left_threshold_helpers.len() || right_thresholds_evaluator.len() != counterterm.right_threshold_helpers.len() {
+                            return Err(eyre!("{representation} threshold evaluator dimensions disagree with shared helpers"));
+                        }
+                        let iterated_evaluator = build_stack_iterated(payload.iterated_evaluator, &format!("{representation}::iterated_evaluator"), left_thresholds_evaluator.len(), right_thresholds_evaluator.len())?;
+                        Ok((representation, LoadedStandaloneCountertermIntegrands { left_thresholds_evaluator, right_thresholds_evaluator, iterated_evaluator }))
+                    }).collect::<Result<BTreeMap<_, _>>>()?;
                     let left_threshold_helpers = counterterm
                         .left_threshold_helpers
                         .into_iter()
@@ -1443,12 +1520,6 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
                             )
                         })
                         .collect::<Result<Vec<_>>>()?;
-                    let iterated_evaluator = build_stack_iterated(
-                        counterterm.iterated_evaluator,
-                        "iterated_evaluator",
-                        left_thresholds_evaluator.len(),
-                        right_thresholds_evaluator.len(),
-                    )?;
                     let iterated_helpers = build_helper_iterated(
                         counterterm.iterated_helpers,
                         "iterated_helpers",
@@ -1460,8 +1531,8 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
                         .map(|collection| {
                             build_threshold_multiplier_collection(
                                 collection,
-                                left_thresholds_evaluator.len(),
-                                right_thresholds_evaluator.len(),
+                                left_threshold_helpers.len(),
+                                right_threshold_helpers.len(),
                                 state_map,
                             )
                             .with_context(|| {
@@ -1474,9 +1545,7 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
                         .transpose()?;
 
                     Ok(LoadedStandaloneCounterterm {
-                        left_thresholds_evaluator,
-                        right_thresholds_evaluator,
-                        iterated_evaluator,
+                        integrands,
                         left_threshold_helpers,
                         right_threshold_helpers,
                         iterated_helpers,
@@ -1496,7 +1565,10 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
             });
         }
 
-        Ok(LoadedStandaloneCrossSection { graph_terms })
+        Ok(LoadedStandaloneCrossSection {
+            three_d_representations: self.three_d_representations,
+            graph_terms,
+        })
     }
 }
 
@@ -1576,6 +1648,7 @@ mod threshold_multiplier_tests {
                 exprs: vec!["archive_weight + 1".to_owned()],
                 additional_fn_map_entries: Vec::new(),
                 dual_shape: None,
+
                 parameter_override: None,
             }],
             left_variants: vec![StandaloneThresholdMultiplierVariantReference {
@@ -1588,12 +1661,17 @@ mod threshold_multiplier_tests {
 
     fn identity_counterterm() -> StandaloneCountertermArchive<String> {
         StandaloneCountertermArchive {
-            left_thresholds_evaluator: vec![Vec::new()],
-            right_thresholds_evaluator: Vec::new(),
-            iterated_evaluator: StandaloneIteratedCollectionArchive {
-                data: Vec::new(),
-                num_right_thresholds: 0,
-            },
+            integrands: BTreeMap::from([(
+                "cff".to_owned(),
+                StandaloneCountertermIntegrandsArchive {
+                    left_thresholds_evaluator: vec![Vec::new()],
+                    right_thresholds_evaluator: Vec::new(),
+                    iterated_evaluator: StandaloneIteratedCollectionArchive {
+                        data: Vec::new(),
+                        num_right_thresholds: 0,
+                    },
+                },
+            )]),
             left_threshold_helpers: vec![Vec::new()],
             right_threshold_helpers: Vec::new(),
             iterated_helpers: StandaloneIteratedCollectionArchive {
@@ -1660,13 +1738,14 @@ mod threshold_multiplier_tests {
     ) -> StandaloneCrossSectionArchive<(), String> {
         StandaloneCrossSectionArchive {
             version: STANDALONE_EVALUATORS_VERSION,
+            three_d_representations: vec!["cff".to_owned()],
             symbolica_state: (),
             graph_terms: vec![StandaloneCrossSectionGraphTermArchive {
                 graph_name: "graph".to_string(),
                 orientations: Vec::new(),
                 param_builder_params: Vec::new(),
                 fn_map_entries: Vec::new(),
-                cut_group_integrands: vec![Vec::new()],
+                cut_group_integrands: BTreeMap::from([("cff".to_owned(), vec![Vec::new()])]),
                 counterterms: vec![identity_counterterm()],
                 threshold_counterterm_metadata,
             }],
@@ -1735,7 +1814,7 @@ mod threshold_multiplier_tests {
 
     #[test]
     fn threshold_counterterm_metadata_archive_validates_ids_and_component_coverage() {
-        assert_eq!(STANDALONE_EVALUATORS_VERSION, 15);
+        assert_eq!(STANDALONE_EVALUATORS_VERSION, 19);
         let counterterms = vec![identity_counterterm()];
         let registry = identity_registry();
         validate_threshold_counterterm_metadata_archive(&registry, "graph", &counterterms).unwrap();
@@ -1753,9 +1832,20 @@ mod threshold_multiplier_tests {
     }
 
     #[test]
-    fn threshold_counterterm_metadata_roundtrips_in_v15_archives() {
+    fn threshold_counterterm_metadata_roundtrips_with_ordered_representations() {
         let registry = identity_registry();
-        let archive = archive_with_metadata(Some(registry.clone()));
+        let mut archive = archive_with_metadata(Some(registry.clone()));
+        archive.three_d_representations = vec!["ltd".to_owned(), "cff".to_owned()];
+        for graph in &mut archive.graph_terms {
+            graph
+                .cut_group_integrands
+                .insert("ltd".to_owned(), graph.cut_group_integrands["cff"].clone());
+            for counterterm in &mut graph.counterterms {
+                counterterm
+                    .integrands
+                    .insert("ltd".to_owned(), counterterm.integrands["cff"].clone());
+            }
+        }
 
         let json = serde_json::to_vec(&archive).unwrap();
         let decoded_json: StandaloneCrossSectionArchive<(), String> =
@@ -1773,6 +1863,25 @@ mod threshold_multiplier_tests {
             Some(registry)
         );
 
+        for decoded in [decoded_json, decoded_binary] {
+            let loaded = decoded.load().unwrap();
+            assert_eq!(loaded.three_d_representations, ["ltd", "cff"]);
+            assert_eq!(loaded.graph_terms[0].cut_group_integrands.len(), 2);
+            assert_eq!(loaded.graph_terms[0].counterterms[0].integrands.len(), 2);
+        }
+        let mut missing_payload = archive_with_metadata(None);
+        missing_payload
+            .three_d_representations
+            .push("ltd".to_owned());
+        assert!(
+            missing_payload
+                .load()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("inconsistent representation payloads")
+        );
+
         let no_directive_json = serde_json::to_value(archive_with_metadata(None)).unwrap();
         assert!(
             no_directive_json["graph_terms"][0]
@@ -1783,10 +1892,22 @@ mod threshold_multiplier_tests {
 }
 
 fn main() -> Result<()> {
-    let input = std::env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(default_input_path);
+    let mut args = std::env::args().skip(1);
+    let mut input = None;
+    let mut representation = None;
+    while let Some(argument) = args.next() {
+        if argument == "--three-dimensional-representation" {
+            representation =
+                Some(args.next().ok_or_else(|| {
+                    eyre!("--three-dimensional-representation requires cff or ltd")
+                })?);
+        } else if input.is_none() {
+            input = Some(PathBuf::from(argument));
+        } else {
+            return Err(eyre!("Unexpected argument {argument}"));
+        }
+    }
+    let input = input.unwrap_or_else(default_input_path);
 
     let Some(ext) = input.extension() else {
         return Err(eyre!("No extension, expected .bin or .json"));
@@ -1803,16 +1924,26 @@ fn main() -> Result<()> {
         }
     };
 
+    let representation = representation
+        .as_ref()
+        .or_else(|| loaded.three_d_representations.first())
+        .ok_or_else(|| eyre!("Archive has no generated 3D representations"))?;
+    if !loaded.three_d_representations.contains(representation) {
+        return Err(eyre!("Representation {representation} was not generated"));
+    }
     println!("Loaded {} graph terms", loaded.graph_terms.len());
     for graph in &loaded.graph_terms {
         println!(
             "graph={} orientations={} cut_groups={} counterterms={}",
             graph.graph_name,
             graph.orientations.len(),
-            graph.cut_group_integrands.len(),
+            graph.cut_group_integrands[representation].len(),
             graph.counterterms.len()
         );
-        for (cut_group_id, derivative_stacks) in graph.cut_group_integrands.iter().enumerate() {
+        for (cut_group_id, derivative_stacks) in graph.cut_group_integrands[representation]
+            .iter()
+            .enumerate()
+        {
             println!(
                 "  cut_group[{cut_group_id}] derivative_evaluators={}",
                 derivative_stacks.len()
@@ -1821,9 +1952,16 @@ fn main() -> Result<()> {
         for (cut_id, counterterm) in graph.counterterms.iter().enumerate() {
             println!(
                 "  counterterm[{cut_id}] left={} right={} iterated={} left_helpers={} right_helpers={} iterated_helpers={} multipliers={} pass_two_exprs={}",
-                counterterm.left_thresholds_evaluator.len(),
-                counterterm.right_thresholds_evaluator.len(),
-                counterterm.iterated_evaluator.data.len(),
+                counterterm.integrands[representation]
+                    .left_thresholds_evaluator
+                    .len(),
+                counterterm.integrands[representation]
+                    .right_thresholds_evaluator
+                    .len(),
+                counterterm.integrands[representation]
+                    .iterated_evaluator
+                    .data
+                    .len(),
                 counterterm.left_threshold_helpers.len(),
                 counterterm.right_threshold_helpers.len(),
                 counterterm.iterated_helpers.data.len(),

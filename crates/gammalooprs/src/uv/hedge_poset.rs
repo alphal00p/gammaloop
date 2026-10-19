@@ -1318,32 +1318,35 @@ impl Forests {
         Ok(())
     }
 
+    /// Return the measured representation-independent part of this computation.
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
         vakint: &Vakint,
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
-    ) -> Result<()> {
-        if settings.generate_integrated || settings.local_uv_cts_from_expanded_4d_integrands {
-            // The projected route needs local 4D coefficients even when their
-            // integrated addbacks are disabled.
-            self.integrate(graph, vakint, settings)?;
-        } else {
-            // Direct local 3D generation only consumes the integrated branch,
-            // which is identically zero when integration is disabled.  Do not
-            // construct and simplify unrelated 4D local atoms merely to obtain
-            // that zero.  Seed every node because disconnected-union replay can
-            // read an integrated prefix before that node's cut result is built.
-            let zero = IntegratedCts::root();
-            for (_, _, operation) in self.graph.iter_nodes() {
-                self.compute_store
-                    .entry(operation.clone())
-                    .or_default()
-                    .integrated = Some(zero.clone());
+        compute_four_d: bool,
+        projection_context: &mut Local4dProjectionContext,
+    ) -> Result<std::time::Duration> {
+        let shared_before = projection_context.shared_preparation_time;
+        if compute_four_d {
+            let started = std::time::Instant::now();
+            if settings.generate_integrated || settings.local_uv_cts_from_expanded_4d_integrands {
+                // Local-4D projection also needs these coefficients when analytic addbacks are off.
+                self.integrate(graph, vakint, settings)?;
+            } else {
+                // Direct local-3D consumes only the zero integrated lane. Seed every
+                // operation because a disconnected replay can visit a prefix first.
+                let zero = IntegratedCts::root();
+                for (_, _, operation) in self.graph.iter_nodes() {
+                    self.compute_store
+                        .entry(operation.clone())
+                        .or_default()
+                        .integrated = Some(zero.clone());
+                }
             }
+            projection_context.shared_preparation_time += started.elapsed();
         }
-        let mut projection_context = Local4dProjectionContext::default();
 
         for (compatible_subset, cutset) in self.cuts.clone() {
             let localizer = Localizer::new(&cutset, orientation);
@@ -1363,7 +1366,7 @@ impl Forests {
                     &cutset,
                     localizer,
                     settings,
-                    &mut projection_context,
+                    projection_context,
                 )?;
                 self.compute_store
                     .entry(operation)
@@ -1373,7 +1376,7 @@ impl Forests {
             }
         }
 
-        Ok(())
+        Ok(projection_context.shared_preparation_time - shared_before)
     }
 
     pub(crate) fn orientation_parametric_exprs(
@@ -1406,7 +1409,7 @@ impl Forests {
                     .final_integrands
                     .map_expressions(|integrand| Ok(integrand.clone().collect_color()))?;
                 sum = Some(match sum {
-                    Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
+                    Some(sum) => sum.zip_add([terms]).wrap_err_with(|| {
                         format!("while aggregating hedge-poset term {operation} for cut {cutset:?}")
                     })?,
                     None => terms,
@@ -1760,6 +1763,7 @@ mod tests {
             )?;
             let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
 
+            let mut context = Local4dProjectionContext::default();
             forests.compute(
                 &mut graph,
                 crate::utils::vakint()?,
@@ -1770,7 +1774,103 @@ mod tests {
                     true,
                 ),
                 &settings.uv,
+                true,
+                &mut context,
             )?;
+
+            if project_local_4d {
+                let mut legacy =
+                    crate::uv::wood::CutWoods::new(CutStructure::empty(&graph), &graph, &settings)?
+                        .unfold(&graph);
+                let mut legacy_context = Local4dProjectionContext::default();
+                legacy.compute(
+                    &mut graph,
+                    crate::utils::vakint()?,
+                    OrientationProjection::exact_expression(
+                        &production,
+                        &options,
+                        &orientation_pattern,
+                        true,
+                    ),
+                    &settings.uv,
+                    true,
+                    &mut legacy_context,
+                )?;
+                let canonical_builds = [
+                    context.canonical_preparation_builds,
+                    legacy_context.canonical_preparation_builds,
+                ];
+                assert!(canonical_builds.iter().all(|count| *count > 0));
+                for representation in [
+                    three_dimensional_reps::RepresentationMode::Ltd,
+                    three_dimensional_reps::RepresentationMode::Cff,
+                ] {
+                    let options = three_dimensional_reps::Generate3DExpressionOptions {
+                        representation,
+                        ..options.clone()
+                    };
+                    let production = graph.generate_3d_expression_for_integrand(
+                        &[],
+                        &graph.get_esurface_canonization(&graph.loop_momentum_basis),
+                        &options,
+                        Some(&Atom::one()),
+                    )?;
+                    assert_eq!(production.representation, representation);
+                    let orientation = OrientationProjection::exact_expression(
+                        &production,
+                        &options,
+                        &orientation_pattern,
+                        true,
+                    );
+                    let before = [&context, &legacy_context].map(|context| {
+                        (
+                            context.shared_preparation_time,
+                            context.preparations.hits,
+                            context.source_preparation_builds,
+                            context.generation_cache.native_generations,
+                        )
+                    });
+                    let shared = [
+                        forests.compute(
+                            &mut graph,
+                            crate::utils::vakint()?,
+                            orientation,
+                            &settings.uv,
+                            false,
+                            &mut context,
+                        )?,
+                        legacy.compute(
+                            &mut graph,
+                            crate::utils::vakint()?,
+                            orientation,
+                            &settings.uv,
+                            false,
+                            &mut legacy_context,
+                        )?,
+                    ];
+                    for (index, context) in [&context, &legacy_context].into_iter().enumerate() {
+                        assert_eq!(
+                            context.canonical_preparation_builds,
+                            canonical_builds[index]
+                        );
+                        assert!(context.preparations.hits > before[index].1);
+                        assert_eq!(
+                            shared[index],
+                            context.shared_preparation_time - before[index].0
+                        );
+                        if representation == three_dimensional_reps::RepresentationMode::Ltd {
+                            assert!(context.source_preparation_builds > before[index].2);
+                            assert!(context.generation_cache.native_generations > before[index].3);
+                        } else {
+                            assert_eq!(context.source_preparation_builds, before[index].2);
+                            assert_eq!(
+                                context.generation_cache.native_generations,
+                                before[index].3
+                            );
+                        }
+                    }
+                }
+            }
 
             assert_eq!(forests.compute_store.entries.len(), forests.graph.n_nodes());
             for (_, _, operation) in forests.graph.iter_nodes() {
@@ -1933,7 +2033,10 @@ mod tests {
                     settings.uv.softct = false;
                     settings.uv.generate_integrated = generate_integrated;
                     let mut graph = graph.clone();
-                    let options = graph.production_cff_3d_expression_options(&settings)?;
+                    let options = graph.production_3d_expression_options(
+                        &settings,
+                        three_dimensional_reps::RepresentationMode::Cff,
+                    )?;
                     let contract =
                         graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
                     let production = graph
@@ -1956,6 +2059,8 @@ mod tests {
                             crate::utils::vakint()?,
                             projection,
                             &settings.uv,
+                            true,
+                            &mut Local4dProjectionContext::default(),
                         )?;
                         results.push(forests.orientation_parametric_exprs(&graph, &settings.uv)?);
                     }
@@ -2473,7 +2578,10 @@ mod tests {
         // the disconnected-union node.
         let cutset = CutSet::empty(graph.n_hedges());
         let orientation_pattern = crate::settings::global::OrientationPattern::default();
-        let options = graph.production_cff_3d_expression_options(&Default::default())?;
+        let options = graph.production_3d_expression_options(
+            &Default::default(),
+            three_dimensional_reps::RepresentationMode::Cff,
+        )?;
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
         // Match the production root: its structural bridge remains a 4D
         // denominator outside the CFF and its loop-energy contour.

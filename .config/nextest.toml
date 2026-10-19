@@ -12,8 +12,8 @@ nextest-version = "0.9.137"
 
 [profile.default]
 # Strict fast lane. Seven cases exceeded 240s in the matched CI-optim runs;
-# the other 36 slow cases have not been timed. The remaining 139 scalar cases
-# are included despite their `slow` module names. See docs/architecture/ci.typ.
+# the other 36 slow cases have not been timed. Other scalar cross-section tests
+# remain eligible despite their `slow` module names. See docs/architecture/ci.typ.
 # The fixed-statistics self-energy acceptance also runs in the main-only lane.
 default-filter = '''
 not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) and not (
@@ -96,6 +96,7 @@ not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) 
     test(=slow::gamma_star_ddbar_top_bubble_child_only_has_two_power_soft_improvement) or
     test(=slow::gamma_star_ddbar_top_bubble_has_two_power_soft_improvement) or
     test(=slow::local_nested_soft_fixture_generates) or
+    test(=slow::soft_ir_4d_representations_layouts_and_forests_match) or
     test(=slow::paper_appendix_b1_ir_specialization_generates_and_profiles) or
     test(=slow::paper_figure_b1_double_triangle_is_a_non_vacuous_uv_fixture) or
     test(=slow::paper_figure_b1_massless_bubble_uses_a_complete_soft_wood) or
@@ -147,6 +148,20 @@ test-group = "integration"
 threads-required = 10
 
 [[profile.default.overrides]]
+# The three center objectives share 75k adaptive samples. Use three workers to
+# keep the larger numerical budget near the three-minute target.
+filter = "test(=integrations::overlap_center_objectives_preserve_the_integrated_amplitude)"
+threads-required = 3
+slow-timeout = { period = "1m", terminate-after = 4 }
+
+[[profile.default.overrides]]
+# Box4E uses two correlated representation slots and four threshold channels.
+filter = "test(=integrations::box_4e_multichannel_subtraction_reproduces_published_integral)"
+threads-required = 3
+slow-timeout = { period = "1m", terminate-after = 3 }
+
+[[profile.default.overrides]]
+# Mark tests with "heavy" in the name as memory-intensive
 filter = "test(heavy) or test(memory) or test(large)"
 test-group = "memory-intensive"
 
@@ -165,7 +180,7 @@ test-group = "gammalooprs-diagnostics"
 # These UV fixtures share generated-state directories across test processes.
 
 [[profile.default.overrides]]
-filter = "package(gammaloop-integration-tests) and binary(uv) and test(/^(dgse_local_ir_profiles_are_non_vacuous|dgse_local_ir_generation_orientation_filter_profiles_one_orientation|massless_quark_self_energy_local_ir_profile_is_non_vacuous|massless_gluon_self_energy_local_ir_profile_is_non_vacuous|soft_cff_state_survives_a_fresh_process_reload|massive_top_self_energy_local_os_dispatch_is_deferred|paper_appendix_b1_os_child_reaches_deferred_dispatch|local_ir_disconnected_completed_components_form_nonzero_union|consecutive_soft_components_have_exact_forest_and_cli_profile|local_ir_integrated_generation_succeeds_across_local_uv_routes|genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs|local_os_integrated_generation_is_rejected_by_run_generate|local_ir_and_pole_part_wood_is_rejected_by_run_generate|local_ir_child_under_positive_degree_muv_parent_is_rejected_by_run_generate)$/)"
+filter = "package(gammaloop-integration-tests) and binary(uv) and test(/^(dgse_local_ir_profiles_are_non_vacuous|dgse_local_ir_generation_orientation_filter_profiles_one_orientation|massless_quark_self_energy_local_ir_profile_is_non_vacuous|massless_gluon_self_energy_local_ir_profile_is_non_vacuous|local_ir_threshold_counterterms_match_across_4d_representations|soft_ct_state_survives_a_fresh_process_reload|massive_top_self_energy_local_os_dispatch_is_deferred|paper_appendix_b1_os_child_reaches_deferred_dispatch|local_ir_disconnected_completed_components_form_nonzero_union|consecutive_soft_components_have_exact_forest_and_cli_profile|local_ir_integrated_generation_succeeds_across_local_uv_routes|genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs|local_os_integrated_generation_is_rejected_by_run_generate|local_ir_and_pole_part_wood_is_rejected_by_run_generate|local_ir_child_under_positive_degree_muv_parent_is_rejected_by_run_generate)$/)"
 test-group = "soft-ct-serial"
 
 [[profile.default.overrides]]
@@ -190,9 +205,10 @@ test-group = "scalar-lu-serial"
 threads-required = "num-test-threads"
 
 # Mandatory soft-CT acceptances generate large symbolic fixtures and must not
-# contend. The full/slow profiles retain their bounded two-hour timeout.
+# contend. The full/slow profiles keep two-hour limits except for the complete
+# four-route massless fixture, which has the exact overrides below.
 [[profile.default.overrides]]
-filter = "test(/^slow::(paper_figure_b1_massless_bubble_uses_a_complete_soft_wood|paper_figure_b1_double_triangle_is_a_non_vacuous_uv_fixture|local_nested_soft_fixture_generates|paper_appendix_b1_ir_specialization_generates_and_profiles|gamma_star_ddbar_top_bubble_child_only_has_two_power_soft_improvement|gamma_star_ddbar_top_bubble_has_two_power_soft_improvement)$/)"
+filter = "test(/^slow::(paper_figure_b1_massless_bubble_uses_a_complete_soft_wood|paper_figure_b1_double_triangle_is_a_non_vacuous_uv_fixture|local_nested_soft_fixture_generates|soft_ir_4d_representations_layouts_and_forests_match|paper_appendix_b1_ir_specialization_generates_and_profiles|gamma_star_ddbar_top_bubble_child_only_has_two_power_soft_improvement|gamma_star_ddbar_top_bubble_has_two_power_soft_improvement)$/)"
 test-group = "soft-ct-serial"
 threads-required = "num-test-threads"
 
@@ -268,6 +284,11 @@ not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) 
 '''
 slow-timeout = { period = "60m", terminate-after = 2, on-timeout = "fail" }
 
+# One shared deadline covers all four routes and both subtracted/bare profiles.
+[[profile.ci_full.overrides]]
+filter = "package(=gammaloop-integration-tests) and binary(=uv) and test(=slow::paper_figure_b1_massless_bubble_uses_a_complete_soft_wood)"
+slow-timeout = { period = "60m", terminate-after = 3, on-timeout = "fail" }
+
 [profile.ci_full.junit]
 path = "junit.xml"
 store-success-output = true
@@ -310,6 +331,7 @@ test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=slow::gamma_star_ddbar_top_bubble_child_only_has_two_power_soft_improvement) or
     test(=slow::gamma_star_ddbar_top_bubble_has_two_power_soft_improvement) or
     test(=slow::local_nested_soft_fixture_generates) or
+    test(=slow::soft_ir_4d_representations_layouts_and_forests_match) or
     test(=slow::paper_appendix_b1_ir_specialization_generates_and_profiles) or
     test(=slow::paper_figure_b1_double_triangle_is_a_non_vacuous_uv_fixture) or
     test(=slow::paper_figure_b1_massless_bubble_uses_a_complete_soft_wood) or
@@ -321,6 +343,11 @@ test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=smoke::slow::epemttb_generate) or
     test(=smoke::slow::test_z_decay)
 '''
+
+# Nextest does not inherit custom per-test overrides from ci_full.
+[[profile.ci_slow.overrides]]
+filter = "package(=gammaloop-integration-tests) and binary(=uv) and test(=slow::paper_figure_b1_massless_bubble_uses_a_complete_soft_wood)"
+slow-timeout = { period = "60m", terminate-after = 3, on-timeout = "fail" }
 
 [profile.ci_slow.junit]
 path = "junit.xml"

@@ -81,7 +81,7 @@ use crate::{
     },
     settings::{
         RuntimeSettings,
-        global::{CompilationOptionsSnapshot, FrozenCompilationMode},
+        global::{CompilationOptionsSnapshot, FrozenCompilationMode, RepresentationMode},
     },
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, RuntimeCache, SamplingFloat, TENSORLIB, W_,
@@ -824,10 +824,28 @@ impl EvaluatorStack {
         integrand: &Atom,
         param_builder: &ParamBuilder,
         numerator_definitions: &[Arc<FnMapEntry>],
+        representation: RepresentationMode,
         orientation_catalog: Option<(&[EdgeVec<Orientation>], &[OrientationID])>,
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
+        if representation == RepresentationMode::Ltd {
+            // LTD always executes the complete residue sum. A single internal
+            // entry lets the existing evaluator layouts compile that expression
+            // without exposing its physical residues as integration channels.
+            let integrand = Self::sum_residue_map_selectors(integrand);
+            let (mut stack, timings) = Self::new_with_timings(
+                &[integrand],
+                param_builder,
+                numerator_definitions,
+                &[EdgeVec::from_iter(std::iter::empty::<Orientation>())],
+                &[OrientationID(0)],
+                dual_shape,
+                settings,
+            )?;
+            stack.explicit_orientation_sum_only = true;
+            return Ok((stack, timings));
+        }
         match orientation_catalog {
             Some((orientations, production_orientation_ids)) => Self::new_with_timings(
                 std::slice::from_ref(integrand),
@@ -2618,6 +2636,21 @@ impl EvaluatorStack {
                 return Err(eyre!(
                     "An explicit orientation-sum evaluator already contains the complete orientation sum and cannot select an individual orientation"
                 ));
+            }
+
+            // LTD may compile additional layouts of this same complete sum.
+            // CFF explicit-sum stacks retain their single-parametric program.
+            match settings.general.evaluator_method {
+                EvaluatorMethod::Iterative if self.iterative.is_some() => {
+                    return self.evaluate_iterative(input, evaluation_metadata);
+                }
+                EvaluatorMethod::SummedFunctionMap if self.summed_function_map.is_some() => {
+                    return self.evaluate_summed_fnmap(input, evaluation_metadata);
+                }
+                EvaluatorMethod::Summed if self.summed.is_some() => {
+                    return self.evaluate_summed(input, evaluation_metadata);
+                }
+                _ => {}
             }
 
             // The atom already contains the complete orientation sum, so
@@ -6384,6 +6417,102 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn ltd_complete_sum_uses_requested_layout_without_changing_cff_inventory() {
+        test_initialise().unwrap();
+        let builder = ParamBuilder::new_empty();
+        let settings = EvaluatorSettings {
+            iterative_orientation_optimization: true,
+            summed_function_map: true,
+            summed: true,
+            ..Default::default()
+        };
+        let (cff, _) = EvaluatorStack::from_integrand_with_timings(
+            &Atom::num(13),
+            &builder,
+            &[],
+            RepresentationMode::Cff,
+            None,
+            None,
+            &settings,
+        )
+        .unwrap();
+        assert!(cff.explicit_orientation_sum_only);
+        assert!(cff.iterative.is_none());
+        assert!(cff.summed_function_map.is_none());
+        assert!(cff.summed.is_none());
+        assert!(cff.production_orientation_ids.is_empty());
+
+        let residue_sum = OrientationID(5).atom() * 2 + OrientationID(9).atom() * 3;
+        let (mut ltd, _) = EvaluatorStack::from_integrand_with_timings(
+            &residue_sum,
+            &builder,
+            &[],
+            RepresentationMode::Ltd,
+            None,
+            None,
+            &settings,
+        )
+        .unwrap();
+        assert!(ltd.explicit_orientation_sum_only);
+        assert!(ltd.iterative.is_some());
+        assert!(ltd.summed_function_map.is_some());
+        assert!(ltd.summed.is_some());
+        assert_eq!(ltd.production_orientation_ids, [OrientationID(0)]);
+        let orientations = TiVec::<OrientationID, _>::from_iter([
+            EdgeVec::from_iter(std::iter::empty::<Orientation>()),
+            EdgeVec::from_iter(std::iter::empty::<Orientation>()),
+        ]);
+        let filter = SubSet::full(orientations.len());
+        let all = SingleOrAllOrientations::All {
+            all: &orientations,
+            filter: &filter,
+        };
+        let make_input = || InputParams {
+            values: SliceMut::Owned(Vec::new()),
+            residue_map_id_start: 0,
+            orientations_start: 0,
+            multiplicative_offset: 1,
+        };
+        let mut runtime = RuntimeSettings::default();
+        let mut metadata = EvaluationMetaData::new_empty();
+        for method in [
+            EvaluatorMethod::SingleParametric,
+            EvaluatorMethod::Iterative,
+            EvaluatorMethod::SummedFunctionMap,
+            EvaluatorMethod::Summed,
+        ] {
+            runtime.general.evaluator_method = method;
+            assert_eq!(
+                scalar_value(
+                    ltd.evaluate(make_input(), all, &runtime, &mut metadata)
+                        .unwrap()
+                ),
+                Complex::new_re(F(5.0))
+            );
+        }
+
+        // Distinguish dispatch from a silent fallback to the single program:
+        // replacing that program must not affect the requested summed map.
+        ltd.single_parametric = cff.single_parametric;
+        runtime.general.evaluator_method = EvaluatorMethod::SummedFunctionMap;
+        assert_eq!(
+            scalar_value(
+                ltd.evaluate(make_input(), all, &runtime, &mut metadata)
+                    .unwrap()
+            ),
+            Complex::new_re(F(5.0))
+        );
+        runtime.general.evaluator_method = EvaluatorMethod::SingleParametric;
+        assert_eq!(
+            scalar_value(
+                ltd.evaluate(make_input(), all, &runtime, &mut metadata)
+                    .unwrap()
+            ),
+            Complex::new_re(F(13.0))
+        );
     }
 
     #[test]
