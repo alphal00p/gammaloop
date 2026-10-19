@@ -973,7 +973,7 @@
       "path": "gammaLoop display integrand",
       "name": "integrand",
       "usage": "Usage: gammaLoop display integrand [OPTIONS]",
-      "about": "Show stored representations, graph groups, generation timings, and selected detail tables",
+      "about": "Show generated integrands, graph groups, resources, and selected detail tables",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2187,7 +2187,7 @@
       "path": "gammaLoop display help integrand",
       "name": "integrand",
       "usage": "Usage: gammaLoop display help integrand",
-      "about": "Show stored representations, graph groups, generation timings, and selected detail tables",
+      "about": "Show generated integrands, graph groups, resources, and selected detail tables",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15816,13 +15816,7 @@
       "generated_help": false,
       "short_flag": null,
       "long_flag": null,
-      "aliases": [
-        {
-          "name": "3drep",
-          "kind": "name",
-          "visible": false
-        }
-      ],
+      "aliases": [],
       "arguments": [
         {
           "id": "help",
@@ -16326,13 +16320,7 @@
           "id": "show_details_for_orientation",
           "long": "show-details-for-orientation",
           "short": null,
-          "aliases": [
-            {
-              "name": "show-details-for-residue",
-              "kind": "long_flag",
-              "visible": false
-            }
-          ],
+          "aliases": [],
           "action": "set",
           "arity": {
             "min": 1,
@@ -16343,7 +16331,7 @@
           "value_names": [
             "SHOW_DETAILS_FOR_ORIENTATION"
           ],
-          "help": "Show a residue/orientation by row id or label, optionally suffixed with `|N<map>|<variant>`",
+          "help": "Show detailed terms for the selected orientation",
           "required": false,
           "positional": false,
           "index": null,
@@ -16780,7 +16768,7 @@
       "path": "gammaLoop help display integrand",
       "name": "integrand",
       "usage": "Usage: gammaLoop help display integrand",
-      "about": "Show stored representations, graph groups, generation timings, and selected detail tables",
+      "about": "Show generated integrands, graph groups, resources, and selected detail tables",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -18028,19 +18016,6 @@
       "possible_values": []
     },
     {
-      "path": "cli.global.generation.three_dimensional_representations",
-      "value_type": "RepresentationMode | array<RepresentationMode>",
-      "description": "Three-dimensional representations to generate; the first is the default for stability levels.",
-      "required": false,
-      "default": [
-        "cff"
-      ],
-      "possible_values": [
-        "cff",
-        "ltd"
-      ]
-    },
-    {
       "path": "cli.global.generation.threshold_subtraction.assume_positive_external_energies",
       "value_type": "boolean",
       "description": "Simplify existence tests by assuming all external-state energies are positive.",
@@ -18635,7 +18610,7 @@
     {
       "path": "runtime.general.generate_events",
       "value_type": "boolean",
-      "description": "Request diagnostic events even without configured observables.\nObservable evaluation always retains the complete per-sample contribution.",
+      "description": "Return generated events in addition to accumulating integration statistics.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -18715,6 +18690,14 @@
       "path": "runtime.general.store_additional_weights_in_event",
       "value_type": "boolean",
       "description": "Persist every configured additional weight on each generated event.",
+      "required": false,
+      "default": false,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.general.use_ltd",
+      "value_type": "boolean",
+      "description": "Evaluate through the loop-tree-duality representation where the selected integrand supports it.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -19177,7 +19160,7 @@
     {
       "path": "runtime.stability.levels",
       "value_type": "array<StabilityLevelSetting>",
-      "description": "Ordered precision and representation choices with tolerances for stability escalation.",
+      "description": "Ordered numerical-precision levels and tolerances used during stability escalation.",
       "required": false,
       "default": [
         {
@@ -19186,8 +19169,7 @@
           "escalate_for_large_weight_threshold": 0.9,
           "precision": "Double",
           "required_precision_for_im": 0.00001,
-          "required_precision_for_re": 0.00001,
-          "three_dimensional_representation": null
+          "required_precision_for_re": 0.00001
         },
         {
           "ecm_relative_tolerance_for_im": 0.0,
@@ -19195,8 +19177,7 @@
           "escalate_for_large_weight_threshold": -1.0,
           "precision": "Quad",
           "required_precision_for_im": 0.00001,
-          "required_precision_for_re": 0.00001,
-          "three_dimensional_representation": null
+          "required_precision_for_re": 0.00001
         },
         {
           "ecm_relative_tolerance_for_im": 0.0,
@@ -19204,8 +19185,7 @@
           "escalate_for_large_weight_threshold": -1.0,
           "precision": "Arb",
           "required_precision_for_im": 0.00001,
-          "required_precision_for_re": 0.00001,
-          "three_dimensional_representation": null
+          "required_precision_for_re": 0.00001
         }
       ],
       "possible_values": []
@@ -19261,17 +19241,6 @@
       "required": true,
       "default": null,
       "possible_values": []
-    },
-    {
-      "path": "runtime.stability.levels[].three_dimensional_representation",
-      "value_type": "RepresentationMode | null",
-      "description": "Representation for this attempt; omission selects the first generated representation.",
-      "required": false,
-      "default": null,
-      "possible_values": [
-        "cff",
-        "ltd"
-      ]
     },
     {
       "path": "runtime.stability.loop_momenta_norm_escalation_factor",

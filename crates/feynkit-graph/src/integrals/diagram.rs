@@ -6,7 +6,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::id::Pattern;
 
 use super::{IntegralFamily, IntegralFamilyError};
-use crate::{DiagramError, FeynmanDiagram, symbols};
+use crate::{DiagramError, EdgeId, FeynmanDiagram, symbols};
 
 impl IntegralFamily {
     /// Complete the diagram's internal propagators with auxiliary scalar products.
@@ -58,6 +58,40 @@ impl FeynmanDiagram {
         &self,
         kinematics: &Kinematics,
     ) -> Result<IntegralFamily, DiagramError> {
+        let denominators = self
+            .ordered_propagators(kinematics)?
+            .into_iter()
+            .map(|(_, denominator)| denominator)
+            .collect();
+        let basis = self.loop_momentum_basis();
+        let loops = (0..basis.loop_edges.len())
+            .map(|i| symbols::loop_momentum().call(i))
+            .collect();
+        let externals = basis
+            .external_edges
+            .iter()
+            .enumerate()
+            .filter(|(_, edge)| !basis.dependent_externals.contains(edge))
+            .map(|(i, _)| symbols::external_momentum().call(i))
+            .collect();
+        Ok(IntegralFamily::new(
+            loops,
+            externals,
+            denominators,
+            kinematics,
+        )?)
+    }
+
+    /// Extract internal quadratic propagators together with their source edge IDs.
+    ///
+    /// Entries follow ascending edge IDs and use the same routing, masses and
+    /// exclusions as [`Self::propagator_family`]. Repeated propagators and
+    /// bridges retain separate entries, allowing consumers to preserve graph
+    /// provenance without reconstructing denominator-selection rules.
+    pub fn ordered_propagators(
+        &self,
+        kinematics: &Kinematics,
+    ) -> Result<Vec<(EdgeId, Atom)>, DiagramError> {
         let basis = self.loop_momentum_basis();
         if basis.loop_edges.is_empty() {
             return Err(IntegralFamilyError::NoLoops.into());
@@ -119,14 +153,9 @@ impl FeynmanDiagram {
             let denominator = arguments[3]
                 .replace(Pattern::Literal(original_square))
                 .with(Pattern::Literal(square));
-            denominators.insert(edge, denominator);
+            denominators.insert(EdgeId(edge), denominator);
         }
-        Ok(IntegralFamily::new(
-            loops,
-            externals,
-            denominators.into_values().collect(),
-            &kin,
-        )?)
+        Ok(denominators.into_iter().collect())
     }
 }
 
@@ -134,6 +163,44 @@ impl FeynmanDiagram {
 mod tests {
     use super::*;
     use feynkit_model::Model;
+
+    #[test]
+    fn ordered_propagators_retain_edge_provenance() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            r#"digraph bubble {
+                incoming [style=invis]; outgoing [style=invis];
+                incoming -> a [id=0, particle="phi"];
+                b -> outgoing [id=1, particle="phi"];
+                a -> b [id=2, particle="phi", lmb_id=0];
+                b -> a [id=3, particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let kinematics = Kinematics::new();
+        let entries = diagram.ordered_propagators(&kinematics).unwrap();
+        assert_eq!(
+            entries.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            vec![EdgeId(2), EdgeId(3)]
+        );
+        let loop_momentum = symbols::loop_momentum().call(0);
+        let mass = Atom::var(symbolica::symbol!("UFO::mass"));
+        assert_eq!(
+            entries[0].1,
+            kinematics
+                .scalar_product(&loop_momentum, &loop_momentum)
+                .unwrap()
+                - mass.pow(2)
+        );
+        let family = diagram.propagator_family(&kinematics).unwrap();
+        assert_eq!(
+            entries
+                .into_iter()
+                .map(|(_, value)| value)
+                .collect::<Vec<_>>(),
+            family.denominators()
+        );
+    }
 
     #[test]
     fn propagator_kinematics_use_literal_symbols() {

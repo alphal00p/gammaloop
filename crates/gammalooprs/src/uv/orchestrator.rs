@@ -1,11 +1,8 @@
-use std::{collections::BTreeMap, time::Instant};
-
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike, SubSetOps};
 use symbolica::atom::{Atom, AtomCore};
-use three_dimensional_reps::RepresentationMode;
 use vakint::Vakint;
 
 use crate::{
@@ -15,10 +12,7 @@ use crate::{
     settings::global::GenerationSettings,
     uv::{
         Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings, UltravioletGraph,
-        approx::{
-            CutStructure, OrientationProjection, local_3d::Localizer,
-            projected_4d::Local4dProjectionContext,
-        },
+        approx::{CutStructure, OrientationProjection, local_3d::Localizer},
         forest::ParametricIntegrands,
         hedge_poset::Wood as HedgePosetWood,
         marker::UvMarker,
@@ -68,31 +62,14 @@ impl UVOrchestrator {
                 model,
                 cut_structure,
                 vakint,
-                orientations,
+                orientation,
                 settings,
-                stats,
-            ),
-            Self::Compare => compare_parametric_integrands(
-                graph,
-                cut_structure,
-                vakint,
-                orientations,
-                settings,
-                stats,
             ),
         }?;
         let marker = UvMarker::new(&settings.uv);
         result
             .into_iter()
-            .map(|(representation, integrands)| {
-                let started = Instant::now();
-                let integrands = integrands
-                    .into_iter()
-                    .map(|integrands| integrands.map_expressions(|atom| Ok(marker.finish(atom))))
-                    .collect::<Result<_>>()?;
-                stats.representation_mut(representation).total_time += started.elapsed();
-                Ok((representation, integrands))
-            })
+            .map(|integrands| integrands.map_expressions(|atom| Ok(marker.finish(atom))))
             .collect()
     }
 
@@ -267,20 +244,15 @@ fn compare_parametric_integrands(
         model,
         cut_structure,
         vakint,
-        orientations,
+        orientation,
         settings,
-        stats,
     )?;
 
-    for (representation, legacy) in &legacy {
-        let started = Instant::now();
-        ParametricIntegrandsComparison {
-            legacy,
-            hedge: &hedge[representation],
-        }
-        .compare()?;
-        stats.representation_mut(*representation).total_time += started.elapsed();
+    ParametricIntegrandsComparison {
+        legacy: &legacy,
+        hedge: &hedge,
     }
+    .compare()?;
     Ok(legacy)
 }
 
@@ -319,7 +291,6 @@ fn legacy_renormalization_part(
         Localizer::new(&cuts, orientation),
         settings,
         &mut super::approx::projected_4d::Local4dProjectionContext::default(),
-        true,
     )?;
 
     forest.renormalization_part_of_ends(graph, settings)

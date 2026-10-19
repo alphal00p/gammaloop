@@ -32,8 +32,7 @@ of this library crate. The normal workspace test suite enables `eval` through
 its integration-test dependency. Run its diagnostic inventory directly with:
 
 ```bash
-cargo nextest run -p three-dimensional-reps -p gammaloop-workspace-hack \
-  --features three-dimensional-reps/eval \
+cargo nextest run -p three-dimensional-reps --features eval \
   --no-fail-fast --retries 0
 ```
 
@@ -49,9 +48,6 @@ renders, and optionally writes the oriented expression. It forwards the configur
 medium to the shared generator and records it in the JSON output, but its input and
 expression preparation are not a GammaLoop production contract. Production
 evaluator construction remains in GammaLoop.
-Select `--representation ltd` to display affine residue keys and explicit E/H
-surfaces, and `--show-details-for-residue <id>` to inspect a complete map row.
-There is no separate CLI evaluation subcommand.
 
 ## Current Limits
 

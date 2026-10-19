@@ -41,10 +41,7 @@ impl PhysicalOverlapInput {
         let (mut graph, generation) = physical_full_h_fixture()?;
         assert!(generation.explicit_orientation_sum_only);
         assert!(generation.orientation_pattern.pat.is_none());
-        let options = graph.production_3d_expression_options(
-            &generation,
-            three_dimensional_reps::RepresentationMode::Cff,
-        )?;
+        let options = graph.production_cff_3d_expression_options(&generation)?;
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
         let contract_edges = graph
             .iter_edges_of(
@@ -175,8 +172,6 @@ impl PhysicalOverlapInput {
             crate::utils::vakint()?,
             orientation,
             &generation.uv,
-            true,
-            &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
         )?;
         let mut nodes = Vec::with_capacity(inventory.len());
         for (node, steps, forest_sign) in inventory {

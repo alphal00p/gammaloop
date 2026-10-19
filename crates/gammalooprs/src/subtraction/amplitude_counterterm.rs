@@ -532,7 +532,6 @@ impl AmplitudeCountertermAtom {
     #[instrument(skip_all)]
     pub(crate) fn to_evaluator_with_timings(
         &self,
-        representation: RepresentationMode,
         param_builder: &ParamBuilder,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         production_orientation_ids: &[OrientationID],
@@ -552,11 +551,8 @@ impl AmplitudeCountertermAtom {
                 integrand,
                 param_builder,
                 self.parametric.numerators(),
-                representation,
-                (!global_settings
-                    .generation
-                    .requires_complete_orientation_sum())
-                .then_some((orientations.as_slice().as_ref(), production_orientation_ids)),
+                (!global_settings.generation.explicit_orientation_sum_only)
+                    .then_some((orientations.as_slice().as_ref(), production_orientation_ids)),
                 dual_shape,
                 &global_settings.generation.evaluator,
             )
@@ -565,12 +561,7 @@ impl AmplitudeCountertermAtom {
             evaluator_stacks.insert(*index, evaluator_stack);
         }
 
-        (
-            AmplitudeCountertermEvaluator {
-                evaluator_stacks: BTreeMap::from([(representation, evaluator_stacks)]),
-            },
-            timings,
-        )
+        (AmplitudeCountertermEvaluator { evaluator_stacks }, timings)
     }
 
     pub(crate) fn new() -> Self {
@@ -583,14 +574,13 @@ impl AmplitudeCountertermAtom {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermEvaluator {
-    pub evaluator_stacks: BTreeMap<RepresentationMode, BTreeMap<CutCFFIndex, EvaluatorStack>>,
+    pub evaluator_stacks: BTreeMap<CutCFFIndex, EvaluatorStack>,
 }
 
 impl AmplitudeCountertermEvaluator {
     pub(crate) fn generic_evaluator_count(&self) -> usize {
         self.evaluator_stacks
             .values()
-            .flat_map(|stacks| stacks.values())
             .map(EvaluatorStack::generic_evaluator_count)
             .sum()
     }
@@ -897,28 +887,15 @@ impl AmplitudeCountertermData {
         path: impl AsRef<Path>,
         _override_existing: bool,
         frozen_mode: &crate::settings::global::FrozenCompilationMode,
-    ) -> Result<GraphGenerationStats> {
-        let started = std::time::Instant::now();
-        let mut stats = GraphGenerationStats::default();
+    ) -> Result<()> {
         for (i, e) in self.evaluators.iter_mut_enumerated() {
-            for (representation, stacks) in &mut e.evaluator_stacks {
-                let mode_started = std::time::Instant::now();
-                for (cff_index, evaluator_stack) in stacks {
-                    let order_index = cff_index.left_threshold_order.unwrap() - 1;
-                    evaluator_stack.compile(
-                        format!(
-                            "{representation}_esurface_{}_order_{}",
-                            i.0,
-                            order_index + 1
-                        ),
-                        path.as_ref(),
-                        frozen_mode,
-                    )?;
-                }
-                let elapsed = mode_started.elapsed();
-                let mode_stats = stats.representation_mut(*representation);
-                mode_stats.total_time += elapsed;
-                mode_stats.evaluator_compile_time += elapsed;
+            for (cff_index, evaluator_stack) in e.evaluator_stacks.iter_mut() {
+                let order_index = cff_index.left_threshold_order.unwrap() - 1;
+                evaluator_stack.compile(
+                    format!("esurface_{}_order_{}", i.0, order_index + 1),
+                    path.as_ref(),
+                    frozen_mode,
+                )?;
             }
         }
 
@@ -999,15 +976,11 @@ impl AmplitudeCountertermData {
 
     pub(crate) fn for_each_generic_evaluator_mut(
         &mut self,
-        mut f: impl FnMut(Option<RepresentationMode>, &mut GenericEvaluator) -> Result<()>,
+        mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for evaluator in self.evaluators.iter_mut() {
-            for (representation, stacks) in &mut evaluator.evaluator_stacks {
-                for evaluator_stack in stacks.values_mut() {
-                    evaluator_stack.for_each_generic_evaluator_mut(|evaluator| {
-                        f(Some(*representation), evaluator)
-                    })?;
-                }
+            for evaluator_stack in evaluator.evaluator_stacks.values_mut() {
+                evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         for evaluator in &mut self.variant_evaluators {
@@ -1019,13 +992,13 @@ impl AmplitudeCountertermData {
         for group in &mut self.overlap.overlap_groups {
             if let Some(prefactor_evaluators) = group.prefactor_evaluator.as_mut() {
                 for prefactor_evaluator in prefactor_evaluators.iter_mut() {
-                    f(None, prefactor_evaluator.get_mut())?;
+                    f(prefactor_evaluator.get_mut())?;
                 }
             }
         }
 
         for evaluator in &mut self.helper_evaluators {
-            f(None, evaluator)?;
+            f(evaluator)?;
         }
         for helpers in &mut self.variant_helper_evaluators {
             for evaluator in helpers {
@@ -1042,7 +1015,6 @@ impl AmplitudeCountertermData {
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate<T: FloatLike>(
         &mut self,
-        representation: RepresentationMode,
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         model: &Model,
@@ -2645,7 +2617,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
     #[allow(clippy::too_many_arguments)]
     fn evaluate<'b, 'c: 'b>(
         self,
-        representation: RepresentationMode,
         param_builder: &mut ParamBuilder<f64>,
         orientations: SingleOrAllOrientations<'a, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
@@ -2765,13 +2736,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let mut evaluation =
             EvaluatedAmplitudeThreshold::new(self.rstar_sample.zero(), record_components);
 
-        for (cut_cff_index, evaluator_stack) in ct_evaluator
-            .evaluator_stacks
-            .get_mut(&representation)
-            .ok_or_else(|| {
-                eyre!("Amplitude threshold counterterm has no {representation} evaluator")
-            })?
-        {
+        for (cut_cff_index, evaluator_stack) in ct_evaluator.evaluator_stacks.iter_mut() {
             let order_index = cut_cff_index.left_threshold_order.unwrap() - 1;
             let (sample_for_order, threshold_params) = if order_index == 0 {
                 debug!(

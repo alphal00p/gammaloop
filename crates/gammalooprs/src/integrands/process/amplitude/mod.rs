@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     fs::{self},
     path::Path,
     sync::LazyLock,
@@ -11,7 +11,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
 
 use colored::Colorize;
-use eyre::{Context, ensure, eyre};
+use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
@@ -200,45 +200,40 @@ impl AmplitudeGraphTerm {
             return Err(eyre!("Generation interrupted by user"));
         }
         let mut stats = GraphGenerationStats::default();
-        for &representation in &settings.generation.three_dimensional_representations {
-            stats.representation_mut(representation);
-        }
-        let first_representation = settings.generation.three_dimensional_representations[0];
-        let source = &graph.derived_data.representations[&first_representation];
-        let orientation_catalogues = graph
+        let production_orientation_ids = graph
             .derived_data
-            .representations
-            .iter()
-            .map(|(representation, source)| {
-                let ids = source
-                    .expression
-                    .expression
-                    .orientations
-                    .iter_enumerated()
-                    .filter_map(|(id, orientation)| {
-                        (settings.generation.requires_complete_orientation_sum()
-                            || settings.generation.orientation_pattern.filter(orientation))
-                        .then_some(id)
-                    })
-                    .collect_vec();
-                let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = ids
-                    .iter()
-                    .map(|id| {
-                        source.expression.expression.orientations[*id]
-                            .data
-                            .orientation
-                            .clone()
-                    })
-                    .collect();
-                (*representation, (ids, orientations))
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .expression
+            .orientations
+            .iter_enumerated()
+            .filter_map(|(orientation_id, orientation)| {
+                (settings.generation.explicit_orientation_sum_only
+                    || settings.generation.orientation_pattern.filter(orientation))
+                .then_some(orientation_id)
             })
-            .collect::<BTreeMap<_, _>>();
-        let (production_orientation_ids, orientations) =
-            &orientation_catalogues[&first_representation];
+            .collect_vec();
         let selected_generation_orientations = production_orientation_ids
             .iter()
-            .map(|id| &source.expression.expression.orientations[*id])
+            .map(|orientation_id| {
+                &graph
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .expression
+                    .orientations[*orientation_id]
+            })
             .collect_vec();
+        // Every generalized residue map is a separate runtime channel. Its
+        // physical directions are metadata and therefore must not deduplicate
+        // maps that differ only by numerator/M sampling data.
+        let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
+            selected_generation_orientations
+                .iter()
+                .map(|orientation| orientation.data.orientation.clone())
+                .collect();
         let production_orientation_keys = selected_generation_orientations
             .iter()
             .map(|orientation| orientation.residue_map_key())
@@ -293,7 +288,7 @@ impl AmplitudeGraphTerm {
         );
 
         crate::debug_tags!(#generation, #graph, #orientation, #compile, #dump;
-            orientation_parametric_integrand = %source.resolved_integrand()?.printer(LOGPRINTOPTS.clone()),
+            orientation_parametric_integrand = %graph.derived_data.resolved_integrand()?.printer(LOGPRINTOPTS.clone()),
             "Building evaluator for all orientations \n{}",
             graph.graph.param_builder.table()
         );
@@ -371,10 +366,18 @@ impl AmplitudeGraphTerm {
         crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
             stage = "amplitude_graph_term_original_evaluator_done",
             graph = %graph.graph.name,
-            evaluator_count = stats.timings.evaluator_count,
+            evaluator_count = original_integrand.generic_evaluator_count(),
             elapsed_ms = original_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            spenso_ms = evaluator_timings.spenso_time.as_secs_f64() * 1000.0,
+            symbolica_ms = evaluator_timings.symbolica_time.as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
+        stats.add_evaluator_build_timings(evaluator_timings);
+        stats.evaluator_count += original_integrand.generic_evaluator_count();
 
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
         let resolved = graph.derived_data.resolved_threshold_counterterms.as_ref();
@@ -655,10 +658,10 @@ impl AmplitudeGraphTerm {
         crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
             stage = "amplitude_graph_term_from_graph_done",
             graph = %graph.graph.name,
-            evaluator_count = stats.timings.evaluator_count,
+            evaluator_count = stats.evaluator_count,
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            spenso_ms = stats.timings.evaluator_spenso_time.as_secs_f64() * 1000.0,
-            symbolica_ms = stats.timings.evaluator_symbolica_time.as_secs_f64() * 1000.0,
+            spenso_ms = stats.evaluator_spenso_time.as_secs_f64() * 1000.0,
+            symbolica_ms = stats.evaluator_symbolica_time.as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
 
@@ -674,11 +677,9 @@ impl AmplitudeGraphTerm {
         Ok((
             AmplitudeGraphTerm {
                 orientation_filter: SubSet::full(orientations.len()),
-                orientations: orientations.clone(),
+                orientations,
                 production_orientation_keys,
-                explicit_orientation_sum_only: settings
-                    .generation
-                    .requires_complete_orientation_sum(),
+                explicit_orientation_sum_only: settings.generation.explicit_orientation_sum_only,
                 original_integrand,
                 fermi_surfaces,
                 tropical_sampler: graph.derived_data.tropical_sampler.clone(),
@@ -747,9 +748,8 @@ impl AmplitudeGraphTerm {
         path: impl AsRef<Path>,
         override_existing: bool,
         frozen_mode: &FrozenCompilationMode,
-    ) -> Result<GraphGenerationStats> {
+    ) -> Result<std::time::Duration> {
         let compile_started = std::time::Instant::now();
-        let mut stats = GraphGenerationStats::default();
         let graph_path = path.as_ref().join(&self.graph.name);
 
         fs::create_dir_all(&graph_path).with_context(|| {
@@ -768,32 +768,15 @@ impl AmplitudeGraphTerm {
             sector.compile(format!("fermi_surface_{index}"), &graph_path, frozen_mode)?;
         }
 
-        stats.merge_in_place(&self.threshold_counterterm.compile(
-            &graph_path,
-            override_existing,
-            frozen_mode,
-        )?);
+        self.threshold_counterterm
+            .compile(&graph_path, override_existing, frozen_mode)?;
 
-        for (index, (_, sector)) in self.fermi_surfaces.iter_mut().enumerate() {
-            let started = Instant::now();
-            sector.compile(format!("fermi_surface_{index}"), &graph_path, frozen_mode)?;
-            let elapsed = started.elapsed();
-            let mode_stats = stats.representation_mut(RepresentationMode::Cff);
-            mode_stats.total_time += elapsed;
-            mode_stats.evaluator_compile_time += elapsed;
-        }
-
-        stats.timings.total_time = compile_started.elapsed();
-        stats.timings.evaluator_compile_time = stats.timings.total_time;
-        Ok(stats)
+        Ok(compile_started.elapsed())
     }
 
     pub(crate) fn for_each_generic_evaluator_mut(
         &mut self,
-        mut f: impl FnMut(
-            Option<RepresentationMode>,
-            &mut crate::integrands::process::GenericEvaluator,
-        ) -> Result<()>,
+        mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         self.original_integrand
             .for_each_generic_evaluator_mut(&mut f)?;
@@ -1019,14 +1002,6 @@ impl AmplitudeGraphTerm {
         );
         let mut result = self
             .original_integrand
-            .get_mut(&context.representation)
-            .ok_or_else(|| {
-                eyre!(
-                    "Representation {} was not generated for graph '{}'",
-                    context.representation,
-                    self.graph.name
-                )
-            })?
             .evaluate(
                 input,
                 orientations,
@@ -2131,7 +2106,6 @@ pub struct AmplitudeIntegrand {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeIntegrandData {
-    pub three_d_representations: Vec<RepresentationMode>,
     pub rotations: Option<Vec<Rotation>>,
     pub name: String,
     pub compilation: FrozenCompilationMode,
@@ -2240,7 +2214,6 @@ impl AmplitudeIntegrand {
         Ok(Self {
             settings: self.settings.clone(),
             data: AmplitudeIntegrandData {
-                three_d_representations: self.data.three_d_representations.clone(),
                 rotations: self.data.rotations.clone(),
                 name: self.data.name.clone(),
                 compilation: self.data.compilation.clone(),
@@ -2419,7 +2392,7 @@ impl AmplitudeIntegrand {
         mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for graph_term in &mut self.data.graph_terms {
-            graph_term.for_each_generic_evaluator_mut(|_, evaluator| f(evaluator))?;
+            graph_term.for_each_generic_evaluator_mut(&mut f)?;
         }
         Ok(())
     }
@@ -2435,7 +2408,7 @@ impl AmplitudeIntegrand {
 
     pub(crate) fn prepare_runtime_backends_after_generation_with_compile_times(
         &mut self,
-    ) -> Result<Vec<GraphGenerationStats>> {
+    ) -> Result<Vec<std::time::Duration>> {
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
@@ -2453,9 +2426,7 @@ impl AmplitudeIntegrand {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
-                    stats.timings.total_time = compile_started.elapsed();
-                    stats.timings.evaluator_compile_time = stats.timings.total_time;
-                    compile_times.push(stats);
+                    compile_times.push(compile_started.elapsed());
                 }
                 self.active_f64_backend.set(ActiveF64Backend::Symjit);
                 Ok(compile_times)
@@ -2468,10 +2439,7 @@ impl AmplitudeIntegrand {
                     Ok(())
                 })?;
                 self.active_f64_backend.set(ActiveF64Backend::Eager);
-                Ok(vec![
-                    GraphGenerationStats::default();
-                    self.data.graph_terms.len()
-                ])
+                Ok(vec![std::time::Duration::ZERO; self.data.graph_terms.len()])
             }
         }
     }
@@ -2545,7 +2513,7 @@ impl AmplitudeIntegrand {
         path: impl AsRef<Path> + Sync,
         override_existing: bool,
         thread_pool: &rayon::ThreadPool,
-    ) -> Result<Vec<(String, GraphGenerationStats)>> {
+    ) -> Result<Vec<(String, std::time::Duration)>> {
         let frozen_mode = self.data.compilation.clone();
         let compile_times = thread_pool.install(|| {
             self.data
@@ -2553,7 +2521,7 @@ impl AmplitudeIntegrand {
                 .par_iter_mut()
                 .map(|a| {
                     a.compile(path.as_ref(), override_existing, &frozen_mode)
-                        .map(|stats| (a.graph.name.clone(), stats))
+                        .map(|duration| (a.graph.name.clone(), duration))
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
@@ -2890,10 +2858,6 @@ impl AmplitudeIntegrand {
 }
 
 impl ProcessIntegrandImpl for AmplitudeIntegrand {
-    fn generated_representations(&self) -> &[RepresentationMode] {
-        &self.data.three_d_representations
-    }
-
     type G = AmplitudeGraphTerm;
 
     fn external_cache_id(&self) -> usize {
@@ -2965,14 +2929,6 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
         );
 
         for a in self.data.graph_terms.iter_mut() {
-            ensure!(
-                a.graph.param_builder.medium_mode == three_dimensional_reps::MediumMode::Vacuum
-                    || !self
-                        .data
-                        .three_d_representations
-                        .contains(&RepresentationMode::Ltd),
-                "LTD supports only vacuum calculations; regenerate this medium integrand with CFF"
-            );
             a.warm_up(&self.settings, model)?;
         }
         for group in &self.data.graph_group_structure {

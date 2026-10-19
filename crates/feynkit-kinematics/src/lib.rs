@@ -18,6 +18,7 @@ mod signature;
 mod symbolic;
 mod transform;
 mod wavefunction;
+mod weyl;
 
 pub use clustering::{ClusteringError, ClusteringResult, Jet, JetAlgorithm, JetDefinition};
 pub use flux::InitialStateFlux;

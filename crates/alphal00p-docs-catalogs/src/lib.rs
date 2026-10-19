@@ -1053,7 +1053,7 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "IntegrandLoopMomentumBasis",
             "IntegrandOrientation",
             "IntegrandThresholdEsurface",
-            "ObservableAccumulator",
+            "SampleEvaluationResult",
             "SettingsValue",
             "StabilityResult",
             "atom_to_canonical_string",

@@ -8,8 +8,7 @@ use symbolica::state::State;
 use super::{
     CrossSectionIntegrand,
     load::{
-        STANDALONE_EVALUATORS_VERSION, StandaloneCountertermArchive,
-        StandaloneCountertermIntegrandsArchive, StandaloneCrossSectionArchive,
+        STANDALONE_EVALUATORS_VERSION, StandaloneCountertermArchive, StandaloneCrossSectionArchive,
         StandaloneCrossSectionGraphTermArchive, StandaloneCutCFFIndex,
         StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
         StandaloneIndexedEvaluatorStackArchive, StandaloneIndexedGenericEvaluatorArchive,
@@ -90,10 +89,11 @@ fn export_generic_evaluator<T: ExportAtomTo>(
     })
 }
 
-pub(in crate::integrands::process) fn export_evaluator_stack<T: ExportAtomTo>(
+fn export_evaluator_stack<T: ExportAtomTo>(
     stack: &crate::integrands::process::evaluators::EvaluatorStack,
     orientation_start: usize,
     residue_map_id_start: usize,
+    mult_offset: usize,
 ) -> Result<StandaloneEvaluatorStackArchive<T>> {
     Ok(StandaloneEvaluatorStackArchive {
         explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
@@ -121,11 +121,7 @@ pub(in crate::integrands::process) fn export_evaluator_stack<T: ExportAtomTo>(
         representative_input: Vec::new(),
         start: orientation_start,
         residue_map_id_start,
-        mult_offset: stack
-            .single_parametric
-            .dual_shape
-            .as_ref()
-            .map_or(1, Vec::len),
+        mult_offset,
     })
 }
 
@@ -141,6 +137,7 @@ fn export_evaluator_map<T: ExportAtomTo>(
     stacks: &BTreeMap<CutCFFIndex, crate::integrands::process::evaluators::EvaluatorStack>,
     orientation_start: usize,
     residue_map_id_start: usize,
+    mult_offset: usize,
 ) -> Result<Vec<StandaloneIndexedEvaluatorStackArchive<T>>> {
     stacks
         .iter()
@@ -151,6 +148,7 @@ fn export_evaluator_map<T: ExportAtomTo>(
                     stack,
                     orientation_start,
                     residue_map_id_start,
+                    mult_offset,
                 )?,
             })
         })
@@ -316,57 +314,32 @@ fn export_counterterm<T: ExportAtomTo>(
     evaluators: &LUCounterTermEvaluators,
     orientation_start: usize,
     residue_map_id_start: usize,
+    mult_offset: usize,
 ) -> Result<StandaloneCountertermArchive<T>> {
     if let Some(multipliers) = &evaluators.threshold_multipliers {
         multipliers.validate(
-            evaluators.threshold_helpers.left_thresholds.len(),
-            evaluators.threshold_helpers.right_thresholds.len(),
+            evaluators.left_thresholds_evaluator.len(),
+            evaluators.right_thresholds_evaluator.len(),
         )?;
     }
     Ok(StandaloneCountertermArchive {
-        integrands: evaluators
-            .integrands
+        left_thresholds_evaluator: evaluators
+            .left_thresholds_evaluator
             .iter()
-            .map(|(representation, payload)| {
-                Ok((
-                    representation.to_string(),
-                    StandaloneCountertermIntegrandsArchive {
-                        left_thresholds_evaluator: payload
-                            .left_thresholds_evaluator
-                            .iter()
-                            .map(|stacks| {
-                                export_evaluator_map(
-                                    stacks,
-                                    orientation_start,
-                                    residue_map_id_start,
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        right_thresholds_evaluator: payload
-                            .right_thresholds_evaluator
-                            .iter()
-                            .map(|stacks| {
-                                export_evaluator_map(
-                                    stacks,
-                                    orientation_start,
-                                    residue_map_id_start,
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        iterated_evaluator: export_iterated_collection(
-                            &payload.iterated_evaluator,
-                            |stacks| {
-                                export_evaluator_map(
-                                    stacks,
-                                    orientation_start,
-                                    residue_map_id_start,
-                                )
-                            },
-                        )?,
-                    },
-                ))
+            .map(|stacks| {
+                export_evaluator_map(stacks, orientation_start, residue_map_id_start, mult_offset)
             })
-            .collect::<Result<BTreeMap<_, _>>>()?,
+            .collect::<Result<Vec<_>>>()?,
+        right_thresholds_evaluator: evaluators
+            .right_thresholds_evaluator
+            .iter()
+            .map(|stacks| {
+                export_evaluator_map(stacks, orientation_start, residue_map_id_start, mult_offset)
+            })
+            .collect::<Result<Vec<_>>>()?,
+        iterated_evaluator: export_iterated_collection(&evaluators.iterated_evaluator, |stacks| {
+            export_evaluator_map(stacks, orientation_start, residue_map_id_start, mult_offset)
+        })?,
         left_threshold_helpers: evaluators
             .threshold_helpers
             .left_thresholds
@@ -445,16 +418,11 @@ fn export_threshold_counterterm_metadata(
 }
 
 fn standalone_rust_script() -> String {
-    let mut script = include_str!("load.rs").replace(
-        "use crate::integrands::process::standalone;",
-        &format!(
-            "mod standalone {{\n{}\n}}",
-            include_str!("../standalone.rs"),
-        ),
-    );
+    let mut script = include_str!("load.rs").to_string();
     if let Some(rest) = script.strip_prefix("//#!/usr/bin/env -S rust-script\n") {
         script = format!("#!/usr/bin/env -S rust-script\n{rest}");
     }
+
     script
 }
 
@@ -533,6 +501,7 @@ impl CrossSectionIntegrand {
                 let orientation_start = term.param_builder.pairs.orientations.value_range.start;
                 let residue_map_id_start =
                     term.param_builder.pairs.residue_map_id.value_range.start;
+                let multiplicative_offset = 1;
                 let param_builder_params = (&term.param_builder.pairs)
                     .into_iter()
                     .flat_map(|pair| pair.params.iter())
@@ -564,27 +533,27 @@ impl CrossSectionIntegrand {
                 let cut_group_integrands = term
                     .integrand
                     .iter()
-                    .map(|(representation, cuts)| {
-                        let cuts = cuts
-                            .iter()
-                            .map(|stacks| {
-                                export_evaluator_map(
-                                    stacks,
-                                    orientation_start,
-                                    residue_map_id_start,
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?;
-                        Ok((representation.to_string(), cuts))
+                    .map(|stacks| {
+                        export_evaluator_map(
+                            stacks,
+                            orientation_start,
+                            residue_map_id_start,
+                            multiplicative_offset,
+                        )
                     })
-                    .collect::<Result<BTreeMap<_, _>>>()?;
+                    .collect::<Result<Vec<_>>>()?;
 
                 let counterterms = term
                     .counterterm
                     .evaluators
                     .iter()
                     .map(|evaluators| {
-                        export_counterterm(evaluators, orientation_start, residue_map_id_start)
+                        export_counterterm(
+                            evaluators,
+                            orientation_start,
+                            residue_map_id_start,
+                            multiplicative_offset,
+                        )
                     })
                     .collect::<Result<Vec<_>>>()?;
                 let threshold_counterterm_metadata = term
@@ -608,12 +577,6 @@ impl CrossSectionIntegrand {
 
         Ok(StandaloneCrossSectionArchive {
             version: STANDALONE_EVALUATORS_VERSION,
-            three_d_representations: self
-                .data
-                .three_d_representations
-                .iter()
-                .map(ToString::to_string)
-                .collect(),
             symbolica_state,
             graph_terms,
         })

@@ -399,10 +399,7 @@ fn compute_legacy_forest(
         crate::utils::vakint()?,
         orientation,
         &generation_settings.uv,
-        true,
-        &mut Local4dProjectionContext::default(),
-    )?;
-    Ok(())
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1216,10 +1213,7 @@ mod tests {
             generation.uv.final_integrand,
             crate::uv::settings::FinalIntegrandDimension::ThreeD
         );
-        let options = graph.production_3d_expression_options(
-            &generation,
-            generation.three_dimensional_representations[0],
-        )?;
+        let options = graph.production_cff_3d_expression_options(&generation)?;
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
         let production = graph.generate_3d_expression_for_integrand(
             &[],

@@ -706,24 +706,6 @@ impl OrientationExpression {
             }
         }
     }
-
-    /// Identify equal on-shell coordinates without changing the independent
-    /// numerator argument slots or their source-edge provenance.
-    pub fn remap_on_shell_energy_values(&mut self, energy_map: &BTreeMap<usize, usize>) {
-        for energy in self
-            .loop_energy_map
-            .iter_mut()
-            .chain(&mut self.edge_energy_map)
-        {
-            *energy = std::mem::replace(energy, LinearEnergyExpr::zero())
-                .remap_internal_edges(energy_map);
-        }
-        for variant in &mut self.variants {
-            for edge in &mut variant.half_edges {
-                *edge = EdgeIndex(energy_map.get(&edge.0).copied().unwrap_or(edge.0));
-            }
-        }
-    }
 }
 
 fn denominator_tree_from_chains(chains: &[Vec<HybridSurfaceID>]) -> Tree<HybridSurfaceID> {

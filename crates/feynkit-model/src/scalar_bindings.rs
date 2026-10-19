@@ -58,6 +58,10 @@ impl Model {
     /// explicitly supplied by the card; cached dependent values are never used
     /// instead of those definitions. Couplings remain analytic until the named
     /// dependencies are substituted, without floating-point recomputation.
+    /// Arbitrary-precision inputs can be supplied directly as atoms in
+    /// `overrides`. To keep a parameter for later numerical or Dual evaluation,
+    /// override it with a distinct free symbol outside the binding map; a
+    /// self-reference would instead be an unresolved dependency.
     ///
     /// Exact `overrides` take precedence over both model and card definitions
     /// before closure. Additional scalar keys are allowed. The returned map has

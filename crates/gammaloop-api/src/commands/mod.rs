@@ -208,7 +208,7 @@ pub enum Commands {
     Profile(Profile),
 
     /// Validate a graph or build its diagnostic three-dimensional energy representation.
-    #[command(name = "3Drep", alias = "3drep")]
+    #[command(name = "3Drep")]
     #[clap(subcommand)]
     ThreeDRep(ThreeDRep),
 

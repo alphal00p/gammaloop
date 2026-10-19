@@ -43,7 +43,7 @@ Application Layer (`gammaloop-api`)
 Domain Layer (`gammalooprs`)
   -> model + parameter cards
   -> graph and process representations (amplitude/cross-section)
-  -> shared preprocessing and CFF/LTD generation
+  -> preprocessing and CFF generation
   -> GL integrand construction + evaluator stacks
   -> differential event generation, selectors, and observables
   -> Monte Carlo integration and stability checks
@@ -109,22 +109,6 @@ Infrastructure
 - `read_only_state` blocks writes inside the state directory. It does not
   make the session immutable: commands may still change in-memory state,
   settings, caches, observables, and history.
-
-`IntegrandInfo` and its Python counterpart derive the ordered representation inventory from
-persisted integrand payloads, not mutable generation settings. Native residue counts come from
-the graph's generated expressions; execution orientations come from its runtime layout. The CLI
-shows both and marks imported diagrams without an integrand as ungenerated. Generation reports
-retain aggregate `GenerationTimings` and an ordered list of disjoint representation timings.
-Shared graph, four-dimensional UV, and helper work is the aggregate remainder. The existing
-generation summary renders these partitions, including compilation, without double counting.
-Graph-job duration sums can overlap under parallel generation and are not process wall time.
-
-Python's `get_residue_map` exposes the stored graph-level native expression through
-`python/residue_map.rs`. Detached snapshots retain immutable keys built from complete
-directions and affine loop/edge maps, exact `Fraction` coefficients, all scalar variants,
-denominator trees, surfaces and convention metadata. Equal keys retain their separate native IDs.
-This inspection boundary does not rebuild representations;
-it replaces the former direction-only `get_orientations` endpoint.
 
 === 2. Application State and Command Model
 <2-application-state-and-command-model>
@@ -470,27 +454,7 @@ residue maps. In-memory diagnostics and disk exports use that same boundary.
 
 === 3.2 CFF production and numerator-energy ownership
 <cff-production-and-numerator-energy-ownership>
-GammaLoop owns production graph/source construction, UV orchestration, exact source mapping, and evaluator preparation. The `three-dimensional-reps` crate owns CFF and native LTD generation through the shared `RepresentationMode` enum. The `3Drep` command and feature-gated eager evaluator are diagnostic tools, not production contracts: GammaLoop may prepare their inputs, factors, and expressions differently.
-
-`global.generation.three_dimensional_representations` accepts one mode or a nonempty list of `cff` and `ltd`.
-Its default is `["cff"]`; parsing preserves the first occurrence of each mode,
-and serialization emits a list. Any list containing LTD requires
-`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` and implies
-complete residue summation, including when
-the same build also contains CFF. Generation and runtime reject orientation
-filters, orientation Monte Carlo and individual-orientation inspection or
-profiling for these builds. CFF-only orientation-local operation remains available.
-LTD supports only `medium.mode = "vacuum"` without vacuum subtraction.
-Finite-temperature and finite-density requests, including mixed CFF/LTD lists,
-fail before process mutation or representation generation. Runtime validation uses
-the persisted graph medium, independently of later global-settings changes.
-
-Ordinary LTD determines complete affine loop-energy maps without CFF capacity
-analysis. Raised propagators use exact polynomial sampling with numerator-degree
-bounds to obtain higher residues without expanding or differentiating the graph
-numerator. The resulting denominator factors retain physical E-surfaces and
-dual-cancellation H-surfaces. Complete LTD sums are required for the latter's
-cancellation; a residue-map row is not an independent integration contribution.
+GammaLoop owns production graph/source construction, UV orchestration, exact source mapping, and evaluator preparation. The `three-dimensional-reps` crate owns the shared CFF algebra. The `3Drep` command and feature-gated eager evaluator are diagnostic tools, not production contracts: GammaLoop may prepare their inputs, factors, and expressions differently.
 
 Finite-temperature and zero-temperature equilibrium share `MediumMode`, the
 structural CFF recursion, and bounded polynomial numerator reduction in
@@ -763,7 +727,7 @@ Diagram numerators requested with `in_lmb=True` use the stored loop-momentum bas
 
 Typed tensor collection uses the shared graph/tape representation to select tensor sectors and preserve unrelated scalar coefficient subtrees. Selected payloads retain their complete slots, powers and shorthand structure; collection does not promise polynomial simplification of opaque coefficients. Structural cancellations and enabled tensor identities remain available without distributing a graph numerator. Algebra reduction and contraction share a regional scheduler, with independent permissions for identity families and structural connections. A color-only request therefore reduces color payloads while retaining unrelated spin and momentum structure. Callbacks validate their resulting interfaces through that same typed boundary. Chain-projector structure inference combines the exposed slots of its factor sequence when no direct slot or index-bundle arguments are present. Enabled chain and trace materialization expands the projector through its existing owner before constructing links, so symmetric, antisymmetric and cyclic sequences retain their external indices.
 
-CFF final residue assembly validates the complete cut-key shape of every summand, then uses Symbolica's native bulk addition once per cut order. Projected sectors and direct-route selector materialization retain their already mapped branch values until this merge. This avoids repeatedly copying the growing numerator; it merges existing top-level sums without distributing product factors or constructing common denominators. After all selected forests are assembled, final factor collection protects complete functions and powers. Inverse-containing factors and selectors stay local to each occurrence; tensor sums under products retain their original contraction boundary. The collector therefore recovers common numerator factors without clearing denominators, sharing branch guards, or pulling a summed vector across independent contractions. Repeated collection stops at a fixed point.
+Final residue assembly validates the complete cut-key shape of every summand, then uses Symbolica's native bulk addition once per cut order. Projected sectors and direct-route selector materialization retain their already mapped branch values until this merge. This avoids repeatedly copying the growing numerator; it merges existing top-level sums without distributing product factors or constructing common denominators. After all selected forests are assembled, final factor collection protects complete functions and powers. Inverse-containing factors and selectors stay local to each occurrence; tensor sums under products retain their original contraction boundary. The collector therefore recovers common numerator factors without clearing denominators, sharing branch guards, or pulling a summed vector across independent contractions. Repeated collection stops at a fixed point.
 
 Vakint's pole-order query uses absolute series depth zero, which includes every pole without searching indefinitely for a nonzero leading term in an exactly cancelling coefficient. The complete coefficient remains available to the separate finite/evanescent Laurent expansion; that expansion's depth is unchanged.
 
@@ -783,7 +747,7 @@ Selection uses native `generated.expression.orientations.len()` before surface c
 
 Generation profiling includes raw physical-degree reports and the complete outer routing selection interval. Raw CFF requests separate source reconstruction, degree/preparation, native generation and postprocessing, and selection records the winner explicitly. This keeps winning generation separate while charging every losing proposal, its preparation and destruction to dispatch. Full local UV accounting uses completed nonroot forest nodes; child projection timers alone do not include the outer routing and assembly boundary.
 
-One nonserialized `Local4dProjectionContext` spans all requested representations for one graph and forest backend. Shared four-dimensional results remain on the forest nodes across projections. Its deterministic LRU caches retain canonical sectors, owned source analysis and immutable numerator templates together (48 MiB, 4,096 entries), winning CFF payloads and contender counts (64 MiB, 4,096 keys), and component-local mapped subtrees (16 MiB, 16,384 entries). Owned keys, containers and symbolic payloads are charged; oversized entries bypass retention. These are retained-payload limits, not RSS limits. Clearing or evicting entries changes computation cost only. Source preparation owns its parsed incidence and signed namespace maps, so a warm hit skips reconstruction without retaining a borrowed graph adapter. The context belongs to one graph computation and cannot be reused for another graph; its keys describe that graph's requests rather than a global graph registry. Representation-dependent generation keys retain the selected mode. Projection reuse tests compare complete coefficients with cold, warm, disabled and evicted retention, while checking only the configured byte ceiling. Hit counts, prepared entry counts and traversal order remain diagnostic observations.
+One nonserialized `Local4dProjectionContext` spans each graph's complete UV computation in both forest orchestrators. Its deterministic LRU caches retain canonical sectors, owned source analysis and immutable numerator templates together (48 MiB, 4,096 entries), winning CFF payloads and contender counts (64 MiB, 4,096 keys), and component-local mapped subtrees (16 MiB, 16,384 entries). Owned keys, containers and symbolic payloads are charged; oversized entries bypass retention. These are retained-payload limits, not RSS limits. Clearing or evicting entries changes computation cost only. Source preparation owns its parsed incidence and signed namespace maps, so a warm hit skips reconstruction without retaining a borrowed graph adapter. The context belongs to one graph computation and cannot be reused for another graph; its keys describe that graph's requests rather than a global graph registry. Projection reuse tests compare complete coefficients with cold, warm, disabled and evicted retention, while checking only the configured byte ceiling. Hit counts, prepared entry counts and traversal order remain diagnostic observations.
 
 `PlannedExactSourceNumerator` owns the assignment, prepared expression and exact signed mapping context behind an immutable `Arc`. A cache miss prepares the same generic template. Capture-free loop/occurrence parameters remain symbolic until a residue row arrives; each subtree records its exact dependencies. Mapping converts required energies once per row and memoizes only the relevant sample tuple. Constants are reused unchanged. Zero contact samples and the order of inactive-energy elimination are preserved. Mutable row caches live outside the immutable template and are cleared after each component wave. No graph-specific tables, global caches or serialized caches are involved.
 
@@ -798,7 +762,7 @@ The production numerator remains factorized. Degree analysis traverses its facto
 
 The signed sampling coefficient is neither a physical edge-direction sign nor the runtime residue-map-key selector `sigma(map_id)`. Pole signs enter the generation-time affine map, after which an orientation entry stores `a` in `LinearEnergyExpr::uniform_scale_coeff` and its interpolation weight stores the compensating inverse power in `CFFVariant::uniform_scale_power`. Multiple numerator maps may therefore share the same coarse orientation. Their complete loop/edge energy maps and distinct `numerator_map_index` values remain attached to the factorized numerator. Each such entry has its own complete map key and therefore its own `sigma(map_id)`; entries must never be merged merely because their physical edge directions agree.
 
-Integrated finite UV terms retain their exact source-local EMR maps. Production map-key selectors partition complete generalized residue-map entries but do not replace those maps. In orientation-local direct-3D generation, shrinking a UV subgraph preserves the orientation selected on every surviving outer edge. Among the cut-valid full orientations which extend that outer assignment, one deterministic inner orientation is selected to host the complete integrated finite counterterm; the other inner extensions receive none, so summing orientations counts the addback exactly once. In explicit-sum direct-3D generation the same reduced residue is kept once without a selector. Projected local-4D counterterms are likewise selector-free: each completed exact source owns its full source-local residue sum, independently of production-orientation IDs. After that sum, a projected sector stores only its coefficient and frozen localizing factor. Its child map lengths need not agree across Taylor topologies. Actual outer branches keep their own maps until the coefficient and remaining numerator have been mapped, then sum by cut order. Typed zeros retain the allowed cut keys without requiring a map; direct and integrated localization retain their own production-host rules. The empty UV forest is the ordinary factorized production root in both local-UV routes; the expanded-4D setting changes only proper, nonempty UV nodes.
+Integrated finite UV terms retain their exact source-local EMR maps. Production map-key selectors partition complete generalized residue-map entries but do not replace those maps. In orientation-local direct-3D generation, shrinking a UV subgraph preserves the orientation selected on every surviving outer edge. Among the cut-valid full orientations which extend that outer assignment, one deterministic inner orientation is selected to host the complete integrated finite counterterm; the other inner extensions receive none, so summing orientations counts the addback exactly once. In explicit-sum direct-3D generation the same reduced residue is kept once without a selector. Projected local-4D counterterms are likewise selector-free: each completed exact source owns its full source-local orientation sum, independently of production-orientation IDs. After that sum, a projected sector stores only its coefficient and frozen localizing factor. Its child map lengths need not agree across Taylor topologies. Actual outer branches keep their own maps until the coefficient and remaining numerator have been mapped, then sum by cut order. Typed zeros retain the allowed cut keys without requiring a map; direct and integrated localization retain their own production-host rules. The empty UV forest is the ordinary factorized production root in both local-UV routes; the expanded-4D setting changes only proper, nonempty UV nodes.
 
 Final assembly uses one `Integrands` map of cut-indexed factorized expressions. UV markers and tensor replacements act on those expressions before the ordinary evaluator preprocessing; there is no parallel deferred-body state. Direct-3D sequential forest construction composes the same local and integrated replay operations used by disconnected forests. Integrated localization registers its source surfaces before either Taylor branch reads the graph, and its normalized localizing factor remains inert under subsequent Taylor operations. Evaluator preparation skips residue-selector parametrization when the selector symbol is absent, and skips orientation collection when neither theta nor IF occurs. Expressions with conditionals retain the existing guarded-branch rewrites so inactive residue-local inverses are never evaluated.
 
@@ -808,7 +772,7 @@ Direct-photon benchmarks use the off-shell spin projector `-g^(mu nu)` and no pi
 
 The raw forward graph already contains inverse-process UFO vertices with their Hermitian-partner spin structures and couplings. An additional RHS numerator adjoint would conjugate those structures a second time. Marking vertices and virtual propagators, together with the reversed RHS virtual contours, instead gives `(-1)^C_R`, with boundary hairs retained in the RHS component count. The complete LU residue factor is `2*pi*i*(-1)^C_R`, hence `-2*pi*i` for connected RHS, while retaining the cut propagator numerators exactly once. Bare, local and integrated UV, and threshold branches use this same cut-group factor. Runtime subtracts threshold helpers with left `-i*pi` and right `+i*pi` integrated coefficients; iterated terms use their product. See #link("phase-conventions.typ")[phase conventions and the independent conjugation audit] for the cut-line `i` cancellation, intrinsic complex CKM phases, and the unsupported complex-mass-scheme boundary. There are no conjugation modes.
 
-The scalar local-equivalence matrix is generated from the scalar model rather than from hand-built graph data. Its lanes without an additional numerator retain the full UFO Feynman rules; companion probes use only Feynman-rule-local edge factors, and there is no graph-specific production branch. The matrix enables local UV, integrated UV and threshold counterterms while comparing orientation-local CFF/from3D, explicit-sum CFF/from3D, CFF/from4D, and LTD/from4D, including native-Arb checks. `just test_LU_scalar_xs` selects the strict fast lane with `ci-optim` compilation and stops on the first failure. Complete acceptance separately selects the whole scalar family under `ci_full`, including the GL16 quartic case excluded from the fast lane. Nonzero route comparisons require finite values and precision-scaled relative agreement. Independent exact source, cut, or threshold certificates permit separate absolute-zero bounds; small magnitude alone does not qualify. Each bound is a dimensionless precision-dependent tolerance times the characteristic physical scale. For these three-loop scalar decay fixtures with six cubic vertices and numerator rank `r`, that scale is `E_cm^(1+r)`. Raw additional weights include their recorded event normalization before comparison; detailed decomposition values already carry it. A certificate for a complete higher-pole residue does not certify its separate derivative-order contributions. The curated suite includes the six base scalar graphs GL00, GL02, GL04, GL08, GL09 and GL24. Each profiles direct local3D separately for every complete residue-map key and projected local4D after the complete residue sum.
+The scalar local-equivalence matrix is generated from the scalar model rather than from hand-built graph data. Its lanes without an additional numerator retain the full UFO Feynman rules; companion probes use only Feynman-rule-local edge factors, and there is no graph-specific production branch. The matrix enables local UV, integrated UV and threshold counterterms while comparing all three local-UV routes, including native-Arb checks. `just test_LU_scalar_xs` includes the slow cases, uses release compilation by default and stops on the first failure. Nonzero route comparisons require finite values and precision-scaled relative agreement. Only an independent exact source-zero certificate permits the separate absolute bound; small magnitude alone does not qualify. The curated suite includes the six base scalar graphs GL00, GL02, GL04, GL08, GL09 and GL24. Each profiles direct local3D separately for every complete residue-map key and projected local4D after the complete residue sum.
 
 Profile samples carry their candidate LMB into canonical source preparation. The source promotes the input momentum tokens exactly, then routes them into the selected graph's stored LMB before native materialization and stability rotation. This also applies when the selected graph is a non-master member of a group. Ordinary direct momentum inspection supplies no candidate LMB and keeps its existing coordinate convention.
 
@@ -977,12 +941,8 @@ The user-facing contract and worked GL297/GL638 examples live in
 + Integrand is warmed up (`ProcessIntegrand::warm_up`) to initialize
   rotations and caches.
 + Sampling path parameterizes points and evaluates graph terms.
-+ Stability checks follow the ordered `runtime.stability.levels` stack and
-  rotate kinematics. Each level may select `three_dimensional_representation`; omission selects the first
-  generated representation. Unavailable modes fail validation before generation
-  or runtime warm-up. Precision may repeat, for example Double/LTD, Double/CFF,
-  then Quad/CFF. Forced Arb uses the configured Arb level's representation, or
-  inherits the first level's selection when synthesizing an Arb level.
++ Stability checks may escalate precision (`f64 -> f128 -> arbitrary`)
+  and rotate kinematics.
 + Process graph evaluation returns a rich `GraphEvaluationResult<T>`
   rather than only a complex weight. This carries:
   - the graph contribution
@@ -1011,11 +971,11 @@ The user-facing contract and worked GL297/GL638 examples live in
     momentum sample carries the combined map/partition factor)
   - the separate `integrator_weight`, i.e. the Monte Carlo/grid weight
     only
-  - grouped accepted events with native factors but no outer-grid weight
+  - grouped accepted events
   - event-processing timing in `evaluation_metadata`
   - generated / accepted event counts in `evaluation_metadata`
-  - ordered per-level stability results, each with precision, resolved `three_dimensional_representation`,
-    relative accuracy and total time spent in that stability level
+  - ordered per-level stability results, each with relative-accuracy and
+    total time spent in that stability level
   - evaluation metadata
   Native reconstruction and stability selection return the same retained
   precision-tagged result to both API routes. The ordinary route checks final
@@ -1031,22 +991,7 @@ The user-facing contract and worked GL297/GL638 examples live in
   separately owned terminal event loop, as documented in the maintained
   #link("ratatui-integration-dashboard.typ")[integration dashboard architecture].
 
-Representation selection travels in the evaluation context without mutating the
-runtime settings. Attempts reuse the prepared sample, graph/channel selection,
-Jacobian and overlap geometry. Each representation has its own evaluator program
-and value caches. Only the accepted attempt supplies retained events and
-observable contributions.
-
-CFF/from4D retains the existing explicit-sum construction: its `SingleParametric`
-program already contains the complete physical sum. CFF orientation-local modes
-retain their existing orientation catalogue and execution methods. LTD supplies its
-complete residue sum to the same generic evaluator constructor, with one execution
-slot. Requested `SingleParametric` and `SummedFunctionMap` programs are supported for
-LTD; either evaluates that complete sum. CFF numerator construction keeps its existing
-owner. Derivative programs retain the existing
-forced-inlining boundary required by the stock Symbolica vectorizer.
-
-Every evaluator receives the auxiliary numerator sampling scale `M` as an input, defaulting to one. Warm-up rejects a zero runtime scale for every amplitude or cross-section integrand, including evaluators that do not use `M`. No source-expression scan or serialized usage flag is needed. `M` is an auxiliary numerator-sampling coordinate, not an LMB energy; LTD arguments can additionally contain on-shell and external energies.
+Every evaluator receives the auxiliary numerator sampling scale `M` as an input, defaulting to one. Warm-up rejects a zero runtime scale for every amplitude or cross-section integrand, including evaluators that do not use `M`. No source-expression scan or serialized usage flag is needed. This enforces the EMR-only `a*M` contract above; `M` is not an LMB coordinate.
 
 Binary64 reporting may round exponentially suppressed, fully weighted components
 to zero. Numerical factors are combined before this rounding so a compensating
@@ -1275,7 +1220,7 @@ Each event carries:
 
 - kinematics
 - cut metadata
-- one event `weight` with native normalization but no outer sampler weight
+- one fully normalized event `weight`
 - `additional_weights`
 
 Observable-specific entry reweighting remains internal to the observable
@@ -1319,7 +1264,7 @@ Serialized event `additional_weights.weights` is a list of `[key, value]` pairs.
 
 === 3.3 Event generation policy
 <33-event-generation-policy>
-Event generation is controlled by two related runtime decisions:
+Event generation is controlled by three related runtime decisions:
 
 - `should_generate_events()`
   - true when `general.generate_events = true`
@@ -1328,15 +1273,19 @@ Event generation is controlled by two related runtime decisions:
 - `should_buffer_generated_events()`
   - true when `general.generate_events = true`
   - or observables exist
+- `should_return_generated_events()`
+  - true only when `general.generate_events = true`
 
 This means:
 
 - `general.generate_events = false`
   - selector-only evaluations still build temporary events for selector
     checks
-  - evaluations with observables retain accepted identity-rotation events
-    in the returned sample for later explicit accumulation
-  - selector-only temporary events are not retained
+  - selector+observable evaluations still build temporary events and
+    buffer accepted identity-rotation events long enough to fill
+    observables
+  - those temporary events are cleared from returned sample results and
+    integration event outputs afterwards
 - `general.generate_events = true`
   - events are built, buffered, and returned even when no selector or
     observable is configured
@@ -1599,8 +1548,7 @@ Differential coverage is currently split into:
     `evaluate_sample(s)`
   - graph/cut grouping and incoming-PDG propagation checks
   - selectors / observables / event-group retention
-  - detached observable accumulation with explicit coefficients
-  - evaluation leaves accumulated statistics unchanged
+  - batch-global observable snapshots for `evaluate_samples`
   - per-sample evaluation metadata
   - x-space vs momentum-space Jacobian behavior
   - minimal-output mode

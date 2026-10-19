@@ -58,10 +58,7 @@ use crate::{
         ThresholdCountertermMetadataRegistry, ThresholdCountertermSide,
         ThresholdCountertermVariantId, build_derivative_structure,
     },
-    settings::{
-        GlobalSettings, RuntimeSettings,
-        global::{FrozenCompilationMode, RepresentationMode},
-    },
+    settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
         RstarTDependenceEvaluator, RstarTDependenceInput, evaluate_integrated_ct_normalisation,
         evaluate_integrated_ct_normalisation_dual, evaluate_uv_damper, evaluate_uv_damper_dual,
@@ -1022,29 +1019,10 @@ impl LUThresholdHelperEvaluators {
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct LUCounterTermRepresentationEvaluators {
+pub struct LUCounterTermEvaluators {
     pub left_thresholds_evaluator: TiVec<LeftThresholdId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub right_thresholds_evaluator: TiVec<RightThresholdId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub iterated_evaluator: IteratedCtCollection<BTreeMap<CutCFFIndex, EvaluatorStack>>,
-}
-
-impl LUCounterTermRepresentationEvaluators {
-    fn generic_compileable_evaluator_count(&self) -> usize {
-        // Ignore eager-only helper and multiplier evaluators, as well as pass-two evaluators.
-        self.left_thresholds_evaluator
-            .iter()
-            .chain(self.right_thresholds_evaluator.iter())
-            .chain(self.iterated_evaluator.iter())
-            .flat_map(|evaluators| evaluators.values())
-            .map(EvaluatorStack::generic_evaluator_count)
-            .sum()
-    }
-}
-
-#[derive(Clone, Encode, Decode)]
-#[trait_decode(trait = GammaLoopContext)]
-pub struct LUCounterTermEvaluators {
-    pub integrands: BTreeMap<RepresentationMode, LUCounterTermRepresentationEvaluators>,
     pub threshold_helpers: LUThresholdHelperEvaluators,
     pub threshold_multipliers: Option<ThresholdMultiplierEvaluatorCollection>,
     pub residue_from_e_surface_evaluators: Vec<GenericEvaluator>,
@@ -1053,7 +1031,6 @@ pub struct LUCounterTermEvaluators {
 impl LUCounterTermEvaluators {
     fn residue_evaluators(
         parametric_integrands: &ParametricIntegrands,
-        representation: RepresentationMode,
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
@@ -1063,14 +1040,13 @@ impl LUCounterTermEvaluators {
         let evaluators = parametric_integrands
             .integrands
             .iter()
-            .map(|(index, integrand)| {
+            .map(|(index, atom)| {
                 let dual_shape = shape_from_cut_cff_index(index);
                 let (evaluator, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
-                    integrand,
+                    atom,
                     param_builder,
                     parametric_integrands.integrands.numerators(),
-                    representation,
-                    (!settings.generation.requires_complete_orientation_sum())
+                    (!settings.generation.explicit_orientation_sum_only)
                         .then_some((&orientations.raw, production_orientation_ids)),
                     dual_shape,
                     &settings.generation.evaluator,
@@ -1171,77 +1147,55 @@ impl LUCounterTermEvaluators {
         settings: &GlobalSettings,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         production_orientation_ids: &[OrientationID],
-    ) -> (Self, crate::processes::GraphGenerationStats) {
-        let mut stats = crate::processes::GraphGenerationStats::default();
-        let mut integrands = BTreeMap::new();
-        for (&representation, payload) in &counterterm_data.integrands {
-            let started = std::time::Instant::now();
-            let mut timings = EvaluatorBuildTimings::default();
-            let left_thresholds_evaluator = payload
-                .left_atoms
-                .iter()
-                .map(|parametric_integrands| {
-                    let (evaluators, evaluator_timings) = Self::residue_evaluators(
-                        parametric_integrands,
-                        representation,
-                        param_builder,
-                        settings,
-                        orientations,
-                        production_orientation_ids,
-                    );
-                    timings += evaluator_timings;
-                    evaluators
-                })
-                .collect();
-
-            let right_thresholds_evaluator = payload
-                .right_atoms
-                .iter()
-                .map(|parametric_integrands| {
-                    let (evaluators, evaluator_timings) = Self::residue_evaluators(
-                        parametric_integrands,
-                        representation,
-                        param_builder,
-                        settings,
-                        orientations,
-                        production_orientation_ids,
-                    );
-                    timings += evaluator_timings;
-                    evaluators
-                })
-                .collect();
-
-            let iterated_timings = std::cell::Cell::new(EvaluatorBuildTimings::default());
-            let iterated_evaluator = payload.iterated.map_ref(|parametric_integrands| {
+    ) -> (Self, EvaluatorBuildTimings) {
+        let mut timings = EvaluatorBuildTimings::default();
+        let left_thresholds_evaluator = counterterm_data
+            .left_atoms
+            .iter()
+            .map(|parametric_integrands| {
                 let (evaluators, evaluator_timings) = Self::residue_evaluators(
                     parametric_integrands,
-                    representation,
                     param_builder,
                     settings,
                     orientations,
                     production_orientation_ids,
                 );
-                let mut timings = iterated_timings.get();
                 timings += evaluator_timings;
-                iterated_timings.set(timings);
                 evaluators
-            });
-            timings += iterated_timings.get();
+            })
+            .collect();
 
-            let payload = LUCounterTermRepresentationEvaluators {
-                left_thresholds_evaluator,
-                right_thresholds_evaluator,
-                iterated_evaluator,
-            };
-            let evaluator_count = payload.generic_compileable_evaluator_count();
-            stats.record_evaluator_build(
-                representation,
-                timings,
-                evaluator_count,
-                started.elapsed(),
+        let right_thresholds_evaluator = counterterm_data
+            .right_atoms
+            .iter()
+            .map(|parametric_integrands| {
+                let (evaluators, evaluator_timings) = Self::residue_evaluators(
+                    parametric_integrands,
+                    param_builder,
+                    settings,
+                    orientations,
+                    production_orientation_ids,
+                );
+                timings += evaluator_timings;
+                evaluators
+            })
+            .collect();
+
+        let iterated_timings = std::cell::Cell::new(EvaluatorBuildTimings::default());
+        let iterated_evaluator = counterterm_data.iterated.map_ref(|parametric_integrands| {
+            let (evaluators, evaluator_timings) = Self::residue_evaluators(
+                parametric_integrands,
+                param_builder,
+                settings,
+                orientations,
+                production_orientation_ids,
             );
-            integrands.insert(representation, payload);
-        }
+            let mut timings = iterated_timings.get();
+            timings += evaluator_timings;
+            iterated_timings.set(timings);
+            evaluators
+        });
+        timings += iterated_timings.get();
 
         let symbolica_started = std::time::Instant::now();
         let pass_two_evaluator = (1..=max_cut_order)
@@ -1250,7 +1204,7 @@ impl LUCounterTermEvaluators {
             })
             .collect();
 
-        stats.timings.evaluator_symbolica_time += symbolica_started.elapsed();
+        timings.symbolica_time += symbolica_started.elapsed();
 
         if let Some(multipliers) = &threshold_multipliers {
             multipliers
@@ -1279,48 +1233,35 @@ impl LUCounterTermEvaluators {
         path: impl AsRef<Path>,
         cut_group_id: CutGroupId,
         frozen_mode: &FrozenCompilationMode,
-    ) -> color_eyre::Result<GraphGenerationStats> {
-        let started = std::time::Instant::now();
-        let mut stats = GraphGenerationStats::default();
-        for (representation, payload) in &mut self.integrands {
-            let mode_started = std::time::Instant::now();
-            for (threshold_id, evaluators) in
-                payload.left_thresholds_evaluator.iter_mut_enumerated()
-            {
-                for (index, evaluator) in evaluators.iter_mut() {
-                    let name = format!(
-                        "{representation}_cut_group_{}_left_threshold_{}_index_{}",
-                        cut_group_id.0, threshold_id.0, index
-                    );
-                    evaluator.compile(&name, path.as_ref(), frozen_mode)?;
-                }
+    ) -> color_eyre::Result<()> {
+        for (threshold_id, evaluators) in self.left_thresholds_evaluator.iter_mut_enumerated() {
+            for (index, evaluator) in evaluators.iter_mut() {
+                let name = format!(
+                    "cut_group_{}_left_threshold_{}_index_{}",
+                    cut_group_id.0, threshold_id.0, index
+                );
+                evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
+        }
 
-            for (threshold_id, evaluators) in
-                payload.right_thresholds_evaluator.iter_mut_enumerated()
-            {
-                for (index, evaluator) in evaluators.iter_mut() {
-                    let name = format!(
-                        "{representation}_cut_group_{}_right_threshold_{}_index_{}",
-                        cut_group_id.0, threshold_id.0, index
-                    );
-                    evaluator.compile(&name, path.as_ref(), frozen_mode)?;
-                }
+        for (threshold_id, evaluators) in self.right_thresholds_evaluator.iter_mut_enumerated() {
+            for (index, evaluator) in evaluators.iter_mut() {
+                let name = format!(
+                    "cut_group_{}_right_threshold_{}_index_{}",
+                    cut_group_id.0, threshold_id.0, index
+                );
+                evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
+        }
 
-            for (iterated_index, evaluators) in payload.iterated_evaluator.iter_mut().enumerate() {
-                for (index, evaluator) in evaluators.iter_mut() {
-                    let name = format!(
-                        "{representation}_cut_group_{}_iterated_{}_index_{}",
-                        cut_group_id.0, iterated_index, index
-                    );
-                    evaluator.compile(&name, path.as_ref(), frozen_mode)?;
-                }
+        for (iterated_index, evaluators) in self.iterated_evaluator.iter_mut().enumerate() {
+            for (index, evaluator) in evaluators.iter_mut() {
+                let name = format!(
+                    "cut_group_{}_iterated_{}_index_{}",
+                    cut_group_id.0, iterated_index, index
+                );
+                evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
-            let elapsed = mode_started.elapsed();
-            let mode_stats = stats.representation_mut(*representation);
-            mode_stats.total_time += elapsed;
-            mode_stats.evaluator_compile_time += elapsed;
         }
 
         for (order, pass_to_evaluator) in self
@@ -1337,36 +1278,26 @@ impl LUCounterTermEvaluators {
             )?;
         }
 
-        stats.timings.total_time = started.elapsed();
-        stats.timings.evaluator_compile_time = stats.timings.total_time;
-        Ok(stats)
+        Ok(())
     }
 
     pub(crate) fn for_each_generic_evaluator_mut(
         &mut self,
-        mut f: impl FnMut(Option<RepresentationMode>, &mut GenericEvaluator) -> color_eyre::Result<()>,
+        mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
     ) -> color_eyre::Result<()> {
-        for (representation, payload) in &mut self.integrands {
-            for evaluators in payload.left_thresholds_evaluator.iter_mut() {
-                for evaluator in evaluators.values_mut() {
-                    evaluator.for_each_generic_evaluator_mut(|evaluator| {
-                        f(Some(*representation), evaluator)
-                    })?;
-                }
+        for evaluators in self.left_thresholds_evaluator.iter_mut() {
+            for evaluator in evaluators.values_mut() {
+                evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
-            for evaluators in payload.right_thresholds_evaluator.iter_mut() {
-                for evaluator in evaluators.values_mut() {
-                    evaluator.for_each_generic_evaluator_mut(|evaluator| {
-                        f(Some(*representation), evaluator)
-                    })?;
-                }
+        }
+        for evaluators in self.right_thresholds_evaluator.iter_mut() {
+            for evaluator in evaluators.values_mut() {
+                evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
-            for evaluators in payload.iterated_evaluator.iter_mut() {
-                for evaluator in evaluators.values_mut() {
-                    evaluator.for_each_generic_evaluator_mut(|evaluator| {
-                        f(Some(*representation), evaluator)
-                    })?;
-                }
+        }
+        for evaluators in self.iterated_evaluator.iter_mut() {
+            for evaluator in evaluators.values_mut() {
+                evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         self.threshold_helpers
@@ -1375,7 +1306,7 @@ impl LUCounterTermEvaluators {
             multipliers.for_each_generic_evaluator_mut(&mut f)?;
         }
         for pass_to_evaluator in self.residue_from_e_surface_evaluators.iter_mut() {
-            f(None, pass_to_evaluator)?;
+            f(pass_to_evaluator)?;
         }
 
         Ok(())
@@ -1610,17 +1541,16 @@ impl LUCounterTerm {
         &mut self,
         path: impl AsRef<Path>,
         frozen_mode: &FrozenCompilationMode,
-    ) -> color_eyre::Result<GraphGenerationStats> {
-        let mut stats = GraphGenerationStats::default();
+    ) -> color_eyre::Result<()> {
         for (cut_group_id, evaluators) in self.evaluators.iter_mut_enumerated() {
-            stats.merge_in_place(&evaluators.compile(path.as_ref(), cut_group_id, frozen_mode)?);
+            evaluators.compile(path.as_ref(), cut_group_id, frozen_mode)?;
         }
-        Ok(stats)
+        Ok(())
     }
 
     pub(crate) fn for_each_generic_evaluator_mut(
         &mut self,
-        mut f: impl FnMut(Option<RepresentationMode>, &mut GenericEvaluator) -> color_eyre::Result<()>,
+        mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
     ) -> color_eyre::Result<()> {
         for evaluators in self.evaluators.iter_mut() {
             evaluators.for_each_generic_evaluator_mut(&mut f)?;
@@ -2027,7 +1957,6 @@ impl LUCounterTerm {
         masses: &EdgeVec<F<T>>,
         probe_rotation: &Rotation,
         settings: &RuntimeSettings,
-        representation: RepresentationMode,
         param_builder: &mut ParamBuilder<f64>,
         orientations: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_meta_data: &mut EvaluationMetaData,
@@ -2275,8 +2204,7 @@ impl LUCounterTerm {
                         LeftThresholdId::from(representative_sample.get_esurface_id().0);
                     self.ensure_active_left_threshold(cut_group_id, left_threshold_id)?;
 
-                    let matching_cut_indices = self.evaluators[cut_group_id].integrands
-                        [&representation]
+                    let matching_cut_indices = self.evaluators[cut_group_id]
                         .left_thresholds_evaluator[left_threshold_id]
                         .keys()
                         .filter(|cut_cff_index| {
@@ -2435,9 +2363,6 @@ impl LUCounterTerm {
                         );
 
                         let result_of_this_ct = self.evaluators[cut_group_id]
-                            .integrands
-                            .get_mut(&representation)
-                            .expect("validated generated representation")
                             .left_thresholds_evaluator[left_threshold_id]
                             .get_mut(&cut_cff_index)
                             .unwrap()
@@ -2550,8 +2475,7 @@ impl LUCounterTerm {
                         RightThresholdId::from(representative_sample.get_esurface_id().0);
                     self.ensure_active_right_threshold(cut_group_id, right_threshold_id)?;
 
-                    let matching_cut_indices = self.evaluators[cut_group_id].integrands
-                        [&representation]
+                    let matching_cut_indices = self.evaluators[cut_group_id]
                         .right_thresholds_evaluator[right_threshold_id]
                         .keys()
                         .filter(|cut_cff_index| {
@@ -2709,9 +2633,6 @@ impl LUCounterTerm {
                         );
 
                         let result_of_this_ct = self.evaluators[cut_group_id]
-                            .integrands
-                            .get_mut(&representation)
-                            .expect("validated generated representation")
                             .right_thresholds_evaluator[right_threshold_id]
                             .get_mut(&cut_cff_index)
                             .unwrap()
@@ -2837,8 +2758,7 @@ impl LUCounterTerm {
                             );
                             self.ensure_active_iterated_threshold(cut_group_id, iterated_index)?;
 
-                            let matching_cut_indices = self.evaluators[cut_group_id].integrands
-                                [&representation]
+                            let matching_cut_indices = self.evaluators[cut_group_id]
                                 .iterated_evaluator[iterated_index]
                                 .keys()
                                 .filter(|cut_cff_index| {
@@ -3130,9 +3050,6 @@ impl LUCounterTerm {
                                 );
 
                                 let result_of_this_ct = self.evaluators[cut_group_id]
-                                    .integrands
-                                    .get_mut(&representation)
-                                    .expect("validated generated representation")
                                     .iterated_evaluator[iterated_index]
                                     .get_mut(&cut_cff_index)
                                     .unwrap()

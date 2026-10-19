@@ -1329,7 +1329,6 @@ impl Forests {
         Ok(())
     }
 
-    /// Return the measured representation-independent part of this computation.
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
@@ -1376,7 +1375,7 @@ impl Forests {
                     &cutset,
                     localizer,
                     settings,
-                    projection_context,
+                    &mut projection_context,
                 )?;
                 self.compute_store
                     .entry(operation)
@@ -1386,7 +1385,7 @@ impl Forests {
             }
         }
 
-        Ok(projection_context.shared_preparation_time - shared_before)
+        Ok(())
     }
 
     pub(crate) fn orientation_parametric_exprs(
@@ -1423,7 +1422,7 @@ impl Forests {
                         ColorSextet {}.into(),
                     ]))?;
                 sum = Some(match sum {
-                    Some(sum) => sum.zip_add([terms]).wrap_err_with(|| {
+                    Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                         format!("while aggregating hedge-poset term {operation} for cut {cutset:?}")
                     })?,
                     None => terms,
@@ -1707,10 +1706,6 @@ impl Display for Forests {
 
 #[cfg(test)]
 mod tests {
-    use crate::initialisation;
-    use crate::numerator::aind::Aind;
-    use crate::utils;
-    use crate::uv::uv_graph::UVE;
     use crate::{
         finalized_runtime_dot,
         graph::{FeynmanGraph, Graph},

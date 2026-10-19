@@ -37,18 +37,15 @@ use symbolica::{
     id::Replacement,
     symbol,
 };
-use three_dimensional_reps::{CffGenerationContext, RepresentationMode};
+use three_dimensional_reps::CffGenerationContext;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct FinalIntegrands {
-    integrands: Integrands,
-    representation: RepresentationMode,
-}
+pub(crate) struct FinalIntegrands(Integrands);
 
 impl FinalIntegrands {
     /// Iterate over finalized semantic expressions for diagnostics.
     #[cfg(test)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = (CutCFFIndex, Atom)> {
-        self.integrands
+        self.0
             .resolved()
             .expect("finalized diagnostic numerator definitions must resolve")
             .atoms
@@ -75,68 +72,8 @@ impl FinalIntegrands {
         )?))
     }
 
-    pub(crate) fn zip_add(self, others: impl IntoIterator<Item = Self>) -> Result<Self> {
-        let representation = self.representation;
-        if representation == RepresentationMode::Cff {
-            let others = others
-                .into_iter()
-                .map(|other| {
-                    eyre::ensure!(
-                        other.representation == representation,
-                        "cannot sum final integrands from different representations"
-                    );
-                    Ok(other.integrands)
-                })
-                .collect::<Result<Vec<_>>>()?;
-            return Ok(Self {
-                integrands: self.integrands.zip_add(others)?,
-                representation,
-            });
-        }
-
-        // Independent LTD sources can have different Laurent orders at the
-        // same selected physical poles. Missing coefficients are zero in this
-        // final additive sum; source multiplication and CFF keep strict shapes.
-        // Never merge different selected axes or duplicate numerator bodies.
-        let mut axes = None;
-        let mut terms = BTreeMap::<_, Vec<Atom>>::new();
-        let mut numerators = Vec::new();
-        let mut scalars = Vec::new();
-        for source in std::iter::once(self).chain(others) {
-            eyre::ensure!(
-                source.representation == representation,
-                "cannot sum final integrands from different representations"
-            );
-            numerators.extend(source.integrands.numerators);
-            scalars.extend(source.integrands.scalars);
-            for (index, atom) in source.integrands.atoms {
-                let orders = [
-                    index.left_threshold_order,
-                    index.right_threshold_order,
-                    index.lu_cut_order,
-                ];
-                eyre::ensure!(
-                    orders.iter().flatten().all(|order| *order > 0),
-                    "invalid zero residue order in {index:?}"
-                );
-                let selected_axes = orders.map(|order| order.is_some());
-                eyre::ensure!(
-                    *axes.get_or_insert(selected_axes) == selected_axes,
-                    "cannot sum different selected residue axes at {index:?}"
-                );
-                terms.entry(index).or_default().push(atom);
-            }
-        }
-        let integrands: Integrands = terms
-            .into_iter()
-            .map(|(index, terms)| (index, terms.into_iter().sum()))
-            .collect();
-        Ok(Self {
-            integrands: integrands
-                .with_numerators(numerators)?
-                .with_scalar_definitions(scalars)?,
-            representation,
-        })
+    pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
+        Ok(Self(self.0.zip_add([other.0])?))
     }
 
     pub(crate) fn collect<const N: usize>(&self, filter: TensorCollectFilter<N>) -> Result<Self> {
@@ -935,7 +872,7 @@ mod tests {
         let second_forest = FinalIntegrands([(index, -&numerator * &second)].into_iter().collect())
             .map_expressions(&normalize)?;
         assert_eq!(
-            first_forest.zip_add([second_forest])?.into_integrands(),
+            first_forest.zip_add(second_forest)?.into_integrands(),
             [(index, factored)].into_iter().collect()
         );
         Ok(())
@@ -982,12 +919,11 @@ mod tests {
         ] {
             let source = &numerator
                 * (production_ids[0].atom() * 2 * &factor + production_ids[1].atom() * 3 * &factor);
-            let collected = FinalIntegrands {
-                integrands: [(CutCFFIndex::new_all_none(), source.clone())]
+            let collected = FinalIntegrands(
+                [(CutCFFIndex::new_all_none(), source.clone())]
                     .into_iter()
                     .collect(),
-                representation: RepresentationMode::Cff,
-            }
+            )
             .into_integrands();
             let finalized = collected.iter().next().unwrap().1;
             for atom in [&source, finalized] {
@@ -1062,12 +998,11 @@ mod tests {
         let first = production_ids[0].atom() * &v1 * &v2_minus * d.pow(-1);
         let second = production_ids[1].atom() * &v1 * &v2_plus * 3 * d.pow(-2);
         let source = &numerator * &first + &numerator * &second;
-        let collected = FinalIntegrands {
-            integrands: [(CutCFFIndex::new_all_none(), source.clone())]
+        let collected = FinalIntegrands(
+            [(CutCFFIndex::new_all_none(), source.clone())]
                 .into_iter()
                 .collect(),
-            representation: RepresentationMode::Cff,
-        }
+        )
         .into_integrands();
         let finalized = collected.iter().next().unwrap().1;
         // Recover the shared scalar numerator while each vector pair still

@@ -1473,8 +1473,11 @@ mod tests {
                             expected_exported_expressions = None;
                             production_expression = Some(source_expression(
                                 &retained.graph,
-                                &retained.derived_data.expressions
-                                    [&three_dimensional_reps::generation::RepresentationMode::Cff],
+                                retained
+                                    .derived_data
+                                    .global_cff_expression
+                                    .as_ref()
+                                    .unwrap(),
                             )?);
                             let plan = cross_section.plan_graph_group_selection(
                                 &GraphGroupSelectionSpec::from_master_graph_names(vec![
@@ -1545,14 +1548,14 @@ mod tests {
                                 let graph = &amplitudes["default"].graphs[0];
                                 (
                                     &graph.graph,
-                                    &graph.derived_data.representations[&three_dimensional_reps::generation::RepresentationMode::Cff].expression,
+                                    graph.derived_data.cff_expression.as_ref().unwrap(),
                                 )
                             }
                             ProcessCollection::CrossSections(cross_sections) => {
                                 let graph = &cross_sections["default"].supergraphs[0];
                                 (
                                     &graph.graph,
-                                    &graph.derived_data.expressions[&three_dimensional_reps::generation::RepresentationMode::Cff],
+                                    graph.derived_data.global_cff_expression.as_ref().unwrap(),
                                 )
                             }
                         };
@@ -1720,19 +1723,20 @@ mod tests {
                         )
                         .unwrap_err();
                     assert!(format!("{error:#}").contains("Source/runtime graph mismatch"));
-                    match &mut processes.processes[0].collection {
+                    let source = match &mut processes.processes[0].collection {
                         ProcessCollection::Amplitudes(amplitudes) => {
                             let graph = &mut amplitudes.get_mut("default").unwrap().graphs[0];
                             graph.graph.name = graph_name.clone();
-                            graph.derived_data.representations.clear();
+                            &mut graph.derived_data.cff_expression
                         }
                         ProcessCollection::CrossSections(cross_sections) => {
                             let graph =
                                 &mut cross_sections.get_mut("default").unwrap().supergraphs[0];
                             graph.graph.name = graph_name.clone();
-                            graph.derived_data.expressions.clear();
+                            &mut graph.derived_data.global_cff_expression
                         }
                     };
+                    *source = None;
                     let topology_dir = case_dir.join("topology_without_source");
                     processes.export_uv_forests(
                         &model,
@@ -1766,7 +1770,7 @@ mod tests {
                             &UVForestExportSettings { computed: true },
                         )
                         .unwrap_err();
-                    assert!(format!("{error:#}").contains("has no stored production cff"));
+                    assert!(format!("{error:#}").contains("has no stored production CFF"));
                 }
             }
         }

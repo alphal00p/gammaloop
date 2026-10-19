@@ -28,7 +28,6 @@ use crate::{
             },
         },
         cross_section::export::export_threshold_multiplier_collection,
-        validate_process_runtime_settings,
     },
     momentum::ThreeMomentum,
     momentum::sample::{LoopMomenta, MomentumSample},
@@ -91,31 +90,13 @@ fn export_generic_evaluator<T: ExportAtomTo>(
     })
 }
 
-pub(super) fn export_evaluator_stack<T: ExportAtomTo>(
+fn export_evaluator_stack<T: ExportAtomTo>(
     evaluator_stack: &crate::integrands::process::evaluators::EvaluatorStack,
     start: usize,
     residue_map_id_start: usize,
-    scalar_input: Vec<StandaloneComplexInput>,
+    mult_offset: usize,
+    representative_input: Vec<StandaloneComplexInput>,
 ) -> Result<StandaloneEvaluatorStackArchive<T>> {
-    let mult_offset = evaluator_stack
-        .single_parametric
-        .dual_shape
-        .as_ref()
-        .map_or(1, Vec::len);
-    // The graph sample is scalar. Embed each exact serialized value as a constant
-    // jet, as ParamBuilder::initialize_duals does, without rounding its precision.
-    let representative_input = scalar_input
-        .into_iter()
-        .flat_map(|value| {
-            std::iter::once(value).chain(std::iter::repeat_n(
-                StandaloneComplexInput {
-                    re: "0".to_owned(),
-                    im: "0".to_owned(),
-                },
-                mult_offset - 1,
-            ))
-        })
-        .collect();
     Ok(StandaloneEvaluatorStackArchive {
         explicit_orientation_sum_only: evaluator_stack.explicit_orientation_sum_only,
         production_orientation_ids: evaluator_stack
@@ -161,6 +142,7 @@ fn export_evaluator_map<T: ExportAtomTo>(
     >,
     start: usize,
     residue_map_id_start: usize,
+    mult_offset: usize,
     representative_input: &[StandaloneComplexInput],
 ) -> Result<Vec<StandaloneIndexedEvaluatorStackArchive<T>>> {
     evaluator_stacks
@@ -172,6 +154,7 @@ fn export_evaluator_map<T: ExportAtomTo>(
                     evaluator_stack,
                     start,
                     residue_map_id_start,
+                    mult_offset,
                     representative_input.to_vec(),
                 )?,
             })
@@ -180,13 +163,7 @@ fn export_evaluator_map<T: ExportAtomTo>(
 }
 
 fn standalone_rust_script() -> String {
-    include_str!("standalone_template.rs").replace(
-        "use crate::integrands::process::standalone;",
-        &format!(
-            "mod standalone {{\n{}\n}}",
-            include_str!("../standalone.rs"),
-        ),
-    )
+    include_str!("standalone_template.rs").to_string()
 }
 
 pub trait ExportAtomTo: Sized {
@@ -269,7 +246,12 @@ impl AmplitudeIntegrand {
             .map(
                 |(
                     term,
-                    (representative_input, orientation_start, residue_map_id_start),
+                    (
+                        representative_input,
+                        multiplicative_offset,
+                        orientation_start,
+                        residue_map_id_start,
+                    ),
                 )| {
                     let param_builder_params = (&term.param_builder.pairs)
                         .into_iter()
@@ -298,19 +280,22 @@ impl AmplitudeIntegrand {
                         .map(|entry| entry.archive())
                         .collect::<Result<Vec<_>>>()?;
 
-                    let original_integrand = term.original_integrand.iter().map(|(representation, evaluator)| {
-                        Ok((representation.to_string(), export_evaluator_stack(
-                            evaluator, orientation_start, residue_map_id_start,
-                            representative_input.clone(),
-                        )?))
-                    }).collect::<Result<BTreeMap<_,_>>>()?;
+                    let original_integrand = export_evaluator_stack(
+                        &term.original_integrand,
+                        orientation_start,
+                        residue_map_id_start,
+                        multiplicative_offset,
+                        representative_input.clone(),
+                    )?;
+
                     let export_counterterm = |counterterm: &crate::subtraction::amplitude_counterterm::AmplitudeCountertermEvaluator| {
-                        counterterm.evaluator_stacks.iter().map(|(representation, stacks)| {
-                            Ok((representation.to_string(), export_evaluator_map(
-                                stacks, orientation_start, residue_map_id_start,
-                                &representative_input,
-                            )?))
-                        }).collect::<Result<BTreeMap<_,_>>>()
+                        export_evaluator_map(
+                            &counterterm.evaluator_stacks,
+                            orientation_start,
+                            residue_map_id_start,
+                            multiplicative_offset,
+                            &representative_input,
+                        )
                     };
                     let threshold_counterterms = if term.threshold_counterterm.legacy_equivalent {
                         term.threshold_counterterm
@@ -413,12 +398,6 @@ impl AmplitudeIntegrand {
             .collect::<Result<Vec<_>>>()?;
         Ok(StandaloneEvaluatorArchive {
             version: STANDALONE_EVALUATORS_VERSION,
-            three_d_representations: self
-                .data
-                .three_d_representations
-                .iter()
-                .map(ToString::to_string)
-                .collect(),
             numeric_target,
             symbolica_state,
             graph_terms,
@@ -428,7 +407,7 @@ impl AmplitudeIntegrand {
     #[allow(clippy::type_complexity)]
     fn representative_input_for<T>(
         &self,
-    ) -> Result<Vec<(Vec<StandaloneComplexInput>, usize, usize)>>
+    ) -> Result<Vec<(Vec<StandaloneComplexInput>, usize, usize, usize)>>
     where
         T: StandaloneRepresentativeInputPrecision,
     {
@@ -477,6 +456,7 @@ impl AmplitudeIntegrand {
 
             inputs.push((
                 serialize_representative_input(input.as_slice()),
+                input.multiplicative_offset,
                 input.orientations_start,
                 input.residue_map_id_start,
             ));
@@ -492,11 +472,6 @@ impl AmplitudeIntegrand {
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
-        validate_process_runtime_settings(
-            &self.settings,
-            self.data.explicit_orientation_sum_only,
-            &self.data.three_d_representations,
-        )?;
         let mut symbolica_state = Vec::new();
         State::export(&mut symbolica_state)
             .with_context(|| "Failed to export Symbolica state for standalone evaluators")?;
@@ -552,17 +527,12 @@ impl AmplitudeIntegrand {
 }
 
 #[cfg(test)]
-#[path = "standalone_template.rs"]
-mod standalone_template_tests;
-
-#[cfg(test)]
 mod tests {
     use super::{STANDALONE_EVALUATORS_VERSION, standalone_rust_script};
 
     #[test]
     fn generated_standalone_loader_tracks_threshold_archive_version_and_fields() {
         let script = standalone_rust_script();
-        assert!(script.contains("symbolica = { version = \"=3.0.1\""));
         assert!(script.contains(&format!(
             "const STANDALONE_EVALUATORS_VERSION: u32 = {STANDALONE_EVALUATORS_VERSION};"
         )));

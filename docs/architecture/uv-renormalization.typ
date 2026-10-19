@@ -1,7 +1,7 @@
 = UV renormalization architecture
 <uv-renormalization-architecture>
 #quote(block: true)[
-#strong[Scope:] Shared soft/UV preparation with CFF and vacuum LTD projection.
+#strong[Reviewed:] 2026-10-01 against jj change `xuoqsyop`
 
 #strong[Lifecycle:] Current implementation architecture. Unsupported
 prescription paths are recorded explicitly under
@@ -127,8 +127,7 @@ remain owned by the shared tensor interface.
 modes:
 
 - `legacy_dag_forest` computes the established `Approximation` DAG and
-  remains the reference implementation for connected graphs. It does not
-  compute disconnected UV unions; those require `hedge_poset`.
+  remains the reference implementation for connected graphs.
 - `hedge_poset` is the default. It unfolds commuting UV operations into
   trace levels and stores their results in a compute store. It supports
   disconnected unions.
@@ -385,17 +384,7 @@ its own tag. The normalized frozen kernels remain outside the Taylor operation.
 This preserves the engineering weight of finite mass vertices without rescaling
 unrelated factors in a disconnected product.
 
-The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, and certifies the signed numerator mapping and denominator reconstruction before projecting that completed term to the requested representation. CFF selects a factorized EMR capacity assignment. Ordinary LTD retains the certified physical affine assignment without numerator-degree analysis; repeated LTD poles require bounds for exact finite sampling. Canonical denominator classes also gate the raw physical degree report, so diagnostic reporting does not reintroduce degree analysis for ordinary LTD. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
-
-Final assembly retains the existing cut-keyed `Integrands` roots and shared
-numerator definitions. Projected sectors complete their source-local residue sums
-before the outer assembly; UV markers and tensor replacements use the existing
-expression operations. CFF/from4D keeps its already-summed `SingleParametric`
-construction. LTD uses the same generic evaluator builder for its complete sum,
-with `SingleParametric` and `SummedFunctionMap` available when requested. The direct
-CFF/from3D Taylor path keeps its existing keyed-family representation.
-
-Requesting LTD requires local UV counterterms from expanded four-dimensional integrands and a complete orientation sum. Mixed CFF/LTD generation uses that same UV setting for both representations. Individual raised threshold residue-order coefficients may differ between CFF and LTD. Their complete contribution for each physical degenerate cut/residue must agree locally, with all pieces multiplying the same observable function grouped together. LTD threshold localization uses its own denominator factors and never reconstructs CFF to fix those individual coefficients.
+The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, performs the factorized minimax EMR dispatch needed for derivative-created occurrences, and only then projects that completed term to CFF. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
 
 == Marker Representation
 <marker-representation>
@@ -498,9 +487,7 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   wood construction can see the medium. It rejects
   `local_uv_cts_from_expanded_4d_integrands` for medium modes and vacuum
   subtraction; their thermal-weight ownership is documented in
-  #link("architecture-current.typ#3-2-three-dimensional-representations-and-numerator-energy-ownership")[the current architecture].
-- LTD is vacuum-only and uses the projected local-4D route. Direct local-3D Taylor
-  subtraction and orientation-local evaluation remain CFF-only.
+  #link("architecture-current.typ#3-2-cff-production-and-numerator-energy-ownership")[the current architecture].
 - The legacy DAG executor constructs union-shaped nodes but does not
   execute multi-parent unions. Disconnected generation therefore
   requires the hedge-poset backend.

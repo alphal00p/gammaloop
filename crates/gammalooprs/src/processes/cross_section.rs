@@ -9,7 +9,6 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
-use three_dimensional_reps::RepresentationMode;
 
 #[cfg(test)]
 mod gauge_sewing_tests;
@@ -998,9 +997,6 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
-        global_settings
-            .generation
-            .validate_for_runtime(&RuntimeSettings::from(runtime_default))?;
         let process_name = process_definition.folder_name.as_str();
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
@@ -1061,7 +1057,7 @@ impl CrossSection {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
-                    stats.timings.total_time += graph_started.elapsed();
+                    stats.total_time += graph_started.elapsed();
                     crate::debug_tags!(#generation, #profile, #graph, #summary;
                         stage = "generate_term_for_graph_done",
                         integrand = %integrand_name,
@@ -1147,11 +1143,7 @@ impl CrossSection {
                 ),
                 explicit_orientation_sum_only: global_settings
                     .generation
-                    .requires_complete_orientation_sum(),
-                three_d_representations: global_settings
-                    .generation
-                    .three_dimensional_representations
-                    .clone(),
+                    .explicit_orientation_sum_only,
             },
             event_processing_runtime: Default::default(),
             active_f64_backend: Default::default(),
@@ -1171,8 +1163,9 @@ impl CrossSection {
             &self.name,
             backend_started.elapsed(),
         );
-        for (report, compile_stats) in graph_reports.iter_mut().zip(compile_times) {
-            report.stats.merge_in_place(&compile_stats);
+        for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
+            report.stats.evaluator_compile_time += compile_time;
+            report.stats.total_time += compile_time;
         }
 
         self.integrand = Some(ProcessIntegrand::CrossSection(cross_section_integrand));
@@ -1210,10 +1203,14 @@ impl CrossSection {
             let compile_times = integrand.compile(&p, override_existing, thread_pool)?;
             return Ok(compile_times
                 .into_iter()
-                .map(|(graph_name, stats)| NamedGraphGenerationReport {
+                .map(|(graph_name, duration)| NamedGraphGenerationReport {
                     integrand_name: self.name.clone(),
                     graph_name,
-                    stats,
+                    stats: GraphGenerationStats {
+                        total_time: duration,
+                        evaluator_compile_time: duration,
+                        ..GraphGenerationStats::default()
+                    },
                 })
                 .collect());
         }
@@ -1598,55 +1595,11 @@ impl CrossSectionGraph {
             }
         }
 
-        // Localizing an LTD H-surface can raise a later LU pole. Its actual
-        // coefficient indices, including every representation and threshold
-        // component, therefore determine the shared derivative geometry.
-        let residue_indices = self
-            .derived_data
-            .cut_parametric_integrands
-            .values()
-            .flat_map(|cuts| cuts.iter_enumerated())
-            .flat_map(|(group, integrands)| {
-                integrands
-                    .integrands
-                    .iter()
-                    .map(move |(index, _)| (group, index))
-            })
-            .chain(
-                self.derived_data
-                    .threshold_counterterms
-                    .iter_enumerated()
-                    .flat_map(|(group, data)| {
-                        data.integrands.values().flat_map(move |payload| {
-                            payload
-                                .left_atoms
-                                .iter()
-                                .chain(payload.right_atoms.iter())
-                                .chain(payload.iterated.iter())
-                                .flat_map(move |integrands| {
-                                    integrands
-                                        .integrands
-                                        .iter()
-                                        .map(move |(index, _)| (group, index))
-                                })
-                        })
-                    }),
-            );
-        stats.merge_in_place(
-            &self
-                .derived_data
-                .cut_group_data
-                .include_residue_orders(residue_indices, &settings.evaluator),
-        );
-        self.graph
-            .param_builder
-            .initialize_duals(self.derived_data.cut_group_data.pass_two_evaluators.len());
-
         stats.cff_energy_degree_bound_reports = cff_energy_degree_bound_reports
             .into_inner()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-        stats.timings.total_time += preprocess_started.elapsed();
+        stats.total_time += preprocess_started.elapsed();
         Ok(stats)
     }
 
@@ -1714,39 +1667,19 @@ impl CrossSectionGraph {
         // The options provision maps from the complete factorized numerator.
         // The numerator itself remains caller-owned and is mapped only when
         // the corresponding orientation integrand is assembled.
-        self.derived_data.expressions.clear();
+        let options = self.graph.production_cff_3d_expression_options(settings)?;
+        let mut global_cff = self.graph.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &canonize_esurface,
+            &options,
+            None,
+        )?;
         let raised_edge_groups = self.graph.get_raised_edge_groups();
-        for &representation in &settings.three_dimensional_representations {
-            let started = std::time::Instant::now();
-            let options = self
-                .graph
-                .production_3d_expression_options(settings, representation)?;
-            let mut generated = self.graph.generate_3d_expression_for_integrand(
-                &contract_edges,
-                &canonize_esurface,
-                &options,
-                None,
-            )?;
-            normalize_three_d_expression_cut_support_with_raised_edge_groups(
-                &mut generated.expression,
-                &raised_edge_groups,
-            );
-            self.derived_data
-                .expressions
-                .insert(representation, generated);
-            stats.representation_mut(representation).total_time += started.elapsed();
-        }
-        // Conversion interns physical surfaces in the graph. Every representation
-        // must retain that same complete inventory, including IDs added later.
-        for generated in self.derived_data.expressions.values_mut() {
-            generated.expression.surfaces = self.graph.surface_cache.clone();
-        }
-        let global_cff = self
-            .derived_data
-            .expressions
-            .values()
-            .next()
-            .expect("generation validates a nonempty representation list");
+        normalize_three_d_expression_cut_support_with_raised_edge_groups(
+            &mut global_cff.expression,
+            &raised_edge_groups,
+        );
+
         let generated_esurfaces = &global_cff.expression.surfaces.esurface_cache;
         let normalized_generated_esurfaces = generated_esurfaces
             .iter()
@@ -1790,10 +1723,10 @@ impl CrossSectionGraph {
             &settings.evaluator,
         );
 
+        self.derived_data.global_cff_expression = Some(global_cff);
         self.derived_data.cut_group_data = cut_group_data;
 
-        stats.merge_in_place(&cut_group_stats);
-        Ok(stats)
+        Ok(cut_group_stats)
     }
 
     pub(crate) fn process_valid_cuts(
@@ -1941,7 +1874,6 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
         vakint: &Vakint,
         cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
-        stats: &mut GraphGenerationStats,
     ) -> Result<()> {
         self.derived_data.cut_paramatric_integrand =
             self.build_integrand(model, settings, vakint, cff_energy_degree_bound_reports)?;
@@ -1954,8 +1886,7 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
         vakint: &Vakint,
         cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
-        stats: &mut GraphGenerationStats,
-    ) -> Result<BTreeMap<RepresentationMode, TiVec<CutGroupId, ParametricIntegrands>>> {
+    ) -> Result<TiVec<CutGroupId, ParametricIntegrands>> {
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_build_integrand_start",
@@ -2012,33 +1943,12 @@ impl CrossSectionGraph {
             "Generation timing milestone"
         );
 
-        let options = settings
-            .three_dimensional_representations
-            .iter()
-            .map(|&representation| {
-                let started = std::time::Instant::now();
-                let options = self
-                    .graph
-                    .production_3d_expression_options(settings, representation);
-                stats.representation_mut(representation).total_time += started.elapsed();
-                options
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let projections = settings
-            .three_dimensional_representations
-            .iter()
-            .zip(&options)
-            .map(|(representation, options)| {
-                OrientationProjection::exact_expression(
-                    &self.derived_data.expressions[representation],
-                    options,
-                    &settings.orientation_pattern,
-                    settings.requires_complete_orientation_sum(),
-                )
-                .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
-                .with_energy_degree_bound_reports(cff_energy_degree_bound_reports)
-            })
-            .collect::<Vec<_>>();
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let production_expression = self
+            .derived_data
+            .global_cff_expression
+            .as_ref()
+            .expect("global_cff_expression should have been created");
 
         let orchestration_started = std::time::Instant::now();
         let parametric_integrands = settings.uv.orchestrator.parametric_integrands(
@@ -2068,19 +1978,11 @@ impl CrossSectionGraph {
         let finalize_started = std::time::Instant::now();
         let result = parametric_integrands
             .into_iter()
-            .map(|(representation, integrands)| {
-                let started = std::time::Instant::now();
-                let integrands = integrands
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, integrand)| {
-                        let group = &self.derived_data.cut_group_data.cut_groups[CutGroupId(index)];
-                        let lu_prefactor = group.lu_prefactor(&self.graph, &self.cuts)?;
-                        Ok(integrand.map(|a| a * &lu_prefactor))
-                    })
-                    .collect::<Result<_>>()?;
-                stats.representation_mut(representation).total_time += started.elapsed();
-                Ok((representation, integrands))
+            .enumerate()
+            .map(|(index, integrand)| {
+                let group = &self.derived_data.cut_group_data.cut_groups[CutGroupId(index)];
+                let lu_prefactor = group.lu_prefactor(&self.graph, &self.cuts)?;
+                Ok(integrand.map(|a| a * &lu_prefactor))
             })
             .collect::<Result<_>>()?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -2553,7 +2455,7 @@ impl CrossSectionGraph {
     //    local_prefactor + integrated_prefactor
     //}
 
-    pub(crate) fn build_lmbs(&mut self) -> Result<()> {
+    fn build_lmbs(&mut self) -> Result<()> {
         let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
 
         let externals: SuBitGraph = self.graph.empty_subgraph();
@@ -4133,10 +4035,10 @@ impl CrossSectionGraph {
                 cut_structure,
                 vakint,
                 OrientationProjection::exact_expression(
-                    &self.derived_data.expressions[representation],
-                    options,
+                    production_expression,
+                    &cff_options,
                     &settings.orientation_pattern,
-                    settings.requires_complete_orientation_sum(),
+                    settings.explicit_orientation_sum_only,
                 )
                 .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
                 .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
@@ -4175,9 +4077,9 @@ impl CrossSectionGraph {
                 .map(|variant_id| resolved.variants[*variant_id].subspace.clone())
                 .collect();
 
-                let mut left_atoms = TiVec::<LeftThresholdId, _>::new();
-                let mut right_atoms = TiVec::<RightThresholdId, _>::new();
-                let mut iterated_atoms = vec![];
+            let mut left_atoms = TiVec::<LeftThresholdId, _>::new();
+            let mut right_atoms = TiVec::<RightThresholdId, _>::new();
+            let mut iterated_atoms = vec![];
 
             for variant_id in &left_variant_ids {
                 let variant = &resolved.variants[*variant_id];
@@ -4355,10 +4257,8 @@ pub struct CrossSectionDerivedData {
     /// Goldstone/ghost cuts; explicit unphysical diagnostic states stay intact.
     pub covariant_cut_representatives: BTreeMap<isize, isize>,
     pub orientations: Option<TiVec<OrientationID, EdgeVec<Orientation>>>,
-    pub cut_parametric_integrands:
-        BTreeMap<RepresentationMode, TiVec<CutGroupId, ParametricIntegrands>>,
-    pub expressions: BTreeMap<
-        RepresentationMode,
+    pub cut_paramatric_integrand: TiVec<CutGroupId, ParametricIntegrands>,
+    pub global_cff_expression: Option<
         GeneratedThreeDExpression<crate::cff::esurface::Esurface, crate::cff::hsurface::Hsurface>,
     >,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
@@ -4519,49 +4419,37 @@ impl CutGroupData {
             });
         }
 
-        // Surface-cache insertion order depends on the representation. Physical
-        // cut order must stay fixed: it also orders the common overlap solve.
-        groups.sort_by_key(|group| group.cuts.iter().map(|cut| cut.0).collect_vec());
-        assert!(!groups.is_empty(), "corrupted cut groups");
-        let mut data = Self {
-            cut_groups: groups,
-            ..Self::new()
-        };
-        stats.merge_in_place(&data.include_residue_orders(std::iter::empty(), evaluator_settings));
-        (data, stats)
-    }
-
-    fn include_residue_orders<'a>(
-        &mut self,
-        indices: impl Iterator<Item = (CutGroupId, &'a CutCFFIndex)>,
-        evaluator_settings: &EvaluatorSettings,
-    ) -> GraphGenerationStats {
-        for (group, index) in indices {
-            if let Some(order) = index.lu_cut_order {
-                let maximum = &mut self.cut_groups[group].related_esurface_group.max_occurence;
-                *maximum = (*maximum).max(order);
-            }
-        }
-        let maximum = self
-            .cut_groups
+        let global_max_occurence = groups
             .iter()
             .map(|group| group.related_esurface_group.max_occurence)
             .max()
-            .unwrap_or(0);
-        self.dual_shapes
-            .extend((self.dual_shapes.len() + 1..maximum).map(simple_n_deriv_shape));
-        let mut stats = GraphGenerationStats::default();
-        for order in self.pass_two_evaluators.len() + 1..=maximum {
-            let started = std::time::Instant::now();
-            self.pass_two_evaluators.push(build_derivative_structure(
-                order as u8,
-                -1,
-                evaluator_settings,
-            ));
-            stats.timings.evaluator_symbolica_time += started.elapsed();
-            stats.timings.evaluator_count += 1;
-        }
-        stats
+            .unwrap_or_else(|| {
+                println!("corrupted groups");
+                panic!();
+            });
+
+        let dual_shapes = (1..global_max_occurence)
+            .map(simple_n_deriv_shape)
+            .collect();
+
+        let pass_two_evaluators = (1..=global_max_occurence)
+            .map(|i| {
+                let evaluator_started = std::time::Instant::now();
+                let evaluator = build_derivative_structure(i as u8, -1, evaluator_settings);
+                stats.evaluator_symbolica_time += evaluator_started.elapsed();
+                stats.evaluator_count += 1;
+                evaluator
+            })
+            .collect();
+
+        (
+            Self {
+                cut_groups: groups,
+                dual_shapes,
+                pass_two_evaluators,
+            },
+            stats,
+        )
     }
 }
 
@@ -4570,8 +4458,8 @@ impl CrossSectionDerivedData {
         Self {
             covariant_cut_representatives: BTreeMap::new(),
             orientations: None,
-            expressions: BTreeMap::new(),
-            cut_parametric_integrands: BTreeMap::new(),
+            global_cff_expression: None,
+            cut_paramatric_integrand: TiVec::new(),
             lmbs: None,
             multi_channeling_setup: None,
             threshold_counterterms: TiVec::new(),
@@ -4787,15 +4675,11 @@ mod tests {
         let raised_esurface_data = RaisedEsurfaceData {
             raised_groups: [
                 RaisedEsurfaceGroup {
-                    esurface_ids: vec![EsurfaceID(2)],
-                    max_occurence: 1,
-                },
-                RaisedEsurfaceGroup {
                     esurface_ids: vec![EsurfaceID(1), EsurfaceID(0)],
                     max_occurence: 1,
                 },
                 RaisedEsurfaceGroup {
-                    esurface_ids: vec![EsurfaceID(3)],
+                    esurface_ids: vec![EsurfaceID(2)],
                     max_occurence: 1,
                 },
             ]
@@ -4803,9 +4687,7 @@ mod tests {
             .collect(),
             pass_two_evaluator: None,
         };
-        let cut_esurface_map = [EsurfaceID(0), EsurfaceID(0), EsurfaceID(2)]
-            .into_iter()
-            .collect();
+        let cut_esurface_map = [EsurfaceID(0), EsurfaceID(0)].into_iter().collect();
 
         let (cut_group_data, _) = super::CutGroupData::new_from_esurface(
             &raised_esurface_data,
@@ -4813,20 +4695,22 @@ mod tests {
             &super::EvaluatorSettings::default(),
         );
 
-        let cut_partitions: Vec<Vec<super::CutId>> = cut_group_data
+        let mut cut_partitions: Vec<Vec<super::CutId>> = cut_group_data
             .cut_groups
             .iter()
-            .map(|group| group.cuts.clone())
+            .filter(|group| !group.cuts.is_empty())
+            .map(|group| {
+                let mut cuts = group.cuts.clone();
+                cuts.sort_unstable_by_key(|cut| cut.0);
+                cuts
+            })
             .collect();
-        // Cache groups arrived in the opposite order. The resulting physical
-        // cut partition still has a stable order, and omits the uncut group.
-        assert_eq!(
-            cut_partitions,
-            vec![
-                vec![super::CutId(0), super::CutId(1)],
-                vec![super::CutId(2)]
-            ]
-        );
+        cut_partitions.sort_unstable_by(|left, right| {
+            left.iter()
+                .map(|cut| cut.0)
+                .cmp(right.iter().map(|cut| cut.0))
+        });
+        assert_eq!(cut_partitions, vec![vec![super::CutId(0), super::CutId(1)]]);
     }
 
     #[test]
@@ -5845,64 +5729,6 @@ mod tests {
             super::max_dual_size_for_cut_cff_indices(cut_cff_indices.iter()),
             8
         );
-    }
-
-    #[test]
-    fn localized_ltd_orders_extend_shared_lu_geometry() {
-        test_initialise().unwrap();
-        // The core Laurent merger regression has A*B*(A+B) denominators:
-        // selecting A produces a B² pole although the production B group
-        // only contains one explicit E-surface factor.
-        let mut data = super::CutGroupData {
-            cut_groups: [0, 1]
-                .into_iter()
-                .map(|id| super::CutGroup {
-                    cuts: vec![super::CutId(id)],
-                    related_esurface_group: crate::cff::esurface::RaisedEsurfaceGroup {
-                        esurface_ids: vec![crate::cff::esurface::EsurfaceID(id)],
-                        max_occurence: 1,
-                    },
-                })
-                .collect(),
-            ..super::CutGroupData::new()
-        };
-        let original = CutCFFIndex {
-            left_threshold_order: None,
-            right_threshold_order: None,
-            lu_cut_order: Some(1),
-        };
-        let localized = CutCFFIndex {
-            left_threshold_order: Some(1),
-            lu_cut_order: Some(2),
-            ..original
-        };
-        let settings = super::EvaluatorSettings::default();
-        data.include_residue_orders(
-            [
-                (super::CutGroupId(0), &original),
-                (super::CutGroupId(0), &localized),
-            ]
-            .into_iter(),
-            &settings,
-        );
-        assert_eq!(
-            data.cut_groups[super::CutGroupId(0)]
-                .related_esurface_group
-                .max_occurence,
-            2
-        );
-        assert_eq!(
-            data.cut_groups[super::CutGroupId(1)]
-                .related_esurface_group
-                .max_occurence,
-            1
-        );
-        assert_eq!(data.dual_shapes, vec![super::simple_n_deriv_shape(1)]);
-        assert_eq!(data.pass_two_evaluators.len(), 2);
-        let repeated =
-            data.include_residue_orders([(super::CutGroupId(0), &original)].into_iter(), &settings);
-        assert_eq!(repeated.timings.evaluator_count, 0);
-        assert_eq!(data.pass_two_evaluators.len(), 2);
     }
 
     #[test]

@@ -16,7 +16,6 @@ use tabled::{
         themes::BorderCorrection,
     },
 };
-use three_dimensional_reps::RepresentationMode;
 
 use crate::observables::{
     AdditionalWeightKey, EventGroupList, GenericEventGroupList, HistogramAccumulatorState,
@@ -132,7 +131,6 @@ pub struct EvaluationResult {
     pub parameterization_jacobian: Option<F<f64>>,
     /// Monte Carlo sample weight supplied by the integrator/grid, excluding the parameterization Jacobian.
     pub integrator_weight: F<f64>,
-    /// All correlated event groups for this input, before the outer integrator weight.
     pub event_groups: EventGroupList,
     pub evaluation_metadata: EvaluationMetaData,
 }
@@ -144,7 +142,6 @@ pub struct EvaluationResultOutput {
     pub absolute_integrand_result: Option<Complex<F<f64>>>,
     pub parameterization_jacobian: Option<F<f64>>,
     pub integrator_weight: F<f64>,
-    /// All correlated event groups for this input, before the outer integrator weight.
     pub event_groups: EventGroupList,
     pub evaluation_metadata: Option<EvaluationMetaData>,
 }
@@ -241,9 +238,9 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
         }
         for (group_index, group) in self.event_groups.iter().enumerate() {
             for (event_index, event) in group.iter().enumerate() {
-                // Event totals retain native factors; the outer sampler weight is still unapplied.
+                // Event totals already contain their full native sampling factor.
                 for (component, value) in [("re", &event.weight.re), ("im", &event.weight.im)] {
-                    check(value, Some(&self.integrator_weight)).wrap_err_with(|| {
+                    check(value, Some(&one)).wrap_err_with(|| {
                         format!("event_groups[{group_index}][{event_index}].weight.{component}")
                     })?;
                 }
@@ -259,8 +256,7 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
                     .map(|factor| {
                         let real = factor.re.abs();
                         let imag = factor.im.abs();
-                        let magnitude = if real > imag { real } else { imag };
-                        magnitude * self.integrator_weight.abs()
+                        if real > imag { real } else { imag }
                     });
                 for (key, weight) in &event.additional_weights.weights {
                     let remaining = if *key == AdditionalWeightKey::FullMultiplicativeFactor {
@@ -457,9 +453,27 @@ fn fmt_evaluation_result_output<T: FloatLike>(
     Ok(())
 }
 
+fn fmt_sample_result<D: Display>(
+    f: &mut std::fmt::Formatter<'_>,
+    evaluation: &D,
+    observables: &ObservableSnapshotBundle,
+) -> std::fmt::Result {
+    write!(f, "{evaluation}")?;
+
+    if let Some(observables_table) = summarize_observables(observables) {
+        writeln!(f)?;
+        writeln!(f)?;
+        writeln!(f, "{}", "Observable snapshots".bold().bright_magenta())?;
+        write!(f, "{observables_table}")?;
+    }
+
+    Ok(())
+}
+
 fn fmt_batch_result<D: Display>(
     f: &mut std::fmt::Formatter<'_>,
     samples: &[D],
+    observables: &ObservableSnapshotBundle,
     numerical_stability: Option<&NumericalStabilityHistograms>,
 ) -> std::fmt::Result {
     let summary_rows = [EvaluationSummaryRow {
@@ -469,6 +483,12 @@ fn fmt_batch_result<D: Display>(
 
     writeln!(f, "{}", "Batch evaluation result".bold().bright_green())?;
     writeln!(f, "{}", Table::new(summary_rows).with(Style::rounded()))?;
+
+    if let Some(observables_table) = summarize_observables(observables) {
+        writeln!(f)?;
+        writeln!(f, "{}", "Observable snapshots".bold().bright_magenta())?;
+        writeln!(f, "{observables_table}")?;
+    }
 
     if let Some(stability_table) = numerical_stability.and_then(summarize_numerical_stability) {
         writeln!(f)?;
@@ -579,6 +599,10 @@ pub struct PreciseSampleEvaluationResult {
 pub struct SingleSampleEvaluationResult {
     /// Evaluation record for the requested f64 sample.
     pub sample: SampleEvaluationResult,
+    /// Persistent runtime-observable snapshot after processing the requested sample.
+    ///
+    /// The snapshot can include samples accumulated by earlier API calls.
+    pub observables: ObservableSnapshotBundle,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Hash)]
@@ -801,6 +825,10 @@ impl NumericalStabilityHistogramAccumulator {
 pub struct BatchSampleEvaluationResult {
     /// Evaluation records in the same order as the requested f64 samples.
     pub samples: Vec<SampleEvaluationResult>,
+    /// Persistent runtime-observable snapshot after processing the requested batch.
+    ///
+    /// The snapshot can include samples accumulated by earlier API calls.
+    pub observables: ObservableSnapshotBundle,
     /// Numerical-stability histograms for this batch, when collected.
     pub numerical_stability: Option<NumericalStabilityHistograms>,
 }
@@ -815,12 +843,16 @@ pub struct RawBatchEvaluationResult {
 pub struct PreciseSingleSampleEvaluationResult {
     /// Evaluation record retaining the numerical precision selected for the sample.
     pub sample: PreciseSampleEvaluationResult,
+    /// Observable snapshot produced from the same Monte Carlo sample.
+    pub observables: ObservableSnapshotBundle,
 }
 
 #[derive(Clone, Debug)]
 pub struct PreciseBatchSampleEvaluationResult {
     /// Precision-preserving evaluation records in requested sample order.
     pub samples: Vec<PreciseSampleEvaluationResult>,
+    /// Observable snapshot accumulated across the complete sample batch.
+    pub observables: ObservableSnapshotBundle,
 }
 
 #[derive(Clone, Debug)]
@@ -836,25 +868,30 @@ impl Display for PreciseSampleEvaluationResult {
 
 impl Display for SingleSampleEvaluationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.sample.evaluation)
+        fmt_sample_result(f, &self.sample.evaluation, &self.observables)
     }
 }
 
 impl Display for BatchSampleEvaluationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt_batch_result(f, &self.samples, self.numerical_stability.as_ref())
+        fmt_batch_result(
+            f,
+            &self.samples,
+            &self.observables,
+            self.numerical_stability.as_ref(),
+        )
     }
 }
 
 impl Display for PreciseSingleSampleEvaluationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.sample.evaluation)
+        fmt_sample_result(f, &self.sample.evaluation, &self.observables)
     }
 }
 
 impl Display for PreciseBatchSampleEvaluationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt_batch_result(f, &self.samples, None)
+        fmt_batch_result(f, &self.samples, &self.observables, None)
     }
 }
 
@@ -862,6 +899,18 @@ impl Display for PreciseBatchSampleEvaluationResult {
 struct EvaluationSummaryRow {
     field: String,
     value: String,
+}
+
+#[derive(Tabled)]
+struct HistogramSummaryRow {
+    name: String,
+    bins: usize,
+    #[tabled(rename = "in-range")]
+    in_range_entries: String,
+    phase: String,
+    range: String,
+    underflow: String,
+    overflow: String,
 }
 
 #[derive(Tabled)]
@@ -948,6 +997,39 @@ fn status_group_separator() -> VerticalLine<On, On, ()> {
     VerticalLine::new('│').top('┬').bottom('┴')
 }
 
+fn summarize_observables(observables: &ObservableSnapshotBundle) -> Option<String> {
+    if observables.histograms.is_empty() {
+        return None;
+    }
+
+    let rows = observables
+        .histograms
+        .iter()
+        .map(|(name, histogram)| HistogramSummaryRow {
+            name: name.clone(),
+            bins: histogram.bins.len(),
+            in_range_entries: format_count(histogram.statistics.in_range_entry_count),
+            phase: format!("{:?}", histogram.phase).to_lowercase(),
+            range: match histogram.kind {
+                crate::observables::HistogramSnapshotKind::Continuous => format!(
+                    "[{:+.16e}, {:+.16e}]",
+                    histogram.x_min.unwrap_or_default(),
+                    histogram.x_max.unwrap_or_default()
+                ),
+                crate::observables::HistogramSnapshotKind::Discrete => {
+                    let min = histogram.discrete_min_bin_id.unwrap_or_default();
+                    let max = min + histogram.bins.len() as isize - 1;
+                    format!("[{}, {}]", min, max)
+                }
+            },
+            underflow: format_count(histogram.underflow_bin.entry_count),
+            overflow: format_count(histogram.overflow_bin.entry_count),
+        })
+        .collect::<Vec<_>>();
+
+    Some(Table::new(rows).with(Style::rounded()).to_string())
+}
+
 fn summarize_numerical_stability(stability: &NumericalStabilityHistograms) -> Option<String> {
     if stability.histograms.is_empty() {
         return None;
@@ -994,9 +1076,6 @@ pub struct RotatedEvaluation {
 #[derive(Clone, Debug, Serialize)]
 pub struct StabilityResult {
     pub precision: Precision,
-    /// Generated representation actually evaluated at this attempt.
-    #[serde(rename = "three_dimensional_representation")]
-    pub representation: RepresentationMode,
     pub estimated_relative_accuracy: Option<F<f64>>,
     /// -log10 of the nonzero relative estimate, computed before narrowing to f64.
     /// None denotes missing/nonfinite data or an exact zero, which has no finite logarithm.
@@ -1146,7 +1225,7 @@ impl Display for EvaluationMetaData {
                 .stability_results
                 .iter()
                 .map(|result| StabilitySummaryRow {
-                    level: format!("{} / {}", result.precision, result.representation),
+                    level: result.precision.to_string(),
                     relative_accuracy: format_optional_real_generic(
                         result.estimated_relative_accuracy.as_ref(),
                     ),
@@ -1608,7 +1687,7 @@ mod tests {
     use super::{
         BatchSampleEvaluationResult, EvaluationMetaData, EvaluationResult,
         NumericalStabilityHistogramAccumulator, NumericalStabilityLevel, NumericalStabilityMedian,
-        RepresentationMode, StabilityResult, StabilityStatus, StatisticsCounter,
+        StabilityResult, StabilityStatus, StatisticsCounter,
     };
 
     #[test]
@@ -1691,7 +1770,6 @@ mod tests {
         let metadata = EvaluationMetaData {
             stability_results: vec![
                 StabilityResult {
-                    representation: RepresentationMode::Cff,
                     precision: Precision::Double,
                     estimated_relative_accuracy: Some(1.0e-5.into()),
                     estimated_decimal_digits: Some(5.0.into()),
@@ -1699,7 +1777,6 @@ mod tests {
                     total_time: Duration::from_micros(120),
                 },
                 StabilityResult {
-                    representation: RepresentationMode::Cff,
                     precision: Precision::Quad,
                     estimated_relative_accuracy: None,
                     estimated_decimal_digits: None,
@@ -1714,9 +1791,6 @@ mod tests {
         assert!(rendered.contains("Stable(3 samples)"), "{rendered}");
         assert!(rendered.contains("Unknown(1 sample)"), "{rendered}");
         assert!(rendered.contains("None"), "{rendered}");
-        let encoded = serde_json::to_value(&metadata.stability_results[0]).unwrap();
-        assert_eq!(encoded["three_dimensional_representation"], "cff");
-        assert!(encoded.get("3drep").is_none());
     }
 
     #[test]
@@ -1724,7 +1798,6 @@ mod tests {
         let mut first = EvaluationResult::zero();
         first.evaluation_metadata.stability_results = vec![
             StabilityResult {
-                representation: RepresentationMode::Cff,
                 precision: Precision::Double,
                 estimated_relative_accuracy: Some(1.0e-8.into()),
                 estimated_decimal_digits: Some(8.0.into()),
@@ -1732,7 +1805,6 @@ mod tests {
                 total_time: Duration::ZERO,
             },
             StabilityResult {
-                representation: RepresentationMode::Cff,
                 precision: Precision::Quad,
                 estimated_relative_accuracy: Some(0.0.into()),
                 estimated_decimal_digits: None,
@@ -1780,7 +1852,6 @@ mod tests {
                 .evaluation_metadata
                 .stability_results
                 .push(StabilityResult {
-                    representation: RepresentationMode::Cff,
                     precision: Precision::Arb,
                     estimated_relative_accuracy: Some(accuracy.into()),
                     estimated_decimal_digits: (accuracy != 0.0).then(|| (-accuracy.log10()).into()),
@@ -1833,7 +1904,6 @@ mod tests {
                 .evaluation_metadata
                 .stability_results
                 .push(StabilityResult {
-                    representation: RepresentationMode::Cff,
                     precision,
                     estimated_relative_accuracy: Some(10.0_f64.powi(-digits).into()),
                     estimated_decimal_digits: Some(f64::from(digits).into()),
@@ -1854,6 +1924,7 @@ mod tests {
     fn batch_result_omits_numerical_stability_when_minimal() {
         let rendered = BatchSampleEvaluationResult {
             samples: Vec::new(),
+            observables: Default::default(),
             numerical_stability: None,
         }
         .to_string();

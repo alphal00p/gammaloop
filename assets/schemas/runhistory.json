@@ -433,6 +433,13 @@
         "MForBeyondQuadraticOnly"
       ]
     },
+    "CliRepresentationMode": {
+      "type": "string",
+      "enum": [
+        "cff",
+        "ltd"
+      ]
+    },
     "CommandHistory": {
       "description": "A raw command string (including scoped templates) or a structured command.",
       "anyOf": [
@@ -2039,10 +2046,6 @@
         "override_lmb_heuristics": {
           "description": "Use explicitly supplied loop-momentum bases instead of the built-in basis heuristics.",
           "type": "boolean"
-        },
-        "three_dimensional_representations": {
-          "description": "Three-dimensional representations to generate; the first is the default for stability levels.",
-          "$ref": "#/$defs/ThreeDRepresentationSelection"
         },
         "threshold_subtraction": {
           "description": "Generation-time selection of local threshold counterterms.",
@@ -4246,13 +4249,6 @@
         "print_namespaces"
       ]
     },
-    "RepresentationMode": {
-      "type": "string",
-      "enum": [
-        "cff",
-        "ltd"
-      ]
-    },
     "RotationSetting": {
       "oneOf": [
         {
@@ -5790,17 +5786,6 @@
           "description": "Maximum accepted relative error in the real component before escalating.",
           "type": "number",
           "format": "double"
-        },
-        "three_dimensional_representation": {
-          "description": "Representation for this attempt; omission selects the first generated representation.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/RepresentationMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       },
       "additionalProperties": false,
@@ -5995,20 +5980,6 @@
           "required": [
             "Build"
           ]
-        }
-      ]
-    },
-    "ThreeDRepresentationSelection": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/RepresentationMode"
-        },
-        {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/RepresentationMode"
-          },
-          "minItems": 1
         }
       ]
     },

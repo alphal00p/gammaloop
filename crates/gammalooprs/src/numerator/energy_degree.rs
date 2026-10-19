@@ -300,28 +300,11 @@ type SoftMomentumAssignment = (EnergyPowerCapMap<EnergyReference>, BTreeMap<usiz
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct EnergyPowerAssignmentPlan {
     expression: PlannedEnergyExpression,
-    energy_degree_bounds: Option<Vec<(usize, usize)>>,
+    energy_degree_bounds: Vec<(usize, usize)>,
     placement_family: Option<(EnergyCandidateFamily, Vec<usize>)>,
 }
 
 impl EnergyPowerAssignmentPlan {
-    /// LTD simple poles use one physical affine map for the complete numerator.
-    /// No capacity is asserted; the mapper still certifies every signed binding
-    /// and its exact reconstruction in the common loop-energy frame.
-    pub(crate) fn unbounded(numerator: Atom, assignments: FactorEnergyAssignments) -> Self {
-        Self {
-            expression: PlannedEnergyExpression::Factor {
-                id: 0,
-                expression: numerator,
-                degrees: EnergyPowerCapMap::default(),
-                families: BTreeMap::new(),
-                assignments,
-            },
-            energy_degree_bounds: None,
-            placement_family: None,
-        }
-    }
-
     pub(crate) fn visit_factors<E>(
         &self,
         mut visit: impl FnMut(&Atom, &FactorEnergyAssignments) -> Result<(), E>,
@@ -330,15 +313,12 @@ impl EnergyPowerAssignmentPlan {
     }
 
     pub(crate) fn certify_bounds(&self) -> Result<(), EnergyPowerAnalysisError> {
-        let Some(bounds) = &self.energy_degree_bounds else {
-            return Ok(());
-        };
         let actual = self
             .expression
             .exact_degrees()?
             .into_iter()
             .collect::<Vec<_>>();
-        if actual != *bounds {
+        if actual != self.energy_degree_bounds {
             return Err(EnergyPowerAnalysisError::InvalidAssignmentCertificate {
                 detail: "declared capacities differ from the immutable assigned expression".into(),
             });
@@ -363,9 +343,7 @@ impl EnergyPowerAssignmentPlan {
     pub(crate) fn accounted_bytes(&self) -> usize {
         std::mem::size_of::<Self>()
             + self.expression.accounted_bytes()
-            + self.energy_degree_bounds.as_ref().map_or(0, |bounds| {
-                bounds.capacity() * std::mem::size_of::<(usize, usize)>()
-            })
+            + self.energy_degree_bounds.capacity() * std::mem::size_of::<(usize, usize)>()
             + self
                 .placement_family
                 .as_ref()
@@ -375,7 +353,7 @@ impl EnergyPowerAssignmentPlan {
     }
 
     pub(crate) fn energy_degree_bounds(&self) -> &[(usize, usize)] {
-        self.energy_degree_bounds.as_deref().unwrap_or_default()
+        &self.energy_degree_bounds
     }
 
     pub(crate) fn expression(&self) -> &PlannedEnergyExpression {
@@ -413,7 +391,7 @@ impl EnergyPowerAssignmentPlan {
             if !seen_bounds.contains(&bounds) {
                 return Ok(Some(Self {
                     expression,
-                    energy_degree_bounds: Some(bounds),
+                    energy_degree_bounds: bounds,
                     placement_family: self.placement_family.clone(),
                 }));
             }
@@ -1139,7 +1117,6 @@ pub struct EnergyPowerAnalyzer {
     loop_edges: Option<Vec<EdgeIndex>>,
     internal_edges: Option<BTreeSet<EdgeIndex>>,
     active_uv_classes: Option<BTreeSet<UvDenominatorClassId>>,
-    scalar_parameters: Option<BTreeMap<Atom, EdgeIndex>>,
     minkowski_symbol: Symbol,
 }
 
@@ -1162,7 +1139,6 @@ impl EnergyPowerAnalyzer {
             loop_edges: Some(loop_edges.into_iter().collect()),
             internal_edges: None,
             active_uv_classes: None,
-            scalar_parameters: None,
             minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
         }
     }
@@ -1175,7 +1151,6 @@ impl EnergyPowerAnalyzer {
             loop_edges: Some(loop_edges.into_iter().collect()),
             internal_edges: Some(internal_edges.into_iter().collect()),
             active_uv_classes: None,
-            scalar_parameters: None,
             minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
         }
     }
@@ -1185,20 +1160,8 @@ impl EnergyPowerAnalyzer {
             loop_edges: None,
             internal_edges: Some(internal_edges.into_iter().collect()),
             active_uv_classes: None,
-            scalar_parameters: None,
             minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
         }
-    }
-
-    /// Analyze only the independent scalar samples of an already certified
-    /// numerator template. Other momentum symbols belong to its fixed frame or
-    /// to a later contour and do not acquire an energy dependence here.
-    pub(crate) fn for_scalar_parameters(
-        parameters: impl IntoIterator<Item = (Atom, EdgeIndex)>,
-    ) -> Self {
-        let mut analyzer = Self::for_physical_emr_edges([]);
-        analyzer.scalar_parameters = Some(parameters.into_iter().collect());
-        analyzer
     }
 
     pub fn analyze_atom(
@@ -1254,7 +1217,7 @@ impl EnergyPowerAnalyzer {
         candidates: &EquivalentEnergyCandidates,
     ) -> Result<EnergyPowerAssignmentPlan, EnergyPowerAnalysisError> {
         Ok(self
-            .plan_atom_assignment_proposals(expression, candidates, true)?
+            .plan_atom_assignment_proposals(expression, candidates)?
             .remove(0))
     }
 
@@ -1262,7 +1225,6 @@ impl EnergyPowerAnalyzer {
         &self,
         expression: &Atom,
         candidates: &EquivalentEnergyCandidates,
-        optimize_occurrences: bool,
     ) -> Result<Vec<EnergyPowerAssignmentPlan>, EnergyPowerAnalysisError> {
         let started = std::time::Instant::now();
         let expected_degrees = self.analyze_reference_atom(expression)?;
@@ -1285,9 +1247,6 @@ impl EnergyPowerAnalyzer {
         let placement_family = family_degrees
             .iter()
             .filter_map(|(family, degree)| {
-                if !optimize_occurrences {
-                    return None;
-                }
                 let occurrences = candidates.get(family)?;
                 if occurrences.len() < 2 {
                     return None;
@@ -1316,7 +1275,7 @@ impl EnergyPowerAnalyzer {
         // its bounded placement reversal; rank never substitutes for counts.
         let mut plans = vec![EnergyPowerAssignmentPlan {
             expression: baseline,
-            energy_degree_bounds: Some(baseline_bounds),
+            energy_degree_bounds: baseline_bounds,
             placement_family: placement_family.clone(),
         }];
         if let Some((family @ EnergyCandidateFamily::UvClass(_), _)) = placement_family {
@@ -1326,10 +1285,10 @@ impl EnergyPowerAnalyzer {
                 Some(family),
             )?;
             let bounds = packed.exact_degrees()?.into_iter().collect::<Vec<_>>();
-            if bounds.as_slice() != plans[0].energy_degree_bounds() {
+            if bounds != plans[0].energy_degree_bounds {
                 plans.push(EnergyPowerAssignmentPlan {
                     expression: packed,
-                    energy_degree_bounds: Some(bounds),
+                    energy_degree_bounds: bounds,
                     placement_family: plans[0].placement_family.clone(),
                 });
             }
@@ -1578,13 +1537,6 @@ impl EnergyPowerAnalyzer {
         expression: AtomView<'_>,
         mode: EnergyPowerAnalysisMode,
     ) -> Result<EnergyPowerCapMap<EnergyReference>, EnergyPowerAnalysisError> {
-        if let Some(parameters) = &self.scalar_parameters
-            && let Some((_, edge)) = parameters
-                .iter()
-                .find(|(parameter, _)| parameter.as_view() == expression)
-        {
-            return Ok(EnergyPowerCapMap::unit(EnergyReference::Physical(*edge)));
-        }
         match expression {
             AtomView::Num(_) | AtomView::Var(_) => Ok(EnergyPowerCapMap::default()),
             AtomView::Add(add) => {
@@ -1640,10 +1592,7 @@ impl EnergyPowerAnalyzer {
                     return Ok(EnergyPowerCapMap::default());
                 }
 
-                if self.scalar_parameters.is_none()
-                    && function.get_nargs() == 2
-                    && function.get_symbol() == GS.emr_mom
-                {
+                if function.get_nargs() == 2 && function.get_symbol() == GS.emr_mom {
                     let edge = self.emr_candidate_family(function.get(0))?.reference();
                     return Ok(if self.is_internal_reference(edge) {
                         self.component_degree(edge, function.get(1))
@@ -1652,10 +1601,7 @@ impl EnergyPowerAnalyzer {
                     });
                 }
 
-                if self.scalar_parameters.is_none()
-                    && function.get_nargs() == 2
-                    && function.get_symbol() == GS.loop_mom
-                {
+                if function.get_nargs() == 2 && function.get_symbol() == GS.loop_mom {
                     let Some(loop_edges) = &self.loop_edges else {
                         return Err(
                             EnergyPowerAnalysisError::LoopMomentumInPhysicalEmrAnalysis {
@@ -1825,7 +1771,7 @@ impl Graph {
         active_edges: impl IntoIterator<Item = EdgeIndex>,
     ) -> color_eyre::Result<Atom> {
         Ok(self
-            .soft_momentum_routing_proposals(std::slice::from_ref(numerator), active_edges, true)?
+            .soft_momentum_routing_proposals(std::slice::from_ref(numerator), active_edges)?
             .remove(0)
             .remove(0))
     }
@@ -1838,7 +1784,6 @@ impl Graph {
         &self,
         numerators: &[Atom],
         active_edges: impl IntoIterator<Item = EdgeIndex>,
-        optimize: bool,
     ) -> color_eyre::Result<Vec<Vec<Atom>>> {
         if !numerators
             .iter()
@@ -1885,7 +1830,6 @@ impl Graph {
             .collect::<Vec<_>>();
         let rank = rank_i64(&rows.iter().map(|(_, row)| row.clone()).collect::<Vec<_>>());
         let mut alternatives = BTreeMap::new();
-        let mut physical_routing = BTreeMap::new();
         let mut planning_edges = active_edges.clone();
         for component in soft_components {
             let AtomView::Fun(momentum) = component.as_view() else {
@@ -1914,18 +1858,18 @@ impl Graph {
             let fixed_external = target.iter().all(|coefficient| *coefficient == 0);
             let mut candidates = BTreeSet::new();
             if spatial || fixed_external || active_edges.contains(&owner) {
-                candidates.insert(original.clone());
+                candidates.insert(original);
             }
             if spatial {
                 // Concrete spatial components carry no energy rank and keep
                 // their original routing.
             } else if fixed_external {
                 candidates.insert(lmb.ext_atom(owner, GS.emr_mom, &indices, true));
-            } else if optimize || !active_edges.contains(&owner) {
+            } else {
                 // Every minimal support is linearly independent and extends to
                 // a basis of the available row space. Enumerating those bases
                 // therefore includes every nondominated energy support.
-                'bases: for selected in rows.iter().combinations(rank) {
+                for selected in rows.iter().combinations(rank) {
                     for columns in (0..target.len()).combinations(rank) {
                         let matrix = columns
                             .iter()
@@ -1962,9 +1906,6 @@ impl Graph {
                             }
                         }
                         candidates.insert(candidate);
-                        if !optimize {
-                            break 'bases;
-                        }
                         // Different invertible minors of one basis give the
                         // same unique exact solution.
                         break;
@@ -1975,23 +1916,6 @@ impl Graph {
                 return Err(eyre::eyre!(
                     "soft energy on crown edge {owner} has no exact routing through the active outer CFF edges {active_edges:?}"
                 ));
-            }
-            if !optimize {
-                // LTD only needs one certified affine identity. Keep available
-                // owners literal; unavailable temporal carriers use active outer
-                // edges (or fixed external energies), including for raised poles.
-                let routed = if spatial || active_edges.contains(&owner) {
-                    original
-                } else if fixed_external {
-                    lmb.ext_atom(owner, GS.emr_mom, &indices, true)
-                } else {
-                    candidates
-                        .into_iter()
-                        .next()
-                        .expect("certified nonempty routing candidates")
-                };
-                physical_routing.insert(component, routed);
-                continue;
             }
             alternatives.insert(
                 component,
@@ -2005,21 +1929,6 @@ impl Graph {
                     })
                     .collect::<Result<Vec<_>, EnergyPowerAnalysisError>>()?,
             );
-        }
-
-        if !optimize {
-            return Ok(vec![
-                numerators
-                    .iter()
-                    .map(|numerator| {
-                        numerator.replace_map(|view, _, output| {
-                            if let Some(routed) = physical_routing.get(&view.to_owned()) {
-                                **output = routed.clone();
-                            }
-                        })
-                    })
-                    .collect(),
-            ]);
         }
 
         // An unavailable crown carrier must still expose its power factors to
@@ -2218,7 +2127,6 @@ impl Graph {
                 numerator,
                 excluded_edges,
                 candidates,
-                true,
             )?
             .remove(0))
     }
@@ -2228,7 +2136,6 @@ impl Graph {
         numerator: &Atom,
         excluded_edges: impl IntoIterator<Item = EdgeIndex>,
         candidates: &EquivalentEnergyCandidates,
-        optimize_occurrences: bool,
     ) -> Result<Vec<EnergyPowerAssignmentPlan>, EnergyPowerAnalysisError> {
         let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
         let active_edges = self
@@ -2250,7 +2157,7 @@ impl Graph {
                 })
                 .collect(),
         );
-        analyzer.plan_atom_assignment_proposals(numerator, candidates, optimize_occurrences)
+        analyzer.plan_atom_assignment_proposals(numerator, candidates)
     }
 }
 
@@ -2418,42 +2325,6 @@ mod tests {
     }
 
     #[test]
-    fn certified_scalar_samples_bound_only_their_own_contour() {
-        let samples = [
-            function!(symbolica::symbol!("lazy_residue_bound::sample"), 0),
-            function!(symbolica::symbol!("lazy_residue_bound::sample"), 1),
-        ];
-        // A fixed loop carrier and a remote UV class remain coefficients of
-        // this source's already prepared independent scalar samples.
-        let fixed = function!(GS.loop_mom, 9, mink_index("mu"));
-        let remote = function!(
-            GS.emr_mom,
-            GS.uv_class_ref(UvDenominatorClassId(7)),
-            GS.cind(0)
-        );
-        let analyzer = EnergyPowerAnalyzer::for_scalar_parameters([
-            (samples[0].clone(), EdgeIndex(4)),
-            (samples[1].clone(), EdgeIndex(1)),
-        ]);
-        let polynomial = (&samples[0] + fixed).pow(3) * (&samples[1] + remote).pow(2);
-        assert_eq!(
-            analyzer
-                .analyze_atom(&polynomial)
-                .unwrap()
-                .into_generation_bounds(),
-            vec![(1, 2), (4, 3)]
-        );
-        let opaque = function!(
-            symbolica::symbol!("lazy_residue_bound::opaque"),
-            &samples[0]
-        );
-        assert!(matches!(
-            analyzer.analyze_atom(&opaque),
-            Err(EnergyPowerAnalysisError::OpaqueEnergyFunction { .. })
-        ));
-    }
-
-    #[test]
     fn sums_take_edgewise_max_and_products_add() {
         let q3 = function!(GS.emr_mom, 3, mink_index("mu"));
         let k1 = function!(GS.loop_mom, 1, mink_index("nu"));
@@ -2505,7 +2376,7 @@ mod tests {
     fn planned_candidates(expression: &Atom, candidates: &EquivalentEnergyCandidates) {
         let edge = EdgeIndex(3);
         let plans = EnergyPowerAnalyzer::for_physical_emr_edges([edge])
-            .plan_atom_assignment_proposals(expression, candidates, true)
+            .plan_atom_assignment_proposals(expression, candidates)
             .unwrap();
         assert!(!plans.is_empty());
         for plan in plans {
@@ -2690,27 +2561,6 @@ mod tests {
                 .to_string()
                 .contains("no exact routing")
         );
-        // An exact affine routing itself requires no polynomial degree analysis.
-        // Keep the opaque outer function intact while replacing its soft argument.
-        let opaque = function!(symbol!("gammalooprs::tests::opaque_soft_routing"), soft(0));
-        let fixed_route = graph.soft_momentum_routing_proposals(
-            std::slice::from_ref(&opaque),
-            surviving,
-            false,
-        )?;
-        assert_eq!(fixed_route.len(), 1);
-        assert_eq!(fixed_route[0].len(), 1);
-        assert!(!fixed_route[0][0].contains_symbol(GS.uv_momentum_provenance));
-        assert!(
-            !fixed_route[0][0]
-                .replace(GS.emr_mom(EdgeIndex(4), GS.cind(0)))
-                .matches()
-        );
-        assert_eq!(
-            fixed_route[0][0].replace_multiple(&neutral),
-            GS.erase_uv_momentum_provenance(&opaque)
-                .replace_multiple(&neutral)
-        );
         let vector_index = compact_minkowski_vector();
         let dot = function!(
             GS.dot,
@@ -2767,7 +2617,7 @@ mod tests {
         );
         for source in [external_soft.clone(), (external_soft + Atom::one()).pow(8)] {
             let proposals = graph
-                .soft_momentum_routing_proposals(std::slice::from_ref(&source), active, true)?
+                .soft_momentum_routing_proposals(std::slice::from_ref(&source), active)?
                 .into_iter()
                 .map(|mut factors| factors.remove(0))
                 .collect::<Vec<_>>();
@@ -3041,7 +2891,7 @@ mod tests {
         let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges([]);
         for expression in expressions {
             let plans = analyzer
-                .plan_atom_assignment_proposals(&expression, &candidates, true)
+                .plan_atom_assignment_proposals(&expression, &candidates)
                 .unwrap();
             assert!(!plans.is_empty());
             for plan in plans {
@@ -3093,7 +2943,7 @@ mod tests {
                 .add_uv_classes([(class, (0..occurrence_count).collect())])
                 .unwrap();
             let plans = EnergyPowerAnalyzer::for_physical_emr_edges([])
-                .plan_atom_assignment_proposals(&expression, &candidates, true)
+                .plan_atom_assignment_proposals(&expression, &candidates)
                 .unwrap();
             assert!(!plans.is_empty());
             for plan in &plans {
@@ -3135,7 +2985,7 @@ mod tests {
         let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges([]);
         let expression = q.pow(7);
         let mut plans = analyzer
-            .plan_atom_assignment_proposals(&expression, &candidates, true)
+            .plan_atom_assignment_proposals(&expression, &candidates)
             .unwrap();
         assert!(!plans.is_empty());
         let seen = plans
@@ -3193,7 +3043,7 @@ mod tests {
             q.pow(2) - Atom::one()
         );
         let opaque = analyzer
-            .plan_atom_assignment_proposals(&den.pow(2), &candidates, true)
+            .plan_atom_assignment_proposals(&den.pow(2), &candidates)
             .unwrap();
         assert!(!opaque.is_empty());
         for plan in opaque {
@@ -3234,7 +3084,7 @@ mod tests {
         let inactive = function!(GS.emr_mom, GS.uv_class_ref(other), GS.cind(0));
         let expression = active.pow(3) * inactive.pow(7);
         let plans = analyzer
-            .plan_atom_assignment_proposals(&expression, &candidates, true)
+            .plan_atom_assignment_proposals(&expression, &candidates)
             .unwrap();
         assert!(!plans.is_empty());
         for plan in plans {
@@ -3438,7 +3288,7 @@ mod tests {
         for expression in expressions {
             assert!(!expression.is_zero());
             let plans = analyzer
-                .plan_atom_assignment_proposals(&expression, &candidates, true)
+                .plan_atom_assignment_proposals(&expression, &candidates)
                 .unwrap();
             assert!(!plans.is_empty());
             for plan in plans {

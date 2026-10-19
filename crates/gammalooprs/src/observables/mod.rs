@@ -12,22 +12,14 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::{SmallVec, smallvec};
 use spenso::algebra::complex::Complex;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
-use std::result::Result as StdResult;
 
 pub mod clustering;
-mod estimates;
 pub mod events;
-mod sample;
-pub use estimates::{
-    HistogramEstimates, IndependentEstimate, ObservableEstimateError, ObservableEstimates,
-};
-
-pub use sample::ObservableAccumulationError;
 
 pub use clustering::{ClusteringResult, Jet, JetAlgorithm, JetClustering};
 pub use events::{
@@ -2107,7 +2099,7 @@ impl HistogramSnapshot {
         self.merge(other)
     }
 
-    fn has_compatible_layout(&self, other: &Self) -> bool {
+    pub fn merge_in_place(&mut self, other: &HistogramSnapshot) -> Result<()> {
         if self.title != other.title
             || self.type_description != other.type_description
             || self.phase != other.phase
@@ -2121,32 +2113,6 @@ impl HistogramSnapshot {
             || self.discrete_min_bin_id != other.discrete_min_bin_id
             || self.bins.len() != other.bins.len()
         {
-            return false;
-        }
-        match self.kind {
-            HistogramSnapshotKind::Continuous => self
-                .bins
-                .iter()
-                .zip(&other.bins)
-                .all(|(left, right)| left.x_min == right.x_min && left.x_max == right.x_max),
-            HistogramSnapshotKind::Discrete => {
-                let left = self
-                    .bins
-                    .iter()
-                    .filter_map(|bin| bin.bin_id)
-                    .collect::<BTreeSet<_>>();
-                let right = other
-                    .bins
-                    .iter()
-                    .filter_map(|bin| bin.bin_id)
-                    .collect::<BTreeSet<_>>();
-                left.len() == self.bins.len() && right.len() == other.bins.len() && left == right
-            }
-        }
-    }
-
-    pub fn merge_in_place(&mut self, other: &HistogramSnapshot) -> Result<()> {
-        if !self.has_compatible_layout(other) {
             return Err(eyre!(
                 "Cannot merge incompatible histogram snapshots '{}'",
                 self.title
@@ -2652,16 +2618,8 @@ impl HistogramAccumulatorState {
         Ok(())
     }
 
-    pub fn merge_in_place(
-        &mut self,
-        other: &mut HistogramAccumulatorState,
-    ) -> StdResult<(), ObservableAccumulationError> {
-        self.ensure_compatible(other)?;
-        let mut merged = self.snapshot();
-        merged.merge_in_place(&other.snapshot())?;
-        *self = merged.into_accumulator_state();
-        *other = other.cleared_clone();
-        Ok(())
+    pub fn merge_in_place(&mut self, other: &mut HistogramAccumulatorState) -> Result<()> {
+        self.merge_samples(other)
     }
 
     pub fn merged_with(&self, other: &HistogramAccumulatorState) -> Result<Self> {
@@ -2684,6 +2642,69 @@ impl HistogramAccumulatorState {
 
     pub fn update_results(&mut self) {
         self.update_result();
+    }
+
+    pub fn fill_continuous_sample(&mut self, entries: &[(f64, f64)]) -> Result<()> {
+        if self.kind != HistogramSnapshotKind::Continuous {
+            return Err(eyre!(
+                "Cannot fill continuous entries into discrete histogram '{}'",
+                self.title
+            ));
+        }
+        self.new_sample_count += 1;
+        for (value, projected_weight) in entries {
+            if !value.is_finite() {
+                self.statistics.register_nan();
+                continue;
+            }
+            let Some(bin_position) =
+                histogram_bin_position(*value, self.x_min, self.x_max, self.bins.len())
+            else {
+                self.statistics.register_nan();
+                continue;
+            };
+            match bin_position {
+                HistogramBinPosition::Underflow => {
+                    self.underflow_bin.add_sample(*projected_weight, 1, 0);
+                }
+                HistogramBinPosition::Overflow => {
+                    self.overflow_bin.add_sample(*projected_weight, 1, 0);
+                }
+                HistogramBinPosition::InRange(bin_index) => {
+                    self.statistics.register_in_range_entry();
+                    self.bins[bin_index].add_sample(*projected_weight, 1, 0);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn fill_discrete_sample(&mut self, entries: &[(isize, f64)]) -> Result<()> {
+        if self.kind != HistogramSnapshotKind::Discrete {
+            return Err(eyre!(
+                "Cannot fill discrete entries into continuous histogram '{}'",
+                self.title
+            ));
+        }
+        self.new_sample_count += 1;
+        let min_bin_id = self
+            .discrete_min_bin_id
+            .expect("discrete histogram missing min bin id");
+        for (bin_id, projected_weight) in entries {
+            match histogram_bin_position_discrete(*bin_id, min_bin_id, self.bins.len()) {
+                HistogramBinPosition::Underflow => {
+                    self.underflow_bin.add_sample(*projected_weight, 1, 0);
+                }
+                HistogramBinPosition::Overflow => {
+                    self.overflow_bin.add_sample(*projected_weight, 1, 0);
+                }
+                HistogramBinPosition::InRange(bin_index) => {
+                    self.statistics.register_in_range_entry();
+                    self.bins[bin_index].add_sample(*projected_weight, 1, 0);
+                }
+            }
+        }
+        Ok(())
     }
 
     fn write_hwu_block<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
@@ -2925,11 +2946,6 @@ impl ObservableSnapshotBundle {
     }
 
     pub fn merge_in_place(&mut self, other: &ObservableSnapshotBundle) -> Result<()> {
-        if !self.histograms.keys().eq(other.histograms.keys()) {
-            return Err(eyre!(
-                "Cannot merge observable snapshots with different histogram names"
-            ));
-        }
         for (name, other_histogram) in other.histograms.iter() {
             let histogram = self
                 .histograms
@@ -3194,34 +3210,10 @@ impl EventProcessingRuntime {
         self.process_event_internal(event, false)
     }
 
-    /// Accumulate one independent draw, preserving correlations between all its groups.
-    ///
-    /// `coefficient` is the complete outer integration weight. A zero coefficient
-    /// counts one attempt without histogram fills. Event weights are never mutated.
-    ///
-    /// # Errors
-    /// Returns an error if the coefficient is nonfinite.
-    ///
-    /// # Examples
-    /// ```
-    /// use gammalooprs::observables::{EventGroupList, EventProcessingRuntime};
-    /// use gammalooprs::utils::F;
-    /// let mut accumulator = EventProcessingRuntime::default();
-    /// accumulator.accumulate_sample(&EventGroupList::default(), &F(0.0))?;
-    /// # Ok::<(), gammalooprs::observables::ObservableAccumulationError>(())
-    /// ```
-    pub fn accumulate_sample<T: FloatLike>(
-        &mut self,
-        event_groups: &GenericEventGroupList<T>,
-        coefficient: &F<T>,
-    ) -> StdResult<(), ObservableAccumulationError> {
-        if !coefficient.0.is_finite() {
-            return Err(ObservableAccumulationError::NonFiniteCoefficient);
-        }
+    pub fn process_event_groups<T: FloatLike>(&mut self, event_groups: &GenericEventGroupList<T>) {
         for observable in self.observables.values_mut() {
-            observable.process_event_groups(event_groups, coefficient, &self.clustering_registry);
+            observable.process_event_groups(event_groups, &self.clustering_registry);
         }
-        Ok(())
     }
 
     pub fn merge_samples(&mut self, other: &mut EventProcessingRuntime) -> Result<()> {
@@ -3262,24 +3254,6 @@ impl EventProcessingRuntime {
                 .map(|(name, observable)| (name.clone(), observable.snapshot()))
                 .collect(),
         }
-    }
-
-    /// Merge an independent batch's complete statistics, including restored samples.
-    ///
-    /// Unlike the native integrator's iteration-local transfer, this consumes all
-    /// samples represented by the snapshot. The source snapshot is unchanged.
-    /// See [`Self::accumulate_sample`] for the per-sample boundary.
-    ///
-    /// # Errors
-    /// Returns an error if histogram definitions or bin layouts are incompatible.
-    pub fn merge_snapshot(
-        &mut self,
-        other: &ObservableSnapshotBundle,
-    ) -> StdResult<(), ObservableAccumulationError> {
-        let mut merged = self.snapshot_bundle();
-        merged.merge_in_place(other)?;
-        self.restore_snapshot_bundle(&merged)
-            .map_err(ObservableAccumulationError::from)
     }
 
     pub fn restore_snapshot_bundle(&mut self, bundle: &ObservableSnapshotBundle) -> Result<()> {
@@ -3329,7 +3303,6 @@ pub(crate) trait Observable {
     fn process_event_groups<T: FloatLike>(
         &mut self,
         event_groups: &GenericEventGroupList<T>,
-        coefficient: &F<T>,
         clustering_registry: &CompiledClusteringRegistry,
     );
 
@@ -3483,7 +3456,6 @@ impl HistogramObservable {
     fn build_group_contributions<T: FloatLike>(
         &mut self,
         event_group: &GenericEventGroup<T>,
-        coefficient: &F<T>,
         _clustering_registry: &CompiledClusteringRegistry,
     ) {
         self.pending_contributions.clear();
@@ -3536,7 +3508,7 @@ impl HistogramObservable {
                 let projected_weight = self
                     .state
                     .phase
-                    .project(&(combined_entry_weight(event, &entry) * coefficient))
+                    .project(&combined_entry_weight(event, &entry))
                     .into_ff64()
                     .0;
                 if !projected_weight.is_finite() {
@@ -4126,17 +4098,13 @@ impl Observable for HistogramObservable {
     fn process_event_groups<T: FloatLike>(
         &mut self,
         event_groups: &GenericEventGroupList<T>,
-        coefficient: &F<T>,
         clustering_registry: &CompiledClusteringRegistry,
     ) {
         self.state.new_sample_count += 1;
-        if coefficient == &coefficient.zero() {
-            return;
-        }
         self.touched_bins.clear();
 
         for event_group in event_groups.iter() {
-            self.build_group_contributions(event_group, coefficient, clustering_registry);
+            self.build_group_contributions(event_group, clustering_registry);
             self.mitigate_group_misbinning();
 
             for contribution in &self.pending_contributions {
@@ -4230,12 +4198,11 @@ impl Observables {
     pub(crate) fn process_event_groups<T: FloatLike>(
         &mut self,
         event_groups: &GenericEventGroupList<T>,
-        coefficient: &F<T>,
         clustering_registry: &CompiledClusteringRegistry,
     ) {
         match self {
             Observables::Histogram(observable) => {
-                observable.process_event_groups(event_groups, coefficient, clustering_registry)
+                observable.process_event_groups(event_groups, clustering_registry)
             }
         }
     }
@@ -4328,7 +4295,7 @@ impl HistogramObservable {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy)]
 enum HistogramBinPosition {
     Underflow,
     Overflow,

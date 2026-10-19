@@ -2860,8 +2860,6 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils;
-    use crate::uv::approx::integrated::Integrated;
     use crate::{
         finalized_runtime_dot,
         graph::{Graph, GraphThreeDSource},

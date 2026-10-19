@@ -341,10 +341,6 @@
           "description": "Use explicitly supplied loop-momentum bases instead of the built-in basis heuristics.",
           "type": "boolean"
         },
-        "three_dimensional_representations": {
-          "description": "Three-dimensional representations to generate; the first is the default for stability levels.",
-          "$ref": "#/$defs/ThreeDRepresentationSelection"
-        },
         "threshold_subtraction": {
           "description": "Generation-time selection of local threshold counterterms.",
           "$ref": "#/$defs/ThresholdSubtractionSettings"
@@ -558,13 +554,6 @@
       },
       "additionalProperties": false
     },
-    "RepresentationMode": {
-      "type": "string",
-      "enum": [
-        "cff",
-        "ltd"
-      ]
-    },
     "TensorNetworkContractionOrder": {
       "type": "string",
       "enum": [
@@ -573,20 +562,6 @@
         "result_rank_only",
         "entry_aware",
         "intermediate_cost"
-      ]
-    },
-    "ThreeDRepresentationSelection": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/RepresentationMode"
-        },
-        {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/RepresentationMode"
-          },
-          "minItems": 1
-        }
       ]
     },
     "ThresholdSubtractionSettings": {

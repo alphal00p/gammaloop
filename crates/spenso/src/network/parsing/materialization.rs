@@ -762,6 +762,29 @@ impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
     /// remain disjoint across separate conversions.
     /// Unrelated arithmetic and compact spectator ports stay opaque.
     pub fn materialize_indexed_chain(&self, value: FunView<'_>) -> Result<Atom, String> {
+        // A projector groups ordered matrix factors, not one matrix with shared
+        // endpoints. Expand its normalized permutations before wiring each chain.
+        if let Some(expanded) = shadowing::expand_chain_like_projector(value.as_view()) {
+            let mut error = None;
+            let expression = expanded.replace_map(|atom, _, output| {
+                let AtomView::Fun(chain) = atom else { return };
+                if chain.get_symbol() != SPENSO_TAG.chain {
+                    return;
+                }
+                match self.materialize_indexed_chain(chain) {
+                    Ok(indexed) => **output = indexed,
+                    Err(reason) => error = Some(reason),
+                }
+            });
+            return error.map_or(Ok(expression), Err);
+        }
+        if value
+            .iter()
+            .skip(2)
+            .any(|factor| shadowing::projector_factor(factor).is_some())
+        {
+            return Err("cannot expand normalized chain projector".into());
+        }
         let mut arguments = value.iter();
         let start = arguments.next().ok_or("chain requires two endpoints")?;
         let end = arguments.next().ok_or("chain requires two endpoints")?;

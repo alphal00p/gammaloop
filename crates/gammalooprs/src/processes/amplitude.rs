@@ -6,6 +6,7 @@ use std::{
     io::Write,
     iter,
     path::Path,
+    sync::Arc,
 };
 
 use ahash::AHashSet;
@@ -83,7 +84,7 @@ use linnet::{
 };
 use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::{atom::Var, prelude::*};
-use three_dimensional_reps::{GeneratedThreeDExpression, RepresentationMode};
+use three_dimensional_reps::GeneratedThreeDExpression;
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -328,10 +329,14 @@ impl Amplitude {
             let compile_times = integrand.compile(&p, override_existing, thread_pool)?;
             return Ok(compile_times
                 .into_iter()
-                .map(|(graph_name, stats)| NamedGraphGenerationReport {
+                .map(|(graph_name, duration)| NamedGraphGenerationReport {
                     integrand_name: self.name.clone(),
                     graph_name,
-                    stats,
+                    stats: GraphGenerationStats {
+                        total_time: duration,
+                        evaluator_compile_time: duration,
+                        ..GraphGenerationStats::default()
+                    },
                 })
                 .collect());
         };
@@ -557,9 +562,6 @@ impl Amplitude {
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
-        global_settings
-            .generation
-            .validate_for_runtime(&RuntimeSettings::from(runtime_default))?;
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "amplitude_build_integrand_start",
@@ -626,8 +628,8 @@ impl Amplitude {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
-                    stats.timings.evaluator_count = term.generic_evaluator_count();
-                    stats.timings.total_time += graph_started.elapsed();
+                    stats.evaluator_count = term.generic_evaluator_count();
+                    stats.total_time += graph_started.elapsed();
                     crate::debug_tags!(#generation, #profile, #graph, #summary;
                         stage = "amplitude_generate_term_for_graph_done",
                         integrand = %integrand_name,
@@ -727,13 +729,9 @@ impl Amplitude {
                     &self.graph_group_structure,
                 ),
                 group_derived_data: self.group_derived_data.clone(),
-                three_d_representations: global_settings
-                    .generation
-                    .three_dimensional_representations
-                    .clone(),
                 explicit_orientation_sum_only: global_settings
                     .generation
-                    .requires_complete_orientation_sum(),
+                    .explicit_orientation_sum_only,
             },
             event_processing_runtime: Default::default(),
             active_f64_backend: Default::default(),
@@ -753,8 +751,9 @@ impl Amplitude {
             &self.name,
             backend_started.elapsed(),
         );
-        for (report, compile_stats) in graph_reports.iter_mut().zip(compile_times) {
-            report.stats.merge_in_place(&compile_stats);
+        for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
+            report.stats.evaluator_compile_time += compile_time;
+            report.stats.total_time += compile_time;
         }
         self.integrand = Some(ProcessIntegrand::Amplitude(amplitude_integrand));
         crate::debug_tags!(#generation, #profile, #graph, #summary;
@@ -952,7 +951,7 @@ impl AmplitudeGraph {
         model: &Model,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
-        if self.derived_data.representations.is_empty() {
+        if self.derived_data.cff_expression.is_none() {
             // Preserve the source-energy gate formerly run by generate_cff,
             // without requiring energy integration for this 4D-only operation.
             self.graph.ensure_energy_convergent_cycles(
@@ -1031,8 +1030,7 @@ impl AmplitudeGraph {
                 .no_dummy()
                 .subtract(&self.graph.initial_state_cut),
         )?;
-        let _progress_guard =
-            generation_progress::enter_detailed_progress_span("Generating 3D representations");
+        let _progress_guard = generation_progress::enter_detailed_progress_span("Generating CFF");
         let shift_rewrite = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -1049,39 +1047,20 @@ impl AmplitudeGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        self.derived_data.representations.clear();
-        for &representation in &settings.three_dimensional_representations {
-            let started = std::time::Instant::now();
-            let options = self
-                .graph
-                .production_3d_expression_options(settings, representation)?;
-            let expression = self.graph.generate_3d_expression_for_integrand(
-                &contract_edges,
-                &shift_rewrite,
-                &options,
-                None,
-            )?;
-            self.derived_data.representations.insert(
-                representation,
-                AmplitudeRepresentationData {
-                    expression,
-                    all_mighty_integrand: Integrands::from_iter([(
-                        CutCFFIndex::new_all_none(),
-                        Atom::Zero,
-                    )]),
-                    threshold_counterterms: TiVec::new(),
-                    threshold_counterterm_variants: TiVec::new(),
-                },
-            );
-            stats.representation_mut(representation).total_time += started.elapsed();
-        }
-        // Surface IDs are interned on the graph; retain the complete inventory
-        // in every representation, including surfaces introduced by later modes.
-        for data in self.derived_data.representations.values_mut() {
-            data.expression.expression.surfaces = self.graph.surface_cache.clone();
-        }
+        // The options provision maps from the complete factorized numerator.
+        // The numerator itself remains caller-owned and is mapped only when
+        // the corresponding orientation integrand is assembled.
+        let options = self.graph.production_cff_3d_expression_options(settings)?;
+        let generated = self.graph.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &shift_rewrite,
+            &options,
+            None,
+        )?;
 
-        Ok(stats)
+        self.derived_data.cff_expression = Some(generated);
+
+        Ok(())
     }
 
     #[instrument(skip_all, err)]
@@ -1095,14 +1074,17 @@ impl AmplitudeGraph {
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
-        let mut stats = self.generate_cff(settings)?;
+        self.generate_cff(settings)?;
 
         // UV orchestration can extend the graph surface cache, while raised IDs
-        // belong to the shared representation inventory generated above.
+        // belong to the CFF expression generated above.
         let raised_data = settings.threshold_subtraction.enable_thresholds.then(|| {
             self.graph.determine_raised_esurfaces_from_expression(
-                &self.derived_data.representations[&settings.three_dimensional_representations[0]]
-                    .expression
+                &self
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .expect("cff_expression should have been created")
                     .expression,
             )
         });
@@ -1162,8 +1144,10 @@ impl AmplitudeGraph {
             self.derived_data.raised_data.pass_two_evaluator = None;
         }
 
-        stats.timings.total_time = preprocess_started.elapsed();
-        Ok(stats)
+        Ok(GraphGenerationStats {
+            total_time: preprocess_started.elapsed(),
+            ..GraphGenerationStats::default()
+        })
     }
 
     #[instrument(skip_all)]
@@ -1482,7 +1466,6 @@ impl AmplitudeGraph {
         model: &Model,
         settings: &GenerationSettings,
         vakint: &Vakint,
-        stats: &mut GraphGenerationStats,
     ) -> Result<()> {
         let _progress_guard =
             generation_progress::enter_detailed_progress_span("Building Parametric Integrand");
@@ -1495,41 +1478,20 @@ impl AmplitudeGraph {
             only = %settings.uv.final_integrand,
             "Generation timing milestone"
         );
-        let options = settings
-            .three_dimensional_representations
-            .iter()
-            .map(|&representation| {
-                let started = std::time::Instant::now();
-                let options = self
-                    .graph
-                    .production_3d_expression_options(settings, representation);
-                stats.representation_mut(representation).total_time += started.elapsed();
-                options
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let projections = settings
-            .three_dimensional_representations
-            .iter()
-            .zip(&options)
-            .map(|(representation, options)| {
-                let expression = &self.derived_data.representations[representation].expression;
-                crate::debug_tags!(#generation, #profile, #graph, #orientation, #summary;
-                    stage = "amplitude_graph_valid_orientations_done",
-                    graph = %self.graph.name,
-                    representation = %representation,
-                    orientation_count = expression.expression.orientations.len(),
-                    elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-                    "Generation timing milestone"
-                );
-                OrientationProjection::exact_expression(
-                    expression,
-                    options,
-                    &settings.orientation_pattern,
-                    settings.requires_complete_orientation_sum(),
-                )
-                .with_vacuum_subtraction(settings.medium.vacuum_subtraction)
-            })
-            .collect::<Vec<_>>();
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let production_expression = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created");
+        let production_orientations = &production_expression.expression.orientations;
+        crate::debug_tags!(#generation, #profile, #graph, #orientation, #summary;
+            stage = "amplitude_graph_valid_orientations_done",
+            graph = %self.graph.name,
+            orientation_count = production_orientations.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         let cutstructure = CutStructure::empty(&self.graph);
         let orchestration_started = std::time::Instant::now();
         let parametric_exprs = settings.uv.orchestrator.parametric_integrands(
@@ -1549,12 +1511,12 @@ impl AmplitudeGraph {
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "amplitude_graph_parametric_orchestration_done",
             graph = %self.graph.name,
-            representation_count = parametric_exprs.len(),
-            parametric_integrand_count = parametric_exprs.values().map(Vec::len).sum::<usize>(),
+            parametric_integrand_count = parametric_exprs.len(),
             elapsed_ms = orchestration_started.elapsed().as_secs_f64() * 1000.0,
             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
+
         let assign_started = std::time::Instant::now();
         // The uncut amplitude must produce exactly one expression with exactly one residue.
         let [expr] = parametric_exprs.as_slice() else {
@@ -1572,6 +1534,8 @@ impl AmplitudeGraph {
                 "amplitude UV integrand must contain exactly one root residue"
             ));
         }
+        self.derived_data.all_mighty_integrand = integrand.clone();
+        self.derived_data.all_mighty_numerators = expr.integrands.numerators().to_vec();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "amplitude_graph_build_integrands_done",
             graph = %self.graph.name,
@@ -2311,26 +2275,6 @@ impl AmplitudeGraph {
             .with_vacuum_subtraction(settings.medium.vacuum_subtraction),
             settings,
         )?;
-        let mut representation_variants = BTreeMap::new();
-        let mut representation_legacy = BTreeMap::new();
-        for (representation, exprs) in expressions {
-            let representation_started = std::time::Instant::now();
-            if exprs.len() != resolved.variants.len() {
-                return Err(eyre!(
-                    "Threshold orchestrator returned {} {representation} counterterms for {} resolved variants of amplitude graph '{}'",
-                    exprs.len(),
-                    resolved.variants.len(),
-                    self.graph.name
-                ));
-            }
-            let mut variants =
-                TiVec::<ThresholdCountertermVariantId, AmplitudeThresholdCountertermVariant>::new();
-            for ((variant_id, variant), expr) in
-                resolved.variants.iter_enumerated().zip(exprs.into_iter())
-            {
-                let loop_number = self.graph.n_loops(&self.graph.underlying.full_filter());
-                let jacobian_factor =
-                    Atom::var(GS.radius_star_left).pow(loop_number as i32 * 3 - 1);
 
         let mut variants =
             TiVec::<ThresholdCountertermVariantId, AmplitudeThresholdCountertermVariant>::new();
@@ -2524,7 +2468,7 @@ impl AmplitudeGraph {
         Ok(())
     }
 
-    // Expects generated representation expressions and E-surface data.
+    // Expects cff_expression, esurface_data,
     #[instrument(
           name = "generate_term_for_graph",
           level = "info",
@@ -2581,24 +2525,19 @@ pub struct AmplitudeDerivedData {
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
-}
-
-#[derive(Clone, Encode, Decode)]
-#[trait_decode(trait = GammaLoopContext)]
-pub struct AmplitudeRepresentationData {
-    pub expression:
+    pub cff_expression: Option<
         GeneratedThreeDExpression<crate::cff::esurface::Esurface, crate::cff::hsurface::Hsurface>,
-    pub all_mighty_integrand: Integrands,
-    /// Compatibility storage used by the current homogeneous amplitude runtime.
-    pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
-    /// Canonical variant-indexed symbolic storage. Duplicate geometric thresholds remain distinct.
-    pub threshold_counterterm_variants:
-        TiVec<ThresholdCountertermVariantId, AmplitudeThresholdCountertermVariant>,
+    >,
 }
 
-impl AmplitudeRepresentationData {
+impl AmplitudeDerivedData {
     pub(crate) fn resolved_integrand(&self) -> Result<Atom> {
-        let integrands = self.all_mighty_integrand.resolved()?;
+        let integrands = Integrands::from_iter([(
+            CutCFFIndex::new_all_none(),
+            self.all_mighty_integrand.clone(),
+        )])
+        .with_numerators(self.all_mighty_numerators.iter().cloned())?
+        .resolved()?;
         Ok(integrands
             .iter()
             .next()
@@ -2863,7 +2802,6 @@ pub(crate) fn threshold_counterterm_recording_helper(
 
 #[cfg(test)]
 pub mod test {
-    use three_dimensional_reps::RepresentationMode;
 
     use std::{
         fs,
@@ -5250,8 +5188,11 @@ pub mod test {
         graph.build_lmbs();
 
         assert!(
-            graph.derived_data.representations[&RepresentationMode::Cff]
-                .expression
+            graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
                 .expression
                 .orientations
                 .len()
@@ -5261,8 +5202,11 @@ pub mod test {
         let global_settings = GlobalSettings {
             generation: GenerationSettings {
                 orientation_pattern: OrientationPattern::from_orientation(
-                    &graph.derived_data.representations[&RepresentationMode::Cff]
-                        .expression
+                    &graph
+                        .derived_data
+                        .cff_expression
+                        .as_ref()
+                        .unwrap()
                         .expression
                         .orientations[OrientationID(0)],
                 ),
@@ -5287,8 +5231,11 @@ pub mod test {
         assert_eq!(term.orientations.len(), 1);
         assert_eq!(
             term.orientations[OrientationID(0)],
-            graph.derived_data.representations[&RepresentationMode::Cff]
-                .expression
+            graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
                 .expression
                 .orientations[OrientationID(0)]
             .data

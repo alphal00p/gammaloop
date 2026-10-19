@@ -378,7 +378,6 @@ impl Display {
 #[derive(Clone, Debug)]
 struct IntegrandMetrics {
     name: String,
-    generated_representations: String,
     graphs: usize,
     graph_groups: usize,
     bin_disk_size_bytes: Option<u64>,
@@ -410,7 +409,7 @@ impl IntegrandDisplayCategory {
     fn title(self) -> &'static str {
         match self {
             Self::Generation => "Generation",
-            Self::Orientation => "Execution orientations",
+            Self::Orientation => "Orientations",
             Self::LoopMomentumBasis => "Loop momentum bases",
             Self::Cuts => "Cuts",
         }
@@ -419,7 +418,7 @@ impl IntegrandDisplayCategory {
     fn value_header(self) -> &'static str {
         match self {
             Self::Generation => "generation",
-            Self::Orientation => "execution orientation",
+            Self::Orientation => "orientation",
             Self::LoopMomentumBasis => "loop momentum basis",
             Self::Cuts => "cut",
         }
@@ -682,14 +681,10 @@ fn category_rows(
                 primary_id: render_category_id(orientation.orientation_id, false),
                 secondary_id: String::new(),
                 tertiary_id: String::new(),
-                value: if group.complete_residue_sum {
-                    "complete residue sum".to_string()
-                } else {
-                    render_orientation_signature(
-                        &orientation.signature,
-                        &group.orientation_edge_ids,
-                    )
-                },
+                value: render_orientation_signature(
+                    &orientation.signature,
+                    &group.orientation_edge_ids,
+                ),
             })
             .collect(),
         IntegrandDisplayCategory::LoopMomentumBasis => group
@@ -733,32 +728,7 @@ fn category_group_header(
 ) -> String {
     match category {
         IntegrandDisplayCategory::Orientation => {
-            let native = group
-                .graphs
-                .iter()
-                .map(|graph| {
-                    format!(
-                        "{} native residue keys: {}",
-                        graph.name,
-                        graph
-                            .native_residue_counts
-                            .iter()
-                            .map(|(mode, count)| format!("{mode}={count}"))
-                            .join(", ")
-                    )
-                })
-                .join("\n");
-            if group.complete_residue_sum {
-                format!(
-                    "{native}\n{} execution slot(s), complete sum",
-                    group.orientations.len()
-                )
-            } else {
-                format!(
-                    "{native}\n{}",
-                    render_orientation_edge_ids(&group.orientation_edge_ids)
-                )
-            }
+            render_orientation_edge_ids(&group.orientation_edge_ids)
         }
         IntegrandDisplayCategory::Generation
         | IntegrandDisplayCategory::LoopMomentumBasis
@@ -1237,14 +1207,6 @@ fn render_integrand_detail_from_info(
             value: detail.kind.to_string().yellow().to_string(),
         },
         DetailSummaryRow {
-            field: "generated 3D representations".to_string(),
-            value: detail
-                .generated_representations
-                .iter()
-                .map(ToString::to_string)
-                .join(", "),
-        },
-        DetailSummaryRow {
             field: "compile enabled".to_string(),
             value: detail
                 .generation_compilation
@@ -1361,10 +1323,6 @@ fn render_processes_table(state: &State, state_folder: &Path) -> Result<()> {
         "process".bold().blue().to_string(),
         "# integrands".bold().blue().to_string(),
         "integrand names".bold().blue().to_string(),
-        "generated 3D representations / integrand"
-            .bold()
-            .blue()
-            .to_string(),
         "graphs / integrand".bold().blue().to_string(),
         "graph groups / integrand".bold().blue().to_string(),
         ".bin size / integrand".bold().blue().to_string(),
@@ -1386,7 +1344,6 @@ fn render_processes_table(state: &State, state_folder: &Path) -> Result<()> {
                 .to_string(),
             metrics.len().to_string().yellow().to_string(),
             format_integrand_names(&metrics),
-            format_metrics_column(&metrics, |metric| metric.generated_representations.clone()),
             format_metrics_column(&metrics, |metric| metric.graphs.to_string()),
             format_metrics_column(&metrics, |metric| metric.graph_groups.to_string()),
             format_metrics_column(&metrics, |metric| {
@@ -1420,7 +1377,6 @@ fn render_integrands_table(
         "process #".bold().blue().to_string(),
         "process".bold().blue().to_string(),
         "integrand".bold().blue().to_string(),
-        "generated 3D representations".bold().blue().to_string(),
         "graphs".bold().blue().to_string(),
         "graph groups".bold().blue().to_string(),
         ".bin size".bold().blue().to_string(),
@@ -1447,7 +1403,6 @@ fn render_integrands_table(
                     .bold()
                     .to_string(),
                 metric.name.cyan().to_string(),
-                metric.generated_representations,
                 metric.graphs.to_string().yellow().to_string(),
                 metric.graph_groups.to_string().yellow().to_string(),
                 format_artifact_size(metric.bin_disk_size_bytes),
@@ -1520,17 +1475,6 @@ fn integrand_metrics_from_amplitude(
     let artifact_sizes = collect_integrand_artifact_sizes(state_folder, process, &amplitude.name)?;
     Ok(IntegrandMetrics {
         name: amplitude.name.clone(),
-        generated_representations: amplitude
-            .integrand
-            .as_ref()
-            .map(|integrand| {
-                integrand
-                    .generated_representations()
-                    .iter()
-                    .map(ToString::to_string)
-                    .join(", ")
-            })
-            .unwrap_or_else(|| "not generated (graphs only)".to_string()),
         graphs: amplitude.graphs.len(),
         graph_groups: amplitude.graph_group_structure.len(),
         bin_disk_size_bytes: artifact_sizes.bin_disk_size_bytes,
@@ -1547,17 +1491,6 @@ fn integrand_metrics_from_cross_section(
         collect_integrand_artifact_sizes(state_folder, process, &cross_section.name)?;
     Ok(IntegrandMetrics {
         name: cross_section.name.clone(),
-        generated_representations: cross_section
-            .integrand
-            .as_ref()
-            .map(|integrand| {
-                integrand
-                    .generated_representations()
-                    .iter()
-                    .map(ToString::to_string)
-                    .join(", ")
-            })
-            .unwrap_or_else(|| "not generated (graphs only)".to_string()),
         graphs: cross_section.supergraphs.len(),
         graph_groups: cross_section.graph_group_structure.len(),
         bin_disk_size_bytes: artifact_sizes.bin_disk_size_bytes,
@@ -2129,70 +2062,6 @@ mod test {
     };
 
     #[test]
-    fn representation_details_distinguish_native_keys_from_execution_slots() {
-        use crate::integrand_info::IntegrandOrientationInfo;
-        use three_dimensional_reps::RepresentationMode::{Cff, Ltd};
-
-        for representations in [vec![(Cff, 2)], vec![(Ltd, 30)], vec![(Ltd, 30), (Cff, 2)]] {
-            let complete = representations.iter().any(|(mode, _)| *mode == Ltd);
-            let mut group = IntegrandGraphGroupInfo {
-                group_id: 0,
-                graphs: vec![IntegrandGraphInfo {
-                    graph_id: 0,
-                    name: "polygon".to_string(),
-                    is_master: true,
-                    native_residue_counts: representations.clone(),
-                    threshold_counterterm_directives: Vec::new(),
-                    threshold_counterterms: None,
-                }],
-                complete_residue_sum: complete,
-                orientation_edge_ids: vec![1, 2],
-                orientations: vec![IntegrandOrientationInfo {
-                    orientation_id: 0,
-                    signature: vec![1, -1],
-                }],
-                loop_momentum_bases: Vec::new(),
-                threshold_esurface_ids: Vec::new(),
-                threshold_esurfaces: Vec::new(),
-                cuts: Vec::new(),
-            };
-            if !complete {
-                group.orientations.push(IntegrandOrientationInfo {
-                    orientation_id: 1,
-                    signature: vec![-1, 1],
-                });
-            }
-            let rendered = super::render_integrand_category_table(
-                &[&group],
-                IntegrandDisplayCategory::Orientation,
-                false,
-            )
-            .unwrap()
-            .unwrap();
-            let native = representations
-                .iter()
-                .map(|(mode, count)| format!("{mode}={count}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            assert!(
-                rendered.contains(&format!("native residue keys: {native}")),
-                "{rendered}"
-            );
-            assert!(rendered.contains("execution orientation"));
-            assert_eq!(rendered.contains("complete residue sum"), complete);
-            if complete {
-                assert!(rendered.contains("1 execution slot(s), complete sum"));
-                assert!(!rendered.contains("30 execution slot"));
-            } else {
-                let rows =
-                    super::category_rows(&group, IntegrandDisplayCategory::Orientation, false);
-                assert_eq!(rows.len(), 2);
-                assert_ne!(rows[0].value, rows[1].value);
-            }
-        }
-    }
-
-    #[test]
     fn threshold_rendering_dims_or_hides_non_existing_associations() {
         let thresholds = vec![
             IntegrandCutThresholdInfo {
@@ -2231,7 +2100,6 @@ mod test {
                 threshold_counterterm_directives: Vec::new(),
                 threshold_counterterms: None,
             }],
-            complete_residue_sum: false,
             orientation_edge_ids: Vec::new(),
             orientations: Vec::new(),
             loop_momentum_bases: Vec::new(),
@@ -2276,7 +2144,6 @@ mod test {
                     threshold_counterterms: None,
                 },
             ],
-            complete_residue_sum: false,
             orientation_edge_ids: Vec::new(),
             orientations: Vec::new(),
             loop_momentum_bases: Vec::new(),

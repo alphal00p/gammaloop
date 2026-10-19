@@ -52,9 +52,6 @@ mod ltd;
     Encode,
     Decode,
 )]
-#[cfg_attr(feature = "json_schema", derive(schemars::JsonSchema))]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
-#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[serde(rename_all = "snake_case")]
 pub enum RepresentationMode {
     #[default]
@@ -2338,8 +2335,6 @@ struct BoundedCffBuilder<'a> {
 
 impl<'a> BoundedCffBuilder<'a> {
     fn new(parsed: &'a ParsedGraph, options: &Generate3DExpressionOptions) -> Result<Self> {
-        #[cfg(feature = "generation-audit")]
-        audit::record_cff();
         let bounds = normalize_energy_degree_bounds(
             options.energy_degree_bounds.as_deref().unwrap_or(&[]),
             parsed.internal_edges.len(),
@@ -3003,8 +2998,6 @@ impl<'a> KnownFactorCffBuilder<'a> {
         sampling_scale_mode: NumeratorSamplingScaleMode,
         medium_mode: MediumMode,
     ) -> Self {
-        #[cfg(feature = "generation-audit")]
-        audit::record_cff();
         Self {
             original,
             source_prefactor: Rational::from(

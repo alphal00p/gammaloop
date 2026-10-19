@@ -3,7 +3,6 @@
 
 import builtins
 import enum
-import fractions
 import numpy
 import numpy.typing
 import os
@@ -43,22 +42,27 @@ class AdditionalWeight:
 @typing.final
 class BatchEvaluationResult:
     r"""
-    One evaluation record per input sample, plus optional batch stability diagnostics.
+    Per-sample evaluations paired with one observable snapshot for the complete batch.
     """
     @property
-    def samples(self) -> builtins.list[EvaluationResult]:
+    def samples(self) -> builtins.list[SampleEvaluationResult]:
         r"""
         Evaluation records in the same order as the requested samples.
+        """
+    @property
+    def observables(self) -> dict:
+        r"""
+        Observable snapshots accumulated across the complete sample batch.
         """
     @property
     def numerical_stability(self) -> typing.Optional[dict]: ...
     def __str__(self) -> builtins.str:
         r"""
-        Return a human-readable per-sample batch summary.
+        Return a human-readable batch and observable summary.
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return the human-readable per-sample batch summary.
+        Return the human-readable batch and observable summary.
         """
 
 @typing.final
@@ -244,8 +248,13 @@ class DotExportSettings:
 @typing.final
 class EvaluationResult:
     r"""
-    Numerical value, metadata, stability records, and generated events for one sample.
+    Single-sample evaluation paired with the observable snapshot for that sample.
     """
+    @property
+    def sample(self) -> SampleEvaluationResult:
+        r"""
+        Evaluation record for the requested sample.
+        """
     @property
     def integrand_result(self) -> complex:
         r"""
@@ -289,21 +298,25 @@ class EvaluationResult:
     @property
     def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:
         r"""
-        Ordered stability-level attempts, or ``None`` when metadata was omitted.
-        Each attempt records its precision and representation; precision may repeat.
+        Per-precision stability attempts, or ``None`` when metadata was omitted.
         """
     @property
     def event_groups(self) -> builtins.list[EventGroup]:
         r"""
-        All correlated event groups for this sample, before the outer sampler weight.
+        Correlated event groups produced while evaluating this sample.
+        """
+    @property
+    def observables(self) -> dict:
+        r"""
+        Observable snapshots produced from the same Monte Carlo sample.
         """
     def __str__(self) -> builtins.str:
         r"""
-        Return a human-readable evaluation summary.
+        Return a human-readable evaluation and observable summary.
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return the human-readable evaluation summary.
+        Return the human-readable evaluation and observable summary.
         """
 
 @typing.final
@@ -467,11 +480,6 @@ class GammaLoopAPI:
         """
     def is_read_only_state(self) -> builtins.bool: ...
     def state_access_mode(self) -> builtins.str: ...
-    def observable_accumulator(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> ObservableAccumulator:
-        r"""
-        Create empty observable statistics for the selected integrand.
-        Evaluation itself never commits observable moments. See ``ObservableAccumulator``.
-        """
     def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = False, minimal_output: builtins.bool = False, return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = False, integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:
         r"""
         Evaluate one integration or momentum-space sample.
@@ -511,7 +519,7 @@ class GammaLoopAPI:
         Returns
         -------
         EvaluationResult
-            One independent sample, with an unweighted contribution for configured observables.
+            The sample evaluation and the observable snapshot for its one-row batch.
 
         Raises
         ------
@@ -525,8 +533,8 @@ class GammaLoopAPI:
         ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
         forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
         fields use the package's ``float64`` output contract. Evaluation may
-        warm the integrand and update in-memory caches even in a read-only-state
-        session. Observable statistics change only through explicit accumulation.
+        warm the integrand and update in-memory caches or observable snapshots even in
+        a read-only-state session.
 
         See Also
         --------
@@ -597,7 +605,7 @@ class GammaLoopAPI:
         Returns
         -------
         BatchEvaluationResult
-            One evaluation per input sample and optional numerical-stability diagnostics.
+            Per-sample evaluations and one observable snapshot for the complete batch.
 
         Raises
         ------
@@ -611,7 +619,7 @@ class GammaLoopAPI:
         ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
         forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
         fields use the package's ``float64`` output contract. Evaluation may
-        update numerical caches; observable statistics change only through explicit accumulation.
+        update in-memory caches or observable snapshots in a read-only-state session.
 
         See Also
         --------
@@ -620,7 +628,7 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Evaluate two rows and explicitly accumulate their correlated observable contributions:
+        Evaluate two rows and inspect their per-sample events and batch-level histograms:
 
         ```python
         from pathlib import Path
@@ -641,12 +649,8 @@ class GammaLoopAPI:
         result = api.evaluate_samples(points, return_events=True)
         assert len(result.samples) == 2
         assert all(sample.event_groups for sample in result.samples)
-        accumulator = api.observable_accumulator()
-        for sample in result.samples:
-            accumulator.add_sample(sample, sample.integrator_weight)
-        histograms = accumulator.snapshot()
-        assert histograms["leading_jet_pt_hist"].sample_count == 2
-        assert len(histograms["leading_jet_pt_hist"].bins) == 8
+        assert result.observables["leading_jet_pt_hist"].sample_count == 2
+        assert len(result.observables["leading_jet_pt_hist"].bins) == 8
         ```
 
         The fixture exercises the API surface; its powered coupling selector is not a validated
@@ -692,14 +696,13 @@ class GammaLoopAPI:
             Per graph, a list of ``(loop_edges, external_edges, edge_signatures)``
             tuples. Each signature contains its loop and external coefficients.
         """
-    def get_residue_map(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, three_dimensional_representation: typing.Optional[builtins.str] = None) -> ResidueMap:
+    def get_orientations(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> builtins.list[builtins.dict[builtins.int, builtins.int]]:
         r"""
-        Return a detached snapshot of one graph's persisted native residue map.
+        Return the causal-flow orientations generated for one graph.
 
-        Keys retain the complete direction vector and exact ordered affine loop and
-        edge energy maps. Values retain every native residue ID and all scalar
-        variants, with exact Fraction coefficients and unexpanded denominator trees.
-        This is graph-level generation data, not the evaluated UV/threshold catalogue.
+        Each returned dictionary maps an edge id to ``1`` (default), ``-1``
+        (reversed), or ``0`` (undirected). Supply process and integrand selectors when
+        the active state does not identify a unique integrand.
 
         Parameters
         ----------
@@ -708,20 +711,12 @@ class GammaLoopAPI:
         process_id : int, optional
             Numeric process identifier; omit when process selection is unambiguous.
         integrand_name : str, optional
-            Integrand containing the graph; omit when selection is unambiguous.
-        three_dimensional_representation : str, optional
-            ``cff`` or ``ltd``; defaults to the first representation generated for
-            this integrand, independently of current mutable generation settings.
+            Integrand containing the graph; omit when integrand selection is unambiguous.
 
         Returns
         -------
-        ResidueMap
-            Detached native entries, shared surfaces and persisted normalization metadata.
-
-        Raises
-        ------
-        ValueError
-            If the graph or representation is unavailable or the integrand is ungenerated.
+        list[dict[int, int]]
+            One edge-direction mapping per generated orientation.
         """
     def get_model(self) -> builtins.str:
         r"""
@@ -1055,9 +1050,10 @@ class HistogramAccumulator:
 
     Notes
     -----
-    Each fill call represents one independent sample. Repeated entries in a bin
-    are summed before their squared contribution is recorded, matching the native
-    observable pipeline. Empty fills still increment the sample count.
+    The example below deliberately places at most one entry in each bin. If several correlated
+    entries land in one bin, the current helper records their squared weights separately rather
+    than grouping their weights like GammaLoop's native observable pipeline. Do not replay raw
+    event groups through this class until that statistical contract is aligned.
 
     Examples
     --------
@@ -1529,11 +1525,6 @@ class IntegrandGraph:
         Whether this graph is the representative graph of its group.
         """
     @property
-    def native_residue_counts(self) -> builtins.list[tuple[builtins.str, builtins.int]]:
-        r"""
-        Native residue-map counts as (representation, count), in generation order.
-        """
-    @property
     def threshold_counterterm_directives(self) -> builtins.list[ThresholdCountertermDirective]:
         r"""
         Threshold directives requested for this graph, including implicit defaults.
@@ -1560,11 +1551,6 @@ class IntegrandGraphGroup:
         Graphs in this group, with the representative graph marked as master.
         """
     @property
-    def complete_residue_sum(self) -> builtins.bool:
-        r"""
-        Whether every native residue is evaluated through the complete-sum layout.
-        """
-    @property
     def orientation_edge_ids(self) -> builtins.list[builtins.int]:
         r"""
         Edge identifiers that establish the ordering of every orientation signature.
@@ -1572,7 +1558,7 @@ class IntegrandGraphGroup:
     @property
     def orientations(self) -> builtins.list[IntegrandOrientation]:
         r"""
-        Runtime execution orientations; a complete-sum slot is not a native residue key.
+        Available causal-flow orientations for the representative graph.
         """
     @property
     def loop_momentum_bases(self) -> builtins.list[IntegrandLoopMomentumBasis]:
@@ -1619,11 +1605,6 @@ class IntegrandInfo:
     def kind(self) -> builtins.str:
         r"""
         ``"amplitude"`` or ``"cross section"``.
-        """
-    @property
-    def generated_representations(self) -> builtins.list[builtins.str]:
-        r"""
-        Generated representations, in persisted generation order.
         """
     @property
     def generation_backend(self) -> builtins.str:
@@ -1816,39 +1797,6 @@ class IntegrationTableComponentResult:
     def max_weight_impact(self) -> builtins.float: ...
 
 @typing.final
-class LinearEnergyExpression:
-    r"""
-    Immutable exact affine energy expression, retaining native term order.
-    """
-    @property
-    def internal_terms(self) -> tuple[tuple[int, fractions.Fraction], ...]:
-        r"""
-        Ordered ``(internal_edge_id, Fraction)`` terms multiplying on-shell energies.
-        """
-    @property
-    def external_terms(self) -> tuple[tuple[int, fractions.Fraction], ...]:
-        r"""
-        Ordered ``(external_edge_id, Fraction)`` terms multiplying external energies.
-        """
-    @property
-    def uniform_scale_coeff(self) -> fractions.Fraction:
-        r"""
-        Exact coefficient of the independent numerator sampling scale M.
-        """
-    @property
-    def constant(self) -> fractions.Fraction:
-        r"""
-        Exact constant energy shift.
-        """
-    @property
-    def canonical_string(self) -> builtins.str:
-        r"""
-        Native symbolic form for diagnostics; equality uses the exact stored terms.
-        """
-    def __eq__(self, value: builtins.object, /) -> builtins.bool: ...
-    def __hash__(self) -> builtins.int: ...
-
-@typing.final
 class MaxWeightInfoEntry:
     r"""
     Largest observed contribution for one signed integration component.
@@ -1863,180 +1811,67 @@ class MaxWeightInfoEntry:
     def coordinates(self) -> typing.Optional[builtins.str]: ...
 
 @typing.final
-class ObservableAccumulator:
+class SampleEvaluationResult:
     r"""
-    Independent observable statistics compiled from one integrand's definitions.
-
-    Construct with ``api.observable_accumulator()`` and add exactly one evaluation
-    record per independent draw. The coefficient is the complete outer weight;
-    zero keeps the attempted sample count without fills. Event groups stay unmodified.
-
-    Examples
-    --------
-    ```python
-    accumulator = api.observable_accumulator()
-    batch = api.evaluate_samples(points)
-    for sample in batch.samples:
-        accumulator.add_sample(sample, sample.integrator_weight)
-    histograms = accumulator.snapshot()
-    ```
-    """
-    def add_sample(self, sample: EvaluationResult, coefficient: builtins.float) -> None:
-        r"""
-        Commit one sample with an explicit outer weight, including zero-weight misses.
-        """
-    def merge_in_place(self, other: ObservableAccumulator) -> None:
-        r"""
-        Merge independent sample statistics without changing the source accumulator.
-        """
-    @staticmethod
-    def sum_independent_estimates(accumulators: typing.Sequence[ObservableAccumulator]) -> typing.Any:
-        r"""
-        Sum means and variances of independent populations, preserving their separate counts.
-        Merge batches within a stratum before passing its accumulator here.
-        """
-    def snapshot(self) -> dict:
-        r"""
-        Return mergeable raw histogram statistics, without clearing or committing them.
-        """
-
-@typing.final
-class Residue:
-    r"""
-    One expression-local residue entry; several native IDs can share the same key.
+    Numerical value, metadata, stability records, and generated events for one sample.
     """
     @property
-    def native_id(self) -> builtins.int:
+    def integrand_result(self) -> complex:
         r"""
-        Native expression-local ID, independent of runtime execution slots.
+        Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
         """
     @property
-    def label(self) -> typing.Optional[builtins.str]: ...
-    @property
-    def numerator_map_index(self) -> typing.Optional[builtins.int]: ...
-    @property
-    def variants(self) -> builtins.list[ResidueVariant]: ...
-
-@typing.final
-class ResidueMap:
-    r"""
-    Detached snapshot of one graph's persisted native 3D representation.
-
-    This is the generated graph-level residue map, not the evaluated UV/threshold
-    catalogue or a partition into independently integrable LTD contributions.
-    """
-    @property
-    def graph_name(self) -> builtins.str: ...
-    @property
-    def representation(self) -> builtins.str: ...
-    @property
-    def entries(self) -> dict[ResidueMapKey, list[Residue]]:
+    def absolute_integrand_result(self) -> typing.Optional[complex]:
         r"""
-        New dict keyed by immutable native residue identities; every native ID is retained.
+        Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
         """
     @property
-    def surfaces(self) -> dict:
+    def integrator_weight(self) -> builtins.float:
         r"""
-        Shared native surface records, keyed by tagged ``(kind, id)`` references.
-        Unit and infinite surfaces use literal references with ID None.
+        Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
         """
     @property
-    def residual_denominators(self) -> list:
+    def generated_event_count(self) -> typing.Optional[builtins.int]:
         r"""
-        Unintegrated four-dimensional denominator records, preserving edge ID and power.
+        Number of candidate events generated, or ``None`` when metadata was omitted.
         """
     @property
-    def energy_factor_ownership(self) -> builtins.str: ...
-    @property
-    def energy_factor_components(self) -> list:
+    def accepted_event_count(self) -> typing.Optional[builtins.int]:
         r"""
-        Source components with their edge IDs, energy ownership and uniform source-frame sign.
+        Number of generated events accepted by selectors, or ``None`` without metadata.
         """
     @property
-    def source_frame(self) -> builtins.int:
+    def event_processing_time_seconds(self) -> typing.Optional[builtins.float]:
         r"""
-        Uniform source contour sign, composed over independently generated components.
-        """
-
-@typing.final
-class ResidueMapKey:
-    r"""
-    Immutable native residue identity, independent of IDs, labels and scalar variants.
-    """
-    @property
-    def directions(self) -> tuple[int, ...]:
-        r"""
-        Complete native edge-direction vector: default 1, reversed -1, undirected 0.
+        Time spent building and selecting events, in seconds, or ``None`` without metadata.
         """
     @property
-    def loop_energy_map(self) -> tuple[LinearEnergyExpression, ...]:
+    def parameterization_jacobian(self) -> typing.Optional[builtins.float]:
         r"""
-        Exact affine energies in native loop-coordinate order.
+        Sample parameterization Jacobian, or ``None`` when no Jacobian was supplied.
         """
     @property
-    def edge_energy_map(self) -> tuple[LinearEnergyExpression, ...]:
+    def is_nan(self) -> typing.Optional[builtins.bool]:
         r"""
-        Exact affine energies in native internal-edge order.
+        Whether evaluation metadata flagged a non-finite result, or ``None`` without metadata.
         """
     @property
-    def canonical_string(self) -> builtins.str:
+    def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:
         r"""
-        The native ``residue_map_key()`` diagnostic string.
-        """
-    def __eq__(self, value: builtins.object, /) -> builtins.bool: ...
-    def __hash__(self) -> builtins.int: ...
-
-@typing.final
-class ResidueVariant:
-    r"""
-    One scalar variant of a native residue, with unexpanded denominator topology.
-    """
-    @property
-    def thermal_weight(self) -> ThermalWeight:
-        r"""
-        Native medium weight; vacuum LTD variants have no distribution factors.
+        Per-precision stability attempts, or ``None`` when metadata was omitted.
         """
     @property
-    def origin(self) -> typing.Optional[builtins.str]: ...
-    @property
-    def prefactor(self) -> fractions.Fraction:
+    def event_groups(self) -> builtins.list[EventGroup]:
         r"""
-        Exact scalar prefactor, including the separately recorded absorbed signs.
+        Correlated event groups produced while evaluating this sample.
         """
-    @property
-    def half_edges(self) -> builtins.list[builtins.int]:
+    def __str__(self) -> builtins.str:
         r"""
-        Ordered edge occurrences supplying factors ``1/(2 E_edge)``; repetitions remain.
+        Return a human-readable evaluation summary.
         """
-    @property
-    def denominator_edges(self) -> builtins.list[builtins.int]:
+    def __repr__(self) -> builtins.str:
         r"""
-        Ordered original denominator-edge occurrences, including repeated edges.
-        """
-    @property
-    def denominator_surface_signs(self) -> dict:
-        r"""
-        Absorbed orientation signs keyed by tagged surface references.
-        """
-    @property
-    def denominator_edge_support_signs(self) -> dict:
-        r"""
-        Absorbed routing signs keyed by ordered tuples of denominator-edge support.
-        """
-    @property
-    def uniform_scale_power(self) -> builtins.int:
-        r"""
-        Power of ``1/M`` multiplying this variant.
-        """
-    @property
-    def numerator_surfaces(self) -> builtins.list[tuple[builtins.str, typing.Optional[builtins.int]]]:
-        r"""
-        Ordered numerator-surface references, preserving multiplicities.
-        """
-    @property
-    def denominator(self) -> dict:
-        r"""
-        Native tree: root ID (or None) and nodes with surface, children and parent IDs.
+        Return the human-readable evaluation summary.
         """
 
 @typing.final
@@ -2163,17 +1998,12 @@ class SlotIntegrationResult:
 @typing.final
 class StabilityResult:
     r"""
-    Outcome and cost of one stability attempt, including precision and representation.
+    Outcome and cost of one numerical-stability precision level.
     """
     @property
     def precision(self) -> builtins.str:
         r"""
         Numerical precision used for this stability level.
-        """
-    @property
-    def three_dimensional_representation(self) -> builtins.str:
-        r"""
-        Generated three-dimensional representation evaluated at this level.
         """
     @property
     def estimated_relative_accuracy(self) -> typing.Optional[builtins.float]:
@@ -2197,43 +2027,6 @@ class StabilityResult:
         r"""
         Total wall-clock time spent at this precision level, in seconds.
         """
-
-@typing.final
-class ThermalDistributionFactor:
-    r"""
-    One exact distribution factor attached to a thermal CFF residue.
-    """
-    @property
-    def edge_id(self) -> builtins.int: ...
-    @property
-    def sign(self) -> builtins.int:
-        r"""
-        Contour offset; the physical chemical-potential orientation is in the residue key.
-        """
-    @property
-    def derivative_order(self) -> builtins.int: ...
-
-@typing.final
-class ThermalNumerator:
-    r"""
-    Ordered positive and negative energy sets in one thermal numerator factor.
-    """
-    @property
-    def positive_energies(self) -> builtins.list[builtins.int]: ...
-    @property
-    def negative_energies(self) -> builtins.list[builtins.int]: ...
-
-@typing.final
-class ThermalWeight:
-    r"""
-    Detached distribution factors, preserving derivatives and repeated occurrences.
-    """
-    @property
-    def medium_mode(self) -> builtins.str: ...
-    @property
-    def numerators(self) -> builtins.list[ThermalNumerator]: ...
-    @property
-    def distributions(self) -> builtins.list[ThermalDistributionFactor]: ...
 
 @typing.final
 class ThresholdCountertermAssociationMetadata:

@@ -22,6 +22,15 @@ use crate::shorthands::schoonschip::{SchoonschipSettings, SchoonschipWithSetting
 spenso::symbolica_init_lazy_static! {
     /// Symbolica-level Levi-Civita symbol. The `Antisymmetric` attribute lets
     /// Symbolica canonicalize argument order and annihilate repeated arguments.
+    ///
+    /// In four Minkowski dimensions its normalization is fixed by the identities
+    /// that produce it: the axial trace `Tr[γ5 γ^μ γ^ν γ^ρ γ^σ] = 4 ε^{μνρσ}`,
+    /// the three-gamma expansion with `-ε^{μνρσ} γ_σ γ5`, and the pair rule
+    /// `ε(a…) ε(b…) = det g(a_i, b_j)`. With the metric `(+,−,−,−)` and
+    /// `γ5 = i γ^0 γ^1 γ^2 γ^3` (`γ5² = 1`, `diag(−1,−1,1,1)` in the Weyl basis),
+    /// they require `ε^{0123} = −i`: the tensor is `−i` times the real
+    /// Levi-Civita symbol with `ε^{0123} = +1`. [`contract_epsilon4`] evaluates
+    /// it on explicit components.
     pub static EPSILON_SYMBOL, EPSILON_SYMBOL_INNER: Symbol =
         || tensor_symbol!("spenso::epsilon"; Antisymmetric);
 }
@@ -71,6 +80,17 @@ pub fn epsilon4<'a, 'b, 'c, 'd>(
         .add_arg(rho)
         .add_arg(sigma)
         .finish()
+}
+
+/// Contracts the four-dimensional Minkowski epsilon with four covectors given
+/// by components, `ε^{ν1ν2ν3ν4} r1[ν1] r2[ν2] r3[ν3] r4[ν4] = ε^{0123} det(r)`
+/// with `ε^{0123} = −i` (see [`EPSILON_SYMBOL`]).
+///
+/// A row holds the covariant components `a_ν = g_νμ a^μ` of a contracted
+/// vector, or a unit row `δ_ν^μ` that keeps the contravariant index `μ`. For
+/// four vectors with contravariant components, `ε(a,b,c,d) = i det[a;b;c;d]`.
+pub fn contract_epsilon4(rows: &[[Atom; 4]; 4]) -> Atom {
+    -Atom::i() * EpsilonSimplifierPass::determinant(4, |i, j| rows[i][j].clone())
 }
 
 /// Simplifies epsilon-metric contractions and epsilon-pair contractions.
@@ -252,30 +272,30 @@ impl EpsilonSimplifierPass {
         }
     }
 
-    /// Emits the determinant `det(g(left_i,right_j))` by summing over all
-    /// signed permutations of the right indices.
+    /// Emits the determinant `det(g(left_i,right_j))`.
     fn metric_determinant(left: &[Atom], right: &[Atom]) -> Atom {
-        let mut permutation = (0..right.len()).collect::<Vec<_>>();
+        Self::determinant(right.len(), |i, j| ETS.metric_literal(&left[i], &right[j]))
+    }
+
+    /// Sums `sign(π) Π_i entry(i, π(i))` over all permutations `π`.
+    fn determinant(size: usize, entry: impl Fn(usize, usize) -> Atom) -> Atom {
+        let mut permutation = (0..size).collect::<Vec<_>>();
         let mut sum = Atom::Zero;
-        Self::determinant_terms(left, right, 0, &mut permutation, 1, &mut sum);
+        Self::determinant_terms(&entry, 0, &mut permutation, 1, &mut sum);
         sum
     }
 
     fn determinant_terms(
-        left: &[Atom],
-        right: &[Atom],
+        entry: &impl Fn(usize, usize) -> Atom,
         position: usize,
         permutation: &mut [usize],
         sign: i64,
         sum: &mut Atom,
     ) {
         if position == permutation.len() {
-            let term = left
-                .iter()
-                .enumerate()
-                .fold(Atom::num(sign), |product, (i, arg)| {
-                    product * ETS.metric_literal(arg, &right[permutation[i]])
-                });
+            let term = (0..permutation.len()).fold(Atom::num(sign), |product, i| {
+                product * entry(i, permutation[i])
+            });
             *sum += term;
             return;
         }
@@ -283,7 +303,7 @@ impl EpsilonSimplifierPass {
         for i in position..permutation.len() {
             permutation.swap(position, i);
             let next_sign = if i == position { sign } else { -sign };
-            Self::determinant_terms(left, right, position + 1, permutation, next_sign, sum);
+            Self::determinant_terms(entry, position + 1, permutation, next_sign, sum);
             permutation.swap(position, i);
         }
     }
@@ -347,16 +367,26 @@ impl EpsilonSimplifierPass {
 #[cfg(test)]
 mod test {
     use insta::assert_snapshot;
-    use spenso::{g, mink, network::parsing::AtomStructureExt, p, q};
+    use spenso::{
+        g, mink,
+        network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG},
+        p, q,
+        structure::partial::PartialStructure,
+        trace,
+    };
     use symbolica::{
-        atom::{Atom, AtomCore},
+        atom::{Atom, AtomCore, AtomView, FunctionBuilder},
         parse,
     };
     use symbolica_utils::AtomPrintExt;
 
-    use crate::{epsilon as eps, test_support::test_initialize};
+    use crate::{
+        epsilon as eps, gamma, gamma5,
+        tensor::{AlgebraSettings, SymbolicTensor},
+        test_support::test_initialize,
+    };
 
-    use super::{EpsilonSimplifier, epsilon4};
+    use super::{EPSILON_SYMBOL, EpsilonSimplifier, contract_epsilon4, epsilon4};
 
     #[test]
     fn color_epsilon_dual_pair_contracts_to_positive_norm() {
@@ -429,6 +459,76 @@ mod test {
                 parse!(expected, default_namespace = "spenso")
             );
         }
+    }
+
+    #[test]
+    fn contracted_epsilon4_reproduces_the_axial_trace() {
+        // With unit vectors e_μ, e̸_0 = γ^0 and e̸_k = -γ^k, so
+        // γ5 = i γ^0 γ^1 γ^2 γ^3 = -i e̸_0 e̸_1 e̸_2 e̸_3. Both traces are
+        // simplified by Idenso and evaluated on contravariant components.
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let components: [[i64; 4]; 8] = [
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+            [3, 1, -2, 5],
+            [2, -1, 4, 1],
+            [7, 3, 1, -2],
+            [1, 5, -3, 2],
+        ];
+        let vectors: Vec<_> = (0..components.len())
+            .map(|i| {
+                let name = format!("idenso::epsilon_components::v{i}");
+                FunctionBuilder::new(SPENSO_TAG.rank_one_tensor_symbol(&name))
+                    .add_arg(r.mink4.to_symbolic([]))
+                    .finish()
+            })
+            .collect();
+        let lowered = |argument: AtomView| -> [Atom; 4] {
+            let vector = vectors
+                .iter()
+                .position(|v| v.as_view() == argument)
+                .unwrap();
+            std::array::from_fn(|mu| {
+                let sign = if mu == 0 { 1 } else { -1 };
+                Atom::num(sign * components[vector][mu])
+            })
+        };
+        let evaluate = |factors: Vec<Atom>| {
+            SymbolicTensor::<PartialStructure>::infer(trace!(&spin; factors))
+                .unwrap()
+                .simplify_algebra(&AlgebraSettings::hep())
+                .unwrap()
+                .into_expression()
+                .replace_map(|part, _, out| {
+                    let AtomView::Fun(f) = part else {
+                        return;
+                    };
+                    let arguments: Vec<_> = f.iter().collect();
+                    if f.get_symbol() == *EPSILON_SYMBOL {
+                        **out = contract_epsilon4(&std::array::from_fn(|i| lowered(arguments[i])));
+                    } else if f.get_symbol() == ETS.metric {
+                        let vector = vectors.iter().position(|v| v.as_view() == arguments[1]);
+                        **out = lowered(arguments[0])
+                            .into_iter()
+                            .zip(components[vector.unwrap()])
+                            .fold(Atom::Zero, |sum, (a, b)| sum + a * Atom::num(b));
+                    }
+                })
+                .expand()
+        };
+        let slashed = |range: std::ops::Range<usize>| range.map(|i| gamma!(&vectors[i]));
+        let axial = evaluate(std::iter::once(gamma5!()).chain(slashed(4..8)).collect());
+        let explicit = evaluate(slashed(0..8).collect());
+        assert!(!axial.is_zero());
+        assert_eq!(axial, -Atom::i() * explicit);
+        // ε(a,b,c,d) = i det[a;b;c;d] for contravariant components.
+        assert_eq!(
+            contract_epsilon4(&std::array::from_fn(|i| lowered(vectors[i].as_view()))),
+            Atom::i()
+        );
     }
 
     #[test]

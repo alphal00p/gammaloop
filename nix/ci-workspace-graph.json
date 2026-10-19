@@ -434,7 +434,6 @@
         "native"
       ],
       "three-dimensional-reps": [
-        "cli",
         "display"
       ]
     },
@@ -452,8 +451,7 @@
         "shadowing"
       ],
       "three-dimensional-reps": [
-        "eval",
-        "generation-audit"
+        "eval"
       ],
       "vakint": []
     },
@@ -1804,7 +1802,6 @@
         "native"
       ],
       "three-dimensional-reps": [
-        "cli",
         "display"
       ]
     },
@@ -1822,8 +1819,7 @@
         "shadowing"
       ],
       "three-dimensional-reps": [
-        "eval",
-        "generation-audit"
+        "eval"
       ],
       "vakint": []
     },

@@ -2137,11 +2137,6 @@ impl CoreIterationState {
                     if raw_batch.samples.len() < samples.len() {
                         return Ok(0);
                     }
-                    for result in &mut raw_batch.samples {
-                        integrand.process_evaluation_result(result)?;
-                        // Slot integration retains moments, not the event payload.
-                        result.event_groups.clear();
-                    }
                     batch_evaluation_time += evaluation_start.elapsed();
                     total_sample_evaluations += raw_batch.samples.len();
                     batch_stats = batch_stats.merged(&raw_batch.statistics);
@@ -2819,24 +2814,7 @@ where
         .sampling
         .get_parameterization_settings()
         .is_none();
-    let representation_stack = primary
-        .settings
-        .stability
-        .levels
-        .iter()
-        .map(|level| {
-            let representation = match &primary.integrand {
-                Integrand::ProcessIntegrand(integrand) => {
-                    level.resolved_representation(integrand.generated_representations())?
-                }
-                #[cfg(test)]
-                Integrand::TestProbe(_) => level
-                    .resolved_representation(&[crate::settings::global::RepresentationMode::Cff])?,
-            };
-            Ok(format!("{} / {}", level.precision, representation))
-        })
-        .collect::<Result<Vec<_>>>()?
-        .join(" → ");
+    let use_ltd = primary.settings.general.use_ltd;
     let integration_seed = primary.settings.integrator.seed;
     let integrated_phase = primary.settings.integrator.integrated_phase;
     let target_relative_accuracy = primary.settings.integrator.target_relative_accuracy;
@@ -2878,8 +2856,8 @@ where
     let t_start = Instant::now();
 
     info!(
-        "Integrating using [{}] with {} {} over {} ...",
-        representation_stack,
+        "Integrating using {} ltd with {} {} over {} ...",
+        if use_ltd { "naive" } else { "cff" },
         cores,
         if cores > 1 { "cores" } else { "core" },
         grid_str
@@ -3411,11 +3389,6 @@ fn generate_event_output(
         EventOutputSettings::EventList => {
             let mut event_groups = EventGroupList::default();
             for mut result in evaluation_results {
-                let factor = Complex::new_re(result.integrator_weight);
-                process::apply_full_event_multiplicative_factor_precise(
-                    &mut result.event_groups,
-                    &factor,
-                );
                 event_groups.append(&mut result.event_groups);
             }
             EventOutput::EventList { event_groups }
@@ -4749,7 +4722,6 @@ mod tests {
         };
         evaluation.evaluation_metadata.stability_results.push(
             crate::integrands::evaluation::StabilityResult {
-                representation: crate::settings::global::RepresentationMode::Cff,
                 precision: fixture.precision,
                 estimated_relative_accuracy,
                 estimated_decimal_digits: estimated_relative_accuracy

@@ -2,9 +2,7 @@ use crate::model::ModelGammaLoopExt;
 use color_eyre::Result;
 use spenso::algebra::complex::Complex;
 use symbolica::atom::AtomCore;
-use three_dimensional_reps::{
-    RepresentationMode, ThermalDistributionCall, thermal::OCCUPATION_FORM,
-};
+use three_dimensional_reps::{ThermalDistributionCall, thermal::OCCUPATION_FORM};
 
 use crate::{
     graph::Graph,
@@ -69,14 +67,7 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
 
         // Exercise the actual evaluator input before resolving any retained
         // numerator definitions. Sector collection keeps those bodies opaque.
-        let source = &amplitude.derived_data.representations[&RepresentationMode::Cff];
-        let expression = source
-            .all_mighty_integrand
-            .iter()
-            .find_map(|(index, atom)| {
-                (*index == crate::cff::CutCFFIndex::new_all_none()).then_some(atom)
-            })
-            .expect("the amplitude retains its uncut scalar expression");
+        let expression = &amplitude.derived_data.all_mighty_integrand;
         let (bulk, sectors) = FermiSurfaceSector::extract(&amplitude.graph, expression)?;
         assert!(
             !sectors.is_empty(),
@@ -111,7 +102,7 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
 
         // These are scalar diagnostic copies. Only now resolve the definitions
         // to compare separately generated UV settings with distinct scope tags.
-        generated.push(source.resolved_integrand()?);
+        generated.push(amplitude.derived_data.resolved_integrand()?);
     }
 
     let raw = &generated[0];

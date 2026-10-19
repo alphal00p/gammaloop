@@ -117,6 +117,7 @@ impl Integrand {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate_samples_raw_with_estimate(
         &mut self,
         samples: &[Sample<F<f64>>],
@@ -149,11 +150,11 @@ impl Integrand {
         }
     }
 
-    pub fn process_evaluation_result(&mut self, result: &EvaluationResult) -> Result<()> {
+    pub fn process_evaluation_result(&mut self, result: &EvaluationResult) {
         match self {
             Integrand::ProcessIntegrand(integrand) => integrand.process_evaluation_result(result),
             #[cfg(test)]
-            Integrand::TestProbe(_) => Ok(()),
+            Integrand::TestProbe(_) => {}
         }
     }
 
@@ -196,6 +197,19 @@ impl Integrand {
     pub fn observable_snapshot_bundle(&self) -> Option<ObservableSnapshotBundle> {
         match self {
             Integrand::ProcessIntegrand(integrand) => integrand.observable_snapshot_bundle(),
+            #[cfg(test)]
+            Integrand::TestProbe(_) => None,
+        }
+    }
+
+    pub fn build_observable_snapshots_for_result(
+        &self,
+        result: &EvaluationResult,
+    ) -> Option<ObservableSnapshotBundle> {
+        match self {
+            Integrand::ProcessIntegrand(integrand) => {
+                integrand.build_observable_snapshots_for_result(result)
+            }
             #[cfg(test)]
             Integrand::TestProbe(_) => None,
         }

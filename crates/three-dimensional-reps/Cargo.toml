@@ -13,13 +13,12 @@ bench = false
 [dependencies]
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
-clap = { workspace = true, features = ["derive"], optional = true }
 itertools = { workspace = true }
 linnet = { workspace = true, features = ["bincode", "serde", "symbolica"] }
 nu-ansi-term = { workspace = true, optional = true }
-pyo3 = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 schemars = { workspace = true, optional = true }
+pyo3 = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 symbolica = { workspace = true, features = ["bincode", "serde"] }
 tabled = { workspace = true, features = ["ansi"], optional = true }
@@ -31,10 +30,7 @@ typed-index-collections = { workspace = true, features = [
 ] }
 
 [features]
-# Opt-in instrumentation for process-isolated integration tests, never production.
-generation-audit = []
 display = ["dep:tabled", "dep:nu-ansi-term"]
 eval = ["dep:serde_json"]
 json_schema = ["dep:schemars"]
 python = ["dep:pyo3"]
-cli = ["dep:clap"]

@@ -369,7 +369,7 @@ fn production_fermi_orientations_preserve_filters_and_mc_weights() -> Result<()>
         assert!(!term.fermi_surfaces.is_empty());
         let count = term.orientations.len();
         assert_eq!(
-            term.original_integrand[&RepresentationMode::Cff]
+            term.original_integrand
                 .production_orientation_ids()
                 .iter()
                 .map(|id| id.0)
@@ -401,7 +401,7 @@ fn production_fermi_orientations_preserve_filters_and_mc_weights() -> Result<()>
         let term = &generated.data.graph_terms[0];
         assert!(!term.fermi_surfaces.is_empty());
         assert_eq!(
-            term.original_integrand[&RepresentationMode::Cff]
+            term.original_integrand
                 .production_orientation_ids()
                 .iter()
                 .map(|id| id.0)

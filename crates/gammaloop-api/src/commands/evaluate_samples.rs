@@ -12,6 +12,7 @@ use gammalooprs::{
     },
     model::Model,
     momentum::ThreeMomentum,
+    observables::ObservableSnapshotBundle,
     utils::F,
 };
 use ndarray::{ArrayView1, ArrayView2};
@@ -172,6 +173,7 @@ impl<'a> EvaluateSamples<'a> {
             )?
         };
 
+        let observables = integrand.observable_snapshot_bundle().unwrap_or_default();
         let numerical_stability =
             (!self.minimal_output).then(|| raw_batch.statistics.numerical_stability_snapshot());
 
@@ -183,6 +185,7 @@ impl<'a> EvaluateSamples<'a> {
                     evaluation: evaluation.into_output(self.minimal_output),
                 })
                 .collect(),
+            observables,
             numerical_stability,
         })
     }
@@ -226,7 +229,7 @@ impl<'a> EvaluateSamplesPrecise<'a> {
         let process_ref = self.process_id.map(ProcessRef::Id);
         let (process_id, integrand_name) =
             state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
-        let raw_samples = with_warmed_integrand(
+        let (raw_samples, observables) = with_warmed_integrand(
             state,
             process_id,
             &integrand_name,
@@ -251,8 +254,8 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                         || orientations.iter().any(Option::is_some))
                 {
                     return Err(eyre!(
-                        "Graph and orientation selection are only supported in momentum-space evaluation."
-                    ));
+                    "Graph and orientation selection are only supported in momentum-space evaluation."
+                ));
                 }
 
                 if let Some(discrete_dims) = &self.discrete_dims {
@@ -265,7 +268,7 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                     }
                 }
 
-                let raw_samples = if self.momentum_space {
+                let mut raw_samples = if self.momentum_space {
                     let inputs = build_momentum_inputs(
                         integrand,
                         &self.points,
@@ -298,7 +301,8 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                         .samples
                 };
 
-                Ok(raw_samples)
+                let observables = merge_precise_observables(integrand, &mut raw_samples)?;
+                Ok((raw_samples, observables))
             },
         )?;
 
@@ -309,6 +313,7 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                     evaluation: evaluation.into_output(self.minimal_output),
                 })
                 .collect(),
+            observables,
         })
     }
 }
@@ -340,6 +345,7 @@ pub fn evaluate_sample_precise<'a>(
     }
     Ok(PreciseSingleSampleEvaluationResult {
         sample: results.samples.remove(0),
+        observables: results.observables,
     })
 }
 
@@ -370,6 +376,7 @@ pub fn evaluate_sample<'a>(
     }
     Ok(SingleSampleEvaluationResult {
         sample: results.samples.remove(0),
+        observables: results.observables,
     })
 }
 
@@ -442,9 +449,6 @@ fn normalize_integrator_weights(
                     batch_len,
                     weights.len()
                 ));
-            }
-            if weights.iter().any(|weight| !weight.is_finite()) {
-                return Err(eyre!("integrator_weights must be finite"));
             }
             Ok(weights.iter().copied().collect())
         }
@@ -709,6 +713,49 @@ fn build_momentum_inputs(
             )
         })
         .collect()
+}
+
+fn clear_precise_event_groups(
+    result: &mut gammalooprs::integrands::evaluation::PreciseEvaluationResult,
+) {
+    match result {
+        gammalooprs::integrands::evaluation::PreciseEvaluationResult::Double(result) => {
+            result.event_groups.clear()
+        }
+        gammalooprs::integrands::evaluation::PreciseEvaluationResult::Quad(result) => {
+            result.event_groups.clear()
+        }
+        gammalooprs::integrands::evaluation::PreciseEvaluationResult::Arb(result) => {
+            result.event_groups.clear()
+        }
+    }
+}
+
+fn merge_precise_observables(
+    integrand: &gammalooprs::integrands::process::ProcessIntegrand,
+    results: &mut [gammalooprs::integrands::evaluation::PreciseEvaluationResult],
+) -> Result<ObservableSnapshotBundle> {
+    let mut observables = ObservableSnapshotBundle::default();
+    let mut have_observables = false;
+
+    for evaluation in results.iter_mut() {
+        let sample_observables = integrand
+            .build_observable_snapshots_for_precise_result(evaluation)
+            .unwrap_or_default();
+        if !sample_observables.histograms.is_empty() {
+            if have_observables {
+                observables.merge_in_place(&sample_observables)?;
+            } else {
+                observables = sample_observables;
+                have_observables = true;
+            }
+        }
+        if !integrand.get_settings().general.generate_events {
+            clear_precise_event_groups(evaluation);
+        }
+    }
+
+    Ok(observables)
 }
 
 fn set_top_level_sample_weight(sample: &mut Sample<F<f64>>, integrator_weight: F<f64>) {

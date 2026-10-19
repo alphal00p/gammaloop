@@ -23,7 +23,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::state::State;
-use three_dimensional_reps::RepresentationMode;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -139,7 +138,6 @@ impl IntegrandThresholdCountertermDirectiveInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct IntegrandOrientationInfo {
     pub orientation_id: usize,
-    /// Directions along the group's orientation edges; empty for a complete residue sum.
     pub signature: Vec<i8>,
 }
 
@@ -337,8 +335,6 @@ impl IntegrandCutInfo {
 pub struct IntegrandGraphGroupInfo {
     pub group_id: usize,
     pub graphs: Vec<IntegrandGraphInfo>,
-    /// True when the runtime layout evaluates a complete physical residue sum.
-    pub complete_residue_sum: bool,
     pub orientation_edge_ids: Vec<usize>,
     pub orientations: Vec<IntegrandOrientationInfo>,
     pub loop_momentum_bases: Vec<IntegrandLoopMomentumBasisInfo>,
@@ -371,8 +367,6 @@ pub struct IntegrandInfo {
     pub integrand_name: String,
     /// Whether the integrand represents an amplitude or cross section.
     pub kind: IntegrandKind,
-    /// Representations stored in the generated payload, in generation order.
-    pub generated_representations: Vec<RepresentationMode>,
     /// Compilation mode frozen into the generated integrand.
     pub generation_compilation: FrozenCompilationMode,
     /// Floating-point evaluator backend currently active for the integrand.
@@ -420,13 +414,12 @@ pub(crate) fn collect_integrand_info(
                 process_name: process.definition.folder_name.clone(),
                 integrand_name: resolved.canonical_name,
                 kind: IntegrandKind::Amplitude,
-                generated_representations: integrand.data.three_d_representations.clone(),
                 generation_compilation: generation_compilation.clone(),
                 active_f64_backend,
                 graph_count: amplitude.graphs.len(),
                 graph_group_count: amplitude.graph_group_structure.len(),
                 record_size_bytes: integrand_record_size_from_amplitude(amplitude)?,
-                graph_groups: amplitude_graph_groups(integrand, amplitude, &model)?,
+                graph_groups: amplitude_graph_groups(integrand, &model)?,
             })
         }
         (
@@ -452,13 +445,12 @@ pub(crate) fn collect_integrand_info(
                 process_name: process.definition.folder_name.clone(),
                 integrand_name: resolved.canonical_name,
                 kind: IntegrandKind::CrossSection,
-                generated_representations: integrand.data.three_d_representations.clone(),
                 generation_compilation,
                 active_f64_backend,
                 graph_count: cross_section.supergraphs.len(),
                 graph_group_count: cross_section.graph_group_structure.len(),
                 record_size_bytes: integrand_record_size_from_cross_section(cross_section)?,
-                graph_groups: cross_section_graph_groups(integrand, cross_section, &model)?,
+                graph_groups: cross_section_graph_groups(integrand, &model)?,
             })
         }
         _ => Err(eyre!(
@@ -540,7 +532,6 @@ fn sampling_channel_ids(
 
 fn amplitude_graph_groups(
     integrand: &gammalooprs::integrands::process::amplitude::AmplitudeIntegrand,
-    amplitude: &Amplitude,
     model: &Model,
 ) -> Result<Vec<IntegrandGraphGroupInfo>> {
     let parameterization_settings = integrand
@@ -677,34 +668,20 @@ fn amplitude_graph_groups(
                         }
                     })
                     .collect(),
-                complete_residue_sum: master_graph.explicit_orientation_sum_only,
-                orientation_edge_ids: if master_graph.explicit_orientation_sum_only {
-                    Vec::new()
-                } else {
-                    master_graph
-                        .orientations
-                        .first()
-                        .map(orientation_edge_ids)
-                        .unwrap_or_default()
-                },
-                orientations: if master_graph.explicit_orientation_sum_only {
-                    // The graph retains its native map catalogue, but the evaluator
-                    // executes the complete sum once through its internal entry 0.
-                    vec![IntegrandOrientationInfo {
-                        orientation_id: 0,
-                        signature: Vec::new(),
-                    }]
-                } else {
-                    master_graph
-                        .orientations
-                        .iter()
-                        .enumerate()
-                        .map(|(orientation_id, orientation)| IntegrandOrientationInfo {
-                            orientation_id,
-                            signature: orientation_signature(orientation),
-                        })
-                        .collect()
-                },
+                orientation_edge_ids: master_graph
+                    .orientations
+                    .first()
+                    .map(orientation_edge_ids)
+                    .unwrap_or_default(),
+                orientations: master_graph
+                    .orientations
+                    .iter()
+                    .enumerate()
+                    .map(|(orientation_id, orientation)| IntegrandOrientationInfo {
+                        orientation_id,
+                        signature: orientation_signature(orientation),
+                    })
+                    .collect(),
                 loop_momentum_bases: master_graph
                     .lmbs
                     .iter_enumerated()
@@ -733,7 +710,6 @@ fn amplitude_graph_groups(
 
 fn cross_section_graph_groups(
     integrand: &gammalooprs::integrands::process::cross_section::CrossSectionIntegrand,
-    cross_section: &CrossSection,
     model: &Model,
 ) -> Result<Vec<IntegrandGraphGroupInfo>> {
     let parameterization_settings = integrand
@@ -823,34 +799,20 @@ fn cross_section_graph_groups(
                         }
                     })
                     .collect(),
-                complete_residue_sum: master_graph.explicit_orientation_sum_only,
-                orientation_edge_ids: if master_graph.explicit_orientation_sum_only {
-                    Vec::new()
-                } else {
-                    master_graph
-                        .orientations
-                        .first()
-                        .map(orientation_edge_ids)
-                        .unwrap_or_default()
-                },
-                orientations: if master_graph.explicit_orientation_sum_only {
-                    // The graph retains its native map catalogue, but the evaluator
-                    // executes the complete sum once through its internal entry 0.
-                    vec![IntegrandOrientationInfo {
-                        orientation_id: 0,
-                        signature: Vec::new(),
-                    }]
-                } else {
-                    master_graph
-                        .orientations
-                        .iter()
-                        .enumerate()
-                        .map(|(orientation_id, orientation)| IntegrandOrientationInfo {
-                            orientation_id,
-                            signature: orientation_signature(orientation),
-                        })
-                        .collect()
-                },
+                orientation_edge_ids: master_graph
+                    .orientations
+                    .first()
+                    .map(orientation_edge_ids)
+                    .unwrap_or_default(),
+                orientations: master_graph
+                    .orientations
+                    .iter()
+                    .enumerate()
+                    .map(|(orientation_id, orientation)| IntegrandOrientationInfo {
+                        orientation_id,
+                        signature: orientation_signature(orientation),
+                    })
+                    .collect(),
                 loop_momentum_bases: master_graph
                     .lmbs
                     .iter_enumerated()

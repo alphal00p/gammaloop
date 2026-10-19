@@ -116,6 +116,25 @@ impl CliNumeratorSamplesNormalization {
     }
 }
 
+#[derive(
+    Debug, Clone, Copy, ValueEnum, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Default,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum CliRepresentationMode {
+    #[default]
+    Cff,
+    Ltd,
+}
+
+impl From<CliRepresentationMode> for RepresentationMode {
+    fn from(value: CliRepresentationMode) -> Self {
+        match value {
+            CliRepresentationMode::Cff => Self::Cff,
+            CliRepresentationMode::Ltd => Self::Ltd,
+        }
+    }
+}
+
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Build {
     #[command(flatten)]
@@ -124,7 +143,7 @@ pub struct Build {
     /// Three-dimensional representation to build.
     #[serde(default)]
     #[arg(long, alias = "family", value_enum, default_value = "cff")]
-    pub representation: RepresentationMode,
+    pub representation: CliRepresentationMode,
 
     /// Override the global numerator sampling normalization for this build.
     #[arg(
@@ -151,8 +170,8 @@ pub struct Build {
     #[arg(long, default_value_t = false)]
     pub no_color: bool,
 
-    /// Show a residue/orientation by row id or label, optionally suffixed with `|N<map>|<variant>`.
-    #[arg(long, alias = "show-details-for-residue")]
+    /// Show detailed terms for the selected orientation.
+    #[arg(long)]
     pub show_details_for_orientation: Option<String>,
 
     /// Directory for generated expression artifacts and the latest-expression pointer.
@@ -329,14 +348,6 @@ impl Build {
                 .generation
                 .uniform_numerator_sampling_scale,
         );
-        let mut generation_settings = global_cli_settings.global.generation.clone();
-        generation_settings.uniform_numerator_sampling_scale = match numerator_sampling_scale_mode {
-            NumeratorSamplingScaleMode::None => UniformNumeratorSamplingScale::None,
-            NumeratorSamplingScaleMode::BeyondQuadratic => {
-                UniformNumeratorSamplingScale::BeyondQuadratic
-            }
-            NumeratorSamplingScaleMode::All => UniformNumeratorSamplingScale::All,
-        };
         let mut options = selected
             .graph
             .cff_3d_expression_options(numerator_sampling_scale_mode)?;

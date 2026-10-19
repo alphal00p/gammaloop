@@ -285,8 +285,8 @@ kind = "Runtime presentation architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-29"
-review_ref = "58606e2de028c0449fee1d5f20e143ea90531d18"
+reviewed_at = "2026-08-18"
+review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
 products = ["gammaloop"]
 topics = ["integration", "terminal", "ratatui", "status"]
 review_triggers = ["crates/gammaloop-api/src/commands/integrate.rs", "crates/gammalooprs/src/integrate/**"]
@@ -1508,7 +1508,7 @@ reviewed_at = "2026-10-06"
 review_ref = "jj:mrluluxqozss"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "testing"]
-review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", "just/ci.just", ".github/scripts/ci-report.mjs", ".github/scripts/performance_gate.py", ".github/scripts/run_performance.py", ".github/workflows/performance.yml", "benchmarks/performance/**", "CONTRIBUTING.typ"]
+review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", "just/ci.just", ".github/scripts/ci-report.mjs", "CONTRIBUTING.typ"]
 
 [[section.note.scope]]
 path = "just/ci.just"

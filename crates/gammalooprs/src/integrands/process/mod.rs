@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
-use std::result::Result as StdResult;
 
 use crate::cff::OrientationID;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
@@ -16,11 +15,7 @@ use crate::momentum::sample::{BareMomentumSample, LoopIndex, LoopMomenta, Moment
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::observables::{
     AdditionalWeightKey, EventProcessingRuntime, GenericEvent, HistogramProcessInfo,
-    ObservableAccumulationError, ObservableAccumulatorBundle, ObservableFileFormat,
-    ObservableSnapshotBundle,
-};
-use crate::processes::{
-    CutGroupId, GraphGenerationStats, GraphGroupSelectionSpec, StandaloneExportSettings,
+    ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
 };
 use crate::processes::{CutGroupId, GraphGroupSelectionSpec, StandaloneExportSettings};
 use crate::subtraction::lu_counterterm::LUSharedOverlaps;
@@ -457,7 +452,7 @@ impl ProcessIntegrand {
         path: impl AsRef<Path>,
         override_existing: bool,
         thread_pool: &rayon::ThreadPool,
-    ) -> Result<Vec<(String, GraphGenerationStats)>> {
+    ) -> Result<Vec<(String, std::time::Duration)>> {
         let path = path.as_ref().join("integrand");
 
         let r = fs::create_dir_all(&path).with_context(|| {
@@ -1124,6 +1119,8 @@ impl ProcessIntegrand {
                 EvaluationTarget::SamplingLaw(_) => precise.try_into_f64()?,
             };
 
+            self.process_evaluation_result(&result);
+            maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
             results.push(result);
             if stop_on_interrupt && crate::is_interrupted() {
                 break;
@@ -1144,7 +1141,7 @@ impl ProcessIntegrand {
     ) -> Result<RawBatchEvaluationResult> {
         let mut results = Vec::with_capacity(inputs.len());
         for input in inputs {
-            let result = match self {
+            let mut result = match self {
                 ProcessIntegrand::Amplitude(integrand) => evaluate_momentum_configuration(
                     integrand,
                     model,
@@ -1163,6 +1160,8 @@ impl ProcessIntegrand {
                 ),
             }?;
 
+            self.process_evaluation_result(&result);
+            maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
             results.push(result);
         }
 
@@ -1211,31 +1210,7 @@ impl ProcessIntegrand {
         Ok(RawPreciseBatchEvaluationResult { samples: results })
     }
 
-    /// Create independent observable statistics using this integrand's compiled definitions.
-    ///
-    /// Warm the integrand first. An integrand without observables returns an empty
-    /// accumulator. This does not copy the integrand or its numerical evaluator.
-    /// See [`EventProcessingRuntime::accumulate_sample`] for accumulation semantics.
-    ///
-    /// # Errors
-    /// Returns an error if observables are configured but the integrand has not been warmed up.
-    pub fn new_observable_accumulator(
-        &self,
-    ) -> StdResult<EventProcessingRuntime, ObservableAccumulationError> {
-        let runtime = match self {
-            Self::Amplitude(integrand) => integrand.event_processing_runtime(),
-            Self::CrossSection(integrand) => integrand.event_processing_runtime(),
-        };
-        match runtime {
-            Some(runtime) => Ok(runtime.cleared_observable_clone()),
-            None if self.get_settings().observables.is_empty() => {
-                Ok(EventProcessingRuntime::default())
-            }
-            None => Err(ObservableAccumulationError::NotInitialized),
-        }
-    }
-
-    pub fn process_evaluation_result(&mut self, result: &EvaluationResult) -> Result<()> {
+    pub fn process_evaluation_result(&mut self, result: &EvaluationResult) {
         match self {
             ProcessIntegrand::Amplitude(integrand) => {
                 process_evaluation_result_runtime(integrand, result)
@@ -1293,6 +1268,50 @@ impl ProcessIntegrand {
         match self {
             ProcessIntegrand::Amplitude(integrand) => observable_snapshot_bundle(integrand),
             ProcessIntegrand::CrossSection(integrand) => observable_snapshot_bundle(integrand),
+        }
+    }
+
+    pub fn build_observable_snapshots_for_result(
+        &self,
+        result: &EvaluationResult,
+    ) -> Option<ObservableSnapshotBundle> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                build_observable_snapshots_for_result(integrand, result)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                build_observable_snapshots_for_result(integrand, result)
+            }
+        }
+    }
+
+    pub fn build_observable_snapshots_for_precise_result(
+        &self,
+        result: &PreciseEvaluationResult,
+    ) -> Option<ObservableSnapshotBundle> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => match result {
+                PreciseEvaluationResult::Double(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+                PreciseEvaluationResult::Quad(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+                PreciseEvaluationResult::Arb(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+            },
+            ProcessIntegrand::CrossSection(integrand) => match result {
+                PreciseEvaluationResult::Double(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+                PreciseEvaluationResult::Quad(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+                PreciseEvaluationResult::Arb(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+            },
         }
     }
 
@@ -1586,11 +1605,21 @@ pub(crate) fn prepare_buffered_event<T: FloatLike>(
 fn process_evaluation_result_runtime<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     result: &EvaluationResult,
-) -> Result<()> {
-    if let Some(runtime) = integrand.event_processing_runtime_mut() {
-        runtime.accumulate_sample(&result.event_groups, &result.integrator_weight)?;
+) {
+    if let Some(runtime) = integrand.event_processing_runtime_mut()
+        && runtime.has_observables()
+    {
+        runtime.process_event_groups(&result.event_groups);
     }
-    Ok(())
+}
+
+fn maybe_discard_generated_events_in_result(
+    settings: &RuntimeSettings,
+    result: &mut EvaluationResult,
+) {
+    if !settings.should_return_generated_events() {
+        result.event_groups.clear();
+    }
 }
 
 fn merge_event_processing_runtime<I: ProcessIntegrandImpl>(
@@ -1628,6 +1657,27 @@ fn observable_snapshot_bundle<I: ProcessIntegrandImpl>(
         .event_processing_runtime()
         .filter(|runtime| runtime.has_observables())
         .map(EventProcessingRuntime::snapshot_bundle)
+}
+
+fn build_observable_snapshots_for_result<I: ProcessIntegrandImpl>(
+    integrand: &I,
+    result: &EvaluationResult,
+) -> Option<ObservableSnapshotBundle> {
+    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+}
+
+fn build_observable_snapshots_for_event_groups<I: ProcessIntegrandImpl, T: FloatLike>(
+    integrand: &I,
+    event_groups: &crate::observables::GenericEventGroupList<T>,
+) -> Option<ObservableSnapshotBundle> {
+    let runtime = integrand.event_processing_runtime()?;
+    if !runtime.has_observables() {
+        return None;
+    }
+
+    let mut runtime = runtime.cleared_observable_clone();
+    runtime.process_event_groups(event_groups);
+    Some(runtime.snapshot_bundle())
 }
 
 fn restore_observable_snapshot_bundle<I: ProcessIntegrandImpl>(
@@ -2262,7 +2312,6 @@ struct PreciseStabilityLevelResult<T: FloatLike> {
     pub result: Complex<F<T>>,
     pub graph_result: GraphEvaluationResult<T>,
     pub stability_level_used: Precision,
-    pub representation: RepresentationMode,
     pub estimated_relative_accuracy: Option<F<T>>,
     pub sample_count: usize,
     pub total_time: Duration,
@@ -3520,7 +3569,6 @@ pub trait ProcessIntegrandImpl {
 pub(crate) fn validate_process_runtime_settings(
     settings: &RuntimeSettings,
     explicit_orientation_sum_only: bool,
-    generated_representations: &[RepresentationMode],
 ) -> Result<()> {
     if let Some(parameterization) = settings.sampling.get_parameterization_settings() {
         let alpha = parameterization.sampling_channels.alpha;
@@ -3563,15 +3611,13 @@ pub(crate) fn validate_process_runtime_settings(
         ));
     }
 
-    if !explicit_orientation_sum_only
-        && !generated_representations.contains(&RepresentationMode::Ltd)
-    {
+    if !explicit_orientation_sum_only {
         return Ok(());
     }
 
     if settings.general.orientation_pat.pat.is_some() {
         return Err(eyre!(
-            "For an integrand requiring a complete residue sum, `runtime.general.orientation_pat` must be unset"
+            "`global.generation.explicit_orientation_sum_only = true` already contains the complete orientation sum; `runtime.general.orientation_pat` must be unset"
         ));
     }
 
@@ -3579,7 +3625,7 @@ pub(crate) fn validate_process_runtime_settings(
         && discrete_settings.sample_orientations
     {
         return Err(eyre!(
-            "An integrand requiring a complete residue sum does not support runtime individual-orientation Monte Carlo sampling; set `runtime.sampling.orientations = \"summed\"`"
+            "`global.generation.explicit_orientation_sum_only = true` does not support runtime individual-orientation Monte Carlo sampling; set `sampling.sample_orientations = false`"
         ));
     }
 
@@ -3863,7 +3909,6 @@ struct EvaluationContext<'a, 'm> {
 }
 
 pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
-    pub representation: RepresentationMode,
     pub model: &'a Model,
     pub settings: &'a RuntimeSettings,
     pub event_processing_runtime: Option<&'m mut EventProcessingRuntime>,
@@ -4435,7 +4480,6 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         result: average_result,
         graph_result,
         stability_level_used: context.stability_level.precision,
-        representation,
         estimated_relative_accuracy,
         sample_count: results.len(),
         total_time: level_start.elapsed(),
@@ -5048,7 +5092,7 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
 ) -> Result<GammaLoopSample<T>> {
     if integrand.uses_explicit_orientation_sum_only() && input.orientation.is_some() {
         return Err(eyre!(
-            "This integrand requires the complete residue sum, so explicit orientation selection is not supported"
+            "`global.generation.explicit_orientation_sum_only = true` represents all orientations as a single summed contribution, so explicit orientation selection is not supported"
         ));
     }
 
@@ -5696,11 +5740,9 @@ fn finalize_precise_evaluation_result<T: FloatLike>(
     let mut event_groups = result.graph_result.event_groups;
     let integrator_weight = F::<T>::from_ff64(integrator_weight);
     let parameterization_jacobian = result.parameterization_jacobian;
-    // Event contributions include native Jacobians/partitions, but the outer
-    // sampler weight is applied only when committing observable statistics.
     let full_factor = full_event_multiplicative_factor_precise(
         parameterization_jacobian.clone(),
-        integrator_weight.one(),
+        integrator_weight.clone(),
     );
     apply_full_event_multiplicative_factor_precise(&mut event_groups, &full_factor);
 
@@ -7390,7 +7432,6 @@ pub(crate) mod tests {
                 result: Complex::new_re(one.clone()),
                 graph_result: GraphEvaluationResult::zero(one.zero()),
                 stability_level_used: Precision::Arb,
-                representation: RepresentationMode::Cff,
                 estimated_relative_accuracy: Some(one.from_usize(10).powi(-exponent)),
                 sample_count: 2,
                 total_time: Duration::ZERO,
@@ -8509,65 +8550,34 @@ pub(crate) mod tests {
     fn explicit_orientation_sum_rejects_runtime_filters_and_ltd() {
         let mut settings = RuntimeSettings::default();
         settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
-        let error = validate_process_runtime_settings(&settings, true, &[RepresentationMode::Cff])
-            .unwrap_err();
+        let error = validate_process_runtime_settings(&settings, true).unwrap_err();
         assert!(error.to_string().contains("orientation_pat` must be unset"));
 
-        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff]).unwrap();
+        validate_process_runtime_settings(&settings, false).unwrap();
 
         settings.general.orientation_pat = OrientationPattern::default();
-        settings.stability.levels[0].three_dimensional_representation =
-            Some(RepresentationMode::Ltd);
-        let error = validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
-            .unwrap_err();
-        assert!(format!("{error:#}").contains("was not generated"));
-
-        settings.stability.levels[0].three_dimensional_representation = None;
-        settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
-        let generated = [RepresentationMode::Ltd, RepresentationMode::Cff];
-        assert!(validate_process_runtime_settings(&settings, false, &generated).is_err());
-        settings.general.orientation_pat = OrientationPattern::default();
-        settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
-            sample_orientations: true,
-            ..Default::default()
-        });
-        assert!(
-            validate_process_runtime_settings(&settings, false, &generated)
-                .unwrap_err()
-                .to_string()
-                .contains("individual-orientation")
-        );
-    }
-
-    #[test]
-    fn runtime_requires_at_least_one_stability_level() {
-        let mut settings = RuntimeSettings::default();
-        settings.stability.levels.clear();
-        let error = validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
-            .unwrap_err();
-        assert!(error.to_string().contains("runtime.stability.levels"));
+        settings.general.use_ltd = true;
+        let error = validate_process_runtime_settings(&settings, false).unwrap_err();
+        assert!(error.to_string().contains("deferred proper-LTD support"));
     }
 
     #[test]
     fn numerator_sampling_scale_requires_nonzero_runtime_value() {
         let mut settings = RuntimeSettings::default();
-        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff]).unwrap();
+        validate_process_runtime_settings(&settings, false).unwrap();
 
         for scale in [0.0, -0.0] {
             settings.general.numerator_sampling_scale = scale;
             for explicit_orientation_sum_only in [false, true] {
-                let error = validate_process_runtime_settings(
-                    &settings,
-                    explicit_orientation_sum_only,
-                    &[RepresentationMode::Cff],
-                )
-                .unwrap_err();
+                let error =
+                    validate_process_runtime_settings(&settings, explicit_orientation_sum_only)
+                        .unwrap_err();
                 assert!(error.to_string().contains("sampling scale M"));
             }
         }
 
         settings.general.numerator_sampling_scale = -2.0;
-        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff]).unwrap();
+        validate_process_runtime_settings(&settings, false).unwrap();
     }
 
     #[test]
@@ -8646,7 +8656,6 @@ pub(crate) mod tests {
             .find(|level| level.precision == Precision::Arb)
             .expect("default stability settings should include Arb");
         arb_level.required_precision_for_re = 2.5e-7;
-        arb_level.three_dimensional_representation = Some(RepresentationMode::Ltd);
         let configured_arb_level = *arb_level;
 
         assert_eq!(
@@ -8654,42 +8663,6 @@ pub(crate) mod tests {
             vec![configured_arb_level]
         );
         assert_eq!(create_stability_iterator(&settings, false), settings.levels);
-    }
-
-    #[test]
-    fn representation_fallback_keeps_repeated_precisions_and_forced_arb_choice() {
-        use crate::settings::runtime::StabilityLevelSetting;
-
-        let ltd = StabilityLevelSetting {
-            three_dimensional_representation: Some(RepresentationMode::Ltd),
-            ..StabilityLevelSetting::default_double()
-        };
-        let cff = StabilityLevelSetting {
-            three_dimensional_representation: Some(RepresentationMode::Cff),
-            ..StabilityLevelSetting::default_double()
-        };
-        let mut settings = StabilitySettings {
-            levels: vec![ltd, cff],
-            ..Default::default()
-        };
-        assert_eq!(create_stability_iterator(&settings, false), vec![ltd, cff]);
-        let forced = create_stability_iterator(&settings, true);
-        assert_eq!(forced.len(), 1);
-        assert_eq!(forced[0].precision, Precision::Arb);
-        assert_eq!(
-            forced[0].three_dimensional_representation,
-            Some(RepresentationMode::Ltd)
-        );
-
-        settings.levels[0].three_dimensional_representation = None;
-        let forced = create_stability_iterator(&settings, true);
-        assert_eq!(forced[0].three_dimensional_representation, None);
-        assert_eq!(
-            forced[0]
-                .resolved_representation(&[RepresentationMode::Ltd, RepresentationMode::Cff])
-                .unwrap(),
-            RepresentationMode::Ltd
-        );
     }
 
     #[test]
