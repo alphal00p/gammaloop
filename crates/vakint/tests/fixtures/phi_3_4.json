@@ -1,0 +1,189 @@
+{
+  "name": "phi_3_4",
+  "restriction": null,
+  "orders": [
+    {
+      "name": "SCALAR",
+      "expansion_order": 99,
+      "hierarchy": 1
+    }
+  ],
+  "parameters": [
+    {
+      "name": "ZERO",
+      "lhablock": null,
+      "lhacode": null,
+      "nature": "internal",
+      "parameter_type": "real",
+      "value": [
+        0.0,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "mass",
+      "lhablock": "SCALAR",
+      "lhacode": [
+        1
+      ],
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        1.0,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "g",
+      "lhablock": "SCALAR",
+      "lhacode": [
+        2
+      ],
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        1.0,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "lam",
+      "lhablock": "SCALAR",
+      "lhacode": [
+        3
+      ],
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        1.0,
+        0.0
+      ],
+      "expression": null
+    }
+  ],
+  "particles": [
+    {
+      "pdg_code": 9000001,
+      "name": "phi",
+      "antiname": "phi",
+      "spin": 1,
+      "color": 1,
+      "mass": "mass",
+      "width": "ZERO",
+      "texname": "\\phi",
+      "antitexname": "\\phi",
+      "charge": 0.0,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "y_charge": 0,
+      "propagating": true,
+      "goldstone": false,
+      "propagator": "phi_prop"
+    }
+  ],
+  "propagators": [
+    {
+      "name": "phi_prop",
+      "particle": "phi",
+      "numerator": "1𝑖",
+      "denominator": "(UFO::P(UFO::idx(1,1)))^2-UFO::mass^2"
+    }
+  ],
+  "lorentz_structures": [
+    {
+      "name": "SCALAR",
+      "spins": [
+        1,
+        1,
+        1
+      ],
+      "structure": "1"
+    },
+    {
+      "name": "SCALAR4",
+      "spins": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "structure": "1"
+    }
+  ],
+  "couplings": [
+    {
+      "name": "SCALAR_COUPLING",
+      "expression": "-1𝑖*UFO::g",
+      "orders": [
+        [
+          "SCALAR",
+          1
+        ]
+      ],
+      "value": [
+        0.0,
+        -1.0
+      ]
+    },
+    {
+      "name": "SCALAR4_COUPLING",
+      "expression": "-1𝑖*UFO::lam",
+      "orders": [
+        [
+          "SCALAR",
+          1
+        ]
+      ],
+      "value": [
+        0.0,
+        -1.0
+      ]
+    }
+  ],
+  "vertex_rules": [
+    {
+      "name": "V_SCALAR",
+      "particles": [
+        "phi",
+        "phi",
+        "phi"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_SCALAR4",
+      "particles": [
+        "phi",
+        "phi",
+        "phi",
+        "phi"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR4"
+      ],
+      "couplings": [
+        [
+          "SCALAR4_COUPLING"
+        ]
+      ]
+    }
+  ],
+  "functions": [],
+  "form_factors": []
+}

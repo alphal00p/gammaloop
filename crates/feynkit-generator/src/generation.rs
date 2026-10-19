@@ -1253,6 +1253,12 @@ impl Generator {
                 }
                 !progress_cancellation.is_cancelled()
             }));
+        if let Some(filter) = options.filter.clone() {
+            let filter_options = options.clone();
+            settings = settings.filter_fn(Box::new(move |graph, completed_vertices| {
+                !filter_options.cancellation_requested() && filter(graph, completed_vertices)
+            }));
+        }
         if let Some(maximum) = options.max_vertices {
             // Symbolica counts the degree-one external nodes as vertices. The
             // public FeynKit option counts interaction vertices instead.
@@ -2903,8 +2909,8 @@ impl Generator {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct EdgeColor {
-    particle: ParticleId,
+pub struct EdgeColor {
+    pub particle: ParticleId,
     direction: Option<bool>,
 }
 
@@ -2980,10 +2986,10 @@ fn vertex_rule_signature(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct ExternalNode {
-    index: usize,
-    state: ExternalState,
-    particle: ParticleId,
+pub struct ExternalNode {
+    pub index: usize,
+    pub state: ExternalState,
+    pub particle: ParticleId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -2993,8 +2999,8 @@ enum ExternalCanonicalClass {
 }
 
 #[derive(Debug, Clone, Default)]
-struct NodeColor {
-    external: Option<ExternalNode>,
+pub struct NodeColor {
+    pub external: Option<ExternalNode>,
     external_class: Option<ExternalCanonicalClass>,
 }
 
@@ -4457,6 +4463,34 @@ mod tests {
                 color: 8,
             },
         ]
+    }
+
+    #[test]
+    fn partial_topology_filter_prunes_enumeration_without_changing_persistent_options() {
+        let generator = Generator::new(scalar_model());
+        let process = Process::amplitude(["phi", "phi"], ["phi", "phi"]);
+        let baseline = generator
+            .generate(&process, &GenerationOptions::default())
+            .unwrap();
+        assert!(baseline.report.completed);
+        assert!(!baseline.diagrams.is_empty());
+        let partial_calls = Arc::new(AtomicUsize::new(0));
+        let calls = Arc::clone(&partial_calls);
+        let options = GenerationOptions::default().filter(move |graph, completed| {
+            if completed < graph.nodes().len() {
+                calls.fetch_add(1, Ordering::Relaxed);
+            }
+            false
+        });
+        assert!(matches!(
+            generator.generate(&process, &options),
+            Err(GenerationError::NoGraphs)
+        ));
+        assert!(partial_calls.load(Ordering::Relaxed) > 0);
+        let restored: GenerationOptions =
+            serde_json::from_str(&serde_json::to_string(&options).unwrap()).unwrap();
+        let regenerated = generator.generate(&process, &restored).unwrap();
+        assert_eq!(regenerated.diagrams.len(), baseline.diagrams.len());
     }
 
     fn scalar_model() -> Model {

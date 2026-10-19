@@ -17,7 +17,7 @@ use super::vakint::{
     Vakint, VakintExpression, diagram_integral::DiagramIntegralOptions, symbols::S,
 };
 use feynkit_generator::{
-    EdgeColor, GenerationFilter, GenerationOptions, NodeColor, Process, VertexSelector,
+    EdgeColor, GenerationFilter, GenerationOptions, Generator, NodeColor, Process, VertexSelector,
 };
 use feynkit_graph::IntegralFamily;
 use feynkit_graph::{
@@ -26,8 +26,10 @@ use feynkit_graph::{
 use feynkit_kinematics::Kinematics;
 use feynkit_model::Model;
 use idenso::{
-    color::ColorSimplifySettings,
-    tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor},
+    IndexTooling,
+    color::{ColorSimplifier, ColorSimplifySettings},
+    dirac::GammaSimplifier,
+    shorthands::schoonschip::Schoonschip,
 };
 use rustred::algebra::CoefficientContext;
 use spenso::{
@@ -53,6 +55,36 @@ pub struct LadderFixture {
 
 type Shape = Graph<u8, i64>;
 
+fn evaluate_overall_factor(factor: AtomView<'_>) -> Atom {
+    // The graph retains generation provenance as tagged scalar factors.
+    let mut result = factor.to_owned();
+    let value = Atom::var(symbol!("qcd_ladder::factor_"));
+    for head in [
+        "AutG",
+        "CouplingsMultiplicity",
+        "InternalFermionLoopSign",
+        "ExternalFermionOrderingSign",
+        "AntiFermionSpinSumSign",
+        "NumeratorIndependentSymmetryGrouping",
+    ] {
+        result = result
+            .replace(symbol!(&format!("feynkit_generator_factor::{head}")).call(&value))
+            .with(value.clone());
+    }
+    result.expand()
+}
+
+fn is_external_edge(diagram: &FeynmanDiagram, ends: feynkit_graph::EdgeEndpoints) -> bool {
+    diagram
+        .vertex(ends.source)
+        .expect("valid source")
+        .is_external()
+        || diagram
+            .vertex(ends.target)
+            .expect("valid target")
+            .is_external()
+}
+
 fn external_color(state: ExternalState) -> u8 {
     match state {
         ExternalState::Incoming => 1,
@@ -64,23 +96,21 @@ fn diagram_labeling(diagram: &FeynmanDiagram) -> Result<(Shape, BTreeMap<VertexI
     let mut graph = Shape::new();
     let vertices = diagram
         .vertices()
-        .map(|(id, _)| (id, graph.add_node(0)))
+        .map(|(id, vertex)| {
+            (
+                id,
+                graph.add_node(
+                    vertex
+                        .external
+                        .as_ref()
+                        .map_or(0, |leg| external_color(leg.state)),
+                ),
+            )
+        })
         .collect::<BTreeMap<_, _>>();
     for (_, ends, edge) in diagram.edges() {
-        let external = edge
-            .external
-            .as_ref()
-            .map(|leg| graph.add_node(external_color(leg.state)));
-        let source = ends
-            .source
-            .map(|v| vertices[&v])
-            .or(external)
-            .ok_or("edge without source")?;
-        let target = ends
-            .target
-            .map(|v| vertices[&v])
-            .or(external)
-            .ok_or("edge without target")?;
+        let source = vertices[&ends.source];
+        let target = vertices[&ends.target];
         let pdg = diagram.model().particle_by_id(edge.particle)?.pdg_code;
         let (source, target) = if pdg < 0 {
             (target, source)
@@ -123,11 +153,10 @@ fn compact_rail_basis(diagram: FeynmanDiagram, target: &FeynmanDiagram) -> Resul
                         .particle_by_id(edge.particle)
                         .expect("native particle")
                         .pdg_code;
-                    if pdg.abs() != 1 || edge.external.is_some() {
+                    if pdg.abs() != 1 || is_external_edge(&diagram, ends) {
                         return None;
                     }
-                    let (left, right) =
-                        (actual_labels[&ends.source?], actual_labels[&ends.target?]);
+                    let (left, right) = (actual_labels[&ends.source], actual_labels[&ends.target]);
                     let (left, right) = if pdg < 0 {
                         (right, left)
                     } else {
@@ -171,9 +200,22 @@ fn generated_shape(graph: &Graph<NodeColor, EdgeColor>, model: &Model) -> Shape 
 }
 
 fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
-    let model = Arc::new(Model::qcd());
-    let target = FeynmanDiagram::from_dot(Arc::clone(&model), include_str!("ladder.dot"))?;
-    if target.loop_count() != 5 || target.edges().count() != 16 || target.vertices().count() != 10 {
+    let model = Arc::new(
+        Model::from_json(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/qcd.json"
+        )))
+        .expect("valid qcd fixture"),
+    );
+    let target = FeynmanDiagram::from_topology_dot(Arc::clone(&model), include_str!("ladder.dot"))?;
+    if target.loop_count() != 5
+        || target.edges().count() != 16
+        || target
+            .vertices()
+            .filter(|(_, vertex)| !vertex.is_external())
+            .count()
+            != 10
+    {
         return Err("the source QCD ladder must have ten vertices, fourteen internal lines, and two external legs".into());
     }
     let shape = diagram_shape(&target)?;
@@ -198,7 +240,6 @@ fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
     }
     let filter_model = Arc::clone(&model);
     let options = GenerationOptions::default()
-        .with_loop_count(5, 5)?
         .max_vertices(10)
         .threads(1)
         .with_graph_filter(GenerationFilter::VertexAllow(rules))
@@ -214,7 +255,10 @@ fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
                 && graph.edges().len() == 16
                 && generated_shape(graph, &filter_model) == shape
         });
-    let mut generated = Process::new(["g"], ["g"]).generate_diagrams(model, &options)?;
+    let mut generated = Generator::new(model).generate(
+        &Process::amplitude(["g"], ["g"]).with_loop_count(5, 5)?,
+        &options,
+    )?;
     if !generated.report.completed || generated.diagrams.len() != 1 {
         return Err(format!(
             "native exact ladder selection returned {} diagrams, completed={}",
@@ -242,6 +286,7 @@ pub fn dress(evidence: &Path) -> Result<feynkit_generator::GenerationResult> {
     if diagram.numerator().is_one()
         || diagram
             .vertices()
+            .filter(|(_, vertex)| !vertex.is_external())
             .any(|(_, vertex)| vertex.numerator.is_one())
     {
         return Err("bare structural DOT was mistaken for a dressed QCD numerator".into());
@@ -302,7 +347,7 @@ fn loop_rows(diagram: &FeynmanDiagram) -> BTreeMap<EdgeId, Atom> {
         .collect::<Vec<_>>();
     diagram
         .edges()
-        .filter(|(_, _, edge)| edge.external.is_none())
+        .filter(|(_, ends, _)| !is_external_edge(diagram, *ends))
         .map(|(id, _, _)| {
             let row = diagram.loop_momentum_basis().edge_signatures[&id]
                 .loops

@@ -5,8 +5,10 @@ mod display;
 mod error;
 mod generation;
 mod graph;
+mod integrals;
 mod kinematics;
 mod model;
+mod symbolic_kinematics;
 mod tensor;
 #[cfg(feature = "ufo")]
 mod ufo;
@@ -23,6 +25,7 @@ pub use generation::{
 pub use graph::{
     PyDiagramEdge, PyDiagramVertex, PyFeynmanDiagram, PyLoopMomentumBasis, PyMomentumSignature,
 };
+pub use integrals::PyIntegralFamily;
 pub use kinematics::{
     PyAxis, PyBoost, PyClusteringResult, PyFourMomentum, PyHelicity, PyJet, PyJetAlgorithm,
     PyJetDefinition, PyRotation, PyThreeMomentum,
@@ -32,6 +35,7 @@ pub use model::{
     PyModelExpression, PyModelFunction, PyParameter, PyParameterCard, PyParameterNature,
     PyParameterType, PyParticle, PyPropagator, PyVertexRule,
 };
+pub use symbolic_kinematics::PyKinematics;
 pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
@@ -57,6 +61,8 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     error::register(module)?;
     model::register(module)?;
     graph::register(module)?;
+    module.add_class::<PyIntegralFamily>()?;
+    module.add_class::<PyKinematics>()?;
     generation::register(module)?;
     kinematics::register(module)?;
     cff::register(module)?;
@@ -70,7 +76,9 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     let info = pyo3_stub_gen::StubInfo::from_project_root(
-        "symbolica.community.feynkit".to_owned(),
+        // Untagged host classes (including Numerica Float/ComplexFloat) belong
+        // to Symbolica. FeynKit classes declare their community module explicitly.
+        "symbolica".to_owned(),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("python"),
     )?;
     let module = info
@@ -225,6 +233,8 @@ mod tests {
         assert_send::<PyModel>();
         assert_send::<PyGenerator>();
         assert_send::<PyFeynmanDiagram>();
+        assert_send::<PyIntegralFamily>();
+        assert_send::<PyKinematics>();
         assert_send::<PyTensorReducer>();
     }
 
@@ -251,6 +261,7 @@ stub_classes = {
     node.name for node in ast.walk(ast.parse(source))
     if isinstance(node, ast.ClassDef)
 }
+assert not {"Float", "ComplexFloat"} & stub_classes, "host numeric classes leaked into FeynKit"
 runtime_classes = {
     name for name, value in vars(fk).items()
     if isinstance(value, type) and value.__module__ == fk.__name__
@@ -274,6 +285,8 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
                 "Generator",
                 "Process",
                 "FeynmanDiagram",
+                "IntegralFamily",
+                "Kinematics",
                 "TensorReducer",
                 "CffGenerator",
                 "FourMomentum",

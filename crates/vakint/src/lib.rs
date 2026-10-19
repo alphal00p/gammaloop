@@ -2964,7 +2964,6 @@ impl VakintTerm {
         });
         let mut failure = None;
         let mut reduced = selected
-            .into_inner()
             .map_collects(|collected, _, out| {
                 if failure.is_some() {
                     return;

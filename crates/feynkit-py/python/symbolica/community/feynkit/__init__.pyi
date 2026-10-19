@@ -1101,6 +1101,44 @@ class FeynmanDiagram:
         --------
         >>> external_particles = [edge.particle_name for edge in diagram.external_edges]
         """
+    def integral_family(self, independent_dot_products: typing.Optional[typing.Sequence[Expression]] = None, *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
+        r"""
+        Complete the routed physical propagators with auxiliary scalar products.
+
+        Physical denominators retain edge order and model masses. Preferred
+        products are appended only when independent, then remaining coordinates
+        are filled automatically. Dependent physical propagators raise DiagramError.
+
+        Examples
+        --------
+        >>> family = diagram.integral_family()
+        >>> assert family.is_complete
+
+        Parameters
+        ----------
+        independent_dot_products : list[Expression] or None
+            Preferred auxiliary denominators in the stored loop routing.
+        kinematics : Kinematics or None
+            Scalar-product assumptions; defaults to the graph's symbolic dimension.
+        """
+    def propagator_family(self, *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
+        r"""
+        Extract ordered physical propagators without removing dependent entries.
+
+        This uses the diagram's stored loop routing and shared model-mass
+        conventions. External carriers and dummy edges are excluded. Tree
+        diagrams raise DiagramError because they have no loop integral.
+
+        Examples
+        --------
+        >>> family = diagram.propagator_family()
+        >>> assert len(family.denominators) >= family.rank
+
+        Parameters
+        ----------
+        kinematics : Kinematics or None
+            Scalar-product assumptions; defaults to the graph's symbolic dimension.
+        """
     @staticmethod
     def from_json(model: Model, json: builtins.str) -> FeynmanDiagram:
         r"""
@@ -1139,6 +1177,31 @@ class FeynmanDiagram:
             Model whose stable IDs and fingerprint are referenced by the diagram.
         dot : str
             DOT text containing the diagram topology and FeynKit annotations.
+        """
+    @staticmethod
+    def from_topology_dot(model: Model, dot: builtins.str) -> FeynmanDiagram:
+        r"""
+        Import a compact particle topology and construct its native loop routing.
+
+        Unlike a saved diagram, compact DOT names particles rather than storing
+        model fingerprints and tensor annotations. Model references and topology
+        are validated by the native importer; no Feynman rules are inferred.
+        Use ``from_dot`` to restore the exact serialized diagram dialect.
+
+        Examples
+        --------
+        >>> diagram = fk.FeynmanDiagram.from_topology_dot(
+        ...     model, 'digraph sunset { a -> b [particle="phi"]; a -> b [particle="phi"]; a -> b [particle="phi"]; }'
+        ... )
+        >>> family = diagram.propagator_family()
+        >>> assert len(family.denominators) == 3
+
+        Parameters
+        ----------
+        model : Model
+            Model defining the named particles and masses.
+        dot : str
+            Compact topology DOT with particle labels and optional routing hints.
         """
     def numerator_expression(self) -> Expression:
         r"""
@@ -2588,6 +2651,157 @@ class Helicity:
         """
 
 @typing.final
+class IntegralFamily:
+    r"""
+    Ordered inverse propagators sharing loop momenta and external kinematics.
+
+    Denominators are expressions such as ``k.k - m2``, not reciprocals.
+    Integral powers follow the denominator order: zero omits a denominator,
+    while a negative power puts it in the numerator. Completing a family appends
+    auxiliary denominators without reordering its physical propagators.
+
+    Examples
+    --------
+    >>> from symbolica import S
+    >>> from symbolica.community import feynkit as fk
+    >>> k, m2 = S("k", "m2")
+    >>> kin = fk.Kinematics(momenta=[k])
+    >>> family = fk.IntegralFamily([k], [], [kin.scalar_product(k, k) - m2], kinematics=kin)
+    >>> assert family.is_complete and family.denominators[0] == kin.scalar_product(k, k) - m2
+    """
+    @property
+    def loop_momenta(self) -> builtins.list[Expression]:
+        r"""
+        Integrated momentum names in their original order.
+        """
+    @property
+    def external_momenta(self) -> builtins.list[Expression]:
+        r"""
+        Independent external momentum names in their original order.
+        """
+    @property
+    def scalar_products(self) -> builtins.list[Expression]:
+        r"""
+        Independent scalar-product coordinates involving at least one loop.
+        """
+    @property
+    def denominators(self) -> builtins.list[Expression]:
+        r"""
+        Inverse propagators in the order used by integral powers.
+        """
+    @property
+    def kinematics(self) -> Kinematics:
+        r"""
+        Immutable scalar-product assumptions and Lorentz dimension.
+        """
+    @property
+    def rank(self) -> builtins.int:
+        r"""
+        Rank of the denominators over external invariants.
+        """
+    @property
+    def is_complete(self) -> builtins.bool:
+        r"""
+        Whether the denominator span includes every loop scalar product.
+        """
+    @property
+    def is_independent(self) -> builtins.bool:
+        r"""
+        Whether the denominators are linearly independent.
+        """
+    def __new__(cls, loop_momenta: typing.Sequence[Expression], external_momenta: typing.Sequence[Expression], denominators: typing.Sequence[Expression], *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
+        r"""
+        Construct a family and determine the exact rank of its denominator basis.
+
+        Examples
+        --------
+        Using the class example:
+
+        >>> assert family.rank == 1
+
+        Parameters
+        ----------
+        loop_momenta : list[Expression]
+            Distinct integrated momentum names, in their intended order.
+        external_momenta : list[Expression]
+            Independent external momentum names.
+        denominators : list[Expression]
+            Ordered inverse propagators.
+        kinematics : Kinematics or None
+            Scalar-product assumptions and dimension; defaults to unconstrained 4D.
+        """
+    @staticmethod
+    def from_diagram(diagram: FeynmanDiagram, independent_dot_products: typing.Optional[typing.Sequence[Expression]] = None, *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
+        r"""
+        Complete the diagram's routed physical propagators with auxiliary slots.
+
+        Physical denominators retain edge order and model masses. Preferred
+        scalar products are appended if independent, then remaining directions
+        are filled automatically. Tree graphs and dependent propagators fail.
+
+        Examples
+        --------
+        >>> family = fk.IntegralFamily.from_diagram(diagram)
+        >>> assert family.is_complete
+
+        Parameters
+        ----------
+        diagram : FeynmanDiagram
+            Graph with its stored loop-momentum routing.
+        independent_dot_products : list[Expression] or None
+            Preferred auxiliary denominators, tried in the supplied order.
+        kinematics : Kinematics or None
+            Assumptions and dimension; defaults to the graph's symbolic dimension.
+        """
+    def complete(self, candidates: typing.Optional[typing.Sequence[Expression]] = None) -> IntegralFamily:
+        r"""
+        Append independent auxiliary denominators without changing the original slots.
+
+        Examples
+        --------
+        >>> completed = family.complete()
+        >>> assert completed.is_complete
+
+        Parameters
+        ----------
+        candidates : list[Expression] or None
+            Preferred scalar products; automatic products fill the remaining span.
+        """
+    def rewrite_numerator(self, numerator: Expression, labels: typing.Sequence[Expression]) -> Expression:
+        r"""
+        Express a scalar numerator using labels for this complete denominator basis.
+
+        Examples
+        --------
+        Using the class example:
+
+        >>> d = S("d")
+        >>> assert family.rewrite_numerator(kin.scalar_product(k, k), [d]) == d + m2
+
+        Parameters
+        ----------
+        numerator : Expression
+            Scalar expression to rewrite with the family's assumptions.
+        labels : list[Expression]
+            One distinct symbol or labeled call per denominator.
+        """
+
+class IntegralFamilyError(FeynkitError):
+    r"""
+    Invalid inverse-propagator family or incomplete scalar-product basis.
+
+    Examples
+    --------
+    Catch a dependent denominator basis before completion:
+
+    >>> try:
+    ...     completed = family.complete()
+    ... except fk.IntegralFamilyError as error:
+    ...     print(error)
+    """
+    ...
+
+@typing.final
 class Jet:
     r"""
     A reconstructed collider jet and its input-particle constituents.
@@ -2776,6 +2990,91 @@ class JetDefinition:
         ----------
         momenta : sequence of FourMomentum
             Input four-momenta to cluster.
+        """
+
+@typing.final
+class Kinematics:
+    r"""
+    Immutable symbolic scalar-product assumptions in a declared Lorentz dimension.
+
+    Momentum inputs are unindexed names. Declare them before using linear
+    combinations so that other symbols are interpreted as scalar coefficients.
+
+    Examples
+    --------
+    >>> from symbolica import S
+    >>> from symbolica.community import feynkit as fk
+    >>> k, p, s = S("k", "p", "s")
+    >>> kin = fk.Kinematics(momenta=[k, p]).with_scalar_product(p, p, s)
+    >>> assert kin.scalar_product(2*p, p) == 2*s
+    """
+    @property
+    def dimension(self) -> Expression:
+        r"""
+        Lorentz dimension as an exact integer or symbol.
+        """
+    def __new__(cls, dimension: typing.Optional[Expression] = None, *, momenta: typing.Optional[typing.Sequence[Expression]] = None) -> Kinematics:
+        r"""
+        Begin without scalar-product assumptions in the requested dimension.
+
+        Examples
+        --------
+        >>> kin = fk.Kinematics(S("D"), momenta=[k, p])
+
+        Parameters
+        ----------
+        dimension : Expression or None
+            Positive integer or symbolic dimension; defaults to four.
+        momenta : list[Expression] or None
+            Momentum names used in scalar products and linear combinations.
+        """
+    def with_scalar_product(self, left: Expression, right: Expression, value: Expression) -> Kinematics:
+        r"""
+        Return a context with one additional scalar-product assumption.
+
+        Examples
+        --------
+        >>> massive = kin.with_scalar_product(p, p, s)
+        >>> assert massive.scalar_product(p, p) == s
+
+        Parameters
+        ----------
+        left : Expression
+            First unindexed momentum name.
+        right : Expression
+            Second unindexed momentum name.
+        value : Expression
+            Exact scalar product to assign.
+        """
+    def scalar_product(self, left: Expression, right: Expression) -> Expression:
+        r"""
+        Expand a bilinear scalar product and apply this context's assumptions.
+
+        Nonlinear momentum expressions fail with KinematicsError.
+
+        Examples
+        --------
+        >>> assert kin.scalar_product(2*p, p) == 2*s
+
+        Parameters
+        ----------
+        left : Expression
+            First momentum or linear combination of declared momenta.
+        right : Expression
+            Second momentum or linear combination of declared momenta.
+        """
+    def apply(self, expression: Expression) -> Expression:
+        r"""
+        Apply the declared scalar-product assumptions to an expression.
+
+        Examples
+        --------
+        >>> assert kin.apply(kin.scalar_product(p, p)) == s
+
+        Parameters
+        ----------
+        expression : Expression
+            Scalar expression in native FeynKit scalar-product notation.
         """
 
 class KinematicsError(FeynkitError):

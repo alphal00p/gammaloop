@@ -420,6 +420,11 @@ impl VakintSettings {
         vakint::VakintSettings {
             form_exe_path: self.form_exe_path.clone(),
             python_exe_path: self.python_exe_path.clone(),
+            rustred_artifact_path: None,
+            rustred_application_options: Default::default(),
+            rustred_scalar_numerator_limits: Default::default(),
+            rustred_product_limits: Default::default(),
+            rustred_momentum_match_limits: Default::default(),
             verify_numerator_identification: false,
             run_time_decimal_precision: self.run_time_decimal_precision as u32,
             allow_unknown_integrals: false,
@@ -656,6 +661,10 @@ mod tests {
             deserialized.tensor_reduction_method,
             settings.tensor_reduction_method
         );
+        assert_eq!(
+            settings.true_settings().tensor_reduction_method,
+            TensorReductionMethod::FeynKit
+        );
     }
 
     #[test]
@@ -669,6 +678,10 @@ mod tests {
         );
         assert_eq!(
             TensorReductionMethod::from(settings.tensor_reduction_method),
+            TensorReductionMethod::AlphaLoop
+        );
+        assert_eq!(
+            settings.true_settings().tensor_reduction_method,
             TensorReductionMethod::AlphaLoop
         );
 

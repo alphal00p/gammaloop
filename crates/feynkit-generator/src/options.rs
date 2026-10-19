@@ -13,10 +13,11 @@ use feynkit_model::Model;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
+    graph::Graph,
     parser::ParseSettings,
 };
 
-use crate::{ParticleSelector, SelectorError, VertexSelector};
+use crate::{EdgeColor, NodeColor, ParticleSelector, SelectorError, VertexSelector};
 
 #[derive(
     Debug,
@@ -325,6 +326,7 @@ impl CancellationToken {
 type ProgressCallback =
     Arc<dyn Fn(GenerationProgress) -> GenerationControl + Send + Sync + 'static>;
 type CancellationCheck = Arc<dyn Fn() -> bool + Send + Sync + 'static>;
+type GraphFilter = Arc<dyn Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync>;
 
 #[derive(Clone)]
 pub struct GenerationOptions {
@@ -348,6 +350,7 @@ pub struct GenerationOptions {
     pub(crate) cancellation: CancellationToken,
     pub(crate) cancellation_check: Option<CancellationCheck>,
     pub(crate) progress: Option<ProgressCallback>,
+    pub(crate) filter: Option<GraphFilter>,
 }
 
 /// Stable persistent portion of [`GenerationOptions`]. Callbacks and
@@ -498,6 +501,7 @@ impl Default for GenerationOptions {
             cancellation: CancellationToken::new(),
             cancellation_check: None,
             progress: None,
+            filter: None,
         }
     }
 }
@@ -559,6 +563,7 @@ impl GenerationOptions {
             cancellation: CancellationToken::new(),
             cancellation_check: None,
             progress: None,
+            filter: None,
         })
     }
 
@@ -630,11 +635,23 @@ impl fmt::Debug for GenerationOptions {
             .field("cancelled", &self.cancellation.is_cancelled())
             .field("cancellation_check", &self.cancellation_check.is_some())
             .field("progress", &self.progress.is_some())
+            .field("filter", &self.filter.is_some())
             .finish()
     }
 }
 
 impl GenerationOptions {
+    /// Prune partial topologies during enumeration. The first `completed_vertices`
+    /// nodes have all incident edges assigned; the others may still grow.
+    /// Like progress callbacks, this runtime predicate is not serialized.
+    pub fn filter(
+        mut self,
+        callback: impl Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.filter = Some(Arc::new(callback));
+        self
+    }
+
     pub fn threads(mut self, threads: usize) -> Self {
         self.threads = Some(threads);
         self

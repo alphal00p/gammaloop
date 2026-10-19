@@ -64,17 +64,11 @@ impl VakintExpression {
         diagram.validate().map_err(|error| native_error(&error))?;
         let mut edges = diagram.edges().collect::<Vec<_>>();
         edges.sort_by_key(|(id, _, _)| *id);
-        if edges.is_empty()
-            || edges.iter().any(|(_, endpoints, edge)| {
-                edge.is_dummy
-                    || edge.external.is_some()
-                    || endpoints.source.is_none()
-                    || endpoints.target.is_none()
-            })
-        {
-            return Err(invalid(
-                "a vacuum topology needs non-dummy, non-dangling propagators",
-            ));
+        // This graph representation attaches external states to vertices and
+        // stores two concrete endpoints on every edge. Vacuum ingress excludes
+        // those external vertices before translating the validated incidence.
+        if edges.is_empty() || diagram.vertices().any(|(_, vertex)| vertex.is_external()) {
+            return Err(invalid("a vacuum topology needs internal propagators"));
         }
         if edges.windows(2).any(|pair| pair[0].0 == pair[1].0) {
             return Err(invalid("duplicate graph edge IDs"));
@@ -249,7 +243,7 @@ impl VakintExpression {
         // every numerator factor, including a cancelled physical denominator.
         let mut vertices = BTreeMap::new();
         for (_, endpoints, _) in &edges {
-            for vertex in [endpoints.source.unwrap().0, endpoints.target.unwrap().0] {
+            for vertex in [endpoints.source.0, endpoints.target.0] {
                 vertices.insert(vertex, vertex);
             }
         }
@@ -257,8 +251,8 @@ impl VakintExpression {
             if powers[*slot] > 0 {
                 continue;
             }
-            let source = vertices[&endpoints.source.unwrap().0];
-            let target = vertices[&endpoints.target.unwrap().0];
+            let source = vertices[&endpoints.source.0];
+            let target = vertices[&endpoints.target.0];
             if source == target {
                 return Err(invalid(
                     "a pinch removes an independent vacuum loop; its scaleless integration is not represented by this graph",
@@ -318,12 +312,8 @@ impl VakintExpression {
                     "graph denominator does not have a scalar mass squared",
                 ));
             }
-            let source = endpoints
-                .source
-                .ok_or_else(|| invalid("propagator has an incomplete incidence"))?;
-            let target = endpoints
-                .target
-                .ok_or_else(|| invalid("propagator has an incomplete incidence"))?;
+            let source = endpoints.source;
+            let target = endpoints.target;
             topology *= S.prop.call((
                 id.0,
                 S.edge.call((vertices[&source.0], vertices[&target.0])),

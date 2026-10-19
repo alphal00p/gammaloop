@@ -287,6 +287,16 @@ pub struct Particle {
 }
 
 impl Particle {
+    /// Symbolic UFO mass parameter, without substituting its numerical value.
+    pub fn symbolic_mass_parameter(&self, model: &Model) -> Result<Atom, ModelError> {
+        let mass = model.parameter_by_id(self.mass)?;
+        Ok(if mass.name == "ZERO" {
+            Atom::num(0)
+        } else {
+            Atom::var(symbol!(&format!("UFO::{}", mass.name)))
+        })
+    }
+
     pub fn is_antiparticle(&self) -> bool {
         self.pdg_code < 0
     }

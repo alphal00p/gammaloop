@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
 use spenso::structure::{
-    IndexLess, OrderedStructure, PermutedStructure,
+    Canonicalized, IndexLess, OrderedStructure,
     representation::{Euclidean, LibraryRep, Minkowski, RepName},
     slot::{DummyAind, IsAbstractSlot, Slot},
 };
@@ -885,7 +885,7 @@ impl ParticleGammaLoopExt for Particle {
     }
 
     fn spin_reps(&self) -> IndexLess<LibraryRep, Aind> {
-        PermutedStructure::<IndexLess<LibraryRep, Aind>>::from_iter(match self.spin {
+        Canonicalized::<IndexLess<LibraryRep, Aind>>::from_iter(match self.spin {
             -1..=1 => vec![],
             spin if spin > 0 && spin % 2 == 0 => {
                 vec![Bispinor {}.new_rep(4).cast(); spin.div_euclid(2) as usize]
@@ -895,7 +895,7 @@ impl ParticleGammaLoopExt for Particle {
             }
             _ => vec![],
         })
-        .structure
+        .into_canonical()
     }
 
     fn color_reps(&self, flow: Flow) -> IndexLess {
@@ -915,7 +915,7 @@ impl ParticleGammaLoopExt for Particle {
             (_, 8) => vec![ColorAdjoint {}.new_rep(8).cast()],
             _ => vec![],
         };
-        PermutedStructure::<IndexLess>::from_iter(reps).structure
+        Canonicalized::<IndexLess>::from_iter(reps).into_canonical()
     }
 
     fn polarization_sum(
@@ -1086,21 +1086,22 @@ impl VertexRuleGammaLoopExt for VertexRule {
         let color_slot = Euclidean {}.new_slot(color_structure.len(), i);
         let spin_slot = Euclidean {}.new_slot(spin_structure.len(), j);
         let color_structure = ParamTensor::composite(DataTensor::Dense(
-            DenseTensor::from_data(
+            DenseTensor::from_storage_data(
                 color_structure,
-                PermutedStructure::from_iter([color_slot]).structure,
+                Canonicalized::from_iter([color_slot]).into_canonical(),
             )
             .unwrap(),
         ));
         let spin_structure = ParamTensor::composite(DataTensor::Dense(
-            DenseTensor::from_data(
+            DenseTensor::from_storage_data(
                 spin_structure,
-                PermutedStructure::from_iter([spin_slot]).structure,
+                Canonicalized::from_iter([spin_slot]).into_canonical(),
             )
             .unwrap(),
         ));
+        let (structure, layout) = Canonicalized::from_iter([color_slot, spin_slot]).into_parts();
         let mut couplings = ParamTensor::composite(DataTensor::Sparse(SparseTensor::empty(
-            PermutedStructure::from_iter([color_slot, spin_slot]).structure,
+            structure,
             Atom::Zero,
         )));
         for (color, row) in self.couplings.iter().enumerate() {
@@ -1108,7 +1109,8 @@ impl VertexRuleGammaLoopExt for VertexRule {
                 if let Some(coupling) = coupling {
                     couplings
                         .set(
-                            &[color, spin],
+                            // UFO rows use color/spin order before canonicalization.
+                            &layout.logical_to_canonical(&[color, spin]),
                             Atom::from(UFOSymbol::from(
                                 &model.coupling_by_id(*coupling).unwrap().name,
                             )),
@@ -1153,5 +1155,79 @@ impl PropagatorGammaLoopExt for Propagator {
 
     fn degree_of_divergence(&self) -> i32 {
         (self.numerator_atom() / self.denominator_atom()).all_dod()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spenso::{contraction::Contract, structure::HasStructure};
+
+    #[test]
+    fn vertex_tensors_preserve_color_spin_axes() {
+        let mut definition = serde_json::to_value(Model::empty("vertex-axis-regression")).unwrap();
+        definition["lorentz_structures"] = serde_json::json!([
+            {"name": "axis_l0", "spins": [], "structure": "11"},
+            {"name": "axis_l1", "spins": [], "structure": "13"}
+        ]);
+        definition["couplings"] = serde_json::json!(
+            (0..6)
+                .map(|index| serde_json::json!({
+                    "name": format!("axis_c{index}"), "expression": "1", "orders": []
+                }))
+                .collect_vec()
+        );
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        for colors in [2, 3] {
+            let vertex = VertexRule {
+                name: "axis_vertex".into(),
+                particles: Vec::new(),
+                color_structures: [2, 3, 5].into_iter().take(colors).map(Atom::num).collect(),
+                lorentz_structures: ["axis_l0", "axis_l1"]
+                    .map(|name| model.lorentz_structure_id(name).unwrap())
+                    .into(),
+                couplings: (0..colors)
+                    .map(|color| {
+                        (0..2)
+                            .map(|spin| {
+                                if (color, spin) == (1, 0) {
+                                    None
+                                } else {
+                                    Some(
+                                        model
+                                            .coupling_id(&format!("axis_c{}", 2 * color + spin))
+                                            .unwrap(),
+                                    )
+                                }
+                            })
+                            .collect()
+                    })
+                    .collect(),
+            };
+            let mut expected = Atom::Zero;
+            for (color, row) in vertex.couplings.iter().enumerate() {
+                for (spin, coupling) in row.iter().enumerate() {
+                    if let Some(coupling) = coupling {
+                        expected += &vertex.color_structures[color]
+                            * Atom::num([11, 13][spin])
+                            * Atom::from(UFOSymbol::from(
+                                &model.coupling_by_id(*coupling).unwrap().name,
+                            ));
+                    }
+                }
+            }
+            // Equal dimensions test index sorting; unequal dimensions also test
+            // representation sorting. Neither may exchange color and spin data.
+            for (i, j) in [
+                (Aind::Normal(1), Aind::Normal(2)),
+                (Aind::Normal(2), Aind::Normal(1)),
+            ] {
+                let [color, couplings, spin] = vertex.tensors(&model, i, j);
+                let contracted = color.contract(&couplings).unwrap().contract(&spin).unwrap();
+                assert_eq!(contracted.scalar().unwrap().expand(), expected.expand());
+                let contracted = spin.contract(&couplings).unwrap().contract(&color).unwrap();
+                assert_eq!(contracted.scalar().unwrap().expand(), expected.expand());
+            }
+        }
     }
 }

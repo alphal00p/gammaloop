@@ -23,8 +23,10 @@ use crate::{
     cff::{PyCffResult, build_cff_for_diagram},
     display::{escape_html, render_diagram_html, render_diagram_svg},
     error,
+    integrals::PyIntegralFamily,
     kinematics::{PyFourMomentum, PyThreeMomentum},
     model::PyModel,
+    symbolic_kinematics::PyKinematics,
     tensor::PyTensorReducer,
 };
 
@@ -917,9 +919,71 @@ impl From<FeynmanDiagram> for PyFeynmanDiagram {
     }
 }
 
+impl PyFeynmanDiagram {
+    /// Borrow the complete native diagram for an integral backend.
+    pub fn as_diagram(&self) -> &FeynmanDiagram {
+        &self.inner
+    }
+}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyFeynmanDiagram {
+    /// Complete the routed physical propagators with auxiliary scalar products.
+    ///
+    /// Physical denominators retain edge order and model masses. Preferred
+    /// products are appended only when independent, then remaining coordinates
+    /// are filled automatically. Dependent physical propagators raise DiagramError.
+    ///
+    /// Examples
+    /// --------
+    /// >>> family = diagram.integral_family()
+    /// >>> assert family.is_complete
+    ///
+    /// Parameters
+    /// ----------
+    /// independent_dot_products : list[Expression] or None
+    ///     Preferred auxiliary denominators in the stored loop routing.
+    /// kinematics : Kinematics or None
+    ///     Scalar-product assumptions; defaults to the graph's symbolic dimension.
+    #[pyo3(signature = (independent_dot_products=None, *, kinematics=None))]
+    fn integral_family(
+        &self,
+        independent_dot_products: Option<Vec<PythonExpression>>,
+        kinematics: Option<&PyKinematics>,
+    ) -> PyResult<PyIntegralFamily> {
+        PyIntegralFamily::from_diagram(self, independent_dot_products, kinematics)
+    }
+
+    /// Extract ordered physical propagators without removing dependent entries.
+    ///
+    /// This uses the diagram's stored loop routing and shared model-mass
+    /// conventions. External carriers and dummy edges are excluded. Tree
+    /// diagrams raise DiagramError because they have no loop integral.
+    ///
+    /// Examples
+    /// --------
+    /// >>> family = diagram.propagator_family()
+    /// >>> assert len(family.denominators) >= family.rank
+    ///
+    /// Parameters
+    /// ----------
+    /// kinematics : Kinematics or None
+    ///     Scalar-product assumptions; defaults to the graph's symbolic dimension.
+    #[pyo3(signature = (*, kinematics=None))]
+    fn propagator_family(&self, kinematics: Option<&PyKinematics>) -> PyResult<PyIntegralFamily> {
+        let default = feynkit_kinematics::Kinematics::in_dimension(&Atom::var(
+            feynkit_graph::symbols::dimension(),
+        ))
+        .expect("the shared dimension is a Symbolica symbol");
+        Ok(PyIntegralFamily {
+            inner: self
+                .inner
+                .propagator_family(kinematics.map(|context| &context.inner).unwrap_or(&default))
+                .map_err(error::diagram)?,
+        })
+    }
+
     /// Deserialize a Feynman diagram from its JSON representation.
     ///
     /// Examples
@@ -961,6 +1025,34 @@ impl PyFeynmanDiagram {
     #[staticmethod]
     fn from_dot(model: &PyModel, dot: &str) -> PyResult<Self> {
         FeynmanDiagram::from_dot(Arc::clone(&model.inner), dot)
+            .map(Into::into)
+            .map_err(error::diagram)
+    }
+
+    /// Import a compact particle topology and construct its native loop routing.
+    ///
+    /// Unlike a saved diagram, compact DOT names particles rather than storing
+    /// model fingerprints and tensor annotations. Model references and topology
+    /// are validated by the native importer; no Feynman rules are inferred.
+    /// Use ``from_dot`` to restore the exact serialized diagram dialect.
+    ///
+    /// Examples
+    /// --------
+    /// >>> diagram = fk.FeynmanDiagram.from_topology_dot(
+    /// ...     model, 'digraph sunset { a -> b [particle="phi"]; a -> b [particle="phi"]; a -> b [particle="phi"]; }'
+    /// ... )
+    /// >>> family = diagram.propagator_family()
+    /// >>> assert len(family.denominators) == 3
+    ///
+    /// Parameters
+    /// ----------
+    /// model : Model
+    ///     Model defining the named particles and masses.
+    /// dot : str
+    ///     Compact topology DOT with particle labels and optional routing hints.
+    #[staticmethod]
+    fn from_topology_dot(model: &PyModel, dot: &str) -> PyResult<Self> {
+        FeynmanDiagram::from_topology_dot(Arc::clone(&model.inner), dot)
             .map(Into::into)
             .map_err(error::diagram)
     }

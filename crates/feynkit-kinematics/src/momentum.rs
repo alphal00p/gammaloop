@@ -483,6 +483,24 @@ impl<T: KinematicScalar> FourMomentum<T> {
         Self::from_args(zero.clone(), zero.clone(), zero.clone(), zero)
     }
 
+    /// Initial-state denominator: `2 E` for decay or invariant scattering flux.
+    ///
+    /// The one-particle value is frame dependent. Two future-directed on-shell
+    /// momenta give `4 sqrt((p1.p2)^2 - p1^2 p2^2)`. Unit conversion, averages
+    /// and phase-space symmetry factors are not included.
+    pub fn flux(&self, other: Option<&Self>) -> T {
+        let flux = match other {
+            Some(other) => crate::InitialStateFlux::Scattering {
+                momentum_dot: self.dot(other),
+                mass_squared_product: self.mass_squared() * other.mass_squared(),
+            },
+            None => crate::InitialStateFlux::Decay {
+                energy: self.temporal.value.clone(),
+            },
+        };
+        flux.denominator(|value| value.sqrt())
+    }
+
     /// Return the positive square root of invariant mass squared.
     pub fn mass(&self) -> T {
         self.mass_squared().sqrt()

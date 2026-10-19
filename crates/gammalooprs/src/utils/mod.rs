@@ -254,7 +254,33 @@ pub mod tracing;
 mod tests {
     use std::str::FromStr;
 
-    use super::{Integer, Rational, RealLike, SymbolicaFloat, VarFloat};
+    use super::{
+        ArbPrec, F, Integer, QuadFloat, Rational, RealLike, SymFloatLike, SymbolicaFloat, VarFloat,
+    };
+
+    #[test]
+    fn precision_requests_preserve_fixed_numeric_backends() {
+        fn check<T: SymFloatLike>(mut value: T) {
+            assert!(value.fixed_precision());
+            let precision = value.get_precision();
+            let original = value.clone();
+            for requested in [32, 2048] {
+                value.set_precision(requested);
+                assert_eq!(value.get_precision(), precision);
+                assert_eq!(value, original);
+            }
+        }
+
+        let rational = Rational::from((25, 8));
+        let mut fixed = VarFloat::<256>::from(&rational);
+        fixed.set_precision(32);
+        assert_eq!(fixed.float.prec(), 256);
+        check(fixed);
+        check(QuadFloat::from(&rational));
+        check(F(ArbPrec::from(&rational)));
+        check(F(QuadFloat::from(&rational)));
+        check(F(3.125_f64));
+    }
 
     #[test]
     fn native_rational_conversion_preserves_requested_precision() {
@@ -768,6 +794,10 @@ impl<const N: u32> RefOne for VarFloat<N> {
 }
 
 impl<const N: u32> SymFloatLike for VarFloat<N> {
+    // The type parameter fixes the working precision.
+    #[inline]
+    fn set_precision(&mut self, _precision: u32) {}
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.float.assign(&other.float);
@@ -986,6 +1016,11 @@ impl RefOne for QuadFloat {
 }
 
 impl SymFloatLike for QuadFloat {
+    #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.0.set_precision(precision);
+    }
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.0.set_from(&other.0);
@@ -2053,6 +2088,11 @@ impl<T: FloatLike> std::fmt::LowerExp for F<T> {
 }
 
 impl<T: FloatLike> SymFloatLike for F<T> {
+    #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.0.set_precision(precision);
+    }
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.0.set_from(&other.0);

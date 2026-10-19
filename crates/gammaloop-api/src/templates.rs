@@ -134,6 +134,7 @@ mod tests {
     #[test]
     #[ignore = "requires Typst, just, and LINNET_TEST_EXECUTABLE pointing to a built CLI"]
     fn exported_model_drawings_render_and_cache_without_python() -> Result<()> {
+        use gammalooprs::model::ModelGammaLoopExt;
         use std::collections::BTreeMap;
         use std::os::unix::fs::symlink;
         use std::path::PathBuf;

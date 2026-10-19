@@ -39,38 +39,8 @@
 
   cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
 
-  lockedCargo = builtins.fromTOML (builtins.readFile (workspaceRoot + "/Cargo.lock"));
-  # Cargo resolves optional path packages from an entire pinned Git workspace,
-  # even when the ordinary lock omits them. Crane links only lock-listed crates,
-  # so make the private feature-unification package available to the offline
-  # resolver too. This supplements vendor metadata, not the runtime lock or its
-  # feature selection; all package contents come from the existing locked commit.
-  gitWorkspaceVendorPackages = map (source: let
-    checkout = builtins.fetchTree {
-      type = "github";
-      owner = "alphal00p";
-      repo = "gammaloop";
-      rev = lib.last (lib.splitString "#" source);
-    };
-    manifest = builtins.fromTOML (builtins.readFile (checkout.outPath + "/crates/${workspaceHackPackage}/Cargo.toml"));
-  in {
-    inherit source;
-    inherit (manifest.package) name version;
-  }) (lib.unique (map (package: package.source) (lib.filter
-    (package: lib.hasPrefix "git+https://github.com/alphal00p/gammaloop?" (package.source or ""))
-    lockedCargo.package)));
-
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
-    cargoLockParsed = lockedCargo // {
-      package = lockedCargo.package ++ lib.filter (extra:
-        !lib.any (package:
-          package.name == extra.name
-          && package.version == extra.version
-          && (package.source or "") == extra.source)
-        lockedCargo.package)
-      gitWorkspaceVendorPackages;
-    };
     overrideVendorGitCheckout = packages: drv: let
       source = (builtins.head packages).source;
       github = "git+https://github.com/";
@@ -483,6 +453,7 @@
       "crates/feynkit-model/tests/fixtures"
       "crates/feynkit-py/tests/fixtures"
       "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
+      "crates/feynkit-py/python/symbolica/community/feynkit/__init__.pyi"
     ];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
     vakint = [

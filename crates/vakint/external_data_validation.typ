@@ -1,6 +1,6 @@
 = External-data migration validation
 
-This records completed migration checks as of 19 October 2026. The focused
+This records completed migration checks as of 20 October 2026. The focused
 suites overlap; their counts are not a combined whole-repository test result.
 Outstanding end-to-end and repository-CI checks are listed separately below.
 
@@ -186,8 +186,43 @@ tree, prepared caches or 4L/5L runtime packs. Building the crate archive with
 `cargo package --allow-dirty --no-verify` stops at the pre-existing Git-only
 `feynkit-graph` dependency without a crates.io version requirement. Publishing
 Vakint itself is outside this migration's scope; workspace compilation and
-the published external-data packs are the delivery targets. The tested Git
-pins were retained.
+the published external-data packs are the delivery targets. That initial packaging result predates the workspace dependency consolidation
+described below; package inventory and archive checks will be repeated against
+the final source. The numerical dependency pins were retained.
+
+== Consolidated workspace dependencies
+
+Vakint now uses the workspace FeynKit, Spenso and Idenso packages. This removes
+separate Git-sourced copies whose Symbolica state initializers collided in a
+combined GammaLoop process. Symbolica/Numerica/Graphica and RustRed retain the
+pinned revisions above. Required integral-family and symbolic-kinematics APIs
+were incorporated from the current FeynKit dependency branch, including exact
+Gaussian-rational coefficients and tiny-coefficient regressions. Stored graph
+routing and physical propagator order are preserved at the local graph boundary.
+
+The consolidated implementation passed 70 graph and 30 kinematics tests, six
+combined GammaLoop precision/tensor/settings regressions, and all 52 active
+FeynKit tensor tests (one existing ignored test). Twenty Python subprocess
+checks passed: four graph-ingress/serialization, five external-data and eleven
+native-cache checks. A fresh-process tensor JSON/DOT regression verifies exact
+registered representation metadata and rejects altered tags; the previous
+extension reproduces its failure. The importer reuses exact registered symbol
+declarations, following the existing dependency implementation.
+
+Actual offline Nix-vendor resolution agrees with Cargo for all 695 selected-CI
+nodes and 822 all-feature nodes, including dependency edges and enabled features.
+Hakari and generated CI graph checks pass. The obsolete Git-Spenso vendor
+augmentation was removed after that proof. All required new fixture and stub
+inputs were checked in the Nix source. Coordinated native-cache, scalar and
+four-loop numerical revalidation is still in progress for this consolidated
+snapshot; the earlier complete numerical evidence above predates this mapping.
+
+A further native/compact DOT discriminator defect was reproduced and submitted
+against the current FeynKit branch in
+#link("https://github.com/alphal00p/gammaloop/pull/156")[PR 156]. Its 123 graph
+tests and all-target Clippy pass; the PR's separate Nix upload/readiness gate is
+in progress. Already-fixed dependency issues were incorporated without duplicate
+upstream submissions.
 
 == Final repository-CI result — pending completion
 

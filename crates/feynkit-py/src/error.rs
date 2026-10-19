@@ -55,6 +55,12 @@ define_exception!(
     "Invalid process configuration or Feynman-diagram generation failure.\n\nExamples\n--------\nProcess and topology failures share one public exception type:\n\n>>> try:\n...     result = model.generate_diagrams(incoming, outgoing, loops=1)\n... except fk.GenerationError as error:\n...     print(error)"
 );
 define_exception!(
+    IntegralFamilyError,
+    FeynkitError,
+    pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
+    "Invalid inverse-propagator family or incomplete scalar-product basis.\n\nExamples\n--------\nCatch a dependent denominator basis before completion:\n\n>>> try:\n...     completed = family.complete()\n... except fk.IntegralFamilyError as error:\n...     print(error)"
+);
+define_exception!(
     CffError,
     FeynkitError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
@@ -96,6 +102,10 @@ pub(crate) fn diagram(error: feynkit_graph::DiagramError) -> PyErr {
     DiagramError::new_err(error.to_string())
 }
 
+pub(crate) fn integral_family(error: feynkit_graph::IntegralFamilyError) -> PyErr {
+    IntegralFamilyError::new_err(error.to_string())
+}
+
 pub(crate) fn generation(error: feynkit_generator::GenerationError) -> PyErr {
     GenerationError::new_err(error.to_string())
 }
@@ -126,6 +136,7 @@ pub(crate) fn register(module: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3:
     module.add("FeynkitError", py.get_type::<FeynkitError>())?;
     module.add("ModelError", py.get_type::<ModelError>())?;
     module.add("DiagramError", py.get_type::<DiagramError>())?;
+    module.add("IntegralFamilyError", py.get_type::<IntegralFamilyError>())?;
     module.add("GenerationError", py.get_type::<GenerationError>())?;
     module.add("CffError", py.get_type::<CffError>())?;
     module.add("KinematicsError", py.get_type::<KinematicsError>())?;

@@ -9,6 +9,8 @@ keywords = ["feynman", "hep", "kinematics", "physics"]
 categories = ["science"]
 
 [dependencies]
+spenso = { workspace = true, features = ["shadowing"] }
+symbolica = { workspace = true, features = ["integer-gmp", "float-mpfr"] }
 linnet = { workspace = true, features = ["serde"] }
 numerica = { workspace = true, features = ["serde", "integer-gmp", "float-mpfr"] }
 serde = { workspace = true, features = ["derive"] }

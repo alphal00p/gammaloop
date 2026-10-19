@@ -9,6 +9,8 @@ keywords = ["feynman", "graph", "physics"]
 categories = ["science"]
 
 [dependencies]
+itertools.workspace = true
+spenso = { workspace = true, features = ["shadowing"] }
 feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 linnet = { version = "0.17.0", path = "../linnet", features = ["serde"] }

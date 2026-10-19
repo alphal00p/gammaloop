@@ -5,12 +5,18 @@ use symbolica::symbol;
 fn scalar_model() -> Model {
     // Native model parameter printers have process-wide identities. Initialize
     // this shared fixture once before parallel diagram tests clone it.
-    static MODEL: std::sync::LazyLock<Model> = std::sync::LazyLock::new(Model::phi_3_4);
+    static MODEL: std::sync::LazyLock<Model> = std::sync::LazyLock::new(|| {
+        Model::from_json(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/phi_3_4.json"
+        )))
+        .expect("valid phi_3_4 fixture")
+    });
     MODEL.clone()
 }
 
 fn sunset() -> (FeynmanDiagram, IntegralFamily) {
-    let diagram = FeynmanDiagram::from_dot(
+    let diagram = FeynmanDiagram::from_topology_dot(
         scalar_model(),
         "digraph sunset { a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; }",
     ).unwrap();
@@ -20,7 +26,7 @@ fn sunset() -> (FeynmanDiagram, IntegralFamily) {
 
 #[test]
 fn repeated_native_propagators_coalesce_exact_powers_before_matching() {
-    let diagram = FeynmanDiagram::from_dot(scalar_model(),
+    let diagram = FeynmanDiagram::from_topology_dot(scalar_model(),
         "digraph repeated { a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; a -> a [particle=\"phi\"]; b -> b [particle=\"phi\"]; }").unwrap();
     let family = diagram.propagator_family(&Kinematics::new()).unwrap();
     assert_eq!(diagram.loop_count(), 3);
@@ -59,7 +65,7 @@ fn repeated_native_propagators_coalesce_exact_powers_before_matching() {
 
 #[test]
 fn massive_zero_flow_bridge_is_a_scalar_factor_without_losing_loops() {
-    let diagram = FeynmanDiagram::from_dot(scalar_model(),
+    let diagram = FeynmanDiagram::from_topology_dot(scalar_model(),
         "digraph two_tadpoles { a -> a [particle=\"phi\"]; a -> b [particle=\"phi\"]; b -> b [particle=\"phi\"]; }").unwrap();
     let original = diagram.propagator_family(&Kinematics::new()).unwrap();
     assert_eq!(diagram.loop_count(), 2);
@@ -141,7 +147,7 @@ fn massive_zero_flow_bridge_is_a_scalar_factor_without_losing_loops() {
 
 #[test]
 fn five_loop_self_edge_pinch_never_downgrades_the_integration_dimension() {
-    let diagram = FeynmanDiagram::from_dot(
+    let diagram = FeynmanDiagram::from_topology_dot(
         scalar_model(),
         "digraph five_tadpoles {\
         a -> a [particle=\"phi\"]; a -> b [particle=\"phi\"];\

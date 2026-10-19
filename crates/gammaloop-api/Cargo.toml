@@ -147,5 +147,5 @@ python_api = [
   "gammalooprs/python_api",
   "ufo_support",
 ]
-python_stubgen = ["python_api"]
+python_stubgen = ["python_api", "dep:pyo3-stub-gen", "gammalooprs/python_stubgen"]
 ufo_support = ["dep:feynkit-ufo", "dep:pyo3", "pyo3/auto-initialize"]

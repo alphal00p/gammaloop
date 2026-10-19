@@ -3,27 +3,60 @@
 
 use super::*;
 use feynkit_tensor::TensorReducer;
+use idenso::shorthands::UndoShorthands;
 use rustred::algebra::Coefficient;
 use spenso::structure::representation::{BaseRepName, Minkowski};
+use spenso::structure::{abstract_index::AbstractIndex, slot::DummyAind};
 use symbolica::{
     atom::Symbol,
     prelude::{Q, Z},
 };
 
-pub(super) fn algebra() -> AlgebraSettings {
-    AlgebraSettings {
-        contract: AlgebraContraction::Dots,
-        color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
-        ..AlgebraSettings::hep()
+pub(super) fn scalar(mut expression: Atom) -> Result<Atom> {
+    // The local Idenso APIs expose the same identity kernels separately.
+    // Repeat until stable because gamma/color identities can create new metric contractions.
+    loop {
+        let next = expression
+            .simplify_gamma()
+            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants())
+            .to_dots();
+        if next == expression {
+            break;
+        }
+        expression = next;
     }
-}
-
-pub(super) fn scalar(expression: Atom) -> Result<Atom> {
-    let tensor = SymbolicTensor::infer(expression)?.simplify_algebra(&algebra())?;
-    if !tensor.is_scalar() {
+    if !expression
+        .list_dangling::<spenso::structure::abstract_index::AbstractIndex>()?
+        .is_empty()
+    {
         return Err("native gamma/color contraction left open tensor ports".into());
     }
-    Ok(tensor.into_expression())
+    Ok(expression)
+}
+
+/// Materialize each scalar-product copy with an independent contracted index.
+/// A network power of an already contracted scalar retains that scalar's dummy
+/// scope; the indexed reducer instead needs explicit copies of that scope.
+fn indexed_dot_polynomial(expression: AtomView<'_>) -> Result<Atom> {
+    match expression {
+        AtomView::Add(sum) => sum.iter().try_fold(Atom::Zero, |sum, term| {
+            Ok(sum + indexed_dot_polynomial(term)?)
+        }),
+        AtomView::Mul(product) => product.iter().try_fold(Atom::one(), |product, factor| {
+            Ok(product * indexed_dot_polynomial(factor)?)
+        }),
+        AtomView::Pow(power) if power.get_base().contains_symbol(SPENSO_TAG.dot) => {
+            let count = usize::try_from(i64::try_from(power.get_exp())?)?;
+            (0..count).try_fold(Atom::one(), |product, _| {
+                Ok(product * indexed_dot_polynomial(power.get_base())?)
+            })
+        }
+        AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.dot => Ok(expression
+            .to_owned()
+            .undo_dots::<AbstractIndex>()?
+            .canonize::<AbstractIndex>(|_| AbstractIndex::new_dummy())?),
+        _ => Ok(expression.to_owned()),
+    }
 }
 
 fn angular(expression: &Atom, q: Symbol, d: &Atom, guards: &mut BTreeSet<Atom>) -> Result<Atom> {
@@ -31,9 +64,12 @@ fn angular(expression: &Atom, q: Symbol, d: &Atom, guards: &mut BTreeSet<Atom>) 
         return Ok(Atom::Zero);
     }
     let rep = Minkowski::selfless_symbol().call(d);
+    // The local reducer consumes indexed vectors. Expand compact products with
+    // Idenso so each factor, including powers of mixed dots, gets its own indices.
+    let indexed = indexed_dot_polynomial(expression.as_view())?;
     let reduction = TensorReducer::new(d.clone())
         .with_integrated_vector(q.call(rep))
-        .reduce(expression.as_view())?;
+        .reduce(indexed.as_view())?;
     if reduction.max_rank() > 4 {
         return Err("the quadratic transverse projector exceeded auxiliary q rank four".into());
     }
@@ -110,5 +146,25 @@ pub(super) fn controls(d: &Atom) -> Result<()> {
             "native auxiliary angular average disagrees with the local quadratic projector".into(),
         );
     }
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn local_projector_preserves_exact_angular_dirac_and_color_controls() -> Result<()> {
+    controls(&dimension()?)?;
+    let expression = Atom::parse(
+        "spenso::gamma(spenso::bis(4,a),spenso::bis(4,b),spenso::mink(d,mu))*spenso::gamma(spenso::bis(4,b),spenso::bis(4,a),spenso::mink(d,mu))",
+        "qcd_ladder_control",
+        Default::default(),
+    )?;
+    let d = Atom::var(symbol!("qcd_ladder_control::d"));
+    assert!((scalar(expression)? - Atom::num(4) * d).expand().is_zero());
+    let expression = Atom::parse(
+        "spenso::t(spenso::coad(8,a),spenso::cof(3,i),spenso::dind(spenso::cof(3,j)))*spenso::t(spenso::coad(8,a),spenso::cof(3,j),spenso::dind(spenso::cof(3,i)))",
+        "qcd_ladder_control",
+        Default::default(),
+    )?;
+    assert!((scalar(expression)? - Atom::num(4)).expand().is_zero());
     Ok(())
 }

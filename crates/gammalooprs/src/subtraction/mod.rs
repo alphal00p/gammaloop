@@ -8,9 +8,7 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     domains::{dual::HyperDual, float::Real},
     evaluate::{FunctionMap, OptimizationSettings},
-    function, parse,
-    poly::PolyVariable,
-    symbol,
+    function, parse, symbol,
 };
 use tracing::debug;
 use typed_index_collections::TiVec;

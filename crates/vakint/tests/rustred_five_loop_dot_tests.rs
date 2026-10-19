@@ -22,13 +22,18 @@ fn arguments(values: &[&str]) -> Vec<PathBuf> {
 }
 
 fn banana_dot() -> Result<String> {
-    let model = Model::phi_3_4();
+    let model = Model::from_json(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/phi_3_4.json"
+    )))
+    .expect("valid phi_3_4 fixture");
     let particle = model.particle_id("phi")?;
     let mut builder = FeynmanDiagram::builder(model, "six_line_scalar_banana");
     let mut vertex = |name: &str| {
         builder.add_vertex(DiagramVertex {
             name: name.into(),
             interaction: None,
+            external: None,
             numerator: Atom::one(),
         })
     };

@@ -19,10 +19,10 @@ ahash = "0.8.12"
 arrayvec = "0.7.4"
 colored = { workspace = true }
 eyre = { workspace = true }
-feynkit-graph = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
-feynkit-kinematics = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
-feynkit-py = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false, optional = true }
-feynkit-tensor = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
+feynkit-graph = { workspace = true }
+feynkit-kinematics = { workspace = true }
+feynkit-py = { workspace = true, optional = true }
+feynkit-tensor = { workspace = true }
 flate2 = "1.1.9"
 log = "0.4.29"
 regex = "1.12.2"
@@ -32,8 +32,8 @@ serde_json.workspace = true
 rustred.workspace = true
 rustred-app.workspace = true
 sha2 = "0.10.9"
-spenso = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
-spenso-macros = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
+spenso = { workspace = true, default-features = false }
+spenso-macros = { workspace = true, default-features = false }
 string-template-plus = "0.4.3"
 thiserror = { workspace = true }
 version-compare = "0.2.1"
@@ -54,9 +54,9 @@ default-features = false
 features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
-idenso = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
-feynkit-generator = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
-feynkit-model = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733", default-features = false }
+idenso = { workspace = true, default-features = false }
+feynkit-generator = { workspace = true }
+feynkit-model = { workspace = true }
 test-log = "0.2.19"
 
 [features]

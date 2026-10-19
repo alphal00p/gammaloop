@@ -2,7 +2,12 @@
 
 use super::*;
 use super::{projector, vacuum::Vacuum};
-use spenso::structure::representation::Minkowski;
+use idenso::CookSettings;
+use spenso::structure::{
+    abstract_index::AbstractIndex,
+    representation::{LibrarySlot, Minkowski},
+    slot::ParseableAind,
+};
 use symbolica::atom::Symbol;
 
 pub(super) struct Contribution {
@@ -53,30 +58,74 @@ fn coefficient(expression: &Atom, parameter: Symbol, power: i64) -> Result<Atom>
         .ok_or("native Taylor coefficient is outside the computed remainder")?)
 }
 
+type GluonPorts = Vec<Vec<LibrarySlot<AbstractIndex>>>;
+
+fn amputated_source(diagram: &FeynmanDiagram, d: &Atom) -> Result<(Atom, GluonPorts)> {
+    let raw = lorentz_dimension(&(diagram.numerator() * diagram.numerator_prefactor()), d);
+    // Generated FeynKit indices are function payloads; the local Idenso index
+    // type consumes symbols. Keep the existing reversible encoding boundary.
+    let cooking = CookSettings::reversible();
+    let numerator = cooking
+        .try_cook_indices(raw.as_view())
+        .map_err(|error| format!("failed to encode generated tensor indices: {error:?}"))?;
+    let ports = numerator
+        .list_dangling::<AbstractIndex>()?
+        .iter()
+        .map(|port| LibrarySlot::<AbstractIndex>::try_from(port.as_view()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut legs = BTreeMap::new();
+    for (id, ends, _) in diagram.edges() {
+        let source = diagram.vertex(ends.source).expect("valid source");
+        let target = diagram.vertex(ends.target).expect("valid target");
+        let (external, index_head) = if let Some(external) = &source.external {
+            (external, symbol!("FeynKit::SinkIndex"))
+        } else if let Some(external) = &target.external {
+            (external, symbol!("FeynKit::SourceIndex"))
+        } else {
+            continue;
+        };
+        let tensor_index = index_head.call((id.0, 1));
+        let mut slots = ports
+            .iter()
+            .filter(|slot| cooking.uncook(slot.aind.to_atom().as_view()) == tensor_index)
+            .copied()
+            .collect::<Vec<_>>();
+        slots.sort();
+        if slots.len() != 2 || legs.insert(external.index, slots).is_some() {
+            return Err(
+                "native amputated source must retain two gluon Lorentz/color ports per leg".into(),
+            );
+        }
+    }
+    let legs = legs.into_values().collect::<Vec<_>>();
+    if legs.len() != 2 || ports.len() != 4 {
+        return Err("native amputated source has unassigned or missing external ports".into());
+    }
+    Ok((numerator, legs))
+}
+
 pub(super) fn prepare(
     generated: feynkit_generator::GenerationResult,
     d: &Atom,
     evidence: &Path,
 ) -> Result<Projected> {
     projector::controls(d)?;
-    let amplitude = generated.into_amplitude(Default::default())?;
-    let diagram = &amplitude.diagrams()[0];
-    if amplitude.legs().len() != 2 || amplitude.legs().iter().any(|leg| leg.slots.len() != 2) {
-        return Err(
-            "native amputated source must retain exactly two gluon Lorentz/color ports".into(),
-        );
+    if !generated.report.completed || generated.diagrams.len() != 1 {
+        return Err("native amputated source requires one completely generated diagram".into());
     }
+    let diagram = &generated.diagrams[0];
+    let (numerator, legs) = amputated_source(diagram, d)?;
     let mut fermions = 0;
     let mut gluons = 0;
-    for (_, _, edge) in diagram.edges() {
-        if edge.external.is_some() {
+    for (_, ends, edge) in diagram.edges() {
+        if is_external_edge(diagram, ends) {
             if !edge.numerator.is_one() {
                 return Err("source contains external propagators or wavefunctions".into());
             }
             continue;
         }
         let particle = diagram.model().particle_by_id(edge.particle)?;
-        if !particle.symbolic_mass(diagram.model()).is_zero() {
+        if !particle.symbolic_mass_parameter(diagram.model())?.is_zero() {
             return Err("original QCD numerator is not massless".into());
         }
         match particle.pdg_code.abs() {
@@ -109,7 +158,7 @@ pub(super) fn prepare(
     let [(external_axis, _)] = independent.as_slice() else {
         return Err("two-point source must have exactly one independent external momentum".into());
     };
-    let raw = lorentz_dimension(&(diagram.numerator() * diagram.numerator_prefactor()), d);
+    let raw = numerator;
     assert_lorentz_dimension(&raw, d)?;
     let routed = diagram.loop_momentum_basis().route_expression(&raw);
     let args = Atom::var(symbol!("qcd_ladder::tensor_args___"));
@@ -130,9 +179,8 @@ pub(super) fn prepare(
     let mut color = Atom::one();
     let mut metric = Atom::one();
     let mut longitudinal = Atom::one();
-    for slot in &amplitude.legs()[0].slots {
-        let other = amplitude.legs()[1]
-            .slots
+    for slot in &legs[0] {
+        let other = legs[1]
             .iter()
             .find(|other| other.rep_name() == slot.rep_name())
             .ok_or("external representations differ")?;
@@ -165,8 +213,8 @@ pub(super) fn prepare(
     let q_square = kin.scalar_product(&Atom::var(q), &Atom::var(q))?;
     let rows = loop_rows(diagram);
     let mut denominator = Atom::one();
-    for (id, _, edge) in diagram.edges() {
-        if edge.external.is_some() {
+    for (id, ends, _) in diagram.edges() {
+        if is_external_edge(diagram, ends) {
             continue;
         }
         let inverse = &inverses[vacuum.original_slot(id)?];
@@ -207,8 +255,7 @@ pub(super) fn prepare(
             .or_insert_with(|| (Atom::Zero, Atom::Zero))
             .1 += value;
     }
-    let overall =
-        feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view());
+    let overall = evaluate_overall_factor(diagram.overall_factor().as_view());
     let mut conditions = BTreeSet::new();
     let mut contributions = Vec::new();
     for (index, (powers, (metric, longitudinal))) in groups.into_iter().enumerate() {
@@ -262,4 +309,20 @@ pub(super) fn prepare(
         contributions,
         conditions,
     })
+}
+
+#[cfg(test)]
+#[test]
+fn generated_qcd_external_ports_are_reversibly_encoded() -> Result<()> {
+    let generated = dressed_diagram()?;
+    let diagram = &generated.diagrams[0];
+    let d = dimension()?;
+    let (numerator, legs) = amputated_source(diagram, &d)?;
+    assert_eq!(legs.len(), 2);
+    assert!(legs.iter().all(|slots| slots.len() == 2));
+    assert_eq!(
+        CookSettings::reversible().uncook(numerator.as_view()),
+        lorentz_dimension(&(diagram.numerator() * diagram.numerator_prefactor()), &d)
+    );
+    Ok(())
 }

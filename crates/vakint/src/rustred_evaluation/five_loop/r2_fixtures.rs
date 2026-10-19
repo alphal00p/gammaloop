@@ -29,18 +29,24 @@ pub(super) struct Fixture {
 }
 
 fn diagram(banana: bool) -> Result<FeynmanDiagram> {
-    let model = Model::phi_3_4();
+    let model = Model::from_json(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/phi_3_4.json"
+    )))
+    .expect("valid phi_3_4 fixture");
     let particle = model.particle_id("phi")?;
     let mut builder = FeynmanDiagram::builder(model.clone(), "physical_r2_control");
     let left = builder.add_vertex(DiagramVertex {
         name: "left".into(),
         interaction: None,
+        external: None,
         numerator: Atom::one(),
     });
     let right = if banana {
         builder.add_vertex(DiagramVertex {
             name: "right".into(),
             interaction: None,
+            external: None,
             numerator: Atom::one(),
         })
     } else {
@@ -67,7 +73,7 @@ fn family(diagram: &FeynmanDiagram) -> Result<(IntegralFamily, Atom)> {
     let model = diagram.model();
     let mass = model
         .particle_by_id(model.particle_id("phi")?)?
-        .symbolic_mass(model);
+        .symbolic_mass_parameter(model)?;
     let replacement = [Replacement::new(mass.clone(), Atom::one())];
     let family = IntegralFamily::new(
         original.loop_momenta().to_vec(),
@@ -225,7 +231,14 @@ fn factor_coordinates() -> Result<Vec<Atom>> {
 
 impl Fixture {
     pub fn verify_native_family_map(&self) -> Result<()> {
-        let diagram = FeynmanDiagram::from_dot(Model::phi_3_4(), &self.dot)?;
+        let diagram = FeynmanDiagram::from_dot(
+            Model::from_json(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/phi_3_4.json"
+            )))
+            .expect("valid phi_3_4 fixture"),
+            &self.dot,
+        )?;
         let (family, _) = family(&diagram)?;
         let common = super::cancellation_fixtures::common_family(
             family.loop_momenta(),

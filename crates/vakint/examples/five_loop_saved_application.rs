@@ -314,8 +314,12 @@ fn check_independent_tadpoles(
 type MassiveBridgeFixture = (String, Atom, Atom, Atom);
 
 fn massive_bridge_fixtures() -> Result<Vec<MassiveBridgeFixture>, Box<dyn std::error::Error>> {
-    let diagram = FeynmanDiagram::from_dot(
-        Model::phi_3_4(),
+    let diagram = FeynmanDiagram::from_topology_dot(
+        Model::from_json(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/phi_3_4.json"
+        )))
+        .expect("valid phi_3_4 fixture"),
         "digraph five_tadpoles {\
          a -> a [particle=\"phi\"]; a -> b [particle=\"phi\"];\
          b -> b [particle=\"phi\"]; b -> c [particle=\"phi\"];\
@@ -581,8 +585,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // not a claim that all homogeneous momentum polynomials are admitted.
         admitted_denominator_numerator(&vakint, &settings, 11)?
     } else {
-        let diagram =
-            FeynmanDiagram::from_dot(Model::phi_3_4(), &std::fs::read_to_string(&args[1])?)?;
+        let diagram = FeynmanDiagram::from_dot(
+            Model::from_json(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/phi_3_4.json"
+            )))
+            .expect("valid phi_3_4 fixture"),
+            &std::fs::read_to_string(&args[1])?,
+        )?;
         if diagram.loop_count() != 5 {
             return Err("the DOT fixture must have five loops".into());
         }

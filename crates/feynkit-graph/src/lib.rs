@@ -7,7 +7,14 @@
 
 #![forbid(unsafe_code)]
 
+mod compact_dot;
 mod display;
+mod integrals;
+pub mod symbols;
+
+pub use integrals::{
+    IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
+};
 
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -31,9 +38,11 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, UserData},
     graph::Graph as CanonicalGraph,
-    parser::ParseSettings,
+    parser::{ParseSettings, Token},
+    state::{State, Workspace},
+    with_default_namespace,
 };
 use thiserror::Error;
 
@@ -438,6 +447,8 @@ impl LoopMomentumBasis {
 /// Errors produced while constructing or transforming diagrams.
 #[derive(Debug, Error)]
 pub enum DiagramError {
+    #[error(transparent)]
+    IntegralFamily(#[from] IntegralFamilyError),
     #[error(transparent)]
     Model(#[from] ModelError),
     #[error("vertex {vertex} is outside a diagram with {vertices} vertices")]
@@ -1941,14 +1952,14 @@ impl FeynmanDiagram {
                 attribute: "cuts",
             })
             .and_then(|cuts| {
-                let decoded = serde_json::from_str::<String>(&format!("\"{cuts}\""));
-                decoded
-                    .and_then(|cuts| serde_json::from_str::<Vec<DiagramCut>>(&cuts))
-                    .map_err(|_| DiagramError::InvalidDotAttribute {
+                // The DOT parser already decoded the attribute's quoted string.
+                serde_json::from_str::<Vec<DiagramCut>>(cuts).map_err(|_| {
+                    DiagramError::InvalidDotAttribute {
                         target: "graph".to_owned(),
                         attribute: "cuts",
                         value: cuts.clone(),
-                    })
+                    }
+                })
             })?;
         let topology_threshold_candidates = parsed
             .global_data
@@ -1959,16 +1970,13 @@ impl FeynmanDiagram {
                 attribute: "topology_threshold_candidates",
             })
             .and_then(|candidates| {
-                let decoded = serde_json::from_str::<String>(&format!("\"{candidates}\""));
-                decoded
-                    .and_then(|candidates| {
-                        serde_json::from_str::<Vec<DiagramThresholdCandidate>>(&candidates)
-                    })
-                    .map_err(|_| DiagramError::InvalidDotAttribute {
+                serde_json::from_str::<Vec<DiagramThresholdCandidate>>(candidates).map_err(|_| {
+                    DiagramError::InvalidDotAttribute {
                         target: "graph".to_owned(),
                         attribute: "topology_threshold_candidates",
                         value: candidates.clone(),
-                    })
+                    }
+                })
             })?;
 
         let mut builder = Self::builder(Arc::clone(&model), name)
@@ -2425,13 +2433,27 @@ impl FeynmanDiagram {
     }
 
     fn parse_expression(field: &'static str, expression: String) -> Result<Atom, DiagramError> {
-        Atom::parse(&expression, "feynkit_graph", ParseSettings::default()).map_err(|message| {
-            DiagramError::SymbolicParse {
+        // Canonical strings include attributes and tags, but not Symbolica user data.
+        // Reuse exact registered declarations so Spenso representation metadata survives.
+        let mut symbols = State::symbol_iter()
+            .filter(|(symbol, _)| !matches!(symbol.get_data(), UserData::None))
+            .map(|(symbol, _)| (Atom::var(symbol).to_canonical_string().into(), symbol))
+            .collect();
+        let namespace = with_default_namespace!(&expression, "feynkit_graph");
+        Workspace::get_local()
+            .with(|workspace| {
+                Token::parse_with_atom_info(
+                    &expression,
+                    ParseSettings::default(),
+                    Some((&namespace, &mut symbols, workspace)),
+                )?
+                .to_atom(&namespace, &mut symbols, workspace)
+            })
+            .map_err(|message| DiagramError::SymbolicParse {
                 field,
                 expression,
                 message,
-            }
-        })
+            })
     }
 
     fn spanning_forests(
@@ -3004,7 +3026,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    fn scalar_model() -> Arc<Model> {
+    pub(crate) fn scalar_model() -> Arc<Model> {
         Arc::new(Model::from_json(
             r#"{
                 "name":"phi3","restriction":null,"orders":[],

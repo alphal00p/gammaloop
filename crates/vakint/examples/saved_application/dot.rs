@@ -64,7 +64,11 @@ impl ScalarDotInput {
     /// The example's phi3/phi4 scalar model supplies the mass symbol. Normalize
     /// its sole mass to one consistently in both the native family and ingress.
     pub fn prepare_text(dot: &str, powers: &[i64]) -> Result<PreparedScalarDot> {
-        let model = Model::phi_3_4();
+        let model = Model::from_json(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/phi_3_4.json"
+        )))
+        .expect("valid phi_3_4 fixture");
         let diagram = FeynmanDiagram::from_dot(model.clone(), dot)?;
         let original = diagram.propagator_family(&Kinematics::new())?;
         if original.denominators().len() != powers.len() {
@@ -77,7 +81,7 @@ impl ScalarDotInput {
         }
         let mass = model
             .particle_by_id(model.particle_id("phi")?)?
-            .symbolic_mass(&model);
+            .symbolic_mass_parameter(&model)?;
         let substitutions = vec![(mass, Atom::one())];
         let replacements = substitutions
             .iter()

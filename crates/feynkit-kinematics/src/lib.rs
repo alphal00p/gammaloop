@@ -8,16 +8,20 @@
 #![forbid(unsafe_code)]
 
 mod clustering;
+mod flux;
 mod helicity;
 mod momentum;
 mod signature;
+mod symbolic;
 mod transform;
 
 pub use clustering::{ClusteringError, ClusteringResult, Jet, JetAlgorithm, JetDefinition};
+pub use flux::InitialStateFlux;
 pub use helicity::{Helicity, HelicityError};
 pub use linnet::num_traits::{Sign, SignError, SignOrZero};
 pub use momentum::{Energy, FourMomentum, ThreeMomentum};
 pub use signature::{MomentumSignature, Signature, SignatureError};
+pub use symbolic::{Kinematics, SymbolicKinematicsError};
 pub use transform::{Axis, Boost, BoostError, Rotation};
 
 use numerica::domains::float::{Real, SingleFloat};

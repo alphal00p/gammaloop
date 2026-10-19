@@ -2401,7 +2401,8 @@ fn resolve_python_slot_key(
     ))
 }
 
-#[allow(dead_code)]
+// Keep the conversion boundary aligned with the public Python keyword arguments.
+#[allow(dead_code, clippy::too_many_arguments)]
 fn build_python_integrate_command(
     state: &State,
     slots: Option<Vec<(ProcessRef, String)>>,
@@ -2814,7 +2815,7 @@ fn parse_cff_dot_graph(dot: &str) -> Result<DotGraph, CffDotInputError> {
             message: error.to_string(),
         })?
         .into_iter()
-        .last()
+        .next_back()
         .ok_or(CffDotInputError::EmptyGraph)
 }
 

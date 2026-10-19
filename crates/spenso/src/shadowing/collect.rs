@@ -185,7 +185,8 @@ impl<const N: usize> TensorCollectFilter<N> {
             .unwrap_collect()
     }
 
-    fn matches(self, arg: AtomView<'_>) -> bool {
+    /// Combine the tensor selector with frontend-specific collection predicates.
+    pub fn matches(self, arg: AtomView<'_>) -> bool {
         let AtomView::Fun(fun) = arg else {
             return false;
         };

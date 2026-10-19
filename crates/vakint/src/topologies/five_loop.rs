@@ -476,20 +476,29 @@ mod tests {
     #[test_log::test]
     fn generated_scalar_vacuum_graphs_match_registered_integral_classes() {
         use crate::{Vakint, VakintExpression, diagram_integral::DiagramIntegralOptions};
-        use feynkit_generator::{GenerationOptions, Process};
+        use feynkit_generator::{GenerationOptions, Generator, Process};
         use feynkit_graph::FeynmanDiagram;
         use feynkit_kinematics::Kinematics;
         use feynkit_model::Model;
 
         let options = GenerationOptions::default()
-            .with_loop_count(5, 5)
-            .unwrap()
             .threads(1)
             .allow_self_loops(true)
             .max_vertices(8);
-        let generated = Process::new(Vec::<&str>::new(), Vec::<&str>::new())
-            .generate_diagrams(Model::phi_3_4(), &options)
-            .unwrap();
+        let generated = Generator::new(
+            Model::from_json(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/phi_3_4.json"
+            )))
+            .expect("valid phi_3_4 fixture"),
+        )
+        .generate(
+            &Process::amplitude(Vec::<&str>::new(), Vec::<&str>::new())
+                .with_loop_count(5, 5)
+                .unwrap(),
+            &options,
+        )
+        .unwrap();
         assert!(!generated.diagrams.is_empty());
         let vakint = Vakint::new().unwrap();
         vakint
@@ -501,7 +510,15 @@ mod tests {
             let started = std::time::Instant::now();
             log::debug!(target: "vakint::five_loop_match", "generated_graph={index} phase=begin");
             let dot = graph.to_dot().unwrap();
-            let decoded = FeynmanDiagram::from_dot(Model::phi_3_4(), &dot).unwrap();
+            let decoded = FeynmanDiagram::from_dot(
+                Model::from_json(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/tests/fixtures/phi_3_4.json"
+                )))
+                .expect("valid phi_3_4 fixture"),
+                &dot,
+            )
+            .unwrap();
             let family = decoded.propagator_family(&Kinematics::new()).unwrap();
             let input = Atom::from(
                 VakintExpression::from_diagram(
@@ -571,8 +588,15 @@ mod tests {
                         format!("v{source} -> v{target} [particle=\"phi\"];")
                     })
                     .collect::<String>();
-                FeynmanDiagram::from_dot(Model::phi_3_4(), &format!("digraph {{ {edges} }}"))
-                    .unwrap()
+                FeynmanDiagram::from_topology_dot(
+                    Model::from_json(include_str!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/tests/fixtures/phi_3_4.json"
+                    )))
+                    .expect("valid phi_3_4 fixture"),
+                    &format!("digraph {{ {edges} }}"),
+                )
+                .unwrap()
             })
             .collect::<Vec<_>>();
 
@@ -580,8 +604,15 @@ mod tests {
             let started = std::time::Instant::now();
             log::debug!(target: "vakint::five_loop_match", "census_sector={} phase=native_dot_roundtrip", witness.sector);
             let diagram = &parents[witness.parent];
-            let roundtrip =
-                FeynmanDiagram::from_dot(Model::phi_3_4(), &diagram.to_dot().unwrap()).unwrap();
+            let roundtrip = FeynmanDiagram::from_dot(
+                Model::from_json(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/tests/fixtures/phi_3_4.json"
+                )))
+                .expect("valid phi_3_4 fixture"),
+                &diagram.to_dot().unwrap(),
+            )
+            .unwrap();
             let mut expressions = Vec::new();
             for graph in [diagram, &roundtrip] {
                 // DOT parsers may reorder edges. Resolve physical slots through

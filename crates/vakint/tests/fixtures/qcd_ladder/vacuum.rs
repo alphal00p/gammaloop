@@ -21,10 +21,22 @@ impl Vacuum {
         let rows = loop_rows(source);
         let attachments = source
             .edges()
-            .filter_map(|(_, ends, edge)| {
-                edge.external
-                    .as_ref()
-                    .map(|_| ends.source.or(ends.target).expect("external attachment"))
+            .filter_map(|(_, ends, _)| {
+                if source
+                    .vertex(ends.source)
+                    .expect("valid source")
+                    .is_external()
+                {
+                    Some(ends.target)
+                } else if source
+                    .vertex(ends.target)
+                    .expect("valid target")
+                    .is_external()
+                {
+                    Some(ends.source)
+                } else {
+                    None
+                }
             })
             .collect::<BTreeSet<_>>();
         if attachments.len() != 2 {
@@ -35,9 +47,9 @@ impl Vacuum {
         for vertex in &attachments {
             let adjacent = source
                 .edges()
-                .filter(|(_, ends, edge)| {
-                    edge.external.is_none()
-                        && (ends.source == Some(*vertex) || ends.target == Some(*vertex))
+                .filter(|(_, ends, _)| {
+                    !is_external_edge(source, *ends)
+                        && (ends.source == *vertex || ends.target == *vertex)
                 })
                 .collect::<Vec<_>>();
             let [left, right] = adjacent.as_slice() else {
@@ -60,16 +72,17 @@ impl Vacuum {
                 return Err("the two merged massless propagators are not equal at q=0".into());
             }
             let other = |ends: &feynkit_graph::EdgeEndpoints| {
-                ends.source
-                    .filter(|v| v != vertex)
-                    .or(ends.target.filter(|v| v != vertex))
-                    .expect("other endpoint")
+                if ends.source == *vertex {
+                    ends.target
+                } else {
+                    ends.source
+                }
             };
             records.push((
                 other(&left.1),
                 other(&right.1),
                 Line {
-                    momentum: if left.1.target == Some(*vertex) {
+                    momentum: if left.1.target == *vertex {
                         p.clone()
                     } else {
                         -p
@@ -79,11 +92,11 @@ impl Vacuum {
             ));
             removed.extend([left.0, right.0]);
         }
-        for (id, ends, edge) in source.edges() {
-            if edge.external.is_none() && !removed.contains(&id) {
+        for (id, ends, _) in source.edges() {
+            if !is_external_edge(source, ends) && !removed.contains(&id) {
                 records.push((
-                    ends.source.ok_or("internal source")?,
-                    ends.target.ok_or("internal target")?,
+                    ends.source,
+                    ends.target,
                     Line {
                         momentum: rows[&id].clone(),
                         original_edges: vec![id],
@@ -105,19 +118,26 @@ impl Vacuum {
         {
             return Err("vacuum topology must retain twelve incidence edges with two insertion dots and total power fourteen".into());
         }
-        let model = Model::phi3();
+        let model = Model::from_json(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/phi3.json"
+        )))
+        .expect("valid phi3 fixture");
         let particle = model.particle_id("phi")?;
-        let mass = model.particle_by_id(particle)?.symbolic_mass(&model);
+        let mass = model
+            .particle_by_id(particle)?
+            .symbolic_mass_parameter(&model)?;
         let mut builder = FeynmanDiagram::builder(model, "projected_qcd_ladder_vacuum");
         let vertices = source
             .vertices()
-            .filter(|(id, _)| !attachments.contains(id))
+            .filter(|(id, vertex)| !vertex.is_external() && !attachments.contains(id))
             .map(|(id, _)| {
                 (
                     id,
                     builder.add_vertex(DiagramVertex {
                         name: format!("v{}", id.0),
                         interaction: None,
+                        external: None,
                         numerator: Atom::one(),
                     }),
                 )

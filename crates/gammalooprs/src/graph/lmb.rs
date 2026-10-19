@@ -17,7 +17,6 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
     function,
     id::Replacement,
-    poly::PolyVariable,
     printer::PrintOptions,
     symbol,
 };

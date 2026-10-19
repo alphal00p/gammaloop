@@ -177,6 +177,7 @@ fn pinched_diagram(model: &Model) -> Result<(FeynmanDiagram, String)> {
     let vertex = builder.add_vertex(DiagramVertex {
         name: "pinched".into(),
         interaction: None,
+        external: None,
         numerator: Atom::one(),
     });
     for _ in 0..5 {
@@ -197,11 +198,15 @@ pub fn fixtures(_initialized_vakint: &Vakint) -> Result<Vec<CancellationFixture>
     if data::PARENTS[0].sector != 32745 {
         return Err("unexpected authoritative parent ordering".into());
     }
-    let model = Model::phi_3_4();
+    let model = Model::from_json(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/phi_3_4.json"
+    )))
+    .expect("valid phi_3_4 fixture");
     let mass = model
         .particle_by_id(model.particle_id("phi")?)?
-        .symbolic_mass(&model);
-    let diagram = FeynmanDiagram::from_dot(model.clone(), &full_parent_dot())?;
+        .symbolic_mass_parameter(&model)?;
+    let diagram = FeynmanDiagram::from_topology_dot(model.clone(), &full_parent_dot())?;
     let physical = diagram.propagator_family(&Kinematics::new())?;
     let (edge_ids, physical_slots, edge_signs) = ordered_physical_slots(&diagram)?;
     let completed = physical.complete(&[])?;
