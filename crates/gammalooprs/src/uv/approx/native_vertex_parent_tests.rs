@@ -1710,6 +1710,85 @@ impl QcdMassReference {
                     );
                     let complete_source =
                         physical_child_finite.clone().multiply(outside.clone())?;
+                    // Compare the actual raw-grown input before any CFF map or
+                    // Phi. The F/G witness below only certifies transport of
+                    // complete_source and cannot supply this separate join.
+                    let raw_reduced = parent.reduced_subgraph(given);
+                    eyre::ensure!(
+                        graph.paired_edges(&raw_reduced)
+                            == source_graph.paired_edges(&reduced_source),
+                        "D09 raw and source cographs retain the same physical edge occurrences"
+                    );
+                    let global = source_graph.global_numerator()?;
+                    let raw_outside = graph
+                        .numerator(&raw_reduced, given.subgraph())?
+                        .to_d_dim(GS.dim)?
+                        .color_simplify()?
+                        .state
+                        .expr
+                        .multiply(global.clone())?;
+                    Self::certify_parent_tensor_zero(
+                        "D09 raw and source cographs have the same complete physical-four numerator and one global",
+                        &normalize(&raw_outside)?.try_sub(&normalize(&outside)?)?,
+                    )?;
+                    let shared_denominator = graph.denominator(&raw_reduced, ctx.model, |_| 1);
+                    let source_denominator =
+                        source_graph.denominator(&reduced_source, &source_graph.model, |_| 1);
+                    eyre::ensure!(
+                        shared_denominator == source_denominator,
+                        "D09 cograph momenta, masses, powers and full prescribed polynomials differ"
+                    );
+                    let source_tree = source_graph
+                        .tree_edges
+                        .subtract(&source_graph.initial_state_cut);
+                    eyre::ensure!(reduced_source.includes(&source_tree));
+                    eyre::ensure!(
+                        source_denominator
+                            == source_graph.denominator(
+                                &reduced_source.subtract(&source_tree),
+                                &source_graph.model,
+                                |_| 1,
+                            ) * source_graph.denominator(
+                                &source_tree,
+                                &source_graph.model,
+                                |_| 1,
+                            ),
+                        "D09 source loop and production-tree denominators must partition the raw cograph once"
+                    );
+                    let raw_source = FourDSector {
+                        atom: finalize(finite[0].atom.clone().multiply(co_graph.clone())?)?,
+                        ..finite[0].clone()
+                    };
+                    let raw_terms = raw_source.physical_terms()?;
+                    eyre::ensure!(
+                        raw_terms.len() == 1,
+                        "D09 raw finite input must retain its one factorized cograph denominator"
+                    );
+                    let literal_denominator =
+                        Atom::mul_many(raw_terms[0].denominators.iter().map(|denominator| {
+                            GS.den(
+                                usize::from(denominator.source_edge),
+                                denominator.momentum.clone(),
+                                denominator.mass_squared.clone(),
+                                denominator.full_expr.clone(),
+                            )
+                        }));
+                    eyre::ensure!(literal_denominator == shared_denominator);
+                    let raw_emitted = emit(&raw_source)?.multiply(global)?;
+                    // Cancel only this independently matched literal product;
+                    // no denominator is cleared across a Phi or forest sum.
+                    let raw_numerator = raw_emitted.with_checked_expression(
+                        raw_emitted.expression() * scalar_tail(&literal_denominator),
+                    )?;
+                    eyre::ensure!(!raw_numerator.expression().contains_symbol(GS.den));
+                    Self::certify_parent_tensor_zero(
+                        "D09 raw frozen-child input equals the actual unmapped source before Phi",
+                        &normalize(&raw_numerator)?.try_sub(&normalize(&complete_source)?)?,
+                    )?;
+                    eyre::ensure!(
+                        raw_source.frozen_lmbs() == finite[0].frozen_lmbs()
+                            && actual_kernel == GS.localizing_integrand(given.lmb())
+                    );
                     eyre::ensure!(
                         complete_source.structure().canonical().external_structure()
                             == numerator.structure().canonical().external_structure()
@@ -2418,94 +2497,623 @@ impl QcdMassReference {
                     .iter()
                     .map(|row| normalize_phi_body(&row.4))
                     .collect::<Result<Vec<_>>>()?;
-                // Each actual row contributes once. Pairwise alias witnesses
-                // are evidence, never extra summands in a complete bipartite class.
-                let mut coefficient_classes = BTreeMap::<
-                    (crate::cff::CutCFFIndex, Atom),
-                    Vec<(bool, usize, i64, Atom)>,
-                >::new();
-                let mut covered_rows = BTreeSet::new();
-                let mut explicit_zero_rows = 0usize;
-                for (is_source, rows, bodies) in [
-                    (true, source_phi.as_slice(), source_phi_bodies.as_slice()),
-                    (false, parent_phi.as_slice(), parent_phi_bodies.as_slice()),
-                ] {
-                    eyre::ensure!(rows.len() == bodies.len());
-                    for (index, (row, body)) in rows.iter().zip(bodies).enumerate() {
-                        eyre::ensure!(
-                            covered_rows.insert((is_source, index)),
-                            "D09 Phi coefficient class reused an actual row"
-                        );
-                        if body.is_zero() {
-                            explicit_zero_rows += 1;
-                            continue;
+                if given.subgraph().is_empty() {
+                    // Each actual row contributes once. Pairwise alias witnesses
+                    // are evidence, never extra summands in a complete bipartite class.
+                    let mut coefficient_classes = BTreeMap::<
+                        (crate::cff::CutCFFIndex, Atom),
+                        Vec<(bool, usize, i64, Atom)>,
+                    >::new();
+                    let mut covered_rows = BTreeSet::new();
+                    let mut explicit_zero_rows = 0usize;
+                    for (is_source, rows, bodies) in [
+                        (true, source_phi.as_slice(), source_phi_bodies.as_slice()),
+                        (false, parent_phi.as_slice(), parent_phi_bodies.as_slice()),
+                    ] {
+                        eyre::ensure!(rows.len() == bodies.len());
+                        for (index, (row, body)) in rows.iter().zip(bodies).enumerate() {
+                            eyre::ensure!(
+                                covered_rows.insert((is_source, index)),
+                                "D09 Phi coefficient class reused an actual row"
+                            );
+                            if body.is_zero() {
+                                explicit_zero_rows += 1;
+                                continue;
+                            }
+                            let negative = normalize_phi_body(&(-body))?;
+                            let (representative, sign) = if body <= &negative {
+                                (body.clone(), 1i64)
+                            } else {
+                                (negative, -1i64)
+                            };
+                            eyre::ensure!(
+                                normalize_phi_body(&(body - Atom::num(sign) * &representative))?
+                                    .is_zero(),
+                                "D09 Phi row lacks its exact signed opaque-body binding"
+                            );
+                            let coefficient = Self::normalized_d09_phi_coefficient(&row.2)?;
+                            coefficient_classes
+                                .entry((row.0, representative))
+                                .or_default()
+                                .push((is_source, index, sign, coefficient));
                         }
-                        let negative = normalize_phi_body(&(-body))?;
-                        let (representative, sign) = if body <= &negative {
-                            (body.clone(), 1i64)
-                        } else {
-                            (negative, -1i64)
-                        };
-                        eyre::ensure!(
-                            normalize_phi_body(&(body - Atom::num(sign) * &representative))?
-                                .is_zero(),
-                            "D09 Phi row lacks its exact signed opaque-body binding"
-                        );
-                        let coefficient = Self::normalized_d09_phi_coefficient(&row.2)?;
-                        coefficient_classes
-                            .entry((row.0, representative))
-                            .or_default()
-                            .push((is_source, index, sign, coefficient));
                     }
-                }
-                let class_members = coefficient_classes.values().map(Vec::len).sum::<usize>();
-                eyre::ensure!(
-                    !coefficient_classes.is_empty()
-                        && covered_rows.len() == source_phi.len() + parent_phi.len()
-                        && explicit_zero_rows + class_members == covered_rows.len(),
-                    "D09 Phi coefficient classes do not cover every actual row exactly once"
-                );
-                let class_count = coefficient_classes.len();
-                for (class, ((cut, _body), members)) in coefficient_classes.into_iter().enumerate()
-                {
-                    // The retained body is only a key; all algebra below acts
-                    // on its scalar CFF coefficients, never on that Phi body.
-                    let sum = Atom::add_many(
-                        members
-                            .iter()
-                            .map(|(_, _, sign, coefficient)| Atom::num(*sign) * coefficient),
-                    );
-                    let residual = Self::normalized_d09_phi_coefficient(&sum)?;
+                    let class_members = coefficient_classes.values().map(Vec::len).sum::<usize>();
                     eyre::ensure!(
-                        residual.is_zero(),
-                        "D09 signed Phi coefficient class {class} did not cancel"
+                        !coefficient_classes.is_empty()
+                            && covered_rows.len() == source_phi.len() + parent_phi.len()
+                            && explicit_zero_rows + class_members == covered_rows.len(),
+                        "D09 Phi coefficient classes do not cover every actual row exactly once"
                     );
-                    let wrong = Self::normalized_d09_phi_coefficient(&(sum + Atom::one()))?;
+                    let class_count = coefficient_classes.len();
+                    for (class, ((cut, _body), members)) in
+                        coefficient_classes.into_iter().enumerate()
+                    {
+                        // The retained body is only a key; all algebra below acts
+                        // on its scalar CFF coefficients, never on that Phi body.
+                        let sum = Atom::add_many(
+                            members
+                                .iter()
+                                .map(|(_, _, sign, coefficient)| Atom::num(*sign) * coefficient),
+                        );
+                        let residual = Self::normalized_d09_phi_coefficient(&sum)?;
+                        eyre::ensure!(
+                            residual.is_zero(),
+                            "D09 signed Phi coefficient class {class} did not cancel"
+                        );
+                        let wrong = Self::normalized_d09_phi_coefficient(&(sum + Atom::one()))?;
+                        eyre::ensure!(
+                            wrong.is_one(),
+                            "D09 scalar class +1 perturbation must leave exactly one"
+                        );
+                        debug_tags!(#uv, #local, #four_d, #cff, #inspect;
+                            stage = "native_d09_emitted_mass_coefficient_class", class,
+                            given = %given.subgraph().string_label(), file.cut = ?cut,
+                            file.members = ?members.iter().map(|(source, index, sign, _)|
+                                (*source, *index, *sign)).collect::<Vec<_>>(),
+                            scalar_coefficient_zero = true, plus_one_residual_exactly_one = true,
+                            phi_body_entered_scalar_algebra = false,
+                            "Each actual signed opaque-body class has an exact zero scalar weight"
+                        );
+                    }
+                    debug_tags!(#uv, #local, #four_d, #cff, #summary;
+                        stage = "native_d09_emitted_mass_coefficient_identity",
+                        given = %given.subgraph().string_label(),
+                        actual_rows = covered_rows.len(), explicit_zero_rows, class_members, class_count,
+                        every_actual_row_once = true, signed_class_coefficients_zero = true,
+                        unchanged_rational_preflight_budget = true, scalar_round_limit = 5,
+                        plus_one_nonzero_controls = true, phi_body_entered_scalar_algebra = false,
+                        emitted_mass_cancellation_proved = true,
+                        dimensional_R2_condition_proved = false,
+                        "Actual emitted CFF Phi rows cancel by bounded scalar coefficient identities"
+                    );
+                } else {
+                    use spenso::shadowing::Collectable;
+                    struct LinearGroup {
+                        cut: crate::cff::CutCFFIndex,
+                        coefficient: Atom,
+                        body: Atom,
+                        members: Vec<(bool, usize)>,
+                    }
+                    let mut groups = BTreeMap::<_, (Vec<(bool, usize)>, Vec<Atom>)>::new();
+                    let mut covered = BTreeSet::new();
+                    let mut closed = BTreeSet::new();
+                    let mut literal_zero_rows = 0usize;
+                    let mut coefficient_zero_rows = 0usize;
+                    let mut radicands = BTreeSet::new();
+                    for (source, rows, bodies) in [
+                        (true, source_phi.as_slice(), source_phi_bodies.as_slice()),
+                        (false, parent_phi.as_slice(), parent_phi_bodies.as_slice()),
+                    ] {
+                        eyre::ensure!(rows.len() == bodies.len());
+                        for (index, (row, body)) in rows.iter().zip(bodies).enumerate() {
+                            eyre::ensure!(
+                                covered.insert((source, index)),
+                                "D09 linear proof reused an actual row"
+                            );
+                            if source {
+                                row.2.visitor(&mut |part| {
+                                    match part {
+                                        AtomView::Fun(call)
+                                            if call.get_symbol() == GS.on_shell_energy
+                                                && call.get_nargs() == 2 =>
+                                        {
+                                            radicands.insert(call.get(1).to_owned());
+                                        }
+                                        AtomView::Pow(power)
+                                            if i64::try_from(power.get_exp()).is_err() =>
+                                        {
+                                            radicands.insert(power.get_base().to_owned());
+                                        }
+                                        _ => {}
+                                    }
+                                    true
+                                });
+                            }
+                            if body.is_zero() {
+                                literal_zero_rows += 1;
+                                eyre::ensure!(closed.insert((source, index)));
+                                continue;
+                            }
+                            let coefficient = Self::normalized_d09_phi_coefficient(&row.2)?;
+                            if coefficient.is_zero() {
+                                coefficient_zero_rows += 1;
+                                eyre::ensure!(closed.insert((source, index)));
+                                continue;
+                            }
+                            let numeric = coefficient.as_view().collect_numeric_content();
+                            let number = match numeric.as_view() {
+                                AtomView::Mul(product) => product
+                                    .get_coefficient()
+                                    .map(|n| n.to_owned())
+                                    .unwrap_or_else(Atom::one),
+                                AtomView::Num(_) => numeric.clone(),
+                                _ => Atom::one(),
+                            };
+                            let key = &numeric / &number;
+                            eyre::ensure!(
+                                Self::normalized_d09_phi_coefficient(
+                                    &(&coefficient - &number * &key)
+                                )?
+                                .is_zero()
+                            );
+                            let (members, weighted_bodies) =
+                                groups.entry((row.0, key)).or_default();
+                            members.push((source, index));
+                            weighted_bodies.push(number * body);
+                        }
+                    }
+                    eyre::ensure!(covered.len() == source_phi.len() + parent_phi.len());
+                    // The original component inventory already binds every global
+                    // coordinate to its actual source/parent domain and full keys.
                     eyre::ensure!(
-                        wrong.is_one(),
-                        "D09 scalar class +1 perturbation must leave exactly one"
+                        component_coordinates.len() == 2,
+                        "D09 linear proof requires its two certified component coordinates"
                     );
-                    debug_tags!(#uv, #local, #four_d, #cff, #inspect;
-                        stage = "native_d09_emitted_mass_coefficient_class", class,
-                        given = %given.subgraph().string_label(), file.cut = ?cut,
-                        file.members = ?members.iter().map(|(source, index, sign, _)|
-                            (*source, *index, *sign)).collect::<Vec<_>>(),
-                        scalar_coefficient_zero = true, plus_one_residual_exactly_one = true,
-                        phi_body_entered_scalar_algebra = false,
-                        "Each actual signed opaque-body class has an exact zero scalar weight"
+                    let spatial = |edge: EdgeIndex| {
+                        (1..=3)
+                            .map(|i| function!(GS.emr_mom, edge.0, GS.cind(i)))
+                            .collect::<Vec<_>>()
+                    };
+                    let mut charts = Vec::new();
+                    for hard in &component_coordinates {
+                        for soft in &component_coordinates {
+                            if hard == soft
+                                || !given.lmb().loop_edges.contains(hard)
+                                || !parent.lmb().loop_edges.contains(soft)
+                                || given.lmb().loop_edges.contains(soft)
+                            {
+                                continue;
+                            }
+                            let k = spatial(*hard);
+                            let l = spatial(*soft);
+                            let hard_base = Atom::add_many(k.iter().map(|x| x.pow(2)))
+                                + Atom::var(GS.m_uv_vacuum).pow(2);
+                            let soft_base = Atom::add_many(l.iter().map(|x| x.pow(2)));
+                            if [&hard_base, &soft_base, &(&soft_base + Atom::one())]
+                                .into_iter()
+                                .all(|base| radicands.contains(base))
+                            {
+                                charts.push((*hard, *soft, k, l, hard_base, soft_base));
+                            }
+                        }
+                    }
+                    eyre::ensure!(
+                        charts.len() == 1,
+                        "D09 coefficient radicands do not select one actual component chart: candidates={}",
+                        charts.len()
+                    );
+                    let (hard, soft, k, l, hard_base, soft_base) = charts.pop().unwrap();
+                    let dot = Atom::add_many(k.iter().zip(&l).map(|(x, y)| x * y));
+                    let names = ["A", "B", "C", "H", "K", "L", "t"];
+                    let symbols =
+                        names.map(|name| symbol!(&format!("native_d09_phi_chart::{name}"); Scalar));
+                    for head in symbols {
+                        eyre::ensure!(
+                            source_phi
+                                .iter()
+                                .chain(&parent_phi)
+                                .all(|row| !row.2.contains_symbol(head)
+                                    && !row.4.contains_symbol(head)),
+                            "D09 chart symbol collides with an actual row"
+                        );
+                    }
+                    let [a, b, c, h, big_k, big_l, t] = symbols.map(Atom::var);
+                    let actual_b = soft_base.pow((1, 2));
+                    let actual_c = (&soft_base + Atom::one()).pow((1, 2));
+                    eyre::ensure!(
+                        (actual_c.pow(2) - actual_b.pow(2))
+                            .collect_compact_factors()
+                            .is_one(),
+                        "D09 physical energy roots do not have unit squared difference"
+                    );
+                    eyre::ensure!(
+                        (&actual_c * actual_c.pow(-1)).is_one(),
+                        "D09 physical massive energy is not a certified unit"
+                    );
+                    let definitions = [
+                        (hard_base.pow((1, 2)), a.clone()),
+                        (actual_b.clone(), b.clone()),
+                        (actual_c.clone(), c.clone()),
+                        (hard_base.clone(), big_k.clone()),
+                        (soft_base.clone(), big_l.clone()),
+                        (dot, h.clone()),
+                    ];
+                    let restore = |atom: &Atom| {
+                        let mut restored = atom.clone();
+                        for (original, alias) in definitions.iter().rev() {
+                            restored = restored
+                                .replace(alias.to_pattern())
+                                .with(original.to_pattern());
+                        }
+                        restored
+                    };
+                    let chart_view = |atom: &Atom| -> Result<Atom> {
+                        eyre::ensure!(
+                            atom.as_view().get_byte_size() <= 32768,
+                            "D09 factorized chart input exceeds 32KiB"
+                        );
+                        let mut view = atom.clone();
+                        for (original, alias) in &definitions {
+                            view = view.replace(original.to_pattern()).with(alias.to_pattern());
+                        }
+                        view = view
+                            .replace(Atom::var(GS.m_uv_vacuum).pow(2).to_pattern())
+                            .with(
+                                (&big_k + Atom::add_many(k.iter().map(|x| -x.pow(2)))).to_pattern(),
+                            )
+                            .replace((&k[2] * &l[2]).to_pattern())
+                            .with((&h - &k[0] * &l[0] - &k[1] * &l[1]).to_pattern())
+                            .replace(l[2].pow(2).to_pattern())
+                            .with((&big_l - l[0].pow(2) - l[1].pow(2)).to_pattern());
+                        eyre::ensure!(
+                            restore(&view) == *atom,
+                            "D09 affine chart does not literally restore its complete input"
+                        );
+                        view = view
+                            .replace(symbols[4])
+                            .with(a.pow(2))
+                            .replace(symbols[5])
+                            .with(c.pow(2) - Atom::one());
+                        eyre::ensure!(
+                            restore(&view) == *atom,
+                            "D09 root chart does not literally restore its complete input"
+                        );
+                        Ok(view)
+                    };
+                    let compact_chart = |atom: &Atom| -> Result<Atom> {
+                        let mut current = atom.clone();
+                        for _ in 0..8 {
+                            let next = current
+                                .replace_map_bottom_up(|part, context, output| {
+                                    if context.function_level == 0
+                                        && matches!(part, AtomView::Add(_) | AtomView::Mul(_))
+                                    {
+                                        **output = part.collect_compact_factors();
+                                    }
+                                })
+                                .collect_compact_factors();
+                            eyre::ensure!(
+                                next.as_view().get_byte_size() <= 32768,
+                                "D09 protected compact chart exceeded its byte scope"
+                            );
+                            if next == current
+                                || next.as_view().get_byte_size()
+                                    >= current.as_view().get_byte_size()
+                            {
+                                return Ok(current);
+                            }
+                            current = next;
+                        }
+                        Ok(current)
+                    };
+                    let mut unresolved = Vec::new();
+                    let mut direct_groups = 0usize;
+                    let mut invariant_groups = 0usize;
+                    for ((cut, coefficient), (members, bodies)) in groups {
+                        let original_body = Atom::add_many(bodies);
+                        let body = original_body.collect_compact_factors();
+                        let direct = body.is_zero();
+                        let invariant = if direct {
+                            false
+                        } else {
+                            compact_chart(&chart_view(&body)?)?.is_zero()
+                        };
+                        if direct || invariant {
+                            let original_control = &original_body + Atom::one();
+                            let mut original_control_one = original_control
+                                .collect_compact_factors()
+                                .is_one()
+                                || (invariant
+                                    && compact_chart(&chart_view(&original_control)?)?.is_one());
+                            let mut coupling_control_rows = 0usize;
+                            if !original_control_one {
+                                // Only the actual registered coupling is a column.
+                                // Every coupling-free complete graph factor stays
+                                // an opaque AtomField coefficient in this owner.
+                                let mut coupling_keys = graph
+                                    .model
+                                    .couplings()
+                                    .iter()
+                                    .map(|coupling| {
+                                        Atom::var(symbol!(&format!("UFO::{}", coupling.name)))
+                                    })
+                                    .filter(|coupling| {
+                                        original_control.contains(coupling.as_view())
+                                    })
+                                    .collect::<Vec<_>>();
+                                eyre::ensure!(
+                                    coupling_keys.len() == 1,
+                                    "D09 original+1 requires one actual registered coupling"
+                                );
+                                let coupling = coupling_keys.pop().unwrap();
+                                let keys = std::slice::from_ref(&coupling);
+                                let rows = original_control.coefficient_list_exact(keys)
+                                    .ok_or_else(|| eyre!("D09 original+1 coupling collection refused its unchanged budget"))?;
+                                let recomposed = Atom::add_many(
+                                    rows.iter()
+                                        .map(|(monomial, coefficient)| monomial * coefficient),
+                                );
+                                eyre::ensure!(
+                                    recomposed.coefficient_list_exact(keys).as_ref() == Some(&rows),
+                                    "D09 original+1 coupling rows do not recompose in their exact owner"
+                                );
+                                let difference = (&recomposed - &original_control).coefficient_list_exact(keys)
+                                    .ok_or_else(|| eyre!("D09 original+1 coupling reconstruction refused its unchanged budget"))?;
+                                eyre::ensure!(
+                                    difference.iter().all(|(_, coefficient)| coefficient
+                                        .collect_compact_factors()
+                                        .is_zero()),
+                                    "D09 original+1 coupling recomposition changed an original complete coefficient"
+                                );
+                                let mut constants = 0usize;
+                                for (monomial, coefficient) in &rows {
+                                    eyre::ensure!(
+                                        !coefficient.contains(coupling.as_view()),
+                                        "D09 coupling coefficient retained its collection key"
+                                    );
+                                    if monomial.is_one() {
+                                        eyre::ensure!(
+                                            coefficient.is_one(),
+                                            "D09 original+1 constant coefficient is not literally one"
+                                        );
+                                        constants += 1;
+                                    } else {
+                                        eyre::ensure!(
+                                            *monomial == coupling.pow(4),
+                                            "D09 original+1 has an unsupported coupling degree"
+                                        );
+                                        eyre::ensure!(
+                                            coefficient.collect_compact_factors().is_zero()
+                                                || (invariant
+                                                    && compact_chart(&chart_view(coefficient)?)?
+                                                        .is_zero()),
+                                            "D09 original+1 retains a nonzero complete coupling coefficient"
+                                        );
+                                    }
+                                    debug_tags!(#uv, #local, #four_d, #cff, #inspect;
+                                        stage = "native_d09_phi_original_unit_coupling_control",
+                                        file.members = ?members, file.actual_coupling = %coupling.to_canonical_string(),
+                                        file.monomial = %monomial.to_canonical_string(), file.complete_coefficient = %coefficient.to_canonical_string(),
+                                        constant_coefficient_literal_one = monomial.is_one(),
+                                        nonconstant_complete_coefficient_zero = !monomial.is_one(),
+                                        exact_original_control_recomposition = true,
+                                        only_actual_coupling_is_polynomial_column = true,
+                                        "The original summed Phi expression plus one has one constant coefficient and zero complete coupling coefficients"
+                                    );
+                                }
+                                eyre::ensure!(
+                                    constants == 1,
+                                    "D09 original+1 did not retain one unit constant row"
+                                );
+                                coupling_control_rows = rows.len();
+                                original_control_one = true;
+                            }
+                            eyre::ensure!(
+                                original_control_one,
+                                "D09 closed linear group lost its original+1 control"
+                            );
+                            for member in &members {
+                                eyre::ensure!(
+                                    closed.insert(*member),
+                                    "D09 linear group closed a row twice"
+                                );
+                            }
+                            direct_groups += usize::from(direct);
+                            invariant_groups += usize::from(invariant);
+                            debug_tags!(#uv, #local, #four_d, #cff, #inspect;
+                                stage = "native_d09_phi_linear_group", file.cut = ?cut,
+                                file.coefficient = %coefficient.to_canonical_string(), file.members = ?members,
+                                protected_compact_zero = direct, reversible_invariant_zero = invariant,
+                                original_plus_one_exact_one = true, coupling_control_rows,
+                                "One actual scalar-coefficient group closes by an exact factorized body identity"
+                            );
+                        } else {
+                            unresolved.push(LinearGroup {
+                                cut,
+                                coefficient,
+                                body,
+                                members,
+                            });
+                        }
+                    }
+                    eyre::ensure!(
+                        unresolved.len() == 6,
+                        "D09 supported completed chart requires six unresolved scalar groups; actual={}",
+                        unresolved.len()
+                    );
+                    struct Triple {
+                        reference: usize,
+                        sign: i64,
+                        slots: [usize; 3],
+                        weights: [Atom; 3],
+                    }
+                    let mut candidates = Vec::new();
+                    for reference in 0..unresolved.len() {
+                        for sign in [1i64, -1] {
+                            let weights = [
+                                actual_c.clone(),
+                                Atom::one() + Atom::num(sign) * &actual_b,
+                                Atom::one()
+                                    + Atom::num(sign) * &actual_b
+                                    + Atom::num(sign) * &actual_c,
+                            ];
+                            let mut matches = [Vec::new(), Vec::new(), Vec::new()];
+                            for (slot, weight) in weights.iter().enumerate() {
+                                for (index, group) in unresolved.iter().enumerate() {
+                                    if group.cut != unresolved[reference].cut {
+                                        continue;
+                                    }
+                                    // Only actual scalar weights enter this unchanged
+                                    // rational certificate; no division by c_ref.
+                                    let residual = Self::normalized_d09_phi_coefficient(
+                                        &(&actual_c * &group.coefficient
+                                            - weight * &unresolved[reference].coefficient),
+                                    )?;
+                                    if residual.is_zero() {
+                                        matches[slot].push(index);
+                                    }
+                                }
+                            }
+                            eyre::ensure!(
+                                matches.iter().all(|slot| slot.len() <= 1),
+                                "D09 coefficient pattern has ambiguous group membership"
+                            );
+                            if matches.iter().all(|slot| slot.len() == 1) {
+                                let slots = std::array::from_fn(|i| matches[i][0]);
+                                if slots.into_iter().collect::<BTreeSet<_>>().len() == 3 {
+                                    candidates.push(Triple {
+                                        reference,
+                                        sign,
+                                        slots,
+                                        weights,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    let mut covers = Vec::new();
+                    for first in 0..candidates.len() {
+                        for second in first + 1..candidates.len() {
+                            let mut members = BTreeSet::new();
+                            if candidates[first]
+                                .slots
+                                .iter()
+                                .chain(&candidates[second].slots)
+                                .all(|slot| members.insert(*slot))
+                                && members.len() == unresolved.len()
+                            {
+                                covers.push([first, second]);
+                            }
+                        }
+                    }
+                    eyre::ensure!(
+                        covers.len() == 1,
+                        "D09 scalar coefficients do not give one exact two-triple cover: {}",
+                        covers.len()
+                    );
+                    let tb = (&t - t.pow(-1)) / Atom::num(2);
+                    let tc = (&t + t.pow(-1)) / Atom::num(2);
+                    eyre::ensure!((&tc + &tb - &t).collect_compact_factors().is_zero());
+                    eyre::ensure!((&tc - &tb - t.pow(-1)).collect_compact_factors().is_zero());
+                    eyre::ensure!((&t * t.pow(-1)).is_one());
+                    eyre::ensure!(
+                        ((((&c + &b) - (&c - &b)) / Atom::num(2)) - &b)
+                            .collect_compact_factors()
+                            .is_zero()
+                    );
+                    eyre::ensure!(
+                        ((((&c + &b) + (&c - &b)) / Atom::num(2)) - &c)
+                            .collect_compact_factors()
+                            .is_zero()
+                    );
+                    let mut grid_nodes = 0usize;
+                    let mut triple_members = 0usize;
+                    for candidate in covers.pop().unwrap() {
+                        let triple = &candidates[candidate];
+                        let mut terms = Vec::new();
+                        for (slot, weight) in triple.slots.iter().zip(&triple.weights) {
+                            let group = &unresolved[*slot];
+                            eyre::ensure!(
+                                Self::normalized_d09_phi_coefficient(
+                                    &(&actual_c * &group.coefficient
+                                        - weight * &unresolved[triple.reference].coefficient)
+                                )?
+                                .is_zero()
+                            );
+                            // Bind each of the three complete weighted bodies before
+                            // compaction; never distribute a product or power.
+                            terms.push(compact_chart(&chart_view(&(weight * &group.body))?)?);
+                            debug_tags!(#uv, #local, #four_d, #cff, #inspect;
+                                stage = "native_d09_phi_coefficient_linear_relation", file.cut = ?group.cut,
+                                file.members = ?group.members, file.coefficient = %group.coefficient.to_canonical_string(),
+                                file.reference_coefficient = %unresolved[triple.reference].coefficient.to_canonical_string(),
+                                file.weight = %weight.to_canonical_string(), file.unit_energy = %actual_c.to_canonical_string(),
+                                scalar_cross_residual_zero = true, no_phi_in_scalar_certificate = true,
+                                "The original CFF weight is bound to one known-energy-unit linear relation"
+                            );
+                        }
+                        let original_chart = Atom::add_many(terms);
+                        let laurent = original_chart
+                            .replace(symbols[1])
+                            .with(tb.clone())
+                            .replace(symbols[2])
+                            .with(tc.clone());
+                        let mut free = BTreeSet::new();
+                        laurent.visitor(&mut |part| {
+                            if let AtomView::Var(variable) = part {
+                                free.insert(variable.get_symbol());
+                            }
+                            true
+                        });
+                        for head in [symbols[0], symbols[3], symbols[6]] {
+                            free.remove(&head);
+                        }
+                        eyre::ensure!(
+                            free.len() == 1,
+                            "D09 exact chart requires one actual remaining coupling variable; actual={free:?}"
+                        );
+                        let coupling = *free.iter().next().unwrap();
+                        grid_nodes += Self::certify_d09_phi_laurent_grid(
+                            &laurent,
+                            [symbols[0], symbols[3], coupling, symbols[6]],
+                        )?;
+                        for slot in triple.slots {
+                            for member in &unresolved[slot].members {
+                                eyre::ensure!(
+                                    closed.insert(*member),
+                                    "D09 exact triple reused an actual row"
+                                );
+                                triple_members += 1;
+                            }
+                        }
+                        debug_tags!(#uv, #local, #four_d, #cff, #summary;
+                            stage = "native_d09_phi_exact_linear_triple", sign = triple.sign,
+                            file.group_indices = ?triple.slots, file.hard_coordinate = ?hard, file.soft_coordinate = ?soft,
+                            file.hard_radicand = %hard_base.to_canonical_string(), file.soft_radicand = %soft_base.to_canonical_string(),
+                            physical_mass_unit = true, actual_unit_energy_positive = true,
+                            actual_given_hard_coordinate = true, actual_parent_retained_coordinate = true,
+                            reversible_whole_term_bindings = true, actual_C_squared_minus_B_squared_one = true,
+                            rational_chart_t_positive = true, emitted_mass_linear_identity_proved = true,
+                            dimensional_R2_condition_proved = false,
+                            "The actual completed D09 coefficient triple closes on a full exact Laurent grid"
+                        );
+                    }
+                    eyre::ensure!(
+                        closed == covered,
+                        "D09 linear proof left an actual emitted row uncovered"
+                    );
+                    debug_tags!(#uv, #local, #four_d, #cff, #summary;
+                        stage = "native_d09_emitted_mass_linear_identity", given = %given.subgraph().string_label(),
+                        actual_rows = covered.len(), literal_zero_rows, coefficient_zero_rows,
+                        direct_groups, invariant_groups, exact_triples = 2, triple_members, grid_nodes,
+                        every_actual_row_once = true, scalar_coefficient_relations_exact = true,
+                        unchanged_rational_preflight_budget = true, original_chart_plus_one_controls = true,
+                        direct_phi_polynomial_conversion = false, graph_numerator_factorization_preserved = true,
+                        emitted_mass_cancellation_proved = true, dimensional_R2_condition_proved = false,
+                        "Every actual completed D09 row is covered by an exact factorized linear proof"
                     );
                 }
-                debug_tags!(#uv, #local, #four_d, #cff, #summary;
-                    stage = "native_d09_emitted_mass_coefficient_identity",
-                    given = %given.subgraph().string_label(),
-                    actual_rows = covered_rows.len(), explicit_zero_rows, class_members, class_count,
-                    every_actual_row_once = true, signed_class_coefficients_zero = true,
-                    unchanged_rational_preflight_budget = true, scalar_round_limit = 5,
-                    plus_one_nonzero_controls = true, phi_body_entered_scalar_algebra = false,
-                    emitted_mass_cancellation_proved = true,
-                    dimensional_R2_condition_proved = false,
-                    "Actual emitted CFF Phi rows cancel by bounded scalar coefficient identities"
-                );
                 let mut source_body_aliases =
                     BTreeMap::<(crate::cff::CutCFFIndex, Atom), Vec<(usize, i64)>>::new();
                 for (index, (row, body)) in source_phi.iter().zip(&source_phi_bodies).enumerate() {
@@ -2571,7 +3179,7 @@ impl QcdMassReference {
                     parent_unmatched_bodies = parent_phi_bodies.len() - parent_zero_rows - parent_alias_rows,
                     coefficients_combined = false, energy_algebra_applied_to_phi = false,
                     emitted_mass_cancellation_proved = true, dimensional_R2_condition_proved = false,
-                    "Body aliases supplement the separate once-only scalar-class cancellation certificate"
+                    "Body aliases supplement the separate once-only summed cancellation certificate"
                 );
                 debug_tags!(#uv, #local, #four_d, #cff, #summary;
                     stage = "native_d09_emitted_phi_transport", given = %given.subgraph().string_label(),
