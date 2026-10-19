@@ -166,7 +166,7 @@ For the historical gluonic fixture, the qualified checkpoint takes *0.858 s* in 
 and *0.300 s* with early rung contractions. Both use tensor-safe replacement
 and include final expansion. Paired gains over the saved build are 9.09% and
 6.66%; current FORM comparisons and mixed trace controls are reported in
-#link(<resumable-observation-public>)[the public qualification below]. These
+"Public qualification of resumable observation" below. These
 results do not establish full FORM parity.
 
 The performance section follows equivalent paired and alternating slash traces through
@@ -694,7 +694,7 @@ Axial twelve improves by 5.38 times. Free eight becomes about 7.9 percent slower
 that shortcut already avoids cleanup, while constructing already-normal metrics
 can incur the new checks. Free twelve changes little. FORM remains about 78
 times faster for axial twelve under these timing boundaries. The
-#source-link("examples/notebooks/dot_normalization.json", label: "local metric normalization record")
+local metric normalization record (a local record, not committed: `examples/notebooks/dot_normalization.json`)
 preserves all cases, raw samples, input/output snapshot hashes, classified changed
 outputs, source identities and matching FORM programs. The benchmark command
 recreates the complete snapshots. A dash marks a case without a fresh matching
@@ -751,7 +751,7 @@ The differences are small and mixed. Axial-twelve dot normalization takes
 Free twelve is about 5.1 percent slower; the external-metric case is about
 3 percent slower. This sequential shared-host comparison does not establish a
 broad upstream speedup.
-The #source-link("examples/notebooks/symbolica_main_update.json", label: "Symbolica-main comparison record")
+The Symbolica-main comparison record (a local record, not committed: `examples/notebooks/symbolica_main_update.json`)
 preserves both sets of raw samples, source and lock identities, build metadata,
 snapshot hashes and validation results. FORM values in that record are reused
 from the preceding comparison; FORM was not rerun for this dependency update.
@@ -876,7 +876,7 @@ HEP takes the matrix trace avoids that intermediate without using gamma
 simplification in the oracle. The record retains the timeout and the final
 passing checks.
 
-The #source-link("examples/notebooks/contraction_performance.json", label: "contraction performance record") preserves both run orders, raw samples, source identities, FORM programs and validation evidence. Reproduce the current Rust measurements with:
+The contraction performance record (a local record, not committed: `examples/notebooks/contraction_performance.json`) preserves both run orders, raw samples, source identities, FORM programs and validation evidence. Reproduce the current Rust measurements with:
 
 // docs-example: syntax
 ```sh
@@ -1540,7 +1540,7 @@ earlier checkpoint passed with warnings denied. The Spenso follow-up passes
 19 relevant tests; its remaining dual-wrapper filter test fails identically with the matcher change
 removed. All final measured trace outputs match the independent certificate.
 
-The #source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction parity progress record")
+The contraction parity progress record (a local record, not committed: `examples/notebooks/tensor_contraction_parity.json`)
 retains raw samples, generated FORM programs, the generic-D benchmark driver,
 source identities and validation evidence.
 
@@ -3086,7 +3086,7 @@ assignments pass. The live worktree passes 897 Rust tests, with the previous
 in both orders against fresh FORM. Raw clocks, source identities, failed
 intermediate diagnostics and final validation are recorded under
 `retained_outside_in_typed_ladder_validation` in the
-#source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction record").
+contraction record (a local record, not committed: `examples/notebooks/tensor_contraction_parity.json`).
 
 == Shared replacement validation
 
@@ -3156,7 +3156,7 @@ milliseconds, while preserving this trace regression in the measurement record.
 
 Source identities, complete clocks, profiles, checks and the axial follow-up
 are recorded under `retained_replacement_validation_consolidation` in the
-#source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction record").
+contraction record (a local record, not committed: `examples/notebooks/tensor_contraction_parity.json`).
 
 == Tensor-factor replacement
 
@@ -3242,7 +3242,7 @@ tensor names and also require descriptor parity with general replacement.
 Sources, commands, raw timings, profiles and checks are preserved in the local
 measurement bundle at `/tmp/idenso-tensor-safe-replace-host`. The
 `retained_tensor_safe_replacement` checkpoint is prepared for the
-#source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction record");
+contraction record (a local record, not committed: `examples/notebooks/tensor_contraction_parity.json`);
 appending it awaits explicit approval. The existing archive is unchanged.
 
 === Symbol classification and remaining contraction walks
@@ -4513,8 +4513,8 @@ size. These limits and all observations are retained under
 `/tmp/idenso-final-scalar-expansion/balanced-poly`.
 
 The standalone
-#link("../../../../examples/reproducers/symbolica-expansion/performance.typ")[scalar
-expansion reproducer] makes these four routes available without tensor-library
+#source-link("examples/reproducers/symbolica-expansion/performance.typ", label: [scalar
+expansion reproducer]) makes these four routes available without tensor-library
 dependencies. Its synthetic input keeps twenty variables fixed while changing
 the number of terms; it also accepts a saved expression file. All four routes
 pass exact ordinary-expansion and fixed-point checks at 20, 256, 1,024 and
@@ -5173,7 +5173,6 @@ protocols, raw observations and `comparison-summary.json` are under
 reviews are under `/tmp/idenso-collector-next-analysis`.
 
 === Public qualification of resumable observation
-<resumable-observation-public>
 
 The complete Python host rebuild includes all consumers of the changed Spenso
 and Idenso code. The frozen comparison uses the saved `d58aee8a` host and the
