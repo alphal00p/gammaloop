@@ -109,10 +109,12 @@ fn deferred_policy_is_revisited_without_losing_other_completion_facts() {
     crate::test_support::test_initialize();
     let port = mink!(4, 99531);
     let r = spenso::vector_symbol!("completion_cache_inexact::r");
-    let s = spenso::vector_symbol!("completion_cache_inexact::s");
+    let t = spenso::tensor_symbol!("completion_cache_inexact::t");
+    let u = spenso::tensor_symbol!("completion_cache_inexact::u");
     let rounded = Atom::num(symbolica::domains::float::Float::parse("0.1", Some(11)).unwrap());
-    let expression = (rounded * p!(&port) + q!(&port))
-        * (symbolica::function!(r, &port) + symbolica::function!(s, &port));
+    // Neither sum offers a source in every term: contraction stays deferred.
+    let expression = (rounded * p!(&port) + symbolica::function!(t, &port))
+        * (symbolica::function!(r, &port) + symbolica::function!(u, &port));
     let source = SymbolicTensor::infer(expression.clone()).unwrap();
     let disabled = AlgebraSettings {
         contract: AlgebraContraction::None,

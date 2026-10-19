@@ -1225,12 +1225,14 @@ mod completion_tests {
         crate::test_support::test_initialize();
         let port = spenso::mink!(4, 98911);
         let r = spenso::vector_symbol!("completion_inexact::r");
-        let s = spenso::vector_symbol!("completion_inexact::s");
+        let t = spenso::tensor_symbol!("completion_inexact::t");
+        let u = spenso::tensor_symbol!("completion_inexact::u");
         let rounded = Atom::num(symbolica::domains::float::Float::parse("0.1", Some(11)).unwrap());
         // A branch-local rounded coefficient cannot be retained as one opaque
-        // scalar spectator of the whole contracted product.
-        let expression = (rounded * spenso::p!(&port) + spenso::q!(&port))
-            * (symbolica::function!(r, &port) + symbolica::function!(s, &port));
+        // scalar spectator of the whole contracted product. Neither sum offers
+        // a source in every term, so the fallback cannot pass one through the other.
+        let expression = (rounded * spenso::p!(&port) + symbolica::function!(t, &port))
+            * (symbolica::function!(r, &port) + symbolica::function!(u, &port));
         let source = SymbolicTensor::infer(expression.clone()).unwrap();
         let settings = ContractSettings {
             collect_chains: false,
