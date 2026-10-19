@@ -6936,21 +6936,20 @@ mod tests {
                 }
                 values
             };
-            let evaluate_arb = |expression: Atom,
-                                values: &[Complex<F<ArbPrec>>]|
-             -> Result<Complex<F<ArbPrec>>> {
-                let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+            let evaluate_arb =
+                |expression: Atom, values: &[Complex<F<ArbPrec>>]| -> Result<Complex<F<ArbPrec>>> {
+                    let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
                     expression.evaluator(&parameters).build().map_err(|error| {
                         eyre::eyre!(
                             "failed to build {label} connected-parent UV-bridge evaluator: {error}"
                         )
                     })?;
-                let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
-                    rational.map_coeff(&|coefficient| {
-                        Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
-                    });
-                Ok(arb.evaluate_single(values))
-            };
+                    let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                        rational.map_coeff(&|coefficient| {
+                            Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                        });
+                    Ok(arb.evaluate_single(values))
+                };
             let scale = F::<ArbPrec>::from(&Rational::from(10).pow(45));
             let uv_values = values_at(&scale);
             let measure = &scale * &scale * &scale;

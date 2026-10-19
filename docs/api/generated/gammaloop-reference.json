@@ -19474,32 +19474,12 @@
       "possible_values": []
     },
     {
-      "path": "runtime.subtraction.overlap_settings.enable_heuristics",
-      "value_type": "boolean",
-      "description": "Enable the configured heuristic center tests before invoking the overlap solver.\nAn explicitly forced center is independent of this switch and is always validated.",
-      "required": false,
-      "default": true,
-      "possible_values": []
-    },
-    {
       "path": "runtime.subtraction.overlap_settings.force_global_center",
       "value_type": "array | null",
       "description": "Explicit three-vector center used for every threshold overlap, when provided.",
       "required": false,
       "default": null,
       "possible_values": []
-    },
-    {
-      "path": "runtime.subtraction.overlap_settings.objective",
-      "value_type": "string",
-      "description": "Refine final maximal-overlap centers after enabled heuristics fail their interior checks.\nOptional objectives leave catalogue membership unchanged and retain a certified witness\nif their fixed iteration budget or physical validation rejects an optimization result.",
-      "required": false,
-      "default": "max_min_depth",
-      "possible_values": [
-        "max_min_depth",
-        "min_sum",
-        "relaxed_chebyshev"
-      ]
     },
     {
       "path": "runtime.subtraction.overlap_settings.try_origin",
