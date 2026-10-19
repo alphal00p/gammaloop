@@ -374,6 +374,40 @@ fn gamma0_square_collapses_inside_chain() {
 }
 
 #[test]
+fn symmetric_gamma0_self_pair_reduces_after_power_compression() {
+    let r = test_initialize();
+    let left = gamma0!(slot!(r.bis4, a), slot!(r.bis4, b));
+    let right = gamma0!(slot!(r.bis4, b), slot!(r.bis4, a));
+    assert_eq!(left, right, "physical gamma0 is symmetric");
+    let spectator = (Atom::var(symbol!("gamma0_self_pair_spectator_a"))
+        + Atom::var(symbol!("gamma0_self_pair_spectator_b")))
+    .pow(11);
+    let source = crate::tensor::SymbolicTensor::infer_indexed(&spectator * &left * &right).unwrap();
+    assert!(source.is_scalar());
+    let retained = source.clone();
+    let settings = crate::tensor::AlgebraSettings {
+        gamma: Some(crate::dirac::GammaSimplifySettings::canonical()),
+        epsilon: true,
+        ..Default::default()
+    };
+    let result = source
+        .simplify_algebra(&settings)
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .to_dots()
+        .unwrap();
+    assert!(result.is_scalar());
+    assert_eq!(result.expression(), &(Atom::num(4) * &spectator));
+    assert_eq!(source, retained);
+    assert_eq!(result.simplify_algebra(&settings).unwrap(), result);
+}
+
+#[test]
 fn gamma0_conjugates_gamma5_inside_chain() {
     let r = test_initialize();
     let expr = chain!(

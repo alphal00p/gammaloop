@@ -273,6 +273,10 @@ impl<'a> Chain for AtomView<'a> {
         let mut joined = false;
         let mut fixed_point = |mut result: Atom| loop {
             let previous = result.clone();
+            if let Some(sewn) = sew_explicit_chain_square(result.as_view(), representation) {
+                result = sewn;
+                joined = true;
+            }
             for (product, transpose_left, transpose_right) in &joins {
                 let start = in_index.to_pattern();
                 let end = out_index.to_pattern();
@@ -301,27 +305,7 @@ impl<'a> Chain for AtomView<'a> {
                             }
                             for factor in factors {
                                 let factor = if transpose {
-                                    let mut slots = SlotMatcher::default();
-                                    let mut opaque_level = None;
-                                    factor.replace_map(|atom, context, output| {
-                                        if opaque_level
-                                            .is_some_and(|level| context.function_level > level)
-                                        {
-                                            return;
-                                        }
-                                        opaque_level = None;
-                                        if !matches!(slots.classify(atom), SlotMatch::Other) {
-                                            opaque_level = Some(context.function_level);
-                                            return;
-                                        }
-                                        if let AtomView::Var(symbol) = atom {
-                                            if symbol.get_symbol() == T.chain_in {
-                                                **output = Atom::var(T.chain_out);
-                                            } else if symbol.get_symbol() == T.chain_out {
-                                                **output = Atom::var(T.chain_in);
-                                            }
-                                        }
-                                    })
+                                    transpose_chain_factor(factor)
                                 } else {
                                     factor.to_owned()
                                 };
@@ -737,6 +721,94 @@ fn undone_self_dual_single_length(chain: AtomView<'_>) -> Option<Atom> {
     Some(undone.finish())
 }
 
+/// The existing common-end join uses an ordinary transpose, never conjugation.
+fn transpose_chain_factor(factor: AtomView<'_>) -> Atom {
+    let mut slots = SlotMatcher::default();
+    let mut opaque_level = None;
+    factor.replace_map(|atom, context, output| {
+        if opaque_level.is_some_and(|level| context.function_level > level) {
+            return;
+        }
+        opaque_level = None;
+        if !matches!(slots.classify(atom), SlotMatch::Other) {
+            opaque_level = Some(context.function_level);
+            return;
+        }
+        if let AtomView::Var(symbol) = atom {
+            if symbol.get_symbol() == T.chain_in {
+                **output = Atom::var(T.chain_out);
+            } else if symbol.get_symbol() == T.chain_out {
+                **output = Atom::var(T.chain_in);
+            }
+        }
+    })
+}
+
+/// Expose the two copies before scalar power compression hides their join.
+/// Other indexed slots need the collector's copy-local dummy scope, so remain opaque.
+fn sew_explicit_chain_square(expression: AtomView<'_>, representation: LibraryRep) -> Option<Atom> {
+    use spenso::structure::slot::IsAbstractSlot;
+    let AtomView::Pow(power) = expression else {
+        return None;
+    };
+    if power.get_exp() != Atom::num(2).as_view() || !representation.is_self_dual() {
+        return None;
+    }
+    let AtomView::Fun(chain) = power.get_base() else {
+        return None;
+    };
+    if chain.get_symbol() != T.chain || chain.get_nargs() < 3 {
+        return None;
+    }
+    let mut slots = SlotMatcher::default();
+    let start = slots
+        .parse::<LibraryRep, AbstractIndex>(chain.get(0))
+        .ok()?;
+    let end = slots
+        .parse::<LibraryRep, AbstractIndex>(chain.get(1))
+        .ok()?;
+    if start.rep().rep != representation
+        || !start.rep().matches(&end.rep())
+        || start.aind() == end.aind()
+        || matches!(start.aind(), AbstractIndex::Open { .. })
+        || matches!(end.aind(), AbstractIndex::Open { .. })
+    {
+        return None;
+    }
+    let factors = chain.iter().skip(2).collect::<Vec<_>>();
+    // Epsilon's owner contracts terminal powers and products. Sewing its
+    // factors into an ordered trace would hide that pending contraction.
+    if factors
+        .iter()
+        .any(|factor| factor.contains_symbol(*crate::epsilon::EPSILON_SYMBOL))
+    {
+        return None;
+    }
+    let mut indexed = false;
+    for factor in &factors {
+        factor.visitor(&mut |atom| {
+            if !matches!(slots.classify(atom), SlotMatch::Other) {
+                indexed = true;
+                return false;
+            }
+            true
+        });
+    }
+    if indexed {
+        return None;
+    }
+    let mut sewn = FunctionBuilder::new(T.chain)
+        .add_arg(chain.get(0))
+        .add_arg(chain.get(0));
+    for factor in &factors {
+        sewn = sewn.add_arg(*factor);
+    }
+    for factor in factors.into_iter().rev() {
+        sewn = sewn.add_arg(transpose_chain_factor(factor));
+    }
+    Some(sewn.finish())
+}
+
 /// Rewrite every product with at least two chain factors, children first:
 /// `join` receives the product of its chains, the other factors stay. `None`
 /// when nothing changed. Slots are left unopened.
@@ -775,6 +847,13 @@ fn joining_products(expression: AtomView<'_>, join: &mut impl FnMut(Atom) -> Ato
         let rebuilt = match expression {
             AtomView::Mul(product) if !changed && product.iter().filter(is_chain).count() < 2 => {
                 return None;
+            }
+            AtomView::Pow(power)
+                if power.get_exp() == Atom::num(2).as_view() && is_chain(&power.get_base()) =>
+            {
+                let original = children[0].as_view().pow(children[1].as_view());
+                let joined = join(original.clone());
+                return (joined != original).then_some(joined);
             }
             _ if !changed && !matches!(expression, AtomView::Mul(_)) => return None,
             AtomView::Fun(function) => {
@@ -1762,5 +1841,129 @@ mod tests {
                 }
             }
         }
+    }
+    #[test]
+    fn explicit_chain_square_sewing_transposes_the_complete_word() {
+        use spenso::shadowing::IntoAtom;
+
+        let reps = test_initialize();
+        let a = slot!(reps.bis4, compressed_square_a).into_atom();
+        let b = slot!(reps.bis4, compressed_square_b).into_atom();
+        let first = T.tensor_symbol("compressed_square_first");
+        let second = T.tensor_symbol("compressed_square_second");
+        let word = chain!(
+            &a,
+            &b,
+            function!(first, T.chain_in, T.chain_out),
+            function!(second, T.chain_in, T.chain_out),
+        );
+        let spectator = (Atom::var(symbol!("compressed_square_u"))
+            + Atom::var(symbol!("compressed_square_v")))
+        .pow(11);
+        let source = &spectator * word.pow(2);
+        let retained = source.clone();
+        let expected = &spectator
+            * trace!(
+                reps.bis4.to_symbolic([]),
+                function!(first, T.chain_in, T.chain_out),
+                function!(second, T.chain_in, T.chain_out),
+                function!(second, T.chain_out, T.chain_in),
+                function!(first, T.chain_out, T.chain_in),
+            );
+        let actual = source.join_chains(Bispinor {}.into());
+        assert_eq!(actual, expected);
+        assert_eq!(actual.join_chains(Bispinor {}.into()), actual);
+        assert_eq!(source, retained);
+        // An unrelated family remains a spectator; only epsilon INSIDE the
+        // candidate word is outside this sewing operation's ownership.
+        let epsilon = crate::epsilon!(
+            spenso::mink!(4, compressed_square_mu),
+            spenso::mink!(4, compressed_square_nu),
+            spenso::mink!(4, compressed_square_rho),
+            spenso::mink!(4, compressed_square_sigma),
+        );
+        assert_eq!(
+            (&epsilon * &source).join_chains(Bispinor {}.into()),
+            epsilon * expected
+        );
+    }
+
+    #[test]
+    fn chain_square_sewing_preserves_other_power_and_index_scopes() {
+        use spenso::shadowing::IntoAtom;
+
+        let reps = test_initialize();
+        let a = slot!(reps.bis4, compressed_guard_a).into_atom();
+        let b = slot!(reps.bis4, compressed_guard_b).into_atom();
+        let matrix = T.tensor_symbol("compressed_guard_matrix");
+        let factor = function!(matrix, T.chain_in, T.chain_out);
+        let word = chain!(&a, &b, &factor);
+        let closed = chain!(&a, &a, &factor);
+        let open = chain!(
+            reps.bis4.to_symbolic([]),
+            reps.bis4.to_symbolic([]),
+            &factor
+        );
+        let mu = slot!(reps.mink4, compressed_guard_mu).into_atom();
+        let indexed = chain!(&a, &b, gamma!(&mu), gamma!(&mu));
+        let rep: LibraryRep = Bispinor {}.into();
+        for source in [
+            open.pow(2),
+            closed.pow(2),
+            indexed.pow(2),
+            word.pow(3),
+            word.pow(4),
+            word.pow(-2),
+            word.pow((1, 2)),
+        ] {
+            assert!(sew_explicit_chain_square(source.as_view(), rep).is_none());
+        }
+        assert!(
+            sew_explicit_chain_square(
+                word.pow(2).as_view(),
+                spenso::structure::representation::Minkowski {}.into()
+            )
+            .is_none()
+        );
+        let fixed = chain!(
+            bis!(
+                4,
+                function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0)
+            ),
+            bis!(
+                4,
+                function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 1)
+            ),
+            &factor,
+        );
+        let mismatch = chain!(&a, bis!(2, compressed_guard_mismatch), &factor);
+        let dualizable: LibraryRep = ColorFundamental {}.into();
+        let color = chain!(
+            dualizable.to_symbolic([Atom::num(3), Atom::num(91201)]),
+            dualizable
+                .dual()
+                .to_symbolic([Atom::num(3), Atom::num(91202)]),
+            &factor,
+        );
+        for (source, selected) in [
+            (fixed.pow(2), rep),
+            (mismatch.pow(2), rep),
+            (color.pow(2), dualizable),
+        ] {
+            assert!(sew_explicit_chain_square(source.as_view(), selected).is_none());
+        }
+        let terminal_epsilon = chain!(
+            spenso::mink!(2, compressed_epsilon_a),
+            spenso::mink!(2, compressed_epsilon_b),
+            crate::epsilon!(T.chain_in, T.chain_out),
+        )
+        .pow(2);
+        assert!(
+            sew_explicit_chain_square(
+                terminal_epsilon.as_view(),
+                spenso::structure::representation::Minkowski {}.into()
+            )
+            .is_none()
+        );
     }
 }
