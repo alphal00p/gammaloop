@@ -9,8 +9,8 @@ retains the same model so particle and interaction IDs remain meaningful after g
 
 == Import a UFO model
 
-Raw UFO import is an optional adapter around Python's `ufo_model_loader`. Install that package
-in the interpreter used by the Symbolica host, then point the loader at your UFO directory:
+Raw UFO import is an optional adapter around Python's `ufo-model-loader>=1.0.1`. Install that
+package in the interpreter used by the Symbolica host, then point the loader at your UFO directory:
 
 // docs-example: compile
 ```python

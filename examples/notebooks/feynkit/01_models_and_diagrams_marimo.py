@@ -326,7 +326,7 @@ def _(mo):
     ## Loading UFO models
 
     For a raw UFO model directory, use Python 3.11 or newer and the
-    Symbolica 3-compatible UFO loader pinned in **04 — Loading UFO models**.
+    `ufo-model-loader==1.0.1` release pinned in **04 — Loading UFO models**.
     That notebook installs and exercises the optional boundary explicitly.
 
     Configure an `UfoLoader`, for example

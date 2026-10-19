@@ -4,7 +4,7 @@
 #     "marimo==0.24.0",
 #     "symbolica==3.0.1",
 #     "typst==0.15.0",
-#     "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",
+#     "ufo-model-loader==1.0.1",
 # ]
 # ///
 
@@ -44,10 +44,10 @@ def _(mo):
     mo.md(r"""
     ## Requirements
 
-    Raw UFO import requires **Python 3.11 or newer** and the Symbolica 3-compatible development revision of `ufo-model-loader`. With the shared Symbolica host installed, use:
+    Raw UFO import requires **Python 3.11 or newer** and `ufo-model-loader==1.0.1`. With the shared Symbolica host installed, use:
 
     ```bash
-    python -m pip install --no-deps 'ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b'
+    python -m pip install --no-deps 'ufo-model-loader==1.0.1'
     ```
 
     The UFO loader is optional for the other showcases. They share the Marimo and Typst dependencies; normalized JSON loading itself needs no UFO tooling.
@@ -92,7 +92,7 @@ def _(UFO_MODEL, UfoLoader, mo, os):
         mo.callout(
             mo.md(
                 "This optional tutorial needs Python 3.11 or newer and "
-                "the pinned `ufo-model-loader` revision above. Install it, then rerun "
+                "the pinned `ufo-model-loader==1.0.1` release above. Install it, then rerun "
                 "this cell."
             ),
             kind="warn",

@@ -67,7 +67,7 @@ listed in `crates/typst-renderer/data.json` and `crates/spynso3/data.json` throu
 Register `linnet_render_py::GraphModule` to install the shared
 `symbolica.community.graph_native` module from `linnet-render-py`. Package
 `crates/linnet-render-py/python/symbolica/community/graph` alongside HepKit so
-`symbolica.community.graph` exposes its shared settings, snapshots, and type information. Include the UFO loader revision documented in the #link("guides/showcases/ufo/")[UFO import example]
+`symbolica.community.graph` exposes its shared settings, snapshots, and type information. Include the UFO loader release documented in the #link("guides/showcases/ufo/")[UFO import example]
 when offering raw UFO import. Install it with `--no-deps` into the existing host environment:
 the host supplies the single Symbolica extension. The checkout's `uv.lock` instead installs a
 standalone Symbolica 3 kernel for GammaLoop development; do not sync that environment over a
@@ -135,12 +135,13 @@ cells and start the existing documentation watcher:
 ```sh
 just notebook-wheel
 just notebook-ufo-wheel
-just docs-notebooks /path/to/symbolica-wasm.whl feynkit docs/generated/notebooks target/notebook-ufo-wheel/ufo_model_loader-0.1.8-py3-none-any.whl
+just docs-notebooks /path/to/symbolica-wasm.whl feynkit docs/generated/notebooks target/notebook-ufo-wheel/ufo_model_loader-1.0.1-py3-none-any.whl
 just docs-watch feynkit 8117
 ```
 
-Pass the actual Symbolica wheel filename produced by the build. The UFO loader is pinned to
-the upstream Symbolica-3-compatible revision because the published 0.1.7 API predates it. `docs-notebooks` stages generated assets
+Pass the actual Symbolica wheel filename produced by the build. `notebook-ufo-wheel` downloads
+the released `ufo-model-loader==1.0.1` pure Python wheel, matching the notebook dependency.
+`docs-notebooks` stages generated assets
 under `docs/generated/notebooks`, which `docs-site` and `docs-watch` include automatically.
 Rerun the export after editing a notebook; the watcher reloads the changed assets. The output
 argument can instead point to an already built site. Generated wheels and notebook assets

@@ -78,7 +78,7 @@ Chemical potentials are model parameters. Each particle may name one (`chemical_
 JSON and UFO models); a missing assignment or the literal `ZERO` means zero chemical potential.
 Restriction-fixed chemical potentials are canonicalized to `ZERO`, including derived expressions.
 A runtime value of zero does not erase an adjustable assignment. UFO import keeps these
-assignments and therefore requires `ufo-model-loader>=1.0.0`. In the bundled `sm` model,
+assignments; the supported loader is `ufo-model-loader>=1.0.1`. In the bundled `sm` model,
 antiparticles use the negated `minus_<name>` parameter, and every particle's value is derived
 from the external parameters `muB`, `muQ`, `muLe`, `muLmu`, and `muLtau` (LHA block
 `CHEMICALPOTENTIAL`) using its baryon number, electric charge, and lepton flavor. Assignments use

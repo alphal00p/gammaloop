@@ -160,17 +160,17 @@ fn load_model(
     })?;
     // The Python loader creates symbols while parsing parameter expressions.
     // Declare their printers first, before even a forward reference can do so.
-    let label_source = CString::new(include_str!("parameter_labels.py")).unwrap();
-    let labels = (|| -> Result<Vec<(String, DisplayNames)>, PyErr> {
+    let metadata_source = CString::new(include_str!("model_metadata.py")).unwrap();
+    let (labels, source_model) = (|| {
         PyModule::from_code(
             py,
-            &label_source,
-            c"parameter_labels.py",
-            c"_parameter_labels",
+            &metadata_source,
+            c"model_metadata.py",
+            c"_model_metadata",
         )?
-        .getattr("parameter_labels")?
+        .getattr("model_metadata")?
         .call1((input_model_path,))?
-        .extract()
+        .extract::<(Vec<(String, DisplayNames)>, Option<Py<PyAny>>)>()
     })()
     .map_err(|source| UfoLoadError::Load { source })?;
     let labels: BTreeMap<_, _> = labels.into_iter().collect();

@@ -246,10 +246,10 @@ docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="docs/generated/notebooks" DEPENDEN
 notebook NAME="spenso_idenso_display" PYTHON="python":
     {{ quote(PYTHON) }} -m marimo edit {{ quote("examples/notebooks/" + NAME + ".py") }}
 
-# Build the Symbolica-3-compatible UFO loader until that revision is released.
+# Download the pinned pure Python UFO loader wheel for browser showcases.
 notebook-ufo-wheel OUTPUT="target/notebook-ufo-wheel":
     uv tool run --from pip pip wheel --no-deps \
-        'ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b' \
+        'ufo-model-loader==1.0.1' \
         --wheel-dir {{ quote(OUTPUT) }}
 
 # Build the shared Symbolica/FeynKit/Spenso/Idenso wheel for browser showcases.
