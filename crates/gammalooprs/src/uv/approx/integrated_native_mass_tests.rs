@@ -39,6 +39,50 @@ pub(in crate::uv) struct QcdMassReference {
     model: Model,
 }
 
+impl QcdMassReference {
+    /// Open a complete source-derived quark closing word on its native frame.
+    /// Keep momentum specialization, normalization and Gram controls at callers.
+    pub(in crate::uv) fn open_native_quark_dual(
+        word: &SymbolicTensor<IndexedStructure>,
+        expected_open: &SymbolicTensor<IndexedStructure>,
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
+        use spenso::structure::slot::IsAbstractSlot;
+        use std::collections::HashMap;
+
+        let slots = word.structure().logical_slots();
+        ensure!(slots.len() == 4 && expected_open.rank() == 4);
+        let mut map = HashMap::new();
+        let mut inverse = HashMap::new();
+        for (position, slot) in slots.iter().enumerate() {
+            let opposite = slots
+                .iter()
+                .filter(|other| slot.rep().matches(&other.rep()) && other.aind() != slot.aind())
+                .collect::<Vec<_>>();
+            ensure!(
+                opposite.len() == 1,
+                "native quark dual needs one named opposite spin/color port"
+            );
+            map.insert(position, opposite[0].aind());
+            inverse.insert(position, slot.aind());
+        }
+        let open = word.reindex_interface_ports(&map)?;
+        ensure!(open.reindex_interface_ports(&inverse)?.same_value(word));
+        ensure!(
+            open.structure().canonical().external_structure()
+                == expected_open.structure().canonical().external_structure()
+        );
+        let zero = word.with_checked_expression(Atom::Zero)?;
+        let moved_zero = zero.reindex_interface_ports(&map)?;
+        ensure!(moved_zero.rank() == 4);
+        ensure!(
+            moved_zero
+                .reindex_interface_ports(&inverse)?
+                .same_value(&zero)
+        );
+        Ok(open)
+    }
+}
+
 type CertifiedMassPole = (usize, Atom, Atom, Atom);
 
 // Actual source/child incidence retains the certified scalar transfer and the

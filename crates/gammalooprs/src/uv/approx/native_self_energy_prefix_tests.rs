@@ -21,11 +21,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Flow},
     subgraph::{SubSetLike, SubSetOps},
 };
-use spenso::{
-    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
-    structure::slot::IsAbstractSlot,
-};
-use std::collections::HashMap;
+use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
 
 #[test]
 fn native_os_quark_proper_prefix_matches_mass_and_field_insertions() -> Result<()> {
@@ -564,31 +560,8 @@ impl QcdMassReference {
                 let closing_kinetic = projector.try_sub(&zero_projector)?;
                 let closing_kinetic = closing_kinetic
                     .with_checked_expression(Atom::num(12) * closing_kinetic.expression())?;
-                let transpose = |tensor: &SymbolicTensor<IndexedStructure>| -> Result<SymbolicTensor<IndexedStructure>> {
-                    let slots = tensor.structure().logical_slots();
-                    ensure!(slots.len() == 4);
-                    let mut map = HashMap::new();
-                    let mut inverse = HashMap::new();
-                    for (position, slot) in slots.iter().enumerate() {
-                        let opposite = slots.iter().filter(|other|
-                                slot.rep().matches(&other.rep()) && other.aind() != slot.aind()
-                        ).collect::<Vec<_>>();
-                        ensure!(opposite.len() == 1, "open prefix needs one named opposite spin/color endpoint");
-                        map.insert(position, opposite[0].aind());
-                        inverse.insert(position, slot.aind());
-                    }
-                    let open = tensor.reindex_interface_ports(&map)?;
-                    ensure!(open.reindex_interface_ports(&inverse)?.same_value(tensor));
-                    ensure!(open.structure().canonical().external_structure()
-                        == full.structure().canonical().external_structure());
-                    let zero = tensor.with_checked_expression(Atom::Zero)?;
-                    let moved_zero = zero.reindex_interface_ports(&map)?;
-                    ensure!(moved_zero.rank() == 4
-                        && moved_zero.reindex_interface_ports(&inverse)?.same_value(&zero));
-                    Ok(open)
-                };
-                let open_identity = transpose(&closing_identity)?;
-                let open_kinetic = transpose(&closing_kinetic)?;
+                let open_identity = Self::open_native_quark_dual(&closing_identity, &full)?;
+                let open_kinetic = Self::open_native_quark_dual(&closing_kinetic, &full)?;
                 let open_loop = evaluate_vector(&open_kinetic, EdgeIndex(0), &parent_vector)?;
                 // The normalized mass trace calibrates both independently
                 // constructed matrices, but is not used to infer their equality.
