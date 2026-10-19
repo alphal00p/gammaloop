@@ -180,14 +180,13 @@ fn export_evaluator_map<T: ExportAtomTo>(
 }
 
 fn standalone_rust_script() -> String {
-    let script = include_str!("standalone_template.rs").replace(
+    include_str!("standalone_template.rs").replace(
         "use crate::integrands::process::standalone;",
         &format!(
             "mod standalone {{\n{}\n}}",
             include_str!("../standalone.rs"),
         ),
-    );
-    script
+    )
 }
 
 pub trait ExportAtomTo: Sized {
