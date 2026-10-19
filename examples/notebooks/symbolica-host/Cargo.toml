@@ -26,6 +26,8 @@ wasm = ["linnet-py/wasm", "feynkit-py/wasm", "spynso3/wasm"]
 # Optional notebook compiler components; see vendor/typst.typ.
 typst-library = { path = "../../../vendor/typst-library" }
 typst-svg = { path = "../../../vendor/typst-svg" }
+# Typst plugins have no JavaScript clock; retain infinite-time Clarabel solves.
+clarabel = { path = "../../../vendor/clarabel" }
 # Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
@@ -36,6 +38,6 @@ symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typ
 debug = 0
 
 # Match the workspace documentation profile for hermetic installed-wheel checks.
-[profile.docs]
+[profile.ci-optim]
 inherits = "dev"
 debug = false

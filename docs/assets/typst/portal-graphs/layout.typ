@@ -1,4 +1,4 @@
-#import "../../../../crates/linnest/typst/src/lib.typ": graph
+#import "../../../../crates/linnest/typst/src/lib.typ": graph, subgraph
 #import "../../../../crates/linnest/typst/src/render/layout.typ" as renderer
 #import "@preview/cetz:0.5.1" as cetz
 #import "../../../../assets/embedded/drawing/templates/layout-core.typ": (
@@ -48,6 +48,33 @@
       cetz.draw.content(box.center, box.label, padding: 0, ..box.label-style)
     }
   }
+}
+
+// Parse one portal DOT graph. FeynKit DOT sews each initial-state connection
+// into one paired edge whose `external` statement carries the leg; open those
+// edges as FeynKit's own drawing does: an incoming leg at the sink and an
+// outgoing leg at the source, both tagged with the connection that
+// cross-section placement pairs on.
+#let parse-graph(input) = {
+  let (g,) = graph.parse(input)
+  let sewn = (:)
+  for edge in graph.edges(g) {
+    let external = json(bytes(edge.statements.at("external", default: "null")))
+    if external != none and edge.source != none and edge.sink != none {
+      sewn.insert(str(edge.edge), external.connection)
+    }
+  }
+  if sewn.len() == 0 { return g }
+  let ids = sewn.keys().map(int)
+  g = graph.map(g, edge: edge => {
+    let connection = sewn.at(str(edge.edge), default: none)
+    if connection != none { (is_cut: connection) }
+  })
+  graph.cut(
+    g,
+    left: subgraph.select(g, sink: ids),
+    right: subgraph.select(g, source: ids),
+  )
 }
 
 // Website adapter: GammaLoop supplies the same particle and external-edge
