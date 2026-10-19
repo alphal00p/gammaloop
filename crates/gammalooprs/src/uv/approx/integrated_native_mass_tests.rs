@@ -3901,9 +3901,19 @@ fn native_d09_proper_local_vacuum_scalar_traces_match_independent_tadpoles() -> 
     let mut records = Vec::new();
     for (index, trace) in traces.iter().enumerate() {
         ensure!(trace.is_scalar());
+        // The finite-row owner expects completed scalar coefficients. Use the
+        // existing SU(3) invariant owner before comparing to numerical CF=4/3.
+        let normalized = trace.simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+            ..Default::default()
+        })?;
+        ensure!(
+            !normalized.expression().contains_symbol(CS.cas)
+                && !normalized.expression().contains_symbol(CS.idx)
+        );
         let weighted = reference
             .model
-            .expand_couplings(&(source_weight.clone() * trace.expression()));
+            .expand_couplings(&(source_weight.clone() * normalized.expression()));
         // Unit scales are imposed after the actual operators and integration.
         let unit = weighted
             .replace(symbol!("UFO::MT"))
