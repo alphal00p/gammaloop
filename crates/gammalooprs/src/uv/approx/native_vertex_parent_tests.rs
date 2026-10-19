@@ -4155,3 +4155,720 @@ impl QcdMassReference {
         Ok(())
     }
 }
+
+impl QcdMassReference {
+    /// Actual proper-local W only. Two calibrated scalar traces, not open R2.
+    pub(in crate::uv) fn certify_d09_proper_local_vacuum_angular_traces(
+        &self,
+        diagram: &feynkit_graph::FeynmanDiagram,
+        ctx: &UVCtx<'_>,
+        given: &OwnedForestNode,
+        prefix: &Full4dCts,
+        actual: &(OwnedForestNode, Local4dCts, IntegratedCts),
+        backend: &vakint::VakintSettings,
+    ) -> Result<[SymbolicTensor<IndexedStructure>; 4]> {
+        use crate::uv::Spinney;
+        let (parent, local, _) = actual;
+        let graph = ctx.graph;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        eyre::ensure!(diagram.name() == "D09" && graph.name == "D09");
+        eyre::ensure!(parent.renormalization_scheme() == ApproximationType::OS);
+        eyre::ensure!(given.renormalization_scheme() == ApproximationType::OS);
+        eyre::ensure!(parent.dod() == 1 && given.dod() == 1);
+        eyre::ensure!(graph.n_loops(parent.subgraph()) == 2);
+        eyre::ensure!(graph.n_loops(given.subgraph()) == 1);
+        eyre::ensure!(graph.paired_edges(given.subgraph()) == [EdgeIndex(2), EdgeIndex(3)]);
+        eyre::ensure!(ctx.settings.generate_integrated && !ctx.settings.add_marker);
+        eyre::ensure!(ctx.settings.vakint.normalization == "MSbar");
+        eyre::ensure!(ctx.settings.vakint.additional_normalization == "1");
+        eyre::ensure!(matches!(
+            &backend.integral_normalization_factor,
+            vakint::LoopNormalizationFactor::MSbar
+        ));
+        let velocity = ctx.settings.on_shell_velocity()?;
+        eyre::ensure!(velocity == [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero]);
+        eyre::ensure!(local.recursive_completion().is_empty());
+        let selected = local
+            .active_sectors()
+            .iter()
+            .filter(|sector| sector.frozen_lmbs.is_empty() && sector.active_components.len() == 2)
+            .collect::<Vec<_>>();
+        let [sector] = selected.as_slice() else {
+            return Err(eyre!(
+                "D09 needs exactly one original two-active proper-local W sector"
+            ));
+        };
+        let sector = *sector;
+        let retained_local = local.clone();
+        let retained_w = sector.integration_atom().clone();
+        eyre::ensure!(
+            !retained_w.expression().contains_symbol(GS.dim_epsilon)
+                && !retained_w
+                    .expression()
+                    .contains_symbol(GS.integrated_loop_scale),
+            "the proper-local UV gate excludes integrated child coefficients"
+        );
+        eyre::ensure!(
+            sector.active_components[0]
+                .2
+                .loop_edges
+                .iter()
+                .copied()
+                .eq([EdgeIndex(2)])
+        );
+        eyre::ensure!(
+            sector.active_components[1]
+                .2
+                .loop_edges
+                .iter()
+                .copied()
+                .eq([EdgeIndex(4)])
+        );
+        eyre::ensure!(sector.inherited_loop_edges == [EdgeIndex(2), EdgeIndex(4)]);
+        eyre::ensure!(sector.scheme_integrand.is_some() && !retained_w.same_value(&sector.atom));
+        let actual_open = &sector.atom;
+        let (closing_duals, open_basis): (
+            [SymbolicTensor<IndexedStructure>; 2],
+            [SymbolicTensor<IndexedStructure>; 2],
+        ) = {
+            use crate::numerator::AppliedFeynmanRule;
+            use color_eyre::eyre::{ensure, eyre};
+            use idenso::color::CS;
+            use idenso::dirac::AGS;
+            use idenso::representations::Bispinor;
+            use idenso::{CookMode, CookSettings};
+            use spenso::network::library::symbolic::ETS;
+            use spenso::structure::representation::LibraryRep;
+            use spenso::structure::slot::IsAbstractSlot;
+            use std::collections::HashMap;
+            use symbolica::atom::{Atom, AtomCore, AtomView};
+
+            ensure!(diagram.name() == "D09");
+            ensure!(actual_open.rank() == 4);
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let (projector, reference_p) = self.mass_projector(diagram, &Atom::var(GS.dim))?;
+            let projector = projector
+                .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))?;
+            let projector = projector
+                .with_checked_expression(projector.expression().replace(CS.nc).with(3))?
+                .try_into_indexed()?;
+            ensure!(projector.rank() == 4);
+            let AtomView::Fun(reference_p) = reference_p.as_view() else {
+                return Err(eyre!("D09 dual has no native incoming momentum owner"));
+            };
+            ensure!(reference_p.get_symbol() == GS.emr_mom && reference_p.get_nargs() == 1);
+            let incoming_edge =
+                usize::try_from(reference_p.get(0)).map_err(|error| eyre!(error))?;
+
+            // Only the actual projector's one incoming momentum is removed/evaluated.
+            // Its original bispinor/color ports and all representations stay attached.
+            let mut momentum_count = 0usize;
+            let mut bad_momentum = false;
+            projector.expression().visitor(&mut |view| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                {
+                    momentum_count += 1;
+                    bad_momentum |= momentum.get_nargs() != 2
+                        || usize::try_from(momentum.get(0)).ok() != Some(incoming_edge);
+                }
+                true
+            });
+            ensure!(momentum_count > 0 && !bad_momentum);
+            let zero_projector = projector.with_checked_expression(
+                projector.expression().replace_map(|view, _, output| {
+                    if let AtomView::Fun(momentum) = view
+                        && momentum.get_symbol() == GS.emr_mom
+                    {
+                        **output = Atom::Zero;
+                    }
+                }),
+            )?;
+            let closing_identity = zero_projector
+                .with_checked_expression(Atom::num(12) * zero_projector.expression())?;
+            ensure!(!closing_identity.expression().contains_symbol(GS.emr_mom));
+
+            // The independent temporal word uses the SAME literal source spin metric
+            // endpoints. Replace only that one bis4 metric; its native color closure
+            // is untouched. No anonymous trace or new external port is introduced.
+            let bis = LibraryRep::from(Bispinor {}).symbol();
+            let identity_source = cooking.uncook(closing_identity.expression().as_view());
+            let mut replaced_spin_metric = 0usize;
+            let temporal_source = identity_source.replace_map(|view, _, output| {
+                let AtomView::Fun(metric) = view else { return };
+                if metric.get_symbol() != ETS.metric || metric.get_nargs() != 2 {
+                    return;
+                }
+                let spin_metric = (0..2).all(|index| {
+                    matches!(metric.get(index), AtomView::Fun(rep)
+                if rep.get_symbol() == bis && rep.get_nargs() == 2
+                    && rep.get(0) == Atom::num(4).as_view())
+                });
+                if spin_metric {
+                    replaced_spin_metric += 1;
+                    **output = function!(AGS.gamma0, metric.get(0), metric.get(1));
+                }
+            });
+            ensure!(replaced_spin_metric == 1);
+            let admitted_temporal = AppliedFeynmanRule::new(temporal_source)?.expr;
+            ensure!(admitted_temporal.rank() == 4);
+            ensure!(
+                admitted_temporal
+                    .structure()
+                    .canonical()
+                    .external_structure()
+                    == closing_identity
+                        .structure()
+                        .canonical()
+                        .external_structure()
+            );
+            let closing_temporal =
+                closing_identity.with_checked_expression(admitted_temporal.expression().clone())?;
+
+            // Independently bind gamma0 to the p-linear source projector at the unit
+            // rest point. energy_delta embeds that fixed component into the ORIGINAL
+            // formal-D Lorentz representation; no scalar D->4 replacement occurs.
+            let closing_p = projector.try_sub(&zero_projector)?;
+            let closing_p =
+                closing_p.with_checked_expression(Atom::num(12) * closing_p.expression())?;
+            let rest_p = closing_p.with_checked_expression(closing_p.expression().replace_map(
+                |view, _, output| {
+                    if let AtomView::Fun(momentum) = view
+                        && momentum.get_symbol() == GS.emr_mom
+                    {
+                        **output = GS.energy_delta(momentum.get(1));
+                    }
+                },
+            ))?;
+            let rest_difference = rest_p.try_sub(&closing_temporal)?;
+            let rest_difference = Self::reduce_parent_external_frame(
+                "D09 independent temporal dual equals its native rest momentum source",
+                &rest_difference,
+            )?;
+            Self::certify_parent_tensor_zero(
+                "D09 independent temporal dual equals its native rest momentum source",
+                &rest_difference,
+            )?;
+
+            // Reverse each actual endpoint pair, retaining the literal inverse and
+            // zero interface, exactly as in the native proper-prefix dual owner.
+            let transpose = |word: &SymbolicTensor<IndexedStructure>|
+     -> color_eyre::Result<SymbolicTensor<IndexedStructure>> {
+        let slots = word.structure().logical_slots();
+        ensure!(slots.len() == 4);
+        let mut map = HashMap::new();
+        let mut inverse = HashMap::new();
+        for (position, slot) in slots.iter().enumerate() {
+            let opposite = slots.iter().filter(|other|
+                slot.rep().matches(&other.rep()) && other.aind() != slot.aind()
+            ).collect::<Vec<_>>();
+            ensure!(opposite.len() == 1,
+                "D09 dual requires one actual opposite spin/color port");
+            map.insert(position, opposite[0].aind());
+            inverse.insert(position, slot.aind());
+        }
+        let open = word.reindex_interface_ports(&map)?;
+        ensure!(open.reindex_interface_ports(&inverse)?.same_value(word));
+        ensure!(open.structure().canonical().external_structure()
+            == actual_open.structure().canonical().external_structure());
+        let zero = word.with_checked_expression(Atom::Zero)?;
+        let open_zero = zero.reindex_interface_ports(&map)?;
+        ensure!(open_zero.rank() == 4);
+        ensure!(open_zero.reindex_interface_ports(&inverse)?.same_value(&zero));
+        Ok(open)
+    };
+            let open_basis = [transpose(&closing_identity)?, transpose(&closing_temporal)?];
+            let closing_duals = [
+                closing_identity
+                    .with_checked_expression(closing_identity.expression() / Atom::num(12))?,
+                closing_temporal
+                    .with_checked_expression(closing_temporal.expression() / Atom::num(12))?,
+            ];
+
+            // Full native 2x2 Gram calibration, not the degenerate matched mass trace.
+            // Tr_spin,color(I)=4*3; gamma0^2=I; both cross traces vanish.
+            for (row, dual) in closing_duals.iter().enumerate() {
+                for (column, basis) in open_basis.iter().enumerate() {
+                    let trace = integrated::simplify(&dual.clone().multiply(basis.clone())?)?;
+                    ensure!(
+                        trace.is_scalar(),
+                        "D09 calibrated dual left native ports open"
+                    );
+                    let expected = Atom::num(if row == column { 1 } else { 0 });
+                    Self::certify_parent_tensor_zero(
+                        "D09 unit-rest identity/temporal dual pairing matrix",
+                        &trace.with_checked_expression(trace.expression() - expected)?,
+                    )?;
+                }
+            }
+            (closing_duals, open_basis)
+        };
+
+        // The point belongs to the actual incoming source and its signed
+        // opposite boundary, not to a new momentum or an external projector.
+        let (_, reference_p) = self.mass_projector(diagram, &Atom::var(GS.dim))?;
+        let basis = diagram.loop_momentum_basis();
+        let routed_p = basis.route_expression(&reference_p);
+        let boundary = graph.dummy_less_full_crown(parent.subgraph());
+        let mut signs = BTreeMap::new();
+        let mut incoming = None;
+        for hedge in boundary.included_iter() {
+            let edge = graph[&hedge];
+            let routed = basis.route_expression(&function!(GS.emr_mom, edge.0));
+            let sign = if (&routed - &routed_p).expand().is_zero() {
+                1
+            } else if (&routed + &routed_p).expand().is_zero() {
+                -1
+            } else {
+                return Err(eyre!("D09 UV dual has an unmatched external routing"));
+            };
+            eyre::ensure!(signs.insert(edge, sign).is_none());
+            if graph.flow(hedge) == Flow::Sink {
+                eyre::ensure!(sign == 1 && incoming.replace(edge).is_none());
+            }
+        }
+        eyre::ensure!(signs.len() == 2);
+        let incoming =
+            incoming.ok_or_else(|| eyre!("D09 UV input has no physical incoming owner"))?;
+        let mass = graph[incoming].particle.mass_atom(ctx.model);
+        for (edge, pdg) in [(2, 6), (3, 21), (4, 6), (5, 6), (6, 21)] {
+            let data = &graph[EdgeIndex(edge)];
+            eyre::ensure!(
+                ctx.model
+                    .particle_by_id(data.particle.particle().unwrap())?
+                    .pdg_code
+                    .abs()
+                    == pdg
+            );
+            if pdg == 6 {
+                eyre::ensure!(data.particle.mass_atom(ctx.model) == mass);
+            } else {
+                eyre::ensure!(data.particle.mass_atom(ctx.model).is_zero());
+            }
+        }
+        let local_prefixes = prefix
+            .sectors()
+            .filter(|value| value.frozen_lmbs.is_empty() && value.active_components.len() == 1)
+            .collect::<Vec<_>>();
+        let [local_prefix] = local_prefixes.as_slice() else {
+            return Err(eyre!(
+                "D09 requires the actual one-active local child prefix"
+            ));
+        };
+        let local_prefix = *local_prefix;
+        eyre::ensure!(
+            local_prefix.active_components[0]
+                .2
+                .loop_edges
+                .iter()
+                .copied()
+                .eq([EdgeIndex(2)])
+        );
+        let isolated = Full4dCts(FourDSectors::new(vec![local_prefix.clone()], Vec::new())?);
+        let lmb = compatible_lmb(ctx, parent, given, &isolated)?;
+        eyre::ensure!(
+            lmb.loop_edges
+                .iter()
+                .copied()
+                .eq([EdgeIndex(2), EdgeIndex(4)])
+        );
+
+        // All point/representation changes happen on a numerator AFTER the
+        // actual operators. Negative denominator polynomials stay dimensional.
+        let prepare_numerator = |numerator: &SymbolicTensor<IndexedStructure>,
+                                 physical_four: bool|
+         -> Result<SymbolicTensor<IndexedStructure>> {
+            let mut invalid_denominator = false;
+            numerator.expression().visitor(&mut |view| {
+                if let AtomView::Pow(power) = view
+                    && power.get_base().contains_symbol(GS.den)
+                    && i64::try_from(power.get_exp()).is_ok_and(|power| power < 0)
+                {
+                    invalid_denominator = true;
+                }
+                true
+            });
+            let expression = numerator.expression().replace_map(|view, _, output| {
+                if let AtomView::Fun(denominator) = view
+                    && denominator.get_symbol() == GS.den
+                {
+                    if denominator.get_nargs() != 4 {
+                        invalid_denominator = true;
+                    } else {
+                        // Positive denominator factors belong to the NUMERATOR.
+                        // Their fourth argument is the complete scalar value.
+                        **output = denominator.get(3).to_owned();
+                    }
+                }
+            });
+            eyre::ensure!(
+                !invalid_denominator,
+                "D09 numerator retained a negative or malformed denominator shell"
+            );
+            let dotted = numerator.with_checked_expression(expression)?.to_dots()?;
+            let expression = GS
+                .erase_uv_momentum_provenance(dotted.expression())
+                .replace_multiple(graph.uv_wrapped_replacement(
+                    parent.subgraph(),
+                    &lmb,
+                    &[W_.x___],
+                ));
+            let mut unexpected = false;
+            let expression = expression.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                {
+                    let Ok(edge) = usize::try_from(momentum.get(0)) else {
+                        unexpected = true;
+                        return;
+                    };
+                    let edge = EdgeIndex(edge);
+                    if let Some(sign) = signs.get(&edge) {
+                        let point =
+                            GS.on_shell_momentum(incoming, &(Atom::num(*sign) * &mass), &velocity);
+                        let indices = momentum
+                            .iter()
+                            .skip(1)
+                            .map(|index| index.to_owned())
+                            .collect::<Vec<_>>();
+                        **output = GS.indexed_momentum(&point, &indices);
+                    } else if ![EdgeIndex(2), EdgeIndex(4)].contains(&edge) {
+                        unexpected = true;
+                    }
+                }
+            });
+            eyre::ensure!(!unexpected, "D09 UV numerator has an unowned momentum");
+            let expression = GS
+                .resolve_os_momenta(&expression)
+                .replace(mass.to_pattern())
+                .with(1);
+            let routed = dotted.with_checked_expression(expression)?;
+            if !physical_four {
+                return Ok(routed);
+            }
+            let source = cooking.uncook(routed.expression().as_view());
+            let outside_representations = source.replace_map(|view, _, output| {
+                if view.get_symbol() == Some(LibraryRep::from(Minkowski {}).symbol()) {
+                    **output = Atom::one();
+                }
+            });
+            eyre::ensure!(
+                !outside_representations.contains_symbol(GS.dim),
+                "D09 physical-four lift refuses an already contracted active scalar D"
+            );
+            let mut invalid_dimension = false;
+            let mapped = routed.map_representation_dimensions(|rep, dimension| {
+                if rep == LibraryRep::from(Minkowski {}) {
+                    if dimension != Atom::var(GS.dim).as_view()
+                        && dimension != Atom::num(4).as_view()
+                    {
+                        invalid_dimension = true;
+                    }
+                    Atom::num(4)
+                } else {
+                    dimension.to_owned()
+                }
+            })?;
+            eyre::ensure!(!invalid_dimension);
+            eyre::ensure!(mapped.structure().logical_slots() == routed.structure().logical_slots());
+            Ok(mapped)
+        };
+        let rational_zero = |label: &str,
+                             left: &SymbolicTensor<IndexedStructure>,
+                             right: &SymbolicTensor<IndexedStructure>,
+                             physical_four: bool|
+         -> Result<()> {
+            let mut classes = BTreeMap::<Vec<Atom>, SymbolicTensor<IndexedStructure>>::new();
+            for (sign, expression) in [(1, left), (-1, right)] {
+                for term in FourDTerm::from_tensor(expression)? {
+                    let mut key = term
+                        .denominators
+                        .iter()
+                        .map(|denominator| {
+                            denominator.polynomial_in_lmb(&lmb).map(|polynomial| {
+                                polynomial.replace(GS.m_uv_expansion).with(GS.m_uv_vacuum)
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    key.sort();
+                    let numerator = prepare_numerator(&term.numerator, physical_four)?;
+                    let numerator = numerator
+                        .with_checked_expression(Atom::num(sign) * numerator.expression())?;
+                    if let Some(sum) = classes.get_mut(&key) {
+                        *sum = sum.try_add(&numerator)?;
+                    } else {
+                        classes.insert(key, numerator);
+                    }
+                }
+            }
+            for numerator in classes.into_values() {
+                let difference = Self::reduce_parent_external_frame(label, &numerator)?;
+                Self::certify_parent_tensor_zero(label, &difference)?;
+            }
+            Ok(())
+        };
+
+        // Exact source absorption. Keep the parent's hard rescaling of mUV
+        // and its terminal denominator policy inside the existing t_raw owner.
+        let root = OwnedForestNode {
+            spinney: Spinney::empty(graph),
+            topo_order: 0,
+        };
+        let bare = Full4dCts::from_factorized_local(&Local4dCts::root());
+        let child_lmb = compatible_lmb(ctx, given, &root, &bare)?;
+        eyre::ensure!(child_lmb.loop_edges.iter().copied().eq([EdgeIndex(2)]));
+        let child_source = grow(&bare, ctx, given, &root)?;
+        let signed_child_u = -t_raw(&child_source, ctx, given, &root, &child_lmb)?;
+        eyre::ensure!(
+            signed_child_u.structure().canonical().external_structure()
+                == local_prefix
+                    .atom
+                    .structure()
+                    .canonical()
+                    .external_structure()
+        );
+        let co_graph = grow_factor(ctx, parent, given)?;
+        let absorbed_source = finalize(signed_child_u.multiply(co_graph)?)?;
+        let actual_source = grow(&isolated, ctx, parent, given)?;
+        let ordinary = t_raw(&actual_source, ctx, parent, given, &lmb)?;
+        let absorbed = t_raw(&absorbed_source, ctx, parent, given, &lmb)?;
+        for physical_four in [false, true] {
+            rational_zero(
+                "actual D09 parent-U absorbs child O-UO at unit rest",
+                &ordinary,
+                &absorbed,
+                physical_four,
+            )?;
+        }
+        let [positive, negative] = graph.on_shell_branches(
+            ctx.model,
+            &actual_source,
+            parent.subgraph(),
+            &lmb,
+            &velocity,
+        )?;
+        let on_shell = positive.try_add(&negative)?;
+        let overlap = t_raw(
+            &on_shell.with_checked_expression(GS.resolve_os_momenta(on_shell.expression()))?,
+            ctx,
+            parent,
+            given,
+            &lmb,
+        )?;
+        let [positive, negative] =
+            graph.on_shell_branches(ctx.model, &ordinary, parent.subgraph(), &lmb, &velocity)?;
+        let [absorbed_positive, absorbed_negative] = graph.on_shell_branches(
+            ctx.model,
+            &absorbed_source,
+            parent.subgraph(),
+            &lmb,
+            &velocity,
+        )?;
+        let absorbed_on_shell = absorbed_positive.try_add(&absorbed_negative)?;
+        let absorbed_overlap = t_raw(
+            &absorbed_on_shell
+                .with_checked_expression(GS.resolve_os_momenta(absorbed_on_shell.expression()))?,
+            ctx,
+            parent,
+            given,
+            &lmb,
+        )?;
+        for physical_four in [false, true] {
+            rational_zero(
+                "actual D09 proper-local parent UO=OU",
+                &overlap,
+                &positive.try_add(&negative)?,
+                physical_four,
+            )?;
+            rational_zero(
+                "actual D09 original proper-local W is UO-U",
+                &retained_w,
+                &overlap.try_sub(&ordinary)?,
+                physical_four,
+            )?;
+            rational_zero(
+                "actual D09 original proper-local W equals absorbed-child W",
+                &retained_w,
+                &absorbed_overlap.try_sub(&absorbed)?,
+                physical_four,
+            )?;
+        }
+
+        // Independently calibrate the source phase/color/coupling before any
+        // new integral is read. D09's three quark and two gluon propagators
+        // and four actual GC_11=iG vertices give i*G^4*CF^2 at zero momenta.
+        let coupling = Atom::var(symbol!("UFO::G"));
+        eyre::ensure!(
+            graph
+                .model
+                .expand_couplings(&Atom::var(symbol!("UFO::GC_11")))
+                == Atom::i() * &coupling
+        );
+        let empty = graph.empty_subgraph();
+        let source = graph
+            .numerator(parent.subgraph(), &empty)?
+            .to_d_dim(GS.dim)?
+            .color_simplify()?
+            .state
+            .expr;
+        let zero_momenta = source
+            .expression()
+            .replace_map(|view, _, output| {
+                if matches!(view, AtomView::Fun(momentum) if momentum.get_symbol() == GS.emr_mom) {
+                    **output = Atom::Zero;
+                }
+            })
+            .replace(mass.to_pattern())
+            .with(1);
+        let source = AppliedFeynmanRule::new(cooking.uncook(zero_momenta.as_view()))?.expr;
+        eyre::ensure!(
+            source.structure().canonical().external_structure()
+                == actual_open.structure().canonical().external_structure()
+        );
+        let source_trace = integrated::simplify(&closing_duals[0].clone().multiply(source)?)?;
+        let source_trace = source_trace
+            .with_checked_expression(graph.model.expand_couplings(source_trace.expression()))?;
+        let expected_phase =
+            Atom::i() * coupling.pow(4) * Atom::num((4, 3)).pow(2) * Atom::var(GS.dim).pow(2);
+        Self::certify_parent_tensor_zero(
+            "D09 independent zero-momentum native phase and CF-squared source",
+            &source_trace.with_checked_expression(source_trace.expression() - &expected_phase)?,
+        )?;
+
+        let terms = FourDTerm::from_tensor(&retained_w)?;
+        eyre::ensure!(terms.len() == 4);
+        let expected_powers = [
+            [1usize, 2, 1, 1, 1],
+            [1, 2, 1, 1, 2],
+            [1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 2],
+        ];
+        let k = function!(GS.emr_mom, 2);
+        let l = function!(GS.emr_mom, 4);
+        let rep = (Minkowski {}).new_rep(GS.dim).to_symbolic([]);
+        let square = |q: &Atom| {
+            function!(
+                SPENSO_TAG.dot,
+                GS.indexed_momentum(q, std::slice::from_ref(&rep)),
+                GS.indexed_momentum(q, std::slice::from_ref(&rep))
+            )
+        };
+        let mut descriptors = Vec::new();
+        for (ordinal, term) in terms.iter().enumerate() {
+            let mut powers = [0usize; 5];
+            for denominator in &term.denominators {
+                eyre::ensure!((2..=6).contains(&denominator.source_edge.0));
+                powers[denominator.source_edge.0 - 2] += 1;
+                let expected_momentum = match denominator.source_edge.0 {
+                    2 => k.clone(),
+                    3 => -&k,
+                    _ => l.clone(),
+                };
+                eyre::ensure!(denominator.momentum == expected_momentum);
+                eyre::ensure!(denominator.mass_squared == Atom::var(GS.m_uv_expansion).pow(2));
+                let expected_polynomial = square(if denominator.source_edge.0 <= 3 {
+                    &k
+                } else {
+                    &l
+                }) - Atom::var(GS.m_uv_vacuum).pow(2);
+                eyre::ensure!(
+                    (denominator.polynomial_in_lmb(&lmb)? - expected_polynomial)
+                        .expand()
+                        .is_zero(),
+                    "D09 W changed the complete vacuum polynomial or prescription"
+                );
+            }
+            eyre::ensure!(powers == expected_powers[ordinal]);
+            descriptors.push(serde_json::json!({"term":ordinal,"source_edge_powers":powers}));
+        }
+
+        let integrator = integrated::Integrated::new(crate::utils::vakint()?, backend);
+        let mut traces = Vec::new();
+        for physical_four in [false, true] {
+            for (dual_index, dual) in closing_duals.iter().enumerate() {
+                let mut sum = SymbolicTensor::infer_indexed(Atom::Zero)?;
+                for term in &terms {
+                    let numerator = prepare_numerator(&term.numerator, physical_four)?;
+                    let closed = integrated::simplify(&dual.clone().multiply(numerator)?)?;
+                    eyre::ensure!(closed.is_scalar());
+                    let closed = if physical_four {
+                        closed.expand_dots()?
+                    } else {
+                        closed
+                    };
+                    if physical_four {
+                        let mut unsupported = false;
+                        closed.expression().visitor(&mut |view| {
+                            if let AtomView::Fun(momentum) = view
+                                && momentum.get_symbol() == GS.emr_mom
+                            {
+                                unsupported |= momentum.get_nargs() != 2
+                                    || !matches!(
+                                        SlotMatcher::default().concrete_component(momentum.get(1)),
+                                        Some(Ok(0..=3))
+                                    );
+                                return false;
+                            }
+                            true
+                        });
+                        eyre::ensure!(
+                            !unsupported,
+                            "physical-four numerator did not expose finite momentum components"
+                        );
+                    }
+                    let denominator = Atom::mul_many(term.denominators.iter().map(|pole| {
+                        function!(
+                            GS.den,
+                            pole.source_edge.0,
+                            &pole.momentum,
+                            &pole.mass_squared,
+                            &pole.full_expr
+                        )
+                        .pow(-1)
+                    }));
+                    sum = sum.try_add(
+                        &closed.with_checked_expression(closed.expression() * denominator)?,
+                    )?;
+                }
+                let scalar_sector = FourDSector {
+                    atom: sum.clone(),
+                    ..sector.clone()
+                }
+                .with_scheme_integrand(sum);
+                eyre::ensure!(scalar_sector.active_components == sector.active_components);
+                eyre::ensure!(scalar_sector.frozen_lmbs == sector.frozen_lmbs);
+                eyre::ensure!(scalar_sector.inherited_loop_edges == sector.inherited_loop_edges);
+                eyre::ensure!(scalar_sector.provenance_components == sector.provenance_components);
+                eyre::ensure!(scalar_sector.provenance_branches == sector.provenance_branches);
+                let scalar_local = Local4dCts(FourDSectors::new(vec![scalar_sector], Vec::new())?);
+                let result = integrator.run(&scalar_local, ctx, parent, given, parent, given)?;
+                let laurent = result
+                    .physical_pole()?
+                    .try_sub(&result.physical_finite_counterterm()?)?;
+                eyre::ensure!(laurent.is_scalar());
+                debug_tags!(#uv, #integrated, #inspect;
+                    stage = "native_d09_proper_local_vacuum_scalar_trace", physical_four, dual_index,
+                    file.trace = %cooking.uncook(laurent.expression().as_view()).to_canonical_string(),
+                    source_absorption_proved = true, original_terms = terms.len(),
+                    file.denominator_inventory = %serde_json::to_string(&descriptors)?,
+                    negative_denominators_remain_dimensional = true,
+                    finite_child_included = false, bare_included = false,
+                    open_matrix_proved = false, emitted_R2_proved = false,
+                    "Actual proper-local W scalar input uses original frames and the existing Integrated owner"
+                );
+                traces.push(laurent);
+            }
+        }
+        eyre::ensure!(
+            local == &retained_local && sector.integration_atom().same_value(&retained_w)
+        );
+        eyre::ensure!(open_basis.iter().all(|value| value.rank() == 4));
+        traces
+            .try_into()
+            .map_err(|_| eyre!("D09 needs exactly four complete scalar traces"))
+    }
+}
