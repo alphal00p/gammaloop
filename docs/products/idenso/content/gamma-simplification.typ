@@ -166,7 +166,7 @@ For the historical gluonic fixture, the qualified checkpoint takes *0.858 s* in 
 and *0.300 s* with early rung contractions. Both use tensor-safe replacement
 and include final expansion. Paired gains over the saved build are 9.09% and
 6.66%; current FORM comparisons and mixed trace controls are reported in
-#link(qualification-label)[the public qualification below]. These
+"Public qualification of resumable observation" below. These
 results do not establish full FORM parity.
 
 The performance section follows equivalent paired and alternating slash traces through
@@ -693,14 +693,12 @@ All entries are milliseconds.
 Axial twelve improves by 5.38 times. Free eight becomes about 7.9 percent slower;
 that shortcut already avoids cleanup, while constructing already-normal metrics
 can incur the new checks. Free twelve changes little. FORM remains about 78
-times faster for axial twelve under these timing boundaries. The historical
-local artifact `dot_normalization.json` recorded the cases, raw samples,
-input/output snapshot hashes, classified changed outputs, source identities and
-matching FORM programs. That artifact is not included in this source revision,
-so its raw evidence cannot be inspected here. The current
-#source-link("crates/idenso/examples/metric_contraction_benchmark.rs", label: "metric benchmark driver")
-recreates fresh snapshots; it does not restore the historical measurements.
-A dash marks a case without a fresh matching FORM run.
+times faster for axial twelve under these timing boundaries. The
+local metric normalization record (a local record, not committed: `examples/notebooks/dot_normalization.json`)
+preserves all cases, raw samples, input/output snapshot hashes, classified changed
+outputs, source identities and matching FORM programs. The benchmark command
+recreates the complete snapshots. A dash marks a case without a fresh matching
+FORM run.
 
 Eight dot-normalization calls process the large axial-twelve output. Multiplying
 the isolated per-call reduction by eight estimates 215.5 ms saved, close to the
@@ -753,11 +751,10 @@ The differences are small and mixed. Axial-twelve dot normalization takes
 Free twelve is about 5.1 percent slower; the external-metric case is about
 3 percent slower. This sequential shared-host comparison does not establish a
 broad upstream speedup.
-The historical local artifact `symbolica_main_update.json` recorded both sets
-of raw samples, source and lock identities, build metadata, snapshot hashes and
-validation results. It is not included in this source revision. The FORM values
-were reused from the preceding comparison; FORM was not rerun for this
-dependency update.
+The Symbolica-main comparison record (a local record, not committed: `examples/notebooks/symbolica_main_update.json`)
+preserves both sets of raw samples, source and lock identities, build metadata,
+snapshot hashes and validation results. FORM values in that record are reused
+from the preceding comparison; FORM was not rerun for this dependency update.
 
 This revision changes the binary atom export format from 0 to 1 and rejects
 legacy format-0 payloads. The surrounding full state-export format also moves
@@ -879,12 +876,7 @@ HEP takes the matrix trace avoids that intermediate without using gamma
 simplification in the oracle. The record retains the timeout and the final
 passing checks.
 
-The historical local artifact `contraction_performance.json` recorded both run
-orders, raw samples, source identities, FORM programs and validation evidence.
-It is not included in this source revision. The current
-#source-link("crates/idenso/examples/metric_contraction_benchmark.rs", label: "metric benchmark driver")
-and #source-link("crates/idenso/examples/contraction_phase_benchmark.rs", label: "phase benchmark driver")
-remain available. Generate fresh Rust measurements with:
+The contraction performance record (a local record, not committed: `examples/notebooks/contraction_performance.json`) preserves both run orders, raw samples, source identities, FORM programs and validation evidence. Reproduce the current Rust measurements with:
 
 // docs-example: syntax
 ```sh
@@ -1548,10 +1540,9 @@ earlier checkpoint passed with warnings denied. The Spenso follow-up passes
 19 relevant tests; its remaining dual-wrapper filter test fails identically with the matcher change
 removed. All final measured trace outputs match the independent certificate.
 
-The historical local artifact `tensor_contraction_parity.json` recorded raw
-samples, generated FORM programs, the generic-D benchmark driver, source
-identities and validation evidence. It is not included in this source revision;
-the checkpoint names below identify entries in that unavailable local artifact.
+The contraction parity progress record (a local record, not committed: `examples/notebooks/tensor_contraction_parity.json`)
+retains raw samples, generated FORM programs, the generic-D benchmark driver,
+source identities and validation evidence.
 
 == Planning contractions before distribution
 
@@ -3095,8 +3086,7 @@ assignments pass. The live worktree passes 897 Rust tests, with the previous
 in both orders against fresh FORM. Raw clocks, source identities, failed
 intermediate diagnostics and final validation are recorded under
 `retained_outside_in_typed_ladder_validation` in the
-historical local `tensor_contraction_parity.json` artifact, unavailable in this
-source revision.
+contraction record (a local record, not committed: `examples/notebooks/tensor_contraction_parity.json`).
 
 == Shared replacement validation
 
@@ -3166,8 +3156,7 @@ milliseconds, while preserving this trace regression in the measurement record.
 
 Source identities, complete clocks, profiles, checks and the axial follow-up
 are recorded under `retained_replacement_validation_consolidation` in the
-historical local `tensor_contraction_parity.json` artifact, unavailable in this
-source revision.
+contraction record (a local record, not committed: `examples/notebooks/tensor_contraction_parity.json`).
 
 == Tensor-factor replacement
 
@@ -3253,9 +3242,8 @@ tensor names and also require descriptor parity with general replacement.
 Sources, commands, raw timings, profiles and checks are preserved in the local
 measurement bundle at `/tmp/idenso-tensor-safe-replace-host`. The
 `retained_tensor_safe_replacement` checkpoint is prepared for the
-historical local `tensor_contraction_parity.json` artifact, unavailable in this
-source revision; appending it awaited explicit approval. This entry does not
-establish that the original local archive was updated.
+contraction record (a local record, not committed: `examples/notebooks/tensor_contraction_parity.json`);
+appending it awaits explicit approval. The existing archive is unchanged.
 
 === Symbol classification and remaining contraction walks
 
@@ -4525,8 +4513,8 @@ size. These limits and all observations are retained under
 `/tmp/idenso-final-scalar-expansion/balanced-poly`.
 
 The standalone
-#source-link("examples/reproducers/symbolica-expansion/performance.typ", label: "scalar expansion reproducer")
-makes these four routes available without tensor-library
+#source-link("examples/reproducers/symbolica-expansion/performance.typ", label: [scalar
+expansion reproducer]) makes these four routes available without tensor-library
 dependencies. Its synthetic input keeps twenty variables fixed while changing
 the number of terms; it also accepts a saved expression file. All four routes
 pass exact ordinary-expansion and fixed-point checks at 20, 256, 1,024 and
@@ -5185,7 +5173,6 @@ protocols, raw observations and `comparison-summary.json` are under
 reviews are under `/tmp/idenso-collector-next-analysis`.
 
 === Public qualification of resumable observation
-#qualification-label
 
 The complete Python host rebuild includes all consumers of the changed Spenso
 and Idenso code. The frozen comparison uses the saved `d58aee8a` host and the

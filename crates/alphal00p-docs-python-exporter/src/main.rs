@@ -200,7 +200,7 @@ fn render(
         #[cfg(feature = "feynkit")]
         "feynkit-community" => Ok(feynkit_py::FeynkitModule::stub_source(module)),
         #[cfg(feature = "linnet")]
-        "linnet-graph" => Ok(linnet_py::canonical_stub(module)?),
+        "linnet-graph" => Ok(linnet_py::canonical_stub_from_module(module)?),
         _ => Ok(module.to_string()),
     }
 }
@@ -336,6 +336,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
     };
     let (module_name, stub_info) = gathered?;
     #[cfg(any(
+        feature = "gammaloop",
         feature = "linnet",
         feature = "spenso",
         feature = "feynkit",
@@ -347,6 +348,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
 }
 
 #[cfg(any(
+    feature = "gammaloop",
     feature = "linnet",
     feature = "spenso",
     feature = "feynkit",
@@ -359,7 +361,6 @@ fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_g
 
     // Numerica leaves these two classes unscoped in its stub inventory.
     // They belong to Symbolica, even when another product gathers first.
-    // Their metadata may be enabled alongside GammaLoop's standalone f64 API.
     let float_types = [
         TypeId::of::<PythonFloat>(),
         TypeId::of::<PythonComplexFloat>(),

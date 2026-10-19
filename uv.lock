@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -488,7 +488,7 @@ requires-dist = [
     { name = "pytest" },
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?branch=community" },
-    { name = "ufo-model-loader", specifier = ">=1.0.0" },
+    { name = "ufo-model-loader", specifier = ">=1.0.1" },
 ]
 provides-extras = ["notebook-display"]
 
@@ -502,7 +502,7 @@ dev = [
     { name = "pyyaml", specifier = ">=6.0.1,<7" },
     { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?branch=community" },
     { name = "ty", specifier = ">=0.0.75" },
-    { name = "ufo-model-loader", specifier = ">=1.0.0" },
+    { name = "ufo-model-loader", specifier = ">=1.0.1" },
 ]
 
 [[package]]
@@ -2208,14 +2208,14 @@ wheels = [
 
 [[package]]
 name = "ufo-model-loader"
-version = "1.0.0"
+version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "symbolica" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/6f/d7187c08bbf2e81a84767ce47bd17120448eb555e1ee57b0f6051ec3aa0a/ufo_model_loader-1.0.0.tar.gz", hash = "sha256:7051dabaffef0ea0737e8e73d8aab527d8a96192274afd53eb2230540288d332", size = 84606, upload-time = "2026-10-03T23:54:35.692Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/1c/85e03b60954953e18e504098d3daa3f7c6dd2d0ec5a23b0c871ae7c372b3/ufo_model_loader-1.0.1.tar.gz", hash = "sha256:9665833acaa1e099649e3e79ae4e52d8473a22d4f62133fc69db38b560bf7159", size = 109676, upload-time = "2026-10-19T13:44:02.723Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/97/0d69174a3679a5180cf2cdb77604710ba0ca7d5dc6755d45e425efc9ad68/ufo_model_loader-1.0.0-py3-none-any.whl", hash = "sha256:4e2e807d6a0d16034a525f80f2a80f4fe17689f7955b27b1118b7595bd56a8eb", size = 103519, upload-time = "2026-10-03T23:54:34.148Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/d7/a1f5e88376b0d8ec17ca4f16ad0121d03c0e01b675c3f7c6604fce8dafa8/ufo_model_loader-1.0.1-py3-none-any.whl", hash = "sha256:379a2ed96e2c4db9a753b7f7e5e9801c7837059479e7135b78cc35da5f747dea", size = 128198, upload-time = "2026-10-19T13:44:01.392Z" },
 ]
 
 [[package]]

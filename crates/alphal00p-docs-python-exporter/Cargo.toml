@@ -17,7 +17,10 @@ vakint = { workspace = true, optional = true, features = ["python_stubgen", "sym
 [features]
 default = []
 feynkit = ["dep:symbolica", "dep:feynkit-py"]
-gammaloop = ["dep:symbolica", "dep:gammaloop-api"]
+# GammaLoop itself does not use Symbolica's Python floats, but unified workspace
+# builds such as the NixCI docs build add them to the stub inventory. Enable
+# them like the other components so the exporter always scopes them alike.
+gammaloop = ["dep:symbolica", "dep:gammaloop-api", "symbolica/python_stubgen"]
 linnet = ["dep:symbolica", "dep:linnet-py"]
 spenso = ["dep:symbolica", "dep:spynso3"]
 vakint = ["dep:symbolica", "dep:vakint"]
