@@ -194,6 +194,13 @@ token-based. The CI metadata guard also checks this direction
 transitively and rejects source references that bypass a Cargo
 dependency.
 
+An explicit `GenerationOptions::threads(1)` performs interaction assignment,
+diagram construction and numerator/group preparation on the calling thread.
+Unspecified and multi-worker native requests retain their dedicated Rayon pool;
+browser kernels remain serial. This avoids acquiring a second Symbolica thread
+license for an otherwise serial caller. Numerical algorithms and input order
+remain unchanged; fresh paired measurements qualify any timing effect.
+
 Rust clients load the canonical `Model`, construct a generation request,
 and receive finalized `FeynmanDiagram` values. Enabling `feynkit/ufo`
 exposes an attached-interpreter loader that returns the same model type
@@ -366,6 +373,17 @@ tensor. Canonicalization, coefficient comparison and dimension transport use
 the shared native owners. Dimension transport covers indexed and compact
 representations, including ports carried only by zero. Numerical sample
 budgets, seeds and scalar-ratio certification remain separate grouping policy.
+
+A finalized diagram's `with_numerator_prefactor` consumes a retained
+`SymbolicTensor<PartialStructure>` in that diagram's existing index frame.
+It replaces only the global multiplier and moves its interface and reduction
+proofs; local fragments, aggregate numerator, topology and routing are unchanged.
+`ordered_propagators` exposes the existing denominator construction in edge-ID
+order, and `propagator_family` delegates to that same owner. Symbolic kinematics
+can expose borrowed momentum/assumption views and map distinct scalar values
+simultaneously without changing keys, momenta or dimension. Exact complex-null
+Weyl charts belong to `FourMomentum<Atom>` and require a caller-selected nonzero
+pivot and the null-momentum assumption.
 
 The shared `NumeratorInterface` codec owns source admission and export. Live
 diagram-to-runtime conversion copies the existing carriers; it does not pass

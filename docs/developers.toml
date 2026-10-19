@@ -191,7 +191,8 @@ anchor = "pub fn generate("
 # Reviewed 2026-10-17: Generation caches retain localized typed factors; source recipes are admitted at instantiation and finalized diagrams transport the carriers directly.
 # Reviewed 2026-10-17: Only toy-model fixtures change: singlet summands have matching scalar color factors, the dedicated colored test retains matching color tensors, and incompatible sums remain rejected before caching.
 # Reviewed 2026-10-17: The toy fermion propagator now uses standard UFO PSlash with valid spinor and contracted Lorentz ports; its original graph/sign/cut assertions remain intact.
-digest = "321e265243c2baded7aefc3c8958695e19bf55db"
+# Reviewed 2026-10-19: the architecture note records caller-thread execution for explicit threads(1), unchanged multi-worker behavior, exact epsilon import normalization and the new regression coverage; the readiness note keeps timing qualification separate.
+digest = "c410fad778b921428a9713a8e1579f30f06ea31d"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -245,7 +246,8 @@ anchor = "pub struct FeynmanDiagram {"
 # Reviewed 2026-10-16: Default ordered routing roots at the outgoing sewn attachment; a physical-cut box regression preserves the center-of-mass origin and topology/numerator identity.
 # Reviewed 2026-10-17: Live graph fragments, aggregate numerator, prefactor and projector retain tensors; the shared source codec records logical ports and ranked zeros in optional metadata.
 # Reviewed 2026-10-17: Artifact validation uses the native coefficient visitor and exact-only scalar zero certification while preserving tensor factorization; typed source fixtures retain owner and UV-degree assertions.
-digest = "d5a349fc04a8e18dc0dd9c93f8cabe54ad6ec61d"
+# Reviewed 2026-10-19: the architecture note records the finalized retained-tensor prefactor replacement and its existing index frame; ranked-zero, precision, native JSON/DOT and reduction-proof controls preserve the current carrier boundary.
+digest = "9630c92642289af4374c29c375abfb90d8c1ef14"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -876,7 +878,8 @@ anchor = "pub struct ContractSettings<'a> {"
 # Reviewed 2026-10-15: Contraction and algebra share the documented regional scheduler
 # with independent permissions. Factorized coefficients and logical interfaces retain
 # the shared graph/tape owner.
-digest = "0ec4859455f2b7a71d319a843fc1486167b5ad3d"
+# Reviewed 2026-10-19: only deferred-frontier test inputs change in this file; all completion assertions remain. The Idenso/readiness notes explain the newly supported vector-sum partner contraction and unchanged unsupported generic-tensor policy.
+digest = "80401bae3bb93c4cde4721ae682d6f7f2091a596"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification.rs"
@@ -947,7 +950,8 @@ anchor = "    fn simplify_product("
 # shared loop edges exclude concrete components while preserving fixed spectators.
 # Reviewed 2026-10-17: normalized f-squares share the guarded two-f owner;
 # numeric phases and spectator powers remain factors, with no sum distribution.
-digest = "428ddf484285321b4c38767d57488372846e945f"
+# Reviewed 2026-10-19: the Idenso and readiness notes record guarded closed quartic Gram reduction, raw-adjoint signs and spectator factorization; independent exact SU(2) matrix controls check the coefficient for all representation pairs.
+digest = "c8b1cab3f51883ca896853b12ae37030407d8ae7"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"
@@ -1571,7 +1575,8 @@ anchor = "pub(crate) fn group_diagrams("
 # algebraic weight cancellation and numeric content preserve factorized inputs.
 # Reviewed 2026-10-17: Grouping retains exact, sampling-source and color-valued sampled tensors; finite Lorentz component values and certified ratios remain scalar. Historical timing identities are unchanged.
 # Reviewed 2026-10-17: Exact scalar ratios decode dimension metadata before the unchanged scalar predicate and respect formal versus concrete color choice; tensor bodies and numerical fallback policy remain unchanged.
-digest = "b34a38911195efb5d0809525734f67c61f5da64d"
+# Reviewed 2026-10-19: the same typed preparation body now uses caller iterators for explicit threads(1); parallel defaults, logical ordering and progress/cancellation remain. The readiness note records the scheduling change without claiming a speedup.
+digest = "2e4272c0a995909e91500a1a08f66e4154b770ba"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

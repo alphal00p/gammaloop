@@ -458,6 +458,16 @@ the matrix phases; explicit structure-constant products independently check the
 sign. This closes internal color labels before scalar coefficients reach an
 analytic backend.
 
+Two invariant symmetric rank-four color tensors sharing two distinct adjoint
+ports can close their remaining ports through two structure constants or a raw
+two-matrix adjoint word. Invariance gives `C_A/3` times their scalar Gram
+contraction; the raw word has the opposite sign. Representation phases,
+structure-constant orientation, matching dimensions and complete closed wiring
+remain explicit guards. The bounded matcher retains spectator factors rather
+than expanding a complete graph numerator. Scalar metadata carrying
+representation arguments is excluded from both matrix-chainification paths;
+genuine tensor children still participate through their existing owner.
+
 A retained adjoint chain can also connect to a separate fundamental trace or
 color line. The product owner exposes that one chain through Spenso's reserved
 dummy allocator only when an existing cross-factor identity can consume the
@@ -557,6 +567,18 @@ state is certified complete merely because its algebraic output is valid.
 Epsilon simplification uses the same selected collector. It exposes epsilon
 bodies and their incident metric/vector factors. Unrelated factors and
 callback-sensitive templates remain opaque.
+
+The four-dimensional Minkowski epsilon convention is fixed by
+`Tr[gamma5 gamma^mu gamma^nu gamma^rho gamma^sigma] = 4 epsilon^{mu nu rho sigma}`.
+With the mostly-minus metric and the existing Weyl gamma5 this means
+`epsilon^{0123} = -i`. `contract_epsilon4` reuses the determinant kernel:
+its rows are covector components, and four contravariant vector inputs require
+lowering their spatial entries first. UFO's real epsilon convention is converted
+at generator import by `-i` times Idenso epsilon. Concrete HEP gamma matrices and
+symbolic gamma-zero identities keep their existing owners and conventions.
+A vector-source sum can also contract through a partner sum when distribution
+is permitted and every term exposes exactly one compatible slot. Unsupported
+or ambiguous frontiers remain deferred; unrelated factors remain opaque.
 
 `contract_ports` is the separate logical binary composition operation.
 `to_dots`, `undo_dots`, `undo_chain` and `undo_trace` change symbolic notation.
