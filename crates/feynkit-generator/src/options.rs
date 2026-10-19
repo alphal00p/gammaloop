@@ -752,6 +752,8 @@ impl fmt::Debug for GenerationOptions {
 }
 
 impl GenerationOptions {
+    /// Set the generation thread count. One runs serially on the calling thread,
+    /// including numerator preparation and grouping, without creating a Rayon pool.
     pub fn threads(mut self, threads: usize) -> Self {
         self.threads = Some(threads);
         self
