@@ -200,7 +200,7 @@ fn render(
         #[cfg(feature = "feynkit")]
         "feynkit-community" => Ok(feynkit_py::FeynkitModule::stub_source(module)),
         #[cfg(feature = "linnet")]
-        "linnet-graph" => Ok(linnet_py::canonical_stub()?),
+        "linnet-graph" => Ok(linnet_py::canonical_stub_from_module(module)?),
         _ => Ok(module.to_string()),
     }
 }
@@ -627,7 +627,7 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_stub_keeps_aliases_before_import_like_docstrings() {
-        let (module_name, mut stub_info) = super::gather("linnet-py").unwrap();
+        let (module_name, mut stub_info) = super::gather("linnet-graph").unwrap();
         let module = stub_info.modules.get_mut(module_name).unwrap();
         module
             .class
@@ -636,7 +636,7 @@ def validate(runtime_module, stub_source):
             .unwrap()
             .doc = "Construct a graph\nfrom its nodes and edges.\nimport drawing data as needed.";
 
-        let canonical = super::render("linnet-py", module).unwrap();
+        let canonical = super::render("linnet-graph", module).unwrap();
         let graph = canonical.find("class Graph:").unwrap();
         assert!(canonical.find("\n__all__ = [\n").unwrap() < graph);
         assert!(canonical.find("\n_NativeValue: typing.TypeAlias").unwrap() < graph);
