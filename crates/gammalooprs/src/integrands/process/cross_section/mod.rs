@@ -1064,7 +1064,7 @@ impl CrossSectionGraphTerm {
                     return Err(eyre!("Generation interrupted by user"));
                 }
                 let mut cut_group_integrands = BTreeMap::new();
-                for (cut_cff_index, atom) in integrand_for_cut_group.integrands.iter() {
+                for cut_cff_index in integrand_for_cut_group.integrands.cut_indices() {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
@@ -1072,10 +1072,15 @@ impl CrossSectionGraphTerm {
 
                     let (evaluator_stack, evaluator_timings) =
                         EvaluatorStack::from_integrand_with_timings(
-                            atom,
+                            integrand_for_cut_group
+                                .integrands
+                                .atom(cut_cff_index)
+                                .expect("every integrand cut has a registered scalar lane"),
                             &graph.graph.param_builder,
                             integrand_for_cut_group.integrands.numerators(),
-                            representation,
+                            integrand_for_cut_group
+                                .integrands
+                                .parametric_terms(cut_cff_index),
                             (!settings.generation.requires_complete_orientation_sum())
                                 .then_some((&orientations.raw, &production_orientation_ids)),
                             dual_shape,
@@ -2650,26 +2655,12 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         self.graph
             .param_builder
-            .m_uv_value(Complex::new_re(F(settings.general.m_uv)));
-        self.graph
-            .param_builder
-            .renormalization_localization_scale_value(Complex::new_re(F(settings
-                .general
-                .renormalization_localization_scale)));
-        self.graph
-            .param_builder
-            .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
-        self.graph
-            .param_builder
-            .inverse_temperature_value(Complex::new_re(F(settings.general.inverse_temperature)));
-        self.graph
-            .param_builder
-            .numerator_sampling_scale_value(Complex::new_re(F(settings
-                .general
-                .numerator_sampling_scale)));
-        self.graph.param_builder.update_model_values(model)?;
-        self.graph
-            .validate_medium_parameters(model, settings.general.inverse_temperature)?;
+            .update_runtime_values(&settings.general, model)?;
+        self.graph.validate_medium_parameters(
+            model,
+            settings.general.inverse_temperature,
+            &self.graph.param_builder,
+        )?;
         let generated_representations = self
             .denominator_hsurfaces
             .iter()

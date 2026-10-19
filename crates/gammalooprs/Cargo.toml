@@ -137,6 +137,7 @@ insta = { workspace = true, features = ["json", "ron", "serde"] }
 # oneloop_bridge = { git = "https://github.com/SecretGmG/OneLOopBridge", version = "0.2.0" }
 
 [build-dependencies]
+toml = { workspace = true }
 # pyo3-build-config = "*"
 # pyo3-build-config = "*"
 

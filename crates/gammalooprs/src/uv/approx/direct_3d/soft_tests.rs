@@ -525,7 +525,7 @@ fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> 
     let orientation =
         OrientationProjection::exact_expression(&production, &options, &orientation_pattern, false);
     let localizer = Localizer::new(&cutset, orientation);
-    let unprojected = localizer.localize(&coefficient, &mut graph, &child)?;
+    let unprojected = localizer.localize(&coefficient, &mut graph, &child, None)?;
     let active_subgraph = current.reduced_subgraph(&child);
     let expected = {
         let ctx = UVCtx::new(&graph, &settings);

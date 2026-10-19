@@ -1156,6 +1156,10 @@ impl<S: StorageTensor<Data = Atom>> TensorAtomMaps for S {
 
     /// Check if the expression could be 0, using (potentially) numerical sampling with
     /// a given tolerance and number of iterations.
+    #[allow(
+        deprecated,
+        reason = "The isolated WASM build supports Symbolica 3.0.1, which lacks check_zero_with."
+    )]
     fn zero_test(&self, iterations: usize, tolerance: f64) -> Self::ContainerData<ConditionResult> {
         self.map_data_ref(|a| a.zero_test(iterations, tolerance))
     }

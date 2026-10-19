@@ -696,6 +696,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "chacha20"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "chinese-number"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1063,6 +1074,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77745e017f5edba1a9c1d854f6f3a52dac8a12dd5af5d2f54aecf61e43d80d30"
 dependencies = [
  "libm",
+]
+
+[[package]]
+name = "corosensei"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6886a0c0f263965933c438626e7179139a62b978a33aa18281cbf0cd5a975f34"
+dependencies = [
+ "autocfg",
+ "cfg-if",
+ "libc",
+ "scopeguard",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2142,6 +2166,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi 6.0.0",
+ "rand_core 0.10.1",
  "wasip2",
  "wasip3",
 ]
@@ -2203,9 +2228,8 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afa7211a7cfdba21893f634868e19459e5d1882e5957f98d7c084875a6e70ab6"
+version = "3.0.1"
+source = "git+https://github.com/ValentinHirschi/symbolica?rev=21378ebc9e390a3e840f21893a443e81e4fe1c45#21378ebc9e390a3e840f21893a443e81e4fe1c45"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -3735,8 +3759,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "836accdb415b7667573bd12676e0b2eb4440e3f60b110038d96a9086f5651c15"
+source = "git+https://github.com/ValentinHirschi/symbolica?rev=21378ebc9e390a3e840f21893a443e81e4fe1c45#21378ebc9e390a3e840f21893a443e81e4fe1c45"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -4549,6 +4572,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
+dependencies = [
+ "chacha20",
+ "getrandom 0.4.2",
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "rand_chacha"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4585,6 +4619,12 @@ checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
 ]
+
+[[package]]
+name = "rand_core"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "rand_distr"
@@ -5711,8 +5751,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0965398bbe5063c00b3a0d078d7d3dc57b61819b97e960b73e9a7e9602662795"
+source = "git+https://github.com/ValentinHirschi/symbolica?rev=21378ebc9e390a3e840f21893a443e81e4fe1c45#21378ebc9e390a3e840f21893a443e81e4fe1c45"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -5772,12 +5811,11 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f06329022a5123536f7fd50eb01b3e885dfafe3983f90a0d7b17408f4d0469ea"
+version = "2.27.2"
+source = "git+https://github.com/siravan/symjit?rev=440fbac996dd7c366a4d28b091e28bb5c555c085#440fbac996dd7c366a4d28b091e28bb5c555c085"
 dependencies = [
- "ahash 0.8.12",
  "anyhow",
+ "corosensei",
  "hashbrown 0.16.1",
  "hugepage-rs",
  "lazy_static",
@@ -5785,7 +5823,7 @@ dependencies = [
  "num-complex",
  "num-rational",
  "num-traits",
- "rand 0.9.4",
+ "rand 0.10.3",
  "rayon",
  "region",
  "serde",

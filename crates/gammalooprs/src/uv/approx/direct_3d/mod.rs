@@ -6,7 +6,7 @@ mod forest;
 mod kernel;
 pub(crate) use kernel::LOCAL_3D_MASS_SCOPE;
 
-pub(crate) use branches::DirectResidueBranches;
+pub(crate) use branches::{DirectResidueBranches, DirectResidueKey};
 #[cfg(test)]
 pub(crate) use forest::DirectSector;
 pub(crate) use forest::{Direct3dApproximation, Direct3dCts};

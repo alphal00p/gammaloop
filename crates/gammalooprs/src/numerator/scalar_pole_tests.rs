@@ -212,6 +212,7 @@ fn scalar_poles_do_not_cross_guards_or_evaluate_inactive_singularities() {
         OptimizationSettings::default(),
         None,
         &EvaluatorSettings::default(),
+        None,
     )
     .unwrap();
     for (inputs, expected) in [

@@ -366,6 +366,10 @@ where
         )
     }
 
+    #[allow(
+        deprecated,
+        reason = "The isolated WASM build supports Symbolica 3.0.1, which lacks check_zero_with."
+    )]
     fn zero_test(
         &self,
         iterations: usize,

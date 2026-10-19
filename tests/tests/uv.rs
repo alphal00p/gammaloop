@@ -5757,7 +5757,7 @@ fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
                 .derived_data
                 .representations
                 .values()
-                .flat_map(|data| data.all_mighty_integrand.iter().map(|(_, atom)| atom))
+                .flat_map(|data| data.all_mighty_integrand.iter_expressions())
             {
                 let _ = expression.replace_map(|view, _, _| {
                     if let AtomView::Fun(function) = view

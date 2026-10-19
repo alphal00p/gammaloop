@@ -16,6 +16,7 @@ use crate::momentum::sample::SubspaceData;
 use crate::momentum::signature::LoopExtSignature;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::settings::RuntimeSettings;
+use crate::settings::runtime::OverlapCenterObjective;
 use crate::utils::F;
 use crate::utils::Length;
 use crate::utils::compute_shift_part_subspace;
@@ -158,6 +159,7 @@ fn extract_center(
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn construct_solver(
     overlap_input: &OverlapInput,
     esurfaces_to_consider: &[ExistingEsurfaceId],
@@ -166,7 +168,9 @@ fn construct_solver(
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
     variable_scale: f64,
-) -> Option<DefaultSolver> {
+    objective: OverlapCenterObjective,
+    minimum_radius: f64,
+) -> Result<Option<DefaultSolver>> {
     let num_loops = overlap_input.subspace.loopcount();
 
     let num_loop_vars = 3 * num_loops;
@@ -205,6 +209,10 @@ fn construct_solver(
             if let Some(edge_position) = propagator_constraints.iter().position(|constraint| {
                 overlap_input.surface_kinematics.is_none()
                     && *constraint.signature == lmb.edge_signatures[edge_id]
+                    && constraint
+                        .mass_pointer
+                        .map_or(F(0.0), |index| inequivalent_masses[index])
+                        == edge_masses[edge_id]
                     && constraint.subspace.solve_signature(overlap_input.lmbs)
                         == threshold_subspace.solve_signature(overlap_input.lmbs)
             }) {
@@ -264,7 +272,17 @@ fn construct_solver(
 
     // objective function
     let mut q_vector = vec![0.0; num_primal_variables];
-    q_vector[0] = 1.0;
+    if objective == OverlapCenterObjective::MinSum {
+        // A shared energy epigraph contributes once per physical surface occurrence.
+        // Energy shifts are constant in the active coordinates and need no cost entry.
+        for row in &esurface_constraints {
+            for index in row {
+                q_vector[propagator_index_offset + index] += 1.0;
+            }
+        }
+    } else {
+        q_vector[0] = 1.0;
+    }
 
     // construct the cones
     let mut cones: Vec<SupportedConeT<f64>> = Vec::with_capacity(1 + propagator_constraints.len());
@@ -282,6 +300,7 @@ fn construct_solver(
     let mut b_vector = vec![0.0; num_constaints];
 
     a_matrix[0][0] = 1.0;
+    b_vector[0] = -minimum_radius;
     // esurface constraints
     for (constraint_index, (existing_esurface_id, esurface_constraint)) in esurfaces_to_consider
         .iter()
@@ -289,7 +308,7 @@ fn construct_solver(
         .enumerate()
     {
         for prop_index in esurface_constraint {
-            a_matrix[constraint_index + 1][*prop_index + propagator_index_offset] = 1.0;
+            a_matrix[constraint_index + 1][*prop_index + propagator_index_offset] += 1.0;
         }
 
         let esurface_id = existing_esurfaces[*existing_esurface_id];
@@ -319,7 +338,17 @@ fn construct_solver(
             edge_masses,
         );
         b_vector[constraint_index + 1] = -shift_part.0;
-        a_matrix[constraint_index + 1][0] = -1.0;
+        a_matrix[constraint_index + 1][0] = if objective != OverlapCenterObjective::MaxMinDepth {
+            -overlap_input.surface_lipschitz(esurface_id)
+        } else {
+            -1.0
+        };
+    }
+
+    if objective == OverlapCenterObjective::RelaxedChebyshev
+        && (1..=esurface_constraints.len()).all(|row| a_matrix[row][0] == 0.0)
+    {
+        q_vector[0] = 0.0;
     }
 
     // propagator constraints
@@ -378,7 +407,7 @@ fn construct_solver(
             .iter()
             .any(|value| (value / variable_scale) * variable_scale != *value)
     {
-        return None;
+        return Ok(None);
     }
     // All primal variables and cone slacks have energy units. With P=0,
     // b -> b/scale and x -> x/scale preserve this homogeneous cone problem.
@@ -390,6 +419,13 @@ fn construct_solver(
     let a_matrix_sparse = CscMatrix::from(&a_matrix);
 
     let settings = DefaultSettingsBuilder::default()
+        // Optional center refinement has a fixed iteration budget, not a scheduling-dependent
+        // wall-clock limit. The baseline feasibility solve keeps its original settings.
+        .max_iter(if objective == OverlapCenterObjective::MaxMinDepth {
+            DefaultSettings::<f64>::default().max_iter
+        } else {
+            64
+        })
         .verbose(verbose)
         .build()
         .unwrap();
@@ -397,6 +433,8 @@ fn construct_solver(
     crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
         stage = "threshold_socp_input",
         variable_scale,
+        objective = ?objective,
+        minimum_radius,
         graph = %overlap_input.graph.name,
         surfaces = ?esurfaces_to_consider,
         file.a = ?a_matrix,
@@ -406,17 +444,16 @@ fn construct_solver(
         "constructed threshold overlap problem"
     );
 
-    Some(
-        DefaultSolver::new(
-            &p_matrix,
-            &q_vector,
-            &a_matrix_sparse,
-            &b_vector,
-            &cones,
-            settings,
-        )
-        .unwrap(),
+    DefaultSolver::new(
+        &p_matrix,
+        &q_vector,
+        &a_matrix_sparse,
+        &b_vector,
+        &cones,
+        settings,
     )
+    .map(Some)
+    .map_err(Into::into)
 }
 
 pub(crate) fn find_center(
@@ -444,6 +481,8 @@ pub(crate) fn find_center(
                 external_momenta,
                 verbose,
                 variable_scale,
+                OverlapCenterObjective::MaxMinDepth,
+                0.0,
             )
         },
         |coordinates| {
@@ -480,10 +519,70 @@ pub(crate) struct OverlapInput<'a> {
 }
 
 impl OverlapInput<'_> {
+    fn refine_centers(
+        &self,
+        overlap: &mut OverlapStructure,
+        loop_moms: &LoopMomenta<F<f64>>,
+        external_momenta: &ExternalFourMomenta<F<f64>>,
+    ) {
+        let objective = self.settings.subtraction.overlap_settings.objective;
+        if objective == OverlapCenterObjective::MaxMinDepth {
+            return;
+        }
+        for group in &mut overlap.overlap_groups {
+            let selected = group.existing_esurfaces.clone();
+            let surfaces = selected
+                .iter()
+                .map(|id| overlap.existing_esurfaces[*id])
+                .collect();
+            objective.refine_center(
+                &mut group.center,
+                self.settings.kinematics.e_cm,
+                |objective, radius| {
+                    construct_solver(
+                        self,
+                        &selected,
+                        &overlap.existing_esurfaces,
+                        loop_moms,
+                        external_momenta,
+                        false,
+                        1.0,
+                        objective,
+                        radius,
+                    )?
+                    .ok_or_else(|| {
+                        eyre!("unscaled optional overlap solver could not be constructed")
+                    })
+                },
+                |coordinates| {
+                    extract_center(self.graph.get_loop_number(), self.subspace, coordinates)
+                },
+                |center| self.center_clearance(&surfaces, center, loop_moms, external_momenta),
+            );
+        }
+    }
+
+    /// Fixed complementary loop coordinates contribute only to affine shifts.
+    fn surface_lipschitz(&self, surface_id: EsurfaceID) -> f64 {
+        let subspace = self.threshold_subspace(surface_id);
+        let lmb = subspace.get_lmb(self.lmbs);
+        subspace
+            .contains(&self.thresholds[surface_id].energies, self.graph)
+            .map(|edge| {
+                self.subspace
+                    .iter_lmb_indices()
+                    .filter(|index| subspace.contains_loop_index(*index))
+                    .map(|index| f64::from(lmb.edge_signatures[edge].internal[index] as i8).powi(2))
+                    .sum::<f64>()
+                    .sqrt()
+            })
+            .sum()
+    }
+
     fn solve_with_rescaling(
         graph_name: &str,
         esurfaces: &ExistingThresholds,
-        mut construct: impl FnMut(f64) -> Option<DefaultSolver>,
+        mut construct: impl FnMut(f64) -> Result<Option<DefaultSolver>>,
         mut center_is_interior: impl FnMut(&[f64]) -> bool,
     ) -> Result<Option<Vec<f64>>> {
         let mut attempts = Vec::with_capacity(2);
@@ -491,7 +590,7 @@ impl OverlapInput<'_> {
         // units can recover a full infeasibility certificate from Clarabel without
         // changing the surfaces, their grouping, or the strict physical-center test.
         for variable_scale in [1.0, 2.0] {
-            let Some(mut solver) = construct(variable_scale) else {
+            let Some(mut solver) = construct(variable_scale)? else {
                 attempts.push(format!(
                     "scale={variable_scale}: change of energy units is not exactly representable"
                 ));
@@ -590,39 +689,60 @@ pub(crate) fn check_global_center(
     loop_moms: &LoopMomenta<F<f64>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
 ) -> bool {
-    existing_esurfaces.iter().all(|esurface_id| {
-        let esurface = &overlap_input.thresholds[*esurface_id];
-        let threshold_subspace = overlap_input.threshold_subspace(*esurface_id);
-        let (surface_loop_moms, surface_external_momenta, edge_masses) = overlap_input
-            .surface_kinematics
-            .and_then(|kinematics| kinematics.get(esurface_id.0))
-            .map(|kinematics| {
-                (
-                    &kinematics.loop_moms,
-                    &kinematics.external_momenta,
-                    kinematics
-                        .edge_masses
-                        .as_ref()
-                        .unwrap_or(&overlap_input.edge_masses),
-                )
-            })
-            .unwrap_or((loop_moms, external_momenta, &overlap_input.edge_masses));
-        let mut center_with_fixed_complement = surface_loop_moms.clone();
-        for loop_index in threshold_subspace.iter_lmb_indices() {
-            center_with_fixed_complement[loop_index] = center[loop_index];
+    overlap_input
+        .center_clearance(existing_esurfaces, center, loop_moms, external_momenta)
+        .is_some()
+}
+
+impl OverlapInput<'_> {
+    /// Evaluate every surface with its own fixed complementary coordinates and kinematics.
+    fn center_clearance(
+        &self,
+        existing_esurfaces: &ExistingThresholds,
+        center: &LoopMomenta<F<f64>>,
+        loop_moms: &LoopMomenta<F<f64>>,
+        external_momenta: &ExternalFourMomenta<F<f64>>,
+    ) -> Option<f64> {
+        let mut depth = f64::INFINITY;
+        for esurface_id in existing_esurfaces {
+            let esurface = &self.thresholds[*esurface_id];
+            let threshold_subspace = self.threshold_subspace(*esurface_id);
+            let (surface_loop_moms, surface_external_momenta, edge_masses) = self
+                .surface_kinematics
+                .and_then(|kinematics| kinematics.get(esurface_id.0))
+                .map(|kinematics| {
+                    (
+                        &kinematics.loop_moms,
+                        &kinematics.external_momenta,
+                        kinematics.edge_masses.as_ref().unwrap_or(&self.edge_masses),
+                    )
+                })
+                .unwrap_or((loop_moms, external_momenta, &self.edge_masses));
+            let mut center_with_fixed_complement = surface_loop_moms.clone();
+            for loop_index in threshold_subspace.iter_lmb_indices() {
+                center_with_fixed_complement[loop_index] = center[loop_index];
+            }
+
+            let lmb = threshold_subspace.get_lmb(self.lmbs);
+
+            let esurface_val = esurface.compute_from_momenta(
+                lmb,
+                edge_masses,
+                &center_with_fixed_complement,
+                surface_external_momenta,
+            );
+
+            if !esurface_value_is_strictly_inside(&esurface_val, &F(self.settings.kinematics.e_cm))
+            {
+                return None;
+            }
+            let lipschitz = self.surface_lipschitz(*esurface_id);
+            if lipschitz > 0.0 {
+                depth = depth.min(-esurface_val.0 / lipschitz);
+            }
         }
-
-        let lmb = threshold_subspace.get_lmb(overlap_input.lmbs);
-
-        let esurface_val = esurface.compute_from_momenta(
-            lmb,
-            edge_masses,
-            &center_with_fixed_complement,
-            surface_external_momenta,
-        );
-
-        esurface_value_is_strictly_inside(&esurface_val, &F(overlap_input.settings.kinematics.e_cm))
-    })
+        Some(depth)
+    }
 }
 
 /// Runtime overlap failures are returned to the stability machinery. An unresolved
@@ -965,7 +1085,9 @@ fn find_maximal_overlap_single(
         return Ok(res);
     }
 
-    if settings.subtraction.overlap_settings.try_origin {
+    if settings.subtraction.overlap_settings.enable_heuristics
+        && settings.subtraction.overlap_settings.try_origin
+    {
         let global_loop_count = overlap_input.graph.get_loop_number();
         let origin = LoopMomenta::from_iter(
             (0..global_loop_count).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
@@ -991,7 +1113,9 @@ fn find_maximal_overlap_single(
         }
     }
 
-    if settings.subtraction.overlap_settings.try_origin_all_lmbs {
+    if settings.subtraction.overlap_settings.enable_heuristics
+        && settings.subtraction.overlap_settings.try_origin_all_lmbs
+    {
         todo!("Not all heuristics implemented")
     }
 
@@ -1014,6 +1138,7 @@ fn find_maximal_overlap_single(
         };
         res.overlap_groups.push(single_group);
         res.fill_in_complements();
+        overlap_input.refine_centers(&mut res, loop_moms, external_momenta);
         return Ok(res);
     }
 
@@ -1075,6 +1200,7 @@ fn find_maximal_overlap_single(
 
     if num_disconnected_surfaces == existing_esurfaces.len() {
         res.fill_in_complements();
+        overlap_input.refine_centers(&mut res, loop_moms, external_momenta);
         return Ok(res);
     }
 
@@ -1089,7 +1215,7 @@ fn find_maximal_overlap_single(
         let possible_subsets =
             esurface_pairs.construct_possible_subsets_of_len(existing_esurfaces, subset_size, &res);
 
-        for subset in possible_subsets.iter() {
+        for subset in possible_subsets.iter().sorted() {
             let option_center = find_center(
                 overlap_input,
                 subset,
@@ -1119,6 +1245,7 @@ fn find_maximal_overlap_single(
     }
 
     res.fill_in_complements();
+    overlap_input.refine_centers(&mut res, loop_moms, external_momenta);
     Ok(res)
 }
 
@@ -1262,6 +1389,164 @@ mod tests {
     use typed_index_collections::ti_vec;
 
     #[test]
+    fn subspace_overlap_objectives_preserve_occurrences_masses_and_heuristic_gate() {
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph overlap_objectives {
+            ext [style=invis]
+            edge [num=1 mass=0]
+            node [num=1]
+            ext->a [id=0]
+            ext->b [id=1]
+            ext->c [id=2]
+            a->b [id=3 lmb_id=0]
+            b->c [id=4]
+            c->d [id=5]
+            d->a [id=6]
+            d->ext [id=7]
+        })
+        .unwrap();
+        assert_eq!(graph.get_loop_number(), 1);
+        for (edge, internal, external) in [
+            (0, vec![0], vec![1, 0, 0]),
+            (1, vec![0], vec![0, 1, 0]),
+            (2, vec![0], vec![0, 0, 1]),
+            (3, vec![1], vec![0, 0, 0]),
+            (4, vec![1], vec![0, 1, 0]),
+            (5, vec![1], vec![0, 1, 0]),
+            (6, vec![1], vec![0, 0, 1]),
+            (7, vec![0], vec![-1, -1, -1]),
+        ] {
+            graph.loop_momentum_basis.edge_signatures[EdgeIndex(edge)] =
+                (internal, external).into();
+        }
+        let mut lmbs = ti_vec![graph.loop_momentum_basis.clone()];
+        let subspace = SubspaceData::new_with_user_selected_lmb(
+            graph.no_dummy(),
+            LmbIndex::from(0),
+            &graph,
+            &lmbs,
+        )
+        .unwrap();
+        let loops = LoopMomenta::from_iter([ThreeMomentum::new(F(0.0), F(0.0), F(0.0))]);
+        let mut thresholds: EsurfaceCollection = vec![
+            Esurface {
+                energies: vec![EdgeIndex(3)],
+                external_shift: vec![(EdgeIndex(0), -1)],
+                vertex_set: VertexSet::dummy(),
+            },
+            Esurface {
+                energies: vec![EdgeIndex(4), EdgeIndex(5)],
+                external_shift: vec![(EdgeIndex(1), -1)],
+                vertex_set: VertexSet::dummy(),
+            },
+        ]
+        .into();
+        let existing: ExistingThresholds = thresholds.keys().collect();
+        let mut masses = graph.new_edgevec(|_, _, _| F(0.0));
+        let mut settings = RuntimeSettings::default();
+        settings.subtraction.overlap_settings.enable_heuristics = false;
+        settings.subtraction.overlap_settings.try_origin_all_lmbs = true;
+        for scale in [1.0, 8.0, 0.125] {
+            settings.kinematics.e_cm = 10.0 * scale;
+            let external = [
+                FourMomentum::from_args(F(2.0 * scale), F(0.0), F(0.0), F(0.0)),
+                FourMomentum::from_args(F(4.0 * scale), F(-3.0 * scale), F(0.0), F(0.0)),
+                FourMomentum::from_args(F(0.0), F(0.0), F(0.0), F(0.0)),
+            ]
+            .into_iter()
+            .collect();
+            for (objective, expected) in [
+                (OverlapCenterObjective::MaxMinDepth, 4.0 / 3.0),
+                (OverlapCenterObjective::RelaxedChebyshev, 1.5),
+                (OverlapCenterObjective::MinSum, 1.5),
+            ] {
+                settings.subtraction.overlap_settings.objective = objective;
+                let input = OverlapInput {
+                    graph: &graph,
+                    settings: &settings,
+                    subspace: &subspace,
+                    threshold_subspaces: None,
+                    lmbs: &lmbs,
+                    thresholds: &thresholds,
+                    edge_masses: masses.clone(),
+                    surface_kinematics: None,
+                };
+                let result = find_maximal_overlap(
+                    &input,
+                    &existing,
+                    &loops,
+                    &external,
+                    &Rotation::new(RotationMethod::Identity),
+                )
+                .unwrap();
+                assert_eq!(result.overlap_groups.len(), 1);
+                let center = &result.overlap_groups[0].center;
+                assert!(
+                    (center[LoopIndex(0)].px.0 / scale - expected).abs() < 2.0e-6,
+                    "{objective:?}: {center}"
+                );
+                assert!(check_global_center(
+                    &input, &existing, center, &loops, &external
+                ));
+            }
+        }
+        // Two equal spatial signatures with different masses must remain separate
+        // epigraphs also in the homogeneous subspace path without per-instance kinematics.
+        lmbs[LmbIndex::from(0)].edge_signatures[EdgeIndex(4)] =
+            lmbs[LmbIndex::from(0)].edge_signatures[EdgeIndex(3)].clone();
+        masses[EdgeIndex(3)] = F(1.0);
+        masses[EdgeIndex(4)] = F(2.0);
+        masses[EdgeIndex(6)] = F(1.0);
+        thresholds[EsurfaceID(1)].energies = vec![EdgeIndex(4)];
+        thresholds.push(Esurface {
+            energies: vec![EdgeIndex(6)],
+            external_shift: vec![(EdgeIndex(2), -1)],
+            vertex_set: VertexSet::dummy(),
+        });
+        let external = [
+            FourMomentum::from_args(F(3.0), F(0.0), F(0.0), F(0.0)),
+            FourMomentum::from_args(F(2.1), F(0.0), F(0.0), F(0.0)),
+            FourMomentum::from_args(F(2.0), F(-2.0), F(0.0), F(0.0)),
+        ]
+        .into_iter()
+        .collect();
+        let existing = thresholds.keys().collect();
+        for objective in [
+            OverlapCenterObjective::MaxMinDepth,
+            OverlapCenterObjective::RelaxedChebyshev,
+            OverlapCenterObjective::MinSum,
+        ] {
+            settings.subtraction.overlap_settings.objective = objective;
+            let input = OverlapInput {
+                graph: &graph,
+                settings: &settings,
+                subspace: &subspace,
+                threshold_subspaces: None,
+                lmbs: &lmbs,
+                thresholds: &thresholds,
+                edge_masses: masses.clone(),
+                surface_kinematics: None,
+            };
+            let result = find_maximal_overlap(
+                &input,
+                &existing,
+                &loops,
+                &external,
+                &Rotation::new(RotationMethod::Identity),
+            )
+            .unwrap();
+            assert_eq!(result.overlap_groups.len(), 1);
+            assert!(check_global_center(
+                &input,
+                &existing,
+                &result.overlap_groups[0].center,
+                &loops,
+                &external
+            ));
+        }
+    }
+
+    #[test]
     fn gl297_recorded_uncertified_socp_problems_are_rescued_without_dropping_overlaps() {
         let fixtures: Vec<serde_json::Value> = serde_json::from_str(include_str!(
             "../../../../tests/resources/graphs/ir_safe_thresholds/GL297_socp_failures.json"
@@ -1288,7 +1573,7 @@ mod tests {
                 &surfaces,
                 |scale| {
                     attempts.push(scale);
-                    Some(
+                    Ok(Some(
                         DefaultSolver::new(
                             &CscMatrix::spalloc((q.len(), q.len()), 0),
                             &q,
@@ -1301,7 +1586,7 @@ mod tests {
                                 .unwrap(),
                         )
                         .unwrap(),
-                    )
+                    ))
                 },
                 |coordinates| {
                     // Evaluate the physical energy sums in the ORIGINAL units, not

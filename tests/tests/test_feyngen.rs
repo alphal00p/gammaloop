@@ -752,8 +752,15 @@ fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
 
 #[test]
 fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
+    use gammaloop_api::state::State;
+    use gammalooprs::integrands::process::amplitude::load::{
+        StandaloneBackend, StandaloneEvaluationRequest, StandaloneMethod,
+    };
+    use gammalooprs::{model::UFOSymbol, utils::GS};
+
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let workspace = get_tests_workspace_path().join("amplitude_standalone_export");
-    let output_dir = workspace.join("standalone_export_check");
+    let output_dir = workspace.with_extension("standalone");
     if workspace.exists() {
         fs::remove_dir_all(&workspace)?;
     }
@@ -764,52 +771,112 @@ fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
         Some("amplitude_standalone_export".to_string()),
         true,
     )?;
-    cli.run_command("set global kv global.generation.evaluator.store_atom=true")?;
+    cli.run_command("set global kv global.generation.evaluator.store_atom=true global.generation.evaluator.compile=false global.generation.evaluator.summed_function_map=true global.generation.evaluator.summed=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.three_dimensional_representations='[\"cff\",\"ltd\"]' global.generation.uv.local_uv_cts_from_expanded_4d_integrands=true")?;
     cli.run_command("generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i archive_eval")?;
     cli.run_command("generate")?;
-
-    cli.state.process_list.export_standalone(
-        &output_dir,
-        &StandaloneExportSettings {
-            mode: StandaloneExportMode::Rust,
-            format: StandaloneDataFormat::Json,
-            ..Default::default()
-        },
-    )?;
 
     let exported_base = output_dir
         .join("processes")
         .join("amplitudes")
         .join("triangle")
         .join("archive_eval");
-    let archive_path = exported_base.join("standalone_evaluators.json");
-    assert!(archive_path.exists());
-    assert!(exported_base.join("standalone_evaluators_rust.rs").exists());
+    // Neither path warms the integrand before export. Runtime/model changes
+    // must reach the emitted default input, including after state reload.
+    for (reload, m_uv, mu_r, mass) in [(false, 19.0, 3.0, 2.25), (true, 23.0, 5.0, 3.25)] {
+        if reload {
+            cli.save_state()?;
+            cli.state = State::load(workspace.clone(), None, None)?;
+        }
+        cli.run_command("set model mass_scalar_2=7.0")?;
+        cli.run_command(&format!(
+            "set process -p triangle -i archive_eval kv general.m_uv={m_uv} general.mu_r={mu_r} general.numerator_sampling_scale=1.5 general.renormalization_localization_scale=17.0 general.inverse_temperature=0.4 model.mass_scalar_2='[{mass},0.0]'"
+        ))?;
+        cli.run_command(&format!(
+            "save standalone '{}' --json",
+            output_dir.display()
+        ))?;
 
-    let archive: StandaloneEvaluatorArchive<(), String> =
-        serde_json::from_slice(&fs::read(archive_path)?)?;
-    let mut loaded = archive.load()?;
-    let graph_term = loaded
-        .graph_terms
-        .first_mut()
-        .ok_or_else(|| eyre!("standalone amplitude archive has no graph terms"))?;
-    let input = (0..graph_term.param_builder_params.len())
-        .map(|index| Complex::new(0.625 + index as f64 * 0.173, 0.031 + index as f64 * 0.007))
-        .collect::<Vec<_>>();
-    let (_, _, evaluator, result) = &mut graph_term
-        .original_integrand
-        .get_mut("cff")
-        .ok_or_else(|| eyre!("standalone archive has no CFF evaluator"))?
-        .parametric;
-    evaluator.evaluate(&input, result);
-    assert!(!result.is_empty());
-    assert!(
-        result
-            .iter()
-            .all(|value| value.re.is_finite() && value.im.is_finite())
-    );
+        let archive_path = exported_base.join("standalone_evaluators.json");
+        assert!(exported_base.join("standalone_evaluators_rust.rs").exists());
+        let archive_json: serde_json::Value = serde_json::from_slice(&fs::read(archive_path)?)?;
+        let archive: StandaloneEvaluatorArchive<(), String> =
+            serde_json::from_value(archive_json.clone())?;
+        let mut loaded = archive.load()?;
+        assert!(!loaded.graph_terms.is_empty());
+        for (graph_index, graph_term) in loaded.graph_terms.iter_mut().enumerate() {
+            for representation in ["cff", "ltd"] {
+                let input = archive_json["graph_terms"][graph_index]["original_integrand"]
+                    [representation]["representative_input"]
+                    .as_array()
+                    .ok_or_else(|| eyre!("standalone archive has no representative input"))?
+                    .iter()
+                    .map(|value| -> Result<_> {
+                        Ok(Complex::new(
+                            value["re"].as_str().unwrap().parse::<f64>()?,
+                            value["im"].as_str().unwrap().parse::<f64>()?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                for (parameter, expected) in [
+                    (Atom::var(GS.m_uv_vacuum), m_uv),
+                    (Atom::var(GS.m_uv_expansion), m_uv),
+                    (Atom::var(GS.mu_r_sq), mu_r * mu_r),
+                    (Atom::var(GS.numerator_sampling_scale), 1.5),
+                    (Atom::var(GS.renormalization_localization_scale), 17.0),
+                    (Atom::var(GS.inverse_temperature), 0.4),
+                    (Atom::from(UFOSymbol::from("mass_scalar_2")), mass),
+                ] {
+                    let index = graph_term
+                        .param_builder_params
+                        .iter()
+                        .position(|candidate| candidate == &parameter)
+                        .ok_or_else(|| eyre!("standalone archive has no parameter {parameter}"))?;
+                    assert_eq!(input[index], Complex::new(expected, 0.0), "{parameter}");
+                }
+                let stack = graph_term
+                    .original_integrand
+                    .get_mut(representation)
+                    .ok_or_else(|| eyre!("standalone archive has no {representation} evaluator"))?;
+                let mut results = Vec::new();
+                for method in [
+                    StandaloneMethod::SingleParametric,
+                    StandaloneMethod::SummedFunctionMap,
+                ] {
+                    let result = stack.evaluate_with_backend(StandaloneEvaluationRequest {
+                        backend: StandaloneBackend::Eager,
+                        method,
+                        orientations: &graph_term.orientations,
+                        orientation_index: None,
+                        custom_input: None,
+                        artifact_root: &output_dir,
+                        label: representation,
+                    })?;
+                    assert!(!result.is_empty());
+                    assert!(
+                        result
+                            .iter()
+                            .all(|value| value.re.is_finite() && value.im.is_finite()),
+                        "{representation}, reloaded={reload}, {method:?}: {result:?}"
+                    );
+                    assert!(
+                        result
+                            .iter()
+                            .any(|value| value.re != 0.0 || value.im != 0.0)
+                    );
+                    results.push(result);
+                }
+                assert_eq!(results[0].len(), results[1].len());
+                for (parametric, summed) in results[0].iter().zip(&results[1]) {
+                    let scale = summed.re.abs().max(summed.im.abs());
+                    assert!((parametric.re - summed.re).abs() <= 1.0e-12 * scale);
+                    assert!((parametric.im - summed.im).abs() <= 1.0e-12 * scale);
+                }
+            }
+        }
+    }
 
     fs::remove_dir_all(workspace)?;
+    fs::remove_dir_all(output_dir)?;
     Ok(())
 }
 
@@ -839,6 +906,9 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
                 format,
                 ..Default::default()
             },
+            |_| -> Result<_> {
+                panic!("cross-section export must not resolve unused default-input model values")
+            },
         )?;
     }
 
@@ -865,6 +935,7 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
         .ok_or_else(|| eyre!("standalone cross-section archive has no graph terms"))?;
     let cut_group_integrands = graph_term
         .get("cut_group_integrands")
+        .and_then(|representations| representations.get("cff"))
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| eyre!("standalone graph term has no cut-group integrands"))?;
     assert!(!cut_group_integrands.is_empty());
@@ -891,7 +962,7 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
         let stack = graph_term
             .cut_group_integrands
             .get_mut("cff")
-            .and_then(|groups| groups.first_mut())
+            .and_then(|cuts| cuts.first_mut())
             .and_then(|integrands| integrands.values_mut().next())
             .ok_or_else(|| {
                 eyre!("{format} standalone graph term has no indexed cut-group evaluator")

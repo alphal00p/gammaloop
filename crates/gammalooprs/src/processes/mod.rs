@@ -15,7 +15,7 @@ use tracing::debug;
 
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
-    settings::{GlobalSettings, runtime::LockedRuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     utils::serde_utils::{IsDefault, is_false, is_true, is_usize, show_defaults_helper},
     uv::export::UVForestExportSettings,
 };
@@ -766,12 +766,13 @@ impl ProcessList {
         &self,
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
+        model_for_settings: impl Fn(&RuntimeSettings) -> Result<Model>,
     ) -> Result<()> {
         let path = path.as_ref().join("processes");
         fs::create_dir_all(&path)?;
 
         for p in self.processes.iter() {
-            p.export_standalone(&path, settings)?;
+            p.export_standalone(&path, settings, &model_for_settings)?;
         }
         Ok(())
     }

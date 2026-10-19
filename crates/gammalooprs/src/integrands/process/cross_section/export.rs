@@ -1,4 +1,5 @@
 use std::{collections::BTreeMap, fs, path::Path};
+use symbolica::evaluate::ParameterRows;
 
 use color_eyre::Result;
 use eyre::{Context, eyre};
@@ -76,6 +77,14 @@ fn export_generic_evaluator<T: ExportAtomTo>(
         .collect::<Result<Vec<_>>>()?;
 
     Ok(StandaloneGenericEvaluatorArchive {
+        parameter_rows: evaluator
+            .parameter_rows
+            .as_ref()
+            .map(|rows| {
+                rows.clone()
+                    .try_map_parameters(|parameter| T::export_atom_to(&parameter))
+            })
+            .transpose()?,
         exprs,
         parameter_override: parameter_override
             .map(|params| {
@@ -87,6 +96,7 @@ fn export_generic_evaluator<T: ExportAtomTo>(
             .transpose()?,
         additional_fn_map_entries,
         dual_shape: evaluator.dual_shape.clone(),
+        zero_components: evaluator.zero_components.clone(),
     })
 }
 
@@ -97,6 +107,21 @@ pub(in crate::integrands::process) fn export_evaluator_stack<T: ExportAtomTo>(
 ) -> Result<StandaloneEvaluatorStackArchive<T>> {
     Ok(StandaloneEvaluatorStackArchive {
         explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
+        parametric_rows: stack
+            .parametric_rows
+            .as_ref()
+            .map(|catalog| -> Result<_> {
+                ParameterRows::new(
+                    catalog
+                        .parameters
+                        .iter()
+                        .map(T::export_atom_to)
+                        .collect::<Result<Vec<_>>>()?,
+                    catalog.rows.clone(),
+                )
+                .map_err(|error| eyre!(error))
+            })
+            .transpose()?,
         production_orientation_ids: stack
             .production_orientation_ids()
             .iter()
@@ -281,6 +306,7 @@ pub(crate) fn export_threshold_multiplier_collection<T: ExportAtomTo>(
             .iter()
             .map(|evaluator| {
                 Ok(StandaloneGenericEvaluatorArchive {
+                    parameter_rows: None,
                     exprs: vec![T::export_atom_to(evaluator.expression())?],
                     parameter_override: None,
                     additional_fn_map_entries: evaluator
@@ -290,6 +316,7 @@ pub(crate) fn export_threshold_multiplier_collection<T: ExportAtomTo>(
                         .map(|entry| entry.archive())
                         .collect::<Result<Vec<_>>>()?,
                     dual_shape: None,
+                    zero_components: Vec::new(),
                 })
             })
             .collect::<Result<Vec<_>>>()?,
@@ -455,7 +482,11 @@ fn standalone_rust_script() -> String {
     if let Some(rest) = script.strip_prefix("//#!/usr/bin/env -S rust-script\n") {
         script = format!("#!/usr/bin/env -S rust-script\n{rest}");
     }
-    script
+    let dependencies = include_str!(concat!(env!("OUT_DIR"), "/standalone_dependencies.toml"))
+        .lines()
+        .map(|line| format!("//! {line}\n"))
+        .collect::<String>();
+    script.replacen("//! ```\n", &format!("{dependencies}//! ```\n"), 1)
 }
 
 impl CrossSectionIntegrand {

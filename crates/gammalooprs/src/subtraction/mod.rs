@@ -433,6 +433,7 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
         OptimizationSettings::default(),
         None,
         &EvaluatorSettings::default(),
+        None,
     )?;
 
     Ok(RstarTDependenceEvaluator {
@@ -685,6 +686,7 @@ mod tests {
                 OptimizationSettings::default(),
                 None,
                 &EvaluatorSettings::default(),
+                None,
             )
             .unwrap()
             .into_eager_only();
