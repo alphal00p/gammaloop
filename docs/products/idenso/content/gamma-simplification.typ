@@ -166,7 +166,7 @@ For the historical gluonic fixture, the qualified checkpoint takes *0.858 s* in 
 and *0.300 s* with early rung contractions. Both use tensor-safe replacement
 and include final expansion. Paired gains over the saved build are 9.09% and
 6.66%; current FORM comparisons and mixed trace controls are reported in
-#link(<resumable-observation-public>)[the public qualification below]. These
+"Public qualification of resumable observation" below. These
 results do not establish full FORM parity.
 
 The performance section follows equivalent paired and alternating slash traces through
@@ -5173,7 +5173,6 @@ protocols, raw observations and `comparison-summary.json` are under
 reviews are under `/tmp/idenso-collector-next-analysis`.
 
 === Public qualification of resumable observation
-<resumable-observation-public>
 
 The complete Python host rebuild includes all consumers of the changed Spenso
 and Idenso code. The frozen comparison uses the saved `d58aee8a` host and the
