@@ -3789,3 +3789,135 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
     );
     Ok(())
 }
+
+#[test]
+fn native_d09_proper_local_vacuum_scalar_traces_match_independent_tadpoles() -> Result<()> {
+    use crate::{
+        utils::GS,
+        uv::{
+            ApproximationType,
+            approx::{ForestNodeLike, UVCtx},
+        },
+    };
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let mut records = reference.certify_os_quark_proper_prefix()?;
+    ensure!(records.len() == 1);
+    let record = records
+        .remove(&("D09".to_owned(), vec![2, 3]))
+        .ok_or_else(|| eyre!("the actual native D09 OS child is missing"))?;
+    ensure!(record.given.renormalization_scheme() == ApproximationType::OS);
+    // Same independent source-weight owner as the full native mass/field gate.
+    // It is read before any new scalar integration, never fitted to an output.
+    let source_projection = reference.project(&record.diagram)?;
+    let source_weight = &source_projection.kernel_weight * &source_projection.numerator_prefactor;
+    ensure!(!source_weight.is_zero());
+    ensure!(record.diagram.loop_momentum_basis().loop_edges.len() == 2);
+    let backend = vakint::VakintSettings {
+        number_of_terms_in_epsilon_expansion: 3,
+        evaluation_order: vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
+            vakint::AlphaLoopOptions {
+                susbstitute_masters: false,
+            },
+        )]),
+        ..record.settings.vakint.true_settings()
+    };
+    let actual =
+        reference.certify_actual_overall_mass_input(&record, &record.given, &record.completed)?;
+    let traces = reference.certify_d09_proper_local_vacuum_angular_traces(
+        &record.diagram,
+        &UVCtx::new(&record.graph, &record.graph.model, &record.settings),
+        &record.given,
+        &record.completed,
+        &actual,
+        &backend,
+    )?;
+
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let pi = Atom::var(symbolica::atom::Symbol::PI);
+    let coupling = Atom::var(symbol!("UFO::G"));
+    let a = coupling.pow(2) / (Atom::num(16) * pi.pow(2));
+    let cf = Atom::num((4, 3));
+    // The source-only i*G^4*CF^2 calibration precedes the new integrals.
+    // Two MSbar Minkowski measures supply i^2/(16*pi^2)^2. The signed
+    // child -U is already inside c(D); run(W) receives no further forest sign.
+    let prefactor = -Atom::i() * a.pow(2) * cf.pow(2) * &source_weight;
+    ensure!(!prefactor.is_zero());
+    // Independent radial Gamma recurrence: T2=e^(gamma_E*eps)*Gamma(eps)
+    // at m=MUV=muR=1, T2^2=eps^-2+pi^2/6+O(eps).
+    // Native source absorption and numerator-only lift are prerequisites.
+    // c(D)=(D-2)^2(D+2)/24=1-7eps/3+5eps^2/3-eps^3/3.
+    let dimensional = epsilon.pow(-2) - Atom::num((7, 3)) / &epsilon
+        + Atom::num((5, 3))
+        + pi.pow(2) / Atom::num(6);
+    let physical_four = epsilon.pow(-2) + pi.pow(2) / Atom::num(6);
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let mut records = Vec::new();
+    for (index, trace) in traces.iter().enumerate() {
+        ensure!(trace.is_scalar());
+        let weighted = reference
+            .model
+            .expand_couplings(&(source_weight.clone() * trace.expression()));
+        // Unit scales are imposed after the actual operators and integration.
+        let unit = weighted
+            .replace(symbol!("UFO::MT"))
+            .with(1)
+            .replace(GS.m_uv_expansion)
+            .with(GS.m_uv_vacuum)
+            .replace(GS.m_uv_vacuum)
+            .with(1)
+            .replace(GS.mu_r_sq)
+            .with(1);
+        let series =
+            super::series(&super::Integrated::dimensionally_regularized(&unit), 0)?.to_atom();
+        let sign = Atom::num(if index % 2 == 0 { -1 } else { 1 });
+        let expected = &sign
+            * &prefactor
+            * if index < 2 {
+                &dimensional
+            } else {
+                &physical_four
+            };
+        let difference =
+            trace.with_checked_expression(cooking.try_cook((&series - &expected).as_view())?)?;
+        QcdMassReference::certify_finite_tagged_rows_zero(
+            "absolute actual proper-local D09 vacuum scalar Laurent trace",
+            difference,
+        )?;
+        // Direct nonzero leading coefficient: a zero trace cannot pass merely
+        // through a permissive scalar-zero normalization or a blind mass Phi.
+        let rows = series
+            .coefficient_list_exact(std::slice::from_ref(&epsilon))
+            .ok_or_else(|| {
+                eyre!("D09 absolute scalar trace exceeds the unchanged Laurent scope")
+            })?;
+        let leading = rows
+            .iter()
+            .find(|(monomial, _)| *monomial == epsilon.pow(-2))
+            .map(|(_, coefficient)| coefficient)
+            .ok_or_else(|| eyre!("D09 scalar trace lost its independently nonzero double pole"))?;
+        ensure!(!leading.is_zero());
+        ensure!((leading - &sign * &prefactor).together().is_zero());
+        records.push(serde_json::json!({
+            "physical_four": index >= 2,
+            "dual": if index % 2 == 0 { "identity/12" } else { "gamma0/12" },
+            "actual": series.to_canonical_string(),
+            "reference": expected.to_canonical_string(),
+            "double_pole": leading.to_canonical_string(),
+        }));
+    }
+    ensure!(records.len() == 4);
+    crate::debug_tags!(#uv, #integrated, #summary;
+        stage = "native_d09_proper_local_vacuum_independent_scalar_reference",
+        file.records = %serde_json::to_string(&records)?,
+        file.source_weight = %source_weight.to_canonical_string(),
+        original_terms = 4, active_loops = 2, frozen_loops = 0,
+        absolute_dimensional_traces_proved = true, absolute_physical_four_traces_proved = true,
+        bare_included = false, finite_child_included = false,
+        full_open_matrix_proved = false, emitted_R2_proved = false,
+        "Actual proper-local W scalar-dual Laurent traces match independent Gamma tadpoles"
+    );
+    Ok(())
+}
