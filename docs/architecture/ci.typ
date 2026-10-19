@@ -44,6 +44,13 @@ APIs and shared Symbolica expressions. Spynso's embedded `typst/*.typ` files are
 production inputs to its package and dependent builds. Its display integration
 test mocks Typst and checks the missing-optional-renderer behavior.
 
+Vakint's production source closure contains cache-free 1L–3L runtime data.
+Prepared caches and 4L/5L RustRed packs are external data. Native reduction tests
+receive an explicitly pinned external-data snapshot at the terminal test boundary;
+normal construction and library compilation require no external-data download. The workspace uses
+one FeynKit/Spenso/Idenso cohort and coordinated Symbolica/Numerica/Graphica pins,
+so Cargo and Nix resolve the same package and feature graph.
+
 Merged artifacts are self-contained compressed archives. Recursive inheritance,
 writable extraction, Cargo fingerprints and epoch-1 timestamps must survive
 changes to archive handling. Stable publication outputs depend on the artifacts,

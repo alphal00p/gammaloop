@@ -19,7 +19,11 @@ pub(super) fn scalar(mut expression: Atom) -> Result<Atom> {
         // Gamma and color identities can return sums inside tensor products.
         // Expose each monomial before the next contraction stage so its dummy
         // indices are contracted within that term.
+        // Contract color and Lorentz indices before tracing gamma matrices.
+        // Repeated indices then avoid unnecessary trace branches.
         let next = expression
+            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants())
+            .to_dots()
             .expand()
             .simplify_gamma()
             .expand()
@@ -194,6 +198,33 @@ fn scalar_contracts_metric_sums_created_by_six_gamma_trace() -> Result<()> {
     // Independent Clifford pairing recurrence gives tr(1)=4 and
     // tr(gamma_mu gamma_nu gamma_rho gamma_mu gamma_nu gamma_rho).
     let expected = Atom::num(4) * &d * (-d.clone().pow(2) + Atom::num(6) * d - Atom::num(4));
+    assert!((scalar(trace)? - expected).expand().together().is_zero());
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn scalar_contracts_metric_prerequisites_before_twenty_gamma_trace() -> Result<()> {
+    let mut factors = (0..20)
+        .map(|position| {
+            format!(
+                "spenso::gamma(spenso::bis(4,t{position}),spenso::bis(4,t{}),spenso::mink(d,m{position}))",
+                (position + 1) % 20
+            )
+        })
+        .collect::<Vec<_>>();
+    for pair in 0..10 {
+        factors.push(format!(
+            "spenso::g(spenso::mink(d,m{}),spenso::mink(d,m{}))",
+            2 * pair,
+            2 * pair + 1
+        ));
+    }
+    let trace = Atom::parse(factors.join("*"), "qcd_ladder_control", Default::default())?;
+    let d = Atom::var(symbol!("qcd_ladder_control::d"));
+    // Each metric identifies an adjacent gamma pair, giving d times the
+    // identity. Ten pairs therefore leave tr(1)*d^10, with tr(1)=4.
+    let expected = Atom::num(4) * d.pow(10);
     assert!((scalar(trace)? - expected).expand().together().is_zero());
     Ok(())
 }

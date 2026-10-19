@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Vakint source on
-2026-08-18.
+2026-10-19.
 
 This note describes the Rust engine and its optional Symbolica community-module wrapper. Backend
 availability and numerical coverage depend on the selected topology, epsilon depth, and installed
@@ -12,7 +12,7 @@ external tools.
 == Boundaries
 
 Vakint is an in-process Symbolica transformation engine for single-scale vacuum integrals. The
-Rust crate owns five boundaries:
+Rust crate owns these boundaries:
 
 - `Vakint` and `Topologies`: construction of the known topology library and entry points for
   canonicalization, tensor reduction, parametric evaluation, and numerical evaluation;
@@ -21,7 +21,8 @@ Rust crate owns five boundaries:
 - `VakintSettings`, `EvaluationOrder`, and `EvaluationMethod`: precision, normalization,
   dependency, and backend-selection policy;
 - FORM and pySecDec adapters: template rendering, subprocess execution, and result decoding;
-- the optional `symbolica.community.vakint` module: Python classes that own a Rust engine and
+- RustRed's immutable data registry, reduction programs, master capabilities, and strict caches;
+- the optional Symbolica community Vakint module: Python classes that own a Rust engine and
   settings while exchanging Symbolica expressions.
 
 The modules `alphaloop_numerics`, `matad`, `matad_numerics`, `fmft`, and `fmft_numerics` contain
@@ -32,8 +33,9 @@ loop-momentum-basis work; it is not Linnet's generic half-edge graph.
 == Core representation
 
 `Vakint::new` initializes the symbol registry and generates an in-memory `Topologies` collection.
-The collection contains canonical one- through four-loop families and selected contractions,
-followed by an `Unknown` matcher whose allowed evaluation method is pySecDec. Each `Integral`
+The collection contains canonical one- through four-loop families and selected contractions.
+Explicitly loaded five-loop applications supply their own catalogue. An `Unknown` matcher permits
+pySecDec when the caller allows unknown integrals. Each `Integral`
 stores its canonical and optional short expressions, match patterns and conditions, graph,
 loop/propagator counts, and applicable backend set.
 
@@ -55,6 +57,37 @@ files, epsilon depth, dot-product notation, and `EvaluationOrder`. A `Vakint` en
 settings are passed explicitly to Rust operations. The Python `Vakint` wrapper stores the engine
 and settings together for convenience.
 
+== RustRed data and numerical capabilities
+
+Each engine owns an immutable `RustRedData` snapshot shared through `Arc`. Its programs, master
+coefficients, topology identities, coverage predicates and graph references feed matching,
+reduction, product factors, master evaluation and cache attachment. Ordinary construction remains
+offline with cache-free one- through three-loop material. Four- and five-loop RustRed material
+requires explicit loading.
+
+`load_official_external_data(N, options)` validates and activates one cumulative one- through
+N-loop snapshot. It recognizes a local checkout before considering network access; managed
+installations use checksummed per-loop release archives, locking and atomic installation. Existing
+validated packs are reused offline. Activation is transactional and replaces incompatible caches
+and numerical context. Explicit IBP, saved-application and cache paths remain available. See
+the crate's `external_data.typ` for loading and release conventions.
+
+RustRed master modes are `Retain`, `Symbolic` and `Numerical`, with numerical substitution the
+default. Symbolic mode expands exact coefficients and retains labeled numerical-only coefficients;
+the originating engine can resolve those symbols later. After exact combination, evaluation checks
+only the required Laurent powers and numerical ingredients. Exact formulas have no finite source
+cap unless they contain finite constants; numerical-only data carries validated significant-digit
+limits. Missing coefficients and insufficient precision are explicit errors.
+
+Campaign certification is advisory outside its recorded predicates. Safe partial reductions retain
+family-qualified unknown integrals and warn with parent-topology graph references. Numerical
+evaluation lists unresolved masters and uncomputed declared terminals. Prepared caches accept
+strict completed reductions, including valid captured descendants, and never store partial results.
+
+Both FORM-backed and RustRed evaluation use the same tagged sixth-root HPL evaluator. FORM
+reduction scripts and hard-coded master formulas remain intact. Opaque finite master data does
+not become an arbitrary-precision constant through a symbolic name.
+
 == Main control flow
 
 The complete Rust entry point is `Vakint::evaluate`:
@@ -64,24 +97,26 @@ AtomView
   -> validate selected settings and external dependencies
   -> split into VakintExpression terms
   -> match and canonicalize topology plus numerator
-  -> tensor-reduce each numerator through FORM
+  -> tensor-reduce each numerator through FeynKit by default, or selected FORM reduction
   -> choose the first supported EvaluationMethod for each term
   -> run the backend and decode its Symbolica expression
+  -> combine RustRed contributions before master capability checks and substitution
   -> combine the transformed terms into an Atom
 ```
 
 `to_canonical`, `tensor_reduce`, and `evaluate_integral` expose narrower stages. Canonicalization
 tries registered topologies in order, derives replacement rules, normalizes momentum routing,
-and can emit the short topology form. Tensor reduction converts compact dot notation if needed,
-maps vectors and indices into FORM syntax, runs the embedded reduction program, and maps the
-result back to Symbolica.
+and can emit the short topology form. The FeynKit tensor reducer works in process with explicit
+index scopes and exact coefficients. The optional FORM tensor path maps vectors and indices into
+FORM syntax, runs the embedded reduction program, and maps the result back to Symbolica.
 
 Integral evaluation matches again so that it has the canonical topology and numerator mapping.
 It then walks `settings.evaluation_order` and selects the first method whose topology, loop count,
 and requested epsilon depth are supported. AlphaLoop is limited to its registered topologies,
 at most three loops, and at most four requested terms; MATAD covers its registered topologies up
 to three loops and five terms; FMFT covers registered four-loop topologies up to five terms;
-pySecDec covers topologies registered for that numerical path. Failure to find a method is an
+pySecDec covers topologies registered for that numerical path. RustRed uses loaded programs and
+checks actual coefficient availability after reduction. Failure to find a method is an
 explicit `NoEvaluationMethodFound` error, not an implicit fallback.
 
 Numerical evaluation is a later boundary. Parametric backend output remains a Symbolica
@@ -92,7 +127,8 @@ Laurent coefficients `(epsilon power, complex value)`.
 == External tools and feature boundaries
 
 AlphaLoop, MATAD, and FMFT invoke FORM. The pySecDec method invokes both FORM and pySecDec through
-the configured Python executable. `validate_settings` checks only dependencies required by the
+the configured Python executable. RustRed and the default FeynKit tensor path require no FORM or
+Mathematica process. `validate_settings` checks only dependencies required by the
 selected evaluation order, validates the loop-normalization expression, and enforces FORM >=
 4.2.1 and pySecDec >= 1.6.4 when those tools are selected.
 
@@ -109,7 +145,7 @@ that library exists. This affects native linking only; it does not select an eva
 
 The core Rust API has no feature requirement. `symbolica_community_module` enables the PyO3
 wrapper and registers `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
-`VakintNumericalResult` on `symbolica.community.vakint`. `python_stubgen` adds stub metadata and
+`VakintNumericalResult` on the community module. `python_stubgen` adds stub metadata and
 also enables Symbolica's Python export. The wrapper delegates transformations to the Rust engine
 and converts `VakintError` into Python `ValueError`; it does not implement a second evaluation
 pipeline.
@@ -120,12 +156,13 @@ Vakint does not serialize its topology library or settings. Known topologies are
 `Vakint::new`, which is why one engine should be reused for multiple operations. Durable values
 cross the API as Symbolica expressions or Laurent-coefficient lists. Temporary FORM/pySecDec
 workspaces are implementation artifacts unless cleanup is disabled or a reuse directory is
-explicitly supplied.
+explicitly supplied. RustRed's external packs and native prepared caches are explicit durable
+data, validated against their schemas and authenticated program bindings before attachment.
 
 A reproducible result therefore depends on more than the input expression: record the topology
 form, numerator, normalization convention, epsilon depth, decimal precision, backend order and
 options, numerical masses and external momenta, executable versions, and whether a pySecDec
-workspace was reused.
+workspace was reused. For RustRed, also record the resolved data version and load report.
 
 == Maintained invariants
 

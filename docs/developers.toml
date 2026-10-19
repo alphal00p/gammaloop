@@ -25,13 +25,15 @@ reviewed_at = "2026-08-18"
 review_ref = "c9f4e32acd2c"
 products = ["gammaloop"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
-review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
+review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**", "crates/feynkit-generator/src/**"]
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/state.rs"
 symbol = "gammaloop_api::state::State::load"
 anchor = "load_state_manifest(&save_path)?"
-digest = "a923d12cfaa66872454cd1be83212eb03faad754"
+# Reviewed 2026-10-19: the architecture records canonical FeynKit model loading,
+# state version 2, and regeneration of version-1 states before symbolic replay.
+digest = "e3b78284267abe5437ffa07da95a46b9c26932d8"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -39,7 +41,9 @@ symbol = "gammaloop_api::commands::integrate::Integrate::default_workspace_path"
 anchor = "fn default_workspace_path(&self"
 # Reviewed 2026-09-14: fallible grid constructors changed only test fixtures;
 # integration-workspace and persistence boundaries remain unchanged.
-digest = "80f35d7c0d7d2e120c0570522fbdbe1aac7d7bf4"
+# No architecture impact 2026-10-19: graph-group selection now receives the
+# canonical model explicitly; workspace and renderer ownership are unchanged.
+digest = "d28eaf0cba490c361af167110d1919428c3f42ba"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -56,7 +60,10 @@ anchor = "pub fn warm_up(&mut self, model"
 # and added regression coverage.
 # Reviewed 2026-09-14: canonical tensor layouts and fallible Symbolica APIs
 # preserve the documented warm-up and state-ownership boundaries.
-digest = "cc699bf2b817eb35c9f0dfceaae5b60bf235e76c"
+# Reviewed 2026-10-19: explicit model selection and FeynKit orientation keys
+# preserve warm-up ownership. The architecture records point-domain grids for
+# zero-loop integrands; positive dimensions use the native grid unchanged.
+digest = "e8bd349afb92317fbca84fa85075a94358f8f7bf"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -68,7 +75,9 @@ digest = "0f9cc30132cbe0106c4354f5afbee4709debf4a8"
 path = "crates/gammalooprs/src/observables/mod.rs"
 symbol = "gammalooprs::observables::EventProcessingRuntime"
 anchor = "pub struct EventProcessingRuntime {"
-digest = "afea0cf9f45b3ce7526c91b708dbd3e360aad060"
+# Reviewed 2026-10-19: canonical particle queries preserve event accumulation;
+# the architecture records finite, nonnegative minimum jet transverse momentum.
+digest = "6846b42ea24339e88e2cfb5dc51125cc80c657b4"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python.rs"
@@ -76,7 +85,10 @@ symbol = "gammaloop_api::python::GammaLoopAPI"
 anchor = "struct GammaLoopAPI {"
 # No architecture impact: the 2026-09-02 doctest correction only marks Python
 # examples as Python in rendered/exported documentation; binding behavior is unchanged.
-digest = "38b30d296961e12dbf507d8530847afa1e8032a8"
+# Reviewed 2026-10-19: the architecture records structured integration through
+# the existing command owner, finalized runtime graph imports, and standalone
+# FeynKit CFF topology helpers. Python session and thread ownership are unchanged.
+digest = "ddf572a0f5f0d601ef37cb3b318a70574947b4f1"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -88,12 +100,14 @@ digest = "25cda2dff8fd5a5c01f6b00c42311089a120e503"
 # No-impact attestation 2026-08-28: tadpole-filter validation failures now
 # warn and reject the candidate instead of panicking; generation ownership and
 # the documented filtering pipeline are unchanged.
-path = "crates/gammalooprs/src/feyngen/diagram_generator.rs"
-symbol = "gammalooprs::feyngen::DiagramGenerator::generate"
+path = "crates/feynkit-generator/src/generation.rs"
+symbol = "feynkit_generator::Generator::generate"
 anchor = "pub fn generate("
 # Reviewed 2026-09-14: Symbolica's graph/canonicalization API migration
 # preserves generation, filtering, and persistence ownership.
-digest = "e3803537b52aeb4f7bd340a3bc876af6066a03f6"
+# Reviewed 2026-10-19: the generation pipeline moved to FeynKit; the architecture
+# now follows its canonical owner and GammaLoop's downstream runtime enrichment.
+digest = "6bcda71b5ab2dd36d2c3c4310c812c19cc78c12f"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -116,7 +130,9 @@ symbol = "gammaloop_api::commands::integrate::dashboard_event_loop"
 anchor = "fn dashboard_event_loop(receiver"
 # Reviewed 2026-09-14: only grid constructors in test fixtures changed;
 # status flow, renderer ownership, and terminal lifecycle are unchanged.
-digest = "80f35d7c0d7d2e120c0570522fbdbe1aac7d7bf4"
+# No dashboard impact 2026-10-19: the integration view receives the canonical
+# model explicitly; status flow, workspace state, and terminal cleanup are unchanged.
+digest = "d28eaf0cba490c361af167110d1919428c3f42ba"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -130,7 +146,9 @@ symbol = "gammalooprs::integrate"
 anchor = "mod render_ratatui;"
 # Reviewed 2026-09-14: test fixtures now unwrap fallible grid construction;
 # status flow and test assertions are unchanged.
-digest = "2ee9d70cfe6d099009a82540410911e58f675ce0"
+# No architecture impact 2026-10-19: four unit-volume test fixtures now use
+# explicit empty models. Production integration and status assembly are unchanged.
+digest = "a374aa0ad93554f4b4842ab65a3776e0868483cc"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -153,7 +171,10 @@ symbol = "gammalooprs::uv::UVOrchestrator"
 anchor = "impl UVOrchestrator {"
 # Reviewed 2026-09-14: comparison propagates canonicalization errors;
 # backend selection, returned legacy result, and UV invariants are unchanged.
-digest = "2e705f792117bb2c29a843306c975fc149f3cb00"
+# Reviewed 2026-10-19: the UV note records the explicit caller-owned canonical
+# model. Backend dispatch, signs, prescriptions, and disconnected composition
+# are unchanged; a test uses the existing EMR-vector symbol helper.
+digest = "286c229322a3f7453c9ce7caefdd7e7438f81c2d"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -228,7 +249,9 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # extract_templates and its destination contract, is byte-identical to the
 # previous verified scope; only test coverage changed. The migration record's
 # current preface now names the style composer alongside its three adapters.
-digest = "040793fcba3b6f372a03187cfe82cfacc32fa953"
+# No architecture impact 2026-10-19: only an ignored drawing test imports
+# ModelGammaLoopExt; template extraction and embedded callbacks are byte-identical.
+digest = "d092ed68be31c4ae6382b22fb4421fd96ce52842"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -416,7 +439,7 @@ title = "Linnet implementation architecture"
 summary = "Half-edge storage, subgraph views, mutation and DOT flows, feature and serialization boundaries, invariants, and verification."
 source = "docs/architecture/linnet-architecture.typ"
 kind = "System architecture"
-status = "Implemented · reviewed 2026-08-18"
+status = "Implemented · reviewed 2026-10-19"
 lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-08-18"
@@ -483,8 +506,8 @@ kind = "System architecture"
 status = "Implemented · reviewed 2026-08-18"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+reviewed_at = "2026-10-19"
+review_ref = "a7c424bb01bb4183ef1bce46a8f1dbb4ce70263d"
 products = ["vakint"]
 topics = ["topologies", "canonicalization", "tensor reduction", "FORM", "pySecDec"]
 review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates/vakint/form_src/**", "crates/vakint/build.rs", "crates/vakint/Cargo.toml"]
@@ -498,7 +521,10 @@ anchor = "pub struct Vakint {"
 # Topology ownership and the documented FORM conversion contracts are unchanged.
 # Reviewed 2026-09-14: stub collection keeps upstream numeric types in Symbolica;
 # Vakint's explicitly registered Python surface and evaluation contracts are unchanged.
-digest = "c6d7a421dcb945bcfe506760598e19e03e093a31"
+# Reviewed 2026-10-19: The architecture now records immutable RustRed snapshots, explicit
+# master modes, exact-combination capability checks, and the in-process FeynKit tensor
+# default.
+digest = "96ba715daa038185684adca6589add6bf216f738"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -506,13 +532,18 @@ symbol = "vakint::topologies::Topologies::match_topologies_to_user_input"
 anchor = "pub fn match_topologies_to_user_input("
 # Reviewed 2026-09-14: the new solution-set API still requires one fully
 # determined loop-basis solution; matching and replacement mappings are unchanged.
-digest = "7a1dcd23ff9116de1ec3e3a4150e81400cdf552f"
+# Reviewed 2026-10-19: The architecture records loaded five-loop catalogues and snapshot-aware
+# RustRed matching; ordinary FORM topology ownership remains unchanged.
+digest = "6ecd3630d5606c2a8990a763078a47b612a7eab2"
 
 [[section.note.scope]]
 path = "crates/vakint/src/graph.rs"
 symbol = "vakint::graph::Graph::new_from_atom"
 anchor = "pub fn new_from_atom("
-digest = "39e48cf8f2a5f368b6eac525e5b2e19ebe41854e"
+# Reviewed 2026-10-19: Reviewed the existing single-scale vacuum graph validation,
+# contractions, and momentum bases. External parent DOT references do not change this graph
+# representation.
+digest = "40e3ccc5640c6a15c73dfe0076136a805d906f91"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/mod.rs"
@@ -520,7 +551,25 @@ symbol = "vakint::symbolica_community_module::VakintWrapper"
 anchor = "pub struct VakintWrapper {"
 # No architecture impact: the 2026-08-21 APIDOC-005 review made the Python
 # wrapper contracts and required tool boundaries explicit without changing behavior.
-digest = "a3a987e8cf8564a79aab31e5e6cc4d269330b8a6"
+# Reviewed 2026-10-19: The Python wrapper exposes cumulative data loading and explicit RustRed
+# master modes through the same engine, without a separate reduction pipeline.
+digest = "b2b445135f89c0a2e15469b7defbc02903525d48"
+
+[[section.note.scope]]
+path = "crates/vakint/src/rustred_evaluation/data.rs"
+symbol = "vakint::rustred_evaluation::data::RustRedData"
+anchor = "pub(crate) struct RustRedData {"
+# Reviewed 2026-10-19: snapshot ownership and coefficient-level capabilities
+# are documented in the RustRed data and numerical-capability architecture.
+digest = "b778fae95dfdcfdb800178aa369012be758f5b81"
+
+[[section.note.scope]]
+path = "crates/vakint/src/rustred_evaluation/masters.rs"
+symbol = "vakint::rustred_evaluation::masters::MasterCatalog"
+anchor = "pub(super) struct MasterCatalog {"
+# Reviewed 2026-10-19: snapshot ownership and coefficient-level capabilities
+# are documented in the RustRed data and numerical-capability architecture.
+digest = "259dff58e529ba4331dab95555ae732edb4d6e70"
 
 [[section]]
 id = "proposals"
@@ -870,7 +919,12 @@ symbol = "workspace package source ownership"
 # guide records this input boundary and the restored binding-test coverage.
 anchor = "documentationCatalogAnnotatedItemSourcePaths ="
 end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
-digest = "9cc9c47f7e6f60a2a4aca498cb922eaef3e7f3b3"
+# Reviewed 2026-10-19: package sources follow the canonical workspace cohort;
+# Vakint embeds cache-free 1L-3L data and terminal tests use a pinned external
+# snapshot. Removed source references follow the existing FeynKit migration.
+# The maintained CI guide records these source boundaries; producer ownership
+# and the separate documentation cache contract are unchanged.
+digest = "b44d60f005be099ca7b0ff401bb9b81df00630a6"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

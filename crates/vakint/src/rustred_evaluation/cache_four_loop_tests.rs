@@ -420,8 +420,10 @@ fn four_loop_first38_fresh_cache_preserves_public_values_guards_and_limits() {
     );
     assert_eq!(report.total_roots, 38);
     assert_eq!(report.completed_roots, 38);
-    assert_eq!(report.newly_stored_roots, 38);
-    assert_eq!(report.reused_roots, 0);
+    // A later selected root may already be a strict completed descendant
+    // captured while reducing an earlier root in this fresh campaign.
+    assert_eq!(report.newly_stored_roots + report.reused_roots, 38);
+    assert!(report.newly_stored_roots > 0);
     assert_eq!(
         ordinary_statistics(),
         ordinary_before,
@@ -440,6 +442,29 @@ fn four_loop_first38_fresh_cache_preserves_public_values_guards_and_limits() {
     let bundle =
         SavedApplicationCacheBundle::open_generated(&output, &bindings, resolved.storage_limits)
             .unwrap();
+    let limits = rustred::reduction::ReductionLimits {
+        max_cached_coefficient_bytes: resolved.retained_coefficient_bytes / programs.len(),
+        ..options.native
+    };
+    for selected in &roots {
+        let program = &programs[selected.namespace];
+        let stored = bundle
+            .open_reader(program.binding())
+            .unwrap()
+            .lookup(
+                &ApplicationCacheKey::guarded_root(&selected.integral),
+                program.context(),
+            )
+            .unwrap()
+            .expect("every selected root must have a complete durable record");
+        program.validate_completed_record(&stored, limits).unwrap();
+        println!(
+            "CACHE_4L durable_selected_root namespace={} target={:?} guards={}",
+            selected.namespace,
+            selected.integral.powers(),
+            stored.nonzero_conditions.len()
+        );
+    }
     for (namespace, program) in programs.iter().enumerate() {
         let (native, _) = engine
             .four_loop_data()
@@ -457,10 +482,6 @@ fn four_loop_first38_fresh_cache_preserves_public_values_guards_and_limits() {
                     && !native.terminals().contains(&root.integral)
             })
             .expect("each family needs a nonterminal dotted control");
-        let limits = rustred::reduction::ReductionLimits {
-            max_cached_coefficient_bytes: resolved.retained_coefficient_bytes / programs.len(),
-            ..options.native
-        };
         let mut cache = program.new_cache(limits, CompletedCachePolicy::EvictLeastRecentlyUsed);
         let reference = program
             .reduce_guarded_root(&selected.integral, &mut cache, limits, None)

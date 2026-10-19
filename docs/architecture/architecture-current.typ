@@ -97,9 +97,13 @@ Infrastructure
 - Construction delegates startup to `StateLoadOption::load`, so Python and
   CLI sessions share state-folder, settings, boot-card, and logging setup.
 - Command strings run through `CliSession`; structured sample evaluation
-  uses the shared `EvaluateSamples` command. Full integrations currently use
-  `GammaLoopAPI.run("integrate ...")` (or the CLI), because the Python module
-  does not expose a supported structured `integrate()` method.
+  uses the shared `EvaluateSamples` command. The structured
+  `GammaLoopAPI.integrate()` method constructs the same `Integrate` command
+  as the CLI and returns a `PyIntegrationOutput`.
+- Runtime graph imports consume finalized GammaLoop artifacts. Standalone
+  CFF helpers instead parse raw DOT topology and call the shared FeynKit
+  CFF engine without constructing a model-bound runtime graph. Malformed
+  topology input produces a Python `ValueError`.
 - `GammaLoopAPI` is a PyO3 `unsendable` class: each instance remains bound
   to its Python thread, while native work invoked by it may still use
   internal parallelism.
@@ -123,12 +127,16 @@ The command model is stateful by design: commands mutate a long-lived
 - Root module wiring: `crates/gammalooprs/src/lib.rs`.
 - Initialization and shared symbol registries:
   `crates/gammalooprs/src/initialisation.rs`.
-- Diagram generation and filtering: `crates/gammalooprs/src/feyngen`.
-- Model and parameters: `crates/gammalooprs/src/model/mod.rs`.
+- Diagram generation and filtering: `crates/feynkit-generator`. GammaLoop adds
+  runtime caches through `crates/gammalooprs/src/feyngen/feynkit.rs`.
+- Canonical model records, validation, and stable entity identifiers:
+  `crates/feynkit-model`. GammaLoop's parameter-card, symbolic, and tensor
+  extensions live in `crates/gammalooprs/src/model/mod.rs`.
 - Graph domain: `crates/gammalooprs/src/graph/mod.rs` and submodules.
 - Momentum routing and parameterization: `crates/gammalooprs/src/momentum`.
-- CFF construction, numerator processing, and subtraction:
-  `crates/gammalooprs/src/cff`, `crates/gammalooprs/src/numerator`, and
+- Shared CFF construction: `crates/feynkit-cff`, called through GammaLoop's
+  runtime adapters in `crates/gammalooprs/src/cff`. Numerator processing and
+  subtraction live in `crates/gammalooprs/src/numerator` and
   `crates/gammalooprs/src/subtraction`.
 - Process orchestration: `crates/gammalooprs/src/processes/mod.rs`,
   `crates/gammalooprs/src/processes/process.rs`.
@@ -180,9 +188,10 @@ projection, marker, and backend-boundary invariants are documented in
 + `generate` command builds `ProcessDefinition` (from syntax or graph
   import).
 + `State::generate_integrand(s)` creates a generation thread pool.
-+ For generated processes, `feyngen::DiagramGenerator` constructs graphs
++ For generated processes, `feynkit_generator::Generator` constructs graphs
   from model vertex rules, filters them, and performs topology- and optional
-  numerator-aware grouping. Graph import supplies that boundary directly.
+  numerator-aware grouping. GammaLoop enriches the finalized FeynKit diagrams
+  with runtime caches. Graph import supplies that boundary directly.
 + `ProcessList::preprocess` delegates to the amplitude or cross-section
   pipeline. Those graph-level stages generate CFF/cut surfaces,
   loop-momentum bases and parametric integrand data, plus the configured
@@ -260,6 +269,11 @@ projection, marker, and backend-boundary invariants are documented in
 + Interactive integration status uses a renderer-neutral snapshot and a
   separately owned terminal event loop, as documented in the maintained
   #link("ratatui-integration-dashboard.typ")[integration dashboard architecture].
+
+Zero-loop integrands use a point integration domain: samples have unit
+weight and no coordinates, and sampling draws no random numbers. The grid
+adapter preserves native settings validation and delegates positive
+dimensions to the native continuous grid.
 
 === 3.1 Differential event-processing runtime
 <31-differential-event-processing-runtime>
@@ -443,6 +457,7 @@ Jet clustering is implemented natively in Rust with IRC-safe algorithms:
 - `anti_kt`
 
 and is validated against `fjcore` in tests.
+The minimum jet transverse momentum must be finite and nonnegative.
 
 == Persistence and Runtime Artifacts
 <persistence-and-runtime-artifacts>
@@ -467,10 +482,12 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 1`
+- State format is versioned with `state_manifest.toml` (`version = 2`
   currently).
-- `State::load` validates the manifest version and rejects states from
-  newer binaries.
+- Version 2 persists the canonical FeynKit model and graph format.
+  Version-1 states must be regenerated; states from newer binaries are
+  also rejected. The canonical model is loaded before Symbolica state
+  import and process reconstruction.
 - Saved-state detection is manifest-only. A non-empty folder without a
   manifest is classified as `Unmanifested` and startup treats its
   contents as blank scratch state; it is not loaded as a legacy state.

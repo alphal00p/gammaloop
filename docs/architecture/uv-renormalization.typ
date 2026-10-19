@@ -35,6 +35,11 @@ The backends share analytic operations and result types. Scheduling,
 dependency lookup, caching, and disconnected-component composition
 belong to the orchestrator because their traversal models differ.
 
+The caller supplies the canonical model explicitly to every backend.
+Forest construction, computation, and localization use that model for
+particle, mass, and rule queries; the model does not own the traversal or
+renormalization policy.
+
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
 The renormalization prescription belongs to the `Spinney`. A compute
