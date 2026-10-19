@@ -89,8 +89,9 @@ changes membership. These are reversed down-quark circuits with two identical
 chiral Z currents and two photon currents. Under the certified momentum map
 and requested symmetric polarizations, trace cyclicity and exchanging the two
 Z indices prove their equality without expanding the numerator or discarding
-vector/axial terms. Four independent exact component checks agree. A second
-native canonicalization also makes their prepared tensors exactly identical.
+vector/axial terms. Four independent exact component checks agree. Applying
+native canonicalization to the reparsed recorded tensors yields identical
+expressions; further canonicalization is idempotent in that parsed frame.
 
 The first unequal preparation places the scalar color trace `Nc` inside
 different chiral sums. Exact preparation previously substituted concrete color,
