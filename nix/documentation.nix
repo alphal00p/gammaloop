@@ -139,6 +139,7 @@ let
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
         (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
         (workspaceRoot + "/crates/linnet-py/tests")
+        (workspaceRoot + "/crates/feynkit-py/tests")
       ]
     );
   };

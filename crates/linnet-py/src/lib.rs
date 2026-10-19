@@ -203,6 +203,15 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         .modules
         .get("symbolica.community.graph")
         .expect("linnet StubInfo must contain the linnet module");
+    canonical_stub_from_module(module)
+}
+
+/// Render a gathered Linnet module without collecting the global inventory again.
+#[cfg(feature = "python_stubgen")]
+#[doc(hidden)]
+pub fn canonical_stub_from_module(
+    module: &pyo3_stub_gen::generate::Module,
+) -> pyo3_stub_gen::Result<String> {
     let mut exports = module
         .class
         .values()
