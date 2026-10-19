@@ -2837,8 +2837,8 @@ keys, although only six literal call-pair monomials are distinct. Identical
 calls therefore do not determine their complete source map. The earlier
 first-monomial prefix remains a separate historical qualification.
 
-These are construction and transport certificates, not an emitted mass
-condition. A subsequent mass projector must act once on each complete product;
+At this construction checkpoint these are transport certificates, not an
+emitted mass condition. A subsequent mass projector must act once on each complete product;
 projecting its child and cograph independently would change the operation.
 Full cancellation still requires parent key/domain association and exact
 component-aware transport of compact energies, including the implicit momentum
@@ -2847,11 +2847,126 @@ low-rank numerator image. The source construction retains compact energy and
 surface functions and separate numerator stores. It does not clear denominators
 across a complete sum or resolve the graph numerator catalog.
 
-The complete generic-field test module is byte-identical to its qualified
-`6a895deb` source; these later additions affect only the private D09 consumer.
-All production owners and the NLO inputs remain unchanged. Ordinary cases
-retain the 240-second failure bound, larger cases retain their full-main
-selection, and implementation CI remains disabled. Shared-host correctness
-measurements do not establish a route-performance ranking. Public complete-
-forest admission, complete two-loop emitted/dimensional/R2 matching and the
-larger scaling and performance matrices remain separate gates.
+This construction checkpoint retains its stated source and scope. Later
+qualifications below separately record the formal-dimensional full26 recheck,
+open-prefix/angular mechanisms and the actual emitted D09 mass condition.
+
+=== Qualified open-prefix and angular mechanisms
+
+Source `1c3d8c31` freshly passes five ordinary support cases in 1.366 seconds
+of JUnit suite time: the open D09 proper prefix, captured finite-Laurent row,
+fixed-component Wick projection, joint physical-four angular moments and exact
+Laurent-grid admission. They use the same retained executable and 2700-file
+source closure as the emitted-mass case below, with the unchanged 240-second
+failure bound.
+
+The actual dimensional child is attached to its doubled-quark cograph before
+projection. At the unit mass and scale point, independent F/H moments fix the
+signed proper insertion. Its two open coefficients obey
+$ P_d-P_4=C_F^2[(-5/epsilon-17)slash(p)+(10/epsilon+24)m I]. $
+Their mass trace is $C_F^2(5/epsilon+7)$ and does not define those coefficients.
+The mass-invisible $slash(p)-I$ control is independently nonzero: closing with
+$I-slash(p)$ gives $-24$, or $-2$ after division by twelve. Dropping the actual
+finite child's epsilon-one term loses $-C_F^2 pi^2/4=-4pi^2/9$ through its
+cograph pole. Both spin companions share that loss.
+
+Here $P_4$ changes the spin coefficient within the same formal kk/pk invariant
+family. It does not lift physical-four loop components into the dimensional
+angular integral. Complete native words and representation slots remain
+outside scalar Laurent truncation; the captured finite scalar coefficients
+retain their factorization and exact nonzero controls.
+
+The separate angular cases use the existing dimensional tensor projector to
+check fixed-component Wick signs, the $4/d$ moment and the joint rank-four
+moments of $k_4^2$, $l_4^2$ and $k_4 dot l_4$. Their early-four controls retain
+both epsilon-one/simple-pole and epsilon-two/double-pole finite losses, with a
+factorized spectator. These qualify the angular mechanism; they do not bind
+that lift to the actual complete D09 vacuum inputs.
+
+=== Fresh full26 field and mass closure
+
+After the finite-Laurent proof-owner extension, source `65c8048b` reruns the
+complete twenty-six-input field and mass case in 411.467 seconds of case time,
+under the unchanged 7200-second full-main bound. All twelve bare and fourteen
+proper inputs pass, with 497 full denominator/frame certificates and 104
+literal projector attachments. Every actual integrated finite parent mass
+projection is exactly zero. The generic-p kinetic and constant coefficients
+still give the independently specified $i a^2 w_2(slash(p)-m I)$ pole above,
+with physical mass symbolic and no auxiliary-scale substitution. The wrong
+gauge, simple-pole, constant-mass and matched-point controls retain actual
+nonzero witnesses; the quadratic control reaches the non-affine guard.
+Independent exact-rational review also reproduces the proper sum and $K_2$
+through its finite term. The 23477-byte bare reference input remains identical;
+no numerical backend integration is repeated.
+
+The subsequent changes through `1c3d8c31` affect only the private D09 test
+consumer and its grid regression. All other tracked files, the full26 driver
+and its shared parent/frame methods retain the qualified source closure.
+The full26 result belongs to its retained source-65 executable; it is not a
+fresh full26 run on the later child.
+
+=== Qualified D09 emitted matched mass condition
+
+Source `1c3d8c31` passes the actual bare and completed-child emitted D09 mass
+case in 118.283 seconds of JUnit suite time, run
+`70d1d7d8-f6b8-4eb2-a2c4-ec23c99d40dd`. Independent review binds its exact
+selector, retained executable, all 2700 source records and runtime artifacts.
+The qualified point has unit physical mass and rest velocity, with
+$p=m v$. This is a private D09 condition, not public mixed-prescription or
+complete emitted all-source admission.
+
+Before Phi, the actual raw frozen child grown by its parent cograph must equal
+the constructed physical-four source: one global numerator, identical full
+prescribed denominators, their loop/tree partition and the original frozen
+frame. The F/G call witness is a separate transport check. The actual final
+builder retains complete key/domain inventories and ordered arguments before
+cancellation; its captured chunks recompose the factorized final payload.
+The mass projector acts once on each complete child/cograph product.
+
+Every actual row is covered once. Bare coverage is 49 rows: 33 exact zeros and
+16 members in five signed coefficient classes. Completed coverage is 287 rows:
+195 exact zeros, 52 rows in eleven direct and one reversible-invariant group,
+and 40 rows in two exact linear triples. The five bare and seventeen completed
+parent chunks retain their full key incidences and ordered row ranges. Actual
+scalar-coefficient cross-relations select one disjoint two-triple cover; no
+key or body independence is inferred from a numerator image.
+
+Reversible whole-term views retain the complete invariants and products.
+The physical energy pair satisfies $C^2-B^2=1$, with $C>=1$, so the known unit
+rescaling and $t=B+C>0$, $B=(t-t^(-1))/2$, $C=(t+t^(-1))/2$ define an exact
+rational chart. Recursive syntax bounds give degrees at most two in each of
+the first two variables, four in the coupling, and t exponents from minus
+four to four. Conceptually multiplying by $t^4$ gives separate degrees
+$(2,2,4,8)$. Each full $3 times 3 times 5 times 9=405$ distinct-node exact QQ(i)
+grid is unisolvent. The two original factorized inputs are therefore exactly
+zero, with 810 zero checks and 810 separate original-input-plus-one equals-one
+checks. These controls concern the unit-rescaled chart; the independent native
+mass insertion supplies the physical nonvacuity check.
+
+Original group-sum-plus-one controls are also retained before compaction.
+Where whole-expression collection obscures the unit, the existing exact
+one-coupling owner collects only the actual registered coupling G. Its constant
+row is literally one and its complete G-free coefficient of $G^4$ is exactly
+zero; all other graph factors remain opaque. Exact row recomposition binds
+this proof to the original input. No graph numerator or Phi polynomial is
+materialized, and no common CFF denominator is cleared.
+
+The separate observation child `28bdf6aa` passes the same mass case in
+121.351 seconds. Before any physical diagnostic normalization it retains
+exactly three original signed analytic inputs: the bare two-loop sector, the
+proper-local two-loop sector, and a one-loop proper-finite sector with the
+child frame frozen. Their complete active/frozen frames and provenance remain
+beside their factorized numerators. Only the finite sector carries epsilon,
+the renormalization scale and the consumed-loop marker. All three analytic
+payloads differ from their physical local expressions. This records the actual
+integration policy without introducing another integration path.
+
+Full R2 still requires the physical-four angular lift on the actual bare,
+proper-local and frozen-finite vacuum inputs, including their dimensional
+angular projectors, physical kernel measures and required child epsilon depth.
+A private D09 W observation can retain those inputs and their provenance; it
+is not that identity. An independent IR-safe rearrangement or uniform UV/IR
+exchange condition is also required. Neither the emitted mass zero nor the
+formal spin companion establishes general off-shell HV/CDR equivalence.
+Public complete-forest admission and the larger scaling/performance matrices
+remain separate. Shared-host case times are correctness records, not rankings.
