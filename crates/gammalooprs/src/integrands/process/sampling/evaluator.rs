@@ -11,6 +11,7 @@ use eyre::eyre;
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::{Atom, AtomView},
+    domains::float::Complex as SymComplex,
     prelude::*,
 };
 
@@ -115,6 +116,7 @@ impl SamplingExpressionEvaluator {
                 OptimizationSettings::default(),
                 dual_config,
                 &EvaluatorSettings::default(),
+                None,
             )?;
             // Map rational coefficients once, before any source draw. Physical
             // evaluators retain an empty cache and their existing three lanes.
@@ -123,7 +125,7 @@ impl SamplingExpressionEvaluator {
                 .as_ref()
                 .expect("new sampling evaluators retain their rational program")
                 .clone()
-                .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+                .map_coeff(&|r| SymComplex::new(F::from(&r.re), F::from(&r.im)));
             evaluator.sampling_fixed256.set(program);
             Ok(evaluator)
         };
@@ -668,7 +670,7 @@ mod tests {
         .unwrap();
         assert!(bytes.is_empty());
         let (decoded, _): (
-            RuntimeCache<ExpressionEvaluator<Complex<F<SamplingFloat>>>>,
+            RuntimeCache<ExpressionEvaluator<SymComplex<F<SamplingFloat>>>>,
             _,
         ) = bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
         assert!(decoded.as_ref().is_none());

@@ -252,6 +252,8 @@ momenta = [[14.0,-6.6,-40.0,0.0],[-43.0,15.2,33.0,0.0],[-17.9,-50.0,11.8,0.0],"d
 helicities = [0,0,0,0]
 [subtraction]
 disable_threshold_subtraction = false
+[subtraction.overlap_settings]
+enable_heuristics = false
 [stability]
 rotation_axis = [{ type = "euler_angles", alpha = 0.1, beta = 0.2, gamma = 0.3 }]
 levels = [
@@ -402,6 +404,240 @@ seed = 20260929
             (left - right).abs() < 5.0 * left_error.hypot(right_error),
             "Box4E CFF/LTD integral disagreement: {cff:?}, {ltd:?}",
         );
+    }
+    clean_test(&root);
+    Ok(())
+}
+
+#[test]
+fn overlap_center_objectives_preserve_the_integrated_amplitude() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    use gammalooprs::{
+        integrands::process::ProcessIntegrand, settings::runtime::OverlapCenterObjective,
+    };
+
+    let test_name = "overlap_center_objectives";
+    let root = get_tests_workspace_path().join(test_name);
+    let mut cli = get_test_cli(None, &root, Some(test_name.to_owned()), true)?;
+    let graph_path = root.join("triangle_box.dot");
+    // The UV-finite triangle-box topology has an asymmetric mass assignment.
+    // Its off-shell external legs also avoid massless soft/collinear divergences.
+    // Unequal routing norms distinguish energy depth from geometric clearance;
+    // massless focal segments leave a genuine optimal face for the signed sum.
+    std::fs::write(
+        &graph_path,
+        r#"digraph triangle_box {
+            num=1; overall_factor=1;
+            node [num=1]; edge [num=1];
+            p1 [style=invis]; p2 [style=invis]; p3 [style=invis];
+            p1 -> A:0 [id=0, particle=scalar_0];
+            C:1 -> p2 [id=1, particle=scalar_0];
+            D:2 -> p3 [id=2, particle=scalar_0];
+            A -> B [id=3, particle=scalar_0];
+            B -> C [id=4, particle=scalar_1];
+            C -> D [id=5, particle=scalar_0];
+            D -> E [id=6, particle=scalar_2, lmb_id=0];
+            B -> E [id=7, particle=scalar_0, lmb_id=1];
+            E -> A [id=8, particle=scalar_1];
+        }"#,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model scalars-default.json",
+            "set model mass_scalar_1=0.5 mass_scalar_2=1.0",
+            "set global kv global.generation.evaluator.compile=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=true global.generation.tropical_subgraph_table.disable_tropical_generation=true",
+            r#"set default-runtime string '
+[general]
+evaluator_method = "SummedFunctionMap"
+integral_unit = "none"
+disable_flux_factor = true
+[kinematics]
+e_cm = 2.5
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[2.5,1.0,0.0,0.0],[3.0,2.0,0.0,0.0],"dependent"]
+helicities = [0,0,0]
+[subtraction]
+disable_threshold_subtraction = false
+[subtraction.overlap_settings]
+enable_heuristics = false
+[stability]
+rotation_axis = []
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+[integrator]
+integrated_phase = "imag"
+n_start = 2500
+n_increase = 2500
+n_max = 75000
+n_bins = 16
+min_samples_for_update = 250
+seed = 20260927
+'"#,
+            &format!(
+                "import graphs {} -p triangle_box -i scalar",
+                graph_path.display()
+            ),
+            "generate existing -p triangle_box -i scalar",
+            "duplicate integrand -p triangle_box -i scalar --output_process_name chebyshev --output_integrand_name scalar",
+            "duplicate integrand -p triangle_box -i scalar --output_process_name min_sum --output_integrand_name scalar",
+        ],
+    )?;
+
+    let objectives = [
+        OverlapCenterObjective::MaxMinDepth,
+        OverlapCenterObjective::RelaxedChebyshev,
+        OverlapCenterObjective::MinSum,
+    ];
+    for (process, objective) in objectives.into_iter().enumerate() {
+        cli.state
+            .process_list
+            .get_integrand_mut(process, "scalar")?
+            .get_mut_settings()
+            .subtraction
+            .overlap_settings
+            .objective = objective;
+    }
+    // The existing correlated integration owner adapts a single grid and evaluates
+    // all three amplitudes on exactly the same samples, with the same seed/settings.
+    let mut command = scalar_topology_integrate_command(
+        test_name,
+        "correlated",
+        &[
+            ("triangle_box", "scalar"),
+            ("chebyshev", "scalar"),
+            ("min_sum", "scalar"),
+        ],
+        &[],
+    );
+    command.n_cores = Some(3);
+    command.no_stream_iterations = true;
+    command.no_stream_updates = true;
+    let result = command.run(&mut cli.state, &cli.cli_settings)?;
+    assert_eq!(result.slots.len(), 3);
+    let mut centers = Vec::new();
+    let mut estimates = Vec::new();
+    for (process, name) in ["triangle_box", "chebyshev", "min_sum"]
+        .into_iter()
+        .enumerate()
+    {
+        // Integrate warmed these exact owners before cloning its workers. Reading
+        // them after the run checks centers actually used, without a second solve.
+        let integrand = cli
+            .state
+            .process_list
+            .get_integrand_mut(process, "scalar")?;
+        let ProcessIntegrand::Amplitude(amplitude) = integrand else {
+            panic!("expected the scalar triangle-box amplitude")
+        };
+        let [graph] = amplitude.data.graph_terms.as_slice() else {
+            panic!("expected one graph")
+        };
+        let overlap = &graph.threshold_counterterm.overlap;
+        assert_eq!(overlap.existing_esurfaces.len(), 6);
+        let [group] = overlap.overlap_groups.as_slice() else {
+            panic!("all six thresholds must have one common overlap")
+        };
+        assert_eq!(group.existing_esurfaces.len(), 6);
+        assert!(group.complement.is_empty());
+        centers.push(
+            group
+                .center
+                .0
+                .iter()
+                .flat_map(|momentum| [momentum.px.0, momentum.py.0, momentum.pz.0])
+                .collect::<Vec<_>>(),
+        );
+
+        let estimate = result
+            .slot(&format!("{name}@scalar"))
+            .expect("each objective must have an integration slot")
+            .integral
+            .clone();
+        assert_eq!(estimate.neval, 75_000);
+        assert!(estimate.result.re.0.is_finite() && estimate.result.im.0.is_finite());
+        estimates.push(estimate);
+    }
+
+    // This short regression resolves the dominant imaginary part to 15%. The
+    // smaller real part has a separate absolute error budget on the same physical
+    // amplitude scale; neither error is allowed to hide a discrepancy in the other.
+    let amplitude_scale = estimates
+        .iter()
+        .map(|estimate| estimate.result.im.0.abs())
+        .sum::<f64>()
+        / 3.0;
+    assert!(amplitude_scale > 1.0e-6);
+    for estimate in &estimates {
+        assert!(
+            estimate.error.im.0.is_finite()
+                && estimate.error.im.0 > 0.0
+                && estimate.error.im.0 < 0.15 * estimate.result.im.0.abs(),
+            "imaginary precision: {estimate:?}"
+        );
+        assert!(
+            estimate.error.re.0.is_finite()
+                && estimate.error.re.0 > 0.0
+                && estimate.error.re.0 < 0.20 * amplitude_scale,
+            "real precision: {estimate:?}"
+        );
+    }
+
+    // Independent geometry: energy depth fixes k_x=-2/3. The optimal relaxed
+    // radius is 1/(2+sqrt(2)), requiring k_x<=-3/4; its flat face admits the
+    // signed-sum optimum k_x=-3/4. Do not compare solver-dependent free coordinates.
+    assert!((centers[0][0] + 2.0 / 3.0).abs() < 1.0e-4);
+    assert!(centers[1][0] <= -0.75 + 1.0e-5);
+    assert!((centers[2][0] + 0.75).abs() < 1.0e-4);
+    let optimal_radius = 1.0 / (2.0 + 2.0_f64.sqrt());
+    for (index, center) in centers.iter().enumerate() {
+        let k = center[0];
+        let l = center[3];
+        // P=|k+l+1|+sqrt(1+k²)+|l|-2.5, with L_P=2+sqrt(2).
+        let radius = (2.5 - (k + l + 1.0).abs() - (1.0 + k * k).sqrt() - l.abs()) * optimal_radius;
+        if index == 0 {
+            assert!(radius < optimal_radius - 0.005);
+        } else {
+            assert!(radius >= optimal_radius - 1.0e-6);
+        }
+    }
+    for left in 0..3 {
+        for right in 0..left {
+            let separation = centers[left]
+                .iter()
+                .zip(&centers[right])
+                .map(|(a, b)| (a - b).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            assert!(
+                separation > 0.0025,
+                "objectives must use meaningfully different centers: {centers:?}"
+            );
+            for (a, b, a_error, b_error) in [
+                (
+                    estimates[left].result.re.0,
+                    estimates[right].result.re.0,
+                    estimates[left].error.re.0,
+                    estimates[right].error.re.0,
+                ),
+                (
+                    estimates[left].result.im.0,
+                    estimates[right].result.im.0,
+                    estimates[left].error.im.0,
+                    estimates[right].error.im.0,
+                ),
+            ] {
+                assert!(
+                    (a - b).abs() <= 5.0 * a_error.hypot(b_error),
+                    "center objectives changed the integral: {estimates:?}"
+                );
+            }
+        }
     }
     clean_test(&root);
     Ok(())

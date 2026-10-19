@@ -65,18 +65,6 @@
           };
         })
       else drv;
-    overrideVendorCargoPackage = package: drv:
-      if package.name == "symbolica" && package.version == "3.0.0"
-      then
-        drv.overrideAttrs (old: {
-          # Symbolica watches .git/HEAD, which its published crate omits. A stable
-          # file prevents Cargo from rebuilding it whenever Nix restores artifacts.
-          postInstall = (old.postInstall or "") + ''
-            mkdir -p "$out/.git"
-            printf 'ref: refs/heads/nix-vendor\n' > "$out/.git/HEAD"
-          '';
-        })
-      else drv;
   };
 
   nonCargoBuildSources = lib.fileset.unions [

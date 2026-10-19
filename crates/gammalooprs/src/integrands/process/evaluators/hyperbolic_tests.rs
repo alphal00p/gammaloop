@@ -366,6 +366,7 @@ fn check_backend<T: FloatLike>(
         // compared directly with its MPC reference.
         None,
         &EvaluatorSettings::default(),
+        None,
     )
     .unwrap();
     let real_arguments = domain == ArgumentDomain::Real;

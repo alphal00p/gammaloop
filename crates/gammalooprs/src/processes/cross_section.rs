@@ -823,9 +823,10 @@ impl CrossSection {
         &self,
         path: impl AsRef<Path>,
         settings: &crate::processes::StandaloneExportSettings,
+        model_for_settings: &impl Fn(&RuntimeSettings) -> Result<Model>,
     ) -> Result<()> {
         if let Some(integrand) = &self.integrand {
-            integrand.export_standalone(path, settings)?;
+            integrand.export_standalone(path, settings, model_for_settings)?;
         } else {
             return Err(eyre!(
                 "Cannot export standalone cross section {} without integrand",
@@ -2354,6 +2355,7 @@ impl CrossSectionGraph {
             optimization_settings,
             dual_shape.map(|shape| (shape, Vec::new())),
             evaluator_settings,
+            None,
         )?
         .into_eager_only();
 
@@ -2409,6 +2411,7 @@ impl CrossSectionGraph {
             optimization_settings,
             dual_shape.map(|shape| (shape, Vec::new())),
             evaluator_settings,
+            None,
         )?
         .into_eager_only();
 
@@ -4650,6 +4653,7 @@ pub(crate) fn build_derivative_structure(
         evaluator_settings.optimization_settings(),
         None,
         evaluator_settings,
+        None,
     )
     .unwrap()
     .into_eager_only()
@@ -6077,6 +6081,7 @@ mod tests {
                             super::OptimizationSettings::default(),
                             None,
                             &super::EvaluatorSettings::default(),
+                            None,
                         )
                         .unwrap_or_else(|error| {
                             panic!(

@@ -717,6 +717,46 @@ local_uv_cts_from_expanded_4d_integrands = true
     }
 
     #[test]
+    fn runtime_settings_snapshot_exposes_overlap_objectives() {
+        use gammalooprs::settings::runtime::OverlapCenterObjective;
+        Python::initialize();
+        let settings: RuntimeSettings = toml::from_str(
+            "[subtraction.overlap_settings]\nobjective='min_sum'\nenable_heuristics=false",
+        )
+        .unwrap();
+        let restored: RuntimeSettings =
+            toml::from_str(&render_smart_toml(&settings).unwrap()).unwrap();
+        assert_eq!(
+            restored.subtraction.overlap_settings.objective,
+            OverlapCenterObjective::MinSum
+        );
+        let snapshot =
+            PySettingsValue::from_settings(&restored, "runtime settings", "runtime").unwrap();
+        Python::attach(|py| {
+            let overlap = snapshot
+                .to_dict(py)
+                .unwrap()
+                .get_item("subtraction")
+                .unwrap()
+                .get_item("overlap_settings")
+                .unwrap();
+            assert_eq!(
+                overlap
+                    .get_item("objective")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "min_sum"
+            );
+            assert!(!overlap
+                .get_item("enable_heuristics")
+                .unwrap()
+                .extract::<bool>()
+                .unwrap());
+        });
+    }
+
+    #[test]
     fn runtime_settings_wrapper_exposes_canonical_sampling_names() {
         use gammalooprs::settings::runtime::{
             MultiChannelingSettings, SamplingChannelDefinition, SamplingChannelWeight,

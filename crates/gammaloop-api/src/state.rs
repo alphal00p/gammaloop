@@ -1625,9 +1625,9 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
-// Version 19 stores ordered generated representations and their separate expression,
-// evaluator and denominator payloads using main's evaluator format. Reject older
-// main and combined-factorization states before importing symbolic data.
+// Version 20 adds Symbolica-owned exact parameter rows, shared-row execution and
+// native retained-function derivatives to the ordered representation payloads.
+// Reject the LTD-only version 19 and earlier combined formats before symbolic import.
 // Version 15 gives each orientation-specific Fermi sector a one-entry evaluator
 // catalogue indexed locally from zero. Older full-catalogue sectors must be regenerated.
 // Version 14 stores one source-frame sign per generated CFF and rational component,
@@ -1657,7 +1657,7 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // regenerated rather than decoded as the new expression type.
 // Local UV forest contributions remain compatible with this layout because
 // they are combined into one persisted integrand before evaluator construction.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 19;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 20;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

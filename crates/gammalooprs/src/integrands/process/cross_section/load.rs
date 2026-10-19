@@ -23,12 +23,15 @@ use crate::integrands::process::standalone;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
-use symbolica::evaluate::{FunctionRegistrationOptions, InliningPolicy};
+use symbolica::evaluate::{
+    FunctionRegistrationOptions, InliningPolicy, ParameterRowEvaluator, ParameterRowPlan,
+    ParameterRowWorkspace, ParameterRows,
+};
 use symbolica::{prelude::*, state::StateMap};
 
-// Reject archives from the combined row-program format before importing symbols.
-// This format stores independent native CFF and LTD evaluator payloads.
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 20;
+// Exact evaluator parameter rows are separate from physical runtime inputs.
+// Reject older payloads before importing symbols or rebuilding native functions.
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 21;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -273,7 +276,7 @@ pub struct StandaloneIndexedGenericEvaluatorArchive<A = Vec<u8>> {
 pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) production_orientation_ids: Vec<usize>,
-
+    pub(crate) parametric_rows: Option<ParameterRows<A>>,
     pub(crate) single_parametric: StandaloneGenericEvaluatorArchive<A>,
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
@@ -286,11 +289,14 @@ pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneGenericEvaluatorArchive<A = Vec<u8>> {
+    pub(crate) parameter_rows: Option<ParameterRows<A>>,
     pub(crate) exprs: Vec<A>,
     /// Parameters used only by evaluators that are not built from the graph-wide parameter map.
     pub(crate) parameter_override: Option<Vec<A>>,
     pub(crate) additional_fn_map_entries: Vec<SerializedFnMapEntry<A>>,
     pub(crate) dual_shape: Option<Vec<Vec<usize>>>,
+    #[serde(default)]
+    pub(crate) zero_components: Vec<(usize, usize)>,
 }
 
 type SerializedFnMapEntry<A> = (A, A, Vec<A>, Vec<A>, InliningPolicy, bool);
@@ -382,7 +388,9 @@ fn apply_fn_map_entries(
             all_replacements.push(Replacement::new(lhs.to_pattern(), rhs));
             continue;
         }
-        let options = FunctionRegistrationOptions::new().inlining(inlining);
+        let options = FunctionRegistrationOptions::new()
+            .inlining(inlining)
+            .prune_unused_arguments(true);
         let name = match lhs.as_view() {
             AtomView::Fun(function) => Some(function.get_symbol()),
             AtomView::Var(variable) if tags.is_empty() => Some(variable.get_symbol()),
@@ -431,7 +439,7 @@ fn apply_fn_map_entries(
 
 #[allow(
     clippy::type_complexity,
-    reason = "Reconstruction returns the existing expression, replacement, program and output tuple."
+    reason = "Reconstruction returns the evaluator and its optional library-owned row plan."
 )]
 fn build_evaluator<A: ImportWithMap>(
     payload: StandaloneGenericEvaluatorArchive<A>,
@@ -439,11 +447,16 @@ fn build_evaluator<A: ImportWithMap>(
     mut fn_map_entries: Vec<ParsedFnMapEntry>,
     state_map: &StateMap,
     iterate: bool,
-) -> Result<LoadedGenericEvaluator> {
+    staged_rows: Option<&ParameterRows<Atom>>,
+) -> Result<(
+    LoadedGenericEvaluator,
+    Option<(ParameterRowPlan, ExpressionEvaluator<Complex<f64>>)>,
+)> {
     let optimization_settings = OptimizationSettings::new()
         .horner_iterations(10)
         .cores(10)
         .abort_check(None);
+    let cpe_iterations = None;
     let exprs = payload
         .exprs
         .iter()
@@ -452,74 +465,128 @@ fn build_evaluator<A: ImportWithMap>(
     let parameter_override = payload
         .parameter_override
         .as_ref()
-        .map(|parameters| {
-            parameters
+        .map(|params| {
+            params
                 .iter()
-                .map(|parameter| parameter.import_with_map(state_map))
+                .map(|param| param.import_with_map(state_map))
                 .collect::<Result<Vec<_>>>()
         })
         .transpose()?;
     let params = parameter_override.as_deref().unwrap_or(graph_params);
-
     if params.iter().collect::<HashSet<_>>().len() != params.len() {
         return Err(eyre!("Standalone evaluator parameters must be distinct"));
     }
 
-    fn_map_entries.extend(parse_fn_map_entries(
-        &payload.additional_fn_map_entries,
-        state_map,
-    )?);
-    if payload.dual_shape.is_some() {
-        // Match native construction: stock Symbolica vectorizes inlined functions.
-        for entry in &mut fn_map_entries {
-            if !entry.5 {
-                entry.4 = InliningPolicy::Always;
-            }
-        }
-    }
+    let additional_reps = parse_fn_map_entries(&payload.additional_fn_map_entries, state_map)?;
+    fn_map_entries.extend(additional_reps);
+
     let (replacements, all_replacements, fn_map) = apply_fn_map_entries(fn_map_entries)?;
-    let build = |expressions: &[Atom]| {
-        let expressions = expressions
+
+    let parameter_rows = payload
+        .parameter_rows
+        .as_ref()
+        .map(|rows| {
+            let parameters = rows
+                .parameters()
+                .iter()
+                .map(|parameter| parameter.import_with_map(state_map))
+                .collect::<Result<Vec<_>>>()?;
+            ParameterRows::new(parameters, rows.rows().to_vec()).map_err(|error| eyre!(error))
+        })
+        .transpose()?;
+    if parameter_rows.is_some() && staged_rows.is_some() {
+        return Err(eyre!(
+            "A standalone evaluator cannot have both summed and staged parameter rows"
+        ));
+    }
+    let source_parameters = parameter_rows.as_ref().or(staged_rows).map(|rows| {
+        let mut source = params.to_vec();
+        source.extend_from_slice(rows.parameters());
+        source
+    });
+    let source_params = source_parameters.as_deref().unwrap_or(params);
+    if staged_rows.is_some_and(|rows| rows.rows().is_empty()) {
+        return Err(eyre!(
+            "A physical residue catalog must contain at least one row"
+        ));
+    }
+    let bound_positions = staged_rows
+        .map(|rows| rows.input_positions(source_params))
+        .transpose()
+        .map_err(|error| eyre!(error))?;
+    let build = |roots: &[Atom]| -> Result<ExpressionEvaluator<Complex<Rational>>> {
+        let expressions = roots
             .iter()
             .map(|expr| expr.replace_multiple(&replacements))
             .collect::<Vec<_>>();
-        Atom::evaluator_multiple(&expressions, params)
+        let mut builder = Atom::evaluator_multiple(&expressions, source_params)
             .function_map(fn_map.clone())
-            .optimization_settings(optimization_settings.clone())
-            .build()
-            .map_err(|error| eyre!(error))
+            .optimization_settings(optimization_settings.clone());
+        if let Some(rows) = &parameter_rows {
+            builder = builder
+                .sum_over_parameters(rows.parameters(), rows.rows())
+                .map_err(|error| eyre!(error))?;
+        }
+        builder.build().map_err(|error| eyre!(error))
     };
-    let mut evaluator = if iterate {
-        let mut evaluator: Option<ExpressionEvaluator<Complex<Rational>>> = None;
+    let mut evaluator = if iterate && payload.dual_shape.is_none() {
+        let mut tree: Option<ExpressionEvaluator<Complex<Rational>>> = None;
         for expr in &exprs {
             let next = build(std::slice::from_ref(expr))?;
-            evaluator = Some(if let Some(mut evaluator) = evaluator {
-                evaluator.merge(next, None).map_err(|error| eyre!(error))?;
-                evaluator
+            tree = Some(if let Some(mut merged) = tree {
+                merged
+                    .merge(next, cpe_iterations)
+                    .map_err(|error| eyre!(error))?;
+                merged
             } else {
                 next
             });
         }
-        evaluator.ok_or_else(|| eyre!("No expressions in evaluator payload"))?
+        tree.ok_or_else(|| eyre!("No expressions in evaluator payload"))?
     } else {
         build(&exprs)?
     };
-    if let Some(shape) = &payload.dual_shape {
-        evaluator = evaluator
-            .vectorize(&Dualizer::new(
-                HyperDual::<Complex<Rational>>::new(shape.clone()),
-                Vec::new(),
-            ))
-            .map_err(|error| eyre!(error))?;
-    }
-    let output_len = evaluator.get_output_len();
-    let evaluator =
-        evaluator.map_coeff(&|value| Complex::new(value.re.to_f64(), value.im.to_f64()));
+    let shared = if let Some(rows) = staged_rows {
+        let mut staged = ParameterRowEvaluator::new(
+            evaluator,
+            bound_positions.expect("validated staged row positions"),
+            rows.rows().to_vec(),
+        )
+        .map_err(|error| eyre!(error))?;
+        if let Some(shape) = &payload.dual_shape {
+            staged = staged
+                .vectorize(&Dualizer::new(
+                    HyperDual::<Complex<Rational>>::new(shape.clone()),
+                    payload.zero_components.clone(),
+                ))
+                .map_err(|error| eyre!(error))?;
+        }
+        let (plan, prelude, body) = staged.into_parts();
+        evaluator = body;
+        Some((
+            plan,
+            prelude.map_coeff(&|value| Complex::new(value.re.to_f64(), value.im.to_f64())),
+        ))
+    } else {
+        if let Some(shape) = &payload.dual_shape {
+            evaluator = evaluator
+                .vectorize(&Dualizer::new(
+                    HyperDual::<Complex<Rational>>::new(shape.clone()),
+                    payload.zero_components.clone(),
+                ))
+                .map_err(|error| eyre!(error))?;
+        }
+        None
+    };
+    let result = vec![Complex::new(0.0, 0.0); evaluator.get_output_len()];
     Ok((
-        exprs,
-        all_replacements,
-        evaluator,
-        vec![Complex::new(0.0, 0.0); output_len],
+        (
+            exprs,
+            all_replacements,
+            evaluator.map_coeff(&|value| Complex::new(value.re.to_f64(), value.im.to_f64())),
+            result,
+        ),
+        shared,
     ))
 }
 
@@ -555,16 +622,35 @@ fn build_stack<A: ImportWithMap>(
             parsed_fn_map_entries.clone(),
             state_map,
             iterate,
-        )?;
+            None,
+        )
+        .map(|(evaluator, _)| evaluator)?;
         println!(
             "[timing] build_evaluator {graph_name}::{label}::{component} took {:?}",
             started.elapsed()
         );
         Ok(evaluator)
     };
-    let single_parametric =
-        timed_build(stack.single_parametric, false, "single_parametric", params)?;
+    let parametric_rows = stack
+        .parametric_rows
+        .map(|rows| rows.try_map_parameters(|parameter| parameter.import_with_map(state_map)))
+        .transpose()?;
+    let started = Instant::now();
+    let (single_parametric, single_parametric_shared) = build_evaluator(
+        stack.single_parametric,
+        params,
+        parsed_fn_map_entries.clone(),
+        state_map,
+        false,
+        parametric_rows.as_ref(),
+    )?;
+    println!(
+        "[timing] build_evaluator {graph_name}::{label}::single_parametric took {:?}",
+        started.elapsed()
+    );
     Ok(LoadedStandaloneEvaluatorStack {
+        single_parametric_shared,
+        single_parametric_workspace: ParameterRowWorkspace::default(),
         explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
         production_orientation_ids: stack.production_orientation_ids,
         representative_input: stack.representative_input,
@@ -1084,7 +1170,10 @@ pub(crate) fn build_threshold_multiplier_collection<A: ImportWithMap + Clone + P
     let evaluators = collection
         .evaluators
         .into_iter()
-        .map(|evaluator| build_evaluator(evaluator, &parameters, Vec::new(), state_map, false))
+        .map(|evaluator| {
+            build_evaluator(evaluator, &parameters, Vec::new(), state_map, false, None)
+                .map(|(evaluator, _)| evaluator)
+        })
         .collect::<Result<Vec<_>>>()?;
 
     Ok(LoadedStandaloneThresholdMultiplierCollection {
@@ -1162,6 +1251,8 @@ pub struct LoadedStandaloneIteratedCollection<T> {
 }
 
 pub struct LoadedStandaloneEvaluatorStack {
+    pub single_parametric_shared: Option<(ParameterRowPlan, ExpressionEvaluator<Complex<f64>>)>,
+    single_parametric_workspace: ParameterRowWorkspace<Complex<f64>>,
     pub explicit_orientation_sum_only: bool,
     pub production_orientation_ids: Vec<usize>,
     pub representative_input: Vec<Complex<f64>>,
@@ -1175,20 +1266,28 @@ pub struct LoadedStandaloneEvaluatorStack {
 }
 
 impl LoadedStandaloneEvaluatorStack {
-    /// Evaluate the selected native program at physical inputs. CFF orientation
+    /// Evaluate the complete source-row sum at physical inputs. CFF orientation
     /// selection, where supported, remains encoded in those physical inputs.
     pub fn evaluate_single_parametric(
         &mut self,
         physical_input: &[Complex<f64>],
     ) -> Result<Vec<Complex<f64>>> {
-        let evaluator = &mut self.single_parametric.2;
-        if physical_input.len() != evaluator.get_input_len() {
-            return Err(eyre!(
-                "Physical input length does not match standalone evaluator"
-            ));
+        let body = &mut self.single_parametric.2;
+        let mut result = vec![Complex::new(0.0, 0.0); body.get_output_len()];
+        if let Some((plan, prelude)) = &mut self.single_parametric_shared {
+            plan.evaluate_with(
+                physical_input,
+                &mut result,
+                &mut self.single_parametric_workspace,
+                |value| Complex::new(value.to_f64(), 0.0),
+                |input, output| prelude.try_evaluate(input, output),
+                |input, output| body.try_evaluate(input, output),
+            )
+            .map_err(|error| eyre!(error))?;
+        } else {
+            body.try_evaluate(physical_input, &mut result)
+                .map_err(|error| eyre!(error))?;
         }
-        let mut result = vec![Complex::new(0.0, 0.0); evaluator.get_output_len()];
-        evaluator.evaluate(physical_input, &mut result);
         Ok(result)
     }
 }
@@ -1316,7 +1415,9 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
                             parsed_fn_map_entries.clone(),
                             state_map,
                             false,
-                        )?;
+                            None,
+                        )
+                        .map(|(evaluator, _)| evaluator)?;
                         println!(
                             "[timing] build_evaluator {}::{}.slot[{}] took {:?}",
                             graph.graph_name,
@@ -1455,7 +1556,7 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
                                 parse_fn_map_entries(&graph.fn_map_entries, state_map)?,
                                 state_map,
                                 false,
-                        )?;
+                             None).map(|(evaluator, _)| evaluator)?;
                             println!(
                                 "[timing] build_evaluator {}::counterterm[{cut_id}]::pass_two_evaluator[{order}] took {:?}",
                                 graph.graph_name,
@@ -1609,6 +1710,287 @@ mod threshold_multiplier_tests {
     use super::*;
 
     #[test]
+    fn standalone_exact_row_payload_restores_sum_and_retained_derivatives() -> Result<()> {
+        let params = [
+            parse_lit!(standalone_exact_rows::x),
+            parse_lit!(standalone_exact_rows::m),
+        ];
+        let coefficient = parse_lit!(standalone_exact_rows::c);
+        let u = parse_lit!(standalone_exact_rows::u);
+        let v = parse_lit!(standalone_exact_rows::v);
+        let numerator = symbol!("standalone_exact_rows::numerator");
+        let print = |atom: &Atom| {
+            atom.printer(symbolica::printer::PrintOptions::file())
+                .to_string()
+        };
+        let root = Symbol::IF.call_args([
+            coefficient.clone(),
+            &coefficient * numerator.call_args(params.clone()),
+            Atom::Zero,
+        ]);
+        let rows = ParameterRows::new(
+            vec![print(&coefficient)],
+            vec![
+                vec![Rational::zero()],
+                vec![Rational::new(1, 4)],
+                vec![Rational::new(1, 2)],
+                vec![Rational::new(1, 2)],
+            ],
+        )
+        .map_err(|error| eyre!(error))?;
+        for inlining in [InliningPolicy::Always, InliningPolicy::Never] {
+            let payload = StandaloneGenericEvaluatorArchive {
+                parameter_rows: Some(rows.clone()),
+                exprs: vec![print(&root), print(&params[0])],
+                parameter_override: None,
+                additional_fn_map_entries: vec![(
+                    print(&numerator.call_args([u.clone(), v.clone()])),
+                    print(&(u.pow(2) + v.pow(Atom::num(Rational::new(1, 2))))),
+                    Vec::new(),
+                    vec![print(&u), print(&v)],
+                    inlining,
+                    false,
+                )],
+                dual_shape: Some(vec![vec![0], vec![1]]),
+                zero_components: vec![(1, 1)],
+            };
+            let json: StandaloneGenericEvaluatorArchive<String> =
+                serde_json::from_slice(&serde_json::to_vec(&payload)?)?;
+            let bytes = bincode::encode_to_vec(&payload, bincode::config::standard())?;
+            let (binary, consumed): (StandaloneGenericEvaluatorArchive<String>, _) =
+                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+            assert_eq!(consumed, bytes.len());
+            for restored in [json, binary] {
+                assert_eq!(restored.parameter_rows.as_ref(), Some(&rows));
+                for dual in [false, true] {
+                    let mut payload = restored.clone();
+                    if !dual {
+                        payload.dual_shape = None;
+                        payload.zero_components.clear();
+                    }
+                    for iterate in [false, true] {
+                        let (_, _, mut evaluator, mut output) = build_evaluator(
+                            payload.clone(),
+                            &params,
+                            Vec::new(),
+                            &StateMap::default(),
+                            iterate,
+                            None,
+                        )
+                        .map(|(evaluator, _)| evaluator)?;
+                        let input = if dual {
+                            vec![2.0, 1.0, 0.0, 0.0]
+                        } else {
+                            vec![2.0, 0.0]
+                        };
+                        let input = input
+                            .into_iter()
+                            .map(|value| Complex::new(value, 0.0))
+                            .collect::<Vec<_>>();
+                        assert_eq!(
+                            evaluator.get_input_len(),
+                            input.len(),
+                            "bound coefficient columns must not survive loading"
+                        );
+                        evaluator.evaluate(&input, &mut output);
+                        let expected = if dual {
+                            vec![5.0, 5.0, 8.0, 4.0]
+                        } else {
+                            vec![5.0, 8.0]
+                        };
+                        assert_eq!(
+                            output,
+                            expected
+                                .into_iter()
+                                .map(|value| Complex::new(value, 0.0))
+                                .collect::<Vec<_>>()
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_dual_payload_restores_retained_numerator_and_zero_seeds() -> Result<()> {
+        let payload = StandaloneGenericEvaluatorArchive {
+            parameter_rows: None,
+            exprs: vec!["ltd_archive_numerator(x,m)".to_owned()],
+            parameter_override: None,
+            additional_fn_map_entries: vec![(
+                "ltd_archive_numerator(u,v)".to_owned(),
+                "u^2+sqrt(v)".to_owned(),
+                Vec::new(),
+                vec!["u".to_owned(), "v".to_owned()],
+                InliningPolicy::Never,
+                false,
+            )],
+            dual_shape: Some(vec![vec![0], vec![1]]),
+            zero_components: vec![(1, 1)],
+        };
+        let json: StandaloneGenericEvaluatorArchive<String> =
+            serde_json::from_slice(&serde_json::to_vec(&payload)?)?;
+        let (binary, _): (StandaloneGenericEvaluatorArchive<String>, _) =
+            bincode::decode_from_slice(
+                &bincode::encode_to_vec(&payload, bincode::config::standard())?,
+                bincode::config::standard(),
+            )?;
+        for payload in [json, binary] {
+            for iterate in [false, true] {
+                let (_, _, mut evaluator, mut output) = build_evaluator(
+                    payload.clone(),
+                    &[parse_lit!(x), parse_lit!(m)],
+                    Vec::new(),
+                    &StateMap::default(),
+                    iterate,
+                    None,
+                )
+                .map(|(evaluator, _)| evaluator)?;
+                assert_eq!(output.len(), 2);
+                evaluator.evaluate(
+                    &[3.0, 1.0, 0.0, 0.0].map(|value| Complex::new(value, 0.0)),
+                    &mut output,
+                );
+                assert_eq!(output, [Complex::new(9.0, 0.0), Complex::new(6.0, 0.0)]);
+            }
+        }
+        let mut parametric = payload.clone();
+        // Reload generic row source; Symbolica owns the shared schedule and
+        // must clear every gathered component on the final inactive row.
+        parametric.exprs = vec!["if(active,ltd_archive_numerator(x+c,m),0)".to_owned()];
+        let stack = StandaloneEvaluatorStackArchive {
+            explicit_orientation_sum_only: true,
+            production_orientation_ids: Vec::new(),
+            parametric_rows: Some(
+                ParameterRows::new(
+                    vec!["unused".to_owned(), "c".to_owned(), "active".to_owned()],
+                    vec![
+                        vec![8.into(), 1.into(), 1.into()],
+                        vec![9.into(), 3.into(), 1.into()],
+                        vec![10.into(), 999.into(), 0.into()],
+                    ],
+                )
+                .unwrap(),
+            ),
+
+            single_parametric: parametric,
+            iterative: None,
+            summed_function_map: None,
+            summed: None,
+            representative_input: Vec::new(),
+            start: 0,
+            residue_map_id_start: 0,
+            mult_offset: 2,
+        };
+        let json = serde_json::from_slice::<StandaloneEvaluatorStackArchive<String>>(
+            &serde_json::to_vec(&stack)?,
+        )?;
+        let (binary, _): (StandaloneEvaluatorStackArchive<String>, _) = bincode::decode_from_slice(
+            &bincode::encode_to_vec(&stack, bincode::config::standard())?,
+            bincode::config::standard(),
+        )?;
+        for stack in [json, binary] {
+            for corrupt_shape in [false, true] {
+                let mut malformed = stack.clone();
+                if corrupt_shape {
+                    malformed.single_parametric.dual_shape = None;
+                } else {
+                    malformed.mult_offset = 1;
+                }
+                assert!(
+                    build_stack(
+                        malformed,
+                        &[parse_lit!(x), parse_lit!(m)],
+                        &[],
+                        &StateMap::default(),
+                        "joint_rows",
+                        "invalid"
+                    )
+                    .is_err()
+                );
+            }
+            for conflicting_column in ["x", "c"] {
+                let mut malformed = stack.clone();
+                malformed.parametric_rows = malformed.parametric_rows.take().map(|rows| {
+                    rows.map_parameters(|name| {
+                        if name == "unused" {
+                            conflicting_column.to_owned()
+                        } else {
+                            name
+                        }
+                    })
+                });
+                assert!(
+                    build_stack(
+                        malformed,
+                        &[parse_lit!(x), parse_lit!(m)],
+                        &[],
+                        &StateMap::default(),
+                        "joint_rows",
+                        "conflicting_columns"
+                    )
+                    .is_err()
+                );
+            }
+            for empty_rows in [false, true] {
+                let mut malformed = stack.clone();
+                let mut rows = serde_json::to_value(malformed.parametric_rows.as_ref().unwrap())?;
+                if empty_rows {
+                    rows["rows"] = serde_json::json!([]);
+                } else {
+                    rows["rows"][0].as_array_mut().unwrap().pop();
+                }
+                malformed.parametric_rows = Some(serde_json::from_value(rows)?);
+                assert!(
+                    build_stack(
+                        malformed,
+                        &[parse_lit!(x), parse_lit!(m)],
+                        &[],
+                        &StateMap::default(),
+                        "joint_rows",
+                        "invalid_rows"
+                    )
+                    .is_err()
+                );
+            }
+            let mut loaded = build_stack(
+                stack,
+                &[parse_lit!(x), parse_lit!(m)],
+                &[],
+                &StateMap::default(),
+                "joint_rows",
+                "dual",
+            )?;
+            let plan = &loaded.single_parametric_shared.as_ref().unwrap().0;
+            assert_eq!(plan.rows().len(), 3);
+            assert_eq!(plan.get_input_len(), 4);
+            let input = [3.0, 1.0, 0.0, 0.0].map(|value| Complex::new(value, 0.0));
+            assert_eq!(
+                loaded.evaluate_single_parametric(&input)?,
+                [Complex::new(52.0, 0.0), Complex::new(20.0, 0.0)]
+            );
+            // Reuse the same native workspace while both kinematics and the
+            // mass parameter change, including a return to the original point.
+            for (x, mass) in [(0.0_f64, 4.0_f64), (-3.0, 9.0), (3.0, 0.0)] {
+                let changed = [x, 1.0, mass, 0.0].map(|value| Complex::new(value, 0.0));
+                assert_eq!(
+                    loaded.evaluate_single_parametric(&changed)?,
+                    [
+                        Complex::new(
+                            (x + 1.0).powi(2) + (x + 3.0).powi(2) + 2.0 * mass.sqrt(),
+                            0.0
+                        ),
+                        Complex::new(4.0 * x + 8.0, 0.0),
+                    ]
+                );
+            }
+            assert!(loaded.evaluate_single_parametric(&input[..3]).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
     fn standalone_binary_rejects_old_version_before_decoding_payload() {
         let path = std::env::temp_dir().join(format!(
             "gammaloop-cross-section-old-archive-{}.bin",
@@ -1645,10 +2027,11 @@ mod threshold_multiplier_tests {
                 parameters: vec!["archive_weight".to_owned()],
             },
             evaluators: vec![StandaloneGenericEvaluatorArchive {
+                parameter_rows: None,
                 exprs: vec!["archive_weight + 1".to_owned()],
                 additional_fn_map_entries: Vec::new(),
                 dual_shape: None,
-
+                zero_components: Vec::new(),
                 parameter_override: None,
             }],
             left_variants: vec![StandaloneThresholdMultiplierVariantReference {
@@ -1814,7 +2197,7 @@ mod threshold_multiplier_tests {
 
     #[test]
     fn threshold_counterterm_metadata_archive_validates_ids_and_component_coverage() {
-        assert_eq!(STANDALONE_EVALUATORS_VERSION, 20);
+        assert_eq!(STANDALONE_EVALUATORS_VERSION, 21);
         let counterterms = vec![identity_counterterm()];
         let registry = identity_registry();
         validate_threshold_counterterm_metadata_archive(&registry, "graph", &counterterms).unwrap();

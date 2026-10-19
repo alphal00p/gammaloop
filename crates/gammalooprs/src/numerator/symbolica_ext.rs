@@ -1,4 +1,8 @@
-use std::{ops::Deref, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+    sync::Arc,
+};
 
 use color_eyre::eyre::{bail, ensure};
 use idenso::{
@@ -10,7 +14,11 @@ use spenso::{
         AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShorthandParsing,
         StrictTensorFilter,
     },
-    structure::representation::{Minkowski, RepName},
+    shadowing::{ANTISYM, CYCLIC, SYM},
+    structure::{
+        representation::{LibraryRep, Minkowski, RepName},
+        slot::{IsAbstractSlot, Slot},
+    },
 };
 
 use symbolica::{
@@ -27,7 +35,7 @@ use crate::{
     utils::{GS, TENSORLIB, W_},
 };
 
-use super::ParsingNet;
+use super::{ParsingNet, aind::Aind};
 pub type ParsingNetError = spenso::network::TensorNetworkError<
     spenso::structure::IndexlessNamedStructure<
         Symbol,
@@ -39,6 +47,15 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 >;
 
 pub trait NumeratorAtomExt {
+    /// Rename each private contraction while preserving the supplied free
+    /// interface. Scalar function payloads remain opaque; tensor wrappers keep
+    /// their nested slot structure. The caller owns collision-free fresh names.
+    fn freshen_private_indices(
+        &self,
+        interface: &HashSet<Atom>,
+        fresh_index: impl FnMut() -> Atom,
+    ) -> Atom;
+
     /// Collect a bounded Laurent polynomial in literal, independent keys using
     /// exact zero tests. Key-independent subtrees remain opaque coefficients.
     /// Return None for unsupported dependence or an exceeded algebra budget.
@@ -85,6 +102,15 @@ pub trait NumeratorAtomExt {
 }
 
 impl NumeratorAtomExt for Atom {
+    fn freshen_private_indices(
+        &self,
+        interface: &HashSet<Atom>,
+        fresh_index: impl FnMut() -> Atom,
+    ) -> Atom {
+        self.as_view()
+            .freshen_private_indices(interface, fresh_index)
+    }
+
     fn coefficient_list_exact(&self, keys: &[Atom]) -> Option<Vec<(Atom, Atom)>> {
         self.as_view().coefficient_list_exact(keys)
     }
@@ -249,6 +275,35 @@ impl ScalarRationalSize {
 }
 
 impl NumeratorAtomExt for AtomView<'_> {
+    fn freshen_private_indices(
+        &self,
+        interface: &HashSet<Atom>,
+        mut fresh_index: impl FnMut() -> Atom,
+    ) -> Atom {
+        let mut private_indices = HashMap::new();
+        self.replace_map(|part, _, output| {
+            if let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(part) {
+                if !interface.contains(&part.to_owned()) {
+                    let fresh = private_indices
+                        .entry(slot.aind())
+                        .or_insert_with(&mut fresh_index);
+                    **output = slot.rep().to_symbolic([fresh.clone()]);
+                } else {
+                    // A dual slot owns its inner representation; do not revisit
+                    // that as a separate base slot.
+                    output.set_from_view(&part);
+                }
+            } else if let AtomView::Fun(function) = part
+                && !part.is_tensorial(StrictTensorFilter::Tagged)
+                && ![*SYM, *ANTISYM, *CYCLIC].contains(&function.get_symbol())
+            {
+                // Scalar function payloads are opaque to the tensor interface,
+                // including parameter aliases.
+                output.set_from_view(&part);
+            }
+        })
+    }
+
     fn coefficient_list_exact(&self, keys: &[Atom]) -> Option<Vec<(Atom, Atom)>> {
         type Polynomial = MultivariatePolynomial<AtomField, i32>;
 

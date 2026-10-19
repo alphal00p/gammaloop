@@ -331,15 +331,22 @@ impl AmplitudeGraphTerm {
             let cut = crate::cff::CutCFFIndex::new_all_none();
             let mut bulk_integrand = source
                 .all_mighty_integrand
-                .iter()
-                .find_map(|(index, atom)| (index == &cut).then(|| atom.clone()))
-                .expect("every integrand cut has a registered scalar lane");
+                .atom(&cut)
+                .expect("every integrand cut has a registered scalar lane")
+                .clone();
             let mut fermi_timings = crate::processes::EvaluatorBuildTimings::default();
             let mut fermi_count = 0;
             if FermiSurfaceSector::is_present(&bulk_integrand)? {
                 ensure!(
                     *representation == RepresentationMode::Cff,
                     "Fermi-surface localization requires the CFF representation"
+                );
+                ensure!(
+                    source
+                        .all_mighty_integrand
+                        .parametric_terms(&cut)
+                        .is_empty(),
+                    "Fermi-surface localization requires the local-3D scalar lane"
                 );
                 let branches = if settings.generation.requires_complete_orientation_sum() {
                     vec![(None, bulk_integrand.clone())]
@@ -389,7 +396,7 @@ impl AmplitudeGraphTerm {
                 &bulk_integrand,
                 &graph.graph.param_builder,
                 source.all_mighty_integrand.numerators(),
-                *representation,
+                source.all_mighty_integrand.parametric_terms(&cut),
                 (!settings.generation.requires_complete_orientation_sum())
                     .then_some((directions.as_slice().as_ref(), ids.as_slice())),
                 None,
@@ -1330,27 +1337,12 @@ impl GraphTerm for AmplitudeGraphTerm {
 
         self.graph
             .param_builder
-            .m_uv_value(Complex::new_re(F(settings.general.m_uv)));
-
-        self.graph
-            .param_builder
-            .renormalization_localization_scale_value(Complex::new_re(F(settings
-                .general
-                .renormalization_localization_scale)));
-        self.graph
-            .param_builder
-            .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
-        self.graph
-            .param_builder
-            .inverse_temperature_value(Complex::new_re(F(settings.general.inverse_temperature)));
-        self.graph
-            .param_builder
-            .numerator_sampling_scale_value(Complex::new_re(F(settings
-                .general
-                .numerator_sampling_scale)));
-        self.graph.param_builder.update_model_values(model)?;
-        self.graph
-            .validate_medium_parameters(model, settings.general.inverse_temperature)?;
+            .update_runtime_values(&settings.general, model)?;
+        self.graph.validate_medium_parameters(
+            model,
+            settings.general.inverse_temperature,
+            &self.graph.param_builder,
+        )?;
         let generated_representations = self
             .denominator_hsurfaces
             .iter()

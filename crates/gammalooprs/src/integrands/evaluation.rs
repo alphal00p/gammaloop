@@ -246,24 +246,40 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
                     })?;
                 }
                 // Auxiliary components remain factorized, but their complete
-                // multiplier is known. Bound each component's possible contribution
-                // to BOTH final phases before allowing an underflowed tail to round
-                // to zero; a complex factor may promote real weight into imaginary.
+                // multiplier is known. When it mixes the phases, bound BOTH
+                // original components together before either rounds to zero:
+                // individually tiny terms can add to a normal final component.
                 let component_factor = event
                     .additional_weights
                     .weights
                     .get(&AdditionalWeightKey::FullMultiplicativeFactor)
                     .filter(|factor| factor.re.0.is_finite() && factor.im.0.is_finite())
                     .map(|factor| {
-                        let real = factor.re.abs();
-                        let imag = factor.im.abs();
-                        if real > imag { real } else { imag }
+                        (
+                            factor.re.abs() + factor.im.abs(),
+                            factor.re != factor.re.zero() && factor.im != factor.im.zero(),
+                        )
                     });
                 for (key, weight) in &event.additional_weights.weights {
                     let remaining = if *key == AdditionalWeightKey::FullMultiplicativeFactor {
                         None
                     } else {
-                        component_factor.as_ref()
+                        component_factor
+                            .as_ref()
+                            .and_then(|(factor, mixes_phases)| {
+                                if *mixes_phases {
+                                    let real = weight.re.abs();
+                                    let imag = weight.im.abs();
+                                    let bound = (if real > imag { real } else { imag }) * factor;
+                                    (weight.re.0.is_finite()
+                                        && weight.im.0.is_finite()
+                                        && bound.0.is_finite()
+                                        && bound < F::<T>::from_f64(f64::MIN_POSITIVE))
+                                    .then_some(factor)
+                                } else {
+                                    Some(factor)
+                                }
+                            })
                     };
                     for (component, value) in [("re", &weight.re), ("im", &weight.im)] {
                         check(value, remaining).wrap_err_with(|| {

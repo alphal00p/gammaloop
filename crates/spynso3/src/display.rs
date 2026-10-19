@@ -346,14 +346,14 @@ pub(crate) fn format_atom_output_rich(
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PythonFormattedOutput {
-    PythonFormattedOutput {
-        text: format_atom_with_settings(atom, TensorDisplayMode::Plain, settings),
-        html: atom_to_html(py, atom, settings, notation_source).ok(),
-        latex: Some({
+    PythonFormattedOutput::new(
+        format_atom_with_settings(atom, TensorDisplayMode::Plain, settings),
+        atom_to_html(py, atom, settings, notation_source).ok(),
+        Some({
             let body = format_atom_with_settings(atom, TensorDisplayMode::Latex, settings);
             format!("$${body}$$")
         }),
-    }
+    )
 }
 
 pub(crate) fn format_structured_output_rich(
@@ -1445,15 +1445,15 @@ pub(crate) fn format_concrete_tensor_output(
     show_dimensions: bool,
 ) -> PythonFormattedOutput {
     let settings = resolved_settings(Some(show_dimensions), None);
-    PythonFormattedOutput {
-        text: format_concrete_with_settings(tensor, TensorDisplayMode::Plain, &settings),
-        html: None,
-        latex: Some(format_concrete_with_settings(
+    PythonFormattedOutput::new(
+        format_concrete_with_settings(tensor, TensorDisplayMode::Plain, &settings),
+        None,
+        Some(format_concrete_with_settings(
             tensor,
             TensorDisplayMode::Latex,
             &settings,
         )),
-    }
+    )
 }
 
 pub(crate) fn format_concrete_tensor_output_rich(
@@ -1462,15 +1462,15 @@ pub(crate) fn format_concrete_tensor_output_rich(
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PythonFormattedOutput {
-    PythonFormattedOutput {
-        text: format_concrete_with_settings(tensor, TensorDisplayMode::Plain, settings),
-        html: concrete_tensor_to_html(py, tensor, settings, notation_source).ok(),
-        latex: Some(format_concrete_with_settings(
+    PythonFormattedOutput::new(
+        format_concrete_with_settings(tensor, TensorDisplayMode::Plain, settings),
+        concrete_tensor_to_html(py, tensor, settings, notation_source).ok(),
+        Some(format_concrete_with_settings(
             tensor,
             TensorDisplayMode::Latex,
             settings,
         )),
-    }
+    )
 }
 
 /// Format a tensor expression using compact Spenso notation.
@@ -1679,6 +1679,14 @@ mod tests {
             format_concrete_with_settings(&tensor, TensorDisplayMode::Latex, &settings),
             "$$2$$"
         );
+        Python::initialize();
+        Python::attach(|py| {
+            let output = format_concrete_tensor_output(&tensor, false);
+            assert_eq!(output.format_plain(py).unwrap(), "2");
+            assert_eq!(output._repr_html_(py).unwrap(), None);
+            assert_eq!(output._repr_latex_(py).unwrap(), Some("$$2$$".to_owned()));
+            assert_eq!(tensor._repr_latex_(py).unwrap(), Some("$$2$$".to_owned()));
+        });
     }
 
     #[test]

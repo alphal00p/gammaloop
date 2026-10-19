@@ -81,6 +81,7 @@ fn fermi_localization_matches_raised_cut_residues_on_nonlinear_shells() -> Resul
                 settings.optimization_settings(),
                 None,
                 &settings,
+                None,
             )?
             .into_eager_only()
         };

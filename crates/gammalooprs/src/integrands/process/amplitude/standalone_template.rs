@@ -24,12 +24,15 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    evaluate::{FunctionRegistrationOptions, InliningPolicy, JITCompiledEvaluator},
+    evaluate::{
+        FunctionRegistrationOptions, InliningPolicy, JITCompiledEvaluator, ParameterRowEvaluator,
+        ParameterRowPlan, ParameterRowWorkspace, ParameterRows,
+    },
     prelude::*,
     state::StateMap,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 17;
+const STANDALONE_EVALUATORS_VERSION: u32 = 18;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -97,7 +100,7 @@ struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
 struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     explicit_orientation_sum_only: bool,
     production_orientation_ids: Vec<usize>,
-
+    parametric_rows: Option<ParameterRows<A>>,
     single_parametric: StandaloneGenericEvaluatorArchive<A>,
     iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
@@ -110,9 +113,12 @@ struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 struct StandaloneGenericEvaluatorArchive<A = Vec<u8>> {
+    parameter_rows: Option<ParameterRows<A>>,
     exprs: Vec<A>,
     additional_fn_map_entries: Vec<SerializedFnMapEntry<A>>,
     dual_shape: Option<Vec<Vec<usize>>>,
+    #[serde(default)]
+    zero_components: Vec<(usize, usize)>,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -482,7 +488,7 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                 );
                 let source_path = artifact_root.join(format!("{function_name}.cpp"));
                 let library_path = artifact_root.join(format!("{function_name}.so"));
-                let compiled = evaluator
+                let exported = evaluator
                     .export_cpp::<Complex<f64>>(
                         &source_path,
                         &function_name,
@@ -491,7 +497,9 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                             .inline_asm(backend.inline_asm())
                             .custom_header(None),
                     )
-                    .map_err(|error| eyre!(error))?
+                    .map_err(|error| eyre!(error))?;
+
+                let compiled = exported
                     .compile(&library_path, CompileOptions::default())
                     .map_err(|error| eyre!(error))?
                     .load()
@@ -500,13 +508,12 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
             }
             StandaloneBackend::Symjit => Ok(Self::Symjit(Box::new(
                 evaluator
-                    // Standalone backend selection uses O2 by default. Keep compaction
-                    // disabled because some complex temporary layouts were incompatible with it.
                     .jit_compile(
                         JITCompilationSettings::new()
                             .direct_translation(true)
                             .optimization_level(2)
-                            .with_option("compact", "false"),
+                            .with_option("compact", "false")
+                            .with_option("cse", "false"),
                     )
                     .map_err(|error| eyre!(error))?,
             ))),
@@ -667,7 +674,9 @@ fn apply_fn_map_entries(
 
             continue;
         }
-        let options = FunctionRegistrationOptions::new().inlining(inlining);
+        let options = FunctionRegistrationOptions::new()
+            .inlining(inlining)
+            .prune_unused_arguments(true);
         let name = match lhs.as_view() {
             AtomView::Fun(function) => Some(function.get_symbol()),
             AtomView::Var(variable) if tags.is_empty() => Some(variable.get_symbol()),
@@ -702,84 +711,168 @@ fn apply_fn_map_entries(
 #[allow(clippy::type_complexity)]
 fn build_evaluator<T: StandaloneNumber, A: ImportWithMap>(
     payload: &StandaloneGenericEvaluatorArchive<A>,
-    graph_params: &[Atom],
+    params: &[Atom],
     mut fn_map_entries: Vec<ParsedFnMapEntry>,
     state_map: &StateMap,
     iterate: bool,
-) -> Result<(ExpressionEvaluator<Complex<T>>, usize)>
+    staged_rows: Option<&ParameterRows<Atom>>,
+) -> Result<(
+    (ExpressionEvaluator<Complex<T>>, usize),
+    Option<(ParameterRowPlan, ExpressionEvaluator<Complex<T>>)>,
+)>
 where
     Complex<T>: EvaluationDomain,
 {
+    if params.iter().collect::<HashSet<_>>().len() != params.len() {
+        return Err(eyre!("Standalone evaluator parameters must be distinct"));
+    }
     let optimization_settings = OptimizationSettings::new()
         .horner_iterations(10)
         .cores(1)
         .abort_check(None);
+    let cpe_iterations = None;
     let exprs = payload
         .exprs
         .iter()
         .map(|expr| expr.import_with_map(state_map))
         .collect::<Result<Vec<_>>>()?;
-    let params = graph_params;
 
-    if params.iter().collect::<HashSet<_>>().len() != params.len() {
-        return Err(eyre!("Standalone evaluator parameters must be distinct"));
-    }
+    let additional_fn_map_entries =
+        parse_fn_map_entries(&payload.additional_fn_map_entries, state_map)?;
+    fn_map_entries.extend(additional_fn_map_entries);
 
-    fn_map_entries.extend(parse_fn_map_entries(
-        &payload.additional_fn_map_entries,
-        state_map,
-    )?);
-    if payload.dual_shape.is_some() {
-        // Match native construction: stock Symbolica vectorizes inlined functions.
-        for entry in &mut fn_map_entries {
-            if !entry.5 {
-                entry.4 = InliningPolicy::Always;
-            }
-        }
-    }
     let (replacements, fn_map) = apply_fn_map_entries(fn_map_entries)?;
-    let build = |expressions: &[Atom]| {
-        let expressions = expressions
+    let parameter_rows = payload
+        .parameter_rows
+        .as_ref()
+        .map(|rows| {
+            let parameters = rows
+                .parameters()
+                .iter()
+                .map(|parameter| parameter.import_with_map(state_map))
+                .collect::<Result<Vec<_>>>()?;
+            ParameterRows::new(parameters, rows.rows().to_vec()).map_err(|error| eyre!(error))
+        })
+        .transpose()?;
+    if parameter_rows.is_some() && staged_rows.is_some() {
+        return Err(eyre!(
+            "A standalone evaluator cannot have both summed and staged parameter rows"
+        ));
+    }
+    let source_parameters = parameter_rows.as_ref().or(staged_rows).map(|rows| {
+        let mut source = params.to_vec();
+        source.extend_from_slice(rows.parameters());
+        source
+    });
+    let source_params = source_parameters.as_deref().unwrap_or(params);
+    if staged_rows.is_some_and(|rows| rows.rows().is_empty()) {
+        return Err(eyre!(
+            "A physical residue catalog must contain at least one row"
+        ));
+    }
+    let bound_positions = staged_rows
+        .map(|rows| rows.input_positions(source_params))
+        .transpose()
+        .map_err(|error| eyre!(error))?;
+    let build = |roots: &[Atom]| -> Result<ExpressionEvaluator<Complex<Rational>>> {
+        let expressions = roots
             .iter()
             .map(|expr| expr.replace_multiple(&replacements))
             .collect::<Vec<_>>();
-        Atom::evaluator_multiple(&expressions, params)
+        let mut builder = Atom::evaluator_multiple(&expressions, source_params)
             .function_map(fn_map.clone())
-            .optimization_settings(optimization_settings.clone())
-            .build()
-            .map_err(|error| eyre!(error))
+            .optimization_settings(optimization_settings.clone());
+        if let Some(rows) = &parameter_rows {
+            builder = builder
+                .sum_over_parameters(rows.parameters(), rows.rows())
+                .map_err(|error| eyre!(error))?;
+        }
+        builder.build().map_err(|error| eyre!(error))
     };
-    let mut evaluator = if iterate {
-        let mut evaluator: Option<ExpressionEvaluator<Complex<Rational>>> = None;
+    let mut evaluator = if iterate && payload.dual_shape.is_none() {
+        let mut tree: Option<ExpressionEvaluator<Complex<Rational>>> = None;
         for expr in &exprs {
             let next = build(std::slice::from_ref(expr))?;
-            evaluator = Some(if let Some(mut evaluator) = evaluator {
-                evaluator.merge(next, None).map_err(|error| eyre!(error))?;
-                evaluator
+            tree = Some(if let Some(mut merged) = tree {
+                merged
+                    .merge(next, cpe_iterations)
+                    .map_err(|error| eyre!(error))?;
+                merged
             } else {
                 next
             });
         }
-        evaluator.ok_or_else(|| eyre!("No expressions in evaluator payload"))?
+        tree.ok_or_else(|| eyre!("No expressions in evaluator payload"))?
     } else {
         build(&exprs)?
     };
-    if let Some(shape) = &payload.dual_shape {
-        evaluator = evaluator
-            .vectorize(&Dualizer::new(
-                HyperDual::<Complex<Rational>>::new(shape.clone()),
-                Vec::new(),
-            ))
-            .map_err(|error| eyre!(error))?;
-    }
-    let output_len = evaluator.get_output_len();
-    let evaluator = evaluator.map_coeff(&|value| {
-        Complex::new(
-            T::exact_from_rational(&value.re),
-            T::exact_from_rational(&value.im),
+    let shared = if let Some(rows) = staged_rows {
+        let mut staged = ParameterRowEvaluator::new(
+            evaluator,
+            bound_positions.expect("validated staged row positions"),
+            rows.rows().to_vec(),
         )
-    });
-    Ok((evaluator, output_len))
+        .map_err(|error| eyre!(error))?;
+        if let Some(shape) = &payload.dual_shape {
+            staged = staged
+                .vectorize(&Dualizer::new(
+                    HyperDual::<Complex<Rational>>::new(shape.clone()),
+                    payload.zero_components.clone(),
+                ))
+                .map_err(|error| eyre!(error))?;
+        }
+        let (plan, prelude, body) = staged.into_parts();
+        evaluator = body;
+        Some((
+            plan,
+            prelude.map_coeff_with_prec(
+                &|value| {
+                    Complex::new(
+                        T::exact_from_rational(&value.re),
+                        T::exact_from_rational(&value.im),
+                    )
+                },
+                T::one_value().get_precision(),
+            ),
+        ))
+    } else {
+        if let Some(shape) = &payload.dual_shape {
+            evaluator = evaluator
+                .vectorize(&Dualizer::new(
+                    HyperDual::<Complex<Rational>>::new(shape.clone()),
+                    payload.zero_components.clone(),
+                ))
+                .map_err(|error| eyre!(error))?;
+        }
+        None
+    };
+    let multiplicity = payload.dual_shape.as_ref().map_or(1, Vec::len);
+    let output_len = evaluator.get_output_len();
+    if shared.as_ref().map_or_else(
+        || evaluator.get_input_len(),
+        |(plan, _)| plan.get_input_len(),
+    ) != params.len() * multiplicity
+        || output_len != exprs.len() * multiplicity
+    {
+        return Err(eyre!(
+            "Standalone evaluator has inconsistent input or output dimensions"
+        ));
+    }
+    Ok((
+        (
+            evaluator.map_coeff_with_prec(
+                &|value| {
+                    Complex::new(
+                        T::exact_from_rational(&value.re),
+                        T::exact_from_rational(&value.im),
+                    )
+                },
+                T::one_value().get_precision(),
+            ),
+            output_len,
+        ),
+        shared,
+    ))
 }
 
 fn set_orientation_values_impl<A: Clone + Neg<Output = A>>(
@@ -1484,15 +1577,6 @@ impl<A> StandaloneEvaluatorStackArchive<A> {
         &self,
         method: StandaloneMethod,
     ) -> Result<(&StandaloneGenericEvaluatorArchive<A>, bool)> {
-        let available = match method {
-            StandaloneMethod::SingleParametric => true,
-            StandaloneMethod::Iterative => self.iterative.is_some(),
-            StandaloneMethod::SummedFunctionMap => self.summed_function_map.is_some(),
-            StandaloneMethod::Summed => self.summed.is_some(),
-        };
-        if self.explicit_orientation_sum_only && !available {
-            return Ok((&self.single_parametric, false));
-        }
         match method {
             StandaloneMethod::SingleParametric => Ok((&self.single_parametric, false)),
             StandaloneMethod::Iterative => self
@@ -1610,44 +1694,104 @@ impl<S, A> StandaloneEvaluatorArchive<S, A> {
 
 fn evaluate_eager<T: StandaloneNumber>(
     evaluator: &mut ExpressionEvaluator<Complex<T>>,
+    mut shared: Option<&mut (ParameterRowPlan, ExpressionEvaluator<Complex<T>>)>,
     output_len: usize,
     inputs: &[Vec<Complex<T>>],
-) -> Vec<Complex<T>>
+) -> Result<Vec<Complex<T>>>
 where
     Complex<T>: EvaluationDomain,
 {
-    let mut accumulated = vec![Complex::new(T::zero_value(), T::zero_value()); output_len];
-
+    let zero = Complex::new(T::zero_value(), T::zero_value());
+    let mut accumulated = vec![zero.clone(); output_len];
+    let mut current = accumulated.clone();
+    let mut workspace = ParameterRowWorkspace::default();
     for input in inputs {
-        let mut current = vec![Complex::new(T::zero_value(), T::zero_value()); output_len];
-        evaluator.evaluate(input, &mut current);
-        for (accumulated_value, current_value) in accumulated.iter_mut().zip(current) {
-            *accumulated_value += current_value;
+        if let Some((plan, prelude)) = shared.as_mut() {
+            plan.evaluate_with(
+                input,
+                &mut current,
+                &mut workspace,
+                |value| Complex::new(T::exact_from_rational(value), T::zero_value()),
+                |input, output| prelude.try_evaluate(input, output),
+                |input, output| evaluator.try_evaluate(input, output),
+            )
+            .map_err(|error| eyre!(error))?;
+        } else {
+            evaluator
+                .try_evaluate(input, &mut current)
+                .map_err(|error| eyre!(error))?;
+        }
+        for (sum, value) in accumulated.iter_mut().zip(&current) {
+            *sum += value;
         }
     }
-
-    accumulated
+    Ok(accumulated)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn evaluate_with_backend_f64(
     evaluator: &mut ExpressionEvaluator<Complex<f64>>,
+    shared: Option<&mut (ParameterRowPlan, ExpressionEvaluator<Complex<f64>>)>,
     backend: StandaloneBackend,
-    output_len: usize,
     inputs: &[Vec<Complex<f64>>],
     artifact_root: &Path,
     label: &str,
 ) -> Result<Vec<Complex<f64>>> {
+    let output_len = evaluator.get_output_len();
+    let input_len = evaluator.get_input_len();
     let mut runtime = StandaloneRuntimeEvaluator::build(evaluator, backend, artifact_root, label)?;
+    let mut shared = shared
+        .map(|(plan, prelude)| -> Result<_> {
+            Ok((
+                plan,
+                (prelude.get_output_len() != 0)
+                    .then(|| {
+                        StandaloneRuntimeEvaluator::build(
+                            prelude,
+                            backend,
+                            artifact_root,
+                            &format!("{label}_auxiliary"),
+                        )
+                    })
+                    .transpose()?,
+            ))
+        })
+        .transpose()?;
     let mut accumulated = vec![Complex::new(0.0, 0.0); output_len];
-
+    let mut current = accumulated.clone();
+    let mut workspace = ParameterRowWorkspace::default();
     for input in inputs {
-        let mut current = vec![Complex::new(0.0, 0.0); output_len];
-        runtime.evaluate(input, &mut current);
-        for (accumulated_value, current_value) in accumulated.iter_mut().zip(current) {
-            *accumulated_value += current_value;
+        if let Some((plan, prelude)) = &mut shared {
+            plan.evaluate_with(
+                input,
+                &mut current,
+                &mut workspace,
+                |value| Complex::new(value.to_f64(), 0.0),
+                |input, output| {
+                    prelude
+                        .as_mut()
+                        .expect("the library plan skips an empty prelude")
+                        .evaluate(input, output);
+                    Ok(())
+                },
+                |input, output| {
+                    runtime.evaluate(input, output);
+                    Ok(())
+                },
+            )
+            .map_err(|error| eyre!(error))?;
+        } else {
+            if input.len() != input_len {
+                return Err(eyre!(
+                    "Physical input length does not match standalone evaluator"
+                ));
+            }
+            runtime.evaluate(input, &mut current);
+        }
+        for (sum, value) in accumulated.iter_mut().zip(&current) {
+            *sum += value;
         }
     }
-
     Ok(accumulated)
 }
 
@@ -1931,8 +2075,31 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
         .map(|param| param.import_with_map(state_map))
         .collect::<Result<Vec<_>>>()?;
     let fn_map_entries = parse_fn_map_entries(&graph.fn_map_entries, state_map)?;
-    let (mut evaluator, output_len) =
-        build_evaluator::<f64, _>(payload, &params, fn_map_entries, state_map, iterate)?;
+    let rows = stack
+        .parametric_rows
+        .as_ref()
+        .map(|rows| {
+            let parameters = rows
+                .parameters()
+                .iter()
+                .map(|parameter| parameter.import_with_map(state_map))
+                .collect::<Result<Vec<_>>>()?;
+            ParameterRows::new(parameters, rows.rows().to_vec()).map_err(|error| eyre!(error))
+        })
+        .transpose()?;
+    let staged_rows = if options.method == StandaloneMethod::SingleParametric {
+        rows.as_ref()
+    } else {
+        None
+    };
+    let ((mut evaluator, _), mut shared) = build_evaluator::<f64, _>(
+        payload,
+        &params,
+        fn_map_entries,
+        state_map,
+        iterate,
+        staged_rows,
+    )?;
 
     let inputs = if let Some(custom_input) = custom_input {
         if custom_input.len() != stack.representative_input.len() {
@@ -2008,8 +2175,8 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
     for backend in compare_backends {
         let values = evaluate_with_backend_f64(
             &mut evaluator,
+            shared.as_mut(),
             backend,
-            output_len,
             &inputs,
             &artifact_root.join(sanitize_label(&graph.graph_name)),
             &format!(
@@ -2084,8 +2251,31 @@ where
         .map(|param| param.import_with_map(state_map))
         .collect::<Result<Vec<_>>>()?;
     let fn_map_entries = parse_fn_map_entries(&graph.fn_map_entries, state_map)?;
-    let (mut evaluator, output_len) =
-        build_evaluator::<T, _>(payload, &params, fn_map_entries, state_map, iterate)?;
+    let rows = stack
+        .parametric_rows
+        .as_ref()
+        .map(|rows| {
+            let parameters = rows
+                .parameters()
+                .iter()
+                .map(|parameter| parameter.import_with_map(state_map))
+                .collect::<Result<Vec<_>>>()?;
+            ParameterRows::new(parameters, rows.rows().to_vec()).map_err(|error| eyre!(error))
+        })
+        .transpose()?;
+    let staged_rows = if options.method == StandaloneMethod::SingleParametric {
+        rows.as_ref()
+    } else {
+        None
+    };
+    let ((mut evaluator, output_len), mut shared) = build_evaluator::<T, _>(
+        payload,
+        &params,
+        fn_map_entries,
+        state_map,
+        iterate,
+        staged_rows,
+    )?;
 
     let inputs = if let Some(custom_input) = custom_input {
         if custom_input.len() != stack.representative_input.len() {
@@ -2147,7 +2337,7 @@ where
         }
     }
 
-    let values = evaluate_eager(&mut evaluator, output_len, &inputs);
+    let values = evaluate_eager(&mut evaluator, shared.as_mut(), output_len, &inputs)?;
     for (index, value) in values.iter().enumerate() {
         println!("  result[{index}] = {value}");
     }
@@ -2234,6 +2424,289 @@ mod tests {
     use super::*;
 
     #[test]
+    fn standalone_exact_row_payload_restores_sum_and_retained_derivatives() -> Result<()> {
+        let params = [
+            parse_lit!(standalone_exact_rows::x),
+            parse_lit!(standalone_exact_rows::m),
+        ];
+        let coefficient = parse_lit!(standalone_exact_rows::c);
+        let u = parse_lit!(standalone_exact_rows::u);
+        let v = parse_lit!(standalone_exact_rows::v);
+        let numerator = symbol!("standalone_exact_rows::numerator");
+        let print = |atom: &Atom| {
+            atom.printer(symbolica::printer::PrintOptions::file())
+                .to_string()
+        };
+        let root = Symbol::IF.call_args([
+            coefficient.clone(),
+            &coefficient * numerator.call_args(params.clone()),
+            Atom::Zero,
+        ]);
+        let rows = ParameterRows::new(
+            vec![print(&coefficient)],
+            vec![
+                vec![Rational::zero()],
+                vec![Rational::new(1, 4)],
+                vec![Rational::new(1, 2)],
+                vec![Rational::new(1, 2)],
+            ],
+        )
+        .map_err(|error| eyre!(error))?;
+        for inlining in [InliningPolicy::Always, InliningPolicy::Never] {
+            let payload = StandaloneGenericEvaluatorArchive {
+                parameter_rows: Some(rows.clone()),
+                exprs: vec![print(&root), print(&params[0])],
+
+                additional_fn_map_entries: vec![(
+                    print(&numerator.call_args([u.clone(), v.clone()])),
+                    print(&(u.pow(2) + v.pow(Atom::num(Rational::new(1, 2))))),
+                    Vec::new(),
+                    vec![print(&u), print(&v)],
+                    inlining,
+                    false,
+                )],
+                dual_shape: Some(vec![vec![0], vec![1]]),
+                zero_components: vec![(1, 1)],
+            };
+            let json: StandaloneGenericEvaluatorArchive<String> =
+                serde_json::from_slice(&serde_json::to_vec(&payload)?)?;
+            let bytes = bincode::encode_to_vec(&payload, bincode::config::standard())?;
+            let (binary, consumed): (StandaloneGenericEvaluatorArchive<String>, _) =
+                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+            assert_eq!(consumed, bytes.len());
+            for restored in [json, binary] {
+                assert_eq!(restored.parameter_rows.as_ref(), Some(&rows));
+                for dual in [false, true] {
+                    let mut payload = restored.clone();
+                    if !dual {
+                        payload.dual_shape = None;
+                        payload.zero_components.clear();
+                    }
+                    for iterate in [false, true] {
+                        let (mut evaluator, length) = build_evaluator::<f64, _>(
+                            &payload,
+                            &params,
+                            Vec::new(),
+                            &StateMap::default(),
+                            iterate,
+                            None,
+                        )
+                        .map(|(evaluator, _)| evaluator)?;
+                        let mut output = vec![Complex::new(0.0, 0.0); length];
+                        let input = if dual {
+                            vec![2.0, 1.0, 0.0, 0.0]
+                        } else {
+                            vec![2.0, 0.0]
+                        };
+                        let input = input
+                            .into_iter()
+                            .map(|value| Complex::new(value, 0.0))
+                            .collect::<Vec<_>>();
+                        assert_eq!(
+                            evaluator.get_input_len(),
+                            input.len(),
+                            "bound coefficient columns must not survive loading"
+                        );
+                        evaluator.evaluate(&input, &mut output);
+                        let expected = if dual {
+                            vec![5.0, 5.0, 8.0, 4.0]
+                        } else {
+                            vec![5.0, 8.0]
+                        };
+                        assert_eq!(
+                            output,
+                            expected
+                                .into_iter()
+                                .map(|value| Complex::new(value, 0.0))
+                                .collect::<Vec<_>>()
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_template_cpp_complex_constants_match_eager_and_assembly() -> Result<()> {
+        let root = std::env::temp_dir().join(format!(
+            "gammaloop_standalone_template_complex_export_{}",
+            std::process::id()
+        ));
+        let x = symbolica::parse!("standalone_template_complex_export::x");
+        let q = symbolica::parse!("standalone_template_complex_export::q");
+        for imaginary in [true, false] {
+            for retained in [false, true] {
+                let coefficient = Atom::num(Rational::new(1, 8))
+                    * if imaginary {
+                        Atom::one() + Atom::i()
+                    } else {
+                        Atom::one()
+                    };
+                let offset = Atom::num(Rational::new(1, 16))
+                    * if imaginary { Atom::i() } else { Atom::one() };
+                let mut functions = FunctionMap::new();
+                let product = if retained {
+                    let inner = symbol!("standalone_template_complex_export::inner");
+                    let outer = symbol!("standalone_template_complex_export::outer");
+                    for (function, body) in [
+                        (inner, &coefficient * &q),
+                        (outer, inner.call_args([q.clone()])),
+                    ] {
+                        functions.add_function_with_options(
+                            function,
+                            vec![Indeterminate::try_from(q.clone()).map_err(|error| eyre!(error))?],
+                            body,
+                            FunctionRegistrationOptions::new().inlining(InliningPolicy::Never),
+                        )?;
+                    }
+                    outer.call_args([x.clone()])
+                } else {
+                    &coefficient * &x
+                };
+                let expressions = [
+                    product + &x * Atom::num(Rational::new(1, 2)) + offset.clone(),
+                    offset,
+                    Atom::num(Rational::new(3, 8)),
+                ];
+                let mut trees = expressions.iter().map(|expression| {
+                    expression
+                        .evaluator(std::slice::from_ref(&x))
+                        .function_map(functions.clone())
+                        .optimization_settings(OptimizationSettings::new().cores(1))
+                        .build()
+                        .map_err(|error| eyre!(error))
+                });
+                let mut tree = trees.next().unwrap()?;
+                for next in trees {
+                    tree.merge(next?, Some(1)).map_err(|error| eyre!(error))?;
+                }
+                let mut evaluator =
+                    tree.map_coeff(&|value| Complex::new(value.re.to_f64(), value.im.to_f64()));
+                let label = format!("complex_{imaginary}_retained_{retained}");
+                for backend in [
+                    StandaloneBackend::Eager,
+                    StandaloneBackend::Cpp,
+                    StandaloneBackend::Assembly,
+                ] {
+                    let mut runtime =
+                        StandaloneRuntimeEvaluator::build(&mut evaluator, backend, &root, &label)?;
+                    for input in [2.0, -2.0] {
+                        let mut output = [Complex::new(0.0, 0.0); 3];
+                        runtime.evaluate(&[Complex::new(input, 0.0)], &mut output);
+                        assert_eq!(
+                            output,
+                            [
+                                Complex::new(
+                                    input * 0.625 + if imaginary { 0.0 } else { 0.0625 },
+                                    if imaginary {
+                                        input * 0.125 + 0.0625
+                                    } else {
+                                        0.0
+                                    },
+                                ),
+                                if imaginary {
+                                    Complex::new(0.0, 0.0625)
+                                } else {
+                                    Complex::new(0.0625, 0.0)
+                                },
+                                Complex::new(0.375, 0.0),
+                            ]
+                        );
+                    }
+                    if matches!(backend, StandaloneBackend::Cpp) {
+                        let path = root.join(format!("standalone_{label}_c__.cpp"));
+                        let source = fs::read_to_string(&path)?;
+                        assert!(source.contains("T(3.75e-1)"));
+                        assert!(!path.with_extension("symbolica.cpp").exists());
+                    }
+                }
+            }
+        }
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_symjit_reserves_retained_call_capacity_after_roundtrip() -> Result<()> {
+        for arity in [65, 2049] {
+            let formals = (0..arity)
+                .map(|i| format!("standalone_wide::q{i}"))
+                .collect::<Vec<_>>();
+            let function = "standalone_wide::function";
+            let entries: Vec<SerializedFnMapEntry<String>> = vec![(
+                format!("{function}({})", formals.join(",")),
+                formals
+                    .iter()
+                    .map(|q| format!("{q}^2"))
+                    .collect::<Vec<_>>()
+                    .join("+"),
+                vec![],
+                formals,
+                InliningPolicy::Never,
+                false,
+            )];
+            let json = serde_json::to_vec(&entries)?;
+            let parsed: Vec<SerializedFnMapEntry<String>> = serde_json::from_slice(&json)?;
+            let bytes = bincode::encode_to_vec(&parsed, bincode::config::standard())?;
+            let (restored, consumed): (Vec<SerializedFnMapEntry<String>>, _) =
+                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+            assert_eq!(consumed, bytes.len());
+            assert_eq!(restored, entries);
+            let parsed = parse_fn_map_entries(&restored, &StateMap::default())?;
+            let (_, fn_map) = apply_fn_map_entries(parsed)?;
+            let parameter = parse_lit!(standalone_wide::x);
+            let root = symbol!(function).call_args((0..arity).map(|i| &parameter + i));
+            let mut evaluator = root
+                .evaluator(std::slice::from_ref(&parameter))
+                .function_map(fn_map)
+                .build()
+                .map_err(|error| eyre!(error))?
+                .map_coeff(&|c| Complex::new(c.re.to_f64(), c.im.to_f64()));
+            let result = StandaloneRuntimeEvaluator::build(
+                &mut evaluator,
+                StandaloneBackend::Symjit,
+                Path::new("."),
+                "wide_call_capacity",
+            );
+            if arity > 2048 {
+                let error = match result {
+                    Err(error) => error,
+                    Ok(_) => panic!("oversized call must be rejected before invoking SymJIT"),
+                };
+                assert!(
+                    error.to_string().contains("call arguments")
+                        && error.to_string().contains("2048"),
+                    "{error}"
+                );
+                continue;
+            }
+            let StandaloneRuntimeEvaluator::Symjit(compiled) = result? else {
+                unreachable!()
+            };
+            let json = serde_json::to_vec(&compiled)?;
+            let mut restored_json: JITCompiledEvaluator<Complex<f64>> =
+                serde_json::from_slice(&json)?;
+            let saved = bincode::encode_to_vec(&compiled, bincode::config::standard())?;
+            let (mut restored, consumed): (JITCompiledEvaluator<Complex<f64>>, _) =
+                bincode::decode_from_slice(&saved, bincode::config::standard())?;
+            assert_eq!(consumed, saved.len());
+            let input = [Complex::new(2.0, 1.0)];
+            let mut output = [Complex::new(0.0, 0.0)];
+            restored.evaluate(&input, &mut output);
+            let expected = (0..arity).fold(Complex::new(0.0, 0.0), |sum, i| {
+                let a = (i + 2) as f64;
+                sum + Complex::new(a * a - 1.0, 2.0 * a)
+            });
+            assert_eq!(output[0], expected);
+            restored_json.evaluate(&input, &mut output);
+            assert_eq!(output[0], expected);
+            assert_eq!(evaluator.evaluate_single(&input), expected);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn standalone_function_policy_roundtrip_preserves_shared_bodies_and_alias_scope() -> Result<()>
     {
         let x = symbolica::parse!("standalone_policy::x");
@@ -2308,8 +2781,9 @@ mod tests {
     fn standalone_template_compiled_artifacts_keep_representation_and_method() -> Result<()> {
         let stack = |value: i64| {
             let payload = StandaloneGenericEvaluatorArchive {
+                parameter_rows: None,
                 exprs: vec![format!(
-                    "{value}*y^2*(standalone_template_joint_numerator(x+1)+standalone_template_joint_numerator(x+3))"
+                    "{value}*y^2*standalone_template_joint_numerator(x+c)"
                 )],
                 additional_fn_map_entries: vec![(
                     "standalone_template_joint_numerator(u)".to_owned(),
@@ -2320,6 +2794,7 @@ mod tests {
                     false,
                 )],
                 dual_shape: Some(vec![vec![0], vec![1]]),
+                zero_components: vec![(1, 1)],
             };
             let mut summed = payload.clone();
             summed.exprs = vec![format!(
@@ -2328,6 +2803,13 @@ mod tests {
             StandaloneEvaluatorStackArchive {
                 explicit_orientation_sum_only: true,
                 production_orientation_ids: vec![0],
+                parametric_rows: Some(
+                    ParameterRows::new(
+                        vec!["c".to_owned()],
+                        vec![vec![Rational::from(1)], vec![Rational::from(3)]],
+                    )
+                    .unwrap(),
+                ),
                 single_parametric: payload,
                 iterative: None,
                 summed_function_map: Some(summed.clone()),
@@ -2427,7 +2909,9 @@ mod tests {
                     Vec::new(),
                     &state_map,
                     iterate,
+                    None,
                 )
+                .map(|(evaluator, _)| evaluator)
                 .unwrap_err();
                 assert!(
                     duplicate_error
@@ -2435,8 +2919,32 @@ mod tests {
                         .contains("parameters must be distinct")
                 );
                 let params = vec![parse_lit!(x), parse_lit!(y)];
-                let (mut evaluator, output_len) =
-                    build_evaluator::<f64, _>(payload, &params, Vec::new(), &state_map, iterate)?;
+                let rows = if method == StandaloneMethod::SingleParametric {
+                    stack
+                        .parametric_rows
+                        .clone()
+                        .map(|rows| {
+                            rows.try_map_parameters(|parameter| {
+                                parameter.import_with_map(&state_map)
+                            })
+                        })
+                        .transpose()?
+                } else {
+                    None
+                };
+                let ((mut evaluator, _), mut shared) = build_evaluator::<f64, _>(
+                    payload,
+                    &params,
+                    Vec::new(),
+                    &state_map,
+                    iterate,
+                    rows.as_ref(),
+                )?;
+                if method == StandaloneMethod::SingleParametric {
+                    // y^2 is shared across every residue row and has a zero
+                    // derivative seed, while the numerator still depends on c.
+                    assert!(shared.as_ref().unwrap().1.get_output_len() > 0);
+                }
                 for (x, expected) in [(2.0, [34.0, 16.0]), (3.0, [52.0, 20.0])] {
                     let inputs = vec![vec![
                         Complex::new(x, 0.0),
@@ -2453,8 +2961,8 @@ mod tests {
                         assert_eq!(
                             evaluate_with_backend_f64(
                                 &mut evaluator,
+                                shared.as_mut(),
                                 backend,
-                                output_len,
                                 &inputs,
                                 &artifact_dir,
                                 &format!("row_values_{representation}_{}_{x}", method.as_str())
@@ -2485,7 +2993,7 @@ mod tests {
         // All files must coexist after both representations and methods have
         // run: a shared basename would silently overwrite an earlier program.
         let artifacts = artifact_dir.join("artifact_dispatch");
-        assert_eq!(fs::read_dir(&artifacts)?.count(), 16);
+        assert_eq!(fs::read_dir(&artifacts)?.count(), 24);
         for representation in ["cff", "ltd"] {
             for method in ["single_parametric", "summed"] {
                 for backend in ["c__", "assembly"] {
@@ -2497,7 +3005,170 @@ mod tests {
                 }
             }
         }
+        for representation in ["cff", "ltd"] {
+            let label = format!(
+                "standalone_artifact_dispatch_{representation}_original_single_parametric_auxiliary"
+            );
+            for backend in ["c__", "assembly"] {
+                for extension in ["cpp", "so"] {
+                    assert!(
+                        artifacts
+                            .join(format!("{label}_{backend}.{extension}"))
+                            .is_file()
+                    );
+                }
+            }
+        }
         fs::remove_dir_all(artifact_dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_template_joint_rows_keep_exact_constants_and_zero_dual_seeds() -> Result<()> {
+        let precise = Rational::from((9_007_199_254_740_993_i64, 9_007_199_254_740_992_i64));
+        let catalog = ParameterRows::new(
+            vec!["c".to_owned(), "q".to_owned(), "active".to_owned()],
+            vec![
+                vec![precise.clone(), precise.clone(), 1.into()],
+                vec![(-1).into(), precise.clone(), 1.into()],
+                vec![7.into(), precise, 0.into()],
+            ],
+        )?;
+        let catalog: ParameterRows<String> =
+            serde_json::from_slice(&serde_json::to_vec(&catalog)?)?;
+        let state = current_state_map()?;
+        let rows = catalog.try_map_parameters(|parameter| parameter.import_with_map(&state))?;
+        let payload = StandaloneGenericEvaluatorArchive {
+            parameter_rows: None,
+            exprs: vec!["if(active,c*x*(q-1),0)".to_owned()],
+            additional_fn_map_entries: Vec::new(),
+            dual_shape: Some(vec![vec![0], vec![1]]),
+            zero_components: Vec::new(),
+        };
+        let ((mut evaluator, output_len), mut shared) = build_evaluator::<Float, _>(
+            &payload,
+            &[parse_lit!(x)],
+            Vec::new(),
+            &state,
+            false,
+            Some(&rows),
+        )?;
+        let inputs = vec![vec![
+            Complex::new(Float::parse_standalone_input("3")?, Float::zero_value()),
+            Complex::new(Float::one_value(), Float::zero_value()),
+        ]];
+        let result = evaluate_eager(&mut evaluator, shared.as_mut(), output_len, &inputs)?;
+        // Both exact coefficient roles matter: rounding either c or q through
+        // f64 erases this value and derivative. The third row remains inactive.
+        assert_eq!(
+            result,
+            [3_i64, 1].map(|numerator| Complex::new(
+                Float::exact_from_rational(
+                    &(Rational::from((numerator, 9_007_199_254_740_992_i64))
+                        / Rational::from(9_007_199_254_740_992_i64))
+                ),
+                Float::zero_value(),
+            ))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_template_arb_external_constants_use_declared_precision() -> Result<()> {
+        let x = parse_lit!(standalone_arb_constants::x);
+        let coefficient = parse_lit!(standalone_arb_constants::c);
+        let print = |atom: &Atom| {
+            atom.printer(symbolica::printer::PrintOptions::file())
+                .to_string()
+        };
+        let rows = ParameterRows::new(
+            vec![coefficient.clone()],
+            vec![vec![1.into()], vec![2.into()]],
+        )?;
+        let state = current_state_map()?;
+        let inputs = vec![vec![Complex::new(
+            Float::parse_standalone_input("1.25")?,
+            Float::zero_value(),
+        )]];
+        let tolerance = Float::parse_standalone_input("1e-250")?;
+        for staged in [false, true] {
+            // The reciprocal stays one row-independent operation, with π in
+            // its input, instead of flattening into the row-dependent product.
+            let mut root = (Atom::var(Symbol::PI) + &x).pow(-1);
+            if staged {
+                root *= &coefficient;
+            }
+            let payload = StandaloneGenericEvaluatorArchive {
+                parameter_rows: None,
+                exprs: vec![print(&root)],
+                additional_fn_map_entries: Vec::new(),
+                dual_shape: None,
+                zero_components: Vec::new(),
+            };
+            let ((mut evaluator, output_len), mut shared) = build_evaluator::<Float, _>(
+                &payload,
+                std::slice::from_ref(&x),
+                Vec::new(),
+                &state,
+                false,
+                staged.then_some(&rows),
+            )?;
+            if staged {
+                assert!(shared.as_ref().unwrap().1.get_output_len() > 0);
+            }
+            let result = evaluate_eager(&mut evaluator, shared.as_mut(), output_len, &inputs)?;
+            let scale = if staged { "3" } else { "1" };
+            let expected = Float::parse_standalone_input(scale)?
+                / (Float::new(ARB_PRECISION_BITS).pi() + Float::parse_standalone_input("1.25")?);
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].re.get_precision(), ARB_PRECISION_BITS);
+            assert!((result[0].re.clone() - expected).norm() < tolerance);
+            assert_eq!(result[0].im, Float::zero_value());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_template_symjit_preserves_independent_guards() -> Result<()> {
+        let q = parse_lit!(standalone_template_guards::q);
+        let s = parse_lit!(standalone_template_guards::s);
+        let t = parse_lit!(standalone_template_guards::t);
+        let power = q.pow(parse_lit!(-1 / 2));
+        let expressions = [s.clone(), t.clone()]
+            .map(|guard| Symbol::IF.call_args([guard, power.clone(), Atom::Zero]));
+        let parameters = [q, s, t];
+        let mut tree = expressions[0]
+            .evaluator(&parameters)
+            .optimization_settings(OptimizationSettings::new().cores(1))
+            .build()
+            .map_err(|error| eyre!(error))?;
+        let second = expressions[1]
+            .evaluator(&parameters)
+            .optimization_settings(OptimizationSettings::new().cores(1))
+            .build()
+            .map_err(|error| eyre!(error))?;
+        tree.merge(second, Some(2)).map_err(|error| eyre!(error))?;
+        let mut evaluator = tree.map_coeff(&|coefficient| {
+            Complex::new(coefficient.re.to_f64(), coefficient.im.to_f64())
+        });
+        let mut runtime = StandaloneRuntimeEvaluator::build(
+            &mut evaluator,
+            StandaloneBackend::Symjit,
+            &std::env::temp_dir(),
+            "independent_guards",
+        )?;
+        for guards in [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]] {
+            let mut result = [Complex::new(0.0, 0.0); 2];
+            runtime.evaluate(
+                &[
+                    Complex::new(4.0, 0.0),
+                    Complex::new(guards[0], 0.0),
+                    Complex::new(guards[1], 0.0),
+                ],
+                &mut result,
+            );
+            assert_eq!(result, guards.map(|guard| Complex::new(guard * 0.5, 0.0)));
+        }
         Ok(())
     }
 

@@ -719,6 +719,7 @@ impl ThresholdMultiplierLayout {
             settings.optimization_settings(),
             None,
             settings,
+            None,
         )?
         .into_eager_only();
         Ok(ThresholdMultiplierEvaluator {
